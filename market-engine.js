@@ -241,7 +241,7 @@ function analyze(c,ctx={}){
     price,change24h,ema20:E20[i],ema50:E50[i],ema200:E200[i],rsi:rsiNow,adx:adxNow,atrPct:atrNow/price*100,volumeZ:vz,
     regime,mood,momentum,volState,structure:st.state,type,side,bias,directionalLean,probabilityLabel,
     score,status,reasons,contributors,components,
-    derivatives:{available:!!deriv,oi:currentOi,cvdState,positioning,oiChangePct,cvdDelta,cvdRatio:deriv?.cvdRatio??null,flowPriceChangePct,tradeCount:deriv?.tradeCount??0,fundingRate:deriv?.fundingRate??null,longPercent,shortPercent,longShortRatio,liquidationBias,liquidationTotal,provider:deriv?.provider??null,errors:deriv?.errors??[]},
+    derivatives:{available:!!deriv,oi:currentOi,cvdState,positioning,oiChangePct,cvdDelta,cvdRatio:deriv?.cvdRatio??null,flowPriceChangePct,tradeCount:deriv?.tradeCount??0,fundingRate:deriv?.fundingRate??null,longPercent,shortPercent,longShortRatio,liquidationBias:liquidationBias&&liquidationBias!=="UNKNOWN"?liquidationBias:"NOT AVAILABLE",liquidationTotal,provider:deriv?.provider??null,errors:deriv?.errors??[]},
     thesis:thesis.join(" "),thesisParts:thesis,
     primaryScenario,alternateScenario,
     mtf:{lower:mtf15,higher:mtf4},stop,tp1,tp2,entryLow:el,entryHigh:eh,rr,
