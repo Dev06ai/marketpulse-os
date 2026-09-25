@@ -293,7 +293,9 @@ function risk(){const acct=+$("acct").value||0,p=(+$("risk").value||0)/100,e=+$(
 function evaluateActiveSignal(d){
   const active=JSON.parse(localStorage.getItem("mp-active-signal")||"null"),a=d.analysis,c=d.candles||[];
   if(!active||active.asset!==$("sym").value||active.interval!==$("int").value)return;
-  const start=Math.max(0,c.findIndex(function(x){return +x.t>=active.candleTs})+1);
+  const anchorIndex=c.findIndex(function(x){return +x.t===+active.candleTs});
+  if(anchorIndex<0)return;
+  const start=anchorIndex+1;
   for(let i=start;i<c.length;i++){
     const x=c[i];
     if(active.side==="LONG"){
@@ -346,7 +348,7 @@ function renderSignalHistory(){
     return '<div class="sigRow"><div class="sigEvent '+x.event.toLowerCase()+'">'+x.event+'</div><div><b>'+main+'</b><div class="small">'+meta+'</div></div><div class="small">'+t+'</div><div class="small">'+x.interval+'</div></div>';
   }).join("")||'<div class="whyitem">No signal events recorded yet. Keep the dashboard open while MarketPulse runs.</div>';
 }
-function clearSignals(){if(confirm("Clear signal history on this device?")){signalHistory=[];lastSignal=null;localStorage.removeItem("mp-signals");localStorage.removeItem("mp-last-signal");renderSignalHistory()}}
+function clearSignals(){if(confirm("Clear signal history on this device?")){signalHistory=[];lastSignal=null;localStorage.removeItem("mp-signals");localStorage.removeItem("mp-last-signal");localStorage.removeItem("mp-active-signal");renderSignalHistory()}}
 function renderJournalStats(){
   const rs=journal.map(function(x){return Number(x.r)}).filter(Number.isFinite),n=rs.length,wins=rs.filter(function(x){return x>0}),losses=rs.filter(function(x){return x<0}),sum=rs.reduce(function(a,b){return a+b},0),gw=wins.reduce(function(a,b){return a+b},0),gl=Math.abs(losses.reduce(function(a,b){return a+b},0));
   let eq=0,peak=0,dd=0;rs.forEach(function(r){eq+=r;peak=Math.max(peak,eq);dd=Math.max(dd,peak-eq)});
