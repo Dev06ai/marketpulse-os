@@ -294,7 +294,7 @@ function renderPulse(){
 function renderScanner(){
  const rows=scanRows.filter(r=>filter==="ALL"?true:filter==="WAIT"?r.side==="WAIT":r.side===filter).sort((a,b)=>b.score-a.score);
  $("rows").innerHTML=rows.map(r=>{const cls=setupClass(r.side),star=watch.has(r.symbol)?"★":"☆";return '<div class="row"><button class="star '+(watch.has(r.symbol)?"on":"")+'" data-star="'+r.symbol+'">'+star+'</button><div class="asset">'+r.label+'</div><div><div>'+r.regime+'</div><div class="small">'+r.score+'/100</div></div><div class="tag '+cls+'">'+r.type+'</div><div class="small">'+fmt(r.rsi)+'</div></div>'}).join("");
- document.querySelectorAll("[data-star]").forEach(b=>b.onclick=()=>{const s=b.dataset.star;watch.has(s)?watch.delete(s):watch.add(s);localStorage.setItem("mp-watch",JSON.stringify([...watch]));renderScanner()});
+ document.querySelectorAll("[data-star]").forEach(b=>b.onclick=()=>{const s=b.dataset.star;watch.has(s)?watch.delete(s):watch.add(s);localStorage.setItem("mp-watch",JSON.stringify([...watch]));renderScanner();queueSync()});
  renderPulse();
 }
 async function scan(){
@@ -327,7 +327,7 @@ function evaluateActiveSignal(d){
   if(active.outcome){
     localStorage.removeItem("mp-active-signal");
     signalHistory=[Object.assign({event:active.outcome==="TARGET 1"?"TARGET 1":"INVALIDATED"},active),...signalHistory].slice(0,60);
-    localStorage.setItem("mp-signals",JSON.stringify(signalHistory));
+    localStorage.setItem("mp-signals",JSON.stringify(signalHistory));queueSync();
     renderSignalHistory();
   }
 }
@@ -469,12 +469,12 @@ function saveTrade(){
     mtf:m.mtf,cvd:m.derivatives?.cvdState,positioning:m.derivatives?.positioning,
     fundingRate:m.derivatives?.fundingRate,rr:m.rr
   }:null};
-  journal.push(item);journal=journal.slice(-50);localStorage.setItem("mp-journal",JSON.stringify(journal));["jEntry","jStop","jTarget","jR","jNotes"].forEach(id=>$(id).value="");renderJournal();renderJournalStats();renderBrain();
+  journal.push(item);journal=journal.slice(-50);localStorage.setItem("mp-journal",JSON.stringify(journal));queueSync();["jEntry","jStop","jTarget","jR","jNotes"].forEach(id=>$(id).value="");renderJournal();renderJournalStats();renderBrain();
 }
 function clearJournal(){if(confirm("Clear this device's journal?")){journal=[];localStorage.removeItem("mp-journal");renderJournal()}}
 function updateAlertUI(){const on=window.Notification&&Notification.permission==="granted";$("notifState").textContent=on?"Enabled on this browser":"Not enabled";$("notifBtn").textContent=on?"Enabled":"Enable";$("watchCount").textContent=watch.size+" asset"+(watch.size===1?"":"s")}
 async function enableNotifications(){if(!("Notification" in window)){alert("This browser does not support notifications.");return}const p=await Notification.requestPermission();updateAlertUI();if(p==="granted")new Notification("MarketPulse",{body:"Smart alerts are on. Watchlisted setup changes will appear here."})}
-function sendBrowserAlert(title,body,key){if(!watch.has(key)||!("Notification" in window)||Notification.permission!=="granted")return;const threshold=+$("alertScore").value||75;const row=scanRows.find(r=>r.symbol===key);if(!row||row.score<threshold||row.side==="WAIT")return;const sig=row.type+"|"+Math.round(row.score/5);if(lastAlertState[key]===sig)return;lastAlertState[key]=sig;localStorage.setItem("mp-alert-state",JSON.stringify(lastAlertState));new Notification(title,{body})}
+function sendBrowserAlert(title,body,key){if(!watch.has(key)||!("Notification" in window)||Notification.permission!=="granted")return;const threshold=+$("alertScore").value||75;const row=scanRows.find(r=>r.symbol===key);if(!row||row.score<threshold||row.side==="WAIT")return;const sig=row.type+"|"+Math.round(row.score/5);if(lastAlertState[key]===sig)return;lastAlertState[key]=sig;localStorage.setItem("mp-alert-state",JSON.stringify(lastAlertState));queueSync();new Notification(title,{body})}
 function alertFromScan(){for(const r of scanRows){if(watch.has(r.symbol)&&r.side!=="WAIT")sendBrowserAlert(r.label+" setup forming",r.type+" · "+r.score+"/100 · "+r.regime+" · "+r.bias,r.symbol)}}
 function schedule(){clearInterval(timer);if(auto)timer=setInterval(()=>{if(document.visibilityState==="visible")load()},45000)}
 let aiMode="market";
@@ -504,7 +504,7 @@ window.addEventListener("resize",()=>{if(window.__lastMarket){drawChart(window._
   $("jAsset").innerHTML=c.symbols.map(s=>'<option value="'+s+'">'+(c.labels[s]||s)+'</option>').join("");
   $("refresh").onclick=load; $("saveTrade").onclick=saveTrade; $("clearJournal").onclick=clearJournal; $("notifBtn").onclick=enableNotifications; $("testAlert").onclick=()=>{if("Notification" in window&&Notification.permission==="granted")new Notification("MarketPulse test",{body:"Smart alerts are working."});else enableNotifications()};
   
-  $("marketTab").onclick=()=>setAiMode("market");$("tradeTab").onclick=()=>setAiMode("trade");$("askAi").onclick=askAi;$("refreshBrain").onclick=renderBrain;
+  $("marketTab").onclick=()=>setAiMode("market");$("tradeTab").onclick=()=>setAiMode("trade");$("askAi").onclick=askAi;$("refreshBrain").onclick=renderBrain;$("syncMemory").onclick=syncMemory;
   $("chartSettingsBtn").onclick=openChartSettings;$("chartClose").onclick=closeChartSettings;$("chartCancel").onclick=closeChartSettings;$("chartApply").onclick=applyChartSettings;
   $("sym").onchange=load;$("int").onchange=load;["acct","risk","rentry","rstop"].forEach(x=>$(x).oninput=risk);
   document.querySelectorAll(".filter button").forEach(b=>b.onclick=()=>{document.querySelectorAll(".filter button").forEach(x=>x.classList.remove("on"));b.classList.add("on");filter=b.dataset.filter;renderScanner()});
