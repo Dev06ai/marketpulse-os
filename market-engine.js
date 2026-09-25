@@ -23,6 +23,16 @@ function atr(c,p=14){
   return rma(tr,p);
 }
 
+function rmaFinite(v,p){
+  const out=Array(v.length).fill(NaN);
+  let start=-1,count=0;
+  for(let i=0;i<v.length;i++){if(Number.isFinite(v[i])){count++;if(count===p){start=i;break}}}
+  if(start<0)return out;
+  let a=0;for(let i=start-p+1;i<=start;i++)a+=v[i];a/=p;out[start]=a;
+  for(let i=start+1;i<v.length;i++){if(Number.isFinite(v[i]))a=((p-1)*a+v[i])/p;out[i]=a}
+  return out;
+}
+
 function adx(c,p=14){
   const tr=[],plus=[],minus=[];
   for(let i=1;i<c.length;i++){
@@ -38,8 +48,8 @@ function adx(c,p=14){
     const pdi=100*pR[i]/atrR[i],mdi=100*mR[i]/atrR[i],sum=pdi+mdi;
     dx.push(sum===0?0:100*Math.abs(pdi-mdi)/sum);
   }
-  const ax=rma(dx,p),out=Array(c.length).fill(NaN);
-  for(let i=0;i<ax.length;i++)out[i+1]=ax[i];
+  const ax=rmaFinite(dx,p),out=Array(c.length).fill(NaN);
+  for(let i=0;i<ax.length;i++)if(Number.isFinite(ax[i]))out[i+1]=ax[i];
   return out;
 }
 
