@@ -107,6 +107,11 @@ function analyze(c,ctx={}){
     else if(flowPriceChangePct<-pThreshold&&cvdDelta<0)cvdState="SELLERS CONFIRM";
   }
   const currentOi=Number.isFinite(deriv?.oi)?deriv.oi:null;
+  const liquidationBias=deriv?.liquidationBias||"UNKNOWN";
+  const liquidationTotal=Number.isFinite(deriv?.liquidationTotal)?deriv.liquidationTotal:null;
+  const longPercent=Number.isFinite(deriv?.longPercent)?deriv.longPercent:null;
+  const shortPercent=Number.isFinite(deriv?.shortPercent)?deriv.shortPercent:null;
+  const longShortRatio=Number.isFinite(deriv?.longShortRatio)?deriv.longShortRatio:null;
   let positioning=deriv?.positioning||"UNKNOWN";
   if(oiChangePct!==null&&flowPriceChangePct!==null){
     if(flowPriceChangePct>0.15&&oiChangePct>1)positioning="PRICE + OI: LONG PARTICIPATION";
@@ -149,13 +154,17 @@ function analyze(c,ctx={}){
       ((side==="LONG"&&cvdState==="BEARISH DIVERGENCE")||(side==="SHORT"&&cvdState==="BULLISH DIVERGENCE"))?0:5},
     {name:"OI context",value:side==="WAIT"||oiChangePct===null?3:
       ((side==="LONG"&&(positioning.includes("LONG PARTICIPATION")||positioning.includes("SHORT COVERING")))||
-       (side==="SHORT"&&(positioning.includes("SHORT PARTICIPATION")||positioning.includes("LONG LIQUIDATION"))))?8:4}
+       (side==="SHORT"&&(positioning.includes("SHORT PARTICIPATION")||positioning.includes("LONG LIQUIDATION"))))?8:4},
+    {name:"Liquidation context",value:side==="WAIT"||!liquidationBias||liquidationBias==="UNKNOWN"?2:
+      ((side==="LONG"&&liquidationBias==="SHORT LIQS DOMINANT")||(side==="SHORT"&&liquidationBias==="LONG LIQS DOMINANT"))?6:3}
   ];  let score=components.reduce((sum,x)=>sum+x.value,0);
   if((side==="LONG"&&mtf4==="DOWNTREND")||(side==="SHORT"&&mtf4==="UPTREND")){score-=20;contributors.push("4H conflict");reasons.push("The 4H trend directly conflicts with this direction");}
   if((side==="LONG"&&mtf15==="DOWNTREND")||(side==="SHORT"&&mtf15==="UPTREND")){score-=10;contributors.push("15M conflict");reasons.push("The 15M trend is working against this direction");}
   if((side==="LONG"&&cvdState==="BEARISH DIVERGENCE")||(side==="SHORT"&&cvdState==="BULLISH DIVERGENCE")){score-=8;contributors.push("CVD divergence");reasons.push("Aggressive flow is diverging from price");}
   if((side==="LONG"&&cvdState==="BUYERS CONFIRM")||(side==="SHORT"&&cvdState==="SELLERS CONFIRM")){score+=4;contributors.push("CVD confirmation");}
   if((side==="LONG"&&positioning.includes("SHORT PARTICIPATION"))||(side==="SHORT"&&positioning.includes("LONG PARTICIPATION"))){score-=6;contributors.push("OI conflict");}
+  if((side==="LONG"&&liquidationBias==="LONG LIQS DOMINANT")||(side==="SHORT"&&liquidationBias==="SHORT LIQS DOMINANT")){score-=5;contributors.push("liquidation conflict");reasons.push("Recent liquidation pressure is working against this direction");}
+  if((side==="LONG"&&liquidationBias==="SHORT LIQS DOMINANT")||(side==="SHORT"&&liquidationBias==="LONG LIQS DOMINANT")){score+=3;contributors.push("liquidation tailwind");}
   if(regime==="HIGH VOLATILITY"){score-=14;contributors.push("volatility penalty");reasons.push("Volatility is elevated enough to reduce setup quality");}
   if(side==="WAIT")score=Math.min(score,54);
   score=clamp(Math.round(score),0,92);
@@ -204,6 +213,8 @@ function analyze(c,ctx={}){
   if(regime==="HIGH VOLATILITY")thesis.push("Volatility is elevated; wider noise and faster invalidations lower the quality of marginal setups.");
   if(deriv){
     thesis.push("Derivatives flow: "+cvdState.toLowerCase()+"; positioning: "+positioning.toLowerCase()+".");
+    if(liquidationBias&&liquidationBias!=="UNKNOWN")thesis.push("Liquidations: "+liquidationBias.toLowerCase()+".");
+    if(longPercent!==null&&shortPercent!==null)thesis.push("Futures positioning split is approximately "+longPercent.toFixed(1)+"% long / "+shortPercent.toFixed(1)+"% short.");
     if(Math.abs(oiChangePct||0)>=3)thesis.push("Open interest has moved "+(oiChangePct>0?"higher":"lower")+" by "+Math.abs(oiChangePct).toFixed(1)+"% over the recent futures window.");
     if(cvdState.includes("DIVERGENCE"))thesis.push("CVD divergence is a warning that price and aggressive futures flow are not fully agreeing.");
   }
@@ -230,7 +241,7 @@ function analyze(c,ctx={}){
     price,change24h,ema20:E20[i],ema50:E50[i],ema200:E200[i],rsi:rsiNow,adx:adxNow,atrPct:atrNow/price*100,volumeZ:vz,
     regime,mood,momentum,volState,structure:st.state,type,side,bias,directionalLean,probabilityLabel,
     score,status,reasons,contributors,components,
-    derivatives:{available:!!deriv,oi:currentOi,cvdState,positioning,oiChangePct,cvdDelta,cvdRatio:deriv?.cvdRatio??null,flowPriceChangePct,tradeCount:deriv?.tradeCount??0,fundingRate:deriv?.fundingRate??null,provider:deriv?.provider??null,errors:deriv?.errors??[]},
+    derivatives:{available:!!deriv,oi:currentOi,cvdState,positioning,oiChangePct,cvdDelta,cvdRatio:deriv?.cvdRatio??null,flowPriceChangePct,tradeCount:deriv?.tradeCount??0,fundingRate:deriv?.fundingRate??null,longPercent,shortPercent,longShortRatio,liquidationBias,liquidationTotal,provider:deriv?.provider??null,errors:deriv?.errors??[]},
     thesis:thesis.join(" "),thesisParts:thesis,
     primaryScenario,alternateScenario,
     mtf:{lower:mtf15,higher:mtf4},stop,tp1,tp2,entryLow:el,entryHigh:eh,rr,
