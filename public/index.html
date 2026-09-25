@@ -277,7 +277,7 @@ function renderSignals(){
   $("sigL").textContent=rows[0]?rows[0].event:"—";
   $("signalRows").innerHTML=rows.map(function(x){
     var cls=x.event==="READY"?"ready":x.event==="INVALIDATED"?"bad":x.event==="WAIT"?"wait":"update";
-    return '<div class="signalRow"><span class="event '+cls+'">'+x.event+'</span><div><b>'+x.asset+' · '+x.type+'</b><div class="small">'+x.regime+" · "+fmt(x.score)+"/100</div></div><span class="small">'+new Date(x.ts).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"})+'</span><span class="small">'+x.interval+"</span></div>";
+    return '<div class="signalRow"><span class="event '+cls+'">'+x.event+'</span><div><b>'+x.asset+' · '+x.type+'</b><div class="small">'+x.regime+' · '+fmt(x.score)+'/100</div></div><span class="small">'+new Date(x.ts).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"})+'</span><span class="small">'+x.interval+'</span></div>';
   }).join("")||'<div class="small">No signal events yet.</div>';
 }
 function recordSignal(a){
