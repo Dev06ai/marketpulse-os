@@ -425,11 +425,12 @@ async function syncMemory(){
   var id=deviceId();
   try{
     var remote=await api("/api/memory?device="+encodeURIComponent(id),5000);
-    var merged={journal:state.journal,signals:state.signals,watch:[],alertState:{},lastSignal:state.signals[0]||null,activeSignal:null,updatedAt:Date.now()};
+    var merged={journal:state.journal,signals:state.signals,watch:state.watch,alertState:{threshold:Number($("alertScore")?.value||75)},lastSignal:state.signals[0]||null,activeSignal:null,updatedAt:Date.now()};
     if(remote&&remote.payload){
       if(Array.isArray(remote.payload.journal)&&remote.payload.journal.length>state.journal.length)state.journal=remote.payload.journal;
       if(Array.isArray(remote.payload.signals)&&remote.payload.signals.length>state.signals.length)state.signals=remote.payload.signals;
-      merged.journal=state.journal;merged.signals=state.signals;
+      if(Array.isArray(remote.payload.watch)&&remote.payload.watch.length)state.watch=Array.from(new Set(state.watch.concat(remote.payload.watch))).slice(0,50);
+      merged.journal=state.journal;merged.signals=state.signals;merged.watch=state.watch;
     }
     var saved=await fetch("/api/memory?device="+encodeURIComponent(id),{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({memory:merged})});
     var out=await saved.json();if(!saved.ok)throw Error(out.error||"Memory sync failed");
