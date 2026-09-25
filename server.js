@@ -192,7 +192,6 @@ async function derivatives(symbol,interval){
       data.liquidationBias=data.liveLiquidations.bias;data.liquidationTotal=data.liveLiquidations.total;
     }
   }
-  const live=flowBucket(symbol);
   if(Number.isFinite(data.oi))live.oi=data.oi;
   if(Number.isFinite(data.fundingRate))live.fundingRate=data.fundingRate;
   if(Number.isFinite(data.markPrice))live.markPrice=data.markPrice;
