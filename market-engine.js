@@ -113,17 +113,25 @@ function analyze(c,ctx={}){
 
   // Confluence model — deliberately transparent rather than pretending to be a win probability.
   const components=[
-    {name:"Regime",value:(regime==="UPTREND"||regime==="DOWNTREND")?18:6},
-    {name:"Trend strength",value:adxNow>=25?12:adxNow>=18?7:2},
-    {name:"Momentum",value:(side==="LONG"&&rsiNow>=50&&rsiNow<=68)||(side==="SHORT"&&rsiNow>=32&&rsiNow<=50)?12:4},
-    {name:"Volume",value:Math.abs(vz)>=1.2?10:Math.abs(vz)>=.5?7:2},
-    {name:"Structure",value:(side==="LONG"&&st.state.includes("BULLISH"))||(side==="SHORT"&&st.state.includes("BEARISH"))?10:4},
-    {name:"4H alignment",value:(side==="LONG"&&mtf4==="UPTREND")||(side==="SHORT"&&mtf4==="DOWNTREND")?10:(side==="WAIT"||mtf4==="UNKNOWN"?4:0)},
-    {name:"15M alignment",value:(side==="LONG"&&mtf15==="UPTREND")||(side==="SHORT"&&mtf15==="DOWNTREND")?8:(side==="WAIT"||mtf15==="UNKNOWN"?3:0)}
-  ];
-  let score=components.reduce((sum,x)=>sum+x.value,0);
+    {name:"Regime",value:(regime==="UPTREND"||regime==="DOWNTREND")?16:6},
+    {name:"Trend strength",value:adxNow>=25?11:adxNow>=18?7:2},
+    {name:"Momentum",value:(side==="LONG"&&rsiNow>=50&&rsiNow<=68)||(side==="SHORT"&&rsiNow>=32&&rsiNow<=50)?11:4},
+    {name:"Volume",value:Math.abs(vz)>=1.2?9:Math.abs(vz)>=.5?6:2},
+    {name:"Structure",value:(side==="LONG"&&st.state.includes("BULLISH"))||(side==="SHORT"&&st.state.includes("BEARISH"))?9:4},
+    {name:"4H alignment",value:(side==="LONG"&&mtf4==="UPTREND")||(side==="SHORT"&&mtf4==="DOWNTREND")?9:(side==="WAIT"||mtf4==="UNKNOWN"?4:0)},
+    {name:"15M alignment",value:(side==="LONG"&&mtf15==="UPTREND")||(side==="SHORT"&&mtf15==="DOWNTREND")?7:(side==="WAIT"||mtf15==="UNKNOWN"?3:0)},
+    {name:"CVD pressure",value:side==="WAIT"||cvdState==="UNKNOWN"?3:
+      ((side==="LONG"&&cvdState==="BUYERS CONFIRM")||(side==="SHORT"&&cvdState==="SELLERS CONFIRM"))?10:
+      ((side==="LONG"&&cvdState==="BEARISH DIVERGENCE")||(side==="SHORT"&&cvdState==="BULLISH DIVERGENCE"))?0:5},
+    {name:"OI context",value:side==="WAIT"||oiChangePct===null?3:
+      ((side==="LONG"&&(positioning.includes("LONG PARTICIPATION")||positioning.includes("SHORT COVERING")))||
+       (side==="SHORT"&&(positioning.includes("SHORT PARTICIPATION")||positioning.includes("LONG LIQUIDATION"))))?8:4}
+  ];  let score=components.reduce((sum,x)=>sum+x.value,0);
   if((side==="LONG"&&mtf4==="DOWNTREND")||(side==="SHORT"&&mtf4==="UPTREND")){score-=20;contributors.push("4H conflict");reasons.push("The 4H trend directly conflicts with this direction");}
   if((side==="LONG"&&mtf15==="DOWNTREND")||(side==="SHORT"&&mtf15==="UPTREND")){score-=10;contributors.push("15M conflict");reasons.push("The 15M trend is working against this direction");}
+  if((side==="LONG"&&cvdState==="BEARISH DIVERGENCE")||(side==="SHORT"&&cvdState==="BULLISH DIVERGENCE")){score-=8;contributors.push("CVD divergence");reasons.push("Aggressive flow is diverging from price");}
+  if((side==="LONG"&&cvdState==="BUYERS CONFIRM")||(side==="SHORT"&&cvdState==="SELLERS CONFIRM")){score+=4;contributors.push("CVD confirmation");}
+  if((side==="LONG"&&positioning.includes("SHORT PARTICIPATION"))||(side==="SHORT"&&positioning.includes("LONG PARTICIPATION"))){score-=6;contributors.push("OI conflict");}
   if(regime==="HIGH VOLATILITY"){score-=14;contributors.push("volatility penalty");reasons.push("Volatility is elevated enough to reduce setup quality");}
   if(side==="WAIT")score=Math.min(score,54);
   score=clamp(Math.round(score),0,92);
@@ -170,6 +178,11 @@ function analyze(c,ctx={}){
   if(volState==="EXPANSION")thesis.push("Volume is in expansion, so the next candle sequence matters more than a static indicator reading.");
   if(regime==="RANGE")thesis.push("Price is behaving like a range; breakout confirmation or range-edge rejection matters more than chasing the middle.");
   if(regime==="HIGH VOLATILITY")thesis.push("Volatility is elevated; wider noise and faster invalidations lower the quality of marginal setups.");
+  if(deriv){
+    thesis.push("Derivatives: "+cvdState.toLowerCase()+"; positioning: "+positioning.toLowerCase()+".");
+    if(Math.abs(oiChangePct||0)>=3)thesis.push("Open interest has moved "+(oiChangePct>0?"higher":"lower")+" by "+Math.abs(oiChangePct).toFixed(1)+"% over the recent futures window.");
+    if(cvdState.includes("DIVERGENCE"))thesis.push("CVD divergence is a warning that price and aggressive futures flow are not fully agreeing.");
+  }
 
   const primaryScenario=side==="LONG"
     ?"Continuation higher while price holds the invalidation zone and momentum stays constructive."
@@ -193,6 +206,7 @@ function analyze(c,ctx={}){
     price,change24h,ema20:E20[i],ema50:E50[i],ema200:E200[i],rsi:rsiNow,adx:adxNow,atrPct:atrNow/price*100,volumeZ:vz,
     regime,mood,momentum,volState,structure:st.state,type,side,bias,directionalLean,probabilityLabel,
     score,status,reasons,contributors,components,
+    derivatives:{available:!!deriv,cvdState,positioning,oiChangePct,cvdRatio:deriv?.cvdRatio??null,tradeCount:deriv?.tradeCount??0,provider:deriv?.provider??null},
     thesis:thesis.join(" "),
     primaryScenario,alternateScenario,
     mtf:{lower:mtf15,higher:mtf4},stop,tp1,tp2,entryLow:el,entryHigh:eh,rr,
