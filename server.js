@@ -11,17 +11,19 @@ const CACHE=new Map(); const TTL=25000;
 const OPENAI_API_KEY=process.env.OPENAI_API_KEY||"";
 const OPENAI_MODEL=process.env.OPENAI_MODEL||"gpt-5.6-luna";
 const AI_LIMIT_MS=8000; const AI_CALLS=new Map();
+const DATA_TIMEOUT_MS=7000;
+function timeoutSignal(ms){return typeof AbortSignal!=="undefined"&&AbortSignal.timeout?AbortSignal.timeout(ms):undefined;}
 
 function mins(interval){return ({'15m':15,'1h':60,'4h':240,'1d':1440})[interval]||60}
 async function getBinance(symbol,interval){
   const bases=['https://api.binance.com','https://api-gcp.binance.com','https://api1.binance.com','https://api2.binance.com','https://api3.binance.com','https://api4.binance.com'];
-  for(const base of bases){try{const u=new URL(base+'/api/v3/klines');u.searchParams.set('symbol',symbol);u.searchParams.set('interval',interval);u.searchParams.set('limit',String(Math.min(KLINE_LIMIT,1000)));const r=await fetch(u);if(r.ok){const rows=await r.json();return rows.map(x=>({t:x[0],o:+x[1],h:+x[2],l:+x[3],c:+x[4],v:+x[5],source:'binance'}))}}catch{}}
+  for(const base of bases){try{const u=new URL(base+'/api/v3/klines');u.searchParams.set('symbol',symbol);u.searchParams.set('interval',interval);u.searchParams.set('limit',String(Math.min(KLINE_LIMIT,1000)));const r=await fetch(u,{signal:timeoutSignal(DATA_TIMEOUT_MS)});if(r.ok){const rows=await r.json();return rows.map(x=>({t:x[0],o:+x[1],h:+x[2],l:+x[3],c:+x[4],v:+x[5],source:'binance'}))}}catch{}}
   return null;
 }
 async function getKraken(symbol,interval){
   const pair=KRAKEN_PAIRS[symbol]; if(!pair)throw new Error('No Kraken mapping for '+symbol);
   const u=new URL('https://api.kraken.com/0/public/OHLC');u.searchParams.set('pair',pair);u.searchParams.set('interval',String(mins(interval)));
-  const r=await fetch(u);if(!r.ok)throw new Error('Kraken returned '+r.status);const body=await r.json();if(body.error?.length)throw new Error(body.error.join(', '));
+  const r=await fetch(u,{signal:timeoutSignal(DATA_TIMEOUT_MS)});if(!r.ok)throw new Error('Kraken returned '+r.status);const body=await r.json();if(body.error?.length)throw new Error(body.error.join(', '));
   const key=Object.keys(body.result||{}).find(k=>k!=='last');if(!key)throw new Error('Kraken returned no OHLC data');
   return (body.result[key]||[]).slice(-Math.min(KLINE_LIMIT,720)).map(x=>({t:+x[0]*1000,o:+x[1],h:+x[2],l:+x[3],c:+x[4],v:+x[6],source:'kraken'}));
 }
@@ -37,7 +39,7 @@ async function longDailyHistory(symbol,days=4200){
       let endTime=Date.now(),all=[];
       while(all.length<days){
         const u=new URL(base+'/api/v3/klines');u.searchParams.set('symbol',symbol);u.searchParams.set('interval','1d');u.searchParams.set('limit','1000');u.searchParams.set('endTime',String(endTime));
-        const r=await fetch(u,{headers:{Accept:'application/json'}});if(!r.ok)throw Error('HTTP '+r.status);
+        const r=await fetch(u,{headers:{Accept:'application/json'},signal:timeoutSignal(5000)});if(!r.ok)throw Error('HTTP '+r.status);
         const rows=await r.json();if(!rows.length)break;
         const mapped=rows.map(x=>({t:x[0],o:+x[1],h:+x[2],l:+x[3],c:+x[4],v:+x[5],source:'binance'}));
         all=mapped.concat(all);endTime=rows[0][0]-1;if(rows.length<1000)break;
@@ -45,7 +47,7 @@ async function longDailyHistory(symbol,days=4200){
       all=all.slice(-days);if(all.length){CACHE.set(key,{ts:Date.now(),rows:all});return all}
     }catch{}
   }
-  return klines(symbol,'1d');
+  const fallback=await klines(symbol,'1d').catch(()=>[]);return fallback;
 }
 
 const LIVE_FLOW=new Map();
