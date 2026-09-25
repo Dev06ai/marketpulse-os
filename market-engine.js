@@ -183,4 +183,4 @@ function backtestBySetup(c){
   return Object.fromEntries(Object.entries(buckets).map(([k,v])=>[k,summarize(v)]));
 }
 
-module.exports={analyze,backtest};
+module.exports={analyze,backtest,backtestBySetup};
