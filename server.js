@@ -467,12 +467,25 @@ const server=http.createServer(async(req,res)=>{
       return send(res,200,{ok:true,interval,rows});
     }
     if(req.method==='GET'&&u.pathname==='/api/system-check'){
-      const checks={server:true,marketEngine:true,learning:false,memory:false,marketData:false};
-      let marketError=null;
+      const checks={server:true,marketEngine:true,learning:false,memory:false,marketData:false,derivatives:false,oi:false,cvd:false,liquidations:false};
+      let marketError=null,derivativesError=null;
       try{checks.learning=Boolean(await learning.status())}catch(e){}
       try{checks.memory=Boolean(storage.status())}catch(e){}
       try{const rows=await getKraken('BTCUSDT','1h');checks.marketData=Boolean(rows&&rows.length>=50)}catch(e){marketError=e.message}
-      return send(res,200,{ok:Object.values(checks).every(Boolean),checks,marketError,routes:{core:true,coreScan:true,coreFlow:true,cycle:true,ai:true,memory:true},timestamp:Date.now()});
+      try{
+        const d=await Promise.race([derivatives('BTCUSDT','15m'),new Promise(resolve=>setTimeout(()=>resolve(null),3500))]);
+        checks.derivatives=Boolean(d&&d.available);
+        checks.oi=Boolean(Number.isFinite(Number(d?.oi)));
+        checks.cvd=Boolean(Number.isFinite(Number(d?.cvdDelta))||String(d?.cvdState||'').includes('PRESSURE')||String(d?.cvdState||'').includes('BALANCED'));
+        checks.liquidations=Boolean(Number(d?.liquidationTotal)>0||Number(d?.liveLiquidations?.total)>0);
+        if(!checks.derivatives)derivativesError="No derivatives provider returned usable data";
+      }catch(e){derivativesError=String(e.message||e)}
+      return send(res,200,{
+        ok:checks.server&&checks.marketEngine&&checks.learning&&checks.memory&&checks.marketData,
+        checks,marketError,derivativesError,
+        routes:{core:true,coreScan:true,coreFlow:true,cycle:true,ai:true,memory:true},
+        timestamp:Date.now()
+      });
     }
     if(req.method==='GET'&&u.pathname==='/api/live'){
       const symbol=(u.searchParams.get('symbol')||'BTCUSDT').toUpperCase(),interval=u.searchParams.get('interval')||'1h';
