@@ -20,6 +20,31 @@ button,select,input{font:inherit}.app{max-width:1280px;margin:auto;padding:20px 
 @media(max-width:960px){.grid{grid-template-columns:1fr}.hero{grid-template-columns:repeat(2,1fr)}.score{text-align:left}.levels,.history{grid-template-columns:repeat(2,1fr)}.risk{grid-template-columns:repeat(2,1fr)}}@media(max-width:620px){.app{padding:14px 12px 88px}.top{align-items:flex-start}.brandMark{width:44px;height:44px;flex-basis:44px}.brand h1{font-size:22px}.brandQuote{font-size:9px}.status{max-width:110px}.controls{gap:6px}.hero{grid-template-columns:repeat(2,1fr)}.hero .metric:first-child{grid-column:span 2}.thesis{flex-direction:column}.score{min-width:auto}.setup{font-size:23px}.chart{height:255px}.levels,.history,.risk{grid-template-columns:repeat(2,1fr)}.row{grid-template-columns:23px 44px 1fr 80px 38px}.hide-sm{display:none!important}}
 
 <style>
+
+/* MarketPulse workspace architecture */
+.workspaceRail{max-width:1340px;margin:0 auto;padding:8px 18px;display:flex;gap:5px;overflow:auto;scrollbar-width:none}
+.workspaceRail::-webkit-scrollbar{display:none}
+.workspaceTab{flex:0 0 auto;border:1px solid rgba(160,190,255,.10);background:rgba(8,17,31,.42);color:#8592a8;padding:8px 11px;border-radius:999px;cursor:pointer;font-size:9px;font-weight:800;letter-spacing:.01em}
+.workspaceTab span{opacity:.75;margin-right:4px}.workspaceTab:hover{color:#eaf1ff;border-color:rgba(125,249,255,.22)}.workspaceTab.active{color:#06111d;background:linear-gradient(100deg,#7df9ff,#b78cff);border-color:transparent;box-shadow:0 8px 28px rgba(125,249,255,.12)}
+.workspaceShell{max-width:1340px;margin:0 auto}
+.workspaceView{display:none;animation:wsIn .18s ease-out}.workspaceView.active{display:block}
+@keyframes wsIn{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}
+.workspaceHero{display:flex;justify-content:space-between;gap:14px;align-items:flex-end;padding:10px 2px 12px}
+.workspaceHero .kicker{font-size:9px;color:#708099;font-weight:900;letter-spacing:.13em;text-transform:uppercase}
+.workspaceHero h2{margin:4px 0 3px;font:700 24px "Space Grotesk",sans-serif;letter-spacing:-.045em}
+.workspaceHero p{margin:0;color:#8e99ad;font-size:10px;line-height:1.5;max-width:720px}
+.workspaceHero .liveBadge{padding:6px 9px;border:1px solid rgba(101,240,172,.18);border-radius:999px;color:#65f0ac;font-size:9px;font-weight:850;background:rgba(101,240,172,.04);white-space:nowrap}
+.workspaceStack{display:grid;gap:14px}
+.workspaceTwo{display:grid;grid-template-columns:1.7fr 1fr;gap:14px}.workspaceTwo>*{min-width:0}
+.workspaceWide{display:grid;gap:14px}
+.launchGrid{display:grid;grid-template-columns:repeat(4,1fr);gap:9px;margin-bottom:2px}
+.launchCard{display:block;text-align:left;border:1px solid rgba(160,190,255,.12);background:linear-gradient(180deg,rgba(14,27,48,.72),rgba(8,15,27,.68));color:#eef3fb;border-radius:14px;padding:13px;cursor:pointer}
+.launchCard:hover{border-color:rgba(125,249,255,.25);transform:translateY(-1px)}.launchCard .ico{font-size:15px}.launchCard b{display:block;margin-top:8px;font-size:11px}.launchCard span{display:block;margin-top:4px;color:#7f8ba0;font-size:9px;line-height:1.4}
+.workspaceView .grid{margin-top:0}.workspaceView>.panel,.workspaceView .panel{box-shadow:0 16px 60px rgba(0,0,0,.25)}
+.toolbox{display:flex;justify-content:space-between;gap:10px;align-items:center;padding:11px 13px;border:1px solid rgba(160,190,255,.11);border-radius:13px;background:rgba(255,255,255,.018)}
+.toolbox b{font-size:10px}.toolbox span{display:block;color:#7f8ba0;font-size:9px;margin-top:3px}
+@media(max-width:960px){.workspaceTwo{grid-template-columns:1fr}.launchGrid{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:620px){.workspaceRail{padding:7px 12px}.workspaceHero{align-items:flex-start}.workspaceHero h2{font-size:21px}.launchGrid{grid-template-columns:1fr 1fr}.workspaceTab{font-size:8px;padding:7px 9px}.workspaceHero .liveBadge{display:none}}
 /* MarketPillar-inspired information architecture — original MarketPulse styling */
 body{background:
   radial-gradient(circle at 8% -8%,rgba(125,249,255,.10),transparent 24%),
@@ -85,18 +110,18 @@ body:before{content:"";position:fixed;inset:0;pointer-events:none;opacity:.22;ba
     </div>
 
     <div class="mainNav" id="mainNav">
-      <button class="navItem active" data-nav-go="top">Intel</button>
+      <button class="navItem active" data-workspace="intel">Intel</button>
 
       <div class="navGroup">
         <button class="navItem navMenuBtn" data-menu="toolsMenu">Tools <span>⌄</span></button>
         <div class="megaMenu" id="toolsMenu">
           <div class="megaLabel">TRADER TOOLS</div>
-          <button data-menu-go="scan"><b>Scanner</b><span>Live setup discovery across assets</span></button>
-          <button data-menu-go="copilot"><b>AI Copilot</b><span>Market reads and trade reviews</span></button>
-          <button data-menu-go="riskSection"><b>Risk Lab</b><span>Position sizing and trade risk</span></button>
-          <button data-menu-go="signalHistory"><b>Signal Lifecycle</b><span>Track formation, confirmation and invalidation</span></button>
-          <button data-menu-go="journalSection"><b>Trade Journal</b><span>Store execution and lessons</span></button>
-          <button data-menu-go="alertsSection"><b>Smart Alerts</b><span>Watchlist-based browser alerts</span></button>
+          <button data-workspace="scanner"><b>Scanner</b><span>Live setup discovery across assets</span></button>
+          <button data-workspace="ai"><b>AI Copilot</b><span>Market reads and trade reviews</span></button>
+          <button data-workspace="risk"><b>Risk Lab</b><span>Position sizing and trade risk</span></button>
+          <button data-workspace="signals"><b>Signal Lifecycle</b><span>Track formation, confirmation and invalidation</span></button>
+          <button data-workspace="journal"><b>Trade Journal</b><span>Store execution and lessons</span></button>
+          <button data-workspace="alerts"><b>Smart Alerts</b><span>Watchlist-based browser alerts</span></button>
         </div>
       </div>
 
@@ -104,10 +129,10 @@ body:before{content:"";position:fixed;inset:0;pointer-events:none;opacity:.22;ba
         <button class="navItem navMenuBtn" data-menu="analyticsMenu">Analytics <span>⌄</span></button>
         <div class="megaMenu" id="analyticsMenu">
           <div class="megaLabel">MARKET ANALYTICS</div>
-          <button data-menu-go="top"><b>Live Intel</b><span>Price, regime and market thesis</span></button>
-          <button data-menu-go="top"><b>Validation Lab</b><span>Historical and out-of-sample testing</span></button>
-          <button data-menu-go="top"><b>Adaptive Intelligence</b><span>Outcome learning and calibration</span></button>
-          <button data-menu-go="top"><b>Derivatives Pulse</b><span>OI, CVD, funding and liquidation context</span></button>
+          <button data-workspace="intel"><b>Live Intel</b><span>Price, regime and market thesis</span></button>
+          <button data-workspace="intel"><b>Validation Lab</b><span>Historical and out-of-sample testing</span></button>
+          <button data-workspace="intel"><b>Adaptive Intelligence</b><span>Outcome learning and calibration</span></button>
+          <button data-workspace="intel"><b>Derivatives Pulse</b><span>OI, CVD, funding and liquidation context</span></button>
         </div>
       </div>
 
@@ -115,9 +140,9 @@ body:before{content:"";position:fixed;inset:0;pointer-events:none;opacity:.22;ba
         <button class="navItem navMenuBtn" data-menu="learnMenu">Learn <span>⌄</span></button>
         <div class="megaMenu" id="learnMenu">
           <div class="megaLabel">METHOD & PROCESS</div>
-          <button data-menu-go="top"><b>How MarketPulse Thinks</b><span>Regime → confluence → scenarios</span></button>
-          <button data-menu-go="brainSection"><b>Trader Brain</b><span>Learn from your own execution history</span></button>
-          <button data-menu-go="riskSection"><b>Risk Framework</b><span>Plan risk before the trade</span></button>
+          <button data-workspace="intel"><b>How MarketPulse Thinks</b><span>Regime → confluence → scenarios</span></button>
+          <button data-workspace="brain"><b>Trader Brain</b><span>Learn from your own execution history</span></button>
+          <button data-workspace="risk"><b>Risk Framework</b><span>Plan risk before the trade</span></button>
         </div>
       </div>
 
@@ -131,7 +156,16 @@ body:before{content:"";position:fixed;inset:0;pointer-events:none;opacity:.22;ba
       <button id="refresh" class="btn primary">Refresh</button>
     </div>
   </div>
-</header>
+</header><div class="workspaceRail" id="workspaceRail">
+  <button class="workspaceTab active" data-workspace="intel"><span>✦</span> Intel</button>
+  <button class="workspaceTab" data-workspace="scanner"><span>⌁</span> Scanner</button>
+  <button class="workspaceTab" data-workspace="flow"><span>◈</span> Flow</button>
+  <button class="workspaceTab" data-workspace="signals"><span>↗</span> Signals</button>
+  <button class="workspaceTab" data-workspace="ai"><span>◎</span> AI Copilot</button>
+  <button class="workspaceTab" data-workspace="lab"><span>◌</span> Lab</button>
+  <button class="workspaceTab" data-workspace="brain"><span>◉</span> Brain</button>
+  <button class="workspaceTab" data-workspace="risk"><span>⌁</span> Risk</button>
+</div>
 
 <div class="pulse"><span class="chip" id="lastUpdated">Updated —</span><span class="chip" id="breadth">Breadth —</span><span class="chip" id="pulseTone">Pulse —</span><span class="chip" id="learningState">Adaptive: collecting</span></div>
 
@@ -288,9 +322,74 @@ body:before{content:"";position:fixed;inset:0;pointer-events:none;opacity:.22;ba
 <div class="axisNote">The right price scale uses the chart range automatically. The current price is highlighted with a floating label.</div>
 <div class="modalFoot"><button id="chartCancel" class="mutedBtn">Close</button><button id="chartApply" class="btn primary">Apply</button></div>
 </div></div>
-<nav class="mobileDock"><button class="active" data-go="top">Intel</button><button data-go="scan">Scan</button><button data-go="copilot">AI</button><button data-go="journalSection">Journal</button><button data-go="riskSection">Risk</button></nav>
+<nav class="mobileDock"><button class="active" data-workspace="intel">Intel</button><button data-workspace="scanner">Scan</button><button data-workspace="ai">AI</button><button data-workspace="journal">Journal</button><button data-workspace="risk">Risk</button></nav>
 
 <script>
+
+function makeWorkspace(id,title,subtitle){
+  const v=document.createElement("section");v.className="workspaceView";v.id="ws-"+id;v.dataset.workspace=id;
+  const head=document.createElement("div");head.className="workspaceHero";head.innerHTML='<div><div class="kicker">MarketPulse workspace</div><h2>'+title+'</h2><p>'+subtitle+'</p></div><span class="liveBadge">LIVE INTELLIGENCE</span>';
+  v.appendChild(head);return v;
+}
+function moveNode(node,parent){if(node)parent.appendChild(node)}
+function initWorkspaces(){
+  if(window.__workspacesReady)return;window.__workspacesReady=true;
+  const app=document.querySelector(".app"),header=app.querySelector(".siteHeader"),rail=document.getElementById("workspaceRail");
+  const pulse=document.querySelector(".pulse"),hero=document.querySelector("section.panel > .hero")?.parentElement;
+  const grid=document.querySelector(".grid"),thesis=grid?.querySelector("section.panel:first-child"),scanner=document.getElementById("scan");
+  const copilot=document.getElementById("copilot"),signals=document.getElementById("signalHistory"),toolsGrid=document.querySelector(".toolsGrid");
+  const journal=document.getElementById("journalSection"),alerts=document.getElementById("alertsSection"),risk=document.getElementById("riskSection");
+  const foot=app.querySelector(".foot");
+  const quality=thesis?.querySelector(".qualityGrid"),adaptive=thesis?.querySelector(".adaptiveCard"),flowGrid=thesis?.querySelector(".flowGrid"),flowPulse=thesis?.querySelector(".flowPulse");
+  const chartHead=thesis?.querySelector(".chartHead"),chart=thesis?.querySelector("#chart"),levels=thesis?.querySelector(".levels"),why=thesis?.querySelector("#why"),histories=[...(thesis?.querySelectorAll(".history")||[])];
+  const shell=document.createElement("main");shell.className="workspaceShell";shell.id="workspaceShell";
+  const intel=makeWorkspace("intel","Market Intel","A single view of price, regime, structure, scenarios and the current decision context.");
+  const scannerWs=makeWorkspace("scanner","Market Scanner","Find the assets that are actually aligning instead of scanning charts one by one.");
+  const flow=makeWorkspace("flow","Derivatives Flow","Open interest, CVD, funding and liquidation pressure in one execution-focused workspace.");
+  const signalWs=makeWorkspace("signals","Signal Lifecycle","Follow setups from formation to confirmation, invalidation and resolution.");
+  const ai=makeWorkspace("ai","AI Copilot","Question the current market or inspect the quality of a trade plan.");
+  const lab=makeWorkspace("lab","Research Lab","Backtests, validation and adaptive calibration — separated from the live decision surface.");
+  const brain=makeWorkspace("brain","Trader Brain","Your execution history, personal patterns and long-term trading memory.");
+  const riskWs=makeWorkspace("risk","Risk Lab","Make position size fit the invalidation instead of forcing the trade to fit the size.");
+  const alertsWs=makeWorkspace("alerts","Smart Alerts","Turn watchlists and signal thresholds into browser notifications.");
+  const journalWs=makeWorkspace("journal","Trade Journal","Capture the plan, result and lesson so the system can learn from your execution.");
+
+  const launch=document.createElement("div");launch.className="launchGrid";launch.innerHTML=[
+    ['scanner','⌁','Scanner','Scan the market for aligned setups.'],
+    ['flow','◈','Flow','Read OI, CVD and liquidation pressure.'],
+    ['lab','◌','Research Lab','Validate the model and adaptive layer.'],
+    ['brain','◉','Trader Brain','Turn your history into evidence.']
+  ].map(x=>'<button class="launchCard" data-workspace="'+x[0]+'"><span class="ico">'+x[1]+'</span><b>'+x[2]+'</b><span>'+x[3]+'</span></button>').join("");
+  intel.appendChild(launch);
+
+  moveNode(pulse,intel);
+  moveNode(hero,intel);
+  moveNode(thesis,intel);
+  moveNode(scanner,scannerWs);
+  moveNode(flowGrid,flow);moveNode(flowPulse,flow);
+  moveNode(chartHead,intel);moveNode(chart,intel);moveNode(levels,intel);moveNode(why,intel);
+  histories.forEach(n=>moveNode(n,lab));
+  moveNode(quality,lab);moveNode(adaptive,lab);
+  moveNode(copilot,ai);moveNode(signals,signalWs);
+  moveNode(journal,journalWs);moveNode(journal?.querySelector("#brainSection"),brain);
+  moveNode(alerts,alertsWs);moveNode(risk,riskWs);
+  moveNode(foot,brain);
+  [intel,scannerWs,flow,signalWs,ai,lab,brain,riskWs,alertsWs,journalWs].forEach(v=>{shell.appendChild(v);v.classList.remove("active")});
+  intel.classList.add("active");
+  header.after(shell);
+  if(grid)grid.remove();
+  if(toolsGrid&&toolsGrid.parentElement)toolsGrid.remove();
+  const nav= document.querySelectorAll(".workspaceTab,.navItem[data-workspace],.megaMenu [data-workspace],.mobileDock [data-workspace],.launchCard");
+  nav.forEach(b=>b.addEventListener("click",()=>setWorkspace(b.dataset.workspace)));
+  setWorkspace("intel");
+}
+function setWorkspace(name){
+  document.querySelectorAll(".workspaceView").forEach(v=>v.classList.toggle("active",v.dataset.workspace===name));
+  document.querySelectorAll(".workspaceTab").forEach(b=>b.classList.toggle("active",b.dataset.workspace===name));
+  document.querySelectorAll(".mainNav .navItem[data-workspace]").forEach(b=>b.classList.toggle("active",b.dataset.workspace===name));
+  const v=document.getElementById("ws-"+name);if(v)v.scrollIntoView({behavior:"smooth",block:"start"});
+  window.scrollTo({top:0,behavior:"smooth"});
+}
 const $=id=>document.getElementById(id);
 const fmt=x=>Number.isFinite(+x)?Number(x).toLocaleString(undefined,{maximumFractionDigits:2}):"—";
 const pct=x=>Number.isFinite(+x)?((+x>=0?"+":"")+Number(x).toFixed(2)+"%"):"—";
@@ -631,7 +730,7 @@ window.addEventListener("resize",()=>{if(window.__lastMarket){drawChart(window._
   $("sym").onchange=load;$("int").onchange=load;["acct","risk","rentry","rstop"].forEach(x=>$(x).oninput=risk);
   document.querySelectorAll(".filter button").forEach(b=>b.onclick=()=>{document.querySelectorAll(".filter button").forEach(x=>x.classList.remove("on"));b.classList.add("on");filter=b.dataset.filter;renderScanner()});
   setAiMode("market");
-  document.querySelectorAll("[data-menu]").forEach(btn=>btn.onclick=(e)=>{e.stopPropagation();const id=btn.dataset.menu;document.querySelectorAll(".megaMenu").forEach(m=>m.classList.toggle("open",m.id===id&&!m.classList.contains("open")))});document.addEventListener("click",()=>document.querySelectorAll(".megaMenu").forEach(m=>m.classList.remove("open")));document.querySelectorAll("[data-menu-go]").forEach(b=>b.onclick=(e)=>{e.stopPropagation();document.querySelectorAll(".megaMenu").forEach(m=>m.classList.remove("open"));document.getElementById(b.dataset.menuGo).scrollIntoView({behavior:"smooth",block:"start"})});document.querySelectorAll(".mainNav>[data-nav-go],.mobileDock button").forEach(b=>b.onclick=()=>{document.querySelectorAll(".mainNav .navItem").forEach(x=>x.classList.remove("active"));document.querySelectorAll(".mobileDock button").forEach(x=>x.classList.remove("active"));b.classList.add("active");document.getElementById(b.dataset.navGo||b.dataset.go).scrollIntoView({behavior:"smooth",block:"start"})});$("feedbackBtn").onclick=()=>{window.location.href="mailto:?subject=MarketPulse%20feedback"};
+  document.querySelectorAll("[data-menu]").forEach(btn=>btn.onclick=(e)=>{e.stopPropagation();const id=btn.dataset.menu;document.querySelectorAll(".megaMenu").forEach(m=>m.classList.toggle("open",m.id===id&&!m.classList.contains("open")))});document.addEventListener("click",()=>document.querySelectorAll(".megaMenu").forEach(m=>m.classList.remove("open")));document.querySelectorAll(".megaMenu [data-workspace]").forEach(b=>b.onclick=(e)=>{e.stopPropagation();document.querySelectorAll(".megaMenu").forEach(m=>m.classList.remove("open"));setWorkspace(b.dataset.workspace)});$("feedbackBtn").onclick=()=>{window.location.href="mailto:?subject=MarketPulse%20feedback"};initWorkspaces();
   $("autoToggle").onclick=()=>{auto=!auto;$("autoToggle").textContent=auto?"On":"Off";schedule()};renderJournal();updateAlertUI();risk();await load();schedule();
  }catch(e){$("why").innerHTML='<div class="whyitem">'+e.message+'</div>'}
 })();
