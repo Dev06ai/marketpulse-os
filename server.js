@@ -26,6 +26,44 @@ async function klines(symbol,interval){
   const key=symbol+'|'+interval,hit=CACHE.get(key);if(hit&&Date.now()-hit.ts<TTL)return hit.rows;
   const rows=await getBinance(symbol,interval)||await getKraken(symbol,interval);CACHE.set(key,{ts:Date.now(),rows});return rows;
 }
+const DERIV_CACHE=new Map(); const DERIV_TTL=15000;
+function bybitInterval(interval){return ({'15m':'15min','1h':'1h','4h':'4h','1d':'1d'})[interval]||'1h'}
+async function bybitGet(path,params){
+  const u=new URL('https://api.bybit.com'+path); for(const [k,v] of Object.entries(params||{}))u.searchParams.set(k,String(v));
+  const r=await fetch(u); if(!r.ok) throw new Error('Bybit returned '+r.status); const j=await r.json();
+  if(j.retCode!==0) throw new Error(j.retMsg||('Bybit error '+j.retCode)); return j.result;
+}
+async function derivatives(symbol,interval){
+  const key=symbol+'|'+interval,hit=DERIV_CACHE.get(key); if(hit&&Date.now()-hit.ts<DERIV_TTL)return hit.data;
+  const oiPromise=bybitGet('/v5/market/open-interest',{category:'linear',symbol,intervalTime:bybitInterval(interval),limit:50});
+  const tradesPromise=bybitGet('/v5/market/recent-trade',{category:'linear',symbol,limit:1000});
+  const [oi,tradeResult]=await Promise.all([oiPromise,tradesPromise]);
+  const oiList=(oi.list||[]).slice().reverse().map(x=>({ts:+x.timestamp,oi:+x.openInterest}));
+  const trades=(tradeResult.list||[]).slice().sort((a,b)=>+a.time-+b.time).map(x=>({ts:+x.time,price:+x.price,size:+x.size,side:x.side}));
+  let cvd=0,total=0; for(const t of trades){const q=t.price*t.size; cvd+=(t.side==='Buy'?q:-q);total+=q}
+  const first=trades[0]?.price,lastT=trades[trades.length-1]?.price;
+  const priceChangePct=Number.isFinite(first)&&first?((lastT-first)/first)*100:null;
+  const oiFirst=oiList[0]?.oi,oiLast=oiList[oiList.length-1]?.oi;
+  const oiChangePct=Number.isFinite(oiFirst)&&oiFirst?((oiLast-oiFirst)/oiFirst)*100:null;
+  const cvdRatio=total?cvd/total:null;
+  let cvdState='MIXED';
+  if(priceChangePct!=null&&cvdRatio!=null){
+    if(priceChangePct>0.15&&cvdRatio<-0.01)cvdState='BEARISH DIVERGENCE';
+    else if(priceChangePct<-0.15&&cvdRatio>0.01)cvdState='BULLISH DIVERGENCE';
+    else if(priceChangePct>0.15&&cvdRatio>0.01)cvdState='BUYERS CONFIRM';
+    else if(priceChangePct<-0.15&&cvdRatio<-0.01)cvdState='SELLERS CONFIRM';
+  }
+  let positioning='MIXED';
+  if(priceChangePct!=null&&oiChangePct!=null){
+    if(priceChangePct>0.15&&oiChangePct>1)positioning='PRICE + OI: LONG PARTICIPATION';
+    else if(priceChangePct>0.15&&oiChangePct<-1)positioning='PRICE UP + OI DOWN: SHORT COVERING';
+    else if(priceChangePct<-0.15&&oiChangePct>1)positioning='PRICE DOWN + OI UP: SHORT PARTICIPATION';
+    else if(priceChangePct<-0.15&&oiChangePct<-1)positioning='PRICE DOWN + OI DOWN: LONG LIQUIDATION';
+  }
+  const data={provider:'Bybit linear futures',oi:oiLast,oiChangePct,cvd,cvdRatio,cvdState,positioning,tradeCount:trades.length,tradePriceChangePct:priceChangePct,updatedAt:Date.now()};
+  DERIV_CACHE.set(key,{ts:Date.now(),data}); return data;
+}
+
 function send(res,code,p){res.writeHead(code,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','Access-Control-Allow-Origin':'*'});res.end(JSON.stringify(p))}
 async function callOpenAI(systemPrompt,userPrompt){
   if(!OPENAI_API_KEY) throw new Error("AI_COPILOT_NOT_CONFIGURED");
@@ -142,8 +180,9 @@ const server=http.createServer(async(req,res)=>{
       const candles=await klines(symbol,interval);
       const lowerA=lower&&lower.length>=220?analyze(lower,{interval:'15m'}):null;
       const higherA=higher&&higher.length>=220?analyze(higher,{interval:'4h'}):null;
-      const analysis=analyze(candles,{interval,higher:higherA,lower:lowerA});
-      return send(res,200,{symbol,interval,candles,analysis,backtest:backtest(candles),setupStats:require("./market-engine").backtestBySetup(candles)});
+      const deriv=await derivatives(symbol,interval).catch(e=>({error:e.message,provider:"Bybit linear futures"}));
+      const analysis=analyze(candles,{interval,higher:higherA,lower:lowerA,deriv});
+      return send(res,200,{symbol,interval,candles,analysis,derivatives:deriv,backtest:backtest(candles),setupStats:require("./market-engine").backtestBySetup(candles)});
     }
     if(req.method==='GET'&&u.pathname==='/api/scanner'){
       const interval=u.searchParams.get('interval')||'1h';
@@ -152,8 +191,9 @@ const server=http.createServer(async(req,res)=>{
           const candles=await klines(symbol,interval);
           const higher=interval==='4h'?null:await klines(symbol,'4h').catch(()=>null);
           const lower=interval==='15m'?null:await klines(symbol,'15m').catch(()=>null);
-          const a=analyze(candles,{interval,higher:higher&&higher.length>=220?analyze(higher,{interval:'4h'}):null,lower:lower&&lower.length>=220?analyze(lower,{interval:'15m'}):null});
-          return {symbol,label:labels[symbol]||symbol,...a};
+          const deriv=await derivatives(symbol,interval).catch(e=>({error:e.message,provider:"Bybit linear futures"}));
+          const a=analyze(candles,{interval,higher:higher&&higher.length>=220?analyze(higher,{interval:'4h'}):null,lower:lower&&lower.length>=220?analyze(lower,{interval:'15m'}):null,deriv});
+          return {symbol,label:labels[symbol]||symbol,derivatives:deriv,...a};
         }catch(e){return {symbol,label:labels[symbol]||symbol,error:e.message}}
       }));
       return send(res,200,{interval,rows,updatedAt:Date.now()});
