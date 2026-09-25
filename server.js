@@ -308,7 +308,7 @@ const server=http.createServer(async(req,res)=>{
       return send(res,200,{ok:true,storage:saved.storage,durable:saved.storage==="postgres",updatedAt:saved.updatedAt});
     }
     if(req.method==='GET'&&u.pathname==='/api/memory/status')return send(res,200,storage.status());
-    if(req.method==='GET'&&u.pathname==='/api/config')return send(res,200,{symbols:SYMBOLS,labels,intervals:['15m','1h','4h','1d']});if(req.method==='POST'&&u.pathname==='/api/ai'){
+    if(req.method==='GET'&&u.pathname==='/api/config')return send(res,200,{symbols:SYMBOLS,labels,intervals:['15m','1h','4h','1d'],memory:storage.status()});if(req.method==='POST'&&u.pathname==='/api/ai'){
       if(!aiAllowed(req)) return send(res,429,{error:"Slow down for a few seconds."});
       let raw=""; for await(const chunk of req) raw+=chunk; let body={}; try{body=JSON.parse(raw||"{}")}catch{return send(res,400,{error:"Invalid JSON"})}
       const mode=body.mode==="trade"?"trade":"market";
