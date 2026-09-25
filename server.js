@@ -1,4 +1,5 @@
 const http=require('http'),fs=require('fs'),path=require('path'),{analyze,backtest}=require('./market-engine');
+const WebSocket=require('ws');
 const PORT=Number(process.env.PORT||3000);
 const SYMBOLS=(process.env.SYMBOLS||'BTCUSDT,ETHUSDT,SOLUSDT,BNBUSDT,XRPUSDT,DOGEUSDT,ADAUSDT').split(',').map(s=>s.trim()).filter(Boolean);
 const KLINE_LIMIT=Number(process.env.KLINE_LIMIT||420);
@@ -26,6 +27,55 @@ async function klines(symbol,interval){
   const key=symbol+'|'+interval,hit=CACHE.get(key);if(hit&&Date.now()-hit.ts<TTL)return hit.rows;
   const rows=await getBinance(symbol,interval)||await getKraken(symbol,interval);CACHE.set(key,{ts:Date.now(),rows});return rows;
 }
+const LIVE_FLOW=new Map();
+const LIVE_FLOW_LIMIT=900;
+const LIVE_SYMBOLS=SYMBOLS.filter(s=>["BTCUSDT","ETHUSDT","SOLUSDT","BNBUSDT","XRPUSDT","DOGEUSDT","ADAUSDT"].includes(s));
+function flowBucket(symbol){
+  let v=LIVE_FLOW.get(symbol);if(!v){v={liqLong:0,liqShort:0,cvd:0,cvdNotional:0,lastTs:0,points:[]};LIVE_FLOW.set(symbol,v)}
+  return v;
+}
+function recordFlowPoint(symbol){
+  const v=flowBucket(symbol);v.points.push({ts:Date.now(),liqLong:v.liqLong,liqShort:v.liqShort,cvd:v.cvd,cvdRatio:v.cvdNotional?v.cvd/v.cvdNotional:null});if(v.points.length>LIVE_FLOW_LIMIT)v.points.shift();
+}
+function startBybitLiveFlow(){
+  if(!LIVE_SYMBOLS.length)return;
+  let stopped=false,ws=null,retry=1000,timer=null;
+  const connect=()=>{
+    if(stopped)return;
+    ws=new WebSocket("wss://stream.bybit.com/v5/public/linear");
+    ws.on("open",()=>{
+      retry=1000;
+      ws.send(JSON.stringify({op:"subscribe",args:LIVE_SYMBOLS.flatMap(sym=>["allLiquidation."+sym,"publicTrade."+sym])}));
+    });
+    ws.on("message",raw=>{
+      try{
+        const msg=JSON.parse(raw.toString()),topic=String(msg.topic||""),data=Array.isArray(msg.data)?msg.data:[msg.data];
+        if(!topic||!data.length)return;
+        const symbol=topic.split(".")[1];if(!LIVE_FLOW.has(symbol))return;const v=flowBucket(symbol);
+        if(topic.startsWith("allLiquidation.")){
+          for(const x of data){
+            const q=Number(x.v)*Number(x.p);if(!Number.isFinite(q)||q<=0)continue;
+            // Bybit: Buy liquidation means a long was liquidated; Sell means a short was liquidated.
+            if(x.S==="Buy")v.liqLong+=q;else if(x.S==="Sell")v.liqShort+=q;
+            v.lastTs=Number(x.T)||Date.now();
+          }
+        }else if(topic.startsWith("publicTrade.")){
+          for(const x of data){
+            const q=Number(x.v)*Number(x.p);if(!Number.isFinite(q)||q<=0)continue;
+            v.cvd+=(x.S==="Buy"?q:-q);v.cvdNotional+=q;v.lastTs=Number(x.T)||Date.now();
+          }
+        }
+        recordFlowPoint(symbol);
+      }catch{}
+    });
+    ws.on("close",()=>{if(!stopped){clearTimeout(timer);timer=setTimeout(connect,retry);retry=Math.min(retry*2,30000)}});
+    ws.on("error",()=>{try{ws.close()}catch{}});
+  };
+  connect();
+  process.on("SIGTERM",()=>{stopped=true;try{ws?.close()}catch{}});
+}
+startBybitLiveFlow();
+
 const DERIV_CACHE=new Map(); const DERIV_TTL=15000;
 const KRAKEN_FUTURES_PAIRS={BTCUSDT:"PF_XBTUSD",ETHUSDT:"PF_ETHUSD",SOLUSDT:"PF_SOLUSD",BNBUSDT:"PF_BNBUSD",XRPUSDT:"PF_XRPUSD",DOGEUSDT:"PF_DOGEUSD",ADAUSDT:"PF_ADAUSD"};
 const BYBIT_HOSTS=["https://api.bybit.com","https://api.bytick.com"];
@@ -105,7 +155,8 @@ async function bybitDerivatives(symbol,interval){
   const trades=(tradePayload?.result?.list||[]).slice().sort((a,b)=>+a.time-+b.time).map(x=>({ts:+x.time,price:+x.price,size:+x.size,side:x.side}));
   let cvd=0,total=0;for(const t of trades){const q=t.price*t.size;cvd+=(t.side==="Buy"?q:-q);total+=q}
   const first=trades[0]?.price,lastT=trades[trades.length-1]?.price,priceChangePct=Number.isFinite(first)&&first?((lastT-first)/first)*100:null,cvdRatio=total?cvd/total:null;
-  const data={available:Boolean(ticker||oiPayload||tradePayload),provider:tickerPayload?.host||oiPayload?.host||tradePayload?.host||"Bybit linear futures",oi:Number.isFinite(currentOi)?currentOi:null,oiChangePct,cvdDelta:cvd,cvdRatio,cvdState:"MIXED",positioning:"MIXED",tradeCount:trades.length,fundingRate:ticker&&Number.isFinite(+ticker.fundingRate)?+ticker.fundingRate:null,markPrice:ticker&&Number.isFinite(+ticker.markPrice)?+ticker.markPrice:null,tradePriceChangePct:priceChangePct,errors,updatedAt:Date.now()};
+  const live=flowBucket(symbol),liveCvd=live.cvdNotional?live.cvd:cvd,liveCvdRatio=live.cvdNotional?live.cvd/live.cvdNotional:cvdRatio,liqTotal=live.liqLong+live.liqShort,liqBias=liqTotal?(live.liqLong>live.liqShort?"LONG LIQS DOMINANT":"SHORT LIQS DOMINANT"):"UNAVAILABLE";
+  const data={available:Boolean(ticker||oiPayload||tradePayload||live.cvdNotional||liqTotal),provider:"Bybit linear futures"+(live.cvdNotional||liqTotal?" · live stream":""),oi:Number.isFinite(currentOi)?currentOi:null,oiChangePct,cvdDelta:liveCvd,cvdRatio:liveCvdRatio,cvdState:"MIXED",positioning:"MIXED",tradeCount:trades.length,fundingRate:ticker&&Number.isFinite(+ticker.fundingRate)?+ticker.fundingRate:null,markPrice:ticker&&Number.isFinite(+ticker.markPrice)?+ticker.markPrice:null,tradePriceChangePct:priceChangePct,longLiquidations:live.liqLong,shortLiquidations:live.liqShort,liquidationTotal:liqTotal,liquidationBias:liqBias,livePointCount:live.points.length,liveHistory:live.points.slice(-120),errors,updatedAt:Date.now()};
   if(priceChangePct!=null&&cvdRatio!=null){if(priceChangePct>0.15&&cvdRatio<-0.01)data.cvdState="BEARISH DIVERGENCE";else if(priceChangePct<-0.15&&cvdRatio>0.01)data.cvdState="BULLISH DIVERGENCE";else if(priceChangePct>0.15&&cvdRatio>0.01)data.cvdState="BUYERS CONFIRM";else if(priceChangePct<-0.15&&cvdRatio<-0.01)data.cvdState="SELLERS CONFIRM"}else if(trades.length===0)data.cvdState="UNAVAILABLE";
   if(priceChangePct!=null&&oiChangePct!=null){if(priceChangePct>0.15&&oiChangePct>1)data.positioning="PRICE + OI: LONG PARTICIPATION";else if(priceChangePct>0.15&&oiChangePct<-1)data.positioning="PRICE UP + OI DOWN: SHORT COVERING";else if(priceChangePct<-0.15&&oiChangePct>1)data.positioning="PRICE DOWN + OI UP: SHORT PARTICIPATION";else if(priceChangePct<-0.15&&oiChangePct<-1)data.positioning="PRICE DOWN + OI DOWN: LONG LIQUIDATION"}else if(!Number.isFinite(oiChangePct))data.positioning=Number.isFinite(currentOi)?"OI CHANGE NOT AVAILABLE":"OI UNAVAILABLE";
   return data;
@@ -128,6 +179,15 @@ async function derivatives(symbol,interval){
       catch(e3){data={available:false,provider:"No derivatives provider",oi:null,oiChangePct:null,cvdDelta:null,cvdRatio:null,cvdState:"UNAVAILABLE",positioning:"UNAVAILABLE",tradeCount:0,fundingRate:null,markPrice:null,errors:[e.message,e2.message,e3.message],updatedAt:Date.now()}}
     }
   }
+  const live=flowBucket(symbol);
+  if(live.liqLong||live.liqShort){
+    data.liveLiquidations={long:live.liqLong,short:live.liqShort,total:live.liqLong+live.liqShort,bias:live.liqLong>live.liqShort?"LONG LIQS DOMINANT":"SHORT LIQS DOMINANT"};
+    if(data.liquidationBias==="UNKNOWN"||data.liquidationTotal===0){
+      data.liquidationBias=data.liveLiquidations.bias;data.liquidationTotal=data.liveLiquidations.total;
+    }
+  }
+  data.liveHistory=live.points.slice(-120);
+  data.livePointCount=live.points.length;
   DERIV_CACHE.set(key,{ts:Date.now(),data});return data;
 }
 
