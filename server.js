@@ -351,6 +351,24 @@ const server=http.createServer(async(req,res)=>{
       }
     }
     
+    if(req.method==='GET'&&u.pathname==='/api/core'){
+      const symbol=(u.searchParams.get('symbol')||'BTCUSDT').toUpperCase(),interval=u.searchParams.get('interval')||'1h';
+      if(!SYMBOLS.includes(symbol))return send(res,400,{error:'Unsupported symbol'});
+      try{
+        let candles=await getKraken(symbol,interval);
+        if(!candles||candles.length<220)throw Error('Kraken returned insufficient candles');
+        const analysis=analyze(candles,{interval});
+        return send(res,200,{ok:true,symbol,interval,candles,analysis,source:'Kraken spot'});
+      }catch(e){return send(res,503,{ok:false,error:String(e.message||e),source:'Kraken spot'})}
+    }
+    if(req.method==='GET'&&u.pathname==='/api/core-scan'){
+      const interval=u.searchParams.get('interval')||'1h';
+      const rows=[];
+      for(const symbol of SYMBOLS){
+        try{const candles=await getKraken(symbol,interval);const analysis=candles&&candles.length>=220?analyze(candles,{interval}):null;rows.push(analysis?{symbol,label:labels[symbol]||symbol,price:analysis.price,change24h:analysis.change24h,regime:analysis.regime,side:analysis.side,type:analysis.type,status:analysis.status,score:analysis.score,bias:analysis.bias,probabilityLabel:analysis.probabilityLabel,structure:analysis.structure}:{symbol,label:labels[symbol]||symbol,status:'WAITING',side:'WAIT',score:0,error:'Insufficient candles'});}catch(e){rows.push({symbol,label:labels[symbol]||symbol,status:'WAITING',side:'WAIT',score:0,error:e.message})}
+      }
+      return send(res,200,{ok:true,interval,rows});
+    }
     if(req.method==='GET'&&u.pathname==='/api/live'){
       const symbol=(u.searchParams.get('symbol')||'BTCUSDT').toUpperCase(),interval=u.searchParams.get('interval')||'1h';
       if(!SYMBOLS.includes(symbol))return send(res,400,{error:'Unsupported symbol'});
