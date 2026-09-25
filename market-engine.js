@@ -1,11 +1,146 @@
 const clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
+const last=v=>v[v.length-1];
+const finiteOr=(v,fallback)=>Number.isFinite(v)?v:fallback;
+
 function sma(v,p){const o=[];let s=0;for(let i=0;i<v.length;i++){s+=v[i];if(i>=p)s-=v[i-p];o.push(i+1>=p?s/p:NaN)}return o}
+function rma(v,p){const o=Array(v.length).fill(NaN);if(v.length<p)return o;let s=0;for(let i=0;i<p;i++)s+=v[i];let a=s/p;o[p-1]=a;for(let i=p;i<v.length;i++){a=((p-1)*a+v[i])/p;o[i]=a}return o}
 function ema(v,p){const o=[],k=2/(p+1);let e=v[0];for(let i=0;i<v.length;i++){e=i===0?v[i]:v[i]*k+e*(1-k);o.push(e)}return o}
 function stdev(v,p){const o=[];for(let i=0;i<v.length;i++){if(i+1<p){o.push(NaN);continue}const w=v.slice(i-p+1,i+1),m=w.reduce((a,b)=>a+b,0)/p;o.push(Math.sqrt(w.reduce((a,b)=>a+(b-m)**2,0)/p))}return o}
-function rsi(v,p=14){const o=Array(v.length).fill(NaN);let g=0,l=0;for(let i=1;i<v.length;i++){const d=v[i]-v[i-1],G=Math.max(d,0),L=Math.max(-d,0);if(i<=p){g+=G;l+=L;if(i===p){o[i]=l===0?100:100-100/(1+g/l);g/=p;l/=p}}else{g=(g*(p-1)+G)/p;l=(l*(p-1)+L)/p;o[i]=l===0?100:100-100/(1+g/l)}}return o}
-function atr(c,p=14){const tr=[];for(let i=0;i<c.length;i++){if(i===0)tr.push(c[i].h-c[i].l);else tr.push(Math.max(c[i].h-c[i].l,Math.abs(c[i].h-c[i-1].c),Math.abs(c[i].l-c[i-1].c)))}return sma(tr,p)}
-function adx(c,p=14){const tr=[],pl=[],mi=[];for(let i=1;i<c.length;i++){const x=c[i],q=c[i-1];tr.push(Math.max(x.h-x.l,Math.abs(x.h-q.c),Math.abs(x.l-q.c)));const u=x.h-q.h,d=q.l-x.l;pl.push(u>d&&u>0?u:0);mi.push(d>u&&d>0?d:0)}const t=sma(tr,p),a=sma(pl,p),b=sma(mi,p),dx=t.map((z,i)=>!z||Number.isNaN(z)?NaN:(a[i]+b[i]?(100*Math.abs(100*a[i]/z-100*b[i]/z)/(100*a[i]/z+100*b[i]/z)):0));return sma(dx,p)}
-function volumeZ(v,p=30){const m=sma(v,p),s=stdev(v,p),i=v.length-1;return Number.isFinite(m[i])&&s[i]?(v[i]-m[i])/s[i]:0}
-function analyze(c){if(!Array.isArray(c)||c.length<220)throw new Error("At least 220 candles are required.");const cl=c.map(x=>x.c),vo=c.map(x=>x.v),i=c.length-1,p=cl[i],E20=ema(cl,20),E50=ema(cl,50),E200=ema(cl,200),R=rsi(cl),A=atr(c),D=adx(c),vz=volumeZ(vo);const ah=A[i],dx=D[i],ri=R[i],rc=c.slice(Math.max(0,i-19),i+1),hi=Math.max(...rc.map(x=>x.h)),lo=Math.min(...rc.map(x=>x.l)),rp=hi===lo?.5:(p-lo)/(hi-lo);let regime="RANGE",type="NO TRADE",side="WAIT",score=0,bias="Neutral",reasons=[];if(p>E50[i]&&E50[i]>E200[i])regime="UPTREND";else if(p<E50[i]&&E50[i]<E200[i])regime="DOWNTREND";if(ah/p*100>4)regime="HIGH VOLATILITY";const tl=regime==="UPTREND"&&p>=E20[i]*.988&&p<=E20[i]*1.018&&ri>=49&&ri<=68,ts=regime==="DOWNTREND"&&p<=E20[i]*1.012&&p>=E20[i]*.982&&ri>=32&&ri<=51,bl=regime==="UPTREND"&&p>=hi&&vz>.8,bs=regime==="DOWNTREND"&&p<=lo&&vz>.8,rl=regime==="RANGE"&&ri<34&&rp<.3,rs=regime==="RANGE"&&ri>66&&rp>.7;if(bl){type="BREAKOUT LONG WATCH";side="LONG";bias="Bullish";score=78+(dx>25?8:0)+(vz>1.2?7:0);reasons=["Price is breaking the recent range high","Trend structure is bullish","Volume is expanding with the move"]}else if(bs){type="BREAKOUT SHORT WATCH";side="SHORT";bias="Bearish";score=78+(dx>25?8:0)+(vz>1.2?7:0);reasons=["Price is breaking the recent range low","Trend structure is bearish","Volume is expanding with the move"]}else if(tl){type="LONG SETUP";side="LONG";bias="Bullish";score=68+(ri>53?8:0)+(vz>.5?7:0)+(dx>20?7:0);reasons=["Price is holding a bullish EMA stack","Price is near the EMA-20 pullback zone","RSI is compatible with continuation"];if(vz>.5)reasons.push("Volume is above its recent mean")}else if(ts){type="SHORT SETUP";side="SHORT";bias="Bearish";score=68+(ri<47?8:0)+(vz>.5?7:0)+(dx>20?7:0);reasons=["Price is holding a bearish EMA stack","Price is near the EMA-20 pullback zone","RSI is compatible with continuation"];if(vz>.5)reasons.push("Volume is above its recent mean")}else if(rl){type="RANGE LONG WATCH";side="LONG";bias="Mean reversion";score=58+(ri<30?8:0)+(rp<.3?7:0);reasons=["Trend strength is low","RSI is deeply extended","Price is in the lower part of its recent range"]}else if(rs){type="RANGE SHORT WATCH";side="SHORT";bias="Mean reversion";score=58+(ri>70?8:0)+(rp>.7?7:0);reasons=["Trend strength is low","RSI is deeply extended","Price is in the upper part of its recent range"]}else{score=clamp(Math.round(42-Math.abs(ri-50)/3),10,55);reasons=["The engine does not see enough alignment between regime, momentum and structure"];if(regime==="HIGH VOLATILITY")reasons.push("ATR expansion is above the strategy safety threshold")}score=clamp(Math.round(score),0,95);let el=null,eh=null,stop=null,tp1=null,tp2=null;if(side!=="WAIT"){const risk=1.15*ah;if(side==="LONG"){el=p-.25*ah;eh=p+.10*ah;stop=Math.min(p-risk,lo-.15*ah);tp1=p+1.15*ah;tp2=p+2.15*ah}else{el=p-.10*ah;eh=p+.25*ah;stop=Math.max(p+risk,hi+.15*ah);tp1=p-1.15*ah;tp2=p-2.15*ah}}return{price:p,ema20:E20[i],ema50:E50[i],ema200:E200[i],rsi:ri,adx:dx,atrPct:ah/p*100,volumeZ:vz,regime,type,side,bias,score,reasons,stop,tp1,tp2,entryLow:el,entryHigh:eh,rangeHigh:hi,rangeLow:lo,rangePosition:rp,updatedAt:Date.now()}}
-function backtest(c){let trades=0,wins=0,netR=0;for(let i=220;i<c.length-18;i++){const a=analyze(c.slice(0,i+1));if(a.side==="WAIT"||!a.stop)continue;trades++;let r=0;for(let j=i+1;j<=Math.min(i+18,c.length-1);j++){const x=c[j];if(a.side==="LONG"){if(x.l<=a.stop){r=-1;break}if(x.h>=a.tp1){r=1;break}}else{if(x.h>=a.stop){r=-1;break}if(x.l<=a.tp1){r=1;break}}}netR+=r;if(r>0)wins++}return{trades,winRate:trades?wins/trades*100:0,netR}}
+
+function rsi(v,p=14){
+  const o=Array(v.length).fill(NaN);let gains=[],losses=[];
+  for(let i=1;i<v.length;i++){const d=v[i]-v[i-1];gains.push(Math.max(d,0));losses.push(Math.max(-d,0))}
+  const ag=rma(gains,p),al=rma(losses,p);
+  for(let i=p;i<v.length;i++){const g=ag[i-1],l=al[i-1];o[i]=l===0?100:100-100/(1+g/l)}
+  return o;
+}
+
+function atr(c,p=14){
+  const tr=[];for(let i=0;i<c.length;i++){
+    if(i===0)tr.push(c[i].h-c[i].l);
+    else tr.push(Math.max(c[i].h-c[i].l,Math.abs(c[i].h-c[i-1].c),Math.abs(c[i].l-c[i-1].c)));
+  }
+  return rma(tr,p);
+}
+
+function adx(c,p=14){
+  const tr=[],plus=[],minus=[];
+  for(let i=1;i<c.length;i++){
+    const x=c[i],q=c[i-1];
+    tr.push(Math.max(x.h-x.l,Math.abs(x.h-q.c),Math.abs(x.l-q.c)));
+    const up=x.h-q.h,down=q.l-x.l;
+    plus.push(up>down&&up>0?up:0);
+    minus.push(down>up&&down>0?down:0);
+  }
+  const atrR=rma(tr,p),pR=rma(plus,p),mR=rma(minus,p),dx=[];
+  for(let i=0;i<tr.length;i++){
+    if(!Number.isFinite(atrR[i])||atrR[i]===0){dx.push(NaN);continue}
+    const pdi=100*pR[i]/atrR[i],mdi=100*mR[i]/atrR[i],sum=pdi+mdi;
+    dx.push(sum===0?0:100*Math.abs(pdi-mdi)/sum);
+  }
+  const ax=rma(dx,p),out=Array(c.length).fill(NaN);
+  for(let i=0;i<ax.length;i++)out[i+1]=ax[i];
+  return out;
+}
+
+function volumeZ(v,p=30){const m=sma(v,p),s=stdev(v,p),i=v.length-1;return Number.isFinite(m[i])&&s[i]?((v[i]-m[i])/s[i]):0}
+
+function structure(c){
+  const i=c.length-1, recent=c.slice(Math.max(0,i-30),i+1);
+  const mid=Math.max(3,Math.floor(recent.length/4));
+  const left=recent.slice(0,Math.max(1,recent.length-mid)), right=recent.slice(Math.max(1,recent.length-mid));
+  const priorHigh=Math.max(...left.map(x=>x.h)), priorLow=Math.min(...left.map(x=>x.l));
+  const recentHigh=Math.max(...right.map(x=>x.h)), recentLow=Math.min(...right.map(x=>x.l));
+  let state="NEUTRAL";
+  if(recentHigh>priorHigh&&recentLow>priorLow)state="HIGHER HIGHS";
+  else if(recentHigh<priorHigh&&recentLow<priorLow)state="LOWER LOWS";
+  else if(recentHigh>priorHigh)state="BULLISH BREAK";
+  else if(recentLow<priorLow)state="BEARISH BREAK";
+  return {priorHigh,priorLow,recentHigh,recentLow,state};
+}
+
+function analyze(c,ctx={}){
+  if(!Array.isArray(c)||c.length<220)throw new Error("At least 220 candles are required.");
+  const closes=c.map(x=>x.c),volumes=c.map(x=>x.v),i=c.length-1,price=closes[i];
+  const E20=ema(closes,20),E50=ema(closes,50),E200=ema(closes,200),R=rsi(closes),A=atr(c),D=adx(c),vz=volumeZ(volumes);
+  const atrNow=finiteOr(A[i],Math.max(price*.01,1)),adxNow=finiteOr(D[i],0),rsiNow=finiteOr(R[i],50),st=structure(c);
+  let regime="RANGE";
+  if(price>E50[i]&&E50[i]>E200[i]&&adxNow>=18)regime="UPTREND";
+  else if(price<E50[i]&&E50[i]<E200[i]&&adxNow>=18)regime="DOWNTREND";
+  if(atrNow/price*100>4.0)regime="HIGH VOLATILITY";
+
+  const recent=c.slice(Math.max(0,i-19),i+1),rangeHigh=Math.max(...recent.map(x=>x.h)),rangeLow=Math.min(...recent.map(x=>x.l));
+  const rangePos=rangeHigh===rangeLow?.5:(price-rangeLow)/(rangeHigh-rangeLow);
+  const body=Math.abs(c[i].c-c[i].o),wick=(c[i].h-c[i].l)-body;
+  const momentum=rsiNow>=55?"POSITIVE":rsiNow<=45?"NEGATIVE":"MIXED";
+  const mtf4=ctx.higher?.regime||"UNKNOWN", mtf15=ctx.lower?.regime||"UNKNOWN";
+
+  let type="NO TRADE",side="WAIT",bias="Neutral";
+  const reasons=[],contributors=[];
+  const trendLong=regime==="UPTREND"&&price>=E20[i]*.985&&price<=E20[i]*1.02&&rsiNow>=50&&rsiNow<=70;
+  const trendShort=regime==="DOWNTREND"&&price<=E20[i]*1.015&&price>=E20[i]*.98&&rsiNow>=30&&rsiNow<=50;
+  const breakoutLong=price>rangeHigh&&vz>0.8&&rsiNow>52&&adxNow>=20;
+  const breakoutShort=price<rangeLow&&vz>0.8&&rsiNow<48&&adxNow>=20;
+  const rangeLong=regime==="RANGE"&&rsiNow<34&&rangePos<.3;
+  const rangeShort=regime==="RANGE"&&rsiNow>66&&rangePos>.7;
+
+  if(breakoutLong){type="BREAKOUT LONG";side="LONG";bias="Bullish";reasons.push("Price is expanding above the recent range","Volume is supporting the move","Trend strength is sufficient for a breakout");}
+  else if(breakoutShort){type="BREAKOUT SHORT";side="SHORT";bias="Bearish";reasons.push("Price is expanding below the recent range","Volume is supporting the move","Trend strength is sufficient for a breakout");}
+  else if(trendLong){type="LONG SETUP";side="LONG";bias="Bullish";reasons.push("Bullish EMA stack is intact","Price is near a continuation zone","Momentum is compatible with trend continuation");}
+  else if(trendShort){type="SHORT SETUP";side="SHORT";bias="Bearish";reasons.push("Bearish EMA stack is intact","Price is near a continuation zone","Momentum is compatible with trend continuation");}
+  else if(rangeLong){type="RANGE LONG WATCH";side="LONG";bias="Mean reversion";reasons.push("Trend strength is muted","Momentum is stretched to the downside","Price sits near the lower range");}
+  else if(rangeShort){type="RANGE SHORT WATCH";side="SHORT";bias="Mean reversion";reasons.push("Trend strength is muted","Momentum is stretched to the upside","Price sits near the upper range");}
+  else reasons.push("The setup does not have enough alignment yet");
+
+  let score=36;
+  if(regime==="UPTREND"||regime==="DOWNTREND"){score+=18;contributors.push("trend")}
+  if(adxNow>=25){score+=12;contributors.push("trend strength")} else if(adxNow>=18)score+=6;
+  if((side==="LONG"&&rsiNow>=50&&rsiNow<=68)||(side==="SHORT"&&rsiNow>=32&&rsiNow<=50)){score+=12;contributors.push("momentum")}
+  if(Math.abs(vz)>=.5){score+=8;contributors.push("volume")}
+  if((side==="LONG"&&st.state.includes("BULLISH"))||(side==="SHORT"&&st.state.includes("BEARISH"))){score+=8;contributors.push("structure")}
+  if((side==="LONG"&&mtf4==="UPTREND")||(side==="SHORT"&&mtf4==="DOWNTREND")){score+=10;contributors.push("4h alignment")}
+  if((side==="LONG"&&mtf15==="DOWNTREND")||(side==="SHORT"&&mtf15==="UPTREND"))score-=10;
+  if(regime==="HIGH VOLATILITY"){score-=14;contributors.push("volatility penalty")}
+  if(side==="WAIT")score=Math.min(score,54);
+  score=clamp(Math.round(score),0,92);
+
+  let mood="CALM";
+  if(regime==="HIGH VOLATILITY")mood="HEATED";
+  else if(regime==="UPTREND"||regime==="DOWNTREND")mood=adxNow>=25?"TRENDING":"BUILDING";
+  else mood="CHOPPY";
+
+  let el=null,eh=null,stop=null,tp1=null,tp2=null,rr=null;
+  if(side!=="WAIT"){
+    const risk=1.15*atrNow;
+    if(side==="LONG"){el=price-.25*atrNow;eh=price+.10*atrNow;stop=Math.min(price-risk,rangeLow-.15*atrNow);tp1=price+1.15*atrNow;tp2=price+2.15*atrNow;}
+    else {el=price-.10*atrNow;eh=price+.25*atrNow;stop=Math.max(price+risk,rangeHigh+.15*atrNow);tp1=price-1.15*atrNow;tp2=price-2.15*atrNow;}
+    rr=Math.abs(tp1-price)/Math.abs(price-stop);
+  }
+
+  const dayBars=Math.max(1,Math.round(1440/({15:15,"1h":60,"4h":240,"1d":1440}[$ctxInterval]||60)));
+  const lookback=Math.min(i,dayBars);
+  const change24h=lookback?((price-closes[i-lookback])/closes[i-lookback])*100:0;
+
+  return {
+    price,change24h,ema20:E20[i],ema50:E50[i],ema200:E200[i],rsi:rsiNow,adx:adxNow,atrPct:atrNow/price*100,volumeZ:vz,
+    regime,mood,momentum,structure:st.state,type,side,bias,score,reasons,contributors,
+    mtf:{lower:mtf15,higher:mtf4},stop,tp1,tp2,entryLow:el,entryHigh:eh,rr,rangeHigh,rangeLow,rangePosition:rangePos,updatedAt:Date.now()
+  };
+}
+
+function backtest(c){
+  let trades=0,wins=0,losses=0,netR=0;
+  for(let i=220;i<c.length-18;i++){
+    const a=analyze(c.slice(0,i+1),{});if(a.side==="WAIT"||!a.stop||!a.tp1)continue;
+    trades++;let result=0;
+    for(let j=i+1;j<=Math.min(i+18,c.length-1);j++){
+      const x=c[j];
+      if(a.side==="LONG"){if(x.l<=a.stop){result=-1;break}if(x.h>=a.tp1){result=1;break}}
+      else {if(x.h>=a.stop){result=-1;break}if(x.l<=a.tp1){result=1;break}}
+    }
+    netR+=result;if(result>0)wins++;if(result<0)losses++;
+  }
+  return {trades,wins,losses,winRate:trades?wins/trades*100:0,netR};
+}
+
 module.exports={analyze,backtest};
