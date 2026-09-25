@@ -1,5 +1,6 @@
 const http=require('http'),fs=require('fs'),path=require('path'),{analyze,backtest,walkForwardBacktest}=require('./market-engine');
 const storage=require('./storage');
+const learning=require('./learning');
 const WebSocket=require('ws');
 const PORT=Number(process.env.PORT||3000);
 const SYMBOLS=(process.env.SYMBOLS||'BTCUSDT,ETHUSDT,SOLUSDT,BNBUSDT,XRPUSDT,DOGEUSDT,ADAUSDT').split(',').map(s=>s.trim()).filter(Boolean);
@@ -308,7 +309,8 @@ const server=http.createServer(async(req,res)=>{
       return send(res,200,{ok:true,storage:saved.storage,durable:saved.storage==="postgres",updatedAt:saved.updatedAt});
     }
     if(req.method==='GET'&&u.pathname==='/api/memory/status')return send(res,200,storage.status());
-    if(req.method==='GET'&&u.pathname==='/api/config')return send(res,200,{symbols:SYMBOLS,labels,intervals:['15m','1h','4h','1d'],memory:storage.status()});if(req.method==='POST'&&u.pathname==='/api/ai'){
+    if(req.method==='GET'&&u.pathname==='/api/learning/status')return send(res,200,await learning.status());
+    if(req.method==='GET'&&u.pathname==='/api/config')return send(res,200,{symbols:SYMBOLS,labels,intervals:['15m','1h','4h','1d'],memory:storage.status(),learning:await learning.status()});if(req.method==='POST'&&u.pathname==='/api/ai'){
       if(!aiAllowed(req)) return send(res,429,{error:"Slow down for a few seconds."});
       let raw=""; for await(const chunk of req) raw+=chunk; let body={}; try{body=JSON.parse(raw||"{}")}catch{return send(res,400,{error:"Invalid JSON"})}
       const mode=body.mode==="trade"?"trade":"market";
@@ -340,8 +342,10 @@ const server=http.createServer(async(req,res)=>{
         derivatives(symbol,interval),
         new Promise(resolve=>setTimeout(()=>resolve(null),2500))
       ]).catch(()=>null);
-      const analysis=analyze(candles,{interval,higher:higherA,lower:lowerA,deriv});
-      return send(res,200,{symbol,interval,candles,analysis,derivatives:deriv,backtest:backtest(candles),validation:walkForwardBacktest(candles),setupStats:require("./market-engine").backtestBySetup(candles)});
+      let analysis=analyze(candles,{interval,higher:higherA,lower:lowerA,deriv});
+      const learned=await learning.process(symbol,interval,candles,analysis);
+      analysis=learned.analysis;
+      return send(res,200,{symbol,interval,candles,analysis,derivatives:deriv,learning:await learning.status(),backtest:backtest(candles),validation:walkForwardBacktest(candles),setupStats:require("./market-engine").backtestBySetup(candles)});
     }
     if(req.method==='GET'&&u.pathname==='/api/scanner'){
       const interval=u.searchParams.get('interval')||'1h';
@@ -354,7 +358,8 @@ const server=http.createServer(async(req,res)=>{
             derivatives(symbol,interval),
             new Promise(resolve=>setTimeout(()=>resolve(null),2200))
           ]).catch(()=>null);
-          const a=analyze(candles,{interval,higher:higher&&higher.length>=220?analyze(higher,{interval:'4h'}):null,lower:lower&&lower.length>=220?analyze(lower,{interval:'15m'}):null,deriv});
+          let a=analyze(candles,{interval,higher:higher&&higher.length>=220?analyze(higher,{interval:'4h'}):null,lower:lower&&lower.length>=220?analyze(lower,{interval:'15m'}):null,deriv});
+          a=(await learning.process(symbol,interval,candles,a)).analysis;
           return {symbol,label:labels[symbol]||symbol,derivatives:deriv,...a};
         }catch(e){return {symbol,label:labels[symbol]||symbol,error:e.message,type:"DATA ERROR",side:"WAIT",score:0,regime:"UNKNOWN"}}
       }));
@@ -363,5 +368,5 @@ const server=http.createServer(async(req,res)=>{
     return staticFile(req,res);
   }catch(e){return send(res,500,{error:e.message||'Server error'})}
 });
-storage.init().catch(()=>{});
+storage.init().catch(()=>{});learning.init().catch(()=>{});
 server.listen(PORT,()=>console.log('MarketPulse OS listening on :'+PORT));
