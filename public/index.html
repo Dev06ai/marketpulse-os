@@ -183,7 +183,7 @@ function drawChart(candles,a){
  });
  let e=candles[0].c,k=2/21,arr=[];for(let i=0;i<candles.length;i++){e=i?candles[i].c*k+e*(1-k):candles[i].c;if(i>=candles.length-data.length)arr.push([leftPad+(i-(candles.length-data.length))*xstep,scale(e)])}
  ctx.strokeStyle=theme.ema;ctx.lineWidth=2;line(ctx,arr);
- const current=Number(last(candles).c),cy=scale(current);
+ const current=Number(candles[candles.length-1].c),cy=scale(current);
  ctx.setLineDash([5,4]);ctx.strokeStyle="rgba(255,255,255,.32)";ctx.beginPath();ctx.moveTo(leftPad,cy);ctx.lineTo(leftPad+plotW,cy);ctx.stroke();ctx.setLineDash([]);
  const label=formatAxisPrice(current),lw=58,lh=22;ctx.fillStyle=theme.bull;ctx.fillRect(leftPad+plotW+5,cy-lh/2,lw,lh);ctx.fillStyle="#07111f";ctx.font="700 10px system-ui";ctx.textAlign="center";ctx.fillText(label,leftPad+plotW+5+lw/2,cy);
  ctx.fillStyle=theme.axis;ctx.textAlign="center";ctx.font="9px system-ui";
@@ -200,7 +200,7 @@ function render(d){
  if(a.status==="WAITING"){$("entry").textContent="Wait for confirmation";$("stop").textContent="—";$("tp1").textContent="—";$("rr").textContent="—"}else{$("entry").textContent=a.entryLow?fmt(a.entryLow)+" → "+fmt(a.entryHigh):"No setup";$("stop").textContent=fmt(a.stop);$("tp1").textContent=fmt(a.tp1);$("rr").textContent=a.rr?Number(a.rr).toFixed(2)+"R":"—"}
  $("thesisText").textContent=a.thesis||"No thesis available.";
   $("primaryScenario").textContent=a.primaryScenario||"—";$("alternateScenario").textContent=a.alternateScenario||"—";
-  const dv=d.derivatives||a.derivatives||{};$("oiValue").textContent=dv.oi!=null?fmt(dv.oi):"—";$("oiDelta").textContent=dv.oiChangePct!=null?pct(dv.oiChangePct)+" recent": "OI unavailable";$("cvdState").textContent=dv.cvdState||"UNKNOWN";$("cvdDelta").textContent=dv.cvdDelta!=null?"Δ "+fmt(dv.cvdDelta)+" · price/flow "+(dv.flowPriceChangePct!=null?pct(dv.flowPriceChangePct):"—"):"CVD unavailable";$("oiState").textContent=dv.positioning||"UNKNOWN";$("fundingValue").textContent=dv.fundingRate!=null?"Funding "+(Number(dv.fundingRate)*100).toFixed(4)+"%":"Funding —";$("derivSource").textContent=dv.available?(dv.provider||"Derivatives online"):"Derivatives unavailable";
+  const dv={...(d.derivatives||{}),...(a.derivatives||{})};$("oiValue").textContent=dv.oi!=null?fmt(dv.oi):"—";$("oiDelta").textContent=dv.oiChangePct!=null?pct(dv.oiChangePct)+" recent":"OI snapshot";$("cvdState").textContent=dv.cvdState||"UNKNOWN";$("cvdDelta").textContent=dv.cvdDelta!=null?"Δ "+fmt(dv.cvdDelta)+" · price/flow "+(dv.flowPriceChangePct!=null?pct(dv.flowPriceChangePct):"—"):"CVD unavailable";$("oiState").textContent=dv.positioning||"UNKNOWN";$("fundingValue").textContent=dv.fundingRate!=null?"Funding "+(Number(dv.fundingRate)*100).toFixed(4)+"%":"Funding —";$("derivSource").textContent=dv.available?(dv.provider||"Derivatives online"):"Derivatives unavailable";
   $("why").innerHTML=a.reasons.map(x=>'<div class="whyitem">'+x+'</div>').join("");
  $("source").textContent=d.candles?.[0]?.source==="kraken"?"Kraken market data":"Market data online";
  $("btTrades").textContent=d.backtest?fmt(d.backtest.trades):"—";$("btWin").textContent=d.backtest&&d.backtest.trades?Number(d.backtest.winRate).toFixed(1)+"%":"—";$("btR").textContent=d.backtest?Number(d.backtest.netR).toFixed(2)+"R":"—";$("btPF").textContent=d.backtest?.profitFactor?Number(d.backtest.profitFactor).toFixed(2):"—";$("btDD").textContent=d.backtest?Number(d.backtest.maxDrawdownR).toFixed(2)+"R":"—";$("btExp").textContent=d.backtest?Number(d.backtest.expectancyR).toFixed(2)+"R":"—";
