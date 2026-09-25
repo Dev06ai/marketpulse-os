@@ -265,61 +265,14 @@ function recordSignal(d){
 }
 function renderSignalHistory(){
   $("sigCount").textContent=signalHistory.length;
-  $("sigReady").textContent=signalHistory.filter(x=>x.event==="READY").length;
-  $("sigInvalid").textContent=signalHistory.filter(x=>x.event==="INVALIDATED").length;
+  $("sigReady").textContent=signalHistory.filter(function(x){return x.event==="READY"}).length;
+  $("sigInvalid").textContent=signalHistory.filter(function(x){return x.event==="INVALIDATED"}).length;
   $("sigLatest").textContent=signalHistory[0]?signalHistory[0].event:"—";
   $("signalTape").innerHTML=signalHistory.slice(0,12).map(function(x){
     const t=new Date(x.ts).toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"});
-    return '<div class="sigRow"><div class="sigEvent '+x.event.toLowerCase()+'">'+x.event+'</div><div><b>'+x.asset+' · '+x.type+'</b><div class="small">'+x.regime+' · '+x.score+'/100 · 
-  const items=journal.slice().reverse().slice(0,8);
-  $("journal").innerHTML=items.length?items.map((x,i)=>'<div class="journalItem"><div class="journalTop"><b>'+x.asset+' · '+x.side+'</b><span class="small">'+new Date(x.ts).toLocaleDateString()+'</span></div><div class="kpiRow"><span class="kpi">Entry '+fmt(x.entry)+'</span><span class="kpi">Stop '+fmt(x.stop)+'</span><span class="kpi">Target '+fmt(x.target)+'</span><span class="kpi">Result '+fmt(x.r)+'R</span></div><div class="small" style="margin-top:6px">'+(x.notes||"No notes")+'</div></div>').join(""):'<div class="whyitem">No trades logged yet.</div>';
-}
-function saveTrade(){
-  const item={asset:$("jAsset").value,side:$("jSide").value,entry:+$("jEntry").value||null,stop:+$("jStop").value||null,target:+$("jTarget").value||null,r:+$("jR").value||0,notes:$("jNotes").value.trim(),ts:Date.now()};
-  journal.push(item);journal=journal.slice(-50);localStorage.setItem("mp-journal",JSON.stringify(journal));renderJournalStats();["jEntry","jStop","jTarget","jR","jNotes"].forEach(id=>$(id).value="");renderJournal();
-}
-function clearJournal(){if(confirm("Clear this device's journal?")){journal=[];localStorage.removeItem("mp-journal");renderJournal();renderJournalStats()}}
-function updateAlertUI(){const on=window.Notification&&Notification.permission==="granted";$("notifState").textContent=on?"Enabled on this browser":"Not enabled";$("notifBtn").textContent=on?"Enabled":"Enable";$("watchCount").textContent=watch.size+" asset"+(watch.size===1?"":"s")}
-async function enableNotifications(){if(!("Notification" in window)){alert("This browser does not support notifications.");return}const p=await Notification.requestPermission();updateAlertUI();if(p==="granted")new Notification("MarketPulse",{body:"Smart alerts are on. Watchlisted setup changes will appear here."})}
-function sendBrowserAlert(title,body,key){if(!watch.has(key)||!("Notification" in window)||Notification.permission!=="granted")return;const threshold=+$("alertScore").value||75;const row=scanRows.find(r=>r.symbol===key);if(!row||row.score<threshold||row.side==="WAIT")return;const sig=row.type+"|"+Math.round(row.score/5);if(lastAlertState[key]===sig)return;lastAlertState[key]=sig;localStorage.setItem("mp-alert-state",JSON.stringify(lastAlertState));new Notification(title,{body})}
-function alertFromScan(){for(const r of scanRows){if(watch.has(r.symbol)&&r.side!=="WAIT")sendBrowserAlert(r.label+" setup forming",r.type+" · "+r.score+"/100 · "+r.regime+" · "+r.bias,r.symbol)}}
-function schedule(){clearInterval(timer);if(auto)timer=setInterval(()=>{if(document.visibilityState==="visible")load()},45000)}
-let aiMode="market";
-function marketPayload(){
-  return {asset:$("sym").value,interval:$("int").value,price:$("price").textContent,change24h:$("change").textContent,regime:$("regime").textContent,mood:$("mood").textContent,call:$("setup").textContent,status:$("signalState").innerText,confluence:$("score").textContent,thesis:$("thesisText").textContent,primaryScenario:$("primaryScenario").textContent,alternateScenario:$("alternateScenario").textContent,openInterest:$("oiValue").textContent,oiChange:$("oiDelta").textContent,cvd:$("cvdState").textContent,positioning:$("oiState").textContent,rsiAdx:$("mom").textContent,structure:$("structure").textContent,multitimeframe:$("pills").innerText,entry:$("entry").textContent,invalidation:$("stop").textContent,target1:$("tp1").textContent,rr:$("rr").textContent};
-}
-function setAiMode(mode){
- aiMode=mode;$("marketTab").classList.toggle("on",mode==="market");$("tradeTab").classList.toggle("on",mode==="trade");$("tradeFields").style.display=mode==="trade"?"block":"none";
- $("aiQuestion").placeholder=mode==="trade"?"Try: Was my entry reasonable? Did my stop match the setup?":"Try: Why is BTC a no-trade right now? What would need to change?";
-}
-async function askAi(){
- $("askAi").disabled=true;$("aiStatus").textContent="Thinking…";$("aiOut").textContent="";
- const trade={asset:$("tAsset").value,side:$("tSide").value,entry:$("tEntry").value,stop:$("tStop").value,target:$("tTarget").value,size:$("tSize").value,notes:$("tNotes").value};
- try{
-  const r=await fetch("/api/ai",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({mode:aiMode,question:$("aiQuestion").value,market:marketPayload(),trade})});
-  const j=await r.json();if(!r.ok)throw Error(j.error||"AI request failed");$("aiOut").textContent=j.text||"No response";$("aiStatus").textContent="Copilot · "+(j.model||"AI");
- }catch(e){$("aiOut").textContent=e.message;$("aiStatus").textContent="Copilot unavailable";}
- finally{$("askAi").disabled=false}
-}
-document.addEventListener("click",e=>{const p=e.target.closest("[data-preset]");if(p){document.querySelectorAll("[data-preset]").forEach(x=>x.classList.remove("active"));p.classList.add("active");}});
-window.addEventListener("resize",()=>{if(window.__lastMarket)drawChart(window.__lastMarket.candles,window.__lastMarket.analysis)});
-(async()=>{
- try{
-  const c=await api('/api/config');$("sym").innerHTML=c.symbols.map(s=>'<option value="'+s+'">'+(c.labels[s]||s)+'</option>').join("");
-  $("jAsset").innerHTML=c.symbols.map(s=>'<option value="'+s+'">'+(c.labels[s]||s)+'</option>').join("");
-  $("refresh").onclick=load; $("clearSignals").onclick=clearSignals; $("saveTrade").onclick=saveTrade; $("clearJournal").onclick=clearJournal; $("notifBtn").onclick=enableNotifications; $("testAlert").onclick=()=>{if("Notification" in window&&Notification.permission==="granted")new Notification("MarketPulse test",{body:"Smart alerts are working."});else enableNotifications()};
-  
-  $("marketTab").onclick=()=>setAiMode("market");$("tradeTab").onclick=()=>setAiMode("trade");$("askAi").onclick=askAi;
-  $("chartSettingsBtn").onclick=openChartSettings;$("chartClose").onclick=closeChartSettings;$("chartCancel").onclick=closeChartSettings;$("chartApply").onclick=applyChartSettings;
-  $("sym").onchange=load;$("int").onchange=load;["acct","risk","rentry","rstop"].forEach(x=>$(x).oninput=risk);
-  document.querySelectorAll(".filter button").forEach(b=>b.onclick=()=>{document.querySelectorAll(".filter button").forEach(x=>x.classList.remove("on"));b.classList.add("on");filter=b.dataset.filter;renderScanner()});
-  setAiMode("market");
-  document.querySelectorAll(".nav button").forEach(b=>b.onclick=()=>{document.querySelectorAll(".nav button").forEach(x=>x.classList.remove("active"));b.classList.add("active");document.getElementById(b.dataset.go).scrollIntoView({behavior:"smooth",block:"start"})});
-  $("autoToggle").onclick=()=>{auto=!auto;$("autoToggle").textContent=auto?"On":"Off";schedule()};renderJournal();renderJournalStats();renderSignalHistory();updateAlertUI();risk();await load();schedule();
- }catch(e){$("why").innerHTML='<div class="whyitem">'+e.message+'</div>'}
-})();
-</script>
-</body></html>+fmt(x.price)+'</div></div><div class="small">'+t+'</div><div class="small">'+x.interval+'</div></div>';
+    const main=x.asset+" · "+x.type;
+    const meta=x.regime+" · "+x.score+"/100 · $"+fmt(x.price);
+    return '<div class="sigRow"><div class="sigEvent '+x.event.toLowerCase()+'">'+x.event+'</div><div><b>'+main+'</b><div class="small">'+meta+'</div></div><div class="small">'+t+'</div><div class="small">'+x.interval+'</div></div>';
   }).join("")||'<div class="whyitem">No signal events recorded yet. Keep the dashboard open while MarketPulse runs.</div>';
 }
 function clearSignals(){if(confirm("Clear signal history on this device?")){signalHistory=[];lastSignal=null;localStorage.removeItem("mp-signals");localStorage.removeItem("mp-last-signal");renderSignalHistory()}}
