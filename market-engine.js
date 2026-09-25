@@ -74,52 +74,59 @@ function analyze(c,ctx={}){
   const closes=c.map(x=>x.c),volumes=c.map(x=>x.v),i=c.length-1,price=closes[i];
   const E20=ema(closes,20),E50=ema(closes,50),E200=ema(closes,200),R=rsi(closes),A=atr(c),D=adx(c),vz=volumeZ(volumes);
   const atrNow=finiteOr(A[i],Math.max(price*.01,1)),adxNow=finiteOr(D[i],0),rsiNow=finiteOr(R[i],50),st=structure(c);
+
+  const look=c.slice(Math.max(0,i-30),i); // exclude the live candle from structural ranges
+  const rangeHigh=Math.max(...look.map(x=>x.h)),rangeLow=Math.min(...look.map(x=>x.l));
+  const rangeSize=Math.max(rangeHigh-rangeLow,atrNow);
+  const rangePos=rangeSize===0?.5:(price-rangeLow)/rangeSize;
+
+  const prior20=c.slice(Math.max(0,i-20),i);
+  const priorHigh=Math.max(...prior20.map(x=>x.h)),priorLow=Math.min(...prior20.map(x=>x.l));
+  const breakoutLong=price>priorHigh&&vz>0.8&&rsiNow>52&&adxNow>=20;
+  const breakoutShort=price<priorLow&&vz>0.8&&rsiNow<48&&adxNow>=20;
+
   let regime="RANGE";
   if(price>E50[i]&&E50[i]>E200[i]&&adxNow>=18)regime="UPTREND";
   else if(price<E50[i]&&E50[i]<E200[i]&&adxNow>=18)regime="DOWNTREND";
-  if(atrNow/price*100>4.0)regime="HIGH VOLATILITY";
+  if(atrNow/price*100>4)regime="HIGH VOLATILITY";
 
-  const recent=c.slice(Math.max(0,i-19),i+1),rangeHigh=Math.max(...recent.map(x=>x.h)),rangeLow=Math.min(...recent.map(x=>x.l));
-  const rangePos=rangeHigh===rangeLow?.5:(price-rangeLow)/(rangeHigh-rangeLow);
-  const body=Math.abs(c[i].c-c[i].o),wick=(c[i].h-c[i].l)-body;
-  const momentum=rsiNow>=55?"POSITIVE":rsiNow<=45?"NEGATIVE":"MIXED";
-  const mtf4=ctx.higher?.regime||"UNKNOWN", mtf15=ctx.lower?.regime||"UNKNOWN";
+  const mtf4=ctx.higher?.regime||"UNKNOWN",mtf15=ctx.lower?.regime||"UNKNOWN";
+  const momentum=rsiNow>=58?"POSITIVE":rsiNow<=42?"NEGATIVE":"MIXED";
+  const volState=Math.abs(vz)>=1.2?"EXPANSION":Math.abs(vz)>=.5?"ELEVATED":"NORMAL";
 
   let type="NO TRADE",side="WAIT",bias="Neutral";
-  const reasons=[],contributors=[];
+  const reasons=[];
+  const contributors=[];
+
   const trendLong=regime==="UPTREND"&&price>=E20[i]*.985&&price<=E20[i]*1.02&&rsiNow>=50&&rsiNow<=70;
   const trendShort=regime==="DOWNTREND"&&price<=E20[i]*1.015&&price>=E20[i]*.98&&rsiNow>=30&&rsiNow<=50;
-  const breakoutLong=price>rangeHigh&&vz>0.8&&rsiNow>52&&adxNow>=20;
-  const breakoutShort=price<rangeLow&&vz>0.8&&rsiNow<48&&adxNow>=20;
-  const rangeLong=regime==="RANGE"&&rsiNow<34&&rangePos<.3;
-  const rangeShort=regime==="RANGE"&&rsiNow>66&&rangePos>.7;
+  const rangeLong=regime==="RANGE"&&rsiNow<34&&rangePos<.32;
+  const rangeShort=regime==="RANGE"&&rsiNow>66&&rangePos>.68;
 
-  if(breakoutLong){type="BREAKOUT LONG";side="LONG";bias="Bullish";reasons.push("Price is expanding above the recent range","Volume is supporting the move","Trend strength is sufficient for a breakout");}
-  else if(breakoutShort){type="BREAKOUT SHORT";side="SHORT";bias="Bearish";reasons.push("Price is expanding below the recent range","Volume is supporting the move","Trend strength is sufficient for a breakout");}
-  else if(trendLong){type="LONG SETUP";side="LONG";bias="Bullish";reasons.push("Bullish EMA stack is intact","Price is near a continuation zone","Momentum is compatible with trend continuation");}
-  else if(trendShort){type="SHORT SETUP";side="SHORT";bias="Bearish";reasons.push("Bearish EMA stack is intact","Price is near a continuation zone","Momentum is compatible with trend continuation");}
-  else if(rangeLong){type="RANGE LONG WATCH";side="LONG";bias="Mean reversion";reasons.push("Trend strength is muted","Momentum is stretched to the downside","Price sits near the lower range");}
-  else if(rangeShort){type="RANGE SHORT WATCH";side="SHORT";bias="Mean reversion";reasons.push("Trend strength is muted","Momentum is stretched to the upside","Price sits near the upper range");}
-  else reasons.push("The setup does not have enough alignment yet");
+  if(breakoutLong){type="BREAKOUT LONG";side="LONG";bias="Bullish";reasons.push("Price has cleared the prior range high","Volume is expanding with the move","Momentum and trend strength confirm the break");}
+  else if(breakoutShort){type="BREAKOUT SHORT";side="SHORT";bias="Bearish";reasons.push("Price has cleared the prior range low","Volume is expanding with the move","Momentum and trend strength confirm the break");}
+  else if(trendLong){type="LONG SETUP";side="LONG";bias="Bullish";reasons.push("EMA structure is bullish","Price is interacting with the continuation zone","Momentum supports continuation");}
+  else if(trendShort){type="SHORT SETUP";side="SHORT";bias="Bearish";reasons.push("EMA structure is bearish","Price is interacting with the continuation zone","Momentum supports continuation");}
+  else if(rangeLong){type="RANGE LONG WATCH";side="LONG";bias="Mean reversion";reasons.push("Trend strength is muted","Downside momentum is stretched","Price is near the lower range");}
+  else if(rangeShort){type="RANGE SHORT WATCH";side="SHORT";bias="Mean reversion";reasons.push("Trend strength is muted","Upside momentum is stretched","Price is near the upper range");}
+  else reasons.push("The current evidence is mixed; no clean trigger has formed");
 
-  let score=36;
-  if(regime==="UPTREND"||regime==="DOWNTREND"){score+=18;contributors.push("trend")}
-  if(adxNow>=25){score+=12;contributors.push("trend strength")} else if(adxNow>=18)score+=6;
-  if((side==="LONG"&&rsiNow>=50&&rsiNow<=68)||(side==="SHORT"&&rsiNow>=32&&rsiNow<=50)){score+=12;contributors.push("momentum")}
-  if(Math.abs(vz)>=.5){score+=8;contributors.push("volume")}
-  if((side==="LONG"&&st.state.includes("BULLISH"))||(side==="SHORT"&&st.state.includes("BEARISH"))){score+=8;contributors.push("structure")}
-  if((side==="LONG"&&mtf4==="UPTREND")||(side==="SHORT"&&mtf4==="DOWNTREND")){score+=10;contributors.push("4h alignment")}
-  if((side==="LONG"&&mtf4==="DOWNTREND")||(side==="SHORT"&&mtf4==="UPTREND")){score-=20;contributors.push("4h conflict");reasons.push("The 4H trend is opposing this setup")}
-  if((side==="LONG"&&mtf15==="DOWNTREND")||(side==="SHORT"&&mtf15==="UPTREND")){score-=10;contributors.push("15m conflict");reasons.push("The 15M trend is opposing this setup")}
-  if((side==="LONG"&&mtf4==="DOWNTREND")||(side==="SHORT"&&mtf4==="UPTREND")) score=Math.min(score,62);
-  if(regime==="HIGH VOLATILITY"){score-=14;contributors.push("volatility penalty")}
+  // Confluence model — deliberately transparent rather than pretending to be a win probability.
+  const components=[
+    {name:"Regime",value:(regime==="UPTREND"||regime==="DOWNTREND")?18:6},
+    {name:"Trend strength",value:adxNow>=25?12:adxNow>=18?7:2},
+    {name:"Momentum",value:(side==="LONG"&&rsiNow>=50&&rsiNow<=68)||(side==="SHORT"&&rsiNow>=32&&rsiNow<=50)?12:4},
+    {name:"Volume",value:Math.abs(vz)>=1.2?10:Math.abs(vz)>=.5?7:2},
+    {name:"Structure",value:(side==="LONG"&&st.state.includes("BULLISH"))||(side==="SHORT"&&st.state.includes("BEARISH"))?10:4},
+    {name:"4H alignment",value:(side==="LONG"&&mtf4==="UPTREND")||(side==="SHORT"&&mtf4==="DOWNTREND")?10:(side==="WAIT"||mtf4==="UNKNOWN"?4:0)},
+    {name:"15M alignment",value:(side==="LONG"&&mtf15==="UPTREND")||(side==="SHORT"&&mtf15==="DOWNTREND")?8:(side==="WAIT"||mtf15==="UNKNOWN"?3:0)}
+  ];
+  let score=components.reduce((sum,x)=>sum+x.value,0);
+  if((side==="LONG"&&mtf4==="DOWNTREND")||(side==="SHORT"&&mtf4==="UPTREND")){score-=20;contributors.push("4H conflict");reasons.push("The 4H trend directly conflicts with this direction");}
+  if((side==="LONG"&&mtf15==="DOWNTREND")||(side==="SHORT"&&mtf15==="UPTREND")){score-=10;contributors.push("15M conflict");reasons.push("The 15M trend is working against this direction");}
+  if(regime==="HIGH VOLATILITY"){score-=14;contributors.push("volatility penalty");reasons.push("Volatility is elevated enough to reduce setup quality");}
   if(side==="WAIT")score=Math.min(score,54);
   score=clamp(Math.round(score),0,92);
-
-  let mood="CALM";
-  if(regime==="HIGH VOLATILITY")mood="HEATED";
-  else if(regime==="UPTREND"||regime==="DOWNTREND")mood=adxNow>=25?"TRENDING":"BUILDING";
-  else mood="CHOPPY";
 
   let el=null,eh=null,stop=null,tp1=null,tp2=null,rr=null;
   if(side!=="WAIT"){
@@ -131,19 +138,65 @@ function analyze(c,ctx={}){
 
   let status="WAITING";
   if(side!=="WAIT"){
-    if(score>=72 && rr>=1.5 && !(mtf4==="DOWNTREND"&&side==="LONG") && !(mtf4==="UPTREND"&&side==="SHORT")) status="READY";
-    else if(score>=55) status="WATCH";
-    else status="WAITING";
+    if(score>=72&&rr>=1.5&&!(mtf4==="DOWNTREND"&&side==="LONG")&&!(mtf4==="UPTREND"&&side==="SHORT"))status="READY";
+    else if(score>=55)status="WATCH";
   }
 
-  const dayBars=Math.max(1,Math.round(1440/(({ "15m":15, "1h":60, "4h":240, "1d":1440 })[ctx.interval]||60)));
+  let mood="CALM";
+  if(regime==="HIGH VOLATILITY")mood="HEATED";
+  else if(regime==="UPTREND"||regime==="DOWNTREND")mood=adxNow>=25?"TRENDING":"BUILDING";
+  else mood="CHOPPY";
+
+  let directionalLean="NEUTRAL";
+  if(score>=70&&side==="LONG")directionalLean="BULLISH BIAS";
+  else if(score>=70&&side==="SHORT")directionalLean="BEARISH BIAS";
+  else if(side==="LONG")directionalLean="LEAN LONG";
+  else if(side==="SHORT")directionalLean="LEAN SHORT";
+
+  const thesis=[];
+  if(status==="READY"){
+    thesis.push(directionalLean+" — multiple timeframes and core momentum/structure inputs are aligned.");
+  }else if(status==="WATCH"){
+    thesis.push(directionalLean+" — the setup is developing, but at least one confirmation is still missing.");
+  }else{
+    thesis.push("NEUTRAL / WAIT — the evidence is not aligned enough to justify a high-conviction directional call.");
+  }
+
+  if(mtf4!=="UNKNOWN"&&mtf15!=="UNKNOWN"&&mtf4!==mtf15){
+    thesis.push("Timeframes are split: the 4H reads "+mtf4+" while 15M reads "+mtf15+".");
+  }else if(mtf4!=="UNKNOWN"){
+    thesis.push("Higher-timeframe context: "+mtf4+".");
+  }
+  if(volState==="EXPANSION")thesis.push("Volume is in expansion, so the next candle sequence matters more than a static indicator reading.");
+  if(regime==="RANGE")thesis.push("Price is behaving like a range; breakout confirmation or range-edge rejection matters more than chasing the middle.");
+  if(regime==="HIGH VOLATILITY")thesis.push("Volatility is elevated; wider noise and faster invalidations lower the quality of marginal setups.");
+
+  const primaryScenario=side==="LONG"
+    ?"Continuation higher while price holds the invalidation zone and momentum stays constructive."
+    :side==="SHORT"
+    ?"Continuation lower while price stays beneath the trigger zone and bearish momentum persists."
+    :"Rotation/range behavior until price breaks a meaningful boundary with volume.";
+
+  const alternateScenario=side==="LONG"
+    ?"Bullish thesis weakens if the 15M/4H structure loses alignment or the invalidation level fails."
+    :side==="SHORT"
+    ?"Bearish thesis weakens if the 15M/4H structure flips and price reclaims the trigger zone."
+    :"A directional thesis becomes more credible after a range break plus volume confirmation.";
+
+  const probabilityLabel=score>=80?"HIGH CONFLUENCE":score>=68?"MODERATE-HIGH CONFLUENCE":score>=55?"EARLY / WATCH":"LOW CONFLUENCE";
+
+  const dayBars=Math.max(1,Math.round(1440/(({"15m":15,"1h":60,"4h":240,"1d":1440})[ctx.interval]||60)));
   const lookback=Math.min(i,dayBars);
   const change24h=lookback?((price-closes[i-lookback])/closes[i-lookback])*100:0;
 
   return {
     price,change24h,ema20:E20[i],ema50:E50[i],ema200:E200[i],rsi:rsiNow,adx:adxNow,atrPct:atrNow/price*100,volumeZ:vz,
-    regime,mood,momentum,structure:st.state,type,side,bias,score,status,reasons,contributors,
-    mtf:{lower:mtf15,higher:mtf4},stop,tp1,tp2,entryLow:el,entryHigh:eh,rr,rangeHigh,rangeLow,rangePosition:rangePos,updatedAt:Date.now()
+    regime,mood,momentum,volState,structure:st.state,type,side,bias,directionalLean,probabilityLabel,
+    score,status,reasons,contributors,components,
+    thesis:thesis.join(" "),
+    primaryScenario,alternateScenario,
+    mtf:{lower:mtf15,higher:mtf4},stop,tp1,tp2,entryLow:el,entryHigh:eh,rr,
+    rangeHigh,rangeLow,rangePosition:rangePos,priorHigh,priorLow,updatedAt:Date.now()
   };
 }
 
