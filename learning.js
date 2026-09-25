@@ -108,6 +108,7 @@ function recalibrate(a){
     adjustment=clamp(Math.round((smoothedWinRate-0.5)*25*10)/10,-6,6);
   }
   const score=clamp(Math.round(baseScore+adjustment),0,92);
+  state.lastAdjustment=adjustment;
   const eligible=Boolean(b&&Number(b.n)>=MIN_ADAPTIVE_SAMPLE);
   if(a.side!=="WAIT"&&eligible){
     if(score>=72&&a.rr>=1.5&&!(a.mtf?.higher==="DOWNTREND"&&a.side==="LONG")&&!(a.mtf?.higher==="UPTREND"&&a.side==="SHORT"))a.status="READY";
