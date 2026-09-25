@@ -129,30 +129,58 @@ function analyze(c,ctx={}){
     rr=Math.abs(tp1-price)/Math.abs(price-stop);
   }
 
+  let status="WAITING";
+  if(side!=="WAIT"){
+    if(score>=72 && rr>=1.5 && !(mtf4==="DOWNTREND"&&side==="LONG") && !(mtf4==="UPTREND"&&side==="SHORT")) status="READY";
+    else if(score>=55) status="WATCH";
+    else status="WAITING";
+  }
+
   const dayBars=Math.max(1,Math.round(1440/(({ "15m":15, "1h":60, "4h":240, "1d":1440 })[ctx.interval]||60)));
   const lookback=Math.min(i,dayBars);
   const change24h=lookback?((price-closes[i-lookback])/closes[i-lookback])*100:0;
 
   return {
     price,change24h,ema20:E20[i],ema50:E50[i],ema200:E200[i],rsi:rsiNow,adx:adxNow,atrPct:atrNow/price*100,volumeZ:vz,
-    regime,mood,momentum,structure:st.state,type,side,bias,score,reasons,contributors,
+    regime,mood,momentum,structure:st.state,type,side,bias,score,status,reasons,contributors,
     mtf:{lower:mtf15,higher:mtf4},stop,tp1,tp2,entryLow:el,entryHigh:eh,rr,rangeHigh,rangeLow,rangePosition:rangePos,updatedAt:Date.now()
   };
 }
 
+function summarize(results){
+  const trades=results.length,wins=results.filter(x=>x.r>0).length,losses=results.filter(x=>x.r<0).length;
+  const netR=results.reduce((s,x)=>s+x.r,0),grossWin=results.filter(x=>x.r>0).reduce((s,x)=>s+x.r,0),grossLoss=Math.abs(results.filter(x=>x.r<0).reduce((s,x)=>s+x.r,0));
+  let equity=0,peak=0,maxDD=0; for(const x of results){equity+=x.r;peak=Math.max(peak,equity);maxDD=Math.max(maxDD,peak-equity)}
+  return {trades,wins,losses,winRate:trades?wins/trades*100:0,netR,avgR:trades?netR/trades:0,profitFactor:grossLoss?grossWin/grossLoss:null,maxDrawdownR:maxDD,expectancyR:trades?netR/trades:0};
+}
 function backtest(c){
-  let trades=0,wins=0,losses=0,netR=0;
+  const results=[];
   for(let i=220;i<c.length-18;i++){
-    const a=analyze(c.slice(0,i+1),{});if(a.side==="WAIT"||!a.stop||!a.tp1)continue;
-    trades++;let result=0;
+    const a=analyze(c.slice(0,i+1),{interval:"1h"});if(a.side==="WAIT"||!a.stop||!a.tp1||a.status==="WAITING")continue;
+    let r=0,exitIndex=null;
     for(let j=i+1;j<=Math.min(i+18,c.length-1);j++){
       const x=c[j];
-      if(a.side==="LONG"){if(x.l<=a.stop){result=-1;break}if(x.h>=a.tp1){result=1;break}}
-      else {if(x.h>=a.stop){result=-1;break}if(x.l<=a.tp1){result=1;break}}
+      if(a.side==="LONG"){if(x.l<=a.stop){r=-1;exitIndex=j;break}if(x.h>=a.tp1){r=1;exitIndex=j;break}}
+      else {if(x.h>=a.stop){r=-1;exitIndex=j;break}if(x.l<=a.tp1){r=1;exitIndex=j;break}}
     }
-    netR+=result;if(result>0)wins++;if(result<0)losses++;
+    if(exitIndex!==null)results.push({i,r,side:a.side,type:a.type,score:a.score});
   }
-  return {trades,wins,losses,winRate:trades?wins/trades*100:0,netR};
+  return summarize(results);
+}
+function backtestBySetup(c){
+  const buckets={};
+  const add=(key,r)=>{(buckets[key]||(buckets[key]=[])).push(r)};
+  for(let i=220;i<c.length-18;i++){
+    const a=analyze(c.slice(0,i+1),{interval:"1h"});if(a.side==="WAIT"||!a.stop||!a.tp1||a.status==="WAITING")continue;
+    let r=0,exitIndex=null;
+    for(let j=i+1;j<=Math.min(i+18,c.length-1);j++){
+      const x=c[j];
+      if(a.side==="LONG"){if(x.l<=a.stop){r=-1;exitIndex=j;break}if(x.h>=a.tp1){r=1;exitIndex=j;break}}
+      else {if(x.h>=a.stop){r=-1;exitIndex=j;break}if(x.l<=a.tp1){r=1;break}}
+    }
+    if(exitIndex!==null){add("ALL",{r});add(a.type,{r});add(a.side,{r});add(a.regime,{r})}
+  }
+  return Object.fromEntries(Object.entries(buckets).map(([k,v])=>[k,summarize(v)]));
 }
 
 module.exports={analyze,backtest};
