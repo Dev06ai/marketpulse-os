@@ -1,44 +1,62 @@
 <!doctype html>
 <html lang="en">
 <head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#07111f">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#050914">
+<meta name="description" content="MarketPulse crypto market intelligence and transparent trade setups.">
 <title>MarketPulse — Crypto Intelligence</title>
 <link rel="manifest" href="/manifest.json">
 <style>
-:root{--bg:#050914;--panel:rgba(12,19,34,.78);--line:rgba(139,164,202,.16);--text:#f5f8ff;--muted:#94a3b8;--cyan:#6ee7f7;--violet:#a78bfa;--green:#57e39b;--red:#ff6f91;--amber:#f7c86a;--shadow:0 18px 60px rgba(0,0,0,.28)}
-*{box-sizing:border-box}html{background:var(--bg)}body{margin:0;color:var(--text);font:14px Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:
-radial-gradient(circle at 10% -10%,rgba(110,231,247,.13),transparent 28%),radial-gradient(circle at 90% 0%,rgba(167,139,250,.14),transparent 25%),linear-gradient(180deg,#07101f,#050914 60%);min-height:100vh}
-a{color:inherit}.app{max-width:1280px;margin:auto;padding:22px 18px 92px}.top{display:flex;align-items:center;justify-content:space-between;gap:14px;margin-bottom:18px}.brand{display:flex;align-items:center;gap:11px}.logo{width:38px;height:38px;border-radius:12px;background:linear-gradient(135deg,var(--cyan),var(--violet));box-shadow:0 0 32px rgba(110,231,247,.2);display:grid;place-items:center;color:#08111f;font-weight:900}.eyebrow{color:var(--muted);font-size:12px}.brand h1{margin:1px 0 0;font-size:22px;letter-spacing:-.03em}.controls{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.select,.btn{background:rgba(9,16,29,.82);border:1px solid var(--line);color:var(--text);padding:9px 11px;border-radius:11px}.btn{cursor:pointer}.btn.primary{border-color:rgba(110,231,247,.34);box-shadow:inset 0 0 0 1px rgba(110,231,247,.05)}.status{display:inline-flex;align-items:center;gap:7px;color:var(--muted);font-size:12px}.dot{width:7px;height:7px;border-radius:999px;background:var(--green);box-shadow:0 0 10px var(--green)}.grid{display:grid;grid-template-columns:1.7fr 1fr;gap:14px}.panel{background:var(--panel);border:1px solid var(--line);box-shadow:var(--shadow);border-radius:18px;padding:16px;backdrop-filter:blur(18px)}.hero{display:grid;grid-template-columns:repeat(5,1fr);gap:10px}.metric{padding:12px;border:1px solid var(--line);border-radius:14px;background:rgba(255,255,255,.02)}.metric .label{color:var(--muted);font-size:11px}.metric .value{margin-top:6px;font-size:21px;font-weight:800;letter-spacing:-.03em}.value.good{color:var(--green)}.value.bad{color:var(--red)}.value.warn{color:var(--amber)}.value.neutral{color:var(--text)}.section-title{font-size:13px;font-weight:800;margin:0 0 10px}.sub{color:var(--muted);font-size:12px}.thesis{display:flex;justify-content:space-between;align-items:flex-start;gap:14px}.setup{font-size:28px;font-weight:900;letter-spacing:-.04em;margin:3px 0 5px}.pillrow{display:flex;gap:7px;flex-wrap:wrap}.pill{padding:6px 9px;border-radius:999px;background:rgba(255,255,255,.05);border:1px solid var(--line);color:var(--muted);font-size:11px}.pill.good{color:var(--green);border-color:rgba(87,227,155,.28)}.pill.bad{color:var(--red);border-color:rgba(255,111,145,.28)}.pill.cyan{color:var(--cyan);border-color:rgba(110,231,247,.28)}.score{min-width:120px;text-align:right}.score .num{font-size:34px;font-weight:900;line-height:1}.score .caption{color:var(--muted);font-size:11px;margin-top:6px}.chart{margin-top:14px;height:330px;width:100%;border-radius:14px;background:linear-gradient(180deg,rgba(255,255,255,.025),rgba(255,255,255,.01));border:1px solid var(--line)}.levels{display:grid;grid-template-columns:repeat(4,1fr);gap:9px;margin-top:12px}.level{padding:11px;border:1px solid var(--line);border-radius:13px}.level .k{color:var(--muted);font-size:11px}.level .v{margin-top:5px;font-weight:800}.why{display:grid;gap:8px;margin-top:13px}.whyitem{padding:10px 11px;border-radius:12px;background:rgba(255,255,255,.03);border:1px solid var(--line)}.scanner{display:grid;gap:8px}.row{display:grid;grid-template-columns:55px 1fr 90px 48px;gap:9px;align-items:center;padding:11px 10px;border:1px solid var(--line);border-radius:13px;background:rgba(255,255,255,.02)}.row .asset{font-weight:900}.small{font-size:11px;color:var(--muted)}.tag{justify-self:start;padding:5px 8px;border-radius:8px;font-size:10px;font-weight:800}.tag.long{color:var(--green);background:rgba(87,227,155,.09)}.tag.short{color:var(--red);background:rgba(255,111,145,.08)}.tag.wait{color:var(--amber);background:rgba(247,200,106,.08)}.risk{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}.input{width:100%;margin-top:6px}.input input{width:100%;background:#091321;border:1px solid var(--line);color:var(--text);padding:10px;border-radius:11px}.riskout{margin-top:12px;color:var(--muted)}.nav{position:fixed;bottom:14px;left:50%;transform:translateX(-50%);display:flex;gap:6px;padding:6px;border:1px solid var(--line);background:rgba(5,9,20,.88);backdrop-filter:blur(18px);border-radius:16px;box-shadow:var(--shadow);z-index:20}.nav button{background:transparent;border:0;color:var(--muted);padding:10px 14px;border-radius:11px}.nav button.active{background:rgba(255,255,255,.06);color:var(--text)}.foot{margin-top:13px;color:var(--muted);font-size:11px;line-height:1.5}@media(max-width:950px){.grid{grid-template-columns:1fr}.hero{grid-template-columns:repeat(2,1fr)}.score{text-align:left}.levels{grid-template-columns:repeat(2,1fr)}.risk{grid-template-columns:repeat(2,1fr)}}@media(max-width:620px){.app{padding:16px 13px 86px}.top{align-items:flex-start}.brand h1{font-size:18px}.controls{justify-content:flex-end}.hero{grid-template-columns:repeat(2,1fr)}.hero .metric:first-child{grid-column:span 2}.setup{font-size:23px}.thesis{flex-direction:column}.score{min-width:auto}.chart{height:260px}.levels{grid-template-columns:repeat(2,1fr)}.risk{grid-template-columns:1fr}.row{grid-template-columns:48px 1fr 92px 40px}.sub.hide-sm{display:none}}
+:root{--bg:#050914;--panel:rgba(12,19,34,.78);--panel2:rgba(17,26,45,.68);--line:rgba(139,164,202,.16);--text:#f5f8ff;--muted:#94a3b8;--cyan:#6ee7f7;--violet:#a78bfa;--green:#57e39b;--red:#ff6f91;--amber:#f7c86a;--shadow:0 18px 60px rgba(0,0,0,.28)}
+*{box-sizing:border-box}html{background:var(--bg);scroll-behavior:smooth}body{margin:0;color:var(--text);font:14px Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:radial-gradient(circle at 10% -10%,rgba(110,231,247,.13),transparent 28%),radial-gradient(circle at 90% 0%,rgba(167,139,250,.14),transparent 25%),linear-gradient(180deg,#07101f,#050914 60%);min-height:100vh}
+button,select,input{font:inherit}.app{max-width:1280px;margin:auto;padding:20px 16px 96px}.top{display:flex;align-items:center;justify-content:space-between;gap:14px;margin-bottom:15px}.brand{display:flex;align-items:center;gap:10px}.logo{width:40px;height:40px;border-radius:13px;background:linear-gradient(135deg,var(--cyan),var(--violet));box-shadow:0 0 32px rgba(110,231,247,.2);display:grid;place-items:center;color:#08111f;font-weight:950}.eyebrow{color:var(--muted);font-size:11px}.brand h1{margin:2px 0 0;font-size:22px;letter-spacing:-.035em}.controls{display:flex;gap:7px;align-items:center;justify-content:flex-end;flex-wrap:wrap}.select,.btn{background:rgba(9,16,29,.88);border:1px solid var(--line);color:var(--text);padding:9px 11px;border-radius:11px}.btn{cursor:pointer}.btn.primary{border-color:rgba(110,231,247,.34);box-shadow:inset 0 0 0 1px rgba(110,231,247,.05)}.status{display:inline-flex;align-items:center;gap:7px;color:var(--muted);font-size:11px}.dot{width:7px;height:7px;border-radius:99px;background:var(--green);box-shadow:0 0 10px var(--green)}.pulse{display:flex;gap:8px;align-items:center;margin:0 0 14px}.chip{padding:6px 9px;border:1px solid var(--line);border-radius:999px;color:var(--muted);background:rgba(255,255,255,.025);font-size:11px}.chip.good{color:var(--green);border-color:rgba(87,227,155,.28)}.chip.warn{color:var(--amber);border-color:rgba(247,200,106,.28)}.chip.bad{color:var(--red);border-color:rgba(255,111,145,.28)}
+.panel{background:var(--panel);border:1px solid var(--line);box-shadow:var(--shadow);border-radius:18px;padding:15px;backdrop-filter:blur(18px)}.hero{display:grid;grid-template-columns:repeat(5,1fr);gap:9px}.metric{padding:12px;border:1px solid var(--line);border-radius:14px;background:rgba(255,255,255,.02)}.metric .label{color:var(--muted);font-size:11px}.metric .value{margin-top:6px;font-size:21px;font-weight:850;letter-spacing:-.035em}.metric .subv{margin-top:3px;color:var(--muted);font-size:10px}.value.good{color:var(--green)}.value.bad{color:var(--red)}.value.warn{color:var(--amber)}.value.neutral{color:var(--text)}.value.cyan{color:var(--cyan)}
+.grid{display:grid;grid-template-columns:1.72fr 1fr;gap:14px;margin-top:14px}.section-title{font-size:13px;font-weight:850;margin:0 0 5px}.sub{color:var(--muted);font-size:11px}.thesis{display:flex;justify-content:space-between;align-items:flex-start;gap:14px}.setup{font-size:27px;font-weight:950;letter-spacing:-.05em;margin:4px 0 6px}.pillrow{display:flex;gap:6px;flex-wrap:wrap}.pill{padding:6px 9px;border-radius:999px;background:rgba(255,255,255,.045);border:1px solid var(--line);color:var(--muted);font-size:10px}.pill.cyan{color:var(--cyan);border-color:rgba(110,231,247,.28)}.score{text-align:right;min-width:120px}.score .num{font-size:34px;font-weight:950;line-height:1}.score .caption{color:var(--muted);font-size:10px;margin-top:5px}.chart{margin-top:13px;height:325px;width:100%;display:block;border-radius:14px;background:linear-gradient(180deg,rgba(255,255,255,.025),rgba(255,255,255,.01));border:1px solid var(--line)}.levels{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:10px}.level{padding:10px;border:1px solid var(--line);border-radius:13px;background:rgba(255,255,255,.018)}.level .k{color:var(--muted);font-size:10px}.level .v{margin-top:5px;font-weight:850;font-size:13px}.why{display:grid;gap:7px;margin-top:11px}.whyitem{padding:9px 10px;border-radius:12px;background:rgba(255,255,255,.028);border:1px solid var(--line);font-size:12px}.scannerHead{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:9px}.filter{display:flex;gap:5px;flex-wrap:wrap}.filter button{border:1px solid var(--line);background:transparent;color:var(--muted);padding:6px 8px;border-radius:9px;font-size:10px;cursor:pointer}.filter button.on{color:var(--text);background:rgba(255,255,255,.06)}.scanner{display:grid;gap:7px}.row{display:grid;grid-template-columns:26px 50px 1fr 86px 42px;gap:7px;align-items:center;padding:9px;border:1px solid var(--line);border-radius:12px;background:rgba(255,255,255,.02)}.star{border:0;background:transparent;color:#536273;font-size:16px;padding:0;cursor:pointer}.star.on{color:var(--amber)}.asset{font-weight:900}.small{font-size:10px;color:var(--muted)}.tag{justify-self:start;padding:5px 7px;border-radius:8px;font-size:9px;font-weight:850;white-space:nowrap}.tag.long{color:var(--green);background:rgba(87,227,155,.09)}.tag.short{color:var(--red);background:rgba(255,111,145,.08)}.tag.wait{color:var(--amber);background:rgba(247,200,106,.08)}.history{margin-top:14px;display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px}.hist{padding:10px;border:1px solid var(--line);border-radius:12px;background:rgba(255,255,255,.018)}.hist .k{color:var(--muted);font-size:10px}.hist .v{font-weight:850;margin-top:5px}.risk{display:grid;grid-template-columns:repeat(4,1fr);gap:9px}.input{width:100%;margin-top:6px}.input input{width:100%;background:#091321;border:1px solid var(--line);color:var(--text);padding:10px;border-radius:11px}.riskout{margin-top:11px;color:var(--muted);font-size:12px}.auto{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:10px;padding:10px 11px;border:1px solid var(--line);border-radius:12px;background:rgba(255,255,255,.018)}.foot{margin-top:12px;color:var(--muted);font-size:10px;line-height:1.5}.nav{position:fixed;bottom:14px;left:50%;transform:translateX(-50%);display:flex;gap:5px;padding:6px;border:1px solid var(--line);background:rgba(5,9,20,.88);backdrop-filter:blur(18px);border-radius:16px;box-shadow:var(--shadow);z-index:20}.nav button{background:transparent;border:0;color:var(--muted);padding:9px 14px;border-radius:11px;cursor:pointer}.nav button.active{background:rgba(255,255,255,.06);color:var(--text)}
+@media(max-width:960px){.grid{grid-template-columns:1fr}.hero{grid-template-columns:repeat(2,1fr)}.score{text-align:left}.levels,.history{grid-template-columns:repeat(2,1fr)}.risk{grid-template-columns:repeat(2,1fr)}}@media(max-width:620px){.app{padding:14px 12px 88px}.top{align-items:flex-start}.brand h1{font-size:19px}.status{max-width:110px}.controls{gap:6px}.hero{grid-template-columns:repeat(2,1fr)}.hero .metric:first-child{grid-column:span 2}.thesis{flex-direction:column}.score{min-width:auto}.setup{font-size:23px}.chart{height:255px}.levels,.history,.risk{grid-template-columns:repeat(2,1fr)}.row{grid-template-columns:23px 44px 1fr 80px 38px}.hide-sm{display:none!important}}
 </style></head>
 <body>
-<div class="app">
-<header class="top"><div class="brand"><div class="logo">MP</div><div><div class="eyebrow">Crypto intelligence • not noise</div><h1>MarketPulse</h1></div></div><div class="controls"><span class="status"><span class="dot"></span><span id="source">Market data online</span></span><select id="sym" class="select"></select><select id="int" class="select"><option>15m</option><option selected>1h</option><option>4h</option><option>1d</option></select><button id="refresh" class="btn primary">Refresh</button></div></header>
+<div class="app" id="top">
+<header class="top">
+  <div class="brand"><div class="logo">MP</div><div><div class="eyebrow">Crypto intelligence • not noise</div><h1>MarketPulse</h1></div></div>
+  <div class="controls"><span class="status"><span class="dot"></span><span id="source">Market data</span></span><select id="sym" class="select"></select><select id="int" class="select"><option>15m</option><option selected>1h</option><option>4h</option><option>1d</option></select><button id="refresh" class="btn primary">Refresh</button></div>
+</header>
+
+<div class="pulse"><span class="chip" id="lastUpdated">Updated —</span><span class="chip" id="breadth">Breadth —</span><span class="chip" id="pulseTone">Pulse —</span></div>
 
 <section class="panel"><div class="hero">
-<div class="metric"><div class="label">Price</div><div class="value" id="price">—</div><div class="small" id="change">—</div></div>
-<div class="metric"><div class="label">Market mode</div><div class="value neutral" id="regime">—</div><div class="small" id="mood">—</div></div>
-<div class="metric"><div class="label">Call</div><div class="value neutral" id="setup">—</div><div class="small" id="bias">—</div></div>
-<div class="metric"><div class="label">Confluence</div><div class="value cyan" id="score">—</div><div class="small">not probability</div></div>
-<div class="metric"><div class="label">RSI / ADX</div><div class="value neutral" id="mom">—</div><div class="small" id="structure">—</div></div></div></section>
+<div class="metric"><div class="label">Price</div><div class="value" id="price">—</div><div class="subv" id="change">—</div></div>
+<div class="metric"><div class="label">Market mode</div><div class="value neutral" id="regime">—</div><div class="subv" id="mood">—</div></div>
+<div class="metric"><div class="label">Call</div><div class="value neutral" id="setup">—</div><div class="subv" id="bias">—</div></div>
+<div class="metric"><div class="label">Confluence</div><div class="value cyan" id="score">—</div><div class="subv">alignment / 100</div></div>
+<div class="metric"><div class="label">RSI / ADX</div><div class="value neutral" id="mom">—</div><div class="subv" id="structure">—</div></div>
+</div></section>
 
-<div class="grid" style="margin-top:14px">
+<div class="grid">
 <section class="panel">
-<div class="thesis"><div><div class="section-title">The thesis</div><div class="setup" id="thesis">Loading market context…</div><div class="pillrow" id="pills"></div></div><div class="score"><div class="num" id="score2">—</div><div class="caption">Confluence / 100</div></div></div>
-<canvas id="chart" class="chart" width="1100" height="330"></canvas>
+<div class="thesis"><div><div class="section-title">The thesis</div><div class="setup" id="thesis">Loading market context…</div><div class="pillrow" id="pills"></div></div><div class="score"><div class="num" id="score2">—</div><div class="caption">Confluence</div></div></div>
+<canvas id="chart" class="chart" width="1100" height="325"></canvas>
 <div class="levels"><div class="level"><div class="k">Entry zone</div><div class="v" id="entry">—</div></div><div class="level"><div class="k">Invalidation</div><div class="v" id="stop">—</div></div><div class="level"><div class="k">Target 1</div><div class="v" id="tp1">—</div></div><div class="level"><div class="k">R:R</div><div class="v" id="rr">—</div></div></div>
 <div class="why" id="why"></div>
+<div class="history"><div class="hist"><div class="k">Historical sample</div><div class="v" id="btTrades">—</div></div><div class="hist"><div class="k">Win rate</div><div class="v" id="btWin">—</div></div><div class="hist"><div class="k">Net R</div><div class="v" id="btR">—</div></div><div class="hist"><div class="k">Reminder</div><div class="v">Not predictive</div></div></div>
 </section>
 
-<section class="panel"><div class="section-title">Scanner</div><div class="sub" style="margin-bottom:10px">Find the cleanest setups without pretending every candle is a trade.</div><div class="scanner" id="scan"></div></section>
+<section class="panel" id="scan">
+<div class="scannerHead"><div><div class="section-title">Scanner</div><div class="sub">See what is actually aligning right now.</div></div><div class="filter" id="filters"><button class="on" data-filter="ALL">All</button><button data-filter="LONG">Long</button><button data-filter="SHORT">Short</button><button data-filter="WAIT">No trade</button></div></div>
+<div class="scanner" id="rows"></div>
+<div class="auto"><span><b>Auto-refresh</b><br><span class="small">Every 45 seconds while this tab is open</span></span><button id="autoToggle" class="btn">On</button></div>
+</section>
 </div>
 
-<section class="panel" style="margin-top:14px" id="riskSection"><div class="section-title">Risk lab</div><div class="sub">Make the size fit your stop — not the other way around.</div><div class="risk" style="margin-top:10px">
+<section class="panel" style="margin-top:14px" id="riskSection">
+<div class="section-title">Risk lab</div><div class="sub">Make the size fit your stop — not the other way around.</div>
+<div class="risk" style="margin-top:10px">
 <label class="input"><span class="small">Account</span><input id="acct" type="number" value="5000"></label>
 <label class="input"><span class="small">Risk %</span><input id="risk" type="number" value="1" step=".05"></label>
 <label class="input"><span class="small">Entry</span><input id="rentry" type="number" value="100000"></label>
 <label class="input"><span class="small">Stop</span><input id="rstop" type="number" value="98000"></label>
-</div><div class="riskout" id="riskout"></div></section>
+</div><div class="riskout" id="riskout"></div>
+</section>
 
 <div class="foot">MarketPulse is educational decision-support software. It does not place orders, manage funds, or guarantee outcomes. A setup score measures rule alignment, not the probability of profit.</div>
 </div>
@@ -49,28 +67,63 @@ a{color:inherit}.app{max-width:1280px;margin:auto;padding:22px 18px 92px}.top{di
 const $=id=>document.getElementById(id);
 const fmt=x=>Number.isFinite(+x)?Number(x).toLocaleString(undefined,{maximumFractionDigits:2}):"—";
 const pct=x=>Number.isFinite(+x)?((+x>=0?"+":"")+Number(x).toFixed(2)+"%"):"—";
+let scanRows=[];let filter="ALL";let timer=null;let auto=true;let watch=new Set(JSON.parse(localStorage.getItem("mp-watch")||"[]");
+
 async function api(u){const r=await fetch(u,{cache:"no-store"}),j=await r.json();if(!r.ok)throw Error(j.error||"Request failed");return j}
 function line(ctx,pts){ctx.beginPath();pts.forEach((p,i)=>i?ctx.lineTo(p[0],p[1]):ctx.moveTo(p[0],p[1]));ctx.stroke()}
 function drawChart(candles,a){
-  const c=$("chart"),ctx=c.getContext("2d"),W=c.width=c.clientWidth*devicePixelRatio,H=c.height=c.clientHeight*devicePixelRatio,d=candles.slice(-90),hi=Math.max(...d.map(x=>x.h)),lo=Math.min(...d.map(x=>x.l)),pad=22*devicePixelRatio;
-  ctx.clearRect(0,0,W,H);ctx.lineWidth=1;ctx.strokeStyle="rgba(148,163,184,.12)";
-  for(let k=0;k<5;k++){const y=pad+k*(H-pad*2)/4;ctx.beginPath();ctx.moveTo(pad,y);ctx.lineTo(W-pad,y);ctx.stroke()}
-  const xstep=(W-pad*2)/Math.max(1,d.length-1),scale=y=>(H-pad)-((y-lo)/(hi-lo))*(H-pad*2);
-  d.forEach((x,i)=>{const X=pad+i*xstep,o=scale(x.o),h=scale(x.h),l=scale(x.l),cl=scale(x.c);ctx.strokeStyle=x.c>=x.o?"rgba(87,227,155,.85)":"rgba(255,111,145,.85)";ctx.beginPath();ctx.moveTo(X,h);ctx.lineTo(X,l);ctx.stroke();const bw=Math.max(2,Math.min(8,xstep*.62));ctx.fillStyle=x.c>=x.o?"rgba(87,227,155,.78)":"rgba(255,111,145,.78)";ctx.fillRect(X-bw/2,Math.min(o,cl),bw,Math.max(1,Math.abs(cl-o)))});
-  const e20=d.map((_,j)=>a.ema20),fullCl=candles.map(x=>x.c),k=2/(20+1);let e=fullCl[0],arr=[];for(let i=0;i<fullCl.length;i++){e=i===0?fullCl[i]:fullCl[i]*k+e*(1-k);if(i>=fullCl.length-d.length)arr.push([pad+(i-(fullCl.length-d.length))*xstep,scale(e)])}
-  ctx.strokeStyle="rgba(110,231,247,.9)";ctx.lineWidth=2;line(ctx,arr);
+ const c=$("chart"),rect=c.getBoundingClientRect(),dpr=window.devicePixelRatio||1,W=Math.max(320,rect.width),H=Math.max(240,rect.height);
+ c.width=W*dpr;c.height=H*dpr;const ctx=c.getContext("2d");ctx.scale(dpr,dpr);
+ const data=candles.slice(-90),hi=Math.max(...data.map(x=>x.h)),lo=Math.min(...data.map(x=>x.l)),pad=18,xstep=(W-pad*2)/Math.max(1,data.length-1),scale=y=>(H-pad)-((y-lo)/(hi-lo||1))*(H-pad*2);
+ ctx.clearRect(0,0,W,H);ctx.lineWidth=1;ctx.strokeStyle="rgba(148,163,184,.12)";
+ for(let k=0;k<5;k++){const y=pad+k*(H-pad*2)/4;ctx.beginPath();ctx.moveTo(pad,y);ctx.lineTo(W-pad,y);ctx.stroke()}
+ data.forEach((x,i)=>{const X=pad+i*xstep,o=scale(x.o),h=scale(x.h),l=scale(x.l),cl=scale(x.c);ctx.strokeStyle=x.c>=x.o?"rgba(87,227,155,.85)":"rgba(255,111,145,.85)";ctx.beginPath();ctx.moveTo(X,h);ctx.lineTo(X,l);ctx.stroke();const bw=Math.max(2,Math.min(8,xstep*.62));ctx.fillStyle=x.c>=x.o?"rgba(87,227,155,.8)":"rgba(255,111,145,.8)";ctx.fillRect(X-bw/2,Math.min(o,cl),bw,Math.max(1,Math.abs(cl-o)))});
+ let e=candles[0].c,k=2/21,arr=[];for(let i=0;i<candles.length;i++){e=i?candles[i].c*k+e*(1-k):candles[i].c;if(i>=candles.length-data.length)arr.push([pad+(i-(candles.length-data.length))*xstep,scale(e)])}
+ ctx.strokeStyle="rgba(110,231,247,.92)";ctx.lineWidth=2;line(ctx,arr);
 }
 function setupClass(side){return side==="LONG"?"long":side==="SHORT"?"short":"wait"}
 function render(d){
-  const a=d.analysis;$("price").textContent=fmt(a.price);$("change").textContent=pct(a.change24h)+" / 24h";$("regime").textContent=a.regime;$("mood").textContent="Mood: "+a.mood;$("setup").textContent=a.type;$("bias").textContent=a.bias;$("score").textContent=a.score;$("score2").textContent=a.score;$("mom").textContent=fmt(a.rsi)+" / "+fmt(a.adx);$("structure").textContent=a.structure;
-  $("thesis").textContent=a.type;$("pills").innerHTML=[["4H",a.mtf?.higher||"—"],["15M",a.mtf?.lower||"—"],["Mood",a.mood],["Structure",a.structure]].map(([k,v])=>'<span class="pill cyan">'+k+': '+v+'</span>').join("");
-  $("entry").textContent=a.entryLow?fmt(a.entryLow)+" → "+fmt(a.entryHigh):"No setup";$("stop").textContent=fmt(a.stop);$("tp1").textContent=fmt(a.tp1);$("rr").textContent=a.rr?Number(a.rr).toFixed(2)+"R":"—";
-  $("why").innerHTML=a.reasons.map(x=>'<div class="whyitem">'+x+'</div>').join("");
-  $("source").textContent=d.candles?.[0]?.source==="kraken"?"Kraken market data":"Market data online";drawChart(d.candles,a);
+ const a=d.analysis;
+ $("price").textContent=fmt(a.price);$("change").textContent=pct(a.change24h)+" / 24h";$("regime").textContent=a.regime;$("mood").textContent="Mood: "+a.mood;$("setup").textContent=a.type;$("bias").textContent=a.bias;$("score").textContent=a.score;$("score2").textContent=a.score;$("mom").textContent=fmt(a.rsi)+" / "+fmt(a.adx);$("structure").textContent=a.structure;$("thesis").textContent=a.type;
+ $("pills").innerHTML=[["4H",a.mtf?.higher||"—"],["15M",a.mtf?.lower||"—"],["Mood",a.mood],["Structure",a.structure]].map(([k,v])=>'<span class="pill cyan">'+k+': '+v+'</span>').join("");
+ $("entry").textContent=a.entryLow?fmt(a.entryLow)+" → "+fmt(a.entryHigh):"No setup";$("stop").textContent=fmt(a.stop);$("tp1").textContent=fmt(a.tp1);$("rr").textContent=a.rr?Number(a.rr).toFixed(2)+"R":"—";
+ $("why").innerHTML=a.reasons.map(x=>'<div class="whyitem">'+x+'</div>').join("");
+ $("source").textContent=d.candles?.[0]?.source==="kraken"?"Kraken market data":"Market data online";
+ $("btTrades").textContent=d.backtest?fmt(d.backtest.trades):"—";$("btWin").textContent=d.backtest&&d.backtest.trades?Number(d.backtest.winRate).toFixed(1)+"%":"—";$("btR").textContent=d.backtest?Number(d.backtest.netR).toFixed(2)+"R":"—";
+ $("lastUpdated").textContent="Updated "+new Date(a.updatedAt||Date.now()).toLocaleTimeString([], {hour:"2-digit",minute:"2-digit",second:"2-digit"});
+ drawChart(d.candles,a);
 }
-async function load(){try{const d=await api('/api/market?symbol='+encodeURIComponent($("sym").value)+'&interval='+$("int").value);render(d);await scan()}catch(e){$("why").innerHTML='<div class="whyitem" style="color:var(--red)">'+e.message+'</div>';}}
-async function scan(){try{const d=await api('/api/scanner?interval='+$("int").value);$("scan").innerHTML=d.rows.map(r=>{const cls=setupClass(r.side);return '<div class="row"><div class="asset">'+r.label+'</div><div><div>'+r.regime+'</div><div class="small">'+r.score+'/100</div></div><div class="tag '+cls+'">'+r.type.replaceAll(" "," ")+'</div><div class="small">'+fmt(r.rsi)+'</div></div>'}).join("")}catch(e){$("scan").innerHTML='<div class="whyitem">'+e.message+'</div>'}}
+function renderPulse(){
+ if(!scanRows.length)return;
+ const ups=scanRows.filter(r=>r.regime==="UPTREND").length,downs=scanRows.filter(r=>r.regime==="DOWNTREND").length,waits=scanRows.filter(r=>r.side==="WAIT").length,total=scanRows.length;
+ $("breadth").textContent="Breadth "+ups+" up · "+downs+" down · "+waits+" wait";
+ let tone="Mixed";if(ups>=total*.6)tone="Risk-on";else if(downs>=total*.6)tone="Risk-off";else if(waits>=total*.6)tone="Choppy";
+ $("pulseTone").textContent="Pulse "+tone;$("pulseTone").className="chip "+(tone==="Risk-on"?"good":tone==="Risk-off"?"bad":"warn");
+}
+function renderScanner(){
+ const rows=scanRows.filter(r=>filter==="ALL"?true:filter==="WAIT"?r.side==="WAIT":r.side===filter).sort((a,b)=>b.score-a.score);
+ $("rows").innerHTML=rows.map(r=>{const cls=setupClass(r.side),star=watch.has(r.symbol)?"★":"☆";return '<div class="row"><button class="star '+(watch.has(r.symbol)?"on":"")+'" data-star="'+r.symbol+'">'+star+'</button><div class="asset">'+r.label+'</div><div><div>'+r.regime+'</div><div class="small">'+r.score+'/100</div></div><div class="tag '+cls+'">'+r.type+'</div><div class="small">'+fmt(r.rsi)+'</div></div>'}).join("");
+ document.querySelectorAll("[data-star]").forEach(b=>b.onclick=()=>{const s=b.dataset.star;watch.has(s)?watch.delete(s):watch.add(s);localStorage.setItem("mp-watch",JSON.stringify([...watch]));renderScanner()});
+ renderPulse();
+}
+async function scan(){
+ try{const d=await api('/api/scanner?interval='+$("int").value);scanRows=d.rows;renderScanner()}
+ catch(e){$("rows").innerHTML='<div class="whyitem">'+e.message+'</div>'}
+}
+async function load(){
+ try{const d=await api('/api/market?symbol='+encodeURIComponent($("sym").value)+'&interval='+$("int").value);render(d);await scan()}
+ catch(e){$("why").innerHTML='<div class="whyitem" style="color:var(--red)">'+e.message+'</div>'}
+}
 function risk(){const acct=+$("acct").value||0,p=(+$("risk").value||0)/100,e=+$("rentry").value||0,s=+$("rstop").value||0,b=acct*p,dist=Math.abs(e-s),qty=dist?b/dist:0;$("riskout").innerHTML='<b style="color:var(--text)">Risk budget '+fmt(b)+'</b> · Stop '+fmt(dist)+' · Position size '+fmt(qty)}
-(async()=>{try{const c=await api('/api/config');$("sym").innerHTML=c.symbols.map(s=>'<option value="'+s+'">'+(c.labels[s]||s)+'</option>').join("");$("refresh").onclick=load;$("sym").onchange=load;$("int").onchange=load;["acct","risk","rentry","rstop"].forEach(x=>$(x).oninput=risk);document.querySelectorAll(".nav button").forEach(b=>b.onclick=()=>document.getElementById(b.dataset.go).scrollIntoView({behavior:"smooth",block:"start"}));risk();await load()}catch(e){$("why").innerHTML='<div class="whyitem">'+e.message+'</div>'}})();
+function schedule(){clearInterval(timer);if(auto)timer=setInterval(()=>{if(document.visibilityState==="visible")load()},45000)}
+(async()=>{
+ try{
+  const c=await api('/api/config');$("sym").innerHTML=c.symbols.map(s=>'<option value="'+s+'">'+(c.labels[s]||s)+'</option>').join("");
+  $("refresh").onclick=load;$("sym").onchange=load;$("int").onchange=load;["acct","risk","rentry","rstop"].forEach(x=>$(x).oninput=risk);
+  document.querySelectorAll(".filter button").forEach(b=>b.onclick=()=>{document.querySelectorAll(".filter button").forEach(x=>x.classList.remove("on"));b.classList.add("on");filter=b.dataset.filter;renderScanner()});
+  document.querySelectorAll(".nav button").forEach(b=>b.onclick=()=>{document.querySelectorAll(".nav button").forEach(x=>x.classList.remove("active"));b.classList.add("active");document.getElementById(b.dataset.go).scrollIntoView({behavior:"smooth",block:"start"})});
+  $("autoToggle").onclick=()=>{auto=!auto;$("autoToggle").textContent=auto?"On":"Off";schedule()};risk();await load();schedule();
+ }catch(e){$("why").innerHTML='<div class="whyitem">'+e.message+'</div>'}
+})();
 </script>
 </body></html>
