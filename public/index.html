@@ -34,7 +34,7 @@ button,select,input{font:inherit}.app{max-width:1280px;margin:auto;padding:20px 
 
 <div class="grid">
 <section class="panel">
-<div class="thesis"><div><div class="section-title">The thesis</div><div class="setup" id="thesis">Loading market context…</div><div class="pillrow" id="pills"></div></div><div class="score"><div class="num" id="score2">—</div><div class="caption">Confluence</div></div></div>
+<div class="thesis"><div><div class="section-title">The thesis</div><div class="setup" id="thesis">Loading market context…</div><div id="signalState"></div><div class="pillrow" id="pills"></div></div><div class="score"><div class="num" id="score2">—</div><div class="caption">Confluence</div></div></div>
 <canvas id="chart" class="chart" width="1100" height="325"></canvas>
 <div class="levels"><div class="level"><div class="k">Entry zone</div><div class="v" id="entry">—</div></div><div class="level"><div class="k">Invalidation</div><div class="v" id="stop">—</div></div><div class="level"><div class="k">Target 1</div><div class="v" id="tp1">—</div></div><div class="level"><div class="k">R:R</div><div class="v" id="rr">—</div></div></div>
 <div class="why" id="why"></div>
@@ -128,12 +128,14 @@ function drawChart(candles,a){
 function setupClass(side){return side==="LONG"?"long":side==="SHORT"?"short":"wait"}
 function render(d){
  const a=d.analysis;
- $("price").textContent=fmt(a.price);$("change").textContent=pct(a.change24h)+" / 24h";$("regime").textContent=a.regime;$("mood").textContent="Mood: "+a.mood;$("setup").textContent=a.type;$("bias").textContent=a.bias;$("score").textContent=a.score;$("score2").textContent=a.score;$("mom").textContent=fmt(a.rsi)+" / "+fmt(a.adx);$("structure").textContent=a.structure;$("thesis").textContent=a.type;
+ $("price").textContent=fmt(a.price);$("change").textContent=pct(a.change24h)+" / 24h";$("regime").textContent=a.regime;$("mood").textContent="Mood: "+a.mood;$("setup").textContent=a.type;$("bias").textContent=a.bias;$("score").textContent=a.score;$("score2").textContent=a.score;
+  const stateCls=a.status==="READY"?"ready":a.status==="WATCH"?"watch":"wait";$("signalState").innerHTML='<span class="statePill '+stateCls+'">'+a.status+'</span>';$("mom").textContent=fmt(a.rsi)+" / "+fmt(a.adx);$("structure").textContent=a.structure;$("thesis").textContent=a.type;
  $("pills").innerHTML=[["4H",a.mtf?.higher||"—"],["15M",a.mtf?.lower||"—"],["Mood",a.mood],["Structure",a.structure]].map(([k,v])=>'<span class="pill cyan">'+k+': '+v+'</span>').join("");
  $("entry").textContent=a.entryLow?fmt(a.entryLow)+" → "+fmt(a.entryHigh):"No setup";$("stop").textContent=fmt(a.stop);$("tp1").textContent=fmt(a.tp1);$("rr").textContent=a.rr?Number(a.rr).toFixed(2)+"R":"—";
  $("why").innerHTML=a.reasons.map(x=>'<div class="whyitem">'+x+'</div>').join("");
  $("source").textContent=d.candles?.[0]?.source==="kraken"?"Kraken market data":"Market data online";
- $("btTrades").textContent=d.backtest?fmt(d.backtest.trades):"—";$("btWin").textContent=d.backtest&&d.backtest.trades?Number(d.backtest.winRate).toFixed(1)+"%":"—";$("btR").textContent=d.backtest?Number(d.backtest.netR).toFixed(2)+"R":"—";
+ $("btTrades").textContent=d.backtest?fmt(d.backtest.trades):"—";$("btWin").textContent=d.backtest&&d.backtest.trades?Number(d.backtest.winRate).toFixed(1)+"%":"—";$("btR").textContent=d.backtest?Number(d.backtest.netR).toFixed(2)+"R":"—";$("btPF").textContent=d.backtest?.profitFactor?Number(d.backtest.profitFactor).toFixed(2):"—";$("btDD").textContent=d.backtest?Number(d.backtest.maxDrawdownR).toFixed(2)+"R":"—";$("btExp").textContent=d.backtest?Number(d.backtest.expectancyR).toFixed(2)+"R":"—";
+  const key=a.type||a.side;const st=d.setupStats?.[key]||d.setupStats?.ALL; $("setupStat").textContent=st&&st.trades?st.trades+" trades · "+Number(st.winRate).toFixed(0)+"%":"—";
  $("lastUpdated").textContent="Updated "+new Date(a.updatedAt||Date.now()).toLocaleTimeString([], {hour:"2-digit",minute:"2-digit",second:"2-digit"});
  drawChart(d.candles,a);
 }
@@ -176,7 +178,7 @@ function alertFromScan(){for(const r of scanRows){if(watch.has(r.symbol)&&r.side
 function schedule(){clearInterval(timer);if(auto)timer=setInterval(()=>{if(document.visibilityState==="visible")load()},45000)}
 let aiMode="market";
 function marketPayload(){
-  return {asset:$("sym").value,interval:$("int").value,price:$("price").textContent,change24h:$("change").textContent,regime:$("regime").textContent,mood:$("mood").textContent,call:$("setup").textContent,confluence:$("score").textContent,rsiAdx:$("mom").textContent,structure:$("structure").textContent,multitimeframe:$("pills").innerText,entry:$("entry").textContent,invalidation:$("stop").textContent,target1:$("tp1").textContent,rr:$("rr").textContent};
+  return {asset:$("sym").value,interval:$("int").value,price:$("price").textContent,change24h:$("change").textContent,regime:$("regime").textContent,mood:$("mood").textContent,call:$("setup").textContent,status:$("signalState").innerText,confluence:$("score").textContent,rsiAdx:$("mom").textContent,structure:$("structure").textContent,multitimeframe:$("pills").innerText,entry:$("entry").textContent,invalidation:$("stop").textContent,target1:$("tp1").textContent,rr:$("rr").textContent};
 }
 function setAiMode(mode){
  aiMode=mode;$("marketTab").classList.toggle("on",mode==="market");$("tradeTab").classList.toggle("on",mode==="trade");$("tradeFields").style.display=mode==="trade"?"block":"none";
