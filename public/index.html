@@ -67,7 +67,7 @@ button,select,input{font:inherit}.app{max-width:1280px;margin:auto;padding:20px 
 const $=id=>document.getElementById(id);
 const fmt=x=>Number.isFinite(+x)?Number(x).toLocaleString(undefined,{maximumFractionDigits:2}):"—";
 const pct=x=>Number.isFinite(+x)?((+x>=0?"+":"")+Number(x).toFixed(2)+"%"):"—";
-let scanRows=[];let filter="ALL";let timer=null;let auto=true;let watch=new Set(JSON.parse(localStorage.getItem("mp-watch")||"[]");
+let scanRows=[];let filter="ALL";let timer=null;let auto=true;let watch=new Set(JSON.parse(localStorage.getItem("mp-watch")||"[]"));
 
 async function api(u){const r=await fetch(u,{cache:"no-store"}),j=await r.json();if(!r.ok)throw Error(j.error||"Request failed");return j}
 function line(ctx,pts){ctx.beginPath();pts.forEach((p,i)=>i?ctx.lineTo(p[0],p[1]):ctx.moveTo(p[0],p[1]));ctx.stroke()}
