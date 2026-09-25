@@ -357,11 +357,10 @@ const server=http.createServer(async(req,res)=>{
       try{
         const candles=await klines(symbol,interval);
         if(!candles||candles.length<220)throw Error('Not enough market candles yet.');
-        const [lower,higher]=await Promise.all([
-          interval==='15m'?Promise.resolve(null):klines(symbol,'15m').catch(()=>null),
-          interval==='4h'?Promise.resolve(null):klines(symbol,'4h').catch(()=>null)
-        ]);
-        const deriv=await Promise.race([derivatives(symbol,interval),new Promise(resolve=>setTimeout(()=>resolve(null),1200))]).catch(()=>null);
+        const lowerPromise=interval==='15m'?Promise.resolve(null):Promise.race([klines(symbol,'15m'),new Promise(resolve=>setTimeout(()=>resolve(null),1500))]).catch(()=>null);
+        const higherPromise=interval==='4h'?Promise.resolve(null):Promise.race([klines(symbol,'4h'),new Promise(resolve=>setTimeout(()=>resolve(null),1500))]).catch(()=>null);
+        const [lower,higher]=await Promise.all([lowerPromise,higherPromise]);
+        const deriv=await Promise.race([derivatives(symbol,interval),new Promise(resolve=>setTimeout(()=>resolve(null),1000))]).catch(()=>null);
         let analysis=analyze(candles,{interval,lower:lower&&lower.length>=220?analyze(lower,{interval:'15m'}):null,higher:higher&&higher.length>=220?analyze(higher,{interval:'4h'}):null,deriv});
         try{const learned=await Promise.race([learning.process(symbol,interval,candles,analysis),new Promise(resolve=>setTimeout(()=>resolve(null),700))]);if(learned?.analysis)analysis=learned.analysis}catch{}
         return send(res,200,{ok:true,symbol,interval,candles,analysis,derivatives:deriv,learning:{phase:2,state:'COLLECTING',durable:storage.status().durable}});
