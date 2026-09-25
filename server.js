@@ -192,6 +192,15 @@ async function derivatives(symbol,interval){
       data.liquidationBias=data.liveLiquidations.bias;data.liquidationTotal=data.liveLiquidations.total;
     }
   }
+  const live=flowBucket(symbol);
+  if(Number.isFinite(data.oi))live.oi=data.oi;
+  if(Number.isFinite(data.fundingRate))live.fundingRate=data.fundingRate;
+  if(Number.isFinite(data.markPrice))live.markPrice=data.markPrice;
+  if(Number.isFinite(data.cvdDelta)&&!live.cvdNotional){live.cvd=data.cvdDelta;live.cvdNotional=1;}
+  if(Number.isFinite(data.liquidationTotal)&&data.liquidationTotal>0&&!live.liqLong&&!live.liqShort){
+    live.liqLong=Number(data.longLiquidations||0);live.liqShort=Number(data.shortLiquidations||0);
+  }
+  recordFlowPoint(symbol);
   data.liveHistory=live.points.slice(-120);
   data.livePointCount=live.points.length;
   DERIV_CACHE.set(key,{ts:Date.now(),data});return data;
