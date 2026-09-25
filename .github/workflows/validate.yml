@@ -1,0 +1,28 @@
+name: Validate MarketPulse
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+jobs:
+  syntax:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: node --check server.js
+      - run: node --check market-engine.js
+      - run: node --check storage.js
+      - run: node --check learning.js
+      - name: Check browser script
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          html = Path("public/index.html").read_text()
+          start = html.index("<script>") + len("<script>")
+          end = html.index("</script>", start)
+          Path("/tmp/browser.js").write_text(html[start:end])
+          PY
+          node --check /tmp/browser.js
