@@ -361,6 +361,14 @@ const server=http.createServer(async(req,res)=>{
         return send(res,200,{ok:true,symbol,interval,candles,analysis,source:'Kraken spot'});
       }catch(e){return send(res,503,{ok:false,error:String(e.message||e),source:'Kraken spot'})}
     }
+    if(req.method==='GET'&&u.pathname==='/api/core-flow'){
+      const symbol=(u.searchParams.get('symbol')||'BTCUSDT').toUpperCase(),interval=u.searchParams.get('interval')||'1h';
+      if(!SYMBOLS.includes(symbol))return send(res,400,{error:'Unsupported symbol'});
+      try{
+        const data=await Promise.race([derivatives(symbol,interval),new Promise(resolve=>setTimeout(()=>resolve(null),2500))]).catch(()=>null);
+        return send(res,200,{ok:true,data:data||null});
+      }catch(e){return send(res,200,{ok:false,data:null,error:e.message})}
+    }
     if(req.method==='GET'&&u.pathname==='/api/core-scan'){
       const interval=u.searchParams.get('interval')||'1h';
       const rows=[];
