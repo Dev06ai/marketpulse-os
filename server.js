@@ -16,9 +16,9 @@ function timeoutSignal(ms){return typeof AbortSignal!=="undefined"&&AbortSignal.
 
 function mins(interval){return ({'15m':15,'1h':60,'4h':240,'1d':1440})[interval]||60}
 async function getBinance(symbol,interval){
-  const bases=['https://api.binance.com','https://api-gcp.binance.com','https://api1.binance.com','https://api2.binance.com','https://api3.binance.com','https://api4.binance.com'];
-  for(const base of bases){try{const u=new URL(base+'/api/v3/klines');u.searchParams.set('symbol',symbol);u.searchParams.set('interval',interval);u.searchParams.set('limit',String(Math.min(KLINE_LIMIT,1000)));const r=await fetch(u,{signal:timeoutSignal(DATA_TIMEOUT_MS)});if(r.ok){const rows=await r.json();return rows.map(x=>({t:x[0],o:+x[1],h:+x[2],l:+x[3],c:+x[4],v:+x[5],source:'binance'}))}}catch{}}
-  return null;
+  const bases=['https://api.binance.com','https://api-gcp.binance.com','https://api1.binance.com'];
+  const requests=bases.map(async base=>{const u=new URL(base+'/api/v3/klines');u.searchParams.set('symbol',symbol);u.searchParams.set('interval',interval);u.searchParams.set('limit',String(Math.min(KLINE_LIMIT,1000)));const r=await fetch(u,{signal:timeoutSignal(DATA_TIMEOUT_MS)});if(!r.ok)throw Error('HTTP '+r.status);const rows=await r.json();return rows.map(x=>({t:x[0],o:+x[1],h:+x[2],l:+x[3],c:+x[4],v:+x[5],source:'binance'}))});
+  try{return await Promise.any(requests)}catch{return null}
 }
 async function getKraken(symbol,interval){
   const pair=KRAKEN_PAIRS[symbol]; if(!pair)throw new Error('No Kraken mapping for '+symbol);
@@ -331,7 +331,7 @@ const server=http.createServer(async(req,res)=>{
     }
     if(req.method==='GET'&&u.pathname==='/api/memory/status')return send(res,200,storage.status());
     if(req.method==='GET'&&u.pathname==='/api/learning/status')return send(res,200,await learning.status());
-    if(req.method==='GET'&&u.pathname==='/api/config')return send(res,200,{symbols:SYMBOLS,labels,intervals:['15m','1h','4h','1d'],memory:storage.status(),learning:await learning.status()});if(req.method==='POST'&&u.pathname==='/api/ai'){
+    if(req.method==='GET'&&u.pathname==='/api/config')return send(res,200,{symbols:SYMBOLS,labels,intervals:['15m','1h','4h','1d'],memory:storage.status(),learning:{state:'LOADING'}});if(req.method==='POST'&&u.pathname==='/api/ai'){
       if(!aiAllowed(req)) return send(res,429,{error:"Slow down for a few seconds."});
       let raw=""; for await(const chunk of req) raw+=chunk; let body={}; try{body=JSON.parse(raw||"{}")}catch{return send(res,400,{error:"Invalid JSON"})}
       const mode=body.mode==="trade"?"trade":"market";
@@ -354,19 +354,23 @@ const server=http.createServer(async(req,res)=>{
     if(req.method==='GET'&&u.pathname==='/api/market'){
       const symbol=(u.searchParams.get('symbol')||'BTCUSDT').toUpperCase(),interval=u.searchParams.get('interval')||'1h';
       if(!SYMBOLS.includes(symbol))return send(res,400,{error:'Unsupported symbol'});
-      const lower=interval==='15m'?null:await klines(symbol,'15m').catch(()=>null);
-      const higher=interval==='4h'?null:await klines(symbol,'4h').catch(()=>null);
       const candles=await klines(symbol,interval);
+      const [lower,higher]=await Promise.all([
+        interval==='15m'?Promise.resolve(null):klines(symbol,'15m').catch(()=>null),
+        interval==='4h'?Promise.resolve(null):klines(symbol,'4h').catch(()=>null)
+      ]);
       const lowerA=lower&&lower.length>=220?analyze(lower,{interval:'15m'}):null;
       const higherA=higher&&higher.length>=220?analyze(higher,{interval:'4h'}):null;
       const deriv=await Promise.race([
         derivatives(symbol,interval),
-        new Promise(resolve=>setTimeout(()=>resolve(null),2500))
+        new Promise(resolve=>setTimeout(()=>resolve(null),1800))
       ]).catch(()=>null);
       let analysis=analyze(candles,{interval,higher:higherA,lower:lowerA,deriv});
-      const learned=await learning.process(symbol,interval,candles,analysis);
-      analysis=learned.analysis;
-      return send(res,200,{symbol,interval,candles,analysis,derivatives:deriv,learning:await learning.status(),backtest:backtest(candles),validation:walkForwardBacktest(candles),setupStats:require("./market-engine").backtestBySetup(candles)});
+      let learningResult=null;
+      try{learningResult=await Promise.race([learning.process(symbol,interval,candles,analysis),new Promise(resolve=>setTimeout(()=>resolve(null),1500))])}catch{}
+      if(learningResult?.analysis)analysis=learningResult.analysis;
+      const learningStatus=await Promise.race([learning.status(),new Promise(resolve=>setTimeout(()=>resolve({phase:2,state:'COLLECTING',durable:storage.status().durable,resolved:0}),700))]).catch(()=>({phase:2,state:'COLLECTING',durable:storage.status().durable,resolved:0}));
+      return send(res,200,{symbol,interval,candles,analysis,derivatives:deriv,learning:learningStatus,backtest:backtest(candles),validation:walkForwardBacktest(candles),setupStats:require("./market-engine").backtestBySetup(candles)});
     }
     if(req.method==='GET'&&u.pathname==='/api/cycle'){
       const symbol=(u.searchParams.get('symbol')||'BTCUSDT').toUpperCase();
