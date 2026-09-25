@@ -1,4 +1,4 @@
-const http=require('http'),fs=require('fs'),path=require('path'),{analyze,backtest}=require('./market-engine');
+const http=require('http'),fs=require('fs'),path=require('path'),{analyze,backtest,walkForwardBacktest}=require('./market-engine');
 const WebSocket=require('ws');
 const PORT=Number(process.env.PORT||3000);
 const SYMBOLS=(process.env.SYMBOLS||'BTCUSDT,ETHUSDT,SOLUSDT,BNBUSDT,XRPUSDT,DOGEUSDT,ADAUSDT').split(',').map(s=>s.trim()).filter(Boolean);
@@ -326,7 +326,7 @@ const server=http.createServer(async(req,res)=>{
         new Promise(resolve=>setTimeout(()=>resolve(null),2500))
       ]).catch(()=>null);
       const analysis=analyze(candles,{interval,higher:higherA,lower:lowerA,deriv});
-      return send(res,200,{symbol,interval,candles,analysis,derivatives:deriv,backtest:backtest(candles),setupStats:require("./market-engine").backtestBySetup(candles)});
+      return send(res,200,{symbol,interval,candles,analysis,derivatives:deriv,backtest:backtest(candles),validation:walkForwardBacktest(candles),setupStats:require("./market-engine").backtestBySetup(candles)});
     }
     if(req.method==='GET'&&u.pathname==='/api/scanner'){
       const interval=u.searchParams.get('interval')||'1h';
