@@ -31,11 +31,11 @@ const LIVE_FLOW=new Map();
 const LIVE_FLOW_LIMIT=900;
 const LIVE_SYMBOLS=SYMBOLS.filter(s=>["BTCUSDT","ETHUSDT","SOLUSDT","BNBUSDT","XRPUSDT","DOGEUSDT","ADAUSDT"].includes(s));
 function flowBucket(symbol){
-  let v=LIVE_FLOW.get(symbol);if(!v){v={liqLong:0,liqShort:0,cvd:0,cvdNotional:0,lastTs:0,points:[]};LIVE_FLOW.set(symbol,v)}
+  let v=LIVE_FLOW.get(symbol);if(!v){v={liqLong:0,liqShort:0,cvd:0,cvdNotional:0,lastTs:0,oi:null,fundingRate:null,markPrice:null,points:[]};LIVE_FLOW.set(symbol,v)}
   return v;
 }
 function recordFlowPoint(symbol){
-  const v=flowBucket(symbol);v.points.push({ts:Date.now(),liqLong:v.liqLong,liqShort:v.liqShort,cvd:v.cvd,cvdRatio:v.cvdNotional?v.cvd/v.cvdNotional:null});if(v.points.length>LIVE_FLOW_LIMIT)v.points.shift();
+  const v=flowBucket(symbol);v.points.push({ts:Date.now(),liqLong:v.liqLong,liqShort:v.liqShort,liqTotal:v.liqLong+v.liqShort,cvd:v.cvd,cvdRatio:v.cvdNotional?v.cvd/v.cvdNotional:null,oi:v.oi,fundingRate:v.fundingRate,markPrice:v.markPrice});if(v.points.length>LIVE_FLOW_LIMIT)v.points.shift();
 }
 function startBybitLiveFlow(){
   if(!LIVE_SYMBOLS.length)return;
@@ -45,7 +45,7 @@ function startBybitLiveFlow(){
     ws=new WebSocket("wss://stream.bybit.com/v5/public/linear");
     ws.on("open",()=>{
       retry=1000;
-      ws.send(JSON.stringify({op:"subscribe",args:LIVE_SYMBOLS.flatMap(sym=>["allLiquidation."+sym,"publicTrade."+sym])}));
+      ws.send(JSON.stringify({op:"subscribe",args:LIVE_SYMBOLS.flatMap(sym=>["allLiquidation."+sym,"publicTrade."+sym,"tickers."+sym])}));
     });
     ws.on("message",raw=>{
       try{
@@ -64,6 +64,12 @@ function startBybitLiveFlow(){
             const q=Number(x.v)*Number(x.p);if(!Number.isFinite(q)||q<=0)continue;
             v.cvd+=(x.S==="Buy"?q:-q);v.cvdNotional+=q;v.lastTs=Number(x.T)||Date.now();
           }
+        }else if(topic.startsWith("tickers.")){
+          const x=data[0]||{};
+          if(Number.isFinite(+x.openInterest))v.oi=+x.openInterest;
+          if(Number.isFinite(+x.fundingRate))v.fundingRate=+x.fundingRate;
+          if(Number.isFinite(+x.markPrice))v.markPrice=+x.markPrice;
+          v.lastTs=Number(msg.ts)||Date.now();
         }
         recordFlowPoint(symbol);
       }catch{}
