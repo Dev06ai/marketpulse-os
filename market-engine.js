@@ -231,7 +231,7 @@ function analyze(c,ctx={}){
     regime,mood,momentum,volState,structure:st.state,type,side,bias,directionalLean,probabilityLabel,
     score,status,reasons,contributors,components,
     derivatives:{available:!!deriv,oi:currentOi,cvdState,positioning,oiChangePct,cvdDelta,cvdRatio:deriv?.cvdRatio??null,flowPriceChangePct,tradeCount:deriv?.tradeCount??0,fundingRate:deriv?.fundingRate??null,provider:deriv?.provider??null,errors:deriv?.errors??[]},
-    thesis:thesis.join(" "),
+    thesis:thesis.join(" "),thesisParts:thesis,
     primaryScenario,alternateScenario,
     mtf:{lower:mtf15,higher:mtf4},stop,tp1,tp2,entryLow:el,entryHigh:eh,rr,
     rangeHigh,rangeLow,rangePosition:rangePos,priorHigh,priorLow,updatedAt:Date.now()
