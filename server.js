@@ -1,4 +1,5 @@
 const http=require('http'),fs=require('fs'),path=require('path'),{analyze,backtest,walkForwardBacktest}=require('./market-engine');
+const storage=require('./storage');
 const WebSocket=require('ws');
 const PORT=Number(process.env.PORT||3000);
 const SYMBOLS=(process.env.SYMBOLS||'BTCUSDT,ETHUSDT,SOLUSDT,BNBUSDT,XRPUSDT,DOGEUSDT,ADAUSDT').split(',').map(s=>s.trim()).filter(Boolean);
@@ -294,6 +295,19 @@ const server=http.createServer(async(req,res)=>{
   try{
     const u=new URL(req.url,'http://localhost');
     if(req.method==='GET'&&u.pathname==='/health')return send(res,200,{ok:true,service:'marketpulse-os',time:Date.now()});
+    if(req.method==='GET'&&u.pathname==='/api/memory'){
+      const device=String(u.searchParams.get('device')||req.headers['x-marketpulse-device']||'');
+      const mem=await storage.get(device);
+      return send(res,200,{storage:mem.storage,durable:mem.storage==="postgres",payload:mem.payload,updatedAt:mem.updatedAt});
+    }
+    if(req.method==='POST'&&u.pathname==='/api/memory'){
+      const device=String(u.searchParams.get('device')||req.headers['x-marketpulse-device']||'');
+      let raw="";for await(const chunk of req)raw+=chunk;
+      let body={};try{body=JSON.parse(raw||"{}")}catch{return send(res,400,{error:"Invalid JSON"})}
+      const saved=await storage.save(device,body.memory||body);
+      return send(res,200,{ok:true,storage:saved.storage,durable:saved.storage==="postgres",updatedAt:saved.updatedAt});
+    }
+    if(req.method==='GET'&&u.pathname==='/api/memory/status')return send(res,200,storage.status());
     if(req.method==='GET'&&u.pathname==='/api/config')return send(res,200,{symbols:SYMBOLS,labels,intervals:['15m','1h','4h','1d']});if(req.method==='POST'&&u.pathname==='/api/ai'){
       if(!aiAllowed(req)) return send(res,429,{error:"Slow down for a few seconds."});
       let raw=""; for await(const chunk of req) raw+=chunk; let body={}; try{body=JSON.parse(raw||"{}")}catch{return send(res,400,{error:"Invalid JSON"})}
