@@ -22,8 +22,8 @@ button,select,input{font:inherit}.app{max-width:1280px;margin:auto;padding:20px 
 <style>
 
 
-/* High-fidelity charting */
-.chart{height:380px;background:linear-gradient(180deg,rgba(8,21,38,.96),rgba(4,12,22,.96));border-color:rgba(160,190,255,.16);box-shadow:inset 0 0 40px rgba(53,122,255,.045),0 16px 50px rgba(0,0,0,.18)}
+/* High-fidelity charting */.chartFrame{position:relative}.chartFrame .chart{display:block}.chartLiveHint{position:absolute;left:12px;top:10px;padding:5px 7px;border-radius:7px;background:rgba(5,12,22,.52);border:1px solid rgba(160,190,255,.10);color:#7f8ba0;font-size:8px;pointer-events:none;backdrop-filter:blur(8px)}@media(max-width:620px){.chartLiveHint{font-size:7px}}
+.chart{width:100%;height:380px;background:linear-gradient(180deg,rgba(8,21,38,.96),rgba(4,12,22,.96));border-color:rgba(160,190,255,.16);box-shadow:inset 0 0 40px rgba(53,122,255,.045),0 16px 50px rgba(0,0,0,.18)}
 .flowPulse{padding:13px 14px;box-shadow:inset 0 0 28px rgba(53,122,255,.04)}
 .flowCanvas{height:150px;margin-top:9px;image-rendering:auto}
 .chartHead{padding-top:3px}.chartHead .chartTitle{font-size:13px;letter-spacing:.01em}
@@ -220,7 +220,7 @@ body:before{content:"";position:fixed;inset:0;pointer-events:none;opacity:.22;ba
 <div class="flowCard" id="oiStateCard"><div class="k">Futures positioning</div><div class="v" id="oiState">—</div><div class="s" id="fundingValue">Funding —</div><div class="s" id="derivSource">—</div></div>
 <div class="flowCard" id="liqCard"><div class="k">Liquidation pressure</div><div class="v" id="liqState">—</div><div class="s" id="liqValue">—</div></div>
 </div></div><div class="score"><div class="num" id="score2">—</div><div class="caption">Confluence</div></div></div>
-<div class="flowPulse"><div class="flowPulseHead"><b>Derivatives pulse</b><span id="flowPoints">Live stream starting…</span></div><canvas id="flowCanvas" class="flowCanvas" width="900" height="100"></canvas><div class="flowLegend"><span class="legendDot"><i style="background:#7df9ff"></i>CVD</span><span class="legendDot"><i style="background:#b78cff"></i>OI</span><span class="legendDot"><i style="background:#ff79c8"></i>Liquidations</span></div><div class="flowFoot">Live derivatives context is directional evidence, not a forecast.</div></div><div class="chartHead"><div><div class="chartTitle">Price action</div><div class="small">Right-side price scale · 90 candles · EMA 20</div></div><div class="chartActions"><button id="chartSettingsBtn" class="chartBtn">⚙ Chart settings</button></div></div><canvas id="chart" class="chart" width="1100" height="325"></canvas>
+<div class="flowPulse"><div class="flowPulseHead"><b>Derivatives pulse</b><span id="flowPoints">Live stream starting…</span></div><canvas id="flowCanvas" class="flowCanvas" width="900" height="100"></canvas><div class="flowLegend"><span class="legendDot"><i style="background:#7df9ff"></i>CVD</span><span class="legendDot"><i style="background:#b78cff"></i>OI</span><span class="legendDot"><i style="background:#ff79c8"></i>Liquidations</span></div><div class="flowFoot">Live derivatives context is directional evidence, not a forecast.</div></div><div class="chartHead"><div><div class="chartTitle">Price action</div><div class="small">Right-side price scale · 90 candles · EMA 20</div></div><div class="chartActions"><button id="chartSettingsBtn" class="chartBtn">⚙ Chart settings</button></div></div><div class="chartFrame"><canvas id="chart" class="chart" width="1100" height="410"></canvas><div class="chartLiveHint">Move over chart · OHLC + time</div></div>
 <div class="levels"><div class="level"><div class="k">Entry zone</div><div class="v" id="entry">—</div></div><div class="level"><div class="k">Invalidation</div><div class="v" id="stop">—</div></div><div class="level"><div class="k">Target 1</div><div class="v" id="tp1">—</div></div><div class="level"><div class="k">R:R</div><div class="v" id="rr">—</div></div></div>
 <div class="why" id="why"></div>
 <div class="history"><div class="hist"><div class="k">Sample</div><div class="v" id="btTrades">—</div></div><div class="hist"><div class="k">Win rate</div><div class="v" id="btWin">—</div></div><div class="hist"><div class="k">Net R</div><div class="v" id="btR">—</div></div><div class="hist"><div class="k">Profit factor</div><div class="v" id="btPF">—</div></div></div>
@@ -489,6 +489,21 @@ function drawChart(candles,a){
   }
 
   const current=Number(candles[candles.length-1].c),cy=scale(current);
+  const p=window.__chartPointer;
+  if(p&&p.visible){
+    const px=Math.max(leftPad,Math.min(leftPad+plotW,p.x));
+    const idx=Math.max(0,Math.min(data.length-1,Math.round((px-leftPad)/xstep)));
+    const row=data[idx],rx=leftPad+idx*xstep,ry=scale(row.c);
+    ctx.save();ctx.strokeStyle="rgba(255,255,255,.22)";ctx.lineWidth=1;ctx.setLineDash([3,4]);
+    ctx.beginPath();ctx.moveTo(rx,topPad);ctx.lineTo(rx,topPad+plotH);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(leftPad,ry);ctx.lineTo(leftPad+plotW,ry);ctx.stroke();ctx.restore();
+    const tipX=Math.min(Math.max(leftPad+8,rx+12),leftPad+plotW-180),tipY=Math.min(Math.max(topPad+8,p.y-44),topPad+plotH-58);
+    ctx.fillStyle="rgba(5,12,22,.92)";ctx.strokeStyle="rgba(160,190,255,.18)";ctx.lineWidth=1;
+    ctx.beginPath();ctx.roundRect(tipX,tipY,172,50,9);ctx.fill();ctx.stroke();
+    ctx.fillStyle="#eef3fb";ctx.font="700 9px 'Plus Jakarta Sans',system-ui";ctx.textAlign="left";
+    ctx.fillText("O "+formatAxisPrice(row.o)+"   H "+formatAxisPrice(row.h)+"   L "+formatAxisPrice(row.l)+"   C "+formatAxisPrice(row.c),tipX+9,tipY+17);
+    ctx.fillStyle="#8f9aae";ctx.font="500 8px 'Plus Jakarta Sans',system-ui";ctx.fillText(new Date(row.t).toLocaleString([], {day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"}),tipX+9,tipY+34);
+  }
   ctx.setLineDash([5,5]);ctx.strokeStyle="rgba(255,255,255,.30)";ctx.lineWidth=1;
   ctx.beginPath();ctx.moveTo(leftPad,cy);ctx.lineTo(leftPad+plotW,cy);ctx.stroke();ctx.setLineDash([]);
 
@@ -780,6 +795,7 @@ let resizeRaf=0;window.addEventListener("resize",()=>{cancelAnimationFrame(resiz
   $("sym").onchange=load;$("int").onchange=load;["acct","risk","rentry","rstop"].forEach(x=>$(x).oninput=risk);
   document.querySelectorAll(".filter button").forEach(b=>b.onclick=()=>{document.querySelectorAll(".filter button").forEach(x=>x.classList.remove("on"));b.classList.add("on");filter=b.dataset.filter;renderScanner()});
   setAiMode("market");
+  const chartEl=$("chart");if(chartEl){let chartFrame=0;chartEl.addEventListener("pointermove",e=>{const r=chartEl.getBoundingClientRect();window.__chartPointer={visible:true,x:e.clientX-r.left,y:e.clientY-r.top};cancelAnimationFrame(chartFrame);chartFrame=requestAnimationFrame(()=>{if(window.__lastMarket)drawChart(window.__lastMarket.candles,window.__lastMarket.analysis)})});chartEl.addEventListener("pointerleave",()=>{window.__chartPointer={visible:false};cancelAnimationFrame(chartFrame);if(window.__lastMarket)drawChart(window.__lastMarket.candles,window.__lastMarket.analysis)})}
   document.querySelectorAll("[data-menu]").forEach(btn=>btn.onclick=(e)=>{e.stopPropagation();const id=btn.dataset.menu;document.querySelectorAll(".megaMenu").forEach(m=>m.classList.toggle("open",m.id===id&&!m.classList.contains("open")))});document.addEventListener("click",()=>document.querySelectorAll(".megaMenu").forEach(m=>m.classList.remove("open")));document.querySelectorAll(".megaMenu [data-workspace]").forEach(b=>b.onclick=(e)=>{e.stopPropagation();document.querySelectorAll(".megaMenu").forEach(m=>m.classList.remove("open"));setWorkspace(b.dataset.workspace)});$("feedbackBtn").onclick=()=>{window.location.href="mailto:?subject=MarketPulse%20feedback"};initWorkspaces();
   $("autoToggle").onclick=()=>{auto=!auto;$("autoToggle").textContent=auto?"On":"Off";schedule()};renderJournal();updateAlertUI();risk();await load();schedule();
  }catch(e){$("why").innerHTML='<div class="whyitem">'+e.message+'</div>'}
