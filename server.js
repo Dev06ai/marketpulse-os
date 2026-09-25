@@ -67,20 +67,28 @@ async function krakenAnalytics(symbol,interval){
   const windows={"15m":6*3600,"1h":24*3600,"4h":3*86400,"1d":7*86400};
   const since=Math.floor((Date.now()-(windows[interval]||24*3600))/1000);
   const base="https://futures.kraken.com/api/charts/v1/analytics/"+pair;
-  const [cvd,oi,funding,ls]=await Promise.all([
+  const [cvd,oi,funding,ls,liq]=await Promise.all([
     fetchJson(base+"/cvd?since="+since+"&interval="+secs),
     fetchJson(base+"/open-interest?since="+since+"&interval="+secs),
     fetchJson(base+"/funding?since="+since+"&interval="+secs).catch(()=>null),
-    fetchJson(base+"/long-short-info?since="+since+"&interval="+secs).catch(()=>null)
+    fetchJson(base+"/long-short-info?since="+since+"&interval="+secs).catch(()=>null),
+    fetchJson(base+"/liquidation-volume?since="+since+"&interval="+secs).catch(()=>null)
   ]);
-  const cvdPayload=cvd?.result||cvd,oiPayload=oi?.result||oi,fundingPayload=funding?.result||funding,lsPayload=ls?.result||ls;
-  const cvdVals=Array.isArray(cvdPayload?.data?.cvd)?cvdPayload.data.cvd:[],buyVals=Array.isArray(cvdPayload?.data?.buyVolume)?cvdPayload.data.buyVolume:[],sellVals=Array.isArray(cvdPayload?.data?.sellVolume)?cvdPayload.data.sellVolume:[],oiVals=Array.isArray(oiPayload?.data?.openInterest)?oiPayload.data.openInterest:[],fundingVals=Array.isArray(fundingPayload?.data?.rate)?fundingPayload.data.rate:[],longPct=Array.isArray(lsPayload?.data?.longPercent)?lsPayload.data.longPercent:[],shortPct=Array.isArray(lsPayload?.data?.shortPercent)?lsPayload.data.shortPercent:[];
-  if(!cvdVals.length&&!oiVals.length&&!buyVals.length&&!sellVals.length)throw new Error("Kraken futures analytics returned no data");
+  const cvdPayload=cvd?.result||cvd,oiPayload=oi?.result||oi,fundingPayload=funding?.result||funding,lsPayload=ls?.result||ls,liqPayload=liq?.result||liq;
+  const numericArray=(obj,names)=>{for(const n of names){if(Array.isArray(obj?.data?.[n]))return obj.data[n].map(Number).filter(Number.isFinite)}return[]};
+  const cvdVals=numericArray(cvdPayload,["cvd"]),buyVals=numericArray(cvdPayload,["buyVolume","buy_volume"]),sellVals=numericArray(cvdPayload,["sellVolume","sell_volume"]);
+  const oiVals=numericArray(oiPayload,["openInterest","open_interest"]);
+  const fundingVals=numericArray(fundingPayload,["rate","fundingRate","funding_rate"]);
+  const longPct=numericArray(lsPayload,["longPercent","long_percent"]),shortPct=numericArray(lsPayload,["shortPercent","short_percent"]),ratioVals=numericArray(lsPayload,["ratio"]);
+  const liqLong=numericArray(liqPayload,["longLiquidationVolume","long_liquidation_volume","buyVolume","buy_volume"]);
+  const liqShort=numericArray(liqPayload,["shortLiquidationVolume","short_liquidation_volume","sellVolume","sell_volume"]);
+  if(!cvdVals.length&&!oiVals.length&&!buyVals.length&&!sellVals.length&&!liqLong.length&&!liqShort.length)throw new Error("Kraken futures analytics returned no data");
   const cvdFirst=Number(cvdVals[0]),cvdLast=Number(cvdVals[cvdVals.length-1]),cvdDelta=Number.isFinite(cvdLast)&&Number.isFinite(cvdFirst)?cvdLast-cvdFirst:null;
   const oiFirst=Number(oiVals[0]),oiLast=Number(oiVals[oiVals.length-1]),oiChangePct=Number.isFinite(oiFirst)&&oiFirst?((oiLast-oiFirst)/oiFirst)*100:null;
   const fundingRate=fundingVals.length?Number(fundingVals[fundingVals.length-1]):null;
-  const longLast=longPct.length?Number(longPct[longPct.length-1]):null,shortLast=shortPct.length?Number(shortPct[shortPct.length-1]):null;
-  return {available:true,provider:"Kraken Futures analytics",symbol:pair,oi:Number.isFinite(oiLast)?oiLast:null,oiChangePct,cvdDelta,cvdState:"MIXED",positioning:"MIXED",tradeCount:0,fundingRate:Number.isFinite(fundingRate)?fundingRate:null,markPrice:null,cvdRatio:null,longPercent:longLast,shortPercent:shortLast,analyticsBuckets:Math.max(cvdVals.length,oiVals.length),updatedAt:Date.now(),errors:[]};
+  const longLast=longPct.length?Number(longPct[longPct.length-1]):null,shortLast=shortPct.length?Number(shortPct[shortPct.length-1]):null,ratioLast=ratioVals.length?Number(ratioVals[ratioVals.length-1]):null;
+  const longLiq=liqLong.reduce((a,b)=>a+b,0),shortLiq=liqShort.reduce((a,b)=>a+b,0),liqTotal=longLiq+shortLiq;
+  return {available:true,provider:"Kraken Futures analytics",symbol:pair,oi:Number.isFinite(oiLast)?oiLast:null,oiChangePct,cvdDelta,cvdState:"MIXED",positioning:"MIXED",tradeCount:0,fundingRate:Number.isFinite(fundingRate)?fundingRate:null,markPrice:null,cvdRatio:null,longPercent:longLast,shortPercent:shortLast,longShortRatio:ratioLast,longLiquidations:longLiq,shortLiquidations:shortLiq,liquidationTotal:liqTotal,liquidationBias:liqTotal?(longLiq>shortLiq?"LONG LIQS DOMINANT":"SHORT LIQS DOMINANT"):"UNKNOWN",analyticsBuckets:Math.max(cvdVals.length,oiVals.length,liqLong.length,liqShort.length),updatedAt:Date.now(),errors:[]};
 }
 
 async function bybitDerivatives(symbol,interval){
