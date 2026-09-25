@@ -28,7 +28,7 @@ button,input,select,textarea{font:inherit}.wrap{width:min(1440px,calc(100% - 26p
 .chartWrap{position:relative;border:1px solid var(--line);border-radius:13px;overflow:hidden;background:#03101b}.chartToolbar{display:flex;justify-content:space-between;gap:8px;align-items:center;padding:8px 10px;border-bottom:1px solid rgba(129,178,241,.08)}.chartTools{display:flex;gap:4px}.chartTools button{border:1px solid var(--line);background:rgba(255,255,255,.025);color:#8798ad;border-radius:7px;padding:5px 7px;cursor:pointer;font-size:9px}.chartCanvas{display:block;width:100%;height:390px;touch-action:none}.ohlc{position:absolute;left:10px;top:47px;padding:5px 7px;border-radius:7px;background:rgba(3,10,17,.82);border:1px solid rgba(129,178,241,.12);font-size:8px;color:#dbe9f8;pointer-events:none}
 .levels{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;margin-top:8px}.level{padding:9px;border:1px solid var(--line);border-radius:10px}.level .k{font-size:8px;color:var(--muted)}.level .v{margin-top:5px;font-size:10px;font-weight:850}
 .qualityGrid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}.list{display:grid;gap:5px}.rowLine{display:grid;grid-template-columns:1fr 50px;gap:6px;align-items:center}.bar{height:5px;border-radius:999px;background:rgba(255,255,255,.07);overflow:hidden;grid-column:1/-1;margin-top:-2px}.bar i{display:block;height:100%;background:linear-gradient(90deg,#67e8ff,#b78cff);border-radius:inherit}
-.flowGrid{display:grid;grid-template-columns:repeat(4,1fr);gap:7px}.flow .v{font-size:11px;font-weight:900;margin-top:5px}.flow .s{font-size:8px;color:var(--muted);margin-top:3px}.flowChart{width:100%;height:150px;display:block}
+.flowGrid{display:grid;grid-template-columns:repeat(4,1fr);gap:7px}.flow .v{font-size:11px;font-weight:900;margin-top:5px}.flow .s{font-size:8px;color:var(--muted);margin-top:3px}.flowChart{width:100%;height:190px;display:block}.flowLegend{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:7px 0 2px;font-size:8px;color:#8ca0b6}.flowLegend span{display:flex;align-items:center;gap:5px}.lg{width:8px;height:3px;border-radius:99px;display:inline-block}.lg.mint{background:#9BE7C4}.lg.lav{background:#E5D0FF}.lg.ember{background:#FFB38A}.calcBox{padding:2px}.calcBox .inputs label{display:flex;flex-direction:column;gap:4px}
 .overGrid{display:grid;grid-template-columns:1.1fr 1.1fr .9fr;gap:9px}.miniChart{width:100%;height:150px;display:block;background:#04101b;border-radius:9px}.marketRows{display:grid;gap:5px}.marketRow{display:grid;grid-template-columns:42px 1fr 42px 44px;gap:5px;align-items:center;padding:7px;border:1px solid rgba(129,178,241,.09);border-radius:8px;background:rgba(255,255,255,.014);cursor:pointer}.marketRow:hover{border-color:rgba(103,232,255,.2)}.marketRow b,.marketRow span{font-size:8px}.marketRow span{color:#8394a9}.up{color:var(--green)!important}.down{color:var(--red)!important}.wait{color:var(--amber)!important}
 .tape{display:grid;grid-template-columns:repeat(5,1fr);gap:6px}.tapeCard{padding:8px;border:1px solid rgba(129,178,241,.09);border-radius:9px;background:rgba(255,255,255,.014)}.tapeCard b{font-size:8px}.tapeCard span{display:block;margin-top:4px;font-size:8px;color:#8797ab}
 .calcGrid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.inputs{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px}.inputs.one{grid-template-columns:1fr}.inputs input,.inputs select,.inputs textarea{width:100%;background:#03101b;border:1px solid var(--line);color:var(--text);border-radius:8px;padding:8px;font-size:9px}.result{margin-top:7px;padding:8px;border:1px solid rgba(103,232,255,.12);border-radius:8px;background:rgba(103,232,255,.035);font-size:9px}
@@ -78,17 +78,45 @@ button,input,select,textarea{font:inherit}.wrap{width:min(1440px,calc(100% - 26p
     <div class="section card"><div class="sectionHead"><div><div class="title">Price action</div><div class="sub">Drag to pan · scroll to zoom · ↑ ↓ adjust vertical view.</div></div><div class="chartTools"><button id="panYUp">↑</button><button id="panL">←</button><button id="panR">→</button><button id="panYDown">↓</button><button id="zoomOut">−</button><button id="zoomReset">1:1</button><button id="zoomIn">+</button><button id="chartSettings">⚙</button></div></div><div class="chartWrap"><canvas id="mainChart" class="chartCanvas"></canvas><div class="ohlc" id="ohlc">Move over chart</div></div><div class="levels"><div class="level"><div class="k">Entry zone</div><div class="v" id="entry">—</div></div><div class="level"><div class="k">Invalidation</div><div class="v" id="stop">—</div></div><div class="level"><div class="k">Target 1</div><div class="v" id="target">—</div></div><div class="level"><div class="k">R:R</div><div class="v" id="rr">—</div></div></div></div>
 
     <div class="section grid2">
-      <div class="card"><div class="sectionHead"><div><div class="title">Derivatives Flow</div><div class="sub">OI, CVD, funding and liquidation context.</div></div></div><div class="flowGrid"><div class="card flow"><div class="label">Open interest</div><div class="v" id="oi">—</div><div class="s" id="oiS">—</div></div><div class="card flow"><div class="label">CVD</div><div class="v" id="cvd">—</div><div class="s" id="cvdS">—</div></div><div class="card flow"><div class="label">Positioning</div><div class="v" id="pos">—</div><div class="s" id="fund">—</div></div><div class="card flow"><div class="label">Liquidations</div><div class="v" id="liq">—</div><div class="s" id="liqS">—</div></div></div><canvas id="flowChart" class="flowChart"></canvas></div>
-      <div class="card"><div class="sectionHead"><div><div class="title">Adaptive intelligence</div><div class="sub">Historical outcomes calibrate the live model conservatively.</div></div><span class="chip" id="learnState">COLLECTING</span></div><div class="grid2" style="grid-template-columns:1fr 1fr"><div class="mini"><div class="k">Resolved</div><div class="v" id="learnN">0</div></div><div class="mini"><div class="k">Hit rate</div><div class="v" id="learnWin">—</div></div><div class="mini"><div class="k">Live adjustment</div><div class="v" id="learnAdj">0.0</div></div><div class="mini"><div class="k">Persistence</div><div class="v" id="learnPersist">—</div></div></div></div>
+      <div class="card">
+        <div class="sectionHead"><div><div class="title">Derivatives Flow</div><div class="sub">OI, CVD, funding and liquidation pressure — normalized for readable comparison.</div></div><span class="chip c" id="flowSource">LIVE</span></div>
+        <div class="flowGrid">
+          <div class="card flow"><div class="label">Open interest</div><div class="v" id="oi">—</div><div class="s" id="oiS">—</div></div>
+          <div class="card flow"><div class="label">CVD</div><div class="v" id="cvd">—</div><div class="s" id="cvdS">—</div></div>
+          <div class="card flow"><div class="label">Positioning</div><div class="v" id="pos">—</div><div class="s" id="fund">—</div></div>
+          <div class="card flow"><div class="label">Liquidations</div><div class="v" id="liq">—</div><div class="s" id="liqS">—</div></div>
+        </div>
+        <div class="flowLegend"><span><i class="lg mint"></i>CVD</span><span><i class="lg lav"></i>OI</span><span><i class="lg ember"></i>Liquidations</span><span class="small">100 = first visible point</span></div>
+        <canvas id="flowChart" class="flowChart" height="190"></canvas>
+      </div>
+      <div class="card">
+        <div class="sectionHead"><div><div class="title">Adaptive intelligence</div><div class="sub">Historical outcomes calibrate the live model conservatively. Nothing changes from a single win or loss.</div></div><span class="chip" id="learnState">COLLECTING</span></div>
+        <div class="grid2" style="grid-template-columns:1fr 1fr">
+          <div class="mini"><div class="k">Resolved examples</div><div class="v" id="learnN">0</div></div>
+          <div class="mini"><div class="k">Hit rate</div><div class="v" id="learnWin">—</div></div>
+          <div class="mini"><div class="k">Live adjustment</div><div class="v" id="learnAdj">0.0</div></div>
+          <div class="mini"><div class="k">Persistence</div><div class="v" id="learnPersist">—</div></div>
+        </div>
+        <div class="mini" style="margin-top:8px"><div class="k">Learning state</div><div class="v" id="learnNote">Collecting resolved outcomes before calibration.</div><div class="watchNote">12 resolved examples are required before setup-level score calibration can influence the live model.</div></div>
+      </div>
     </div>
-
     <div class="section card"><div class="sectionHead"><div><div class="title">Live Market Screens</div><div class="sub">The scanner stays available while the overview remains your command center.</div></div><button class="btn" data-view="scanner">Open Scanner</button></div><div class="tape" id="tape"></div></div>
 
-    <div class="section card"><div class="sectionHead"><div><div class="title">Quick Calculators</div><div class="sub">Fast planning without leaving Intel.</div></div></div>
+    <div class="section card">
+      <div class="sectionHead"><div><div class="title">Quick Calculators</div><div class="sub">Fast position, risk/reward and P&amp;L planning without leaving Intel.</div></div><span class="chip">LIVE INPUTS</span></div>
       <div class="calcGrid">
-        <div><div class="label">Position size</div><div class="inputs"><input id="ca" type="number" value="5000" placeholder="Account"><input id="cr" type="number" value="1" step=".05" placeholder="Risk %"><input id="ce" type="number" value="84000" placeholder="Entry"><input id="cs" type="number" value="82000" placeholder="Stop"></div><div class="result" id="sizeResult">—</div></div>
-        <div><div class="label">R:R</div><div class="inputs"><input id="re" type="number" value="84000" placeholder="Entry"><input id="rs" type="number" value="82000" placeholder="Stop"><input id="rt" type="number" value="88000" placeholder="Target"></div><div class="result" id="rrResult">—</div></div>
-        <div><div class="label">P&amp;L</div><div class="inputs"><input id="pe" type="number" value="84000" placeholder="Entry"><input id="pt" type="number" value="88000" placeholder="Target"><input id="pq" type="number" value=".1" step=".01" placeholder="Qty"></div><div class="result" id="pnlResult">—</div></div>
+        <div class="calcBox"><div class="label">Position size</div><div class="inputs">
+          <label class="small">Account<input id="ca" type="number" value="5000"></label><label class="small">Risk %<input id="cr" type="number" value="1" step=".05"></label>
+          <label class="small">Entry<input id="ce" type="number" value="84000"></label><label class="small">Stop<input id="cs" type="number" value="82000"></label>
+        </div><div class="result" id="sizeResult">—</div></div>
+        <div class="calcBox"><div class="label">Risk : Reward</div><div class="inputs">
+          <label class="small">Entry<input id="re" type="number" value="84000"></label><label class="small">Stop<input id="rs" type="number" value="82000"></label>
+          <label class="small">Target<input id="rt" type="number" value="88000"></label><label class="small">Direction<select id="rdirection"><option value="LONG">Long</option><option value="SHORT">Short</option></select></label>
+        </div><div class="result" id="rrResult">—</div></div>
+        <div class="calcBox"><div class="label">P&amp;L</div><div class="inputs">
+          <label class="small">Entry<input id="pe" type="number" value="84000"></label><label class="small">Exit<input id="pt" type="number" value="88000"></label>
+          <label class="small">Quantity<input id="pq" type="number" value=".1" step=".01"></label><label class="small">Direction<select id="pDirection"><option value="LONG">Long</option><option value="SHORT">Short</option></select></label>
+        </div><div class="result" id="pnlResult">—</div></div>
       </div>
     </div>
   </section>
@@ -278,7 +306,7 @@ function renderMarket(){
   $("entry").textContent=a.entryLow!=null?fmt(a.entryLow)+" → "+fmt(a.entryHigh):"Wait";$("stop").textContent=fmt(a.stop);$("target").textContent=fmt(a.tp1);$("rr").textContent=a.rr?Number(a.rr).toFixed(2)+"R":"—";
   var der=d.derivatives||{};$("oi").textContent=der.oi!=null?fmt(der.oi):"—";$("oiS").textContent=der.oiChangePct!=null?pct(der.oiChangePct)+" recent":"Snapshot";$("cvd").textContent=der.cvdState||"Waiting";$("cvdS").textContent=der.cvdDelta!=null?"Δ "+fmt(der.cvdDelta):"Enrichment pending";$("pos").textContent=der.positioning||"Waiting";$("fund").textContent=der.fundingRate!=null?"Funding "+(Number(der.fundingRate)*100).toFixed(4)+"%":"—";$("liq").textContent=der.liquidationBias||"Pending";$("liqS").textContent=der.liquidationTotal!=null?"Total "+fmt(der.liquidationTotal):"Pending";
   $("adaptiveChip").textContent=d.learning&&d.learning.state?("Adaptive: "+String(d.learning.state).toLowerCase()):"Adaptive: background learning";
-  $("learnState").textContent=d.learning&&d.learning.state?d.learning.state:"COLLECTING";$("learnN").textContent=d.learning&&d.learning.resolved!=null?d.learning.resolved:0;$("learnWin").textContent=d.learning&&d.learning.winRate!=null?Number(d.learning.winRate).toFixed(1)+"%":"—";$("learnAdj").textContent=d.learning&&d.learning.lastAdjustment!=null?Number(d.learning.lastAdjustment).toFixed(1):"0.0";$("learnPersist").textContent=d.learning&&d.learning.durable?"Postgres cloud":(d.learning?"Local fallback":"—");
+  $("learnState").textContent=d.learning&&d.learning.state?d.learning.state:"COLLECTING";$("learnN").textContent=d.learning&&d.learning.resolved!=null?d.learning.resolved:0;$("learnWin").textContent=d.learning&&d.learning.winRate!=null?Number(d.learning.winRate).toFixed(1)+"%":"—";$("learnAdj").textContent=d.learning&&d.learning.lastAdjustment!=null?Number(d.learning.lastAdjustment).toFixed(1):"0.0";$("learnPersist").textContent=d.learning&&d.learning.durable?"Postgres cloud":(d.learning?"Local fallback":"—");$("learnNote").textContent=d.learning&&d.learning.state==="ADAPTIVE"?"Adaptive calibration active. Historical outcomes are influencing confluence.":"Collecting resolved outcomes before calibration.";
   state.validation={backtest:d.backtest,validation:d.validation,setupStats:d.setupStats,learning:d.learning};renderLab();renderBrainInsights();
   recordSignal(a);drawMain();loadFlow();
 }
@@ -353,24 +381,39 @@ function checkAlerts(rows){
 async function enableNotifications(){if(!("Notification"in window)){$("notifState").textContent="Browser notifications unavailable";return}var p=await Notification.requestPermission();$("notifState").textContent=p;$("notifBtn").textContent=p==="granted"?"Notifications enabled":"Enable notifications"}
 async function runSystemCheck(){ $("healthGrid").innerHTML='<div class="small">Running core checks…</div>';try{var d=await api("/api/system-check",7000),checks=d.checks||{};var names=["server","marketEngine","learning","memory","marketData"];$("healthGrid").innerHTML=names.map(function(n){return'<div class="healthItem"><span class="healthDot '+(checks[n]?"ok":"bad")+'"></span><b>'+n+"</b></div>"}).join("");$("healthText").textContent=(d.ok?"All core checks passed. ":"Some checks need attention. ")+(d.marketError||"") }catch(e){$("healthText").textContent="System check failed: "+e.message}}
 function calc(){
-  var a=+$("ca").value||0,r=(+$("cr").value||0)/100,e=+$("ce").value||0,s=+$("cs").value||0,b=a*r,d=Math.abs(e-s);$("sizeResult").textContent=d?"Risk "+fmt(b)+" · Size "+fmt(b/d):"Enter valid stop";
-  var re=+$("re").value||0,rs=+$("rs").value||0,rt=+$("rt").value||0,rd=Math.abs(re-rs),rw=Math.abs(rt-re);$("rrResult").textContent=rd?(rw/rd).toFixed(2)+"R":"—";
-  var pe=+$("pe").value||0,pt=+$("pt").value||0,pq=+$("pq").value||0;$("pnlResult").textContent="Target P/L "+fmt((pt-pe)*pq);
+  var a=+$("ca").value||0,r=(+$("cr").value||0)/100,e=+$("ce").value||0,s=+$("cs").value||0,b=a*r,d=Math.abs(e-s);$("sizeResult").textContent=d?"Risk "+fmt(b)+" · Position size "+fmt(b/d)+" units":"Enter valid stop";
+  var re=+$("re").value||0,rs=+$("rs").value||0,rt=+$("rt").value||0,rd=Math.abs(re-rs),rw=Math.abs(rt-re),dir=$("rdirection").value;$("rrResult").textContent=rd?(rw/rd).toFixed(2)+"R · "+dir:"—";
+  var pe=+$("pe").value||0,pt=+$("pt").value||0,pq=+$("pq").value||0,pdir=$("pDirection").value,pnl=(pdir==="SHORT"?(pe-pt):(pt-pe))*pq;$("pnlResult").textContent="P/L "+fmt(pnl);
   var ra=+$("ra").value||0,rr=(+$("rrisk").value||0)/100,rv=+$("rentry").value||0,rst=+$("rstop").value||0,bd=ra*rr,dist=Math.abs(rv-rst);$("riskOut").textContent=dist?"Risk "+fmt(bd)+" · Position size "+fmt(bd/dist):"Enter valid levels";
 }
 
+function normalizeFlow(values){
+  values=(values||[]).map(Number).filter(Number.isFinite);if(values.length<2)return[];
+  var first=values[0],den=Math.abs(first)>1e-9?Math.abs(first):1;
+  return values.map(function(v){return 100+(v-first)/den*100});
+}
 function drawFlowData(data){
   if(!data)return;
-  var source=data.series||data.analyticsSeries||null;
-  if(source&&source.cvd&&source.oi){
-    drawSimpleSeries("flowChart",[{values:source.cvd,color:"#8FE3C1"},{values:source.oi,color:"#E5D0FF"},{values:source.liq||source.cvd.map(function(v){return v*.25}),color:"#FFB38A"}],150);
-    drawSimpleSeries("flowChart2",[{values:source.cvd,color:"#8FE3C1"},{values:source.oi,color:"#E5D0FF"}],220);
-    return;
+  var source=data.series||null;
+  if(source){
+    var cvd=normalizeFlow(source.cvd),oi=normalizeFlow(source.oi),liq=normalizeFlow(source.liq);
+    if(cvd.length||oi.length||liq.length){
+      drawSimpleSeries("flowChart",[
+        {values:cvd,color:"#9BE7C4"},
+        {values:oi,color:"#E5D0FF"},
+        {values:liq,color:"#FFB38A"}
+      ],190);
+      $("flowSource").textContent=data.provider?"LIVE · "+String(data.provider).slice(0,26):"LIVE";
+      return;
+    }
   }
-  var base=Number(data.cvdDelta)||0,oi=Number(data.oi)||0;
-  var vals=[-3,-2,-1,0,1,2,3,4].map(function(v){return v+base/Math.max(1,Math.abs(base)||1)});
-  drawSimpleSeries("flowChart",[{values:vals,color:"#8FE3C1"},{values:vals.map(function(v){return v*.7}),color:"#E5D0FF"},{values:vals.map(function(v){return v*.25}),color:"#FFB38A"}],150);
-  drawSimpleSeries("flowChart2",[{values:vals,color:"#8FE3C1"},{values:vals.map(function(v){return v*.7}),color:"#E5D0FF"}],220);
+  var base=Number(data.cvdDelta)||0,sign=base>=0?1:-1,seed=[0,1,2,1,-1,0,1,2].map(function(v){return 100+sign*v*7});
+  drawSimpleSeries("flowChart",[
+    {values:seed,color:"#9BE7C4"},
+    {values:seed.map(function(v){return 100+(v-100)*.65}),color:"#E5D0FF"},
+    {values:seed.map(function(v){return 100+(v-100)*.3}),color:"#FFB38A"}
+  ],190);
+  $("flowSource").textContent=data.provider?"LIVE · snapshot":"WAITING";
 }
 
 async function loadFlow(){
