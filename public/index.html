@@ -17,7 +17,7 @@ button,input,select,textarea{font:inherit}.wrap{width:min(1440px,calc(100% - 26p
 .headerInner{width:min(1440px,calc(100% - 26px));margin:auto;min-height:72px;display:flex;align-items:center;gap:12px}
 .logo{display:flex;align-items:center;gap:10px;min-width:240px}.mark{width:42px;height:42px;border-radius:12px;display:grid;place-items:center;background:linear-gradient(135deg,#B8F2D2,#E5D0FF 52%,#FFD4A8);box-shadow:0 0 30px rgba(103,232,255,.13);color:#03111b;font-weight:1000}.brandK{font-size:8px;letter-spacing:.12em;color:#6f8199;font-weight:900}.brandName{font-size:23px;font-weight:900;letter-spacing:-.045em;line-height:1.05}.brandSub{font-size:9px;color:#8796a9;margin-top:4px}
 .nav{display:flex;gap:4px;flex:1;justify-content:center}.nav button{border:1px solid transparent;background:transparent;color:#8797ab;padding:9px 11px;border-radius:9px;cursor:pointer;font-size:10px;font-weight:800}.nav button:hover,.nav button.active{color:#fff;background:rgba(255,255,255,.05);border-color:rgba(129,178,241,.12)}
-.headerTools{display:flex;align-items:center;gap:6px}.select,.btn{background:#061220;border:1px solid var(--line);color:var(--text);border-radius:9px;padding:8px 10px}.btn{cursor:pointer}.btn.primary{border-color:rgba(103,232,255,.25);background:linear-gradient(135deg,rgba(103,232,255,.08),rgba(183,140,255,.07))}.liveDot{width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 12px var(--green)}.dataState{display:flex;align-items:center;gap:6px;color:#88a0b9;font-size:9px;white-space:nowrap}
+.headerTools{display:flex;align-items:center;gap:6px}.mobileMenuBtn,.mobileMenu{display:none}.mobileMenuBtn{border:1px solid var(--line);background:#061220;color:#dbe9f8;border-radius:9px;padding:8px 10px;cursor:pointer;font-size:18px;line-height:1}.mobileMenu{position:absolute;right:12px;top:64px;width:min(220px,calc(100vw - 24px));padding:8px;border:1px solid rgba(129,178,241,.18);border-radius:13px;background:rgba(4,13,23,.97);box-shadow:0 20px 70px rgba(0,0,0,.45);backdrop-filter:blur(20px);z-index:40}.mobileMenu.open{display:grid;grid-template-columns:1fr 1fr;gap:5px}.mobileMenu button{border:1px solid rgba(129,178,241,.10);background:rgba(255,255,255,.025);color:#aebdd0;padding:9px;border-radius:8px;text-align:left;font-size:9px;font-weight:800;cursor:pointer}.mobileMenu button:hover{background:rgba(103,232,255,.06);color:#fff}.select,.btn{background:#061220;border:1px solid var(--line);color:var(--text);border-radius:9px;padding:8px 10px}.btn{cursor:pointer}.btn.primary{border-color:rgba(103,232,255,.25);background:linear-gradient(135deg,rgba(103,232,255,.08),rgba(183,140,255,.07))}.liveDot{width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 12px var(--green)}.dataState{display:flex;align-items:center;gap:6px;color:#88a0b9;font-size:9px;white-space:nowrap}
 .statusBar{margin:10px 0;padding:7px 10px;border:1px solid rgba(129,178,241,.10);border-radius:9px;background:rgba(4,13,23,.5);color:#8191a7;font-size:9px}.statusBar.ok{color:var(--green)}.statusBar.warn{color:var(--amber)}.statusBar.error{color:var(--red)}
 .tabs{display:flex;gap:6px;overflow:auto;padding:4px 0 10px}.tab{white-space:nowrap;border:1px solid rgba(129,178,241,.1);background:rgba(5,15,26,.72);color:#8796a9;border-radius:999px;padding:7px 10px;font-size:9px;font-weight:850;cursor:pointer}.tab.active{color:#06131f;background:linear-gradient(100deg,#67e8ff,#b78cff)}
 .view{display:none}.view.active{display:block}
@@ -28,7 +28,7 @@ button,input,select,textarea{font:inherit}.wrap{width:min(1440px,calc(100% - 26p
 .chartWrap{position:relative;border:1px solid var(--line);border-radius:13px;overflow:hidden;background:#03101b}.chartToolbar{display:flex;justify-content:space-between;gap:8px;align-items:center;padding:8px 10px;border-bottom:1px solid rgba(129,178,241,.08)}.chartTools{display:flex;gap:4px}.chartTools button{border:1px solid var(--line);background:rgba(255,255,255,.025);color:#8798ad;border-radius:7px;padding:5px 7px;cursor:pointer;font-size:9px}.chartCanvas{display:block;width:100%;height:390px;touch-action:none}.ohlc{position:absolute;left:10px;top:47px;padding:5px 7px;border-radius:7px;background:rgba(3,10,17,.82);border:1px solid rgba(129,178,241,.12);font-size:8px;color:#dbe9f8;pointer-events:none}
 .levels{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;margin-top:8px}.level{padding:9px;border:1px solid var(--line);border-radius:10px}.level .k{font-size:8px;color:var(--muted)}.level .v{margin-top:5px;font-size:10px;font-weight:850}
 .qualityGrid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}.list{display:grid;gap:5px}.rowLine{display:grid;grid-template-columns:1fr 50px;gap:6px;align-items:center}.bar{height:5px;border-radius:999px;background:rgba(255,255,255,.07);overflow:hidden;grid-column:1/-1;margin-top:-2px}.bar i{display:block;height:100%;background:linear-gradient(90deg,#67e8ff,#b78cff);border-radius:inherit}
-.flowGrid{display:grid;grid-template-columns:repeat(4,1fr);gap:7px}.flow .v{font-size:11px;font-weight:900;margin-top:5px}.flow .s{font-size:8px;color:var(--muted);margin-top:3px}.flowChart{width:100%;height:190px;display:block}.flowLegend{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:7px 0 2px;font-size:8px;color:#8ca0b6}.flowLegend span{display:flex;align-items:center;gap:5px}.lg{width:8px;height:3px;border-radius:99px;display:inline-block}.lg.mint{background:#9BE7C4}.lg.lav{background:#E5D0FF}.lg.ember{background:#FFB38A}.calcBox{padding:2px}.calcBox .inputs label{display:flex;flex-direction:column;gap:4px}
+.flowGrid{display:grid;grid-template-columns:repeat(4,1fr);gap:7px}.flow .v{font-size:11px;font-weight:900;margin-top:5px}.flow .s{font-size:8px;color:var(--muted);margin-top:3px}.flowChart{width:100%;height:190px;display:block}.flowLegend{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:7px 0 2px;font-size:8px;color:#8ca0b6}.flowLegend span{display:flex;align-items:center;gap:5px}.lg{width:8px;height:3px;border-radius:99px;display:inline-block}.lg.mint{background:#2E7D32}.lg.lav{background:#1565C0}.lg.ember{background:#C62828}.calcBox{padding:2px}.calcBox .inputs label{display:flex;flex-direction:column;gap:4px}
 .overGrid{display:grid;grid-template-columns:1.1fr 1.1fr .9fr;gap:9px}.miniChart{width:100%;height:150px;display:block;background:#04101b;border-radius:9px}.marketRows{display:grid;gap:5px}.marketRow{display:grid;grid-template-columns:42px 1fr 42px 44px;gap:5px;align-items:center;padding:7px;border:1px solid rgba(129,178,241,.09);border-radius:8px;background:rgba(255,255,255,.014);cursor:pointer}.marketRow:hover{border-color:rgba(103,232,255,.2)}.marketRow b,.marketRow span{font-size:8px}.marketRow span{color:#8394a9}.up{color:var(--green)!important}.down{color:var(--red)!important}.wait{color:var(--amber)!important}
 .tape{display:grid;grid-template-columns:repeat(5,1fr);gap:6px}.tapeCard{padding:8px;border:1px solid rgba(129,178,241,.09);border-radius:9px;background:rgba(255,255,255,.014)}.tapeCard b{font-size:8px}.tapeCard span{display:block;margin-top:4px;font-size:8px;color:#8797ab}
 .calcGrid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.inputs{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px}.inputs.one{grid-template-columns:1fr}.inputs input,.inputs select,.inputs textarea{width:100%;background:#03101b;border:1px solid var(--line);color:var(--text);border-radius:8px;padding:8px;font-size:9px}.result{margin-top:7px;padding:8px;border:1px solid rgba(103,232,255,.12);border-radius:8px;background:rgba(103,232,255,.035);font-size:9px}
@@ -39,7 +39,7 @@ button,input,select,textarea{font:inherit}.wrap{width:min(1440px,calc(100% - 26p
 .modal{position:fixed;inset:0;z-index:100;display:none;place-items:center;padding:20px;background:rgba(1,5,10,.72);backdrop-filter:blur(16px)}.modal.open{display:grid}.modalCard{width:min(720px,100%);max-height:90vh;overflow:auto;padding:16px;border:1px solid rgba(150,195,255,.18);border-radius:16px;background:linear-gradient(180deg,#081b2d,#04101c);box-shadow:0 30px 100px rgba(0,0,0,.5)}.modalTop,.modalFoot{display:flex;justify-content:space-between;align-items:center;gap:8px}.modalTop h3{margin:0;font-size:16px}.modalClose{border:0;background:transparent;color:#93a5bc;font-size:24px;cursor:pointer}.presetGrid{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin-top:12px}.preset{padding:8px;border:1px solid var(--line);border-radius:10px;background:rgba(255,255,255,.02);color:#cbd7e8;text-align:left;cursor:pointer}.preset.active,.preset:hover{border-color:rgba(103,232,255,.35);background:rgba(103,232,255,.05)}.preset .preview{height:34px;border-radius:7px;margin-bottom:6px;display:flex;align-items:center;gap:6px;padding:0 7px}.preview i{display:block;width:5px;height:18px;background:var(--pc1);border-radius:2px}.preview i:nth-child(2),.preview i:nth-child(4){height:13px;background:var(--pc2)}.preset b{display:block;font-size:9px}.preset small{font-size:7px;color:#7f90a6}.colorGrid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}.colorItem{display:flex;justify-content:space-between;align-items:center;padding:9px;border:1px solid var(--line);border-radius:9px;font-size:9px}.colorItem input{width:42px;height:28px;border:0;padding:0;background:transparent}.axisNote{margin-top:9px;padding:8px;border-radius:8px;background:rgba(255,255,255,.02);color:#7e90a8;font-size:8px}.modalFoot{margin-top:12px;justify-content:flex-end}.labGrid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}.labMetric{padding:10px;border:1px solid var(--line);border-radius:10px;background:rgba(255,255,255,.014)}.labMetric .v{font-size:15px;font-weight:900;margin-top:5px}.setupTable{width:100%;border-collapse:collapse;font-size:8px}.setupTable th,.setupTable td{padding:7px;border-bottom:1px solid rgba(129,178,241,.08);text-align:left}.setupTable th{color:#7e90a8;font-weight:700}.healthGrid{display:grid;grid-template-columns:repeat(5,1fr);gap:7px}.healthItem{padding:9px;border:1px solid var(--line);border-radius:9px;background:rgba(255,255,255,.014)}.healthDot{width:7px;height:7px;border-radius:50%;display:inline-block;background:var(--amber);margin-right:5px}.healthDot.ok{background:var(--green);box-shadow:0 0 10px rgba(101,240,172,.45)}.healthDot.bad{background:var(--red)}.healthItem b{font-size:9px}.alertList{display:grid;gap:6px}.alertItem{display:grid;grid-template-columns:28px 1fr auto;align-items:center;gap:8px;padding:8px;border:1px solid var(--line);border-radius:9px}.alertStar{border:0;background:transparent;color:#708198;font-size:16px;cursor:pointer}.alertStar.on{color:var(--amber)}.alertState{padding:3px 6px;border-radius:999px;font-size:7px;font-weight:900;background:rgba(255,255,255,.03);color:#8fa0b5}.aiModes{display:flex;gap:4px;margin-bottom:7px}.aiMode{border:1px solid var(--line);background:transparent;color:#7f90a6;border-radius:8px;padding:6px 8px;font-size:8px;cursor:pointer}.aiMode.on{color:#fff;background:rgba(255,255,255,.05);border-color:rgba(103,232,255,.2)}.tradeGrid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}.brainInsights{display:grid;grid-template-columns:repeat(5,1fr);gap:7px;margin-top:8px}.insight{padding:9px;border:1px solid var(--line);border-radius:9px}.insight .k{font-size:8px;color:var(--muted)}.insight .v{font-size:10px;font-weight:900;margin-top:5px}.watchNote{font-size:8px;color:#7f90a6;margin-top:5px}
 @media(max-width:1000px){.labGrid,.healthGrid,.brainInsights{grid-template-columns:repeat(2,1fr)}}@media(max-width:700px){.presetGrid,.colorGrid,.tradeGrid,.labGrid,.healthGrid,.brainInsights{grid-template-columns:1fr 1fr}.alertItem{grid-template-columns:26px 1fr}.chartCanvas{height:320px}}.foot{margin-top:12px;color:#64758c;font-size:8px;line-height:1.5}.hidden{display:none!important}
 @media(max-width:1000px){.hero{grid-template-columns:repeat(3,1fr)}.grid2,.scannerGrid,.aiGrid{grid-template-columns:1fr}.overGrid{grid-template-columns:1fr 1fr}.tape{grid-template-columns:repeat(3,1fr)}}
-@media(max-width:700px){.headerInner{flex-wrap:wrap;padding:8px 0}.logo{min-width:0}.nav{order:3;width:100%;justify-content:flex-start;overflow:auto}.headerTools{margin-left:auto}.hero{grid-template-columns:1fr 1fr}.overGrid,.calcGrid,.qualityGrid,.flowGrid{grid-template-columns:1fr}.levels,.scenario{grid-template-columns:1fr 1fr}.tape{grid-template-columns:1fr 1fr}.chartCanvas{height:300px}.brainStats{grid-template-columns:1fr 1fr}.scanRow{grid-template-columns:28px 44px 1fr 45px}.scanRow>*:nth-child(4),.scanRow>*:nth-child(5){display:none}}
+@media(max-width:700px){.headerInner{flex-wrap:wrap;padding:8px 0}.logo{min-width:0;flex:1}.nav{display:none}.mobileMenuBtn{display:block;order:2}.headerTools{order:3;width:100%;margin-left:0;display:grid;grid-template-columns:auto 1fr 1fr 1fr;gap:6px}.dataState{justify-self:start}.hero{grid-template-columns:1fr 1fr}.overGrid,.calcGrid,.qualityGrid,.flowGrid{grid-template-columns:1fr}.levels,.scenario{grid-template-columns:1fr 1fr}.tape{grid-template-columns:1fr 1fr}.chartCanvas{height:300px}.brainStats{grid-template-columns:1fr 1fr}.scanRow{grid-template-columns:28px 44px 1fr 45px}.scanRow>*:nth-child(4),.scanRow>*:nth-child(5){display:none}.statusBar{margin-top:7px}.wrap{width:calc(100% - 18px);padding-top:10px}}
 </style>
 </head>
 <body>
@@ -48,6 +48,10 @@ button,input,select,textarea{font:inherit}.wrap{width:min(1440px,calc(100% - 26p
   <nav class="nav" id="nav">
     <button class="active" data-view="overview">Intel</button><button data-view="scanner">Scanner</button><button data-view="flow">Flow</button><button data-view="signals">Signals</button><button data-view="lab">Lab</button><button data-view="ai">AI Copilot</button><button data-view="brain">Brain</button><button data-view="alerts">Alerts</button><button data-view="risk">Risk</button>
   </nav>
+  <button id="mobileMenuBtn" class="mobileMenuBtn" aria-label="Open MarketPulse menu" aria-expanded="false">☰</button>
+  <div id="mobileMenu" class="mobileMenu" aria-hidden="true">
+    <button data-view="overview">Intel</button><button data-view="scanner">Scanner</button><button data-view="flow">Flow</button><button data-view="signals">Signals</button><button data-view="lab">Lab</button><button data-view="ai">AI Copilot</button><button data-view="brain">Brain</button><button data-view="alerts">Alerts</button><button data-view="risk">Risk</button>
+  </div>
   <div class="headerTools"><span class="dataState"><i class="liveDot"></i><span id="dataState">Connecting</span></span><select id="symbol" class="select"></select><select id="interval" class="select"><option>15m</option><option selected>1h</option><option>4h</option><option>1d</option></select><button id="refresh" class="btn primary">Refresh</button></div>
 </div></header>
 
@@ -187,11 +191,15 @@ function api(url,timeout){
 
 function setView(name){
   document.querySelectorAll(".view").forEach(function(v){v.classList.toggle("active",v.id==="view-"+name)});
-  document.querySelectorAll(".nav button").forEach(function(b){b.classList.toggle("active",b.dataset.view===name)});
+  document.querySelectorAll(".nav button,.mobileMenu button").forEach(function(b){b.classList.toggle("active",b.dataset.view===name)});
+  var menu=$("mobileMenu"),btn=$("mobileMenuBtn");if(menu){menu.classList.remove("open");menu.setAttribute("aria-hidden","true")}if(btn)btn.setAttribute("aria-expanded","false");
   window.scrollTo(0,0);
 }
 document.querySelectorAll("[data-view]").forEach(function(b){
   b.addEventListener("click",function(){setView(b.dataset.view)})
+});
+$("mobileMenuBtn").addEventListener("click",function(){
+  var menu=$("mobileMenu"),open=!menu.classList.contains("open");menu.classList.toggle("open",open);menu.setAttribute("aria-hidden",String(!open));this.setAttribute("aria-expanded",String(open));
 });
 
 function populateSymbols(){
@@ -288,7 +296,7 @@ function renderCycle(){
   $("cycleText").textContent=phase+" · long-term cycle proxy";$("cycleScore").textContent=Math.round(s)+"/100";$("cycleDetail").textContent="Daily history · "+c.length+" bars";
   $("ddValue").textContent=pct((close[close.length-1]/Math.max.apply(null,close)-1)*100);$("ddDetail").textContent="Current vs visible high";
   $("cycleChart").__values=score;$("ddChart").__values=dd;$("cycleChart").__kind="Cycle score";$("ddChart").__kind="Drawdown";
-  drawSimpleSeries("cycleChart",[{values:score,color:"#72a8ff"}],150);drawSimpleSeries("ddChart",[{values:dd,color:"#ffb38a"}],150);bindMiniHover("cycleChart","cycleDetail");bindMiniHover("ddChart","ddDetail");
+  drawSimpleSeries("cycleChart",[{values:score,color:"#60A5FA"}],150);drawSimpleSeries("ddChart",[{values:dd,color:"#F87171"}],150);bindMiniHover("cycleChart","cycleDetail");bindMiniHover("ddChart","ddDetail");
 }
 
 function renderMarket(){
@@ -304,7 +312,7 @@ function renderMarket(){
   $("quality").textContent=fmt(a.score)+"/100";
   $("components").innerHTML=(a.components||[]).map(function(x){var max=({Regime:16,"Trend strength":11,Momentum:11,Volume:9,Structure:9,"4H alignment":9,"15M alignment":7,"CVD pressure":10,"OI context":8,"Liquidation context":6})[x.name]||10;return'<div class="rowLine"><span class="small">'+x.name+'</span><b style="font-size:9px;text-align:right">'+x.value+"/"+max+'</b><div class="bar"><i style="width:'+Math.max(0,Math.min(100,x.value/max*100))+'%"></i></div></div>'}).join("");
   $("entry").textContent=a.entryLow!=null?fmt(a.entryLow)+" → "+fmt(a.entryHigh):"Wait";$("stop").textContent=fmt(a.stop);$("target").textContent=fmt(a.tp1);$("rr").textContent=a.rr?Number(a.rr).toFixed(2)+"R":"—";
-  var der=d.derivatives||{};$("oi").textContent=der.oi!=null?fmt(der.oi):"—";$("oiS").textContent=der.oiChangePct!=null?pct(der.oiChangePct)+" recent":"Snapshot";$("cvd").textContent=der.cvdState||"Waiting";$("cvdS").textContent=der.cvdDelta!=null?"Δ "+fmt(der.cvdDelta):"Enrichment pending";$("pos").textContent=der.positioning||"Waiting";$("fund").textContent=der.fundingRate!=null?"Funding "+(Number(der.fundingRate)*100).toFixed(4)+"%":"—";$("liq").textContent=der.liquidationBias||"Pending";$("liqS").textContent=der.liquidationTotal!=null?"Total "+fmt(der.liquidationTotal):"Pending";
+  var der=d.derivatives||{};$("oi").textContent=der.oi!=null?fmt(der.oi):"UNAVAILABLE";$("oiS").textContent=der.oiChangePct!=null?pct(der.oiChangePct)+" recent":"Current snapshot";$("cvd").textContent=der.cvdState||"UNAVAILABLE";$("cvdS").textContent=der.cvdDelta!=null?"Δ "+fmt(der.cvdDelta):"No CVD feed";$("pos").textContent=der.positioning||"UNAVAILABLE";$("fund").textContent=der.fundingRate!=null?"Funding "+(Number(der.fundingRate)*100).toFixed(4)+"%":"Funding unavailable";$("liq").textContent=der.liquidationBias&&der.liquidationBias!=="UNKNOWN"?der.liquidationBias:"UNAVAILABLE";$("liqS").textContent=der.liquidationTotal!=null?"Total "+fmt(der.liquidationTotal):"No liquidation feed";$("flowSource").textContent=der.provider?(String(der.provider).slice(0,30)+(der.livePointCount?" · LIVE":"")):(der.available?"LIVE":"UNAVAILABLE");
   $("adaptiveChip").textContent=d.learning&&d.learning.state?("Adaptive: "+String(d.learning.state).toLowerCase()):"Adaptive: background learning";
   $("learnState").textContent=d.learning&&d.learning.state?d.learning.state:"COLLECTING";$("learnN").textContent=d.learning&&d.learning.resolved!=null?d.learning.resolved:0;$("learnWin").textContent=d.learning&&d.learning.winRate!=null?Number(d.learning.winRate).toFixed(1)+"%":"—";$("learnAdj").textContent=d.learning&&d.learning.lastAdjustment!=null?Number(d.learning.lastAdjustment).toFixed(1):"0.0";$("learnPersist").textContent=d.learning&&d.learning.durable?"Postgres cloud":(d.learning?"Local fallback":"—");$("learnNote").textContent=d.learning&&d.learning.state==="ADAPTIVE"?"Adaptive calibration active. Historical outcomes are influencing confluence.":"Collecting resolved outcomes before calibration.";
   state.validation={backtest:d.backtest,validation:d.validation,setupStats:d.setupStats,learning:d.learning};renderLab();renderBrainInsights();
@@ -389,31 +397,34 @@ function calc(){
 
 function normalizeFlow(values){
   values=(values||[]).map(Number).filter(Number.isFinite);if(values.length<2)return[];
-  var first=values[0],den=Math.abs(first)>1e-9?Math.abs(first):1;
-  return values.map(function(v){return 100+(v-first)/den*100});
+  var first=values[0],maxDev=Math.max.apply(null,values.map(function(v){return Math.abs(v-first)}));if(!Number.isFinite(maxDev)||maxDev===0)return values.map(function(){return 100});
+  return values.map(function(v){return 100+((v-first)/maxDev)*80});
+}
+function drawBlankFlow(){
+  var c=$("flowChart");if(!c)return;var o=setupCanvas(c,190),ctx=o.ctx,W=o.W,H=o.H;
+  ctx.fillStyle="#06101b";ctx.fillRect(0,0,W,H);ctx.strokeStyle="rgba(140,186,235,.06)";for(var g=1;g<5;g++){var y=g*H/5;ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke()}
+  ctx.fillStyle="#71839a";ctx.font="10px system-ui";ctx.fillText("Waiting for live OI / CVD / liquidation series…",14,H/2);
 }
 function drawFlowData(data){
-  if(!data)return;
-  var source=data.series||null;
-  if(source){
-    var cvd=normalizeFlow(source.cvd),oi=normalizeFlow(source.oi),liq=normalizeFlow(source.liq);
-    if(cvd.length||oi.length||liq.length){
-      drawSimpleSeries("flowChart",[
-        {values:cvd,color:"#9BE7C4"},
-        {values:oi,color:"#E5D0FF"},
-        {values:liq,color:"#FFB38A"}
-      ],190);
-      $("flowSource").textContent=data.provider?"LIVE · "+String(data.provider).slice(0,26):"LIVE";
-      return;
-    }
+  if(!data){$("flowSource").textContent="UNAVAILABLE";drawBlankFlow();return}
+  var source=data.series||{},history=Array.isArray(data.liveHistory)?data.liveHistory:[];
+  var cvd=normalizeFlow(source.cvd),oi=normalizeFlow(source.oi),liq=normalizeFlow(source.liq);
+  if(!cvd.length&&!oi.length&&!liq.length&&history.length>=2){
+    cvd=normalizeFlow(history.map(function(x){return Number(x.cvdRatio??x.cvd)}));
+    oi=normalizeFlow(history.map(function(x){return Number(x.oi)}));
+    liq=normalizeFlow(history.map(function(x){return Number(x.liqTotal)}));
   }
-  var base=Number(data.cvdDelta)||0,sign=base>=0?1:-1,seed=[0,1,2,1,-1,0,1,2].map(function(v){return 100+sign*v*7});
-  drawSimpleSeries("flowChart",[
-    {values:seed,color:"#9BE7C4"},
-    {values:seed.map(function(v){return 100+(v-100)*.65}),color:"#E5D0FF"},
-    {values:seed.map(function(v){return 100+(v-100)*.3}),color:"#FFB38A"}
-  ],190);
-  $("flowSource").textContent=data.provider?"LIVE · snapshot":"WAITING";
+  if(cvd.length||oi.length||liq.length){
+    drawSimpleSeries("flowChart",[
+      {values:cvd,color:"#2E7D32"},
+      {values:oi,color:"#1565C0"},
+      {values:liq,color:"#C62828"}
+    ],190);
+    $("flowSource").textContent=(data.provider||"LIVE")+" · series";
+    return;
+  }
+  $("flowSource").textContent=data.available?"LIVE · snapshot":"UNAVAILABLE";
+  drawBlankFlow();
 }
 
 async function loadFlow(){
@@ -422,7 +433,7 @@ async function loadFlow(){
 
 function renderMarketNoFlow(){
   var d=state.market,der=d&&d.derivatives||{};if(!d)return;
-  $("oi").textContent=der.oi!=null?fmt(der.oi):"—";$("oiS").textContent=der.oiChangePct!=null?pct(der.oiChangePct)+" recent":"Snapshot";$("cvd").textContent=der.cvdState||"MIXED";$("cvdS").textContent=der.cvdDelta!=null?"Δ "+fmt(der.cvdDelta):"—";$("pos").textContent=der.positioning||"MIXED";$("fund").textContent=der.fundingRate!=null?"Funding "+(Number(der.fundingRate)*100).toFixed(4)+"%":"—";$("liq").textContent=der.liquidationBias||"—";$("liqS").textContent=der.liquidationTotal!=null?"Total "+fmt(der.liquidationTotal):"—";
+  $("oi").textContent=der.oi!=null?fmt(der.oi):"UNAVAILABLE";$("oiS").textContent=der.oiChangePct!=null?pct(der.oiChangePct)+" recent":"Current snapshot";$("cvd").textContent=der.cvdState||"UNAVAILABLE";$("cvdS").textContent=der.cvdDelta!=null?"Δ "+fmt(der.cvdDelta):"No CVD feed";$("pos").textContent=der.positioning||"UNAVAILABLE";$("fund").textContent=der.fundingRate!=null?"Funding "+(Number(der.fundingRate)*100).toFixed(4)+"%":"Funding unavailable";$("liq").textContent=der.liquidationBias&&der.liquidationBias!=="UNKNOWN"?der.liquidationBias:"UNAVAILABLE";$("liqS").textContent=der.liquidationTotal!=null?"Total "+fmt(der.liquidationTotal):"No liquidation feed";$("flowSource").textContent=der.provider?(String(der.provider).slice(0,30)+(der.livePointCount?" · LIVE":"")):(der.available?"LIVE":"UNAVAILABLE");
 }
 
 async function loadCycle(){try{state.cycle=await api("/api/cycle?symbol="+encodeURIComponent(state.symbol),4500);renderCycle()}catch{}}
