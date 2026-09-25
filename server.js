@@ -143,7 +143,7 @@ const server=http.createServer(async(req,res)=>{
       const lowerA=lower&&lower.length>=220?analyze(lower,{interval:'15m'}):null;
       const higherA=higher&&higher.length>=220?analyze(higher,{interval:'4h'}):null;
       const analysis=analyze(candles,{interval,higher:higherA,lower:lowerA});
-      return send(res,200,{symbol,interval,candles,analysis,backtest:backtest(candles)});
+      return send(res,200,{symbol,interval,candles,analysis,backtest:backtest(candles),setupStats:require("./market-engine").backtestBySetup(candles)});
     }
     if(req.method==='GET'&&u.pathname==='/api/scanner'){
       const interval=u.searchParams.get('interval')||'1h';
