@@ -35,6 +35,32 @@ async function init(){
         payload JSONB NOT NULL DEFAULT '{}'::jsonb,
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       )`);
+      await pool.query(`CREATE TABLE IF NOT EXISTS marketpulse_learning (
+        id INTEGER PRIMARY KEY DEFAULT 1,
+        payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )`);
+      await pool.query(`CREATE TABLE IF NOT EXISTS marketpulse_learning_predictions (
+        fingerprint TEXT PRIMARY KEY,
+        symbol TEXT NOT NULL,
+        interval TEXT NOT NULL,
+        candle_ts BIGINT NOT NULL,
+        side TEXT NOT NULL,
+        type TEXT NOT NULL,
+        status TEXT NOT NULL,
+        score NUMERIC NOT NULL,
+        price NUMERIC,
+        stop NUMERIC,
+        target NUMERIC,
+        regime TEXT,
+        features JSONB NOT NULL DEFAULT '{}'::jsonb,
+        horizon_bars INTEGER NOT NULL DEFAULT 12,
+        outcome TEXT,
+        result_r NUMERIC,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        resolved_at TIMESTAMPTZ
+      )`);
+      await pool.query('CREATE INDEX IF NOT EXISTS idx_learning_open ON marketpulse_learning_predictions(symbol,interval,outcome) WHERE outcome IS NULL');
       mode="postgres";
     }catch(err){
       mode="local";try{await pool?.end()}catch{}pool=null;
@@ -68,5 +94,65 @@ async function clear(deviceId){
   if(mode==="postgres"){await pool.query("DELETE FROM marketpulse_memory WHERE device_id=$1",[deviceId]);return}
   const all=readLocal();delete all[deviceId];writeLocal(all);
 }
+async function getLearningState(){
+  await init();
+  if(mode==="postgres"){
+    const r=await pool.query("SELECT payload,updated_at FROM marketpulse_learning WHERE id=1");
+    return r.rows[0]?{storage:"postgres",updatedAt:r.rows[0].updated_at,payload:r.rows[0].payload}:{storage:"postgres",updatedAt:null,payload:null};
+  }
+  const all=readLocal();return {storage:"local",updatedAt:all.__learning__?.updatedAt||null,payload:all.__learning__?.payload||null};
+}
+async function saveLearningState(state){
+  await init();
+  const payload=state&&typeof state==="object"?state:{};
+  if(mode==="postgres"){
+    await pool.query(`INSERT INTO marketpulse_learning(id,payload,updated_at)
+      VALUES(1,$1,NOW())
+      ON CONFLICT(id) DO UPDATE SET payload=EXCLUDED.payload,updated_at=NOW()`,[payload]);
+    return {storage:"postgres",updatedAt:new Date().toISOString(),payload};
+  }
+  const all=readLocal();all.__learning__={payload,updatedAt:new Date().toISOString()};writeLocal(all);
+  return {storage:"local",updatedAt:all.__learning__.updatedAt,payload};
+}
+async function recordLearningPrediction(pred){
+  await init();
+  const p=pred||{};
+  if(mode==="postgres"){
+    const r=await pool.query(`INSERT INTO marketpulse_learning_predictions
+      (fingerprint,symbol,interval,candle_ts,side,type,status,score,price,stop,target,regime,features,horizon_bars)
+      VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+      ON CONFLICT(fingerprint) DO NOTHING
+      RETURNING fingerprint`,
+      [p.fingerprint,p.symbol,p.interval,p.candleTs,p.side,p.type,p.status,Number(p.score)||0,p.price??null,p.stop??null,p.target??null,p.regime??null,p.features||{},Number(p.horizonBars)||12]);
+    return {recorded:Boolean(r.rowCount)};
+  }
+  const all=readLocal(),rows=Array.isArray(all.__learning_predictions__)?all.__learning_predictions__:[];
+  if(rows.some(x=>x.fingerprint===p.fingerprint))return {recorded:false};
+  rows.push(Object.assign({},p,{outcome:null,resultR:null,createdAt:new Date().toISOString()}));
+  all.__learning_predictions__=rows.slice(-5000);writeLocal(all);return {recorded:true};
+}
+async function getOpenLearningPredictions(symbol,interval,limit=200){
+  await init();
+  if(mode==="postgres"){
+    const r=await pool.query(`SELECT fingerprint,symbol,interval,candle_ts,side,type,status,score,price,stop,target,regime,features,horizon_bars,created_at
+      FROM marketpulse_learning_predictions
+      WHERE outcome IS NULL AND symbol=$1 AND interval=$2
+      ORDER BY candle_ts ASC LIMIT $3`,[symbol,interval,limit]);
+    return r.rows;
+  }
+  const all=readLocal();return (Array.isArray(all.__learning_predictions__)?all.__learning_predictions__:[]).filter(x=>!x.outcome&&x.symbol===symbol&&x.interval===interval).slice(-limit);
+}
+async function resolveLearningPrediction(fingerprint,outcome,resultR){
+  await init();
+  if(mode==="postgres"){
+    await pool.query(`UPDATE marketpulse_learning_predictions
+      SET outcome=$2,result_r=$3,resolved_at=NOW()
+      WHERE fingerprint=$1 AND outcome IS NULL`,[fingerprint,outcome,resultR]);
+    return;
+  }
+  const all=readLocal(),rows=Array.isArray(all.__learning_predictions__)?all.__learning_predictions__:[];
+  for(const x of rows)if(x.fingerprint===fingerprint&&!x.outcome){x.outcome=outcome;x.resultR=resultR;x.resolvedAt=new Date().toISOString()}
+  all.__learning_predictions__=rows.slice(-5000);writeLocal(all);
+}
 function status(){return {mode,configured:Boolean(DB_URL&&Pool),durable:mode==="postgres"}}
-module.exports={init,get,save,clear,status};
+module.exports={init,get,save,clear,getLearningState,saveLearningState,recordLearningPrediction,getOpenLearningPredictions,resolveLearningPrediction,status};
