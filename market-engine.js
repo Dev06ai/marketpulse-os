@@ -176,7 +176,7 @@ function backtestBySetup(c){
     for(let j=i+1;j<=Math.min(i+18,c.length-1);j++){
       const x=c[j];
       if(a.side==="LONG"){if(x.l<=a.stop){r=-1;exitIndex=j;break}if(x.h>=a.tp1){r=1;exitIndex=j;break}}
-      else {if(x.h>=a.stop){r=-1;exitIndex=j;break}if(x.l<=a.tp1){r=1;break}}
+      else {if(x.h>=a.stop){r=-1;exitIndex=j;break}if(x.l<=a.tp1){r=1;exitIndex=j;break}}
     }
     if(exitIndex!==null){add("ALL",{r});add(a.type,{r});add(a.side,{r});add(a.regime,{r})}
   }
