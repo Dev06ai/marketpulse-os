@@ -29,6 +29,25 @@ async function klines(symbol,interval){
   const key=symbol+'|'+interval,hit=CACHE.get(key);if(hit&&Date.now()-hit.ts<TTL)return hit.rows;
   const rows=await getBinance(symbol,interval)||await getKraken(symbol,interval);CACHE.set(key,{ts:Date.now(),rows});return rows;
 }
+async function longDailyHistory(symbol,days=4200){
+  const key="LONG|"+symbol,hit=CACHE.get(key);if(hit&&Date.now()-hit.ts<TTL*4)return hit.rows;
+  const bases=['https://api.binance.com','https://api-gcp.binance.com','https://api1.binance.com','https://api2.binance.com','https://api3.binance.com','https://api4.binance.com'];
+  for(const base of bases){
+    try{
+      let endTime=Date.now(),all=[];
+      while(all.length<days){
+        const u=new URL(base+'/api/v3/klines');u.searchParams.set('symbol',symbol);u.searchParams.set('interval','1d');u.searchParams.set('limit','1000');u.searchParams.set('endTime',String(endTime));
+        const r=await fetch(u,{headers:{Accept:'application/json'}});if(!r.ok)throw Error('HTTP '+r.status);
+        const rows=await r.json();if(!rows.length)break;
+        const mapped=rows.map(x=>({t:x[0],o:+x[1],h:+x[2],l:+x[3],c:+x[4],v:+x[5],source:'binance'}));
+        all=mapped.concat(all);endTime=rows[0][0]-1;if(rows.length<1000)break;
+      }
+      all=all.slice(-days);if(all.length){CACHE.set(key,{ts:Date.now(),rows:all});return all}
+    }catch{}
+  }
+  return klines(symbol,'1d');
+}
+
 const LIVE_FLOW=new Map();
 const LIVE_FLOW_LIMIT=900;
 const LIVE_SYMBOLS=SYMBOLS.filter(s=>["BTCUSDT","ETHUSDT","SOLUSDT","BNBUSDT","XRPUSDT","DOGEUSDT","ADAUSDT"].includes(s));
@@ -346,6 +365,12 @@ const server=http.createServer(async(req,res)=>{
       const learned=await learning.process(symbol,interval,candles,analysis);
       analysis=learned.analysis;
       return send(res,200,{symbol,interval,candles,analysis,derivatives:deriv,learning:await learning.status(),backtest:backtest(candles),validation:walkForwardBacktest(candles),setupStats:require("./market-engine").backtestBySetup(candles)});
+    }
+    if(req.method==='GET'&&u.pathname==='/api/cycle'){
+      const symbol=(u.searchParams.get('symbol')||'BTCUSDT').toUpperCase();
+      if(!SYMBOLS.includes(symbol))return send(res,400,{error:'Unsupported symbol'});
+      const candles=await longDailyHistory(symbol,4200);
+      return send(res,200,{symbol,interval:'1d',candles,updatedAt:Date.now(),source:candles?.[0]?.source||'binance'});
     }
     if(req.method==='GET'&&u.pathname==='/api/scanner'){
       const interval=u.searchParams.get('interval')||'1h';
