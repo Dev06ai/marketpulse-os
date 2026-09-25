@@ -272,7 +272,7 @@ function renderScanner(){
 function renderJournal(){
   var items=state.journal.slice().reverse().slice(0,8),n=state.journal.length,w=state.journal.filter(function(x){return Number(x.r)>0}).length,sum=state.journal.reduce(function(a,x){return a+(Number(x.r)||0)},0);
   $("bN").textContent=n;$("bNet").textContent=sum.toFixed(2)+"R";$("bWin").textContent=n?(w/n*100).toFixed(0)+"%":"—";$("bPersist").textContent="Browser";
-  $("journalRows").innerHTML=items.map(function(x){return'<div class="journalRow"><div class="journalTop"><b>Trade</b><span>'+new Date(x.ts).toLocaleDateString()+'</span></div><div class="small">Entry '+fmt(x.entry)+" · Stop "+fmt(x.stop)+" · Target "+fmt(x.target)+" · "+fmt(x.r)+"R</div><div class="small">'+(x.note||"No notes")+"</div></div>"}).join("")||'<div class="small">No trades logged.</div>';
+  $("journalRows").innerHTML=items.map(function(x){return '<div class="journalRow"><div class="journalTop"><b>Trade</b><span>'+new Date(x.ts).toLocaleDateString()+'</span></div><div class="small">Entry '+fmt(x.entry)+' · Stop '+fmt(x.stop)+' · Target '+fmt(x.target)+' · '+fmt(x.r)+'R</div><div class="small">'+(x.note||'No notes')+'</div></div>'}).join("")||'<div class="small">No trades logged.</div>';
 }
 
 function calc(){
