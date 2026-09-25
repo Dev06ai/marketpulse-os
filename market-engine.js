@@ -106,12 +106,16 @@ function analyze(c,ctx={}){
     else if(flowPriceChangePct>pThreshold&&cvdDelta>0)cvdState="BUYERS CONFIRM";
     else if(flowPriceChangePct<-pThreshold&&cvdDelta<0)cvdState="SELLERS CONFIRM";
   }
+  const currentOi=Number.isFinite(deriv?.oi)?deriv.oi:null;
   let positioning=deriv?.positioning||"UNKNOWN";
   if(oiChangePct!==null&&flowPriceChangePct!==null){
     if(flowPriceChangePct>0.15&&oiChangePct>1)positioning="PRICE + OI: LONG PARTICIPATION";
     else if(flowPriceChangePct>0.15&&oiChangePct<-1)positioning="PRICE UP + OI DOWN: SHORT COVERING";
     else if(flowPriceChangePct<-0.15&&oiChangePct>1)positioning="PRICE DOWN + OI UP: SHORT PARTICIPATION";
     else if(flowPriceChangePct<-0.15&&oiChangePct<-1)positioning="PRICE DOWN + OI DOWN: LONG LIQUIDATION";
+    else positioning="OI / PRICE MIXED";
+  }else if(currentOi!==null){
+    positioning="OI SNAPSHOT";
   }
 
   let type="NO TRADE",side="WAIT",bias="Neutral";
@@ -226,7 +230,7 @@ function analyze(c,ctx={}){
     price,change24h,ema20:E20[i],ema50:E50[i],ema200:E200[i],rsi:rsiNow,adx:adxNow,atrPct:atrNow/price*100,volumeZ:vz,
     regime,mood,momentum,volState,structure:st.state,type,side,bias,directionalLean,probabilityLabel,
     score,status,reasons,contributors,components,
-    derivatives:{available:!!deriv,cvdState,positioning,oiChangePct,cvdDelta,cvdRatio:deriv?.cvdRatio??null,flowPriceChangePct,tradeCount:deriv?.tradeCount??0,provider:deriv?.provider??null,errors:deriv?.errors??[]},
+    derivatives:{available:!!deriv,oi:currentOi,cvdState,positioning,oiChangePct,cvdDelta,cvdRatio:deriv?.cvdRatio??null,flowPriceChangePct,tradeCount:deriv?.tradeCount??0,fundingRate:deriv?.fundingRate??null,provider:deriv?.provider??null,errors:deriv?.errors??[]},
     thesis:thesis.join(" "),
     primaryScenario,alternateScenario,
     mtf:{lower:mtf15,higher:mtf4},stop,tp1,tp2,entryLow:el,entryHigh:eh,rr,
