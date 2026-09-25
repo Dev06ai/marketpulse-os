@@ -355,10 +355,24 @@ const server=http.createServer(async(req,res)=>{
       const symbol=(u.searchParams.get('symbol')||'BTCUSDT').toUpperCase(),interval=u.searchParams.get('interval')||'1h';
       if(!SYMBOLS.includes(symbol))return send(res,400,{error:'Unsupported symbol'});
       try{
-        let candles=await getKraken(symbol,interval);
+        const candles=await getKraken(symbol,interval);
         if(!candles||candles.length<220)throw Error('Kraken returned insufficient candles');
-        const analysis=analyze(candles,{interval});
-        return send(res,200,{ok:true,symbol,interval,candles,analysis,source:'Kraken spot'});
+        const lowerPromise=interval==='15m'?Promise.resolve(null):Promise.race([getKraken(symbol,'15m'),new Promise(resolve=>setTimeout(()=>resolve(null),1400))]).catch(()=>null);
+        const higherPromise=interval==='4h'?Promise.resolve(null):Promise.race([getKraken(symbol,'4h'),new Promise(resolve=>setTimeout(()=>resolve(null),1400))]).catch(()=>null);
+        const derivPromise=Promise.race([derivatives(symbol,interval),new Promise(resolve=>setTimeout(()=>resolve(null),900))]).catch(()=>null);
+        const [lower,higher,deriv]=await Promise.all([lowerPromise,higherPromise,derivPromise]);
+        let analysis=analyze(candles,{interval,lower:lower&&lower.length>=220?analyze(lower,{interval:'15m'}):null,higher:higher&&higher.length>=220?analyze(higher,{interval:'4h'}):null,deriv});
+        let learned=null;
+        try{learned=await Promise.race([learning.process(symbol,interval,candles,analysis),new Promise(resolve=>setTimeout(()=>resolve(null),650))])}catch{}
+        if(learned?.analysis)analysis=learned.analysis;
+        const learningStatus=await Promise.race([learning.status(),new Promise(resolve=>setTimeout(()=>resolve({phase:2,state:'COLLECTING',durable:storage.status().durable,resolved:0}),500))]).catch(()=>({phase:2,state:'COLLECTING',durable:storage.status().durable,resolved:0}));
+        const sample=candles.slice(-600);
+        const setupStats=require("./market-engine").backtestBySetup(sample);
+        return send(res,200,{
+          ok:true,symbol,interval,candles,analysis,derivatives:deriv,learning:learningStatus,
+          backtest:backtest(sample),validation:walkForwardBacktest(sample),setupStats,
+          source:'Kraken spot',updatedAt:Date.now()
+        });
       }catch(e){return send(res,503,{ok:false,error:String(e.message||e),source:'Kraken spot'})}
     }
     if(req.method==='GET'&&u.pathname==='/api/core-flow'){
@@ -374,11 +388,21 @@ const server=http.createServer(async(req,res)=>{
       const rows=await Promise.all(SYMBOLS.map(async symbol=>{
         try{
           const candles=await getKraken(symbol,interval);
-          const analysis=candles&&candles.length>=220?analyze(candles,{interval}):null;
-          return analysis?{symbol,label:labels[symbol]||symbol,price:analysis.price,change24h:analysis.change24h,regime:analysis.regime,side:analysis.side,type:analysis.type,status:analysis.status,score:analysis.score,bias:analysis.bias,probabilityLabel:analysis.probabilityLabel,structure:analysis.structure}:{symbol,label:labels[symbol]||symbol,status:'WAITING',side:'WAIT',score:0,error:'Insufficient candles'};
+          if(!candles||candles.length<220)throw Error('Insufficient candles');
+          let analysis=analyze(candles,{interval});
+          try{const learned=await Promise.race([learning.process(symbol,interval,candles,analysis),new Promise(resolve=>setTimeout(()=>resolve(null),350))]);if(learned?.analysis)analysis=learned.analysis}catch{}
+          return {symbol,label:labels[symbol]||symbol,price:analysis.price,change24h:analysis.change24h,regime:analysis.regime,side:analysis.side,type:analysis.type,status:analysis.status,score:analysis.score,bias:analysis.bias,probabilityLabel:analysis.probabilityLabel,structure:analysis.structure};
         }catch(e){return {symbol,label:labels[symbol]||symbol,status:'WAITING',side:'WAIT',score:0,error:e.message}}
       }));
       return send(res,200,{ok:true,interval,rows});
+    }
+    if(req.method==='GET'&&u.pathname==='/api/system-check'){
+      const checks={server:true,marketEngine:true,learning:false,memory:false,marketData:false};
+      let marketError=null;
+      try{checks.learning=Boolean(await learning.status())}catch(e){}
+      try{checks.memory=Boolean(storage.status())}catch(e){}
+      try{const rows=await getKraken('BTCUSDT','1h');checks.marketData=Boolean(rows&&rows.length>=50)}catch(e){marketError=e.message}
+      return send(res,200,{ok:Object.values(checks).every(Boolean),checks,marketError,routes:{core:true,coreScan:true,coreFlow:true,cycle:true,ai:true,memory:true},timestamp:Date.now()});
     }
     if(req.method==='GET'&&u.pathname==='/api/live'){
       const symbol=(u.searchParams.get('symbol')||'BTCUSDT').toUpperCase(),interval=u.searchParams.get('interval')||'1h';
