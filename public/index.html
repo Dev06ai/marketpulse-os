@@ -76,6 +76,8 @@ button,input,select,textarea{font:inherit}.wrap{width:min(1440px,calc(100% - 26p
       </div>
     </div>
 
+    <div class="section card"><div class="sectionHead"><div><div class="title">Price action</div><div class="sub">Drag to pan · scroll to zoom · ↑ ↓ adjust vertical view.</div></div><div class="chartTools"><button id="panYUp">↑</button><button id="panL">←</button><button id="panR">→</button><button id="panYDown">↓</button><button id="zoomOut">−</button><button id="zoomReset">1:1</button><button id="zoomIn">+</button><button id="chartSettings">⚙</button></div></div><div class="chartWrap"><canvas id="mainChart" class="chartCanvas"></canvas><div class="ohlc" id="ohlc">Move over chart</div></div><div class="levels"><div class="level"><div class="k">Entry zone</div><div class="v" id="entry">—</div></div><div class="level"><div class="k">Invalidation</div><div class="v" id="stop">—</div></div><div class="level"><div class="k">Target 1</div><div class="v" id="target">—</div></div><div class="level"><div class="k">R:R</div><div class="v" id="rr">—</div></div></div></div>
+
     <div class="section"><div class="sectionHead"><div><div class="title">Market Overview</div><div class="sub">Live market intelligence, long-term cycle context and quick trading tools.</div></div><span class="chip">Long-term context</span></div>
       <div class="overGrid">
         <div class="card"><div class="sectionHead"><div><b>Cycle phase</b><div class="sub" id="cycleText">Waiting for cycle history</div></div><span class="chip c">LIVE</span></div><canvas id="cycleChart" class="miniChart"></canvas><div class="cycleMetric" style="margin-top:7px;font-size:10px"><b id="cycleScore">—</b><span id="cycleDetail" style="color:var(--muted)">—</span></div></div>
@@ -84,7 +86,6 @@ button,input,select,textarea{font:inherit}.wrap{width:min(1440px,calc(100% - 26p
       </div>
     </div>
 
-    <div class="section card"><div class="sectionHead"><div><div class="title">Price action</div><div class="sub">Drag to pan · scroll to zoom · ↑ ↓ adjust vertical view.</div></div><div class="chartTools"><button id="panYUp">↑</button><button id="panL">←</button><button id="panR">→</button><button id="panYDown">↓</button><button id="zoomOut">−</button><button id="zoomReset">1:1</button><button id="zoomIn">+</button><button id="chartSettings">⚙</button></div></div><div class="chartWrap"><canvas id="mainChart" class="chartCanvas"></canvas><div class="ohlc" id="ohlc">Move over chart</div></div><div class="levels"><div class="level"><div class="k">Entry zone</div><div class="v" id="entry">—</div></div><div class="level"><div class="k">Invalidation</div><div class="v" id="stop">—</div></div><div class="level"><div class="k">Target 1</div><div class="v" id="target">—</div></div><div class="level"><div class="k">R:R</div><div class="v" id="rr">—</div></div></div></div>
 
     <div class="section grid2">
       <div class="card">
