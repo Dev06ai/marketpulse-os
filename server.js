@@ -73,6 +73,42 @@ function aiSystem(){
   ].join(" ");
 }
 
+function liteCopilot(mode,market,trade,question){
+  const m=market||{}, call=String(m.call||"NO TRADE"), regime=String(m.regime||"UNKNOWN"), mtf=String(m.multitimeframe||"");
+  const score=Number(m.confluence||0), rsi=String(m.rsiAdx||"—"), structure=String(m.structure||"—");
+  if(mode==="trade"){
+    const entry=Number(trade?.entry),stop=Number(trade?.stop),target=Number(trade?.target),side=String(trade?.side||"");
+    const risk=Number.isFinite(entry)&&Number.isFinite(stop)?Math.abs(entry-stop):NaN;
+    const reward=Number.isFinite(entry)&&Number.isFinite(target)?Math.abs(target-entry):NaN;
+    const rr=Number.isFinite(risk)&&risk?reward/risk:NaN;
+    const lines=[
+      "MarketPulse Lite review",
+      "",
+      "Market context: "+regime+" · "+call+" · confluence "+score+"/100.",
+      "Momentum: RSI/ADX "+rsi+" · structure "+structure+".",
+      mtf?"Timeframe context: "+mtf+".":""
+    ].filter(Boolean);
+    if(side)lines.push("Your plan: "+side+(Number.isFinite(rr)?" · planned R:R "+rr.toFixed(2)+"R.":""));
+    if(call==="NO TRADE")lines.push("The dashboard currently sees insufficient alignment. That matters more than whether the trade eventually wins or loses.");
+    else if(Number.isFinite(rr)&&rr<1.5)lines.push("Your planned R:R is below 1.5R. That makes the setup less forgiving before fees/slippage.");
+    else if(Number.isFinite(rr))lines.push("Your planned R:R is "+rr.toFixed(2)+"R. Check that the invalidation is structural rather than arbitrary.");
+    lines.push("Question: "+(question||"Review this trade."));
+    lines.push("Note: Lite mode uses deterministic MarketPulse rules. Add API credits to unlock the full AI Copilot.");
+    return lines.join("\n");
+  }
+  const lines=[
+    "MarketPulse Lite",
+    "",
+    "BTC/asset context: "+regime+" · "+call+" · confluence "+score+"/100.",
+    "RSI/ADX: "+rsi+" · structure: "+structure+".",
+    mtf?"Multi-timeframe: "+mtf+".":"",
+    call==="NO TRADE"?"Read: wait for alignment instead of forcing a trade.":"Read: treat this as a setup to validate, not a guarantee.",
+    "Question: "+(question||"What is the market doing?"),
+    "Full AI Copilot will be available when API credits are added."
+  ].filter(Boolean);
+  return lines.join("\n");
+}
+
 function staticFile(req,res){const reqPath=req.url==='/'?'/index.html':req.url.split('?')[0],file=path.join(__dirname,'public',reqPath),root=path.join(__dirname,'public');if(!file.startsWith(root))return send(res,403,{error:'Forbidden'});fs.readFile(file,(e,d)=>{if(e)return send(res,404,{error:'Not found'});const ext=path.extname(file);res.writeHead(200,{'Content-Type':ext==='.html'?'text/html; charset=utf-8':ext==='.json'?'application/json; charset=utf-8':'text/plain; charset=utf-8'});res.end(d)})}
 
 const server=http.createServer(async(req,res)=>{
@@ -89,7 +125,13 @@ const server=http.createServer(async(req,res)=>{
         ? ("Review this trade plan/trade.\nMARKET CONTEXT:\n"+JSON.stringify(market)+"\nTRADE:\n"+JSON.stringify(trade)+"\nUSER QUESTION:\n"+q)
         : ("Explain the current market context.\nMARKET:\n"+JSON.stringify(market)+"\nUSER QUESTION:\n"+q);
       try{return send(res,200,await callOpenAI(aiSystem(),userPrompt))}
-      catch(e){if(e.message==="AI_COPILOT_NOT_CONFIGURED")return send(res,503,{error:"AI Copilot is not configured yet. Add OPENAI_API_KEY in Render Environment Variables."});return send(res,502,{error:e.message||"AI request failed"})}
+      catch(e){
+        const msg=String(e.message||"AI request failed");
+        if(e.message==="AI_COPILOT_NOT_CONFIGURED"||/credit|billing|quota|insufficient/i.test(msg)){
+          return send(res,200,{text:liteCopilot(mode,market,trade,q),model:"MarketPulse Lite",lite:true,ts:Date.now()});
+        }
+        return send(res,502,{error:msg});
+      }
     }
     
     if(req.method==='GET'&&u.pathname==='/api/market'){
