@@ -3,6 +3,9 @@ const storage=require("./storage");
 const HORIZON_BARS={"15m":16,"1h":12,"4h":6,"1d":3};
 const PRIOR=6;
 const MIN_ADAPTIVE_SAMPLE=12;
+const MIN_COMPONENT_SAMPLE=20;
+const COMPONENT_ADJUSTMENT_CAP=1.25;
+const TOTAL_COMPONENT_ADJUSTMENT_CAP=4;
 const STATE_VERSION=1;
 let state=null;
 let initPromise=null;
@@ -17,14 +20,18 @@ function baseState(){
     netR:0,
     buckets:{},
     scoreBuckets:{},
+    componentStats:{},
     lastResolvedAt:null,
-    lastAdjustment:0
+    lastAdjustment:0,
+    lastSetupAdjustment:0,
+    lastComponentAdjustment:0
   };
 }
 function ensureState(raw){
   const s=raw&&typeof raw==="object"?raw:baseState();
   if(!s.buckets||typeof s.buckets!=="object")s.buckets={};
   if(!s.scoreBuckets||typeof s.scoreBuckets!=="object")s.scoreBuckets={};
+  if(!s.componentStats||typeof s.componentStats!=="object")s.componentStats={};
   s.version=STATE_VERSION;
   s.resolved=Number(s.resolved)||0;
   s.wins=Number(s.wins)||0;
@@ -34,6 +41,43 @@ function ensureState(raw){
 }
 function bucketKey(a){return [a.type||"UNKNOWN",a.side||"WAIT",a.regime||"UNKNOWN"].join("|")}
 function scoreKey(score){return String(clamp(Math.floor(Number(score||0)/10),0,9)*10)}
+function componentMax(name){
+  return ({Regime:16,"Trend strength":11,Momentum:11,Volume:9,Structure:9,"4H alignment":9,"15M alignment":7,"CVD pressure":10,"OI context":8,"Liquidation context":6})[name]||10;
+}
+function componentContextKey(pred,name){return [pred.regime||"UNKNOWN",pred.side||"WAIT",name].join("|")}
+function componentState(pred,comp){
+  const max=componentMax(comp.name),value=Number(comp.value)||0;
+  return value/max>=0.6?"strong":"weak";
+}
+function updateComponentAggregate(pred,outcome){
+  const comps=Array.isArray(pred?.features?.components)?pred.features.components:[];
+  for(const comp of comps){
+    const name=String(comp?.name||"UNKNOWN"),key=componentContextKey(pred,name);
+    const row=state.componentStats[key]||(state.componentStats[key]={name,regime:pred.regime||"UNKNOWN",side:pred.side||"WAIT",strong:{n:0,wins:0,losses:0},weak:{n:0,wins:0,losses:0}});
+    const bucket=componentState(pred,comp);
+    const b=row[bucket]||(row[bucket]={n:0,wins:0,losses:0});
+    b.n+=1;
+    if(outcome==="WIN")b.wins+=1;
+    if(outcome==="LOSS")b.losses+=1;
+  }
+}
+function smoothedRate(b){
+  const n=Number(b?.n)||0;
+  return n?(Number(b.wins||0)+PRIOR)/(n+PRIOR*2):0.5;
+}
+function componentSignal(a,comp){
+  const key=componentContextKey(a,comp.name),row=state.componentStats[key];
+  const current=componentState(a,comp);
+  if(!row)return {name:comp.name,current,nStrong:0,nWeak:0,strongWinRate:null,weakWinRate:null,uplift:0,adjustment:0,eligible:false,context:key};
+  const strong=row.strong||{n:0,wins:0},weak=row.weak||{n:0,wins:0};
+  const eligible=Number(strong.n)>=MIN_COMPONENT_SAMPLE&&Number(weak.n)>=MIN_COMPONENT_SAMPLE;
+  const strongWinRate=Number(strong.n)?smoothedRate(strong):null;
+  const weakWinRate=Number(weak.n)?smoothedRate(weak):null;
+  const uplift=eligible?strongWinRate-weakWinRate:0;
+  let adjustment=0;
+  if(eligible)adjustment=clamp((current==="strong"?uplift:-uplift)*3,-COMPONENT_ADJUSTMENT_CAP,COMPONENT_ADJUSTMENT_CAP);
+  return {name:comp.name,current,nStrong:Number(strong.n)||0,nWeak:Number(weak.n)||0,strongWinRate,weakWinRate,uplift,adjustment,eligible,context:key};
+}
 function updateAggregate(pred,outcome,resultR){
   const key=bucketKey(pred);
   const b=state.buckets[key]||(state.buckets[key]={n:0,wins:0,losses:0,netR:0});
@@ -48,6 +92,7 @@ function updateAggregate(pred,outcome,resultR){
   const sk=scoreKey(pred.score);
   const sb=state.scoreBuckets[sk]||(state.scoreBuckets[sk]={n:0,wins:0,losses:0});
   sb.n+=1;if(outcome==="WIN")sb.wins+=1;if(outcome==="LOSS")sb.losses+=1;
+  updateComponentAggregate(pred,outcome);
 }
 function outcomeFromCandles(pred,candles){
   const ts=Number(pred.candle_ts??pred.candleTs);
@@ -101,14 +146,20 @@ function recalibrate(a){
   const baseScore=Number(a.score)||0;
   const key=bucketKey(a);
   const b=state?.buckets?.[key];
-  let adjustment=0;
+  let setupAdjustment=0;
   let smoothedWinRate=0.5;
   if(b&&Number(b.n)>=MIN_ADAPTIVE_SAMPLE){
     smoothedWinRate=(Number(b.wins)+PRIOR)/(Number(b.n)+PRIOR*2);
-    adjustment=clamp(Math.round((smoothedWinRate-0.5)*25*10)/10,-6,6);
+    setupAdjustment=clamp(Math.round((smoothedWinRate-0.5)*25*10)/10,-6,6);
   }
-  const score=clamp(Math.round(baseScore+adjustment),0,92);
-  state.lastAdjustment=adjustment;
+  const componentSignals=(Array.isArray(a.components)?a.components:[]).map(function(comp){return componentSignal(a,comp)});
+  const rawComponentAdjustment=componentSignals.reduce(function(sum,x){return sum+(Number(x.adjustment)||0)},0);
+  const componentAdjustment=clamp(rawComponentAdjustment,-TOTAL_COMPONENT_ADJUSTMENT_CAP,TOTAL_COMPONENT_ADJUSTMENT_CAP);
+  const totalAdjustment=setupAdjustment+componentAdjustment;
+  const score=clamp(Math.round(baseScore+totalAdjustment),0,92);
+  state.lastAdjustment=totalAdjustment;
+  state.lastSetupAdjustment=setupAdjustment;
+  state.lastComponentAdjustment=componentAdjustment;
   const eligible=Boolean(b&&Number(b.n)>=MIN_ADAPTIVE_SAMPLE);
   if(a.side!=="WAIT"&&eligible){
     if(score>=72&&a.rr>=1.5&&!(a.mtf?.higher==="DOWNTREND"&&a.side==="LONG")&&!(a.mtf?.higher==="UPTREND"&&a.side==="SHORT"))a.status="READY";
@@ -119,17 +170,21 @@ function recalibrate(a){
   a.probabilityLabel=score>=80?"HIGH CONFLUENCE":score>=68?"MODERATE-HIGH CONFLUENCE":score>=55?"EARLY / WATCH":"LOW CONFLUENCE";
   a.adaptive={
     enabled:true,
+    phase:2,
     bucket:key,
     samples:b?Number(b.n):0,
     resolvedWins:b?Number(b.wins):0,
     smoothedWinRate,
-    adjustment,
+    setupAdjustment,
+    componentAdjustment,
+    adjustment:totalAdjustment,
     eligible,
+    componentSignals,
     note:eligible?"Historical outcome calibration is influencing the confluence score.":"Collecting resolved signals before changing the live model."
   };
-  if(Math.abs(adjustment)>=1){
+  if(Math.abs(totalAdjustment)>=1){
     a.contributors=a.contributors||[];
-    a.contributors.push("adaptive historical calibration "+(adjustment>0?"+":"")+adjustment);
+    a.contributors.push("adaptive historical calibration "+(totalAdjustment>0?"+":"")+totalAdjustment.toFixed(1));
   }
   return a;
 }
@@ -158,12 +213,30 @@ async function process(symbol,interval,candles,a){
   const observed=await observe(symbol,interval,candle?.t,adapted);
   return {analysis:adapted,observed};
 }
+function componentSummary(){
+  const grouped={};
+  for(const row of Object.values(state.componentStats||{})){
+    const g=grouped[row.name]||(grouped[row.name]={name:row.name,strongN:0,strongWins:0,weakN:0,weakWins:0,contexts:0});
+    g.strongN+=Number(row.strong?.n)||0;
+    g.strongWins+=Number(row.strong?.wins)||0;
+    g.weakN+=Number(row.weak?.n)||0;
+    g.weakWins+=Number(row.weak?.wins)||0;
+    g.contexts+=1;
+  }
+  return Object.values(grouped).map(function(g){
+    const eligible=g.strongN>=MIN_COMPONENT_SAMPLE&&g.weakN>=MIN_COMPONENT_SAMPLE;
+    const strongRate=g.strongN?(g.strongWins+PRIOR)/(g.strongN+PRIOR*2):null;
+    const weakRate=g.weakN?(g.weakWins+PRIOR)/(g.weakN+PRIOR*2):null;
+    return {name:g.name,strongN:g.strongN,weakN:g.weakN,contexts:g.contexts,strongWinRate:strongRate,weakWinRate:weakRate,uplift:eligible?strongRate-weakRate:0,eligible};
+  }).sort(function(a,b){return (b.strongN+b.weakN)-(a.strongN+a.weakN)}).slice(0,10);
+}
 async function status(){
   await init();
   const total=Number(state.resolved)||0;
   const winRate=total?state.wins/total*100:null;
   return {
     version:state.version,
+    phase:2,
     state:total>=MIN_ADAPTIVE_SAMPLE?"ADAPTIVE":"COLLECTING",
     resolved:total,
     wins:state.wins,
@@ -171,9 +244,14 @@ async function status(){
     winRate,
     netR:Number(state.netR)||0,
     minSamples:MIN_ADAPTIVE_SAMPLE,
+    componentMinSamples:MIN_COMPONENT_SAMPLE,
+    componentProfiles:Object.keys(state.componentStats||{}).length,
+    componentSummary:componentSummary(),
     lastResolvedAt:state.lastResolvedAt,
     durable:storage.status().durable,
-    lastAdjustment:Number(state.lastAdjustment)||0
+    lastAdjustment:Number(state.lastAdjustment)||0,
+    lastSetupAdjustment:Number(state.lastSetupAdjustment)||0,
+    lastComponentAdjustment:Number(state.lastComponentAdjustment)||0
   };
 }
 module.exports={init,process,recalibrate,status,resolve};
