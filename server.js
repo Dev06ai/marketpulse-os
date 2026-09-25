@@ -46,6 +46,21 @@ async function bybitGet(path,params,timeoutMs=4500){
   throw lastErr;
 }
 
+async function krakenRecentCvd(symbol){
+  const pair=KRAKEN_FUTURES_PAIRS[symbol];if(!pair)throw new Error("No Kraken futures trade mapping");
+  const j=await fetchJson("https://futures.kraken.com/derivatives/api/v3/history?symbol="+encodeURIComponent(pair));
+  const rows=(j.history||[]).slice().reverse();
+  if(!rows.length)throw new Error("Kraken Futures history returned no trades");
+  let cvd=0,total=0;
+  for(const t of rows){
+    const q=Number(t.notional_amount||Number(t.price||0)*Number(t.size||0));
+    if(!Number.isFinite(q)||!q)continue;
+    cvd+=(String(t.side).toLowerCase()==="buy"?q:-q);total+=q;
+  }
+  const first=Number(rows[0]?.price),last=Number(rows[rows.length-1]?.price);
+  return {cvdDelta:cvd,cvdRatio:total?cvd/total:null,tradeCount:rows.length,tradePriceChangePct:Number.isFinite(first)&&first?((last-first)/first)*100:null};
+}
+
 async function krakenAnalytics(symbol,interval){
   const pair=KRAKEN_FUTURES_PAIRS[symbol];if(!pair)throw new Error("No Kraken futures mapping for "+symbol);
   const secs=mins(interval)*60;
@@ -89,11 +104,21 @@ async function bybitDerivatives(symbol,interval){
 }
 
 async function derivatives(symbol,interval){
-  const key=symbol+"|"+interval,hit=DERIV_CACHE.get(key);if(hit&&Date.now()-hit.ts<DERIV_TTL)return hit.data;
+  const key=symbol+"|"+interval,hit=DERIV_CACHE.get(key);
+  if(hit&&Date.now()-hit.ts<DERIV_TTL)return hit.data;
   let data=null;
-  try{data=await krakenAnalytics(symbol,interval)}catch(e){
-    try{data=await bybitDerivatives(symbol,interval);data.fallbackReason="Kraken futures analytics: "+e.message}
-    catch(e2){data={available:false,provider:"No derivatives provider",oi:null,oiChangePct:null,cvdDelta:null,cvdRatio:null,cvdState:"UNAVAILABLE",positioning:"UNAVAILABLE",tradeCount:0,fundingRate:null,markPrice:null,errors:[e.message,e2.message],updatedAt:Date.now()}}
+  try{data=await krakenAnalytics(symbol,interval)}
+  catch(e){
+    try{
+      const ticker=await fetchJson("https://futures.kraken.com/derivatives/api/v3/tickers");
+      const t=(ticker.tickers||[]).find(x=>String(x.symbol||"").toUpperCase()===KRAKEN_FUTURES_PAIRS[symbol]);
+      const cvd=await krakenRecentCvd(symbol).catch(()=>null);
+      if(!t&&!cvd)throw new Error("Kraken Futures public analytics unavailable");
+      data={available:true,provider:"Kraken Futures public API",symbol:KRAKEN_FUTURES_PAIRS[symbol],oi:t&&Number.isFinite(+t.openInterest)?+t.openInterest:null,oiChangePct:null,cvdDelta:cvd?.cvdDelta??null,cvdRatio:cvd?.cvdRatio??null,cvdState:"MIXED",positioning:"OI CHANGE NOT AVAILABLE",tradeCount:cvd?.tradeCount??0,fundingRate:t&&Number.isFinite(+t.fundingRate)?+t.fundingRate:null,markPrice:t&&Number.isFinite(+t.markPrice)?+t.markPrice:null,tradePriceChangePct:cvd?.tradePriceChangePct??null,errors:[e.message],updatedAt:Date.now()};
+    }catch(e2){
+      try{data=await bybitDerivatives(symbol,interval)}
+      catch(e3){data={available:false,provider:"No derivatives provider",oi:null,oiChangePct:null,cvdDelta:null,cvdRatio:null,cvdState:"UNAVAILABLE",positioning:"UNAVAILABLE",tradeCount:0,fundingRate:null,markPrice:null,errors:[e.message,e2.message,e3.message],updatedAt:Date.now()}}
+    }
   }
   DERIV_CACHE.set(key,{ts:Date.now(),data});return data;
 }
