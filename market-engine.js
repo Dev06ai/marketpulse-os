@@ -255,19 +255,45 @@ function summarize(results){
   let equity=0,peak=0,maxDD=0; for(const x of results){equity+=x.r;peak=Math.max(peak,equity);maxDD=Math.max(maxDD,peak-equity)}
   return {trades,wins,losses,winRate:trades?wins/trades*100:0,netR,avgR:trades?netR/trades:0,profitFactor:grossLoss?grossWin/grossLoss:null,maxDrawdownR:maxDD,expectancyR:trades?netR/trades:0};
 }
-function backtest(c){
-  const results=[];
-  for(let i=220;i<c.length-18;i++){
-    const a=analyze(c.slice(0,i+1),{interval:"1h"});if(a.side==="WAIT"||!a.stop||!a.tp1||a.status==="WAITING")continue;
-    let r=0,exitIndex=null;
+function evaluateRange(c,start,end){
+  const results=[],unresolved=[];
+  const from=Math.max(220,start||220),to=Math.min((end==null?c.length-19:end),c.length-19);
+  for(let i=from;i<to;i++){
+    const a=analyze(c.slice(0,i+1),{interval:"1h"});
+    if(a.side==="WAIT"||!a.stop||!a.tp1||a.status==="WAITING")continue;
+    let r=null,exitIndex=null,exitReason="UNRESOLVED";
     for(let j=i+1;j<=Math.min(i+18,c.length-1);j++){
       const x=c[j];
-      if(a.side==="LONG"){if(x.l<=a.stop){r=-1;exitIndex=j;break}if(x.h>=a.tp1){r=1;exitIndex=j;break}}
-      else {if(x.h>=a.stop){r=-1;exitIndex=j;break}if(x.l<=a.tp1){r=1;exitIndex=j;break}}
+      if(a.side==="LONG"){
+        if(x.l<=a.stop){r=-1;exitIndex=j;exitReason="STOP";break}
+        if(x.h>=a.tp1){r=1;exitIndex=j;exitReason="TARGET";break}
+      }else{
+        if(x.h>=a.stop){r=-1;exitIndex=j;exitReason="STOP";break}
+        if(x.l<=a.tp1){r=1;exitIndex=j;exitReason="TARGET";break}
+      }
     }
-    if(exitIndex!==null)results.push({i,r,side:a.side,type:a.type,score:a.score});
+    const item={i,r,side:a.side,type:a.type,score:a.score,regime:a.regime,exitIndex,exitReason};
+    if(r===null)unresolved.push(item);else results.push(item);
   }
-  return summarize(results);
+  return {results,unresolved};
+}
+function walkForwardBacktest(c){
+  const split=Math.max(240,Math.floor(c.length*0.70));
+  const train=evaluateRange(c,220,split);
+  const test=evaluateRange(c,split,c.length-18);
+  return {
+    splitIndex:split,
+    train:summarize(train.results),
+    validation:summarize(test.results),
+    trainUnresolved:train.unresolved.length,
+    validationUnresolved:test.unresolved.length,
+    validationCoverage:(test.results.length+test.unresolved.length)?test.results.length/(test.results.length+test.unresolved.length)*100:0
+  };
+}
+function backtest(c){
+  const q=evaluateRange(c,220,c.length-18);
+  const summary=summarize(q.results);
+  return Object.assign(summary,{unresolved:q.unresolved.length,coverage:(q.results.length+q.unresolved.length)?q.results.length/(q.results.length+q.unresolved.length)*100:0});
 }
 function backtestBySetup(c){
   const buckets={};
@@ -285,4 +311,4 @@ function backtestBySetup(c){
   return Object.fromEntries(Object.entries(buckets).map(([k,v])=>[k,summarize(v)]));
 }
 
-module.exports={analyze,backtest,backtestBySetup};
+module.exports={analyze,backtest,backtestBySetup,walkForwardBacktest};
