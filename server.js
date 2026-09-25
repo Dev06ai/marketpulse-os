@@ -299,10 +299,11 @@ const server=http.createServer(async(req,res)=>{
       let raw=""; for await(const chunk of req) raw+=chunk; let body={}; try{body=JSON.parse(raw||"{}")}catch{return send(res,400,{error:"Invalid JSON"})}
       const mode=body.mode==="trade"?"trade":"market";
       const q=String(body.question||"").slice(0,1800);
-      const market=body.market||{}; const trade=body.trade||{};
+      const market=body.market||{}; const trade=body.trade||{}; const traderProfile=body.traderProfile||{};
+      const profileText="PERSONAL TRADER PROFILE (descriptive, small-sample aware):\n"+JSON.stringify(traderProfile);
       const userPrompt=mode==="trade"
-        ? ("Review this trade plan/trade.\nMARKET CONTEXT:\n"+JSON.stringify(market)+"\nTRADE:\n"+JSON.stringify(trade)+"\nUSER QUESTION:\n"+q)
-        : ("Explain the current market context.\nMARKET:\n"+JSON.stringify(market)+"\nUSER QUESTION:\n"+q);
+        ? ("Review this trade plan/trade.\nMARKET CONTEXT:\n"+JSON.stringify(market)+"\nTRADE:\n"+JSON.stringify(trade)+"\n"+profileText+"\nUSER QUESTION:\n"+q)
+        : ("Explain the current market context.\nMARKET:\n"+JSON.stringify(market)+"\n"+profileText+"\nUSER QUESTION:\n"+q);
       try{return send(res,200,await callOpenAI(aiSystem(),userPrompt))}
       catch(e){
         const msg=String(e.message||"AI request failed");
