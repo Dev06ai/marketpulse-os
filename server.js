@@ -146,30 +146,93 @@ async function krakenAnalytics(symbol,interval){
   const windows={"15m":6*3600,"1h":24*3600,"4h":3*86400,"1d":7*86400};
   const since=Math.floor((Date.now()-(windows[interval]||24*3600))/1000);
   const base="https://futures.kraken.com/api/charts/v1/analytics/"+pair;
-  const [cvd,oi,funding,ls,liq]=await Promise.all([
-    fetchJson(base+"/cvd?since="+since+"&interval="+secs),
-    fetchJson(base+"/open-interest?since="+since+"&interval="+secs),
-    fetchJson(base+"/funding?since="+since+"&interval="+secs).catch(()=>null),
-    fetchJson(base+"/long-short-info?since="+since+"&interval="+secs).catch(()=>null),
-    fetchJson(base+"/liquidation-volume?since="+since+"&interval="+secs).catch(()=>null)
-  ]);
-  const cvdPayload=cvd?.result||cvd,oiPayload=oi?.result||oi,fundingPayload=funding?.result||funding,lsPayload=ls?.result||ls,liqPayload=liq?.result||liq;
-  const numericArray=(obj,names)=>{for(const n of names){if(Array.isArray(obj?.data?.[n]))return obj.data[n].map(Number).filter(Number.isFinite)}return[]};
-  const cvdVals=numericArray(cvdPayload,["cvd"]),buyVals=numericArray(cvdPayload,["buyVolume","buy_volume"]),sellVals=numericArray(cvdPayload,["sellVolume","sell_volume"]);
-  const oiVals=numericArray(oiPayload,["openInterest","open_interest"]);
+  const urls={
+    cvd:base+"/cvd?since="+since+"&interval="+secs,
+    oi:base+"/open-interest?since="+since+"&interval="+secs,
+    funding:base+"/funding?since="+since+"&interval="+secs,
+    ls:base+"/long-short-info?since="+since+"&interval="+secs,
+    liq:base+"/liquidation-volume?since="+since+"&interval="+secs
+  };
+  const settled=await Promise.all(Object.entries(urls).map(async([key,url])=>{
+    try{return {key,status:"fulfilled",value:await fetchJson(url)}}
+    catch(e){return {key,status:"rejected",reason:String(e.message||e)}}
+  }));
+  const byName=Object.fromEntries(settled.map(x=>[x.key,x]));
+  const payload=(key)=>byName[key]?.status==="fulfilled"?(byName[key].value?.result||byName[key].value):null;
+  const numericArray=(obj,names)=>{
+    const roots=[obj?.data,obj?.result?.data,obj?.result,obj];
+    for(const root of roots){
+      if(!root)continue;
+      for(const n of names){
+        const direct=root?.[n];
+        if(Array.isArray(direct)){
+          const out=direct.map(v=>typeof v==="object"?Number(v.value??v.v??v[n]):Number(v)).filter(Number.isFinite);
+          if(out.length)return out;
+        }
+      }
+      if(Array.isArray(root)){
+        for(const n of names){
+          const out=root.map(v=>Number(v?.[n]??v?.value??v?.v)).filter(Number.isFinite);
+          if(out.length)return out;
+        }
+      }
+    }
+    return [];
+  };
+  const cvdPayload=payload("cvd"),oiPayload=payload("oi"),fundingPayload=payload("funding"),lsPayload=payload("ls"),liqPayload=payload("liq");
+  const cvdVals=numericArray(cvdPayload,["cvd","cumulativeVolumeDelta","cumulative_volume_delta"]);
+  const buyVals=numericArray(cvdPayload,["buyVolume","buy_volume","buyNotional"]);
+  const sellVals=numericArray(cvdPayload,["sellVolume","sell_volume","sellNotional"]);
+  const oiVals=numericArray(oiPayload,["openInterest","open_interest","oi"]);
   const fundingVals=numericArray(fundingPayload,["rate","fundingRate","funding_rate"]);
-  const longPct=numericArray(lsPayload,["longPercent","long_percent"]),shortPct=numericArray(lsPayload,["shortPercent","short_percent"]),ratioVals=numericArray(lsPayload,["ratio"]);
-  const liqLong=numericArray(liqPayload,["longLiquidationVolume","long_liquidation_volume","buyVolume","buy_volume"]);
-  const liqShort=numericArray(liqPayload,["shortLiquidationVolume","short_liquidation_volume","sellVolume","sell_volume"]);
-  if(!cvdVals.length&&!oiVals.length&&!buyVals.length&&!sellVals.length&&!liqLong.length&&!liqShort.length)throw new Error("Kraken futures analytics returned no data");
-  const cvdFirst=Number(cvdVals[0]),cvdLast=Number(cvdVals[cvdVals.length-1]),cvdDelta=Number.isFinite(cvdLast)&&Number.isFinite(cvdFirst)?cvdLast-cvdFirst:null;
-  const oiFirst=Number(oiVals[0]),oiLast=Number(oiVals[oiVals.length-1]),oiChangePct=Number.isFinite(oiFirst)&&oiFirst?((oiLast-oiFirst)/oiFirst)*100:null;
+  const longPct=numericArray(lsPayload,["longPercent","long_percent","long"]);
+  const shortPct=numericArray(lsPayload,["shortPercent","short_percent","short"]);
+  const ratioVals=numericArray(lsPayload,["ratio","longShortRatio","long_short_ratio"]);
+  const liqLong=numericArray(liqPayload,["longLiquidationVolume","long_liquidation_volume","longVolume","buyVolume","buy_volume"]);
+  const liqShort=numericArray(liqPayload,["shortLiquidationVolume","short_liquidation_volume","shortVolume","sellVolume","sell_volume"]);
+
+  const cvdFirst=cvdVals.length?Number(cvdVals[0]):NaN,cvdLast=cvdVals.length?Number(cvdVals[cvdVals.length-1]):NaN;
+  let cvdDelta=Number.isFinite(cvdLast)&&Number.isFinite(cvdFirst)?cvdLast-cvdFirst:null;
+  if(cvdDelta===null&&buyVals.length&&sellVals.length){
+    const n=Math.min(buyVals.length,sellVals.length),buy=buyVals.slice(-n).reduce((a,b)=>a+b,0),sell=sellVals.slice(-n).reduce((a,b)=>a+b,0);
+    cvdDelta=buy-sell;
+  }
+  const oiFirst=oiVals.length?Number(oiVals[0]):NaN,oiLast=oiVals.length?Number(oiVals[oiVals.length-1]):NaN;
+  const oiChangePct=Number.isFinite(oiFirst)&&oiFirst?((oiLast-oiFirst)/oiFirst)*100:null;
   const fundingRate=fundingVals.length?Number(fundingVals[fundingVals.length-1]):null;
   const longLast=longPct.length?Number(longPct[longPct.length-1]):null,shortLast=shortPct.length?Number(shortPct[shortPct.length-1]):null,ratioLast=ratioVals.length?Number(ratioVals[ratioVals.length-1]):null;
   const longLiq=liqLong.reduce((a,b)=>a+b,0),shortLiq=liqShort.reduce((a,b)=>a+b,0),liqTotal=longLiq+shortLiq;
-  return {available:true,provider:"Kraken Futures analytics",symbol:pair,oi:Number.isFinite(oiLast)?oiLast:null,oiChangePct,cvdDelta,cvdState:"MIXED",positioning:"MIXED",tradeCount:0,fundingRate:Number.isFinite(fundingRate)?fundingRate:null,markPrice:null,cvdRatio:null,longPercent:longLast,shortPercent:shortLast,longShortRatio:ratioLast,longLiquidations:longLiq,shortLiquidations:shortLiq,liquidationTotal:liqTotal,liquidationBias:liqTotal?(longLiq>shortLiq?"LONG LIQS DOMINANT":"SHORT LIQS DOMINANT"):"UNKNOWN",analyticsBuckets:Math.max(cvdVals.length,oiVals.length,liqLong.length,liqShort.length),series:{cvd:cvdVals,oi:oiVals,liq:(liqLong.length?liqLong.map((v,i)=>(Number(v)||0)+(Number(liqShort[i]||0)||0)):[])},updatedAt:Date.now(),errors:[]};
-}
 
+  if(!Number.isFinite(oiLast)&&!Number.isFinite(cvdDelta)&&!longLiq&&!shortLiq&&!Number.isFinite(fundingRate))throw new Error("Kraken futures analytics returned no usable data");
+
+  let cvdState="UNAVAILABLE";
+  if(Number.isFinite(cvdDelta)){if(cvdDelta>0)cvdState="BUYERS PRESSURE";else if(cvdDelta<0)cvdState="SELLERS PRESSURE";else cvdState="BALANCED";}
+  let positioning="OI CHANGE NOT AVAILABLE";
+  if(Number.isFinite(longLast)&&Number.isFinite(shortLast)){
+    positioning=longLast>shortLast+2?"LONG BIAS":shortLast>longLast+2?"SHORT BIAS":"BALANCED";
+  }else if(Number.isFinite(oiChangePct)){
+    positioning=oiChangePct>1?"OI RISING":oiChangePct<-1?"OI FALLING":"OI FLAT";
+  }
+
+  const errors=settled.filter(x=>x.status==="rejected").map(x=>x.key+": "+x.reason);
+  const lengths=[cvdVals.length,oiVals.length,liqLong.length,liqShort.length].filter(Boolean);
+  return {
+    available:true,provider:"Kraken Futures analytics",symbol:pair,
+    oi:Number.isFinite(oiLast)?oiLast:null,oiChangePct,
+    cvdDelta,cvdState,positioning,tradeCount:0,
+    fundingRate:Number.isFinite(fundingRate)?fundingRate:null,markPrice:null,
+    cvdRatio:null,longPercent:longLast,shortPercent:shortLast,longShortRatio:ratioLast,
+    longLiquidations:longLiq,shortLiquidations:shortLiq,liquidationTotal:liqTotal,
+    liquidationBias:liqTotal?(longLiq>shortLiq?"LONG LIQS DOMINANT":"SHORT LIQS DOMINANT"):"UNAVAILABLE",
+    analyticsBuckets:lengths.length?Math.max(...lengths):0,
+    series:{
+      cvd:cvdVals,
+      oi:oiVals,
+      liq:liqLong.length||liqShort.length?Array.from({length:Math.max(liqLong.length,liqShort.length)},(_,i)=>(Number(liqLong[i]||0)+Number(liqShort[i]||0))):[]
+    },
+    updatedAt:Date.now(),errors
+  };
+}
 async function bybitDerivatives(symbol,interval){
   const [oiRes,tradeRes,tickerRes]=await Promise.allSettled([
     bybitGet('/v5/market/open-interest',{category:'linear',symbol,intervalTime:bybitInterval(interval),limit:50}),
@@ -209,18 +272,25 @@ async function derivatives(symbol,interval){
     }
   }
   const live=flowBucket(symbol);
-  if(live.liqLong||live.liqShort){
-    data.liveLiquidations={long:live.liqLong,short:live.liqShort,total:live.liqLong+live.liqShort,bias:live.liqLong>live.liqShort?"LONG LIQS DOMINANT":"SHORT LIQS DOMINANT"};
-    if(data.liquidationBias==="UNKNOWN"||data.liquidationTotal===0){
-      data.liquidationBias=data.liveLiquidations.bias;data.liquidationTotal=data.liveLiquidations.total;
-    }
-  }
   if(Number.isFinite(data.oi))live.oi=data.oi;
   if(Number.isFinite(data.fundingRate))live.fundingRate=data.fundingRate;
   if(Number.isFinite(data.markPrice))live.markPrice=data.markPrice;
   if(Number.isFinite(data.cvdDelta)&&!live.cvdNotional){live.cvd=data.cvdDelta;live.cvdNotional=1;}
-  if(Number.isFinite(data.liquidationTotal)&&data.liquidationTotal>0&&!live.liqLong&&!live.liqShort){
-    live.liqLong=Number(data.longLiquidations||0);live.liqShort=Number(data.shortLiquidations||0);
+  if(Number.isFinite(data.cvdDelta)){
+    data.cvdState=data.cvdDelta>0?"BUYERS PRESSURE":data.cvdDelta<0?"SELLERS PRESSURE":"BALANCED";
+  }
+  if(Number.isFinite(data.oiChangePct)){
+    data.positioning=data.oiChangePct>1?"OI RISING":data.oiChangePct<-1?"OI FALLING":"OI FLAT";
+  }
+  if(Number.isFinite(data.longPercent)&&Number.isFinite(data.shortPercent)){
+    data.positioning=data.longPercent>data.shortPercent+2?"LONG BIAS":data.shortPercent>data.longPercent+2?"SHORT BIAS":"BALANCED";
+  }
+  if(live.liqLong||live.liqShort){
+    data.liveLiquidations={long:live.liqLong,short:live.liqShort,total:live.liqLong+live.liqShort,bias:live.liqLong>live.liqShort?"LONG LIQS DOMINANT":"SHORT LIQS DOMINANT"};
+    if(!Number(data.liquidationTotal) || data.liquidationTotal===0){
+      data.liquidationBias=data.liveLiquidations.bias;data.liquidationTotal=data.liveLiquidations.total;
+      data.longLiquidations=live.liqLong;data.shortLiquidations=live.liqShort;
+    }
   }
   recordFlowPoint(symbol);
   data.liveHistory=live.points.slice(-120);
