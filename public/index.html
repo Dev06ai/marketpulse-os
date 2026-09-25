@@ -321,12 +321,12 @@ async function loadCore(){
 async function askAI(){
   var q=$("aiQ").value.trim();if(!q)return;
   $("aiStatus").textContent="Thinking…";$("aiOut").textContent="";
+  var payload={mode:"market",question:q,market:state.market?state.market.analysis:{},trade:{},traderProfile:{trades:state.journal.length}};
   try{
-    var payload={mode:"market",question:q,market:state.market?state.market.analysis:{},trade:{},traderProfile:{trades:state.journal.length}};
-    var j=await api("/api/ai",12000);
-    if(!j)throw Error("No AI response");
+    var r=await fetch("/api/ai",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
+    var j=await r.json();if(!r.ok)throw Error(j.error||"AI failed");
     $("aiOut").textContent=j.text||"No response";$("aiStatus").textContent="Copilot ready";
-  }catch(e){try{var r=await fetch("/api/ai",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});var j2=await r.json();if(!r.ok)throw Error(j2.error||"AI failed");$("aiOut").textContent=j2.text||"No response";$("aiStatus").textContent="Copilot ready"}catch(e2){$("aiOut").textContent=e2.message;$("aiStatus").textContent="Copilot unavailable"}}
+  }catch(e){$("aiOut").textContent=e.message;$("aiStatus").textContent="Copilot unavailable"}
 }
 
 $("refresh").addEventListener("click",loadCore);
