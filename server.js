@@ -53,11 +53,12 @@ async function krakenAnalytics(symbol,interval){
   const since=Math.floor((Date.now()-(windows[interval]||24*3600))/1000);
   const base="https://futures.kraken.com/api/charts/v1/analytics/"+pair;
   const [cvd,oi]=await Promise.all([fetchJson(base+"/cvd?since="+since+"&interval="+secs),fetchJson(base+"/open-interest?since="+since+"&interval="+secs)]);
-  const cvdTimes=cvd?.result?.timestamp||[],cvdVals=cvd?.result?.data?.cvd||[],oiTimes=oi?.result?.timestamp||[],oiVals=oi?.result?.data?.openInterest||[];
+  const cvdPayload=cvd?.result||cvd,oiPayload=oi?.result||oi;
+  const cvdTimes=cvdPayload?.timestamp||[],cvdVals=Array.isArray(cvdPayload?.data?.cvd)?cvdPayload.data.cvd:[],oiTimes=oiPayload?.timestamp||[],oiVals=Array.isArray(oiPayload?.data?.openInterest)?oiPayload.data.openInterest:[];
   if(!cvdVals.length&&!oiVals.length)throw new Error("Kraken futures analytics returned no data");
   const cvdFirst=Number(cvdVals[0]),cvdLast=Number(cvdVals[cvdVals.length-1]),cvdDelta=Number.isFinite(cvdLast)&&Number.isFinite(cvdFirst)?cvdLast-cvdFirst:null;
   const oiFirst=Number(oiVals[0]),oiLast=Number(oiVals[oiVals.length-1]),oiChangePct=Number.isFinite(oiFirst)&&oiFirst?((oiLast-oiFirst)/oiFirst)*100:null;
-  return {available:true,provider:"Kraken Futures analytics",symbol:pair,oi:Number.isFinite(oiLast)?oiLast:null,oiChangePct,cvdDelta,cvdState:"MIXED",positioning:"MIXED",tradeCount:0,fundingRate:null,markPrice:null,cvdRatio:null,analyticsBuckets:Math.max(cvdVals.length,oiVals.length),updatedAt:Date.now()};
+  return {available:true,provider:"Kraken Futures analytics",symbol:pair,oi:Number.isFinite(oiLast)?oiLast:null,oiChangePct,cvdDelta,cvdState:"MIXED",positioning:"MIXED",tradeCount:0,fundingRate:null,markPrice:null,cvdRatio:null,analyticsBuckets:Math.max(cvdVals.length,oiVals.length),updatedAt:Date.now(),errors:[]};
 }
 
 async function bybitDerivatives(symbol,interval){
@@ -70,13 +71,13 @@ async function bybitDerivatives(symbol,interval){
   const oiPayload=oiRes.status==='fulfilled'?oiRes.value:null,tradePayload=tradeRes.status==='fulfilled'?tradeRes.value:null,tickerPayload=tickerRes.status==='fulfilled'?tickerRes.value:null;
   if(oiRes.status==='rejected')errors.push("OI: "+oiRes.reason.message);if(tradeRes.status==='rejected')errors.push("Trades: "+tradeRes.reason.message);if(tickerRes.status==='rejected')errors.push("Ticker: "+tickerRes.reason.message);
   const oiList=(oiPayload?.result?.list||[]).slice().reverse().map(x=>+x.openInterest),ticker=tickerPayload?.result?.list?.[0]||null;
-  const currentOi=oiList.length?oiList[oiList.length-1]:(ticker?+ticker.openInterest:NaN),oiFirst=oiList[0],oiChangePct=Number.isFinite(oiFirst)&&oiFirst?((currentOi-oiFirst)/oiFirst)*100:null;
+  const currentOi=oiList.length?oiList[oiList.length-1]:(ticker&&Number.isFinite(+ticker.openInterest)?+ticker.openInterest:NaN),oiFirst=oiList[0],oiChangePct=Number.isFinite(oiFirst)&&oiFirst?((currentOi-oiFirst)/oiFirst)*100:null;
   const trades=(tradePayload?.result?.list||[]).slice().sort((a,b)=>+a.time-+b.time).map(x=>({ts:+x.time,price:+x.price,size:+x.size,side:x.side}));
   let cvd=0,total=0;for(const t of trades){const q=t.price*t.size;cvd+=(t.side==="Buy"?q:-q);total+=q}
   const first=trades[0]?.price,lastT=trades[trades.length-1]?.price,priceChangePct=Number.isFinite(first)&&first?((lastT-first)/first)*100:null,cvdRatio=total?cvd/total:null;
   const data={available:Boolean(ticker||oiPayload||tradePayload),provider:tickerPayload?.host||oiPayload?.host||tradePayload?.host||"Bybit linear futures",oi:Number.isFinite(currentOi)?currentOi:null,oiChangePct,cvdDelta:cvd,cvdRatio,cvdState:"MIXED",positioning:"MIXED",tradeCount:trades.length,fundingRate:ticker&&Number.isFinite(+ticker.fundingRate)?+ticker.fundingRate:null,markPrice:ticker&&Number.isFinite(+ticker.markPrice)?+ticker.markPrice:null,tradePriceChangePct:priceChangePct,errors,updatedAt:Date.now()};
   if(priceChangePct!=null&&cvdRatio!=null){if(priceChangePct>0.15&&cvdRatio<-0.01)data.cvdState="BEARISH DIVERGENCE";else if(priceChangePct<-0.15&&cvdRatio>0.01)data.cvdState="BULLISH DIVERGENCE";else if(priceChangePct>0.15&&cvdRatio>0.01)data.cvdState="BUYERS CONFIRM";else if(priceChangePct<-0.15&&cvdRatio<-0.01)data.cvdState="SELLERS CONFIRM"}else if(trades.length===0)data.cvdState="UNAVAILABLE";
-  if(priceChangePct!=null&&oiChangePct!=null){if(priceChangePct>0.15&&oiChangePct>1)data.positioning="PRICE + OI: LONG PARTICIPATION";else if(priceChangePct>0.15&&oiChangePct<-1)data.positioning="PRICE UP + OI DOWN: SHORT COVERING";else if(priceChangePct<-0.15&&oiChangePct>1)data.positioning="PRICE DOWN + OI UP: SHORT PARTICIPATION";else if(priceChangePct<-0.15&&oiChangePct<-1)data.positioning="PRICE DOWN + OI DOWN: LONG LIQUIDATION"}else if(!Number.isFinite(oiChangePct))data.positioning="OI CHANGE UNAVAILABLE";
+  if(priceChangePct!=null&&oiChangePct!=null){if(priceChangePct>0.15&&oiChangePct>1)data.positioning="PRICE + OI: LONG PARTICIPATION";else if(priceChangePct>0.15&&oiChangePct<-1)data.positioning="PRICE UP + OI DOWN: SHORT COVERING";else if(priceChangePct<-0.15&&oiChangePct>1)data.positioning="PRICE DOWN + OI UP: SHORT PARTICIPATION";else if(priceChangePct<-0.15&&oiChangePct<-1)data.positioning="PRICE DOWN + OI DOWN: LONG LIQUIDATION"}else if(!Number.isFinite(oiChangePct))data.positioning=Number.isFinite(currentOi)?"OI CHANGE NOT AVAILABLE":"OI UNAVAILABLE";
   return data;
 }
 
@@ -217,10 +218,13 @@ const server=http.createServer(async(req,res)=>{
           const candles=await klines(symbol,interval);
           const higher=interval==='4h'?null:await klines(symbol,'4h').catch(()=>null);
           const lower=interval==='15m'?null:await klines(symbol,'15m').catch(()=>null);
-          const deriv=await derivatives(symbol,interval).catch(e=>({error:e.message,provider:"Bybit linear futures"}));
+          const deriv=await Promise.race([
+            derivatives(symbol,interval),
+            new Promise(resolve=>setTimeout(()=>resolve(null),2200))
+          ]).catch(()=>null);
           const a=analyze(candles,{interval,higher:higher&&higher.length>=220?analyze(higher,{interval:'4h'}):null,lower:lower&&lower.length>=220?analyze(lower,{interval:'15m'}):null,deriv});
           return {symbol,label:labels[symbol]||symbol,derivatives:deriv,...a};
-        }catch(e){return {symbol,label:labels[symbol]||symbol,error:e.message}}
+        }catch(e){return {symbol,label:labels[symbol]||symbol,error:e.message,type:"DATA ERROR",side:"WAIT",score:0,regime:"UNKNOWN"}}
       }));
       return send(res,200,{interval,rows,updatedAt:Date.now()});
     }
