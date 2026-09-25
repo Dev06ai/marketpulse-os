@@ -109,7 +109,9 @@ function analyze(c,ctx={}){
   if(Math.abs(vz)>=.5){score+=8;contributors.push("volume")}
   if((side==="LONG"&&st.state.includes("BULLISH"))||(side==="SHORT"&&st.state.includes("BEARISH"))){score+=8;contributors.push("structure")}
   if((side==="LONG"&&mtf4==="UPTREND")||(side==="SHORT"&&mtf4==="DOWNTREND")){score+=10;contributors.push("4h alignment")}
-  if((side==="LONG"&&mtf15==="DOWNTREND")||(side==="SHORT"&&mtf15==="UPTREND"))score-=10;
+  if((side==="LONG"&&mtf4==="DOWNTREND")||(side==="SHORT"&&mtf4==="UPTREND")){score-=20;contributors.push("4h conflict");reasons.push("The 4H trend is opposing this setup")}
+  if((side==="LONG"&&mtf15==="DOWNTREND")||(side==="SHORT"&&mtf15==="UPTREND")){score-=10;contributors.push("15m conflict");reasons.push("The 15M trend is opposing this setup")}
+  if((side==="LONG"&&mtf4==="DOWNTREND")||(side==="SHORT"&&mtf4==="UPTREND")) score=Math.min(score,62);
   if(regime==="HIGH VOLATILITY"){score-=14;contributors.push("volatility penalty")}
   if(side==="WAIT")score=Math.min(score,54);
   score=clamp(Math.round(score),0,92);
