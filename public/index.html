@@ -331,6 +331,52 @@ function evaluateActiveSignal(d){
     renderSignalHistory();
   }
 }
+function localMemory(){
+  return {journal:journal,signals:signalHistory,watch:Array.from(watch),alertState:lastAlertState,lastSignal:lastSignal,activeSignal:JSON.parse(localStorage.getItem("mp-active-signal")||"null")};
+}
+function saveLocalMemory(m){
+  journal=Array.isArray(m.journal)?m.journal.slice(-100):journal;
+  signalHistory=Array.isArray(m.signals)?m.signals.slice(-100):signalHistory;
+  watch=new Set(Array.isArray(m.watch)?m.watch:[]);
+  lastAlertState=m.alertState&&typeof m.alertState==="object"?m.alertState:lastAlertState;
+  lastSignal=m.lastSignal||lastSignal;
+  if(m.activeSignal)localStorage.setItem("mp-active-signal",JSON.stringify(m.activeSignal));
+  localStorage.setItem("mp-journal",JSON.stringify(journal));
+  localStorage.setItem("mp-signals",JSON.stringify(signalHistory));
+  localStorage.setItem("mp-watch",JSON.stringify(Array.from(watch)));
+  localStorage.setItem("mp-alert-state",JSON.stringify(lastAlertState));
+  if(lastSignal)localStorage.setItem("mp-last-signal",JSON.stringify(lastSignal));
+}
+function mergeByTs(a,b){
+  var map=new Map();
+  (Array.isArray(a)?a:[]).forEach(function(x){map.set(String(x.ts),x)});
+  (Array.isArray(b)?b:[]).forEach(function(x){map.set(String(x.ts),x)});
+  return Array.from(map.values()).sort(function(x,y){return (x.ts||0)-(y.ts||0)}).slice(-100);
+}
+async function syncMemory(){
+  if(window.__memorySyncBusy)return;
+  window.__memorySyncBusy=true;
+  $("memoryStatus").textContent="Memory: syncing…";
+  try{
+    var r=await api("/api/memory?device="+encodeURIComponent(deviceId));
+    var remote=r.payload||{},local=localMemory();
+    var merged={
+      journal:mergeByTs(remote.journal,local.journal),
+      signals:mergeByTs(remote.signals,local.signals),
+      watch:Array.from(new Set([...(remote.watch||[]),...(local.watch||[])])),
+      alertState:Object.assign({},remote.alertState||{},local.alertState||{}),
+      lastSignal:local.lastSignal||remote.lastSignal||null,
+      activeSignal:local.activeSignal||remote.activeSignal||null
+    };
+    saveLocalMemory(merged);
+    await fetch("/api/memory?device="+encodeURIComponent(deviceId),{method:"POST",headers:{"Content-Type":"application/json","X-MarketPulse-Device":deviceId},body:JSON.stringify({memory:merged})});
+    $("memoryStatus").textContent=r.durable?"Memory: cloud synced":"Memory: device fallback";
+    $("brainSub").textContent=r.durable?"Your journal, signal history and profile are persisted in cloud storage.":"Local memory is active. Add DATABASE_URL in Render to make it durable.";
+    renderJournal();renderJournalStats();renderBrain();renderSignalHistory();renderScanner();updateAlertUI();
+  }catch(e){$("memoryStatus").textContent="Memory: offline"}
+  finally{window.__memorySyncBusy=false}
+}
+function queueSync(){clearTimeout(window.__memorySyncTimer);window.__memorySyncTimer=setTimeout(syncMemory,1500)}
 function recordSignal(d){
 
   const a=d.analysis||{},asset=$("sym").value,interval=$("int").value;
