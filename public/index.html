@@ -111,7 +111,7 @@ button,select,input{font:inherit}.app{max-width:1280px;margin:auto;padding:20px 
   </div>
   <div style="display:flex;gap:7px;margin-top:8px"><button id="saveTrade" class="btn primary">Save trade</button><button id="clearJournal" class="mutedBtn">Clear</button></div>
   <section class="panel" id="brainSection" style="margin-top:14px">
-<div style="display:flex;justify-content:space-between;gap:10px;align-items:center"><div><div class="section-title">Trader Brain</div><div class="sub">Turns your journal into a personal evidence dashboard. Stored on this device for now.</div></div><button id="refreshBrain" class="mutedBtn">Refresh</button></div>
+<div style="display:flex;justify-content:space-between;gap:10px;align-items:center"><div><div class="section-title">Trader Brain</div><div class="sub" id="brainSub">Turns your journal into a personal evidence dashboard.</div></div><div style="display:flex;gap:7px;align-items:center"><span class="small" id="memoryStatus">Memory: checking…</span><button id="syncMemory" class="mutedBtn">Sync</button><button id="refreshBrain" class="mutedBtn">Refresh</button></div></div>
 <div class="brainGrid">
 <div class="brainCard"><div class="k">Personal profile</div><div class="big" id="brainHeadline">Not enough data</div><div class="desc" id="brainSummary">Log a few trades with entry, stop, target and a lesson. MarketPulse will look for repeatable patterns.</div><div class="brainList">
 <div class="brainRow"><b>Trades analyzed</b><span id="brainTrades">0</span></div>
@@ -173,6 +173,7 @@ button,select,input{font:inherit}.app{max-width:1280px;margin:auto;padding:20px 
 const $=id=>document.getElementById(id);
 const fmt=x=>Number.isFinite(+x)?Number(x).toLocaleString(undefined,{maximumFractionDigits:2}):"—";
 const pct=x=>Number.isFinite(+x)?((+x>=0?"+":"")+Number(x).toFixed(2)+"%"):"—";
+let deviceId=localStorage.getItem("mp-device-id");if(!deviceId){deviceId="mp-"+Date.now()+"-"+Math.random().toString(16).slice(2);localStorage.setItem("mp-device-id",deviceId)}
 let scanRows=[];let filter="ALL";let timer=null;let auto=true;let watch=new Set(JSON.parse(localStorage.getItem("mp-watch")||"[]"));let journal=JSON.parse(localStorage.getItem("mp-journal")||"[]");let lastAlertState=JSON.parse(localStorage.getItem("mp-alert-state")||"{}");let signalHistory=JSON.parse(localStorage.getItem("mp-signals")||"[]");let lastSignal=JSON.parse(localStorage.getItem("mp-last-signal")||"null");
 
 async function api(u){const r=await fetch(u,{cache:"no-store"}),j=await r.json();if(!r.ok)throw Error(j.error||"Request failed");return j}
