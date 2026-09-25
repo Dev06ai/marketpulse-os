@@ -94,9 +94,25 @@ function analyze(c,ctx={}){
   const momentum=rsiNow>=58?"POSITIVE":rsiNow<=42?"NEGATIVE":"MIXED";
   const volState=Math.abs(vz)>=1.2?"EXPANSION":Math.abs(vz)>=.5?"ELEVATED":"NORMAL";
   const deriv=ctx.deriv&&typeof ctx.deriv==="object"&&!ctx.deriv.error?ctx.deriv:null;
-  const cvdState=deriv?.cvdState||"UNKNOWN";
-  const positioning=deriv?.positioning||"UNKNOWN";
   const oiChangePct=Number.isFinite(deriv?.oiChangePct)?deriv.oiChangePct:null;
+  const flowBars=({"15m":24,"1h":24,"4h":18,"1d":7})[ctx.interval]||24;
+  const flowStart=closes[Math.max(0,i-flowBars)],flowPriceChangePct=Number.isFinite(flowStart)&&flowStart?((price-flowStart)/flowStart)*100:null;
+  let cvdState=deriv?.cvdState||"UNKNOWN";
+  const cvdDelta=Number.isFinite(deriv?.cvdDelta)?deriv.cvdDelta:null;
+  if(cvdDelta!==null&&flowPriceChangePct!==null){
+    const pThreshold=ctx.interval==="15m"?0.15:ctx.interval==="1h"?0.35:ctx.interval==="4h"?0.8:1.5;
+    if(flowPriceChangePct>pThreshold&&cvdDelta<0)cvdState="BEARISH DIVERGENCE";
+    else if(flowPriceChangePct<-pThreshold&&cvdDelta>0)cvdState="BULLISH DIVERGENCE";
+    else if(flowPriceChangePct>pThreshold&&cvdDelta>0)cvdState="BUYERS CONFIRM";
+    else if(flowPriceChangePct<-pThreshold&&cvdDelta<0)cvdState="SELLERS CONFIRM";
+  }
+  let positioning=deriv?.positioning||"UNKNOWN";
+  if(oiChangePct!==null&&flowPriceChangePct!==null){
+    if(flowPriceChangePct>0.15&&oiChangePct>1)positioning="PRICE + OI: LONG PARTICIPATION";
+    else if(flowPriceChangePct>0.15&&oiChangePct<-1)positioning="PRICE UP + OI DOWN: SHORT COVERING";
+    else if(flowPriceChangePct<-0.15&&oiChangePct>1)positioning="PRICE DOWN + OI UP: SHORT PARTICIPATION";
+    else if(flowPriceChangePct<-0.15&&oiChangePct<-1)positioning="PRICE DOWN + OI DOWN: LONG LIQUIDATION";
+  }
 
   let type="NO TRADE",side="WAIT",bias="Neutral";
   const reasons=[];
@@ -183,7 +199,7 @@ function analyze(c,ctx={}){
   if(regime==="RANGE")thesis.push("Price is behaving like a range; breakout confirmation or range-edge rejection matters more than chasing the middle.");
   if(regime==="HIGH VOLATILITY")thesis.push("Volatility is elevated; wider noise and faster invalidations lower the quality of marginal setups.");
   if(deriv){
-    thesis.push("Derivatives: "+cvdState.toLowerCase()+"; positioning: "+positioning.toLowerCase()+".");
+    thesis.push("Derivatives flow: "+cvdState.toLowerCase()+"; positioning: "+positioning.toLowerCase()+".");
     if(Math.abs(oiChangePct||0)>=3)thesis.push("Open interest has moved "+(oiChangePct>0?"higher":"lower")+" by "+Math.abs(oiChangePct).toFixed(1)+"% over the recent futures window.");
     if(cvdState.includes("DIVERGENCE"))thesis.push("CVD divergence is a warning that price and aggressive futures flow are not fully agreeing.");
   }
@@ -210,7 +226,7 @@ function analyze(c,ctx={}){
     price,change24h,ema20:E20[i],ema50:E50[i],ema200:E200[i],rsi:rsiNow,adx:adxNow,atrPct:atrNow/price*100,volumeZ:vz,
     regime,mood,momentum,volState,structure:st.state,type,side,bias,directionalLean,probabilityLabel,
     score,status,reasons,contributors,components,
-    derivatives:{available:!!deriv,cvdState,positioning,oiChangePct,cvdRatio:deriv?.cvdRatio??null,tradeCount:deriv?.tradeCount??0,provider:deriv?.provider??null},
+    derivatives:{available:!!deriv,cvdState,positioning,oiChangePct,cvdDelta,cvdRatio:deriv?.cvdRatio??null,flowPriceChangePct,tradeCount:deriv?.tradeCount??0,provider:deriv?.provider??null,errors:deriv?.errors??[]},
     thesis:thesis.join(" "),
     primaryScenario,alternateScenario,
     mtf:{lower:mtf15,higher:mtf4},stop,tp1,tp2,entryLow:el,entryHigh:eh,rr,
