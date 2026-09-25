@@ -247,7 +247,10 @@ const server=http.createServer(async(req,res)=>{
       const candles=await klines(symbol,interval);
       const lowerA=lower&&lower.length>=220?analyze(lower,{interval:'15m'}):null;
       const higherA=higher&&higher.length>=220?analyze(higher,{interval:'4h'}):null;
-      const deriv=await derivatives(symbol,interval).catch(e=>({error:e.message,provider:"Bybit linear futures"}));
+      const deriv=await Promise.race([
+        derivatives(symbol,interval),
+        new Promise(resolve=>setTimeout(()=>resolve(null),2500))
+      ]).catch(()=>null);
       const analysis=analyze(candles,{interval,higher:higherA,lower:lowerA,deriv});
       return send(res,200,{symbol,interval,candles,analysis,derivatives:deriv,backtest:backtest(candles),setupStats:require("./market-engine").backtestBySetup(candles)});
     }
