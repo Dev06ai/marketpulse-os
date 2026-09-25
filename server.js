@@ -27,86 +27,67 @@ async function klines(symbol,interval){
   const rows=await getBinance(symbol,interval)||await getKraken(symbol,interval);CACHE.set(key,{ts:Date.now(),rows});return rows;
 }
 const DERIV_CACHE=new Map(); const DERIV_TTL=15000;
+const KRAKEN_FUTURES_PAIRS={BTCUSDT:"PF_XBTUSD",ETHUSDT:"PF_ETHUSD",SOLUSDT:"PF_SOLUSD",BNBUSDT:"PF_BNBUSD",XRPUSDT:"PF_XRPUSD",DOGEUSDT:"PF_DOGEUSD",ADAUSDT:"PF_ADAUSD"};
 const BYBIT_HOSTS=["https://api.bybit.com","https://api.bytick.com"];
 function bybitInterval(interval){return ({'15m':'15min','1h':'1h','4h':'4h','1d':'1d'})[interval]||'1h'}
+
+async function fetchJson(url,timeoutMs=4500){
+  const controller=new AbortController();const t=setTimeout(()=>controller.abort(),timeoutMs);
+  try{const r=await fetch(url,{signal:controller.signal,headers:{"User-Agent":"MarketPulse/2.0","Accept":"application/json"}});const raw=await r.text();let j={};try{j=JSON.parse(raw)}catch{}if(!r.ok)throw new Error("HTTP "+r.status);return j}
+  finally{clearTimeout(t)}
+}
 
 async function bybitGet(path,params,timeoutMs=4500){
   let lastErr=new Error("Bybit request failed");
   for(const host of BYBIT_HOSTS){
-    const u=new URL(host+path);
-    for(const [k,v] of Object.entries(params||{}))u.searchParams.set(k,String(v));
-    const controller=new AbortController(); const t=setTimeout(()=>controller.abort(),timeoutMs);
-    try{
-      const r=await fetch(u,{signal:controller.signal,headers:{"User-Agent":"MarketPulse/2.0"}});
-      const raw=await r.text(); let j={}; try{j=JSON.parse(raw)}catch{}
-      if(!r.ok){lastErr=new Error("Bybit "+r.status+" on "+host);continue}
-      if(j.retCode!==0){lastErr=new Error((j.retMsg||("Bybit error "+j.retCode))+" on "+host);continue}
-      return {result:j.result,host};
-    }catch(e){lastErr=e}
-    finally{clearTimeout(t)}
+    const u=new URL(host+path);for(const [k,v] of Object.entries(params||{}))u.searchParams.set(k,String(v));
+    try{const j=await fetchJson(u,timeoutMs);if(j.retCode!==0)throw new Error(j.retMsg||("Bybit error "+j.retCode));return {result:j.result,host}}catch(e){lastErr=e}
   }
   throw lastErr;
 }
 
-async function derivatives(symbol,interval){
-  const key=symbol+"|"+interval,hit=DERIV_CACHE.get(key);
-  if(hit&&Date.now()-hit.ts<DERIV_TTL)return hit.data;
+async function krakenAnalytics(symbol,interval){
+  const pair=KRAKEN_FUTURES_PAIRS[symbol];if(!pair)throw new Error("No Kraken futures mapping for "+symbol);
+  const secs=mins(interval)*60;
+  const windows={"15m":6*3600,"1h":24*3600,"4h":3*86400,"1d":7*86400};
+  const since=Math.floor((Date.now()-(windows[interval]||24*3600))/1000);
+  const base="https://futures.kraken.com/api/charts/v1/analytics/"+pair;
+  const [cvd,oi]=await Promise.all([fetchJson(base+"/cvd?since="+since+"&interval="+secs),fetchJson(base+"/open-interest?since="+since+"&interval="+secs)]);
+  const cvdTimes=cvd?.result?.timestamp||[],cvdVals=cvd?.result?.data?.cvd||[],oiTimes=oi?.result?.timestamp||[],oiVals=oi?.result?.data?.openInterest||[];
+  if(!cvdVals.length&&!oiVals.length)throw new Error("Kraken futures analytics returned no data");
+  const cvdFirst=Number(cvdVals[0]),cvdLast=Number(cvdVals[cvdVals.length-1]),cvdDelta=Number.isFinite(cvdLast)&&Number.isFinite(cvdFirst)?cvdLast-cvdFirst:null;
+  const oiFirst=Number(oiVals[0]),oiLast=Number(oiVals[oiVals.length-1]),oiChangePct=Number.isFinite(oiFirst)&&oiFirst?((oiLast-oiFirst)/oiFirst)*100:null;
+  return {available:true,provider:"Kraken Futures analytics",symbol:pair,oi:Number.isFinite(oiLast)?oiLast:null,oiChangePct,cvdDelta,cvdState:"MIXED",positioning:"MIXED",tradeCount:0,fundingRate:null,markPrice:null,cvdRatio:null,analyticsBuckets:Math.max(cvdVals.length,oiVals.length),updatedAt:Date.now()};
+}
 
+async function bybitDerivatives(symbol,interval){
   const [oiRes,tradeRes,tickerRes]=await Promise.allSettled([
     bybitGet('/v5/market/open-interest',{category:'linear',symbol,intervalTime:bybitInterval(interval),limit:50}),
     bybitGet('/v5/market/recent-trade',{category:'linear',symbol,limit:1000}),
     bybitGet('/v5/market/tickers',{category:'linear',symbol})
   ]);
-
   const errors=[];
-  const oiPayload=oiRes.status==='fulfilled'?oiRes.value:null;
-  const tradePayload=tradeRes.status==='fulfilled'?tradeRes.value:null;
-  const tickerPayload=tickerRes.status==='fulfilled'?tickerRes.value:null;
-
-  if(oiRes.status==='rejected')errors.push("OI: "+oiRes.reason.message);
-  if(tradeRes.status==='rejected')errors.push("Trades: "+tradeRes.reason.message);
-  if(tickerRes.status==='rejected')errors.push("Ticker: "+tickerRes.reason.message);
-
-  const oiList=(oiPayload?.result?.list||[]).slice().reverse().map(x=>({ts:+x.timestamp,oi:+x.openInterest}));
-  const ticker=tickerPayload?.result?.list?.[0]||null;
-  const currentOi=oiList.length?oiList[oiList.length-1].oi:(ticker?+ticker.openInterest:NaN);
-  const oiFirst=oiList[0]?.oi;
-  const oiChangePct=Number.isFinite(oiFirst)&&oiFirst?((currentOi-oiFirst)/oiFirst)*100:null;
-
+  const oiPayload=oiRes.status==='fulfilled'?oiRes.value:null,tradePayload=tradeRes.status==='fulfilled'?tradeRes.value:null,tickerPayload=tickerRes.status==='fulfilled'?tickerRes.value:null;
+  if(oiRes.status==='rejected')errors.push("OI: "+oiRes.reason.message);if(tradeRes.status==='rejected')errors.push("Trades: "+tradeRes.reason.message);if(tickerRes.status==='rejected')errors.push("Ticker: "+tickerRes.reason.message);
+  const oiList=(oiPayload?.result?.list||[]).slice().reverse().map(x=>+x.openInterest),ticker=tickerPayload?.result?.list?.[0]||null;
+  const currentOi=oiList.length?oiList[oiList.length-1]:(ticker?+ticker.openInterest:NaN),oiFirst=oiList[0],oiChangePct=Number.isFinite(oiFirst)&&oiFirst?((currentOi-oiFirst)/oiFirst)*100:null;
   const trades=(tradePayload?.result?.list||[]).slice().sort((a,b)=>+a.time-+b.time).map(x=>({ts:+x.time,price:+x.price,size:+x.size,side:x.side}));
-  let cvd=0,total=0;
-  for(const t of trades){const q=t.price*t.size;cvd+=(t.side==='Buy'?q:-q);total+=q}
-  const first=trades[0]?.price,lastT=trades[trades.length-1]?.price;
-  const priceChangePct=Number.isFinite(first)&&first?((lastT-first)/first)*100:null;
-  const cvdRatio=total?cvd/total:null;
-
-  let cvdState='MIXED';
-  if(priceChangePct!=null&&cvdRatio!=null){
-    if(priceChangePct>0.15&&cvdRatio<-0.01)cvdState='BEARISH DIVERGENCE';
-    else if(priceChangePct<-0.15&&cvdRatio>0.01)cvdState='BULLISH DIVERGENCE';
-    else if(priceChangePct>0.15&&cvdRatio>0.01)cvdState='BUYERS CONFIRM';
-    else if(priceChangePct<-0.15&&cvdRatio<-0.01)cvdState='SELLERS CONFIRM';
-  }else if(trades.length===0)cvdState='UNAVAILABLE';
-
-  let positioning='MIXED';
-  if(priceChangePct!=null&&oiChangePct!=null){
-    if(priceChangePct>0.15&&oiChangePct>1)positioning='PRICE + OI: LONG PARTICIPATION';
-    else if(priceChangePct>0.15&&oiChangePct<-1)positioning='PRICE UP + OI DOWN: SHORT COVERING';
-    else if(priceChangePct<-0.15&&oiChangePct>1)positioning='PRICE DOWN + OI UP: SHORT PARTICIPATION';
-    else if(priceChangePct<-0.15&&oiChangePct<-1)positioning='PRICE DOWN + OI DOWN: LONG LIQUIDATION';
-  }else if(!Number.isFinite(oiChangePct))positioning='OI CHANGE UNAVAILABLE';
-
-  const data={
-    available:Boolean(ticker||oiPayload||tradePayload),
-    provider:tickerPayload?.value?.host||oiPayload?.host||tradePayload?.host||"Bybit linear futures",
-    oi:Number.isFinite(currentOi)?currentOi:null,
-    oiChangePct, fundingRate:ticker&&Number.isFinite(+ticker.fundingRate)?+ticker.fundingRate:null,
-    markPrice:ticker&&Number.isFinite(+ticker.markPrice)?+ticker.markPrice:null,
-    cvd,cvdRatio,cvdState,positioning,tradeCount:trades.length,
-    tradePriceChangePct:priceChangePct,errors,updatedAt:Date.now()
-  };
-  DERIV_CACHE.set(key,{ts:Date.now(),data});
+  let cvd=0,total=0;for(const t of trades){const q=t.price*t.size;cvd+=(t.side==="Buy"?q:-q);total+=q}
+  const first=trades[0]?.price,lastT=trades[trades.length-1]?.price,priceChangePct=Number.isFinite(first)&&first?((lastT-first)/first)*100:null,cvdRatio=total?cvd/total:null;
+  const data={available:Boolean(ticker||oiPayload||tradePayload),provider:tickerPayload?.host||oiPayload?.host||tradePayload?.host||"Bybit linear futures",oi:Number.isFinite(currentOi)?currentOi:null,oiChangePct,cvdDelta:cvd,cvdRatio,cvdState:"MIXED",positioning:"MIXED",tradeCount:trades.length,fundingRate:ticker&&Number.isFinite(+ticker.fundingRate)?+ticker.fundingRate:null,markPrice:ticker&&Number.isFinite(+ticker.markPrice)?+ticker.markPrice:null,tradePriceChangePct:priceChangePct,errors,updatedAt:Date.now()};
+  if(priceChangePct!=null&&cvdRatio!=null){if(priceChangePct>0.15&&cvdRatio<-0.01)data.cvdState="BEARISH DIVERGENCE";else if(priceChangePct<-0.15&&cvdRatio>0.01)data.cvdState="BULLISH DIVERGENCE";else if(priceChangePct>0.15&&cvdRatio>0.01)data.cvdState="BUYERS CONFIRM";else if(priceChangePct<-0.15&&cvdRatio<-0.01)data.cvdState="SELLERS CONFIRM"}else if(trades.length===0)data.cvdState="UNAVAILABLE";
+  if(priceChangePct!=null&&oiChangePct!=null){if(priceChangePct>0.15&&oiChangePct>1)data.positioning="PRICE + OI: LONG PARTICIPATION";else if(priceChangePct>0.15&&oiChangePct<-1)data.positioning="PRICE UP + OI DOWN: SHORT COVERING";else if(priceChangePct<-0.15&&oiChangePct>1)data.positioning="PRICE DOWN + OI UP: SHORT PARTICIPATION";else if(priceChangePct<-0.15&&oiChangePct<-1)data.positioning="PRICE DOWN + OI DOWN: LONG LIQUIDATION"}else if(!Number.isFinite(oiChangePct))data.positioning="OI CHANGE UNAVAILABLE";
   return data;
+}
+
+async function derivatives(symbol,interval){
+  const key=symbol+"|"+interval,hit=DERIV_CACHE.get(key);if(hit&&Date.now()-hit.ts<DERIV_TTL)return hit.data;
+  let data=null;
+  try{data=await krakenAnalytics(symbol,interval)}catch(e){
+    try{data=await bybitDerivatives(symbol,interval);data.fallbackReason="Kraken futures analytics: "+e.message}
+    catch(e2){data={available:false,provider:"No derivatives provider",oi:null,oiChangePct:null,cvdDelta:null,cvdRatio:null,cvdState:"UNAVAILABLE",positioning:"UNAVAILABLE",tradeCount:0,fundingRate:null,markPrice:null,errors:[e.message,e2.message],updatedAt:Date.now()}}
+  }
+  DERIV_CACHE.set(key,{ts:Date.now(),data});return data;
 }
 
 function send(res,code,p){res.writeHead(code,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','Access-Control-Allow-Origin':'*'});res.end(JSON.stringify(p))}
