@@ -117,7 +117,7 @@ function analyze(c,ctx={}){
     rr=Math.abs(tp1-price)/Math.abs(price-stop);
   }
 
-  const dayBars=Math.max(1,Math.round(1440/({15:15,"1h":60,"4h":240,"1d":1440}[$ctxInterval]||60)));
+  const dayBars=Math.max(1,Math.round(1440/(({ "15m":15, "1h":60, "4h":240, "1d":1440 })[ctx.interval]||60)));
   const lookback=Math.min(i,dayBars);
   const change24h=lookback?((price-closes[i-lookback])/closes[i-lookback])*100:0;
 
