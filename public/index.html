@@ -26,7 +26,7 @@ button,select,input{font:inherit}.app{max-width:1280px;margin:auto;padding:20px 
 .workspaceRail::-webkit-scrollbar{display:none}
 .workspaceTab{flex:0 0 auto;border:1px solid rgba(160,190,255,.10);background:rgba(8,17,31,.42);color:#8592a8;padding:8px 11px;border-radius:999px;cursor:pointer;font-size:9px;font-weight:800;letter-spacing:.01em}
 .workspaceTab span{opacity:.75;margin-right:4px}.workspaceTab:hover{color:#eaf1ff;border-color:rgba(125,249,255,.22)}.workspaceTab.active{color:#06111d;background:linear-gradient(100deg,#7df9ff,#b78cff);border-color:transparent;box-shadow:0 8px 28px rgba(125,249,255,.12)}
-.workspaceShell{max-width:1340px;margin:0 auto}
+.workspaceShell{max-width:1340px;margin:0 auto}.workspaceShell+.foot{display:block;max-width:1340px;margin:18px auto 0}
 .workspaceView{display:none;animation:wsIn .18s ease-out}.workspaceView.active{display:block}
 @keyframes wsIn{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}
 .workspaceHero{display:flex;justify-content:space-between;gap:14px;align-items:flex-end;padding:10px 2px 12px}
@@ -373,7 +373,6 @@ function initWorkspaces(){
   moveNode(copilot,ai);moveNode(signals,signalWs);
   moveNode(journal,journalWs);moveNode(journal?.querySelector("#brainSection"),brain);
   moveNode(alerts,alertsWs);moveNode(risk,riskWs);
-  moveNode(foot,brain);
   [intel,scannerWs,flow,signalWs,ai,lab,brain,riskWs,alertsWs,journalWs].forEach(v=>{shell.appendChild(v);v.classList.remove("active")});
   intel.classList.add("active");
   header.after(shell);
