@@ -354,8 +354,8 @@ const server=http.createServer(async(req,res)=>{
     if(req.method==='GET'&&u.pathname==='/api/market'){
       const symbol=(u.searchParams.get('symbol')||'BTCUSDT').toUpperCase(),interval=u.searchParams.get('interval')||'1h';
       if(!SYMBOLS.includes(symbol))return send(res,400,{error:'Unsupported symbol'});
-      const candles=await klines(symbol,interval);
-      const [lower,higher]=await Promise.all([
+      const [candles,lower,higher]=await Promise.all([
+        klines(symbol,interval),
         interval==='15m'?Promise.resolve(null):klines(symbol,'15m').catch(()=>null),
         interval==='4h'?Promise.resolve(null):klines(symbol,'4h').catch(()=>null)
       ]);
