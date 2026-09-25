@@ -93,6 +93,10 @@ function analyze(c,ctx={}){
   const mtf4=ctx.higher?.regime||"UNKNOWN",mtf15=ctx.lower?.regime||"UNKNOWN";
   const momentum=rsiNow>=58?"POSITIVE":rsiNow<=42?"NEGATIVE":"MIXED";
   const volState=Math.abs(vz)>=1.2?"EXPANSION":Math.abs(vz)>=.5?"ELEVATED":"NORMAL";
+  const deriv=ctx.deriv&&typeof ctx.deriv==="object"&&!ctx.deriv.error?ctx.deriv:null;
+  const cvdState=deriv?.cvdState||"UNKNOWN";
+  const positioning=deriv?.positioning||"UNKNOWN";
+  const oiChangePct=Number.isFinite(deriv?.oiChangePct)?deriv.oiChangePct:null;
 
   let type="NO TRADE",side="WAIT",bias="Neutral";
   const reasons=[];
