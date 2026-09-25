@@ -351,6 +351,34 @@ const server=http.createServer(async(req,res)=>{
       }
     }
     
+    if(req.method==='GET'&&u.pathname==='/api/live'){
+      const symbol=(u.searchParams.get('symbol')||'BTCUSDT').toUpperCase(),interval=u.searchParams.get('interval')||'1h';
+      if(!SYMBOLS.includes(symbol))return send(res,400,{error:'Unsupported symbol'});
+      try{
+        const candles=await klines(symbol,interval);
+        if(!candles||candles.length<220)throw Error('Not enough market candles yet.');
+        const [lower,higher]=await Promise.all([
+          interval==='15m'?Promise.resolve(null):klines(symbol,'15m').catch(()=>null),
+          interval==='4h'?Promise.resolve(null):klines(symbol,'4h').catch(()=>null)
+        ]);
+        const deriv=await Promise.race([derivatives(symbol,interval),new Promise(resolve=>setTimeout(()=>resolve(null),1200))]).catch(()=>null);
+        let analysis=analyze(candles,{interval,lower:lower&&lower.length>=220?analyze(lower,{interval:'15m'}):null,higher:higher&&higher.length>=220?analyze(higher,{interval:'4h'}):null,deriv});
+        try{const learned=await Promise.race([learning.process(symbol,interval,candles,analysis),new Promise(resolve=>setTimeout(()=>resolve(null),700))]);if(learned?.analysis)analysis=learned.analysis}catch{}
+        return send(res,200,{ok:true,symbol,interval,candles,analysis,derivatives:deriv,learning:{phase:2,state:'COLLECTING',durable:storage.status().durable}});
+      }catch(e){return send(res,503,{ok:false,error:String(e.message||e)})}
+    }
+    if(req.method==='GET'&&u.pathname==='/api/scanner-live'){
+      const interval=u.searchParams.get('interval')||'1h';
+      const rows=await Promise.all(SYMBOLS.map(async symbol=>{
+        try{
+          const candles=await klines(symbol,interval);
+          if(!candles||candles.length<220)throw Error('insufficient candles');
+          const a=analyze(candles,{interval});
+          return {symbol,label:labels[symbol]||symbol,price:a.price,change24h:a.change24h,regime:a.regime,side:a.side,type:a.type,status:a.status,score:a.score,bias:a.bias,probabilityLabel:a.probabilityLabel,structure:a.structure};
+        }catch(e){return {symbol,label:labels[symbol]||symbol,error:e.message,status:'WAITING',side:'WAIT',score:0}}
+      }));
+      return send(res,200,{ok:true,interval,rows});
+    }
     if(req.method==='GET'&&u.pathname==='/api/market'){
       const symbol=(u.searchParams.get('symbol')||'BTCUSDT').toUpperCase(),interval=u.searchParams.get('interval')||'1h';
       if(!SYMBOLS.includes(symbol))return send(res,400,{error:'Unsupported symbol'});
