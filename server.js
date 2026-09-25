@@ -363,4 +363,5 @@ const server=http.createServer(async(req,res)=>{
     return staticFile(req,res);
   }catch(e){return send(res,500,{error:e.message||'Server error'})}
 });
+storage.init().catch(()=>{});
 server.listen(PORT,()=>console.log('MarketPulse OS listening on :'+PORT));
