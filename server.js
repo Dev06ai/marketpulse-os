@@ -46,6 +46,8 @@ const ADMIN_ONLY_PATHS=new Set([
   '/api/learning/status',
   '/api/edge/health',
   '/api/edge/events',
+  '/api/edge/config',
+  '/api/edge/journal',
   '/api/execution',
   '/api/execution/config',
   '/api/execution/arm',
