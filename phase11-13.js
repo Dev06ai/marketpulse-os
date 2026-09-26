@@ -60,38 +60,52 @@ function analyseScoreBuckets(rows){
   return buckets.map(b=>{
     const x=rows.filter(r=>Number(r.score)>=b.min&&Number(r.score)<=b.max&&r.outcome!=="SKIP");
     const s=summarise(x,{opportunities:x.length,testBars:x.length});
-    return {bucket:b.name,trades:s.trades,winRate:s.winRate,expectancyR:s.expectancyR,profitFactor:s.profitFactor,netR:s.netR};
+    return {bucket:b.name,min:b.min,max:b.max,trades:s.trades,winRate:s.winRate,expectancyR:s.expectancyR,profitFactor:s.profitFactor,netR:s.netR};
   });
 }
 
+function validatedThreshold(summary,buckets,baseScore){
+  const minTrades=25;
+  const eligible=(buckets||[])
+    .filter(b=>Number(b.trades)>=minTrades&&Number(b.winRate)>=52&&Number(b.expectancyR)>0&&
+      (b.profitFactor===null||Number(b.profitFactor)>=1.05)&&Number(b.min||0)>=baseScore);
+  if(!eligible.length)return null;
+  return eligible.sort((a,b)=>Number(a.min||0)-Number(b.min||0))[0];
+}
+
 function adaptivePolicy(validation,base={}){
-  const baseScore=clamp(num(base.minScore,72),60,90);
-  const baseRR=Math.max(1.1,num(base.minRR,1.5));
+  const baseScore=clamp(num(base.minScore,78),70,90);
+  const baseRR=Math.max(1.5,num(base.minRR,1.5));
   const s=validation.summary||{};
   let minScore=baseScore;
   const reasons=[];
-  if(!s.sufficient){
-    reasons.push("insufficient_out_of_sample_evidence");
-  }else{
+  const bucketGate=validatedThreshold(s,validation.buckets,baseScore);
+  if(!s.sufficient)reasons.push("insufficient_out_of_sample_evidence");
+  if(s.sufficient){
     if(s.expectancyR<=0){minScore+=6;reasons.push("non_positive_expectancy")}
-    else if(s.expectancyR<0.08){minScore+=3;reasons.push("thin_expectancy")}
-    if(Number.isFinite(s.profitFactor)&&s.profitFactor<1.05){minScore+=5;reasons.push("weak_profit_factor")}
-    if(s.winRate<50){minScore+=4;reasons.push("sub_50_win_rate")}
-    if(s.maxDrawdownR>8){minScore+=3;reasons.push("drawdown_pressure")}
+    else if(s.expectancyR<0.05){minScore+=3;reasons.push("thin_expectancy")}
+    if(Number.isFinite(s.profitFactor)&&s.profitFactor<1.10){minScore+=4;reasons.push("weak_profit_factor")}
+    if(s.winRate<52){minScore+=4;reasons.push("win_rate_below_52")}
+    if(s.maxDrawdownR>10){minScore+=3;reasons.push("drawdown_pressure")}
   }
+  if(bucketGate)minScore=Math.max(minScore,Number(bucketGate.min||0));
+  else reasons.push("no_score_bucket_meets_validation_thresholds");
   minScore=clamp(Math.round(minScore),baseScore,88);
   const eligibleEvidence=Boolean(
     s.sufficient&&
-    s.trades>=60&&
+    s.trades>=80&&
+    s.winRate>=52&&
     s.expectancyR>0.05&&
-    (s.profitFactor===null||s.profitFactor>=1.05)&&
-    s.maxDrawdownR<=10
+    (s.profitFactor===null||s.profitFactor>=1.10)&&
+    s.maxDrawdownR<=10&&
+    bucketGate
   );
   return {
     mode:eligibleEvidence?"CALIBRATED_SIGNAL":"PAPER_ONLY",
     minScore,minRR:baseRR,
     evidenceSufficient:Boolean(s.sufficient),
     signalGateReady:eligibleEvidence,
+    validatedBucket:bucketGate||null,
     changedFromBase:minScore!==baseScore,
     reasons
   };
@@ -119,7 +133,8 @@ function runWalkForward(candles,opts={}){
       consensus:{consensusQualityPct:90,priceDispersionBps:20,sourceCount:1,independentSourceCount:1},
       dataQuality:{candleAgeMs:1000},
       liveFlow:{liveConnected:false,livePointCount:0},
-      propGate:{decision:"ELIGIBLE"}
+      propGate:{decision:"ELIGIBLE"},
+      strictEvidence:false
     });
     const actionable=decision.state==="READY"&&["LONG","SHORT"].includes(decision.action)&&Number(decision.market?.confluenceScore)>=72;
     if(actionable)opportunities++;
@@ -168,7 +183,7 @@ function applyDeploymentGate(decision,validation,opts={}){
   const fresh=!d?.stale;
   const engineHealthy=d?.operational?.failSafe===true&&d?.operational?.executionEnabled===false;
   let signalEligible=false,gateState="PAPER_ONLY",reason="Historical validation evidence is not yet sufficient for live reliance.";
-  if(policy.signalGateReady&&fresh&&dataScore>=85&&riskOk&&engineHealthy&&currentScore>=policy.minScore){
+  if(policy.signalGateReady&&fresh&&dataScore>=85&&riskOk&&engineHealthy&&currentScore>=policy.minScore&&d.state==="READY"&&["LONG","SHORT"].includes(String(d.action||"").toUpperCase())){
     signalEligible=true;gateState="SIGNAL_ELIGIBLE";reason="Current signal passed the conservative data, risk and validation gates.";
   }else if(d?.state==="DATA_BLOCKED"||dataScore<70){
     gateState="BLOCKED";reason="Critical live data quality is too weak for a signal.";
@@ -179,9 +194,21 @@ function applyDeploymentGate(decision,validation,opts={}){
   }else if(currentScore<policy.minScore){
     gateState="PAPER_ONLY";reason="The current confluence score is below the adaptive validation threshold.";
   }
+  const finalSide=signalEligible?(String(d?.market?.side||d?.action||"WAIT").toUpperCase()):"WAIT";
+  const finalAction=signalEligible&&["LONG","SHORT"].includes(finalSide)?finalSide:"WAIT";
+  const finalMarket=signalEligible
+    ?{...(d.market||{}),side:finalSide}
+    :{...(d.market||{}),side:"WAIT",status:"WAITING",type:"NO TRADE",bias:"Neutral",directionalLean:"NEUTRAL"};
+  const finalLevels=signalEligible
+    ?d.levels
+    :{...(d.levels||{}),entryLow:null,entryHigh:null,entry:null,stop:null,tp1:null,tp2:null,rr:null};
   return {
     ...d,
     rawAction:d.action,
+    action:finalAction,
+    state:signalEligible?"READY":"NO_TRADE",
+    market:finalMarket,
+    levels:finalLevels,
     liveSignalEligible:signalEligible,
     deploymentGate:{state:gateState,reason,validationEvidenceSufficient:Boolean(policy.evidenceSufficient),adaptiveMode:policy.mode,minScore:policy.minScore,minRR:policy.minRR},
     operational:{...(d.operational||{}),failSafe:true,executionEnabled:false,liveUse:gateState==="SIGNAL_ELIGIBLE"?"DECISION_SUPPORT_ONLY":"PAPER_ONLY"}
@@ -200,7 +227,7 @@ function selfTest(){
     })
   };
   const v=runWalkForward(candles,{
-    symbol:"BTCUSDT",interval:"1h",step:8,maxSamples:60,minTrades:5,minTestBars:100,
+    symbol:"BTCUSDT",interval:"1h",step:8,maxSamples:60,minTrades:80,minTestBars:100,
     analyze:fakeAnalyze,phase910:fakePhase
   });
   const historicalGate=applyDeploymentGate({
@@ -209,6 +236,7 @@ function selfTest(){
   },v,{basePolicy:{minScore:72,minRR:1.5}});
   const strongValidation={
     summary:{trades:80,winRate:56,expectancyR:.14,profitFactor:1.2,maxDrawdownR:6,sufficient:true},
+    buckets:[{bucket:"80-83",min:80,max:83,trades:30,winRate:56,expectancyR:.14,profitFactor:1.2,netR:4.2}],
     adaptive:null
   };
   strongValidation.adaptive=adaptivePolicy(strongValidation,{minScore:72,minRR:1.5});

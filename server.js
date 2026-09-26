@@ -166,12 +166,19 @@ function queuePhase1113Validation(symbol,interval,candles){
   const key="P11-13|"+String(symbol)+"|"+String(interval),now=Date.now(),hit=PHASE1113_CACHE.get(key);
   if(hit&&now-hit.ts<PHASE1113_TTL)return hit.payload;
   if(PHASE1113_JOBS.has(key))return hit?.payload||null;
-  const sample=(candles||[]).slice(-900);
-  if(sample.length<260)return hit?.payload||null;
+  const fallback=(candles||[]).slice(-900);
+  if(fallback.length<260)return hit?.payload||null;
   PHASE1113_JOBS.add(key);
   setTimeout(async()=>{
     try{
-      const validation=phase1113.runWalkForward(sample,{symbol,interval,basePolicy:{minScore:72,minRR:1.5},step:2,maxSamples:350});
+      let source=fallback;
+      try{
+        const historical=await research.fetchBinanceKlines(symbol,interval,{maxBars:1800});
+        const closed=closedCandles(historical,interval,Date.now());
+        if(closed.length>=600)source=closed;
+      }catch{}
+      const sample=source.slice(-1500);
+      const validation=phase1113.runWalkForward(sample,{symbol,interval,basePolicy:{minScore:78,minRR:1.5},step:2,maxSamples:350,minTrades:80,minTestBars:300});
       PHASE1113_CACHE.set(key,{ts:Date.now(),payload:validation});
       try{
         const state=await storage.getLearningState();
@@ -187,10 +194,15 @@ async function buildDecisionSnapshot(symbol,interval,query){
   const key=symbol+"|"+interval,now=Date.now(),cached=DECISION_CACHE.get(key);
   if(cached&&now-cached.ts<DECISION_TTL)return Object.assign({cache:"fresh",cacheAgeMs:now-cached.ts},cached.payload);
   try{
-    const candles=await getFastKlines(symbol,interval);
-    if(!candles||candles.length<220)throw Error("Insufficient candles");
-    const lower=interval==="15m"?null:await Promise.race([klines(symbol,"15m"),new Promise(resolve=>setTimeout(()=>resolve(null),1500))]).catch(()=>null);
-    const higher=interval==="4h"?null:await Promise.race([klines(symbol,"4h"),new Promise(resolve=>setTimeout(()=>resolve(null),1500))]).catch(()=>null);
+    const rawCandles=await getFastKlines(symbol,interval);
+    const candles=closedCandles(rawCandles,interval,now);
+    if(!candles||candles.length<220)throw Error("Insufficient closed candles");
+    const lowerInterval=interval==="15m"?null:"15m";
+    const higherInterval=interval==="4h"?"1d":interval==="1d"?null:"4h";
+    const lowerRaw=lowerInterval?await Promise.race([klines(symbol,lowerInterval),new Promise(resolve=>setTimeout(()=>resolve(null),1500))]).catch(()=>null):null;
+    const higherRaw=higherInterval?await Promise.race([klines(symbol,higherInterval),new Promise(resolve=>setTimeout(()=>resolve(null),1500))]).catch(()=>null):null;
+    const lower=lowerRaw?closedCandles(lowerRaw,lowerInterval,now):null;
+    const higher=higherRaw?closedCandles(higherRaw,higherInterval,now):null;
     const deriv=await Promise.race([derivatives(symbol,interval),new Promise(resolve=>setTimeout(()=>resolve(null),2600))]).catch(()=>null);
     const consensus=await Promise.race([dataFabric.assess(symbol,interval,{
       primaryPrice:candles[candles.length-1]?.c,
@@ -198,8 +210,8 @@ async function buildDecisionSnapshot(symbol,interval,query){
       primarySource:candles?.[0]?.source,
       liveFlow:flowBucket(symbol)
     }),new Promise(resolve=>setTimeout(()=>resolve(null),1500))]).catch(()=>null);
-    const lowerAnalysis=lower&&lower.length>=220?analyze(lower,{interval:"15m"}):null;
-    const higherAnalysis=higher&&higher.length>=220?analyze(higher,{interval:"4h"}):null;
+    const lowerAnalysis=lower&&lower.length>=220&&lowerInterval?analyze(lower,{interval:lowerInterval}):null;
+    const higherAnalysis=higher&&higher.length>=220&&higherInterval?analyze(higher,{interval:higherInterval}):null;
     let analysis=analyze(candles,{interval,lower:lowerAnalysis,higher:higherAnalysis,deriv});
     let learned=null;
     try{
@@ -217,7 +229,7 @@ async function buildDecisionSnapshot(symbol,interval,query){
       maxDrawdownPct:Number(getQ('maxDrawdownPct',process.env.PROP_MAX_DRAWDOWN_PCT||6)),
       riskPerTradePct:Number(getQ('riskPerTradePct',process.env.PROP_RISK_PER_TRADE_PCT||0.5)),
       maxOpenRiskPct:Number(getQ('maxOpenRiskPct',process.env.PROP_MAX_OPEN_RISK_PCT||1)),
-      minSignalScore:Number(getQ('minSignalScore',process.env.PROP_MIN_SIGNAL_SCORE||72)),
+      minSignalScore:Number(getQ('minSignalScore',process.env.PROP_MIN_SIGNAL_SCORE||78)),
       minRR:Number(getQ('minRR',process.env.PROP_MIN_RR||1.5)),
       minConsensusQualityPct:Number(getQ('minConsensusQualityPct',process.env.PROP_MIN_CONSENSUS_QUALITY_PCT||85)),
       maxPriceDispersionBps:Number(getQ('maxPriceDispersionBps',process.env.PROP_MAX_PRICE_DISPERSION_BPS||80)),
@@ -262,6 +274,10 @@ function authKey(ip,email,type){return type+":"+String(ip||"unknown")+":"+String
 function requestDevice(req){return String(req.headers["x-marketpulse-device"]||"00000000-0000-0000-0000-000000000000").slice(0,128)}
 
 function mins(interval){return ({'15m':15,'30m':30,'1h':60,'4h':240,'1d':1440})[interval]||60}
+function closedCandles(rows,interval,now=Date.now()){
+  const ms=mins(interval)*60*1000;
+  return (Array.isArray(rows)?rows:[]).filter(x=>Number.isFinite(Number(x?.t))&&Number(x.t)+ms<=now-1000);
+}
 async function getBinance(symbol,interval,timeoutMs=DATA_TIMEOUT_MS){
   const bases=['https://api.binance.com','https://api-gcp.binance.com','https://api1.binance.com'];
   const requests=bases.map(async base=>{const u=new URL(base+'/api/v3/klines');u.searchParams.set('symbol',symbol);u.searchParams.set('interval',interval);u.searchParams.set('limit',String(Math.min(KLINE_LIMIT,1000)));const r=await fetch(u,{signal:timeoutSignal(timeoutMs)});if(!r.ok)throw Error('HTTP '+r.status);const rows=await r.json();return rows.map(x=>({t:x[0],o:+x[1],h:+x[2],l:+x[3],c:+x[4],v:+x[5],source:'binance'}))});
@@ -1305,7 +1321,7 @@ const server=http.createServer(async(req,res)=>{
       try{
         const cached=PHASE1113_CACHE.get("P11-13|"+symbol+"|"+interval);
         if(cached&&Date.now()-cached.ts<PHASE1113_TTL)return send(res,200,{ok:true,ready:true,symbol,interval,...cached.payload,updatedAt:cached.ts});
-        const candles=await getFastKlines(symbol,interval);
+        const candles=closedCandles(await getFastKlines(symbol,interval),interval,Date.now());
         const validation=queuePhase1113Validation(symbol,interval,candles);
         if(validation)return send(res,200,{ok:true,ready:true,symbol,interval,...validation,updatedAt:Date.now()});
         return send(res,200,{ok:true,ready:false,symbol,interval,message:'Validation is warming up in the background.',phase11:PHASE11_VERSION,phase12:PHASE12_VERSION,phase13:PHASE13_VERSION});
