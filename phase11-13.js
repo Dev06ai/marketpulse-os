@@ -190,19 +190,37 @@ function applyDeploymentGate(decision,validation,opts={}){
 
 function selfTest(){
   const candles=[];
-  let p=100;
-  for(let i=0;i<520;i++){
-    const drift=i<360?0.08:-0.02;
-    const o=p,p2=p+drift+(i%5===0?0.25:0);
-    const h=Math.max(o,p2)+0.35,l=Math.min(o,p2)-0.3;
-    p=p2;candles.push({t:Date.now()+i*3600000,o,h,l,c:p,v:1000+(i%30)*10});
-  }
-  const v=runWalkForward(candles,{symbol:"BTCUSDT",interval:"1h",step:8,maxSamples:60,minTrades:5,minTestBars:100});
-  const gated=applyDeploymentGate({
+  for(let i=0;i<560;i++)candles.push({t:Date.now()+i*3600000,o:99,h:103,l:98,c:101,v:1000+i});
+  const fakeAnalyze=()=>({});
+  const fakePhase={
+    evaluate:()=>({
+      state:"READY",action:"LONG",
+      market:{confluenceScore:80,regime:"UPTREND"},
+      levels:{entry:100,stop:98,tp1:102}
+    })
+  };
+  const v=runWalkForward(candles,{
+    symbol:"BTCUSDT",interval:"1h",step:8,maxSamples:60,minTrades:5,minTestBars:100,
+    analyze:fakeAnalyze,phase910:fakePhase
+  });
+  const historicalGate=applyDeploymentGate({
     state:"READY",market:{confluenceScore:80},data:{score:92},propGate:{decision:"ELIGIBLE"},
     operational:{failSafe:true,executionEnabled:false}
   },v,{basePolicy:{minScore:72,minRR:1.5}});
-  return {ok:Boolean(v.summary&&v.adaptive&&gated.deploymentGate),summary:v.summary,adaptive:v.adaptive,gate:gated.deploymentGate};
+  const strongValidation={
+    summary:{trades:80,winRate:56,expectancyR:.14,profitFactor:1.2,maxDrawdownR:6,sufficient:true},
+    adaptive:null
+  };
+  strongValidation.adaptive=adaptivePolicy(strongValidation,{minScore:72,minRR:1.5});
+  const calibratedGate=applyDeploymentGate({
+    state:"READY",market:{confluenceScore:80},data:{score:92},propGate:{decision:"ELIGIBLE"},
+    operational:{failSafe:true,executionEnabled:false}
+  },strongValidation,{basePolicy:{minScore:72,minRR:1.5}});
+  return {
+    ok:Boolean(v.summary.trades>0&&v.summary.netR>0&&historicalGate.deploymentGate.state==="PAPER_ONLY"&&calibratedGate.liveSignalEligible===true),
+    summary:v.summary,adaptive:v.adaptive,
+    historicalGate:historicalGate.deploymentGate,calibratedGate:calibratedGate.deploymentGate
+  };
 }
 
 module.exports={VERSION,PHASE11,PHASE12,PHASE13,outcomeForSetup,summarise,adaptivePolicy,runWalkForward,applyDeploymentGate,selfTest};
