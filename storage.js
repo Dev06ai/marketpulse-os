@@ -98,15 +98,23 @@ async function init(){
         email TEXT NOT NULL UNIQUE,
         password_hash TEXT NOT NULL,
         password_salt TEXT NOT NULL,
+        failed_login_count INTEGER NOT NULL DEFAULT 0,
+        locked_until TIMESTAMPTZ,
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        last_login_at TIMESTAMPTZ
+        last_login_at TIMESTAMPTZ,
+        password_updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       )`);
+      await pool.query('ALTER TABLE marketpulse_users ADD COLUMN IF NOT EXISTS failed_login_count INTEGER NOT NULL DEFAULT 0');
+      await pool.query('ALTER TABLE marketpulse_users ADD COLUMN IF NOT EXISTS locked_until TIMESTAMPTZ');
+      await pool.query('ALTER TABLE marketpulse_users ADD COLUMN IF NOT EXISTS password_updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()');
       await pool.query(`CREATE TABLE IF NOT EXISTS marketpulse_sessions (
         token_hash TEXT PRIMARY KEY,
         user_id UUID NOT NULL REFERENCES marketpulse_users(id) ON DELETE CASCADE,
         expires_at TIMESTAMPTZ NOT NULL,
-        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        admin_mfa_at TIMESTAMPTZ
       )`);
+      await pool.query('ALTER TABLE marketpulse_sessions ADD COLUMN IF NOT EXISTS admin_mfa_at TIMESTAMPTZ');
       await pool.query('CREATE INDEX IF NOT EXISTS idx_marketpulse_sessions_user ON marketpulse_sessions(user_id)');
       await pool.query(`CREATE TABLE IF NOT EXISTS marketpulse_account_memory (
         user_id UUID PRIMARY KEY REFERENCES marketpulse_users(id) ON DELETE CASCADE,
@@ -325,17 +333,42 @@ async function createUser(user){
   }
   const all=readLocal();all.__users__=all.__users__||{};
   if(Object.values(all.__users__).some(x=>String(x.email).toLowerCase()===String(p.email).toLowerCase()))throw new Error("EMAIL_EXISTS");
-  const row={id:p.id,email:p.email,passwordHash:p.passwordHash,passwordSalt:p.passwordSalt,createdAt:new Date().toISOString(),lastLoginAt:null};
+  const row={id:p.id,email:p.email,passwordHash:p.passwordHash,passwordSalt:p.passwordSalt,failedLoginCount:0,lockedUntil:null,createdAt:new Date().toISOString(),lastLoginAt:null,passwordUpdatedAt:new Date().toISOString()};
   all.__users__[p.id]=row;writeLocal(all);
   return {id:row.id,email:row.email,createdAt:row.createdAt,lastLoginAt:null};
 }
 async function findUserByEmail(email){
   await init();const e=String(email||"").toLowerCase();
   if(mode==="postgres"){
-    const r=await pool.query(`SELECT id,email,password_hash AS "passwordHash",password_salt AS "passwordSalt",created_at AS "createdAt",last_login_at AS "lastLoginAt" FROM marketpulse_users WHERE lower(email)=lower($1)`,[e]);
+    const r=await pool.query(`SELECT id,email,password_hash AS "passwordHash",password_salt AS "passwordSalt",failed_login_count AS "failedLoginCount",locked_until AS "lockedUntil",created_at AS "createdAt",last_login_at AS "lastLoginAt",password_updated_at AS "passwordUpdatedAt" FROM marketpulse_users WHERE lower(email)=lower($1)`,[e]);
     return r.rows[0]||null;
   }
   const all=readLocal(),rows=Object.values(all.__users__||{});return rows.find(x=>String(x.email).toLowerCase()===e)||null;
+}
+async function recordLoginFailure(id,lockThreshold=7,lockMinutes=15){
+  await init();
+  if(mode==="postgres"){
+    const r=await pool.query(`UPDATE marketpulse_users
+      SET failed_login_count=failed_login_count+1,
+          locked_until=CASE WHEN failed_login_count+1 >= $2 THEN NOW()+($3 || ' minutes')::interval ELSE locked_until END
+      WHERE id=$1
+      RETURNING failed_login_count AS "failedLoginCount",locked_until AS "lockedUntil"`,[id,lockThreshold,String(lockMinutes)]);
+    return r.rows[0]||null;
+  }
+  const all=readLocal(),u=all.__users__?.[id];if(!u)return null;
+  u.failedLoginCount=Number(u.failedLoginCount||0)+1;
+  if(u.failedLoginCount>=lockThreshold)u.lockedUntil=new Date(Date.now()+lockMinutes*60000).toISOString();
+  writeLocal(all);return {failedLoginCount:u.failedLoginCount,lockedUntil:u.lockedUntil||null};
+}
+async function resetLoginFailures(id){
+  await init();
+  if(mode==="postgres"){await pool.query("UPDATE marketpulse_users SET failed_login_count=0,locked_until=NULL,last_login_at=NOW() WHERE id=$1",[id]);return}
+  const all=readLocal(),u=all.__users__?.[id];if(u){u.failedLoginCount=0;u.lockedUntil=null;u.lastLoginAt=new Date().toISOString();writeLocal(all)}
+}
+async function savePassword(id,passwordHash,passwordSalt){
+  await init();
+  if(mode==="postgres"){await pool.query("UPDATE marketpulse_users SET password_hash=$2,password_salt=$3,password_updated_at=NOW() WHERE id=$1",[id,passwordHash,passwordSalt]);return}
+  const all=readLocal(),u=all.__users__?.[id];if(u){u.passwordHash=passwordHash;u.passwordSalt=passwordSalt;u.passwordUpdatedAt=new Date().toISOString();writeLocal(all)}
 }
 async function getUserById(id){
   await init();
@@ -346,11 +379,17 @@ async function getUserById(id){
   const all=readLocal(),x=all.__users__?.[id];return x?{id:x.id,email:x.email,createdAt:x.createdAt,lastLoginAt:x.lastLoginAt}:null;
 }
 async function touchUserLogin(id){
-  await init();
-  if(mode==="postgres"){await pool.query("UPDATE marketpulse_users SET last_login_at=NOW() WHERE id=$1",[id]);return}
-  const all=readLocal();if(all.__users__?.[id]){all.__users__[id].lastLoginAt=new Date().toISOString();writeLocal(all)}
+  await resetLoginFailures(id);
 }
-async function saveSession(tokenHash,userId,expiresAt){
+async function saveSession(tokenHash,userId,expiresAt,adminMfaAt=null){
+  await init();
+  if(mode==="postgres"){
+    await pool.query(`INSERT INTO marketpulse_sessions(token_hash,user_id,expires_at,admin_mfa_at) VALUES($1,$2,$3,$4)`,[tokenHash,userId,expiresAt,adminMfaAt]);return
+  }
+  const all=readLocal();all.__sessions__=all.__sessions__||{};all.__sessions__[tokenHash]={userId,expiresAt,adminMfaAt};writeLocal(all);
+  return
+}
+async function saveSessionLegacy(tokenHash,userId,expiresAt){
   await init();
   if(mode==="postgres"){
     await pool.query(`INSERT INTO marketpulse_sessions(token_hash,user_id,expires_at) VALUES($1,$2,$3)`,[tokenHash,userId,expiresAt]);return
@@ -360,12 +399,17 @@ async function saveSession(tokenHash,userId,expiresAt){
 async function getSession(tokenHash){
   await init();
   if(mode==="postgres"){
-    const r=await pool.query(`SELECT s.user_id AS "userId",s.expires_at AS "expiresAt",u.email FROM marketpulse_sessions s JOIN marketpulse_users u ON u.id=s.user_id WHERE s.token_hash=$1 AND s.expires_at>NOW()`,[tokenHash]);
+    const r=await pool.query(`SELECT s.user_id AS "userId",s.expires_at AS "expiresAt",s.admin_mfa_at AS "adminMfaAt",u.email FROM marketpulse_sessions s JOIN marketpulse_users u ON u.id=s.user_id WHERE s.token_hash=$1 AND s.expires_at>NOW()`,[tokenHash]);
     return r.rows[0]||null;
   }
   const all=readLocal(),x=all.__sessions__?.[tokenHash];if(!x)return null;
   if(new Date(x.expiresAt).getTime()<=Date.now()){delete all.__sessions__[tokenHash];writeLocal(all);return null}
-  const user=all.__users__?.[x.userId];return user?{userId:user.id,email:user.email,expiresAt:x.expiresAt}:null;
+  const user=all.__users__?.[x.userId];return user?{userId:user.id,email:user.email,expiresAt:x.expiresAt,adminMfaAt:x.adminMfaAt||null}:null;
+}
+async function revokeUserSessions(id){
+  await init();
+  if(mode==="postgres"){await pool.query("DELETE FROM marketpulse_sessions WHERE user_id=$1",[id]);return}
+  const all=readLocal();for(const [k,v] of Object.entries(all.__sessions__||{}))if(v.userId===id)delete all.__sessions__[k];writeLocal(all);
 }
 async function deleteSession(tokenHash){
   await init();
@@ -392,4 +436,4 @@ async function saveAccountMemory(userId,memory){
 }
 
 function status(){return {mode,configured:Boolean(DB_URL&&Pool),durable:mode==="postgres"}}
-module.exports={init,get,save,clear,getLearningState,saveLearningState,recordLearningPrediction,getOpenLearningPredictions,resolveLearningPrediction,saveSignalDNA,getSignalDNA,clearSignalDNA,getPhase4State,savePhase4State,getExecutionState,saveExecutionState,getPhase6State,savePhase6State,createUser,findUserByEmail,getUserById,touchUserLogin,saveSession,getSession,deleteSession,getAccountMemory,saveAccountMemory,status};
+module.exports={init,get,save,clear,getLearningState,saveLearningState,recordLearningPrediction,getOpenLearningPredictions,resolveLearningPrediction,saveSignalDNA,getSignalDNA,clearSignalDNA,getPhase4State,savePhase4State,getExecutionState,saveExecutionState,getPhase6State,savePhase6State,createUser,findUserByEmail,getUserById,touchUserLogin,recordLoginFailure,resetLoginFailures,savePassword,saveSession,getSession,revokeUserSessions,deleteSession,getAccountMemory,saveAccountMemory,status};
