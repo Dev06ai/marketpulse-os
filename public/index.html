@@ -311,6 +311,14 @@ body.admin-mode .nav button.adminNav,body.admin-mode .mobileMenu button.adminNav
   .adminFlagRow .flagName{font-size:10px}
   .adminFlagRow .flagDesc{font-size:9px}
 }
+</style><style id="prediction-engine-ui">
+.predictionEnginePanel{border:1px solid rgba(96,165,250,.16)!important;background:linear-gradient(180deg,rgba(16,22,32,.96),rgba(8,10,15,.94))}
+.predictionMetricGrid{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;margin-top:8px}
+.predictionMetric{padding:9px;border:1px solid rgba(255,255,255,.06);border-radius:8px;background:rgba(255,255,255,.014)}
+.predictionMetric .k{font-size:9px;color:#8495a8;text-transform:uppercase;letter-spacing:.07em}.predictionMetric .v{font-size:15px;font-weight:900;margin-top:3px}
+.predictionRunRow{display:flex;gap:7px;align-items:center;flex-wrap:wrap}.predictionRunRow select,.predictionRunRow input{background:#111116;border:1px solid rgba(255,255,255,.08);color:#e8edf4;border-radius:7px;padding:7px;font-size:9px}
+.predictionStatus{margin-top:8px;font-size:9px;color:#8fa1b5}.predictionStatus.ok{color:#a7f3d0}.predictionStatus.warn{color:#fde68a}
+@media(max-width:700px){.predictionMetricGrid{grid-template-columns:1fr 1fr}}
 </style></head>
 <body>
 <header class="header"><div class="headerInner">
@@ -678,6 +686,24 @@ body.admin-mode .nav button.adminNav,body.admin-mode .mobileMenu button.adminNav
       <div class="title">Learning / validation</div><div class="sub">Adaptive engine state and recent sample quality.</div>
       <div class="adminList" id="acLearning"></div>
     </div>
+  </div>
+
+  <div class="card adminPanelSmall predictionEnginePanel" style="margin-top:10px">
+    <div class="sectionHead"><div><div class="title">Prediction Engine</div><div class="sub">Calibrated setup-quality model. Champion models are promoted only after out-of-sample validation.</div></div><span class="adminBadgeSmall ok" id="acPredictionBadge">NO MODEL</span></div>
+    <div class="predictionMetricGrid">
+      <div class="predictionMetric"><div class="k">Champion samples</div><div class="v" id="acPredSamples">—</div></div>
+      <div class="predictionMetric"><div class="k">Validation Brier</div><div class="v" id="acPredBrier">—</div></div>
+      <div class="predictionMetric"><div class="k">Validation log loss</div><div class="v" id="acPredLoss">—</div></div>
+      <div class="predictionMetric"><div class="k">Validation accuracy</div><div class="v" id="acPredAcc">—</div></div>
+    </div>
+    <div class="predictionRunRow" style="margin-top:9px">
+      <select id="acPredSymbol"><option>BTCUSDT</option><option>ETHUSDT</option><option>SOLUSDT</option></select>
+      <select id="acPredInterval"><option>15m</option><option selected>1h</option><option>4h</option><option>1d</option></select>
+      <button id="acTrainPublicModel" class="btn primary">Train public-data model</button>
+      <button id="acTrainOwnModel" class="btn">Train from own outcomes</button>
+      <button id="acPromoteModel" class="btn">Promote candidate</button>
+    </div>
+    <div class="predictionStatus" id="acPredictionStatus">Uses public Binance USD-M historical futures candles plus MarketPulse resolved outcomes. A candidate is not automatically promoted unless its validation gate passes.</div>
   </div>
 
   <div class="card adminPanelSmall" style="margin-top:10px">
@@ -1115,7 +1141,7 @@ function renderMarket(){
   $("thesisTitle").textContent=a.status==="WAITING"?"No trade":(a.type||"Market context");$("thesisState").textContent=(a.status||"WAITING")+" · "+(a.probabilityLabel||"");
   $("thesisScore").textContent=fmt(a.score)+"/100";$("thesis").textContent=(a.thesisParts||[a.thesis||"Market context available."]).join(" ");
   $("primary").textContent=a.primaryScenario||"—";$("alternate").textContent=a.alternateScenario||"—";
-  $("thesisChips").innerHTML=[["4H",a.mtf&&a.mtf.higher],["15M",a.mtf&&a.mtf.lower],["Mood",a.mood],["Structure",a.structure]].map(function(x){return'<span class="chip c">'+x[0]+": "+(x[1]||"—")+"</span>"}).join("");
+  $("thesisChips").innerHTML=[["4H",a.mtf&&a.mtf.higher],["15M",a.mtf&&a.mtf.lower],["Mood",a.mood],["Structure",a.structure],["Model",a.predictionModel&&a.predictionModel.probability!=null?(Number(a.predictionModel.probability)*100).toFixed(0)+"%":"—"]].map(function(x){return'<span class="chip c">'+x[0]+": "+(x[1]||"—")+"</span>"}).join("");
   $("quality").textContent=fmt(a.score)+"/100";
   $("components").innerHTML=(a.components||[]).map(function(x){var max=({Regime:16,"Trend strength":11,Momentum:11,Volume:9,Structure:9,"4H alignment":9,"15M alignment":7,"CVD pressure":10,"OI context":8,"Liquidation context":6})[x.name]||10;return'<div class="rowLine"><span class="small">'+x.name+'</span><b style="font-size:9px;text-align:right">'+x.value+"/"+max+'</b><div class="bar"><i style="width:'+Math.max(0,Math.min(100,x.value/max*100))+'%"></i></div></div>'}).join("");
   $("entry").textContent=a.entryLow!=null?fmt(a.entryLow)+" → "+fmt(a.entryHigh):"Wait";$("stop").textContent=fmt(a.stop);$("target").textContent=fmt(a.tp1);$("rr").textContent=a.rr?Number(a.rr).toFixed(2)+"R":"—";
@@ -1692,6 +1718,7 @@ function adminRenderCommandCenter(){
   adminRenderBroadcasts(o.broadcasts||[]);
   adminRenderTickets(o.tickets||[]);
   adminRenderSnapshots(o.snapshots||[]);
+  renderPredictionAdmin(o.predictionModel||null);
   $("acActivityTable").innerHTML=(o.recentUsage||[]).slice(0,20).map(function(x){return'<tr><td>'+adminDate(x.createdAt)+'</td><td>'+safeHtml(x.email||"Guest")+'</td><td>'+safeHtml(x.feature||"—")+'</td><td>'+safeHtml(x.action||"—")+'</td><td>'+safeHtml(x.symbol||"—")+'</td><td>'+safeHtml(x.interval||"—")+'</td></tr>'}).join("")||'<tr><td colspan="6" class="small">No recent activity yet.</td></tr>';
 }
 function adminRenderProviders(){
@@ -1718,6 +1745,26 @@ function adminRenderTickets(rows){
 function adminRenderSnapshots(rows){
   state.adminSnapshots=rows||[];$("acSnapshots").innerHTML=(rows||[]).slice(0,8).map(function(x){return'<div class="adminLine"><div><b>'+safeHtml(x.label)+'</b><div class="small">'+adminDate(x.createdAt)+'</div></div><button class="btn" data-snapshot="'+x.id+'">Restore</button></div>'}).join("")||'<div class="small">No snapshots yet.</div>';
   $("acSnapshots").querySelectorAll("[data-snapshot]").forEach(function(b){b.addEventListener("click",function(){adminRestoreSnapshot(b.dataset.snapshot)})});
+}
+function renderPredictionAdmin(o){
+  var m=o||null;
+  var badge=$("acPredictionBadge");if(!m){badge.textContent="NO MODEL";badge.className="adminBadgeSmall warn";$("acPredSamples").textContent="—";$("acPredBrier").textContent="—";$("acPredLoss").textContent="—";$("acPredAcc").textContent="—";return}
+  badge.textContent="CHAMPION";badge.className="adminBadgeSmall ok";
+  $("acPredSamples").textContent=fmt(m.samples||0);
+  $("acPredBrier").textContent=Number.isFinite(Number(m.validationMetrics?.brier))?Number(m.validationMetrics.brier).toFixed(4):"—";
+  $("acPredLoss").textContent=Number.isFinite(Number(m.validationMetrics?.logLoss))?Number(m.validationMetrics.logLoss).toFixed(4):"—";
+  $("acPredAcc").textContent=Number.isFinite(Number(m.validationMetrics?.accuracy))?Number(m.validationMetrics.accuracy).toFixed(1)+"%":"—";
+}
+async function loadPredictionAdmin(){
+  try{var d=await api("/api/admin/prediction/status",7000);renderPredictionAdmin(d.model);return d}catch(e){$("acPredictionStatus").textContent="Prediction status unavailable: "+e.message;return null}
+}
+async function trainPrediction(endpoint){
+  $("acPredictionStatus").textContent="Training candidate… this is an isolated background calculation and will not change the live champion until validation passes.";
+  try{
+    var body={symbol:$("acPredSymbol").value,interval:$("acPredInterval").value,limit:1500},d=await apiPost(endpoint,body);
+    $("acPredictionStatus").textContent=(d.promotable?"Candidate passed the validation gate and was promoted to champion. ":"Candidate was trained but kept as candidate. ")+"Samples: "+(d.model?.samples||0)+" · Brier: "+(Number(d.model?.validationMetrics?.brier||0)).toFixed(4)+" · Accuracy: "+(Number(d.model?.validationMetrics?.accuracy||0)).toFixed(1)+"%.";
+    loadAdminCenter();
+  }catch(e){$("acPredictionStatus").textContent="Training failed: "+e.message}
 }
 async function loadAdminProviders(){
   try{var d=await api("/api/admin/providers",9000);state.adminProviders=d.providers||[];adminRenderProviders()}catch(e){$("acProviders").innerHTML='<div class="small">Provider check failed: '+safeHtml(e.message)+'</div>'}
@@ -2083,6 +2130,9 @@ function initAccountUI(){
   if($("acSupportRefresh"))$("acSupportRefresh").addEventListener("click",loadAdminCenter);
   if($("acActivityRefresh"))$("acActivityRefresh").addEventListener("click",loadAdminCenter);
   if($("acCreateSnapshot"))$("acCreateSnapshot").addEventListener("click",adminCreateSnapshot);
+  if($("acTrainPublicModel"))$("acTrainPublicModel").addEventListener("click",function(){trainPrediction("/api/admin/prediction/train")});
+  if($("acTrainOwnModel"))$("acTrainOwnModel").addEventListener("click",function(){trainPrediction("/api/admin/prediction/train-own")});
+  if($("acPromoteModel"))$("acPromoteModel").addEventListener("click",async function(){try{var d=await apiPost("/api/admin/prediction/promote",{});$("acPredictionStatus").textContent="Candidate promoted. Champion sample count: "+(d.model?.samples||0);await loadAdminCenter()}catch(e){$("acPredictionStatus").textContent=e.message}});
   return true;
 }
 if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",initAccountUI,{once:true});else initAccountUI();
