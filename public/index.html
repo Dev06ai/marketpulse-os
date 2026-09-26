@@ -450,8 +450,8 @@ body.admin-mode .nav button.adminNav,body.admin-mode .mobileMenu button.adminNav
           <label class="small">Platform<select id="ecgVenue"><option>GENERIC</option><option>TOOBIT</option><option>XT</option></select></label>
           <label class="small">Contract direction<select id="ecgSide"><option>UP</option><option>DOWN</option></select></label>
           <label class="small">Cost if wrong<input id="ecgPremium" type="number" value="10" min="0" step=".01"></label>
-          <label class="small">Payout if correct<input id="ecgPayout" type="number" value="20" min="0" step=".01"></label>
-          <label class="small">Strike price<input title="The price level the contract settles against." id="ecgStrike" type="number" value="" min="0" step=".01" placeholder="Optional"></label>
+          <label class="small">Total payout if correct<input id="ecgPayout" type="number" value="20" min="0" step=".01"></label>
+          <label class="small">Strike price<input title="The price level the contract settles against." id="ecgStrike" type="number" value="" min="0" step=".01" placeholder="Enter venue strike"></label>
           <label class="small">Minutes until expiry<input id="ecgExpiryMin" type="number" value="5" min="0.5" step=".5"></label>
           <label class="small">Fee / cost<input id="ecgFee" type="number" value="0" min="0" step=".01"></label>
         </div>
@@ -1659,6 +1659,8 @@ function friendlyGateReason(code){
     PAYOUT_REQUIRED:"Enter the payout shown by the venue.",
     PAYOUT_NOT_ABOVE_STAKE:"The payout is not greater than the stake and fees.",
     EVENT_PAYOFF_BELOW_RISK_REQUIREMENT:"The contract payout is too small for your minimum reward/risk.",
+    PER_TRADE_RISK_EXCEEDED:"Position size risks more than the configured amount per trade.",
+    PER_TRADE_RISK_EXCEEDED_AFTER_EXCHANGE_ROUNDING:"Exchange tick/quantity rounding pushed risk above the allowed amount.",
     EVENT_DIRECTION_CONFLICTS_WITH_SIGNAL:"The contract direction conflicts with MarketPulse.",
     NO_CONTRACTS_WITHIN_RISK_BUDGET:"The contract is too large for your remaining risk budget.",
     STRIKE_REQUIRED:"Enter the venue's strike price.",
@@ -1730,7 +1732,7 @@ async function loadEventGuard(){
       dailyLossLimitPct:$("pfgDailyLoss").value||3,maxDrawdownPct:$("pfgMaxDD").value||6,
       riskPerTradePct:$("pfgRiskTrade").value||.5,minSignalScore:$("pfgScore").value||72,minRR:$("pfgRR").value||1.5,
       side:$("ecgSide").value,premium:$("ecgPremium").value,payout:$("ecgPayout").value,fee:$("ecgFee").value,
-      venue:$("ecgVenue").value,strikePrice:$("ecgStrike").value,expirationAt:String(Date.now()+((Number($("ecgExpiryMin").value)||5)*60000)),strictContractContext:$("ecgStrike").value?true:false
+      venue:$("ecgVenue").value,strikePrice:$("ecgStrike").value,expirationAt:String(Date.now()+((Number($("ecgExpiryMin").value)||5)*60000)),strictContractContext:true
     });
     var d=await api("/api/propfirm/event?"+q.toString(),8500),g=d.gate||{};
     applyGateVisual("ecgCard","ecgGateChip",g.decision||"WAITING");
