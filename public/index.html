@@ -1598,6 +1598,72 @@ async function loadDataFabric(){
     $("dcfState").textContent="ERROR";$("dcfSources").textContent=e.message||"Cross-exchange check unavailable";
   }
 }
+function gateDecisionClass(decision){
+  decision=String(decision||"").toUpperCase();
+  if(decision==="BLOCKED")return"gate-blocked";
+  if(decision==="ELIGIBLE")return"gate-passed";
+  if(decision==="ELIGIBLE_WITH_WARNINGS")return"gate-warning";
+  return"";
+}
+function friendlyGateReason(code){
+  var map={
+    NO_DIRECTIONAL_SETUP:"No clear UP/DOWN market setup.",
+    SIGNAL_SCORE_BELOW_THRESHOLD:"Signal strength is below your minimum.",
+    R_R_BELOW_THRESHOLD:"The target is too close for your minimum reward/risk.",
+    DERIVATIVES_UNAVAILABLE:"Open-interest/flow data is unavailable.",
+    DATA_QUALITY_BELOW_THRESHOLD:"Market data quality is below the required level.",
+    CANDLE_DATA_STALE:"The candle feed is too old.",
+    FLOW_DATA_STALE:"The live flow feed is too old.",
+    SPREAD_TOO_WIDE:"The market spread is too wide right now.",
+    DAILY_LOSS_LIMIT_REACHED:"Your daily loss limit has already been reached.",
+    MAX_DRAWDOWN_LIMIT_REACHED:"Your account is too close to the maximum drawdown.",
+    OPEN_RISK_LIMIT_REACHED:"Existing open risk leaves no room for another trade.",
+    MAX_OPEN_POSITIONS_REACHED:"You already have the maximum number of open positions.",
+    DAILY_TRADE_LIMIT_REACHED:"Today's trade limit has been reached.",
+    CONSECUTIVE_LOSS_LIMIT_REACHED:"The loss-streak protection is active.",
+    LOSS_COOLDOWN_ACTIVE:"The post-loss cooldown is still active.",
+    HIGH_VOLATILITY_BLOCKED:"Volatility is above the configured safety limit.",
+    FLOW_MIXED:"Order flow is mixed, so the direction is not confirmed.",
+    FLOW_CONFLICTS_WITH_DIRECTION:"Order flow disagrees with the suggested direction.",
+    MARKET_CONSENSUS_UNAVAILABLE:"Independent price confirmation is unavailable.",
+    MARKET_CONSENSUS_WEAK:"Independent price feeds are not confirming the move strongly enough.",
+    INSUFFICIENT_INDEPENDENT_PRICE_SOURCES:"Not enough independent price feeds are available.",
+    CONSENSUS_SOURCE_COUNT_UNAVAILABLE:"The independent-source check could not be completed.",
+    PRICE_FEEDS_CONFLICT:"Independent price feeds disagree too much.",
+    EVENT_SIDE_REQUIRED:"Choose UP or DOWN.",
+    PREMIUM_REQUIRED:"Enter the amount you can lose on this contract.",
+    PAYOUT_REQUIRED:"Enter the payout shown by the venue.",
+    PAYOUT_NOT_ABOVE_STAKE:"The payout is not greater than the stake and fees.",
+    EVENT_PAYOFF_BELOW_RISK_REQUIREMENT:"The contract payout is too small for your minimum reward/risk.",
+    EVENT_DIRECTION_CONFLICTS_WITH_SIGNAL:"The contract direction conflicts with MarketPulse.",
+    NO_CONTRACTS_WITHIN_RISK_BUDGET:"The contract is too large for your remaining risk budget.",
+    STRIKE_REQUIRED:"Enter the venue's strike price.",
+    EXPIRY_REQUIRED:"Enter the contract expiry.",
+    CONTRACT_EXPIRED:"This contract has already expired.",
+    EXPIRY_TOO_CLOSE:"There is too little time left to satisfy the safety rule.",
+    STRIKE_TOO_CLOSE_TO_INDEX:"The strike is too close to the current index.",
+    INVALID_LEVELS:"Entry, stop and target levels are invalid.",
+    MAX_DAILY_LOSS:"The execution daily-loss limit is active.",
+    RECONCILIATION_BLOCK:"Exchange state must be reconciled before execution.",
+    KILL_SWITCH_ACTIVE:"The execution kill switch is active."
+  };
+  return map[code]||String(code||"Safety check failed.").replaceAll("_"," ").toLowerCase();
+}
+function applyGateVisual(cardId,chipId,decision){
+  var card=$(cardId),chip=$(chipId);if(!card||!chip)return;
+  card.classList.remove("gate-blocked","gate-passed","gate-warning");
+  var cls=gateDecisionClass(decision);if(cls)card.classList.add(cls);
+  chip.textContent=decision||"WAITING";
+}
+function setGateExplain(id,decision,reasons){
+  var el=$(id);if(!el)return;
+  if(decision==="BLOCKED")el.textContent="DON'T TRADE — one or more safety checks failed.";
+  else if(decision==="ELIGIBLE")el.textContent="TRADE CHECK PASSED — the configured safety checks are clear.";
+  else if(decision==="ELIGIBLE_WITH_WARNINGS")el.textContent="CAUTION — the setup cleared the hard blocks, but warnings remain.";
+  else el.textContent="Waiting for enough data to complete the safety check.";
+  el.dataset.reasons=(reasons||[]).join("|");
+}
+
 async function loadPropFirmGuard(){
   if(!$("pfgResult"))return;
   try{
@@ -1608,9 +1674,10 @@ async function loadPropFirmGuard(){
       riskPerTradePct:$("pfgRiskTrade").value||.5,minSignalScore:$("pfgScore").value||72,minRR:$("pfgRR").value||1.5
     });
     var d=await api("/api/propfirm?"+q.toString(),8500),g=d.gate||{};
-    $("pfgGateChip").textContent=g.decision||"UNKNOWN";
-    $("pfgResult").textContent=(g.signalSide||"WAIT")+" · score "+fmt(g.score)+" · R:R "+Number(g.rr||0).toFixed(2)+" · risk headroom "+fmt(g.riskHeadroomCash||0);
-    $("pfgReasons").textContent=(g.reasons&&g.reasons.length?("BLOCK: "+g.reasons.join(" · ")):("Gate clear"+(g.warnings&&g.warnings.length?(" · Warnings: "+g.warnings.join(" · ")):"")));
+    applyGateVisual("pfgCard","pfgGateChip",g.decision||"WAITING");
+    setGateExplain("pfgExplain",g.decision,g.reasons);
+    $("pfgResult").textContent=(g.signalSide||"WAIT")+" · score "+fmt(g.score)+" · R:R "+Number(g.rr||0).toFixed(2)+" · remaining risk "+fmt(g.riskHeadroomCash||0);
+    $("pfgReasons").textContent=(g.reasons&&g.reasons.length?("Why blocked: "+g.reasons.map(friendlyGateReason).join(" · ")):("Checks passed"+(g.warnings&&g.warnings.length?(" · Caution: "+g.warnings.map(friendlyGateReason).join(" · ")):"")));
   }catch(e){
     $("pfgGateChip").textContent="ERROR";$("pfgResult").textContent="Prop guard unavailable";$("pfgReasons").textContent=e.message||"Request failed";
   }
@@ -1627,9 +1694,10 @@ async function loadEventGuard(){
       venue:$("ecgVenue").value,strikePrice:$("ecgStrike").value,expirationAt:String(Date.now()+((Number($("ecgExpiryMin").value)||5)*60000)),strictContractContext:$("ecgStrike").value?true:false
     });
     var d=await api("/api/propfirm/event?"+q.toString(),8500),g=d.gate||{};
-    $("ecgGateChip").textContent=g.decision||"UNKNOWN";
+    applyGateVisual("ecgCard","ecgGateChip",g.decision||"WAITING");
+    setGateExplain("ecgExplain",g.decision,g.reasons);
     $("ecgResult").textContent=(g.eventSide||"WAIT")+" · max "+Number(g.maxContracts||0)+" contract(s) · max loss "+fmt(g.maxLoss||0)+" · max profit "+fmt(g.maxProfit||0)+" · payoff "+Number(g.payoffR||0).toFixed(2)+"R"+(g.strikeDistanceBps!=null?" · strike distance "+Number(g.strikeDistanceBps).toFixed(1)+" bps":"");
-    $("ecgReasons").textContent=(g.reasons&&g.reasons.length?("BLOCK: "+g.reasons.join(" · ")):("Gate clear"+(g.warnings&&g.warnings.length?(" · Warnings: "+g.warnings.join(" · ")):"")))+".";
+    $("ecgReasons").textContent=(g.reasons&&g.reasons.length?("Why blocked: "+g.reasons.map(friendlyGateReason).join(" · ")):("Checks passed"+(g.warnings&&g.warnings.length?(" · Caution: "+g.warnings.map(friendlyGateReason).join(" · ")):"")))+".";
   }catch(e){
     $("ecgGateChip").textContent="ERROR";$("ecgResult").textContent="Event guard unavailable";$("ecgReasons").textContent=e.message||"Request failed";
   }
