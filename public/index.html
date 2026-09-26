@@ -98,6 +98,18 @@ button,input,select,textarea{font:inherit}.wrap{width:min(1440px,calc(100% - 26p
   .nav button[data-view="lab"],.nav button[data-view="edge"],.nav button[data-view="brain"]{margin-left:3px}
 }
 #mp7-panel{margin-top:12px}
+</style><style id="signal-state-style">
+#callMetric,#callMetric .value,.decisionStateCard,.signalQualityCard{transition:color .25s ease,border-color .25s ease,box-shadow .25s ease,background .25s ease}
+.decisionSection{--signal-accent:#a78bfa;--signal-soft:rgba(167,139,250,.10);--signal-border:rgba(167,139,250,.28)}
+.decisionSection.signal-long{--signal-accent:#4ade80;--signal-soft:rgba(74,222,128,.10);--signal-border:rgba(74,222,128,.30)}
+.decisionSection.signal-short{--signal-accent:#fb7185;--signal-soft:rgba(251,113,133,.10);--signal-border:rgba(251,113,133,.30)}
+.decisionSection.signal-wait{--signal-accent:#a78bfa;--signal-soft:rgba(167,139,250,.10);--signal-border:rgba(167,139,250,.28)}
+.decisionSection.signal-long .decisionStateCard,.decisionSection.signal-short .decisionStateCard,.decisionSection.signal-wait .decisionStateCard,.decisionSection.signal-long .signalQualityCard,.decisionSection.signal-short .signalQualityCard,.decisionSection.signal-wait .signalQualityCard,.decisionSection.signal-long #callMetric,.decisionSection.signal-short #callMetric,.decisionSection.signal-wait #callMetric{border-color:var(--signal-border);background:linear-gradient(180deg,var(--signal-soft),rgba(8,8,11,.94));box-shadow:0 0 0 1px color-mix(in srgb,var(--signal-accent) 12%,transparent),0 0 30px color-mix(in srgb,var(--signal-accent) 16%,transparent),inset 0 1px 0 rgba(255,255,255,.05),var(--shadow)}
+.decisionSection.signal-long #callMetric .value,.decisionSection.signal-short #callMetric .value,.decisionSection.signal-wait #callMetric .value{color:var(--signal-accent)!important;text-shadow:0 0 18px color-mix(in srgb,var(--signal-accent) 35%,transparent)}
+.decisionSection.signal-long .signalQualityCard .value,.decisionSection.signal-short .signalQualityCard .value,.decisionSection.signal-wait .signalQualityCard .value{color:var(--signal-accent)!important;text-shadow:0 0 16px color-mix(in srgb,var(--signal-accent) 28%,transparent)}
+.decisionSection.signal-long .bar i,.decisionSection.signal-short .bar i,.decisionSection.signal-wait .bar i{background:linear-gradient(90deg,var(--signal-accent),color-mix(in srgb,var(--signal-accent) 45%,#fff));box-shadow:0 0 10px color-mix(in srgb,var(--signal-accent) 28%,transparent)}
+.flowUnavailable{padding:48px 12px;text-align:center;color:#71839a;font-size:10px}
+@media(prefers-reduced-motion:reduce){#callMetric,#callMetric .value,.decisionStateCard,.signalQualityCard{transition:none}}
 </style></head>
 <body>
 <header class="header"><div class="headerInner">
@@ -114,7 +126,7 @@ button,input,select,textarea{font:inherit}.wrap{width:min(1440px,calc(100% - 26p
     <div class="hero">
       <div class="metric"><div class="label">Price</div><div class="value" id="mPrice">—</div><div class="subv" id="mChange">—</div></div>
       <div class="metric"><div class="label">Market mode</div><div class="value" id="mRegime">—</div><div class="subv" id="mMood">—</div></div>
-      <div class="metric"><div class="label">Call</div><div class="value" id="mCall">—</div><div class="subv" id="mBias">—</div></div>
+      <div class="metric" id="callMetric"><div class="label">Call</div><div class="value" id="mCall">—</div><div class="subv" id="mBias">—</div></div>
       <div class="metric"><div class="label">Confluence</div><div class="value" style="color:var(--cyan)" id="mScore">—</div><div class="subv">alignment / 100</div></div>
       <div class="metric"><div class="label">RSI / ADX</div><div class="value" id="mMom">—</div><div class="subv" id="mStructure">—</div></div>
     </div>
@@ -123,8 +135,8 @@ button,input,select,textarea{font:inherit}.wrap{width:min(1440px,calc(100% - 26p
       <div class="sectionHead"><div><div class="title">Decision Center</div><div class="sub">Your current trade state stays above the long-term context.</div></div><span class="chip" id="adaptiveChip">Adaptive: collecting</span></div>
       <div class="grid2">
             <div class="section grid2">
-      <div class="card"><div class="sectionHead"><div><div class="title" id="thesisTitle">Loading market context…</div><div class="sub" id="thesisState">—</div></div><div class="value" id="thesisScore">—</div></div><div id="thesis" class="thesis">Waiting for the live model.</div><div class="chips" id="thesisChips"></div><div class="scenario"><div class="mini"><div class="k">Primary scenario</div><div class="v" id="primary">—</div></div><div class="mini"><div class="k">What would break it</div><div class="v" id="alternate">—</div></div></div></div>
-      <div class="card"><div class="sectionHead"><div><div class="title">Signal quality</div><div class="sub">Transparent confluence components.</div></div><span class="value" id="quality">—</span></div><div id="components" class="list"></div></div>
+      <div class="card decisionStateCard"><div class="sectionHead"><div><div class="title" id="thesisTitle">Loading market context…</div><div class="sub" id="thesisState">—</div></div><div class="value" id="thesisScore">—</div></div><div id="thesis" class="thesis">Waiting for the live model.</div><div class="chips" id="thesisChips"></div><div class="scenario"><div class="mini"><div class="k">Primary scenario</div><div class="v" id="primary">—</div></div><div class="mini"><div class="k">What would break it</div><div class="v" id="alternate">—</div></div></div></div>
+      <div class="card signalQualityCard"><div class="sectionHead"><div><div class="title">Signal quality</div><div class="sub">Transparent confluence components.</div></div><span class="value" id="quality">—</span></div><div id="components" class="list"></div></div>
     </div>
       </div>
     </div>
@@ -487,6 +499,10 @@ function setView(name){
   document.querySelectorAll(".nav button,.mobileMenu button").forEach(function(b){b.classList.toggle("active",b.dataset.view===name)});
   var menu=$("mobileMenu"),btn=$("mobileMenuBtn");if(menu){menu.classList.remove("open");menu.setAttribute("aria-hidden","true")}if(btn)btn.setAttribute("aria-expanded","false");
   window.scrollTo(0,0);
+  if(name==="flow"&&state.market){
+    renderFlowView(state.market.derivatives||{available:false});
+    drawFlowData(state.market.derivatives||null);
+  }
 }
 document.querySelectorAll("[data-view]").forEach(function(b){
   b.addEventListener("click",function(){setView(b.dataset.view)})
@@ -608,9 +624,13 @@ function renderCycle(){
 
 function renderMarket(){
   var d=state.market,a=d&&d.analysis;if(!d||!a)return;
+  var signalState=a.side==="LONG"?"signal-long":a.side==="SHORT"?"signal-short":"signal-wait";
+  var decision=document.querySelector(".decisionSection");
+  if(decision){decision.classList.remove("signal-long","signal-short","signal-wait");decision.classList.add(signalState)}
+  $("callMetric").classList.remove("signal-long","signal-short","signal-wait");$("callMetric").classList.add(signalState);
   $("mPrice").textContent=fmt(a.price);$("mChange").textContent=pct(a.change24h)+" / 24h";
   $("mRegime").textContent=a.regime||"—";$("mMood").textContent="Mood: "+(a.mood||"—");
-  $("mCall").textContent=a.status==="WAITING"?"NO TRADE":(a.type||"—");$("mBias").textContent=a.bias||"Wait";
+  $("mCall").textContent=a.side==="LONG"?"LONG":a.side==="SHORT"?"SHORT":"NO TRADE";$("mBias").textContent=a.side==="LONG"?"Bullish setup":a.side==="SHORT"?"Bearish setup":"Neutral / waiting";
   $("mScore").textContent=fmt(a.score);$("mMom").textContent=fmt(a.rsi)+" / "+fmt(a.adx);$("mStructure").textContent=a.structure||"—";
   $("thesisTitle").textContent=a.status==="WAITING"?"No trade":(a.type||"Market context");$("thesisState").textContent=(a.status||"WAITING")+" · "+(a.probabilityLabel||"");
   $("thesisScore").textContent=fmt(a.score)+"/100";$("thesis").textContent=(a.thesisParts||[a.thesis||"Market context available."]).join(" ");
@@ -832,8 +852,8 @@ function renderPortfolio(data){
   $("pfRisk").textContent=(Number(p.grossRiskPct)||0).toFixed(2)+"%";
   $("pfRiskMeta").textContent="Limit "+(Number(cfg.maxPortfolioRiskPct)||0).toFixed(2)+"%";
   $("pfExposure").textContent=(Number(p.grossExposurePct)||0).toFixed(2)+"%";
-  var top=p.concentration?.[0];$("pfConcentration").textContent=top?String(top.symbol||"—")+" "+Number(top.pct||0).toFixed(2)+"%":"—";
-  $("pfConcentrationMeta").textContent=top?"Largest symbol exposure":"No exposure";
+  var top=p.concentration?.[0];$("pfConcentration").textContent=top&&Number(top.pct)>0?String(top.symbol||"—")+" "+Number(top.pct||0).toFixed(2)+"%":"None";
+  $("pfConcentrationMeta").textContent=top&&Number(top.pct)>0?"Largest symbol exposure":"No active exposure";
   $("pfGuard").textContent=p.guardState||"WITHIN LIMITS";
   $("pfGuard").className="v "+(p.warnings?.length?"portfolioBad":"portfolioOk");
   $("pfGuardMeta").textContent=p.warnings?.length?p.warnings.join(" · "):"No portfolio-level warnings";
@@ -844,9 +864,10 @@ function renderPortfolio(data){
     var width=Math.min(100,(Number(x.exposurePct||0)/maxBar)*100);
     return'<div class="portfolioBarRow"><b>'+safeHtml(x.label||x.symbol)+'</b><div class="portfolioBar"><i style="width:'+width.toFixed(0)+'%"></i></div><span>'+Number(x.exposurePct||0).toFixed(2)+'%</span></div>';
   }).join("")||'<div class="portfolioSmall">No assets.</div>';
-  $("pfClusterRows").innerHTML=(p.clusters||[]).map(function(x){
+  var activeClusters=(p.clusters||[]).filter(function(x){return (x.members||[]).length>1 || Number(x.riskPct||0)>0 || Number(x.exposurePct||0)>0});
+  $("pfClusterRows").innerHTML=activeClusters.map(function(x){
     return'<div class="portfolioBarRow"><b>'+safeHtml((x.members||[]).join(" + "))+'</b><div class="portfolioBar"><i style="width:'+Math.min(100,(Number(x.riskPct||0)/(Number(cfg.maxCorrelatedClusterRiskPct)||3))*100).toFixed(0)+'%"></i></div><span>'+Number(x.riskPct||0).toFixed(2)+'% R</span></div>';
-  }).join("")||'<div class="portfolioSmall">No correlated clusters.</div>';
+  }).join("")||'<div class="portfolioSmall">No active correlated clusters.</div>';
   $("pfAssetTable").innerHTML=assets.map(function(x){
     return'<tr><td><b>'+safeHtml(x.label||x.symbol)+'</b></td><td>'+fmt(x.price)+'</td><td>'+pct(x.change24h)+'</td><td>'+safeHtml(x.regime||"—")+'</td><td>'+safeHtml(x.side||"WAIT")+'</td><td>'+fmt(x.score)+'</td><td>'+Number(x.exposurePct||0).toFixed(2)+'%</td><td>'+Number(x.riskPct||0).toFixed(2)+'%</td></tr>';
   }).join("")||'<tr><td colspan="8">No portfolio data.</td></tr>';
@@ -970,7 +991,7 @@ function checkAlerts(rows){
   });
 }
 async function enableNotifications(){if(!("Notification"in window)){$("notifState").textContent="Browser notifications unavailable";return}var p=await Notification.requestPermission();$("notifState").textContent=p;$("notifBtn").textContent=p==="granted"?"Notifications enabled":"Enable notifications"}
-async function runSystemCheck(){ $("healthGrid").innerHTML='<div class="small">Running core checks…</div>';try{var d=await api("/api/system-check",8000),checks=d.checks||{};var names=["server","marketEngine","learning","memory","marketData","derivatives","oi","cvd","liquidations","execution"];$("healthGrid").innerHTML=names.map(function(n){return'<div class="healthItem"><span class="healthDot '+(checks[n]?"ok":"bad")+'"></span><b>'+n+"</b></div>"}).join("");$("healthText").textContent=(d.ok?"Core market stack passed. ":"Core market stack needs attention. ")+(d.marketError||d.derivativesError||"")+" · OI/CVD/liquidations are reported separately above."; }catch(e){$("healthText").textContent="System check failed: "+e.message}}
+async function runSystemCheck(){ $("healthGrid").innerHTML='<div class="small">Running core checks…</div>';try{var d=await api("/api/system-check",8000),checks=d.checks||{};var names=["server","marketEngine","learning","memory","marketData","derivatives","oi","cvd","liquidations","execution","portfolio","phase7"];$("healthGrid").innerHTML=names.map(function(n){return'<div class="healthItem"><span class="healthDot '+(checks[n]?"ok":"bad")+'"></span><b>'+n+"</b></div>"}).join("");$("healthText").textContent=(d.ok?"Core market stack passed. ":"Core market stack needs attention. ")+(d.marketError||d.derivativesError||"")+" · Portfolio and Trader Analytics checks are included."; }catch(e){$("healthText").textContent="System check failed: "+e.message}}
 function calc(){
   var a=+$("ca").value||0,r=(+$("cr").value||0)/100,e=+$("ce").value||0,s=+$("cs").value||0,b=a*r,d=Math.abs(e-s);$("sizeResult").textContent=d?"Risk "+fmt(b)+" · Position size "+fmt(b/d)+" units":"Enter valid stop";
   var re=+$("re").value||0,rs=+$("rs").value||0,rt=+$("rt").value||0,rd=Math.abs(re-rs),rw=Math.abs(rt-re),dir=$("rdirection").value;$("rrResult").textContent=rd?(rw/rd).toFixed(2)+"R · "+dir:"—";
@@ -984,9 +1005,12 @@ function normalizeFlow(values){
   return values.map(function(v){return 100+((v-first)/maxDev)*80});
 }
 function drawBlankFlow(){
-  var c=$("flowChart");if(!c)return;var o=setupCanvas(c,190),ctx=o.ctx,W=o.W,H=o.H;
-  ctx.fillStyle="#111114";ctx.fillRect(0,0,W,H);ctx.strokeStyle="rgba(255,255,255,.055)";for(var g=1;g<5;g++){var y=g*H/5;ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke()}
-  ctx.fillStyle="#71839a";ctx.font="10px system-ui";ctx.fillText("Waiting for live OI / CVD / liquidation series…",14,H/2);
+  ["flowChart","flowChart2"].forEach(function(id){
+    var c=$(id);if(!c)return;var o=setupCanvas(c,190),ctx=o.ctx,W=o.W,H=o.H;
+    ctx.fillStyle="#111114";ctx.fillRect(0,0,W,H);ctx.strokeStyle="rgba(255,255,255,.055)";
+    for(var g=1;g<5;g++){var y=g*H/5;ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke()}
+    ctx.fillStyle="#71839a";ctx.font="10px system-ui";ctx.fillText("Waiting for live OI / CVD / liquidation series…",14,H/2);
+  });
 }
 function drawFlowData(data){
   if(!data){$("flowSource").textContent="UNAVAILABLE";drawBlankFlow();return}
@@ -998,20 +1022,39 @@ function drawFlowData(data){
     liq=normalizeFlow(history.map(function(x){return Number(x.liqTotal)}));
   }
   if(cvd.length||oi.length||liq.length){
-    drawSimpleSeries("flowChart",[
-      {values:cvd,color:"#2E7D32"},
-      {values:oi,color:"#1565C0"},
-      {values:liq,color:"#C62828"}
-    ],190);
+    var sets=[{values:cvd,color:"#2E7D32"},{values:oi,color:"#1565C0"},{values:liq,color:"#C62828"}];
+    drawSimpleSeries("flowChart",sets,190);drawSimpleSeries("flowChart2",sets,190);
     $("flowSource").textContent=(data.provider||"LIVE")+" · series";
     return;
   }
   $("flowSource").textContent=data.available?"LIVE · snapshot":"UNAVAILABLE";
   drawBlankFlow();
 }
-
+function renderFlowView(data){
+  data=data||{};
+  $("fOi").textContent=data.oi!=null?fmt(data.oi):"UNAVAILABLE";
+  $("fOiS").textContent=data.oiChangePct!=null?pct(data.oiChangePct)+" recent":"Current snapshot";
+  $("fCvd").textContent=data.cvdState||"UNAVAILABLE";
+  $("fCvdS").textContent=data.cvdDelta!=null?"Δ "+fmt(data.cvdDelta):"No CVD feed";
+  $("fPos").textContent=data.positioning||"UNAVAILABLE";
+  $("fFund").textContent=data.fundingRate!=null?"Funding "+(Number(data.fundingRate)*100).toFixed(4)+"%":"Funding unavailable";
+  $("fLiq").textContent=data.liquidationBias&&data.liquidationBias!=="UNKNOWN"?data.liquidationBias:"UNAVAILABLE";
+  $("fLiqS").textContent=data.liquidationTotal!=null?"Total "+fmt(data.liquidationTotal):"No liquidation feed";
+}
 async function loadFlow(){
-  try{var j=await api("/api/core-flow?symbol="+encodeURIComponent(state.symbol)+"&interval="+encodeURIComponent(state.interval),3500);if(j.data){state.market.derivatives=j.data;renderMarketNoFlow();drawFlowData(j.data)}}catch{}
+  $("flowSource").textContent="CONNECTING";
+  try{
+    var j=await api("/api/core-flow?symbol="+encodeURIComponent(state.symbol)+"&interval="+encodeURIComponent(state.interval),8500);
+    if(j.data){
+      state.market=state.market||{};state.market.derivatives=j.data;
+      renderMarketNoFlow();renderFlowView(j.data);drawFlowData(j.data);
+      $("flowSource").textContent=j.data.available===false?"UNAVAILABLE":"LIVE";
+    }else{
+      renderFlowView({available:false});drawFlowData(null);$("flowSource").textContent="UNAVAILABLE";
+    }
+  }catch(e){
+    renderFlowView({available:false});drawFlowData(null);$("flowSource").textContent="RETRY";
+  }
 }
 
 function renderMarketNoFlow(){
