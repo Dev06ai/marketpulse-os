@@ -28,6 +28,8 @@ const DATA_TIMEOUT_MS=7000;
 const GLOBAL_RATE_WINDOW_MS=5*60*1000;
 const GLOBAL_RATE_LIMIT=300;
 const GLOBAL_RATE=new Map();
+const FAST_PUBLIC_PATHS=new Set(["/api/core","/api/fast-ticker","/api/core-enrichment","/api/core-analytics","/api/data-fabric","/api/config","/health","/"]);
+const FAST_TICKER_CACHE=new Map();
 const CSRF_COOKIE="mp_csrf";
 const SERVER_METRICS={startedAt:Date.now(),requests:0,errors:0,totalLatencyMs:0,routeCounts:new Map(),lastErrors:[]};
 let RESEARCH_JOB={running:false,startedAt:null,finishedAt:null,error:null,symbol:null,interval:null,bars:0,records:0,trained:0,skipped:0,progress:{processed:0,total:0,pct:0}};
@@ -153,21 +155,39 @@ function authKey(ip,email,type){return type+":"+String(ip||"unknown")+":"+String
 function requestDevice(req){return String(req.headers["x-marketpulse-device"]||"00000000-0000-0000-0000-000000000000").slice(0,128)}
 
 function mins(interval){return ({'15m':15,'1h':60,'4h':240,'1d':1440})[interval]||60}
-async function getBinance(symbol,interval){
+async function getBinance(symbol,interval,timeoutMs=DATA_TIMEOUT_MS){
   const bases=['https://api.binance.com','https://api-gcp.binance.com','https://api1.binance.com'];
-  const requests=bases.map(async base=>{const u=new URL(base+'/api/v3/klines');u.searchParams.set('symbol',symbol);u.searchParams.set('interval',interval);u.searchParams.set('limit',String(Math.min(KLINE_LIMIT,1000)));const r=await fetch(u,{signal:timeoutSignal(DATA_TIMEOUT_MS)});if(!r.ok)throw Error('HTTP '+r.status);const rows=await r.json();return rows.map(x=>({t:x[0],o:+x[1],h:+x[2],l:+x[3],c:+x[4],v:+x[5],source:'binance'}))});
+  const requests=bases.map(async base=>{const u=new URL(base+'/api/v3/klines');u.searchParams.set('symbol',symbol);u.searchParams.set('interval',interval);u.searchParams.set('limit',String(Math.min(KLINE_LIMIT,1000)));const r=await fetch(u,{signal:timeoutSignal(timeoutMs)});if(!r.ok)throw Error('HTTP '+r.status);const rows=await r.json();return rows.map(x=>({t:x[0],o:+x[1],h:+x[2],l:+x[3],c:+x[4],v:+x[5],source:'binance'}))});
   try{return await Promise.any(requests)}catch{return null}
 }
-async function getKraken(symbol,interval){
+async function getKraken(symbol,interval,timeoutMs=DATA_TIMEOUT_MS){
   const pair=KRAKEN_PAIRS[symbol]; if(!pair)throw new Error('No Kraken mapping for '+symbol);
   const u=new URL('https://api.kraken.com/0/public/OHLC');u.searchParams.set('pair',pair);u.searchParams.set('interval',String(mins(interval)));
-  const r=await fetch(u,{signal:timeoutSignal(DATA_TIMEOUT_MS)});if(!r.ok)throw new Error('Kraken returned '+r.status);const body=await r.json();if(body.error?.length)throw new Error(body.error.join(', '));
+  const r=await fetch(u,{signal:timeoutSignal(timeoutMs)});if(!r.ok)throw new Error('Kraken returned '+r.status);const body=await r.json();if(body.error?.length)throw new Error(body.error.join(', '));
   const key=Object.keys(body.result||{}).find(k=>k!=='last');if(!key)throw new Error('Kraken returned no OHLC data');
   return (body.result[key]||[]).slice(-Math.min(KLINE_LIMIT,720)).map(x=>({t:+x[0]*1000,o:+x[1],h:+x[2],l:+x[3],c:+x[4],v:+x[6],source:'kraken'}));
 }
+async function getFastKlines(symbol,interval){
+  const key="FAST|"+symbol+"|"+interval,hit=CACHE.get(key);
+  if(hit&&Date.now()-hit.ts<8000)return hit.rows;
+  try{
+    const rows=await getKraken(symbol,interval,2800);
+    CACHE.set(key,{ts:Date.now(),rows});
+    return rows;
+  }catch{
+    try{
+      const rows=await getBinance(symbol,interval,1800);
+      CACHE.set(key,{ts:Date.now(),rows});
+      return rows;
+    }catch{
+      if(hit?.rows)return hit.rows;
+      throw Error("No fast market data source available");
+    }
+  }
+}
 async function klines(symbol,interval){
   const key=symbol+'|'+interval,hit=CACHE.get(key);if(hit&&Date.now()-hit.ts<TTL)return hit.rows;
-  const rows=await getBinance(symbol,interval)||await getKraken(symbol,interval);CACHE.set(key,{ts:Date.now(),rows});return rows;
+  const rows=await getFastKlines(symbol,interval)||await getBinance(symbol,interval)||await getKraken(symbol,interval);CACHE.set(key,{ts:Date.now(),rows});return rows;
 }
 async function longDailyHistory(symbol,days=4200){
   const key="LONG|"+symbol,hit=CACHE.get(key);if(hit&&Date.now()-hit.ts<TTL*4)return hit.rows;
@@ -723,8 +743,13 @@ const server=http.createServer(async(req,res)=>{
       const guard=await auth.requireAdmin(req);
       if(!guard.ok)return send(res,guard.status,{ok:false,error:guard.error});
     }
-    const adminCfg=await getAdminRuntime();
-    const userForMode=await auth.userFromRequest(req);
+    const fastPublic=FAST_PUBLIC_PATHS.has(u.pathname)&&req.method==="GET";
+    const adminCfg=fastPublic?(ADMIN_RUNTIME.config||{
+      mode:"normal",maintenanceMode:false,readOnlyMode:false,registrationsEnabled:true,
+      aiEnabled:true,executionEnabled:true,marketDataEnabled:true,writesEnabled:true,
+      maintenanceMessage:"MarketPulse is temporarily unavailable."
+    }):await getAdminRuntime();
+    const userForMode=fastPublic?null:await auth.userFromRequest(req);
     const isAdminUser=Boolean(userForMode?.isAdmin);
     const publicAllowed=new Set(['/api/config','/api/auth/me','/api/auth/login','/api/auth/register','/api/auth/logout','/api/auth/presence','/api/broadcasts/active','/api/telemetry/event','/health','/']);
     if(adminCfg.maintenanceMode&&!isAdminUser&&u.pathname.startsWith('/api/')&&!publicAllowed.has(u.pathname))return send(res,503,{ok:false,error:"MAINTENANCE_MODE",maintenance:true,message:adminCfg.maintenanceMessage});
@@ -1011,11 +1036,35 @@ const server=http.createServer(async(req,res)=>{
       }
     }
     
+    if(req.method==='GET'&&u.pathname==='/api/fast-ticker'){
+      const symbol=(u.searchParams.get('symbol')||'BTCUSDT').toUpperCase();
+      if(!SYMBOLS.includes(symbol))return send(res,400,{ok:false,error:'Unsupported symbol'});
+      const now=Date.now(),cached=FAST_TICKER_CACHE.get(symbol);
+      if(cached&&now-cached.ts<3000)return send(res,200,{ok:true,...cached.payload,cached:true,cacheAgeMs:now-cached.ts});
+      try{
+        const live=flowBucket(symbol);
+        if(Number.isFinite(Number(live.markPrice))&&now-Number(live.lastTs||0)<10000){
+          const payload={symbol,price:Number(live.markPrice),source:"Bybit live flow",updatedAt:now};
+          FAST_TICKER_CACHE.set(symbol,{ts:now,payload});
+          return send(res,200,{ok:true,...payload});
+        }
+        const snapshot=await Promise.race([
+          dataFabric.krakenSnapshot(symbol),
+          dataFabric.coinbaseSnapshot(symbol)
+        ]);
+        const payload={symbol,price:Number(snapshot.price),source:snapshot.name,updatedAt:now};
+        FAST_TICKER_CACHE.set(symbol,{ts:now,payload});
+        return send(res,200,{ok:true,...payload});
+      }catch(e){
+        if(cached)return send(res,200,{ok:true,...cached.payload,stale:true,cacheAgeMs:now-cached.ts});
+        return send(res,503,{ok:false,error:String(e.message||e)});
+      }
+    }
     if(req.method==='GET'&&u.pathname==='/api/core'){
       const symbol=(u.searchParams.get('symbol')||'BTCUSDT').toUpperCase(),interval=u.searchParams.get('interval')||'1h';
       if(!SYMBOLS.includes(symbol))return send(res,400,{error:'Unsupported symbol'});
       try{
-        const candles=await klines(symbol,interval);
+        const candles=await getFastKlines(symbol,interval);
         if(!candles||candles.length<220)throw Error('Insufficient candles');
         let analysis=analyze(candles,{interval,lower:null,higher:null,deriv:null});
         try{
@@ -1045,7 +1094,7 @@ const server=http.createServer(async(req,res)=>{
       const symbol=(u.searchParams.get('symbol')||'BTCUSDT').toUpperCase(),interval=u.searchParams.get('interval')||'1h';
       if(!SYMBOLS.includes(symbol))return send(res,400,{ok:false,error:'Unsupported symbol'});
       try{
-        const candles=await klines(symbol,interval);
+        const candles=await getFastKlines(symbol,interval);
         const consensus=await Promise.race([
           dataFabric.assess(symbol,interval,{primaryPrice:candles?.[candles.length-1]?.c,primaryAgeMs:candles?.[candles.length-1]?.t?Date.now()-Number(candles[candles.length-1].t):null,primarySource:candles?.[0]?.source,liveFlow:flowBucket(symbol)}),
           new Promise(resolve=>setTimeout(()=>resolve(null),2500))
