@@ -190,7 +190,7 @@ async function executionGate(plan,executionState){
     side:plan.side,entry:finite(plan.entry,0)||0,qty:finite(plan.qty,0)||0,
     riskCash:finite(plan.riskCash,0)||0
   }]);
-  const testOrders=existingOrders.filter(x=>!["CANCELLED","REJECTED","EXPIRED","CLOSED"].includes(x.status));
+  const testOrders=existingOrders.filter(x=>!["CANCELLED","REJECTED","EXPIRED","CLOSED"].includes(x.status)&&String(x.id||"")!==String(plan.intentId||""));
   const pseudoSeries={};
   const symbols=Array.from(new Set([...(existingPositions||[]).map(x=>x.symbol),...(existingOrders||[]).map(x=>x.symbol),String(plan.symbol||"").toUpperCase()].filter(Boolean)));
   const p=buildPortfolio(cfg,testPositions,testOrders,pseudoSeries);
