@@ -3,6 +3,7 @@ const assert=require("assert");
 const {analyze,backtest,backtestBySetup,walkForwardBacktest}=require("../market-engine");
 const phase4=require("../phase4");
 const execution=require("../execution");
+const phase6=require("../phase6");
 
 function candles(n=420){
   const out=[];let p=100;
@@ -47,7 +48,15 @@ p5.control.killSwitch=true;
 const g5b=await execution.marketGate({symbol:"BTCUSDT",side:"LONG",entry:100,stop:95,target:110,qty:10},p5);
 assert(!g5b.allowed&&g5b.reason==="KILL SWITCH ACTIVE","phase5 kill switch");
 
-console.log("MarketPulse Phase 5 smoke checks passed:",{
+const p6=phase6.createState();
+const series6={BTCUSDT:c,ETHUSDT:c.map(x=>Object.assign({},x,{c:x.c*1.01,o:x.o*1.01,h:x.h*1.01,l:x.l*1.01}))};
+const pf6=phase6.buildPortfolio(p6.config,[{symbol:"BTCUSDT",side:"LONG",entry:100,qty:10,riskCash:1000}],[],series6);
+assert(pf6.grossRiskPct===1,"phase6 portfolio risk");
+assert(pf6.correlation.BTCUSDT.ETHUSDT>0.99,"phase6 correlation");
+const st6=phase6.stressTest(Object.assign({},p6.config,{stressMovePct:5}),[{symbol:"BTCUSDT",side:"LONG",entry:100,qty:10,riskCash:1000}],[]);
+assert(st6.rows.length===2&&st6.rows[0].pnl<0&&st6.rows[1].pnl>0,"phase6 stress lab");
+
+console.log("MarketPulse Phase 6 smoke checks passed:",{
   price:a.price,score:a.score,status:a.status,backtestTrades:b.trades,
   validationTrades:w.validation.trades,setupBuckets:Object.keys(s).length
 });
