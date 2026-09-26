@@ -29,7 +29,7 @@ function baseState(){
     lastSetupAdjustment:0,
     lastComponentAdjustment:0,
     calibrationHistory:[],
-    model:{version:1,bias:0,weights:{},updates:0,logLoss:0,lastUpdateAt:null}
+    model:{version:1,bias:0,weights:{},updates:0,logLoss:0,lastUpdateAt:null,trainedKeys:[]}
   };
 }
 function ensureState(raw){
@@ -43,6 +43,7 @@ function ensureState(raw){
   s.model.bias=Number(s.model.bias)||0;
   s.model.updates=Number(s.model.updates)||0;
   s.model.logLoss=Number(s.model.logLoss)||0;
+  if(!Array.isArray(s.model.trainedKeys))s.model.trainedKeys=[];
   s.version=STATE_VERSION;
   s.resolved=Number(s.resolved)||0;
   s.wins=Number(s.wins)||0;
@@ -305,6 +306,30 @@ async function process(symbol,interval,candles,a){
   const observed=await observe(symbol,interval,candle?.t,adapted);
   return {analysis:adapted,observed};
 }
+async function trainFromReplay(records){
+  await init();
+  const rows=Array.isArray(records)?records:[];
+  let trained=0,skipped=0;
+  const seen=new Set(state.model.trainedKeys||[]);
+  for(const row of rows){
+    const outcome=row?.outcome?.status==="TARGET_1"?"WIN":row?.outcome?.status==="STOP"?"LOSS":null;
+    if(!outcome){skipped++;continue}
+    const key=String(row.signalKey||[row.symbol,row.interval,row.candleTs,row.side,row.score].join("|"));
+    if(seen.has(key)){skipped++;continue}
+    const pred=Object.assign({},row.snapshot||{},{
+      score:Number(row.score??row.snapshot?.score)||0,
+      side:row.side||row.snapshot?.side||"WAIT",
+      type:row.type||row.snapshot?.type||"UNKNOWN",
+      regime:row.regime||row.snapshot?.regime||"UNKNOWN",
+      derivatives:row.snapshot?.derivatives||row.snapshot?.deriv||{}
+    });
+    updateOnlineModel(pred,outcome);
+    seen.add(key);trained++;
+  }
+  state.model.trainedKeys=Array.from(seen).slice(-20000);
+  if(trained)await storage.saveLearningState(state);
+  return {trained,skipped,total:rows.length,updates:Number(state.model.updates)||0,ready:Number(state.model.updates||0)>=MODEL_MIN_UPDATES};
+}
 function componentSummary(){
   const grouped={};
   for(const row of Object.values(state.componentStats||{})){
@@ -339,7 +364,7 @@ async function status(){
     componentMinSamples:MIN_COMPONENT_SAMPLE,
     componentProfiles:Object.keys(state.componentStats||{}).length,
     componentSummary:componentSummary(),
-    model:{ready:Number(state.model?.updates||0)>=MODEL_MIN_UPDATES,updates:Number(state.model?.updates)||0,logLoss:Number(state.model?.logLoss)||0,averageLogLoss:Number(state.model?.updates)?Number(state.model.logLoss)/Number(state.model.updates):null,weights:state.model?.weights||{},lastUpdateAt:state.model?.lastUpdateAt||null},
+    model:{ready:Number(state.model?.updates||0)>=MODEL_MIN_UPDATES,updates:Number(state.model?.updates)||0,logLoss:Number(state.model?.logLoss)||0,averageLogLoss:Number(state.model?.updates)?Number(state.model.logLoss)/Number(state.model.updates):null,trainedKeys:Number(state.model?.trainedKeys?.length)||0,weights:state.model?.weights||{},lastUpdateAt:state.model?.lastUpdateAt||null},
     calibrationHistory:(state.calibrationHistory||[]).slice(-12),
     lastResolvedAt:state.lastResolvedAt,
     durable:storage.status().durable,
@@ -348,4 +373,4 @@ async function status(){
     lastComponentAdjustment:Number(state.lastComponentAdjustment)||0
   };
 }
-module.exports={init,process,recalibrate,status,resolve};
+module.exports={init,process,recalibrate,status,resolve,trainFromReplay};
