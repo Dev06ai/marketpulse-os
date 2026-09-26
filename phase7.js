@@ -8,7 +8,7 @@ function cleanText(x){return String(x??"").trim();}
 function bucketStats(rows){
   const items=new Map();
   for(const r of rows){
-    const key=cleanText(r)||"UNKNOWN";
+    const key=cleanText(r?._bucket??r?.key??r)||"UNKNOWN";
     const x=items.get(key)||{key,total:0,wins:0,losses:0,flats:0,netR:0,grossWin:0,grossLoss:0};
     x.total++;
     const rr=num(r.r,null);
@@ -71,13 +71,7 @@ function summarize(rows){
     bestTrade:best?{r:num(best.r,0),asset:best.asset||best.symbol||"—",side:best.side||"—",ts:num(best.ts, null)}:null,
     worstTrade:worst?{r:num(worst.r,0),asset:worst.asset||worst.symbol||"—",side:worst.side||"—",ts:num(worst.ts, null)}:null,
     streak,
-    byAsset:bucketStats(list.map(r=>[r.asset||r.symbol||"UNKNOWN",r])),
-    bySide:bucketStats(list.map(r=>[r.side||"UNKNOWN",r])),
-    byRegime:bucketStats(list.map(r=>[r.regime||"UNKNOWN",r])),
-    bySetup:bucketStats(list.map(r=>[r.setup||r.type||"UNKNOWN",r])),
-    byHour:bucketStats(list.map(r=>{const ts=num(r.ts,null);if(ts===null)return["UNKNOWN",r];const d=new Date(ts);return[String(d.getHours()).padStart(2,"0")+":00",r]})),
-    byWeekday:bucketStats(list.map(r=>{const ts=num(r.ts,null);if(ts===null)return["UNKNOWN",r];const d=new Date(ts);return[d.toLocaleDateString("en-US",{weekday:"short"}),r]}))
-  };
+      };
 }
 function normalizeBucketInput(pairs){
   return pairs.map(([key,row])=>Object.assign({},row,{_bucket:key}));
