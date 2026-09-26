@@ -1157,7 +1157,7 @@ const server=http.createServer(async(req,res)=>{
         let analysis=analyze(candles,{interval,lower:lower&&lower.length>=220?analyze(lower,{interval:'15m'}):null,higher:higher&&higher.length>=220?analyze(higher,{interval:'4h'}):null,deriv,orderbook});
         analysis.microstructure=orderbook;
         const champion=await getPredictionChampion();
-        analysis=predictionEngine.applyModel(analysis,champion,{orderbook,takerFlow:null});
+        analysis=predictionEngine.applyModel(analysis,champion,{orderbook,takerFlow:null,candles});
         try{const learned=await Promise.race([learning.process(symbol,interval,candles,analysis),new Promise(resolve=>setTimeout(()=>resolve(null),700))]);if(learned?.analysis)analysis=learned.analysis}catch{}
         return send(res,200,{ok:true,symbol,interval,candles,analysis,derivatives:deriv,learning:{phase:2,state:'COLLECTING',durable:storage.status().durable}});
       }catch(e){return send(res,503,{ok:false,error:String(e.message||e)})}
