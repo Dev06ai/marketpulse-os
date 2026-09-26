@@ -516,7 +516,7 @@ const server=http.createServer(async(req,res)=>{
         return send(res,200,{
           ok:true,symbol,interval,candles,analysis,derivatives:deriv,learning:learningStatus,
           backtest:backtest(sample),validation:walkForwardBacktest(sample),setupStats,
-          source:'Kraken spot',
+          source:candles?.[0]?.source||'market data',
           phase2:PHASE2_VERSION,
           phase3:PHASE3_VERSION,
           phase4:PHASE4_VERSION,
