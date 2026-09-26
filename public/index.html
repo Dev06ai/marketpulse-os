@@ -544,6 +544,13 @@ body.admin-mode .nav button.adminNav,body.admin-mode .mobileMenu button.adminNav
       <div class="card signalQualityCard"><div class="sectionHead"><div><div class="title">Why the signal looks this way</div><div class="sub">See which parts of the market are helping or weakening the setup.</div></div><span class="value" id="quality">—</span></div><div id="components" class="list"></div></div>
     </div>
       </div>
+      <div class="card" style="margin-top:10px">
+        <div class="sectionHead"><div><div class="title">Live validation &amp; safety gate</div><div class="sub">Historical replay calibrates the minimum evidence required before a signal is shown as eligible for live decision support.</div></div><span class="chip" id="validationChip">PAPER ONLY</span></div>
+        <div class="grid2">
+          <div><div class="label">Validation evidence</div><div class="value" id="validationEvidence">Collecting…</div><div class="sub" id="validationDetail">Waiting for the walk-forward sample.</div></div>
+          <div><div class="label">Live-use gate</div><div class="value" id="deploymentGate">PAPER ONLY</div><div class="sub" id="deploymentReason">Signals remain decision-support only until the validation and live-data gates pass.</div></div>
+        </div>
+      </div>
     </div>
 
     <div id="priceActionSection" class="section card"><div class="sectionHead"><div><div class="title">Price action</div><div class="sub">Exchange-style HD candles · 50 EMA · drag to pan · wheel/pinch to zoom · move cursor for time, OHLC and price.</div></div><div class="chartHeaderTools"><div class="chartTimeframes" id="chartTimeframes"><button class="chartTf" data-chart-tf="15m">15m</button><button class="chartTf" data-chart-tf="30m">30m</button><button class="chartTf active" data-chart-tf="1h">1h</button><button class="chartTf" data-chart-tf="4h">4h</button><button class="chartTf" data-chart-tf="1d">1D</button></div><div class="chartTools"><button id="chartCandles" class="active" title="Candlestick chart">Candles</button><button id="chartLine" title="Closing-price line chart">Line</button><button id="chartAuto" title="Fit price scale automatically">Auto</button><button id="chartFit" title="Fit all visible candles">Fit</button><button id="panL" title="Move toward older candles">←</button><button id="panR" title="Move toward newer candles">→</button><button id="zoomOut" class="zoomBtn" title="Zoom out">− Zoom out</button><button id="zoomReset" title="Reset chart zoom">1:1</button><button id="zoomIn" class="zoomBtn" title="Zoom in">+ Zoom in</button><button id="chartFullscreen" class="chartFocusBtn" title="Expand only the Price Action chart">⛶ Expand</button><button id="chartSettings" title="Chart settings">⚙</button></div></div></div><div class="chartWrap"><canvas id="mainChart" class="chartCanvas"></canvas><div class="ohlc" id="ohlc">Move over chart</div></div><div class="levels"><div class="level"><div class="k">Entry zone</div><div class="v" id="entry">—</div></div><div class="level"><div class="k">Invalidation</div><div class="v" id="stop">—</div></div><div class="level"><div class="k">Target 1</div><div class="v" id="target">—</div></div><div class="level"><div class="k">R:R</div><div class="v" id="rr">—</div></div></div></div>
@@ -2595,7 +2602,7 @@ function queueSecondaryBoot(){
 
 async function renderFinalDecision(d){
   if(!d)return;
-  var m=d.market||{},ev=d.evidence||{},lv=d.levels||{},data=d.data||{},pg=d.propGate||{};
+  var m=d.market||{},ev=d.evidence||{},lv=d.levels||{},data=d.data||{},pg=d.propGate||{},v=d.phase11_13||{},gate=d.deploymentGate||{};
   var side=m.side==="LONG"?"LONG":m.side==="SHORT"?"SHORT":"WAIT";
   var accent=side==="LONG"?"#4ade80":side==="SHORT"?"#f87171":"#c084fc";
   var glow=side==="LONG"?"rgba(74,222,128,.18)":side==="SHORT"?"rgba(248,113,133,.18)":"rgba(192,132,252,.20)";
@@ -2612,7 +2619,16 @@ async function renderFinalDecision(d){
   $("quality").textContent=fmt(m.confluenceScore)+"/100";$("quality").style.color=accent;
   $("components").innerHTML=(ev.components||[]).map(function(x){return'<div class="rowLine"><span class="small">'+safeHtml(x.name)+'</span><b style="font-size:9px;text-align:right">'+fmt(x.score)+'/100</b><div class="bar"><i style="width:'+Math.max(0,Math.min(100,Number(x.score)||0))+'%"></i></div></div>'}).join("");
   $("entry").textContent=lv.entryLow!=null?fmt(lv.entryLow)+" → "+fmt(lv.entryHigh):"Wait";$("stop").textContent=fmt(lv.stop);$("target").textContent=fmt(lv.tp1);$("rr").textContent=lv.rr?Number(lv.rr).toFixed(2)+"R":"—";
-  $("finalEngineMeta").textContent="Phase 9/10 · "+(d.stale?"STALE LAST-GOOD · ":"LIVE · ")+(d.state||"WAITING")+" · data "+fmt(data.score)+"/100 · risk "+(pg.decision||"NOT EVALUATED");
+  var s=v.summary||{},p=v.adaptive||{};
+  var evidence=s.sufficient?("Sufficient sample · "+Number(s.trades||0)+" resolved setups"):("Collecting · "+Number(s.trades||0)+" resolved setups");
+  if($("validationEvidence"))$("validationEvidence").textContent=evidence;
+  if($("validationDetail"))$("validationDetail").textContent=s.trades?("Win rate "+Number(s.winRate||0).toFixed(1)+"% · expectancy "+Number(s.expectancyR||0).toFixed(3)+"R · PF "+(s.profitFactor==null?"—":Number(s.profitFactor).toFixed(2))):"Waiting for the walk-forward sample.";
+  var gs=gate.state||p.mode||"PAPER_ONLY";
+  if($("deploymentGate"))$("deploymentGate").textContent=gs;
+  if($("deploymentReason"))$("deploymentReason").textContent=gate.reason||"Signals remain decision-support only until the validation and live-data gates pass.";
+  if($("validationChip"))$("validationChip").textContent=gs;
+  $("adaptiveChip").textContent="Adaptive: "+(p.mode||"collecting");
+  $("finalEngineMeta").textContent="Phase 9/10/11-13 · "+(d.stale?"STALE LAST-GOOD · ":"LIVE · ")+(d.state||"WAITING")+" · data "+fmt(data.score)+"/100 · risk "+(pg.decision||"NOT EVALUATED")+" · live gate "+gs;
   var ds=document.querySelector(".decisionSection");if(ds){ds.classList.remove("signal-long","signal-short","signal-wait");ds.classList.add(side==="LONG"?"signal-long":side==="SHORT"?"signal-short":"signal-wait")}
 }
 async function loadFinalDecision(){
