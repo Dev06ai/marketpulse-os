@@ -318,9 +318,10 @@ function replayOutcome(candles,index,analysis,horizon=12){
   if(!Number.isFinite(stop)||!Number.isFinite(target)||!side)return {status:"NO_LEVELS"};
   const entry=Number.isFinite(entryLow)&&Number.isFinite(entryHigh)?(entryLow+entryHigh)/2:Number(analysis.price);
   if(!Number.isFinite(entry)||Math.abs(entry-stop)<1e-12)return {status:"NO_LEVELS"};
+  const zoneLow=Number.isFinite(entryLow)?entryLow:entry,zoneHigh=Number.isFinite(entryHigh)?entryHigh:entry;
   let entryBar=-1;
   for(let j=index+1;j<Math.min(candles.length,index+1+horizon);j++){
-    const c=candles[j],hitEntry=Number(c.l)<=Math.max(entryLow,entry)&&Number(c.h)>=Math.min(entryHigh||entry,c.l);
+    const c=candles[j],hitEntry=Number(c.l)<=zoneHigh&&Number(c.h)>=zoneLow;
     if(hitEntry){entryBar=j;break}
   }
   if(entryBar<0)return {status:"NOT_TRIGGERED",entry,stop,target,side,resolutionBars:horizon};
@@ -496,11 +497,13 @@ const server=http.createServer(async(req,res)=>{
     }
     if(req.method==='POST'&&u.pathname==='/api/dna/refresh'){
       let raw="";for await(const chunk of req)raw+=chunk;let body={};try{body=JSON.parse(raw||"{}")}catch{return send(res,400,{error:"Invalid JSON"})}
-      const symbol=(body.symbol||"BTCUSDT").toUpperCase(),interval=body.interval||"1h",points=Math.min(160,Math.max(20,Number(body.points||80))),bars=Math.min(4200,Math.max(240,Number(body.bars||(interval==="1d"?1800:420))));
-      if(!SYMBOLS.includes(symbol))return send(res,400,{error:"Unsupported symbol"});
+      const requestedSymbol=(body.symbol||"ALL").toUpperCase(),interval=body.interval||"1h",points=Math.min(160,Math.max(20,Number(body.points||80))),bars=Math.min(4200,Math.max(240,Number(body.bars||(interval==="1d"?1800:420))));
+      const symbols=requestedSymbol==="ALL"?SYMBOLS:[requestedSymbol];
+      if(symbols.some(s=>!SYMBOLS.includes(s)))return send(res,400,{error:"Unsupported symbol"});
       try{
-        const dataset=await buildReplayDataset(symbol,interval,{points,bars}),records=dnaRecordsFromReplay(dataset),stored=await storage.saveSignalDNA(records);
-        return send(res,200,{ok:true,symbol,interval,stored:stored.stored,storage:stored.storage,coverage:dataset.coverage,summary:summarizeDNA(records),records:records.slice(-160).reverse()});
+        const datasets=await Promise.all(symbols.map(async symbol=>buildReplayDataset(symbol,interval,{points,bars}))),records=datasets.flatMap(d=>dnaRecordsFromReplay(d));
+        const stored=await storage.saveSignalDNA(records);
+        return send(res,200,{ok:true,symbol:requestedSymbol,interval,stored:stored.stored,storage:stored.storage,coverage:datasets.map(d=>d.coverage),summary:summarizeDNA(records),records:records.slice(-250).reverse()});
       }catch(e){return send(res,503,{ok:false,error:e.message})}
     }
     if(req.method==='GET'&&u.pathname==='/api/dna'){
