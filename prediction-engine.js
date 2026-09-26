@@ -20,7 +20,7 @@ function structureNum(s){
   return 0;
 }
 function buildFeatures(a,ctx={}){
-  const d=a?.derivatives||{},o=ctx.orderbook||a?.microstructure||{};
+  const d=ctx.derivatives||a?.derivatives||{},o=ctx.orderbook||a?.microstructure||{};
   const side=sideNum(a?.side);
   const mtf=((a?.mtf?.higher==="UPTREND"&&side>0)||(a?.mtf?.higher==="DOWNTREND"&&side<0)?1:0)
     +((a?.mtf?.lower==="UPTREND"&&side>0)||(a?.mtf?.lower==="DOWNTREND"&&side<0)?1:0)
@@ -148,24 +148,34 @@ function outcomeForSetup(a,candles,i,horizon){
   }
   return null;
 }
-function buildTrainingRows(candles,interval="1h"){
+function nearestContext(series,ts){
+  if(!Array.isArray(series)||!series.length)return null;
+  let lo=0,hi=series.length-1,best=null;
+  while(lo<=hi){
+    const mid=(lo+hi)>>1,mt=Number(series[mid]?.ts);
+    if(!Number.isFinite(mt)){lo=mid+1;continue}
+    if(mt<=ts){best=series[mid];lo=mid+1}else hi=mid-1;
+  }
+  return best;
+}
+function buildTrainingRows(candles,interval="1h",context={}){
   const rows=[];
   if(!Array.isArray(candles)||candles.length<260)return rows;
   const horizon=interval==="15m"?16:interval==="4h"?6:interval==="1d"?3:12;
   for(let i=220;i<candles.length-horizon;i++){
-    let a;
-    try{
-      a=marketEngine.analyze(candles.slice(0,i+1),{interval});
-    }catch{continue}
+    let a;try{a=marketEngine.analyze(candles.slice(0,i+1),{interval})}catch{continue}
     if(a.side==="WAIT"||a.status==="WAITING")continue;
-    const label=outcomeForSetup(a,candles,i,horizon);
-    if(label===null)continue;
-    const c=candles[i],prev=candles[Math.max(0,i-1)];
+    const label=outcomeForSetup(a,candles,i,horizon);if(label===null)continue;
+    const c=candles[i],ts=Number(c?.t);
     const buyPressure=Number.isFinite(c?.takerBuyQuote)?(2*Number(c.takerBuyQuote)-Number(c.quoteVolume||0))/(Number(c.quoteVolume||1)):0;
-    const features=buildFeatures(a,{takerFlow:buyPressure,orderbook:{},derivatives:a.derivatives});
-    // Prevent a training sample from ever seeing data after its decision candle.
-    if(prev?.c===c?.c&&prev?.t===c?.t)continue;
-    rows.push({timestamp:c.t,label,features,side:a.side,score:a.score,type:a.type});
+    const oiCtx=nearestContext(context.oiSeries,ts),fundCtx=nearestContext(context.fundingSeries,ts);
+    const derivatives={
+      ...(a.derivatives||{}),
+      oiChangePct:Number.isFinite(Number(oiCtx?.oiChangePct))?Number(oiCtx.oiChangePct):null,
+      fundingRate:Number.isFinite(Number(fundCtx?.fundingRate))?Number(fundCtx.fundingRate):null
+    };
+    const features=buildFeatures(a,{takerFlow:buyPressure,orderbook:{},derivatives});
+    rows.push({timestamp:ts,label,features,side:a.side,score:a.score,type:a.type});
   }
   return rows;
 }
