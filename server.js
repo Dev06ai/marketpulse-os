@@ -700,12 +700,12 @@ const server=http.createServer(async(req,res)=>{
       try{return send(res,200,{ok:true,tickets:(await storage.listSupportTickets(100)).filter(x=>x.userId===user.id)})}catch(e){return send(res,503,{ok:false,error:e.message})}
     }
     if(req.method==='GET'&&u.pathname==='/api/admin/overview'){
-      const [health,stats,analytics,flags,config,audit,security,tickets,broadcasts,snapshots]=await Promise.all([
-        storage.health(),storage.userStats(),storage.adminAnalytics(),storage.getFeatureFlags(),getAdminRuntime(true),storage.listAdminAudit(20),storage.listSecurityEvents(20),storage.listSupportTickets(20),storage.listBroadcasts(20),storage.listAdminSnapshots(20)
+      const [health,stats,analytics,flags,config,audit,security,tickets,broadcasts,snapshots,recentUsage]=await Promise.all([
+        storage.health(),storage.userStats(),storage.adminAnalytics(),storage.getFeatureFlags(),getAdminRuntime(true),storage.listAdminAudit(20),storage.listSecurityEvents(20),storage.listSupportTickets(20),storage.listBroadcasts(20),storage.listAdminSnapshots(20),storage.recentUsageEvents(40)
       ]);
       const perf={uptimeSec:Math.floor((Date.now()-SERVER_METRICS.startedAt)/1000),requests:SERVER_METRICS.requests,errors:SERVER_METRICS.errors,avgLatencyMs:SERVER_METRICS.requests?Math.round(SERVER_METRICS.totalLatencyMs/SERVER_METRICS.requests):0,memoryMb:Math.round(process.memoryUsage().rss/1048576),heapUsedMb:Math.round(process.memoryUsage().heapUsed/1048576),cpu:process.cpuUsage(),lastErrors:SERVER_METRICS.lastErrors.slice(0,12),topRoutes:Array.from(SERVER_METRICS.routeCounts.entries()).sort((a,b)=>b[1]-a[1]).slice(0,10).map(([route,count])=>({route,count}))};
       const learningState=await Promise.race([learning.status(),new Promise(resolve=>setTimeout(()=>resolve({state:"unknown"}),1200))]).catch(()=>({state:"unknown"}));const phase7Check=(()=>{try{return phase7.selfTest()}catch{return{ok:false}}})();
-      return send(res,200,{ok:true,health,stats:{...stats,...liveVisitorStats()},analytics,flags,config,audit,security,tickets,broadcasts,snapshots,learning:learningState,phase7:phase7Check,performance:perf});
+      return send(res,200,{ok:true,health,stats:{...stats,...liveVisitorStats()},analytics,flags,config,audit,security,tickets,broadcasts,snapshots,recentUsage,learning:learningState,phase7:phase7Check,performance:perf});
     }
     if(req.method==='GET'&&u.pathname==='/api/admin/providers'){
       const test=async(name,fn)=>{const t=Date.now();try{const value=await fn();return{name,status:"healthy",latencyMs:Date.now()-t,detail:value||null}}catch(e){return{name,status:"error",latencyMs:Date.now()-t,detail:String(e.message||e)}}};
