@@ -320,15 +320,15 @@ async function recordLearningPrediction(pred){
 async function getResolvedLearningPredictions(symbol,interval,limit=1500){
   await init();const n=Math.min(3000,Math.max(50,Number(limit)||1500));
   if(mode==="postgres"){
-    const params=[n];let where=["outcome IS NOT NULL"];
-    if(symbol){params.unshift(symbol);where.unshift("symbol=$"+params.length)}
-    if(interval){params.unshift(interval);where.unshift("interval=$"+params.length)}
-    params[params.length-1]=n;
+    const params=[];const where=["outcome IS NOT NULL"];
+    if(symbol){params.push(symbol);where.push("symbol=$"+params.length)}
+    if(interval){params.push(interval);where.push("interval=$"+params.length)}
+    params.push(n);
     const q=`SELECT fingerprint,symbol,interval,candle_ts AS "candleTs",side,type,status,score,features,outcome,result_r AS "resultR",resolved_at AS "resolvedAt"
-      FROM marketpulse_learning_predictions WHERE ${where.join(" AND ")} ORDER BY resolved_at DESC LIMIT ${params.length}`;
+      FROM marketpulse_learning_predictions WHERE ${where.join(" AND ")} ORDER BY resolved_at DESC LIMIT $${params.length}`;
     const r=await pool.query(q,params);return r.rows;
   }
-  const all=readLocal();let rows=(all.__learning_predictions__||[]).filter(x=>x.outcome&&(!symbol||x.symbol===symbol)&&(!interval||x.interval===interval)).slice(-n).reverse();return rows;
+  const all=readLocal();return (all.__learning_predictions__||[]).filter(x=>x.outcome&&(!symbol||x.symbol===symbol)&&(!interval||x.interval===interval)).slice(-n).reverse();
 }
 async function getOpenLearningPredictions(symbol,interval,limit=200){
   await init();
