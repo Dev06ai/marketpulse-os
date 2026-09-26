@@ -82,6 +82,11 @@ async function init(){
         payload JSONB NOT NULL DEFAULT '{}'::jsonb,
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       )`);
+      await pool.query(`CREATE TABLE IF NOT EXISTS marketpulse_execution (
+        id INTEGER PRIMARY KEY DEFAULT 1,
+        payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )`);
       mode="postgres";
     }catch(err){
       mode="local";try{await pool?.end()}catch{}pool=null;
@@ -239,5 +244,26 @@ async function savePhase4State(deviceId,state){
   return {storage:"local",updatedAt:all.__phase4__[deviceId].updatedAt,payload};
 }
 
+async function getExecutionState(){
+  await init();
+  if(mode==="postgres"){
+    const r=await pool.query("SELECT payload,updated_at FROM marketpulse_execution WHERE id=1");
+    return r.rows[0]?{storage:"postgres",updatedAt:r.rows[0].updated_at,payload:r.rows[0].payload}:{storage:"postgres",updatedAt:null,payload:null};
+  }
+  const all=readLocal();return {storage:"local",updatedAt:all.__execution__?.updatedAt||null,payload:all.__execution__?.payload||null};
+}
+async function saveExecutionState(state){
+  await init();
+  const payload=state&&typeof state==="object"?state:{};
+  if(mode==="postgres"){
+    await pool.query(`INSERT INTO marketpulse_execution(id,payload,updated_at)
+      VALUES(1,$1,NOW())
+      ON CONFLICT(id) DO UPDATE SET payload=EXCLUDED.payload,updated_at=NOW()`,[payload]);
+    return {storage:"postgres",updatedAt:new Date().toISOString(),payload};
+  }
+  const all=readLocal();all.__execution__={payload,updatedAt:new Date().toISOString()};writeLocal(all);
+  return {storage:"local",updatedAt:all.__execution__.updatedAt,payload};
+}
+
 function status(){return {mode,configured:Boolean(DB_URL&&Pool),durable:mode==="postgres"}}
-module.exports={init,get,save,clear,getLearningState,saveLearningState,recordLearningPrediction,getOpenLearningPredictions,resolveLearningPrediction,saveSignalDNA,getSignalDNA,clearSignalDNA,getPhase4State,savePhase4State,status};
+module.exports={init,get,save,clear,getLearningState,saveLearningState,recordLearningPrediction,getOpenLearningPredictions,resolveLearningPrediction,saveSignalDNA,getSignalDNA,clearSignalDNA,getPhase4State,savePhase4State,getExecutionState,saveExecutionState,status};
