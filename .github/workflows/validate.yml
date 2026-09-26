@@ -16,6 +16,7 @@ jobs:
       - run: node --check market-engine.js
       - run: node --check storage.js
       - run: node --check learning.js
+      - run: node --check phase4.js
       - run: node tests/smoke.js
       - name: Check browser script
         run: |
@@ -40,12 +41,12 @@ jobs:
             'id="alertList"','id="setupRows"','id="componentRows"','id="calibrationRows"',
             'id="view-replay"','id="view-dna"','id="view-research"',
             'id="loadReplay"','id="replayCanvas"','id="refreshDNA"','id="dnaRows"',
-            'id="runResearch"','id="resRegime"','id="resScore"'
+            'id="runResearch"','id="resRegime"','id="resScore"','id="view-edge"','id="edgeSignal"','id="edgeQualityRows"','id="edgeOpenRows"','id="edgePersonalRows"'
           ]
           required_server=[
             "/api/core","/api/core-scan","/api/core-flow","/api/cycle",
             "/api/system-check","/api/memory","/api/learning/status","/api/ai",
-            "/api/replay","/api/dna","/api/dna/refresh","/api/research"
+            "/api/replay","/api/dna","/api/dna/refresh","/api/research","/api/edge","/api/edge/health","/api/edge/config","/api/edge/journal"
           ]
           missing=[x for x in required_html if x not in html]+[x for x in required_server if x not in server]
           if missing: raise SystemExit("Missing feature surface: "+", ".join(missing))
