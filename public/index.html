@@ -847,8 +847,8 @@ function renderPortfolio(data){
   $("pfRisk").textContent=(Number(p.grossRiskPct)||0).toFixed(2)+"%";
   $("pfRiskMeta").textContent="Limit "+(Number(cfg.maxPortfolioRiskPct)||0).toFixed(2)+"%";
   $("pfExposure").textContent=(Number(p.grossExposurePct)||0).toFixed(2)+"%";
-  var top=p.concentration?.[0];$("pfConcentration").textContent=top?String(top.symbol||"—")+" "+Number(top.pct||0).toFixed(2)+"%":"—";
-  $("pfConcentrationMeta").textContent=top?"Largest symbol exposure":"No exposure";
+  var top=p.concentration?.[0];$("pfConcentration").textContent=top&&Number(top.pct)>0?String(top.symbol||"—")+" "+Number(top.pct||0).toFixed(2)+"%":"None";
+  $("pfConcentrationMeta").textContent=top&&Number(top.pct)>0?"Largest symbol exposure":"No active exposure";
   $("pfGuard").textContent=p.guardState||"WITHIN LIMITS";
   $("pfGuard").className="v "+(p.warnings?.length?"portfolioBad":"portfolioOk");
   $("pfGuardMeta").textContent=p.warnings?.length?p.warnings.join(" · "):"No portfolio-level warnings";
@@ -859,9 +859,10 @@ function renderPortfolio(data){
     var width=Math.min(100,(Number(x.exposurePct||0)/maxBar)*100);
     return'<div class="portfolioBarRow"><b>'+safeHtml(x.label||x.symbol)+'</b><div class="portfolioBar"><i style="width:'+width.toFixed(0)+'%"></i></div><span>'+Number(x.exposurePct||0).toFixed(2)+'%</span></div>';
   }).join("")||'<div class="portfolioSmall">No assets.</div>';
-  $("pfClusterRows").innerHTML=(p.clusters||[]).map(function(x){
+  var activeClusters=(p.clusters||[]).filter(function(x){return (x.members||[]).length>1 || Number(x.riskPct||0)>0 || Number(x.exposurePct||0)>0});
+  $("pfClusterRows").innerHTML=activeClusters.map(function(x){
     return'<div class="portfolioBarRow"><b>'+safeHtml((x.members||[]).join(" + "))+'</b><div class="portfolioBar"><i style="width:'+Math.min(100,(Number(x.riskPct||0)/(Number(cfg.maxCorrelatedClusterRiskPct)||3))*100).toFixed(0)+'%"></i></div><span>'+Number(x.riskPct||0).toFixed(2)+'% R</span></div>';
-  }).join("")||'<div class="portfolioSmall">No correlated clusters.</div>';
+  }).join("")||'<div class="portfolioSmall">No active correlated clusters.</div>';
   $("pfAssetTable").innerHTML=assets.map(function(x){
     return'<tr><td><b>'+safeHtml(x.label||x.symbol)+'</b></td><td>'+fmt(x.price)+'</td><td>'+pct(x.change24h)+'</td><td>'+safeHtml(x.regime||"—")+'</td><td>'+safeHtml(x.side||"WAIT")+'</td><td>'+fmt(x.score)+'</td><td>'+Number(x.exposurePct||0).toFixed(2)+'%</td><td>'+Number(x.riskPct||0).toFixed(2)+'%</td></tr>';
   }).join("")||'<tr><td colspan="8">No portfolio data.</td></tr>';
