@@ -1,51 +1,54 @@
 const crypto=require("crypto");
 const storage=require("./storage");
+const totp=require("./totp");
 
-const SESSION_DAYS=30;
+const SESSION_DAYS=Math.max(1,Number(process.env.MARKETPULSE_SESSION_DAYS||30));
+const ADMIN_SESSION_HOURS=Math.max(1,Number(process.env.MARKETPULSE_ADMIN_SESSION_HOURS||8));
 const COOKIE="mp_session";
 const ADMIN_EMAIL=String(process.env.MARKETPULSE_ADMIN_EMAIL||"").trim().toLowerCase();
+const PASSWORD_PEPPER=String(process.env.MARKETPULSE_PASSWORD_PEPPER||"");
 const RATE_WINDOW_MS=15*60*1000;
 const RATE_LIMIT=12;
 const rate=new Map();
+const DUMMY_SALT=crypto.createHash("sha256").update("marketpulse-dummy-salt-v2").digest("hex");
 
-function normalizeEmail(email){
-  return String(email||"").trim().toLowerCase();
-}
-function validEmail(email){
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-}
+function normalizeEmail(email){return String(email||"").trim().toLowerCase()}
+function validEmail(email){return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)}
 function passwordRules(password){
   const p=String(password||"");
-  if(p.length<8)return "Password must be at least 8 characters.";
-  if(p.length>128)return "Password is too long.";
+  if(p.length<12)return "Password must be at least 12 characters.";
+  if(p.length>256)return "Password is too long.";
   return null;
 }
-function hashPassword(password,salt){
-  return crypto.scryptSync(String(password),Buffer.from(salt,"hex"),64).toString("hex");
+function isAdminEmail(email){return Boolean(ADMIN_EMAIL&&normalizeEmail(email)===ADMIN_EMAIL)}
+function hashInput(password,usePepper){
+  if(!usePepper||!PASSWORD_PEPPER)return Buffer.from(String(password));
+  return crypto.createHmac("sha256",PASSWORD_PEPPER).update(String(password)).digest();
+}
+function parseSalt(salt){
+  const raw=String(salt||"");
+  if(!raw.startsWith("v2$"))return {version:1,N:16384,r:8,p:1,pepper:false,salt:raw};
+  const parts=raw.split("$");
+  return {version:2,N:Number(parts[1])||32768,r:Number(parts[2])||8,p:Number(parts[3])||3,pepper:parts[4]==="1",salt:parts[5]||""};
+}
+function hashPassword(password,saltMeta){
+  const meta=saltMeta||{version:2,N:32768,r:8,p:3,pepper:Boolean(PASSWORD_PEPPER)};
+  const buf=hashInput(password,meta.pepper);
+  return crypto.scryptSync(buf,Buffer.from(meta.salt,"hex"),64,{N:meta.N,r:meta.r,p:meta.p,maxmem:256*1024*1024}).toString("hex");
 }
 function newPassword(password){
   const salt=crypto.randomBytes(16).toString("hex");
-  return {salt,hash:hashPassword(password,salt)};
+  const meta={version:2,N:32768,r:8,p:3,pepper:Boolean(PASSWORD_PEPPER),salt};
+  return {salt:"v2$"+meta.N+"$"+meta.r+"$"+meta.p+"$"+(meta.pepper?1:0)+"$"+salt,hash:hashPassword(password,meta)};
 }
-function token(){
-  return crypto.randomBytes(32).toString("hex");
-}
-function hashToken(raw){
-  return crypto.createHash("sha256").update(String(raw)).digest("hex");
-}
+function token(){return crypto.randomBytes(32).toString("hex")}
+function hashToken(raw){return crypto.createHash("sha256").update(String(raw)).digest("hex")}
 function parseCookies(header){
-  const out={};
-  String(header||"").split(";").forEach(part=>{
-    const i=part.indexOf("=");
-    if(i<0)return;
-    const k=part.slice(0,i).trim(),v=part.slice(i+1).trim();
-    if(k)out[k]=decodeURIComponent(v);
-  });
-  return out;
+  const out={};String(header||"").split(";").forEach(part=>{const i=part.indexOf("=");if(i<0)return;const k=part.slice(0,i).trim(),v=part.slice(i+1).trim();if(k)out[k]=decodeURIComponent(v)});return out;
 }
-function cookie(raw,maxAge=SESSION_DAYS*86400){
+function cookie(raw,maxAge){
   const secure=String(process.env.NODE_ENV||"").toLowerCase()==="production"?" Secure;":"";
-  return COOKIE+"="+encodeURIComponent(raw)+"; Path=/; HttpOnly; SameSite=Lax; Max-Age="+maxAge+";"+secure;
+  return COOKIE+"="+encodeURIComponent(raw)+"; Path=/; HttpOnly; SameSite=Strict; Max-Age="+Math.max(0,Math.floor(maxAge||0))+";"+secure;
 }
 function clearCookie(){return cookie("",0)}
 function rateCheck(key){
@@ -53,6 +56,11 @@ function rateCheck(key){
   if(!x||now-x.started>RATE_WINDOW_MS){rate.set(key,{started:now,count:1});return}
   if(x.count>=RATE_LIMIT)throw new Error("AUTH_RATE_LIMIT");
   x.count++;
+}
+function loginKey(reqLike,email,type){return type+":"+String(reqLike||"unknown")+":"+normalizeEmail(email)}
+function lockMessage(until){
+  const mins=Math.max(1,Math.ceil((new Date(until).getTime()-Date.now())/60000));
+  return "Account temporarily locked after repeated failed attempts. Try again in about "+mins+" minute"+(mins===1?"":"s")+".";
 }
 async function register(email,password,key="register"){
   rateCheck(key);
@@ -64,34 +72,64 @@ async function register(email,password,key="register"){
   const user=await storage.createUser({id,email:e,passwordHash:p.hash,passwordSalt:p.salt});
   return user;
 }
-async function login(email,password,key="login"){
+async function login(email,password,key="login",mfaCode=""){
   rateCheck(key);
   const e=normalizeEmail(email),user=await storage.findUserByEmail(e);
-  if(!user)throw new Error("INVALID_CREDENTIALS");
-  const hash=hashPassword(password,user.passwordSalt);
-  if(!crypto.timingSafeEqual(Buffer.from(hash,"hex"),Buffer.from(user.passwordHash,"hex")))throw new Error("INVALID_CREDENTIALS");
-  const raw=token(),expiresAt=new Date(Date.now()+SESSION_DAYS*86400000);
-  await storage.saveSession(hashToken(raw),user.id,expiresAt.toISOString());
+  if(!user){
+    try{hashPassword(String(password),{version:1,N:16384,r:8,p:1,pepper:false,salt:DUMMY_SALT})}catch{}
+    throw new Error("INVALID_CREDENTIALS");
+  }
+  if(user.lockedUntil&&new Date(user.lockedUntil).getTime()>Date.now())throw new Error("ACCOUNT_LOCKED");
+  if(user.lockedUntil){await storage.resetLoginFailures(user.id)}
+  const meta=parseSalt(user.passwordSalt);
+  const hash=hashPassword(password,meta);
+  let valid=false;
+  try{valid=crypto.timingSafeEqual(Buffer.from(hash,"hex"),Buffer.from(user.passwordHash,"hex"))}catch{valid=false}
+  if(!valid){
+    const lock=await storage.recordLoginFailure(user.id,7,15);
+    if(lock?.lockedUntil)throw new Error("ACCOUNT_LOCKED");
+    throw new Error("INVALID_CREDENTIALS");
+  }
+  const admin=isAdminEmail(user.email);
+  const mfaEnabled=admin&&totp.configured();
+  if(admin&&mfaEnabled&&!totp.verifyTotp(process.env.MARKETPULSE_ADMIN_TOTP_SECRET,mfaCode,1)){
+    if(!mfaCode)throw new Error("ADMIN_MFA_REQUIRED");
+    throw new Error("ADMIN_MFA_INVALID");
+  }
+  const newMetaNeeded=meta.version!==2 || meta.pepper!==Boolean(PASSWORD_PEPPER);
+  if(newMetaNeeded){
+    const upgraded=newPassword(password);
+    await storage.savePassword(user.id,upgraded.hash,upgraded.salt);
+  }
+  const raw=token(),hours=admin?ADMIN_SESSION_HOURS:SESSION_DAYS*24;
+  const expiresAt=new Date(Date.now()+hours*3600000),mfaAt=admin&&mfaEnabled?new Date().toISOString():null;
+  if(admin)await storage.revokeUserSessions(user.id);
+  await storage.saveSession(hashToken(raw),user.id,expiresAt.toISOString(),mfaAt);
   await storage.touchUserLogin(user.id);
-  return {user:{id:user.id,email:user.email,createdAt:user.createdAt,lastLoginAt:expiresAt.toISOString(),isAdmin:isAdminEmail(user.email)},setCookie:cookie(raw)};
+  return {
+    user:{id:user.id,email:user.email,createdAt:user.createdAt,lastLoginAt:new Date().toISOString(),isAdmin:admin,mfaEnabled},
+    setCookie:cookie(raw,hours*3600)
+  };
 }
-function isAdminEmail(email){return Boolean(ADMIN_EMAIL&&normalizeEmail(email)===ADMIN_EMAIL)}
 async function userFromRequest(req){
-  const raw=parseCookies(req.headers.cookie||"")[COOKIE];
-  if(!raw)return null;
-  const session=await storage.getSession(hashToken(raw));
-  if(!session)return null;
-  return {id:session.userId,email:session.email,expiresAt:session.expiresAt,isAdmin:isAdminEmail(session.email)};
+  const raw=parseCookies(req.headers.cookie||"")[COOKIE];if(!raw)return null;
+  const session=await storage.getSession(hashToken(raw));if(!session)return null;
+  return {id:session.userId,email:session.email,expiresAt:session.expiresAt,isAdmin:isAdminEmail(session.email),adminMfaAt:session.adminMfaAt||null};
 }
 async function requireAdmin(req){
   const user=await userFromRequest(req);
   if(!user)return {ok:false,status:401,error:"Authentication required",user:null};
   if(!user.isAdmin)return {ok:false,status:403,error:"Admin access required",user};
+  if(totp.configured()){
+    if(!user.adminMfaAt)return {ok:false,status:401,error:"Admin MFA required",user};
+    const age=Date.now()-new Date(user.adminMfaAt).getTime();
+    if(!Number.isFinite(age)||age>ADMIN_SESSION_HOURS*3600000)return {ok:false,status:401,error:"Admin MFA session expired",user};
+  }
   return {ok:true,status:200,user};
 }
 async function logout(req){
-  const raw=parseCookies(req.headers.cookie||"")[COOKIE];
-  if(raw)await storage.deleteSession(hashToken(raw));
+  const raw=parseCookies(req.headers.cookie||"");const tokenValue=raw[COOKIE];
+  if(tokenValue)await storage.deleteSession(hashToken(tokenValue));
   return {setCookie:clearCookie()};
 }
-module.exports={register,login,userFromRequest,requireAdmin,isAdminEmail,validEmail,passwordRules,CookieName:COOKIE,adminConfigured:Boolean(ADMIN_EMAIL)};
+module.exports={register,login,userFromRequest,requireAdmin,isAdminEmail,validEmail,passwordRules,CookieName:COOKIE,adminConfigured:Boolean(ADMIN_EMAIL),mfaEnabled:Boolean(ADMIN_EMAIL&&totp.configured()),passwordPepperEnabled:Boolean(PASSWORD_PEPPER)};
