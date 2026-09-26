@@ -178,7 +178,14 @@ function queuePhase1113Validation(symbol,interval,candles){
         if(closed.length>=600)source=closed;
       }catch{}
       const sample=source.slice(-1500);
-      const validation=phase1113.runWalkForward(sample,{symbol,interval,basePolicy:{minScore:78,minRR:1.5},step:2,maxSamples:350,minTrades:80,minTestBars:300});
+      let higher8h=null;
+      if(String(interval).toLowerCase()==="15m"){
+        try{
+          const h=await research.fetchBinanceKlines(symbol,"8h",{maxBars:1800});
+          higher8h=closedCandles(h,"8h",Date.now());
+        }catch{}
+      }
+      const validation=phase1113.runWalkForward(sample,{symbol,interval,higher8h,basePolicy:{minScore:78,minRR:1.5},step:2,maxSamples:350,minTrades:80,minTestBars:300});
       PHASE1113_CACHE.set(key,{ts:Date.now(),payload:validation});
       try{
         const state=await storage.getLearningState();
