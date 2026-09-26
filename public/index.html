@@ -217,7 +217,17 @@ body{font-size:14px}
 #callMetric.signal-long{border-color:rgba(74,222,128,.45)!important;background:linear-gradient(180deg,rgba(74,222,128,.12),rgba(8,8,11,.94))!important;box-shadow:0 0 30px rgba(74,222,128,.18),var(--shadow)!important}
 #callMetric.signal-short{border-color:rgba(248,113,113,.45)!important;background:linear-gradient(180deg,rgba(248,113,113,.12),rgba(8,8,11,.94))!important;box-shadow:0 0 30px rgba(248,113,113,.18),var(--shadow)!important}
 #callMetric.signal-wait{border-color:rgba(192,132,252,.48)!important;background:linear-gradient(180deg,rgba(192,132,252,.13),rgba(8,8,11,.94))!important;box-shadow:0 0 30px rgba(192,132,252,.20),var(--shadow)!important}
-</style><style id="phase8-style">
+<style id="chart-layout-final">
+.chartHeaderTools{display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap}
+.chartTimeframes{display:flex;gap:3px;flex:0 0 auto}
+.chartTools{display:grid!important;grid-template-columns:repeat(10,max-content)!important;gap:4px!important;align-items:center;justify-content:end!important}
+@media(max-width:900px){
+  .chartHeaderTools{width:100%;flex-direction:column;align-items:stretch}
+  .chartTimeframes{width:100%;display:grid;grid-template-columns:repeat(5,1fr);gap:4px}
+  .chartTools{width:100%;grid-template-columns:repeat(4,minmax(0,1fr))!important;gap:5px!important}
+  .chartTools button{width:100%;min-width:0;padding:7px 5px}
+}
+</style></style><style id="phase8-style">
 #accountBtn{font-weight:800}
 .accountCard{width:min(520px,100%)}
 .accountCard h3{font-size:20px;margin:0;color:#eefbff}
