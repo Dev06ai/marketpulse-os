@@ -624,7 +624,7 @@ body.admin-mode .nav button.adminNav,body.admin-mode .mobileMenu button.adminNav
     <div class="sectionHead"><div><div class="title">Portfolio Risk</div><div class="sub">Phase 6 maps concentration, aggregate risk, correlated clusters and stress impact across the whole trading book.</div></div><div class="portfolioPill">PORTFOLIO INTELLIGENCE</div></div>
 
     <div class="portfolioMetricGrid">
-      <div class="portfolioMetric"><div class="label">Portfolio risk</div><div class="v" id="pfgRiskTrade">0.00%</div><div class="subv" id="pfRiskMeta">Limit 4.00%</div></div>
+      <div class="portfolioMetric"><div class="label">Portfolio risk</div><div class="v" id="pfRisk">0.00%</div><div class="subv" id="pfRiskMeta">Limit 4.00%</div></div>
       <div class="portfolioMetric"><div class="label">Gross exposure</div><div class="v" id="pfExposure">0.00%</div><div class="subv" id="pfExposureMeta">Across tracked assets</div></div>
       <div class="portfolioMetric"><div class="label">Concentration</div><div class="v" id="pfConcentration">—</div><div class="subv" id="pfConcentrationMeta">Largest symbol exposure</div></div>
       <div class="portfolioMetric"><div class="label">Portfolio guard</div><div class="v" id="pfGuard">WITHIN LIMITS</div><div class="subv" id="pfGuardMeta">No portfolio-level warnings</div></div>
@@ -664,7 +664,7 @@ body.admin-mode .nav button.adminNav,body.admin-mode .mobileMenu button.adminNav
           <label>Correlation threshold<input id="pfCorrLimit" type="number" min=".6" max=".99" step=".01" value=".85"></label>
           <label>Stress move %<input id="pfStressMove" type="number" min="1" max="25" step="1" value="5"></label>
           <button id="pfSaveConfig" class="btn primary">Save portfolio rules</button>
-          <button id="pfgRefresh" class="btn">Refresh portfolio</button>
+          <button id="pfRefresh" class="btn">Refresh portfolio</button>
         </div>
         <div class="portfolioNote" id="pfConfigNote">Portfolio limits are server-side and persist independently of the browser.</div>
       </div>
@@ -1662,7 +1662,7 @@ async function askAI(){
 
 
 $("pfSaveConfig").addEventListener("click",savePortfolioConfig);
-$("pfgRefresh").addEventListener("click",loadPortfolio);
+$("pfRefresh").addEventListener("click",loadPortfolio);
 $("exSaveConfig").addEventListener("click",saveExecutionConfig);
 $("exPrepare").addEventListener("click",prepareExecution);
 $("exSubmit").addEventListener("click",function(){submitExecution()});
@@ -1674,22 +1674,7 @@ $("exPositionRows").addEventListener("click",function(e){var b=e.target.closest(
 $("refresh").addEventListener("click",loadCore);
 $("pfgRefresh").addEventListener("click",loadPropFirmGuard);
 $("ecgRefresh").addEventListener("click",loadEventGuard);
-$("pfgRefresh").addEventListener("click",loadPropFirmGuard);
-$("ecgRefresh").addEventListener("click",loadEventGuard);
 $("symbol").addEventListener("change",function(){state.symbol=this.value;loadCore()});
-$("interval").addEventListener("change",function(){state.interval=this.value;loadCore()});
-document.querySelectorAll("[data-filter]").forEach(function(b){b.addEventListener("click",function(){document.querySelectorAll("[data-filter]").forEach(function(x){x.classList.remove("on")});b.classList.add("on");state.filter=b.dataset.filter;renderScanner()})});
-document.querySelectorAll("input,select").forEach(function(el){el.addEventListener("input",calc);el.addEventListener("change",calc)});
-$("saveJournal").addEventListener("click",function(){
-  var a=state.market&&state.market.analysis,ts=state.editJournalTs||Date.now();
-  var row={asset:$("jAsset").value,side:$("jSide").value,entry:+$("jEntry").value||0,stop:+$("jStop").value||0,target:+$("jTarget").value||0,r:+$("jR").value||0,note:$("jNote").value.trim(),regime:a&&a.regime||"—",status:a&&a.status||"—",score:a&&a.score||0,ts:ts};
-  var idx=state.journal.findIndex(function(x){return Number(x.ts)===Number(ts)});
-  if(idx>=0)state.journal[idx]=row;else state.journal.push(row);
-  state.journal=state.journal.slice(-100);state.editJournalTs=null;$("saveJournal").textContent="Save trade";
-  localStorage.setItem("mp-stable-journal",JSON.stringify(state.journal));renderJournal();renderBrainInsights();syncMemory();saveServerJournal(row);
-});
-$("saveEdgeConfig").addEventListener("click",saveEdgeConfig);
-
 function deviceId(){
   var k="mp-device-id",id=localStorage.getItem(k);
   var valid=/^[a-f0-9-]{16,128}$/i.test(String(id||""));
