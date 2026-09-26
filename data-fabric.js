@@ -10,6 +10,9 @@ const KRAKEN_SPOT_PAIRS = {
   ADAUSDT:"ADAUSD"
 };
 
+const DATA_FABRIC_CACHE=new Map();
+const DATA_FABRIC_TTL=5000;
+
 const COINBASE_PRODUCTS = {
   BTCUSDT:"BTC-USD",
   ETHUSDT:"ETH-USD",
@@ -132,6 +135,9 @@ function summarizeSources(rows){
 }
 
 async function assess(symbol,interval="1h",context={}){
+  const key=String(symbol)+"|"+String(interval);
+  const cached=DATA_FABRIC_CACHE.get(key);
+  if(cached&&Date.now()-cached.ts<DATA_FABRIC_TTL)return Object.assign({},cached.data,{cached:true,cacheAgeMs:Date.now()-cached.ts});
   const started=Date.now();
   const settled=await Promise.all([
     coinbaseSnapshot(symbol).catch(e=>({name:"Coinbase Spot",role:"spot-price-cross-check",status:"error",price:null,error:String(e.message||e)})),
@@ -147,7 +153,7 @@ async function assess(symbol,interval="1h",context={}){
   const usable=rows.filter(x=>Number.isFinite(x.price));
   const ages=usable.map(x=>finite(x.ageMs)).filter(Number.isFinite);
   const newestAge=ages.length?Math.min(...ages):null;
-  return Object.assign({},summary,{
+  const result=Object.assign({},summary,{
     symbol,interval,
     generatedAt:Date.now(),
     latencyMs:Date.now()-started,
@@ -158,6 +164,8 @@ async function assess(symbol,interval="1h",context={}){
     method:"cross-exchange spot consensus; derivatives mark is supplemental",
     interpretation:summary.consensus==="CONFLICT"?"Price feeds materially disagree.":summary.consensus==="NO_DATA"?"No independent cross-check available.":"Independent price feeds are sufficiently aligned."
   });
+  DATA_FABRIC_CACHE.set(key,{ts:Date.now(),data:result});
+  return result;
 }
 
 module.exports={VERSION,KRAKEN_SPOT_PAIRS,COINBASE_PRODUCTS,coinbaseSnapshot,krakenSnapshot,binanceSnapshot,summarizeSources,assess};
