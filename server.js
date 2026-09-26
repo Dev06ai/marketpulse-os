@@ -562,14 +562,14 @@ const server=http.createServer(async(req,res)=>{
     const adminCfg=await getAdminRuntime();
     const userForMode=await auth.userFromRequest(req);
     const isAdminUser=Boolean(userForMode?.isAdmin);
-    const publicAllowed=new Set(['/api/config','/api/auth/me','/api/auth/login','/api/auth/register','/api/auth/logout','/api/broadcasts/active','/health','/']);
+    const publicAllowed=new Set(['/api/config','/api/auth/me','/api/auth/login','/api/auth/register','/api/auth/logout','/api/auth/presence','/api/broadcasts/active','/api/telemetry/event','/health','/']);
     if(adminCfg.maintenanceMode&&!isAdminUser&&u.pathname.startsWith('/api/')&&!publicAllowed.has(u.pathname))return send(res,503,{ok:false,error:"MAINTENANCE_MODE",maintenance:true,message:adminCfg.maintenanceMessage});
-    if(adminCfg.readOnlyMode&&!isAdminUser&&unsafe)return send(res,423,{ok:false,error:"READ_ONLY_MODE",readOnly:true,message:"MarketPulse is temporarily in read-only mode."});
+    if(adminCfg.readOnlyMode&&!isAdminUser&&unsafe&&!['/api/auth/presence','/api/telemetry/event'].includes(u.pathname))return send(res,423,{ok:false,error:"READ_ONLY_MODE",readOnly:true,message:"MarketPulse is temporarily in read-only mode."});
     if(adminCfg.registrationsEnabled===false&&u.pathname==='/api/auth/register'&& !isAdminUser)return send(res,403,{ok:false,error:"REGISTRATIONS_DISABLED"});
     if(adminCfg.aiEnabled===false&&u.pathname==='/api/ai'&&!isAdminUser)return send(res,503,{ok:false,error:"AI_DISABLED"});
     if(adminCfg.executionEnabled===false&&u.pathname.startsWith('/api/execution')&&!isAdminUser)return send(res,503,{ok:false,error:"EXECUTION_DISABLED"});
     if(adminCfg.marketDataEnabled===false&&['/api/core','/api/live','/api/market','/api/scanner','/api/scanner-live','/api/core-scan','/api/core-flow','/api/cycle'].includes(u.pathname)&&!isAdminUser)return send(res,503,{ok:false,error:"MARKET_DATA_DISABLED"});
-    if(adminCfg.writesEnabled===false&&unsafe&&!isAdminUser&&!u.pathname.startsWith('/api/auth/'))return send(res,423,{ok:false,error:"WRITES_DISABLED"});
+    if(adminCfg.writesEnabled===false&&unsafe&&!isAdminUser&&!u.pathname.startsWith('/api/auth/')&&!['/api/telemetry/event'].includes(u.pathname))return send(res,423,{ok:false,error:"WRITES_DISABLED"});
     if(req.method==='GET'&&u.pathname==='/health')return send(res,200,{ok:true,service:'marketpulse-os',time:Date.now()});
     if(req.method==='GET'&&u.pathname==='/api/memory'){
       const device=String(u.searchParams.get('device')||req.headers['x-marketpulse-device']||'');
