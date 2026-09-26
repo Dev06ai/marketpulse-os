@@ -68,44 +68,64 @@ function meanStd(rows){
 function standardize(x,scaler){return x.map((v,i)=>(v-scaler.mean[i])/scaler.std[i])}
 function dot(w,x){let s=w[0]||0;for(let i=0;i<x.length;i++)s+=(w[i+1]||0)*x[i];return s}
 
+function fitLogistic(rows,epochs,lr,l2){
+  const splitScaler=meanStd(rows),w=Array(FEATURE_NAMES.length+1).fill(0);
+  for(let epoch=0;epoch<epochs;epoch++){
+    const g=Array(w.length).fill(0);
+    for(const r of rows){
+      const x=standardize(vector(r.features),splitScaler),p=sigmoid(dot(w,x)),e=p-r.label;
+      g[0]+=e;for(let j=0;j<x.length;j++)g[j+1]+=e*x[j];
+    }
+    const inv=1/(rows.length||1);
+    for(let j=0;j<w.length;j++){const penalty=j?l2*w[j]:0;w[j]-=lr*(g[j]*inv+penalty)}
+  }
+  return {w,scaler:splitScaler};
+}
+function evaluateModel(fit,set){
+  let brier=0,logLoss=0,correct=0;
+  for(const r of set){
+    const p=sigmoid(dot(fit.w,standardize(vector(r.features),fit.scaler)));
+    brier+=(p-r.label)**2;
+    logLoss-=r.label*Math.log(Math.max(p,1e-6))+(1-r.label)*Math.log(Math.max(1-p,1e-6));
+    if((p>=.5?1:0)===r.label)correct++;
+  }
+  const n=set.length||1;return {n,brier:brier/n,logLoss:logLoss/n,accuracy:correct/n*100};
+}
+function walkForwardValidation(rows,folds=3){
+  const out=[];const n=rows.length;
+  for(let k=0;k<folds;k++){
+    const testStart=Math.floor(n*(0.55+k*0.12)),testEnd=Math.min(n,Math.floor(n*(0.67+k*0.11)));
+    if(testEnd-testStart<30||testStart<80)continue;
+    const train=rows.slice(0,testStart),test=rows.slice(testStart,testEnd);
+    const fit=fitLogistic(train,120,.045,.02),metrics=evaluateModel(fit,test);
+    const baseline={n:test.length,brier:.25,logLoss:Math.log(2),accuracy:Math.max(
+      test.filter(x=>x.label===1).length,
+      test.filter(x=>x.label===0).length
+    )/test.length*100};
+    out.push({...metrics,baseline,brierImprovement:baseline.brier-metrics.brier,logLossImprovement:baseline.logLoss-metrics.logLoss});
+  }
+  const mean=k=>out.length?out.reduce((a,x)=>a+Number(x[k]||0),0)/out.length:null;
+  return {folds:out.length,meanBrier:mean("brier"),meanLogLoss:mean("logLoss"),meanAccuracy:mean("accuracy"),meanBrierImprovement:mean("brierImprovement"),meanLogLossImprovement:mean("logLossImprovement"),allFoldsBeatBaseline:out.length>0&&out.every(x=>x.brier<.25&&x.logLoss<Math.log(2))};
+}
 function trainLogistic(rows,options={}){
   if(!Array.isArray(rows)||rows.length<120)throw new Error("At least 120 resolved training samples are required.");
   const epochs=Math.max(80,Math.min(500,Number(options.epochs)||260)),lr=Number(options.lr)||0.05,l2=Number(options.l2)||0.015;
   const split=Math.max(80,Math.floor(rows.length*.7));
   const train=rows.slice(0,split),test=rows.slice(split);
-  const scaler=meanStd(train),w=Array(FEATURE_NAMES.length+1).fill(0);
-  for(let epoch=0;epoch<epochs;epoch++){
-    const g=Array(w.length).fill(0);
-    for(const r of train){
-      const x=standardize(vector(r.features),scaler),p=sigmoid(dot(w,x)),e=p-r.label;
-      g[0]+=e;
-      for(let j=0;j<x.length;j++)g[j+1]+=e*x[j];
-    }
-    const inv=1/train.length;
-    for(let j=0;j<w.length;j++){const penalty=j?l2*w[j]:0;w[j]-=lr*(g[j]*inv+penalty)}
-  }
-  const evaluate=(set)=>{
-    let brier=0,logLoss=0,correct=0;
-    for(const r of set){
-      const p=sigmoid(dot(w,standardize(vector(r.features),scaler)));
-      brier+=(p-r.label)**2;
-      logLoss-=r.label*Math.log(Math.max(p,1e-6))+(1-r.label)*Math.log(Math.max(1-p,1e-6));
-      if((p>=.5?1:0)===r.label)correct++;
-    }
-    const n=set.length||1;
-    return {n,brier:brier/n,logLoss:logLoss/n,accuracy:correct/n*100};
-  };
-  const trainMetrics=evaluate(train),validation=evaluate(test);
+  const fit=fitLogistic(train,epochs,lr,l2);
+  const trainMetrics=evaluateModel(fit,train),validation=evaluateModel(fit,test),walkForward=walkForwardValidation(rows,3);
   return {
-    version:1,
+    version:2,
     kind:"binary_setup_quality",
     trainedAt:Date.now(),
     samples:rows.length,
     featureNames:FEATURE_NAMES,
-    scaler,
-    weights:w,
+    scaler:fit.scaler,
+    weights:fit.w,
     trainMetrics,
-    validationMetrics:validation
+    validationMetrics:validation,
+    walkForwardMetrics:walkForward,
+    validationBaseline:{brier:.25,logLoss:Math.log(2)}
   };
 }
 function predict(model,features){
