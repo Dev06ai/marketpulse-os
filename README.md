@@ -49,3 +49,7 @@ For the strongest owner protection, configure these Render secrets:
 - `MARKETPULSE_PASSWORD_PEPPER`: a long random secret kept only in the server environment. Existing legacy password hashes can be transparently upgraded after successful login when this is enabled.
 - `MARKETPULSE_ADMIN_SESSION_HOURS`: optional owner session lifetime; default is 8 hours.
 - `MARKETPULSE_SESSION_DAYS`: optional regular-user session lifetime; default is 30 days.
+
+
+## Owner user & access management
+The owner-only Admin Console includes registration counts for today, this week, this month and all time; live visitor and live registered-user counts based on a short-lived 2-minute heartbeat; a registered-user directory with join/login/activity timestamps; and server-enforced moderation actions for temporary restriction, restoration and permanent ban. Moderation revokes active sessions. User views intentionally exclude passwords, IP addresses and other unnecessary personal data.
