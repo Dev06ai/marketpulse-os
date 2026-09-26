@@ -316,7 +316,7 @@ function upsertPosition(state,row){
     p={id:"MP5P-"+now().toString(36),externalKey:key,symbol,side,qty:0,entry:0,markPrice:0,riskCash:0,updatedAt:now(),source:"BYBIT"};
     state.positions.push(p);
   }
-  p.side=side;p.qty=qty;p.entry=finite(row.avgPrice??row.entryPrice,p.entry);p.markPrice=finite(row.markPrice,p.markPrice);p.leverage=finite(row.leverage,p.leverage);p.unrealisedPnl=finite(row.unrealisedPnl,p.unrealisedPnl);p.updatedAt=now();
+  p.side=side;p.positionIdx=finite(row.positionIdx,0);p.qty=qty;p.entry=finite(row.avgPrice??row.entryPrice,p.entry);p.markPrice=finite(row.markPrice,p.markPrice);p.leverage=finite(row.leverage,p.leverage);p.unrealisedPnl=finite(row.unrealisedPnl,p.unrealisedPnl);p.updatedAt=now();
   if(qty===0)p.riskCash=0;
   else if(!p.riskCash)p.riskCash=Math.abs(p.entry*qty)*state.config.riskPct/100;
   state.positions=state.positions.slice(-MAX_POSITIONS);
@@ -496,7 +496,7 @@ async function reconcile(){
   const externalPositions=[];
   for(const sym of symbols)externalPositions.push(...await adapter.positions(sym));
   const extPosMap=new Map(externalPositions.map(p=>[String(p.symbol)+":"+String(p.positionIdx??0),Math.abs(finite(p.size,0)||0)]));
-  const localPosMap=new Map(activePositions(state).map(p=>[p.symbol+":0",Math.abs(finite(p.qty,0)||0)]));
+  const localPosMap=new Map(activePositions(state).map(p=>[String(p.symbol)+":"+String(p.positionIdx??0),Math.abs(finite(p.qty,0)||0)]));
   let positionMismatch=false;
   for(const [k,v] of extPosMap)if((v>0)!==(localPosMap.get(k)>0))positionMismatch=true;
   for(const [k,v] of localPosMap)if((v>0)!==(extPosMap.get(k)>0))positionMismatch=true;
