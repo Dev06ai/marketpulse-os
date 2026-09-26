@@ -310,6 +310,93 @@ function liteCopilot(mode,market,trade,question){
   }
   return ["MarketPulse Lite","", "Market context: "+regime+" · "+call+" · confluence "+score+"/100.","Momentum: RSI "+rsi+" · ADX "+adx+" · structure "+structure+".",mtf?"Multi-timeframe: "+mtf+".":"",deriv.cvdState?"Derivatives: "+deriv.cvdState+" · "+(deriv.positioning||"positioning unavailable")+".":"",call==="NO TRADE"?"Read: wait for alignment instead of forcing a trade.":"Read: treat this as a setup to validate, not a guarantee.","Question: "+(question||"What is the market doing?"),"Full AI reasoning will be available when API credits are added."].filter(Boolean).join("\n");
 }
+
+function replayOutcome(candles,index,analysis,horizon=12){
+  if(!analysis||!["READY","WATCH","WAITING"].includes(analysis.status))return {status:"NO_SIGNAL"};
+  const entryLow=Number(analysis.entryLow),entryHigh=Number(analysis.entryHigh),stop=Number(analysis.stop),target=Number(analysis.tp1);
+  const side=String(analysis.side||"");
+  if(!Number.isFinite(stop)||!Number.isFinite(target)||!side)return {status:"NO_LEVELS"};
+  const entry=Number.isFinite(entryLow)&&Number.isFinite(entryHigh)?(entryLow+entryHigh)/2:Number(analysis.price);
+  if(!Number.isFinite(entry)||Math.abs(entry-stop)<1e-12)return {status:"NO_LEVELS"};
+  let entryBar=-1;
+  for(let j=index+1;j<Math.min(candles.length,index+1+horizon);j++){
+    const c=candles[j],hitEntry=Number(c.l)<=Math.max(entryLow,entry)&&Number(c.h)>=Math.min(entryHigh||entry,c.l);
+    if(hitEntry){entryBar=j;break}
+  }
+  if(entryBar<0)return {status:"NOT_TRIGGERED",entry,stop,target,side,resolutionBars:horizon};
+  let outcome="UNRESOLVED",resultR=0,resolvedBar=-1;
+  for(let j=entryBar;j<Math.min(candles.length,index+1+horizon);j++){
+    const c=candles[j],lo=Number(c.l),hi=Number(c.h);
+    const stopHit=side==="LONG"?lo<=stop:hi>=stop;
+    const targetHit=side==="LONG"?hi>=target:lo<=target;
+    if(stopHit&&targetHit){outcome="AMBIGUOUS";resolvedBar=j;resultR=0;break}
+    if(stopHit){outcome="STOP";resolvedBar=j;resultR=-1;break}
+    if(targetHit){outcome="TARGET_1";resolvedBar=j;const risk=Math.abs(entry-stop),reward=Math.abs(target-entry);resultR=risk?reward/risk:0;break}
+  }
+  return {status:outcome,entry,stop,target,side,resultR,resolutionBars:resolvedBar>=0?resolvedBar-entryBar:horizon,entryBar:entryBar-index,resolvedBar:resolvedBar};
+}
+
+function replaySnapshot(a){
+  return {
+    status:a.status,type:a.type,side:a.side,score:a.score,bias:a.bias,regime:a.regime,mood:a.mood,
+    momentum:a.momentum,volatilityState:a.volatilityState,structure:a.structure,directionalLean:a.directionalLean,
+    price:a.price,rsi:a.rsi,adx:a.adx,atrPct:a.atrPct,volumeZ:a.volumeZ,
+    ema20:a.ema20,ema50:a.ema50,ema200:a.ema200,
+    entryLow:a.entryLow,entryHigh:a.entryHigh,stop:a.stop,tp1:a.tp1,tp2:a.tp2,rr:a.rr,
+    probabilityLabel:a.probabilityLabel,reasons:(a.reasons||[]).slice(0,6),
+    historicalDerivativeContext:"UNAVAILABLE_IN_REPLAY"
+  };
+}
+
+async function historicalCandles(symbol,interval,bars){
+  const n=Math.max(240,Math.min(Number(bars)||4200,4200));
+  if(interval==="1d")return longDailyHistory(symbol,n);
+  return klines(symbol,interval);
+}
+
+async function buildReplayDataset(symbol,interval,{points=60,bars=420}={}){
+  const candles=await historicalCandles(symbol,interval,bars);
+  if(!candles||candles.length<240)throw new Error("Not enough historical candles for replay");
+  const usable=Math.max(1,candles.length-220-13),count=Math.max(10,Math.min(Number(points)||60,usable));
+  const step=Math.max(1,Math.floor(usable/count)),frames=[];
+  for(let idx=220;idx<candles.length-12;idx+=step){
+    const window=candles.slice(0,idx+1);
+    const a=analyze(window,{interval});
+    const outcome=replayOutcome(candles,idx,a,12);
+    frames.push({
+      index:idx,ts:candles[idx].t,price:candles[idx].c,
+      snapshot:replaySnapshot(a),outcome
+    });
+    if(frames.length>=count)break;
+  }
+  return {symbol,interval,candles,frames,coverage:{bars:candles.length,startTs:candles[0]?.t,endTs:candles[candles.length-1]?.t,points:frames.length,horizonBars:12}};
+}
+
+function dnaRecordsFromReplay(dataset){
+  return (dataset.frames||[]).map(f=>{
+    const s=f.snapshot,o=f.outcome||{};
+    const signalKey=["MPDNA",dataset.symbol,dataset.interval,f.ts,s.status,s.score,s.side].join("|");
+    return {
+      signalKey,symbol:dataset.symbol,interval:dataset.interval,candleTs:f.ts,status:s.status,side:s.side||"NEUTRAL",
+      type:s.type||"NO TRADE",regime:s.regime||"UNKNOWN",score:Number(s.score)||0,
+      snapshot:s,outcome:o
+    };
+  });
+}
+
+function summarizeDNA(records){
+  const rows=Array.isArray(records)?records:[];
+  const resolved=rows.filter(x=>["TARGET_1","STOP","AMBIGUOUS"].includes(x.outcome?.status));
+  const triggered=rows.filter(x=>!["NOT_TRIGGERED","NO_SIGNAL","NO_LEVELS"].includes(x.outcome?.status));
+  const by=(keyFn)=>{
+    const map=new Map();
+    for(const r of rows){const k=keyFn(r)||"UNKNOWN";const x=map.get(k)||{key:k,total:0,triggered:0,target:0,stop:0,ambiguous:0,notTriggered:0,netR:0,resolved:0};x.total++;if(r.outcome?.status==="TARGET_1"){x.target++;x.triggered++;x.resolved++;x.netR+=Number(r.outcome.resultR)||0}else if(r.outcome?.status==="STOP"){x.stop++;x.triggered++;x.resolved++;x.netR-=1}else if(r.outcome?.status==="AMBIGUOUS"){x.ambiguous++;x.triggered++;x.resolved++}else if(r.outcome?.status==="NOT_TRIGGERED")x.notTriggered++;map.set(k,x)}
+    return Array.from(map.values()).map(x=>({...x,triggerRate:x.total?x.triggered/x.total:0,targetRate:x.resolved?x.target/x.resolved:0,avgR:x.resolved?x.netR/x.resolved:0})).sort((a,b)=>b.total-a.total);
+  };
+  const scoreBuckets=by(r=>{const s=Number(r.score)||0;return s<40?"0-39":s<55?"40-54":s<70?"55-69":s<80?"70-79":"80-100"});
+  return {total:rows.length,resolved:resolved.length,triggered:triggered.length,targetHits:resolved.filter(x=>x.outcome?.status==="TARGET_1").length,stops:resolved.filter(x=>x.outcome?.status==="STOP").length,ambiguous:resolved.filter(x=>x.outcome?.status==="AMBIGUOUS").length,notTriggered:rows.filter(x=>x.outcome?.status==="NOT_TRIGGERED").length,netR:resolved.reduce((a,x)=>a+(Number(x.outcome?.resultR)||0),0),byRegime:by(r=>r.regime),bySide:by(r=>r.side),byType:by(r=>r.type),byStatus:by(r=>r.status),byScore:scoreBuckets};
+}
+
 function staticFile(req,res){const reqPath=req.url==='/'?'/index.html':req.url.split('?')[0],file=path.join(__dirname,'public',reqPath),root=path.join(__dirname,'public');if(!file.startsWith(root))return send(res,403,{error:'Forbidden'});fs.readFile(file,(e,d)=>{if(e)return send(res,404,{error:'Not found'});const ext=path.extname(file);res.writeHead(200,{'Content-Type':ext==='.html'?'text/html; charset=utf-8':ext==='.json'?'application/json; charset=utf-8':'text/plain; charset=utf-8'});res.end(d)})}
 
 const server=http.createServer(async(req,res)=>{
@@ -401,6 +488,45 @@ const server=http.createServer(async(req,res)=>{
       }));
       const payload={ok:true,interval,rows,updatedAt:Date.now(),cacheTtlMs:SCAN_TTL};SCAN_CACHE.set(interval,{ts:Date.now(),payload});return send(res,200,payload);
     }
+
+    if(req.method==='GET'&&u.pathname==='/api/replay'){
+      const symbol=(u.searchParams.get('symbol')||'BTCUSDT').toUpperCase(),interval=u.searchParams.get('interval')||'1h',points=Math.min(120,Math.max(12,Number(u.searchParams.get('points')||60))),bars=Math.min(4200,Math.max(240,Number(u.searchParams.get('bars')||(interval==="1d"?1800:420))));
+      if(!SYMBOLS.includes(symbol))return send(res,400,{error:'Unsupported symbol'});
+      try{return send(res,200,await buildReplayDataset(symbol,interval,{points,bars}))}catch(e){return send(res,503,{ok:false,error:e.message})}
+    }
+    if(req.method==='POST'&&u.pathname==='/api/dna/refresh'){
+      let raw="";for await(const chunk of req)raw+=chunk;let body={};try{body=JSON.parse(raw||"{}")}catch{return send(res,400,{error:"Invalid JSON"})}
+      const symbol=(body.symbol||"BTCUSDT").toUpperCase(),interval=body.interval||"1h",points=Math.min(160,Math.max(20,Number(body.points||80))),bars=Math.min(4200,Math.max(240,Number(body.bars||(interval==="1d"?1800:420))));
+      if(!SYMBOLS.includes(symbol))return send(res,400,{error:"Unsupported symbol"});
+      try{
+        const dataset=await buildReplayDataset(symbol,interval,{points,bars}),records=dnaRecordsFromReplay(dataset),stored=await storage.saveSignalDNA(records);
+        return send(res,200,{ok:true,symbol,interval,stored:stored.stored,storage:stored.storage,coverage:dataset.coverage,summary:summarizeDNA(records),records:records.slice(-160).reverse()});
+      }catch(e){return send(res,503,{ok:false,error:e.message})}
+    }
+    if(req.method==='GET'&&u.pathname==='/api/dna'){
+      const symbol=u.searchParams.get('symbol')||"",interval=u.searchParams.get('interval')||"",limit=Math.min(500,Math.max(20,Number(u.searchParams.get('limit')||200)));
+      try{const records=await storage.getSignalDNA({symbol: symbol||undefined,interval:interval||undefined,limit});return send(res,200,{ok:true,records,summary:summarizeDNA(records),storage:storage.status()})}catch(e){return send(res,503,{ok:false,error:e.message})}
+    }
+    if(req.method==='POST'&&u.pathname==='/api/dna/clear'){
+      let raw="";for await(const chunk of req)raw+=chunk;let body={};try{body=JSON.parse(raw||"{}")}catch{return send(res,400,{error:"Invalid JSON"})}
+      await storage.clearSignalDNA({symbol:body.symbol||undefined,interval:body.interval||undefined});return send(res,200,{ok:true})
+    }
+    if(req.method==='GET'&&u.pathname==='/api/research'){
+      const symbol=u.searchParams.get('symbol')||"",interval=u.searchParams.get('interval')||"",limit=Math.min(2000,Math.max(50,Number(u.searchParams.get('limit')||800)));
+      try{
+        let records=await storage.getSignalDNA({symbol:symbol||undefined,interval:interval||undefined,limit});
+        if(records.length<50){
+          const symbols=symbol?[symbol]:SYMBOLS,sets=await Promise.all(symbols.map(async sym=>{
+            try{
+              const ds=await buildReplayDataset(sym,interval||"1h",{points:50,bars:(interval||"1h")==="1d"?1800:420});return dnaRecordsFromReplay(ds);
+            }catch{return[]}
+          }));
+          records=sets.flat();
+        }
+        return send(res,200,{ok:true,filters:{symbol:symbol||"ALL",interval:interval||"ALL"},summary:summarizeDNA(records),records:records.slice(0,limit),updatedAt:Date.now()});
+      }catch(e){return send(res,503,{ok:false,error:e.message})}
+    }
+
     if(req.method==='GET'&&u.pathname==='/api/system-check'){
       const checks={server:true,marketEngine:true,learning:false,memory:false,marketData:false,derivatives:false,oi:false,cvd:false,liquidations:false};
       let marketError=null,derivativesError=null;
