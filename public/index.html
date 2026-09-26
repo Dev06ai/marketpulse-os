@@ -498,6 +498,10 @@ function setView(name){
   document.querySelectorAll(".nav button,.mobileMenu button").forEach(function(b){b.classList.toggle("active",b.dataset.view===name)});
   var menu=$("mobileMenu"),btn=$("mobileMenuBtn");if(menu){menu.classList.remove("open");menu.setAttribute("aria-hidden","true")}if(btn)btn.setAttribute("aria-expanded","false");
   window.scrollTo(0,0);
+  if(name==="flow"&&state.market){
+    renderFlowView(state.market.derivatives||{available:false});
+    drawFlowData(state.market.derivatives||null);
+  }
 }
 document.querySelectorAll("[data-view]").forEach(function(b){
   b.addEventListener("click",function(){setView(b.dataset.view)})
