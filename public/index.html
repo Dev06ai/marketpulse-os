@@ -1290,13 +1290,23 @@ async function syncMemory(){
       remote=await api("/api/memory?device="+encodeURIComponent(id),5000);userMem=remote&&remote.payload||{};
     }
     var p=userMem||{};
+    if(state.account&&p.preferences&&typeof p.preferences==="object"){
+      var prefs=p.preferences;
+      if(SYMBOLS.includes(prefs.symbol))state.symbol=prefs.symbol;
+      if(["15m","1h","4h","1d"].includes(prefs.interval))state.interval=prefs.interval;
+      if(prefs.aiMode==="market"||prefs.aiMode==="trade")state.aiMode=prefs.aiMode;
+      if(prefs.chartSettings&&typeof prefs.chartSettings==="object"){
+        chartSettings=Object.assign({},chartSettings||{},prefs.chartSettings);
+        localStorage.setItem("mp-chart",JSON.stringify(chartSettings));
+      }
+    }
     state.journal=mergeMemoryArrays(state.journal,p.journal,"ts").slice(0,100);
     state.signals=mergeMemoryArrays(state.signals,p.signals,"ts").slice(0,100);
     state.watch=Array.from(new Set((state.watch||[]).concat(Array.isArray(p.watch)?p.watch:[]))).slice(0,50);
     localStorage.setItem("mp-stable-journal",JSON.stringify(state.journal));
     localStorage.setItem("mp-stable-signals",JSON.stringify(state.signals));
     localStorage.setItem("mp-watch",JSON.stringify(state.watch));
-    var merged={journal:state.journal,signals:state.signals,watch:state.watch,alertState:{threshold:Number($("alertScore")?.value||75)},lastSignal:state.signals[0]||null,activeSignal:null,updatedAt:Date.now()};
+    var merged={journal:state.journal,signals:state.signals,watch:state.watch,alertState:{threshold:Number($("alertScore")?.value||75)},preferences:{symbol:state.symbol,interval:state.interval,aiMode:state.aiMode,chartSettings:chartSettings||{}},lastSignal:state.signals[0]||null,activeSignal:null,updatedAt:Date.now()};
     var saved;
     if(state.account){
       saved=await fetch("/api/account/memory",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({memory:merged})});
