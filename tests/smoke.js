@@ -41,10 +41,10 @@ assert(q4.components.length===1&&q4.marketScore===80,"phase4 quality");
 const p4s=phase4.summarizeTrades([{resultR:1,pnl:100},{resultR:-1,pnl:-50}]);
 assert(p4s.trades===2&&p4s.netR===0,"phase4 paper summary");
 const p5=execution.createState();
-const g5=execution.marketGate({symbol:"BTCUSDT",side:"LONG",entry:100,stop:95,target:110,qty:10},p5);
+const g5=await execution.marketGate({symbol:"BTCUSDT",side:"LONG",entry:100,stop:95,target:110,qty:10},p5);
 assert(g5.allowed&&g5.rr>=1.5&&g5.qty===10,"phase5 execution gate");
 p5.control.killSwitch=true;
-const g5b=execution.marketGate({symbol:"BTCUSDT",side:"LONG",entry:100,stop:95,target:110,qty:10},p5);
+const g5b=await execution.marketGate({symbol:"BTCUSDT",side:"LONG",entry:100,stop:95,target:110,qty:10},p5);
 assert(!g5b.allowed&&g5b.reason==="KILL SWITCH ACTIVE","phase5 kill switch");
 
 console.log("MarketPulse Phase 5 smoke checks passed:",{
