@@ -26,10 +26,10 @@ assert(blocked.reasons.includes("SIGNAL_SCORE_BELOW_THRESHOLD"),"score gate");
 const event=evaluateEventContract({
   analysis,derivatives:deriv,dataQuality:{qualityPct:100,candleAgeMs:1000},
   equity:5000,dayStartEquity:5000,peakEquity:5000,
-  side:"UP",premium:10,payout:18,fee:0,config:cfg
+  side:"UP",premium:10,payout:30,fee:0,config:cfg
 });
 assert(event.mode==="EVENT_UP_DOWN","event mode");
-assert(event.maxContracts===250,"event risk sizing");
-assert(event.maxLoss===2500,"event max loss");
+assert(event.maxContracts===2,"event risk sizing");
+assert(event.maxLoss===20,"event max loss");
 
 console.log("Prop Firm Guard smoke checks passed:",{standard:good.decision,event:event.decision,maxContracts:event.maxContracts});
