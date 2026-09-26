@@ -1038,6 +1038,10 @@ const server=http.createServer(async(req,res)=>{
             const lower=interval==='15m'?null:await Promise.race([klines(symbol,'15m'),new Promise(resolve=>setTimeout(()=>resolve(null),1200))]).catch(()=>null);
             const higher=interval==='4h'?null:await Promise.race([klines(symbol,'4h'),new Promise(resolve=>setTimeout(()=>resolve(null),1200))]).catch(()=>null);
             const deriv=await Promise.race([derivatives(symbol,interval),new Promise(resolve=>setTimeout(()=>resolve(null),2500))]).catch(()=>null);
+            const consensus=await Promise.race([
+              dataFabric.assess(symbol,interval,{primaryPrice:candles?.[candles.length-1]?.c,primaryAgeMs:candles?.[candles.length-1]?.t?Date.now()-Number(candles[candles.length-1].t):null,primarySource:candles?.[0]?.source,liveFlow:flowBucket(symbol)}),
+              new Promise(resolve=>setTimeout(()=>resolve(null),1200))
+            ]).catch(()=>null);
             const analysis=analyze(candles,{interval,lower:lower&&lower.length>=220?analyze(lower,{interval:'15m'}):null,higher:higher&&higher.length>=220?analyze(higher,{interval:'4h'}):null,deriv});
             const config=propFirm.normalizeConfig({
               accountSize:Number(u.searchParams.get('accountSize')||process.env.PROP_ACCOUNT_SIZE||5000),
@@ -1052,10 +1056,10 @@ const server=http.createServer(async(req,res)=>{
             });
             const gate=propFirm.evaluateStandard({
               analysis,derivatives:deriv,
-              dataQuality:{candleAgeMs:candles.length?Math.max(0,Date.now()-Number(candles[candles.length-1].t)):null,qualityPct:deriv?.available?100:80},
+              dataQuality:{candleAgeMs:candles.length?Math.max(0,Date.now()-Number(candles[candles.length-1].t)):null,qualityPct:deriv?.available?100:80,consensusQualityPct:consensus?.consensusQualityPct,priceDispersionBps:consensus?.priceDispersionBps,providerCount:consensus?.sourceCount},
               equity:config.startingEquity,dayStartEquity:config.startingEquity,peakEquity:config.startingEquity,config
             });
-            return {symbol,interval,analysis,derivatives:deriv,gate,updatedAt:Date.now()};
+            return {symbol,interval,analysis,derivatives:deriv,consensus,gate,updatedAt:Date.now()};
           })(),
           new Promise((_,reject)=>setTimeout(()=>reject(new Error("PROP_EVAL_TIMEOUT")),7000))
         ]);
@@ -1071,6 +1075,10 @@ const server=http.createServer(async(req,res)=>{
         const lower=interval==='15m'?null:await Promise.race([klines(symbol,'15m'),new Promise(resolve=>setTimeout(()=>resolve(null),1000))]).catch(()=>null);
         const higher=await Promise.race([klines(symbol,'4h'),new Promise(resolve=>setTimeout(()=>resolve(null),1000))]).catch(()=>null);
         const deriv=await Promise.race([derivatives(symbol,interval),new Promise(resolve=>setTimeout(()=>resolve(null),2200))]).catch(()=>null);
+        const consensus=await Promise.race([
+          dataFabric.assess(symbol,interval,{primaryPrice:candles?.[candles.length-1]?.c,primaryAgeMs:candles?.[candles.length-1]?.t?Date.now()-Number(candles[candles.length-1].t):null,primarySource:candles?.[0]?.source,liveFlow:flowBucket(symbol)}),
+          new Promise(resolve=>setTimeout(()=>resolve(null),1200))
+        ]).catch(()=>null);
         const analysis=analyze(candles,{interval,lower:lower&&lower.length>=220?analyze(lower,{interval:'15m'}):null,higher:higher&&higher.length>=220?analyze(higher,{interval:'4h'}):null,deriv});
         const config=propFirm.normalizeConfig({
           accountSize:Number(u.searchParams.get('accountSize')||process.env.PROP_ACCOUNT_SIZE||5000),
@@ -1085,7 +1093,7 @@ const server=http.createServer(async(req,res)=>{
         });
         const gate=propFirm.evaluateEventContract({
           analysis,derivatives:deriv,
-          dataQuality:{candleAgeMs:candles.length?Math.max(0,Date.now()-Number(candles[candles.length-1].t)):null,qualityPct:deriv?.available?100:80},
+          dataQuality:{candleAgeMs:candles.length?Math.max(0,Date.now()-Number(candles[candles.length-1].t)):null,qualityPct:deriv?.available?100:80,consensusQualityPct:consensus?.consensusQualityPct,priceDispersionBps:consensus?.priceDispersionBps,providerCount:consensus?.sourceCount},
           equity:config.startingEquity,dayStartEquity:config.startingEquity,peakEquity:config.startingEquity,
           side:String(u.searchParams.get('side')||"").toUpperCase(),
           premium:Number(u.searchParams.get('premium')),
@@ -1093,7 +1101,7 @@ const server=http.createServer(async(req,res)=>{
           fee:Number(u.searchParams.get('fee')||0),
           config
         });
-        return send(res,200,{ok:true,symbol,interval,analysis,derivatives:deriv,gate,updatedAt:Date.now()});
+        return send(res,200,{ok:true,symbol,interval,analysis,derivatives:deriv,consensus,gate,updatedAt:Date.now()});
       }catch(e){return send(res,503,{ok:false,error:String(e.message||e)})}
     }
 
