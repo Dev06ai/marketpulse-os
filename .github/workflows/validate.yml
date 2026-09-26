@@ -110,7 +110,7 @@ jobs:
           server=Path("server.js").read_text()
           required_html=[
             'id="pfgGateChip"','id="pfgRefresh"','id="ecgGateChip"','id="ecgRefresh"','id="dcfState"','id="dcfRefresh"',
-            'id="pfgEvalAccount"','id="pfgRiskTrade"','id="ecgPremium"','id="ecgPayout"'
+            'id="pfgEvalAccount"','id="pfgRiskTrade"','id="ecgPremium"','id="ecgPayout"','id="ecgVenue"','id="ecgStrike"','id="ecgExpiryMin"'
           ]
           required_server=[
             "/api/propfirm","/api/propfirm/event","/api/data-fabric","/api/research/catalog","/api/research/status","/api/research/train"
