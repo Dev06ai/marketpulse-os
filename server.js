@@ -134,11 +134,11 @@ const LIVE_FLOW=new Map();
 const LIVE_FLOW_LIMIT=900;
 const LIVE_SYMBOLS=SYMBOLS.filter(s=>["BTCUSDT","ETHUSDT","SOLUSDT","BNBUSDT","XRPUSDT","DOGEUSDT","ADAUSDT"].includes(s));
 function flowBucket(symbol){
-  let v=LIVE_FLOW.get(symbol);if(!v){v={liqLong:0,liqShort:0,cvd:0,cvdNotional:0,lastTs:0,oi:null,fundingRate:null,markPrice:null,points:[]};LIVE_FLOW.set(symbol,v)}
+  let v=LIVE_FLOW.get(symbol);if(!v){v={liqLong:0,liqShort:0,cvd:0,cvdNotional:0,lastTs:0,oi:null,fundingRate:null,markPrice:null,orderBook:null,points:[]};LIVE_FLOW.set(symbol,v)}
   return v;
 }
 function recordFlowPoint(symbol){
-  const v=flowBucket(symbol);v.points.push({ts:Date.now(),liqLong:v.liqLong,liqShort:v.liqShort,liqTotal:v.liqLong+v.liqShort,cvd:v.cvd,cvdRatio:v.cvdNotional?v.cvd/v.cvdNotional:null,oi:v.oi,fundingRate:v.fundingRate,markPrice:v.markPrice});if(v.points.length>LIVE_FLOW_LIMIT)v.points.shift();
+  const v=flowBucket(symbol);v.points.push({ts:Date.now(),liqLong:v.liqLong,liqShort:v.liqShort,liqTotal:v.liqLong+v.liqShort,cvd:v.cvd,cvdRatio:v.cvdNotional?v.cvd/v.cvdNotional:null,oi:v.oi,fundingRate:v.fundingRate,markPrice:v.markPrice,orderBook:v.orderBook});if(v.points.length>LIVE_FLOW_LIMIT)v.points.shift();
 }
 function startBybitLiveFlow(){
   if(!LIVE_SYMBOLS.length)return;
@@ -148,7 +148,7 @@ function startBybitLiveFlow(){
     ws=new WebSocket("wss://stream.bybit.com/v5/public/linear");
     ws.on("open",()=>{
       retry=1000;
-      ws.send(JSON.stringify({op:"subscribe",args:LIVE_SYMBOLS.flatMap(sym=>["allLiquidation."+sym,"publicTrade."+sym,"tickers."+sym])}));
+      ws.send(JSON.stringify({op:"subscribe",args:LIVE_SYMBOLS.flatMap(sym=>["allLiquidation."+sym,"publicTrade."+sym,"tickers."+sym,"orderbook.50."+sym])}));
     });
     ws.on("message",raw=>{
       try{
@@ -172,6 +172,23 @@ function startBybitLiveFlow(){
           if(Number.isFinite(+x.openInterest))v.oi=+x.openInterest;
           if(Number.isFinite(+x.fundingRate))v.fundingRate=+x.fundingRate;
           if(Number.isFinite(+x.markPrice))v.markPrice=+x.markPrice;
+          v.lastTs=Number(msg.ts)||Date.now();
+        }else if(topic.startsWith("orderbook.50.")){
+          const x=data[0]||{}, bids=Array.isArray(x.b)?x.b:[],asks=Array.isArray(x.a)?x.a:[];
+          const bidQty=bids.slice(0,10).reduce((n,r)=>n+(Number(r?.[1])||0),0);
+          const askQty=asks.slice(0,10).reduce((n,r)=>n+(Number(r?.[1])||0),0);
+          const bidDepth=bids.slice(0,10).reduce((n,r)=>n+(Number(r?.[0])||0)*(Number(r?.[1])||0),0);
+          const askDepth=asks.slice(0,10).reduce((n,r)=>n+(Number(r?.[0])||0)*(Number(r?.[1])||0),0);
+          const bid=Number(bids[0]?.[0]),ask=Number(asks[0]?.[0]);
+          const mid=Number.isFinite(bid)&&Number.isFinite(ask)?(bid+ask)/2:null;
+          const micro=mid&&bidQty+askQty>0?((ask*bidQty)+(bid*askQty))/(bidQty+askQty):null;
+          v.orderBook={
+            imbalance:(bidQty+askQty)>0?(bidQty-askQty)/(bidQty+askQty):null,
+            micropriceBias:mid&&Number.isFinite(micro)?(micro-mid)/mid:null,
+            spreadBps:mid&&Number.isFinite(ask)&&Number.isFinite(bid)?((ask-bid)/mid)*10000:null,
+            depthNotional:bidDepth+askDepth,
+            bidDepth,askDepth,ts:Date.now()
+          };
           v.lastTs=Number(msg.ts)||Date.now();
         }
         recordFlowPoint(symbol);
@@ -263,21 +280,29 @@ async function krakenAnalytics(symbol,interval){
   return{available:true,provider:"Kraken Futures public API",symbol:pair,oi:Number.isFinite(oiLast)?oiLast:null,oiChangePct,cvdDelta,cvdState,positioning,tradeCount:0,fundingRate:Number.isFinite(fundingRate)?fundingRate:null,markPrice:null,cvdRatio:null,longPercent:longLast,shortPercent:shortLast,longShortRatio:ratioLast,liquidationTotal,liquidationBias:liquidationTotal>0?"LIQUIDATION ACTIVITY":"NO LIQUIDATION ACTIVITY",analyticsBuckets:lengths.length?Math.max(...lengths):0,series:{cvd:cvdVals,oi:oiVals,liq:liqTotalVals},completeness:{oi:Number.isFinite(oiLast),cvd:Number.isFinite(cvdDelta),funding:Number.isFinite(fundingRate),positioning:Number.isFinite(longLast)&&Number.isFinite(shortLast),liquidations:liqTotalVals.length>0},errors,updatedAt:Date.now()};
 }
 async function bybitDerivatives(symbol,interval){
-  const [oiRes,tradeRes,tickerRes]=await Promise.allSettled([
+  const [oiRes,tradeRes,tickerRes,bookRes]=await Promise.allSettled([
     bybitGet('/v5/market/open-interest',{category:'linear',symbol,intervalTime:bybitInterval(interval),limit:50}),
     bybitGet('/v5/market/recent-trade',{category:'linear',symbol,limit:1000}),
-    bybitGet('/v5/market/tickers',{category:'linear',symbol})
+    bybitGet('/v5/market/tickers',{category:'linear',symbol}),
+    bybitGet('/v5/market/orderbook',{category:'linear',symbol,limit:50})
   ]);
   const errors=[];
-  const oiPayload=oiRes.status==='fulfilled'?oiRes.value:null,tradePayload=tradeRes.status==='fulfilled'?tradeRes.value:null,tickerPayload=tickerRes.status==='fulfilled'?tickerRes.value:null;
-  if(oiRes.status==='rejected')errors.push("OI: "+oiRes.reason.message);if(tradeRes.status==='rejected')errors.push("Trades: "+tradeRes.reason.message);if(tickerRes.status==='rejected')errors.push("Ticker: "+tickerRes.reason.message);
+  const oiPayload=oiRes.status==='fulfilled'?oiRes.value:null,tradePayload=tradeRes.status==='fulfilled'?tradeRes.value:null,tickerPayload=tickerRes.status==='fulfilled'?tickerRes.value:null,bookPayload=bookRes.status==='fulfilled'?bookRes.value:null;
+  if(oiRes.status==='rejected')errors.push("OI: "+oiRes.reason.message);if(tradeRes.status==='rejected')errors.push("Trades: "+tradeRes.reason.message);if(tickerRes.status==='rejected')errors.push("Ticker: "+tickerRes.reason.message);if(bookRes.status==='rejected')errors.push("Order book: "+bookRes.reason.message);
   const oiList=(oiPayload?.result?.list||[]).slice().reverse().map(x=>+x.openInterest),ticker=tickerPayload?.result?.list?.[0]||null;
+  const book=bookPayload?.result||{},bids=Array.isArray(book.b)?book.b:[],asks=Array.isArray(book.a)?book.a:[];
+  const bidQty=bids.slice(0,10).reduce((n,r)=>n+(Number(r?.[1])||0),0),askQty=asks.slice(0,10).reduce((n,r)=>n+(Number(r?.[1])||0),0);
+  const bidDepth=bids.slice(0,10).reduce((n,r)=>n+(Number(r?.[0])||0)*(Number(r?.[1])||0),0),askDepth=asks.slice(0,10).reduce((n,r)=>n+(Number(r?.[0])||0)*(Number(r?.[1])||0),0);
+  const bid=Number(bids[0]?.[0]),ask=Number(asks[0]?.[0]),mid=Number.isFinite(bid)&&Number.isFinite(ask)?(bid+ask)/2:null;
+  const micro=mid&&bidQty+askQty>0?((ask*bidQty)+(bid*askQty))/(bidQty+askQty):null;
+  const orderBook={imbalance:bidQty+askQty>0?(bidQty-askQty)/(bidQty+askQty):null,micropriceBias:mid&&Number.isFinite(micro)?(micro-mid)/mid:null,spreadBps:mid&&Number.isFinite(ask)&&Number.isFinite(bid)?((ask-bid)/mid)*10000:null,depthNotional:bidDepth+askDepth,bidDepth,askDepth,ts:Date.now()};
   const currentOi=oiList.length?oiList[oiList.length-1]:(ticker&&Number.isFinite(+ticker.openInterest)?+ticker.openInterest:NaN),oiFirst=oiList[0],oiChangePct=Number.isFinite(oiFirst)&&oiFirst?((currentOi-oiFirst)/oiFirst)*100:null;
   const trades=(tradePayload?.result?.list||[]).slice().sort((a,b)=>+a.time-+b.time).map(x=>({ts:+x.time,price:+x.price,size:+x.size,side:x.side}));
   let cvd=0,total=0;for(const t of trades){const q=t.price*t.size;cvd+=(t.side==="Buy"?q:-q);total+=q}
   const first=trades[0]?.price,lastT=trades[trades.length-1]?.price,priceChangePct=Number.isFinite(first)&&first?((lastT-first)/first)*100:null,cvdRatio=total?cvd/total:null;
   const live=flowBucket(symbol),liveCvd=live.cvdNotional?live.cvd:cvd,liveCvdRatio=live.cvdNotional?live.cvd/live.cvdNotional:cvdRatio,liqTotal=live.liqLong+live.liqShort,liqBias=liqTotal?(live.liqLong>live.liqShort?"LONG LIQS DOMINANT":"SHORT LIQS DOMINANT"):"UNAVAILABLE";
-  const data={available:Boolean(ticker||oiPayload||tradePayload||live.cvdNotional||liqTotal),provider:"Bybit linear futures"+(live.cvdNotional||liqTotal?" · live stream":""),oi:Number.isFinite(currentOi)?currentOi:null,oiChangePct,cvdDelta:liveCvd,cvdRatio:liveCvdRatio,cvdState:"MIXED",positioning:"MIXED",tradeCount:trades.length,fundingRate:ticker&&Number.isFinite(+ticker.fundingRate)?+ticker.fundingRate:null,markPrice:ticker&&Number.isFinite(+ticker.markPrice)?+ticker.markPrice:null,tradePriceChangePct:priceChangePct,longLiquidations:live.liqLong,shortLiquidations:live.liqShort,liquidationTotal:liqTotal,liquidationBias:liqBias,livePointCount:live.points.length,liveHistory:live.points.slice(-120),errors,updatedAt:Date.now()};
+  const orderBook=live.orderBook||orderBook;
+  const data={available:Boolean(ticker||oiPayload||tradePayload||bookPayload||live.cvdNotional||liqTotal),provider:"Bybit linear futures"+(live.cvdNotional||liqTotal?" · live stream":""),oi:Number.isFinite(currentOi)?currentOi:null,oiChangePct,cvdDelta:liveCvd,cvdRatio:liveCvdRatio,cvdState:"MIXED",positioning:"MIXED",tradeCount:trades.length,fundingRate:ticker&&Number.isFinite(+ticker.fundingRate)?+ticker.fundingRate:null,markPrice:ticker&&Number.isFinite(+ticker.markPrice)?+ticker.markPrice:null,tradePriceChangePct:priceChangePct,takerImbalance:liveCvdRatio,longLiquidations:live.liqLong,shortLiquidations:live.liqShort,liquidationTotal:liqTotal,liquidationBias:liqBias,orderBook,livePointCount:live.points.length,liveHistory:live.points.slice(-120),errors,updatedAt:Date.now()};
   if(priceChangePct!=null&&cvdRatio!=null){if(priceChangePct>0.15&&cvdRatio<-0.01)data.cvdState="BEARISH DIVERGENCE";else if(priceChangePct<-0.15&&cvdRatio>0.01)data.cvdState="BULLISH DIVERGENCE";else if(priceChangePct>0.15&&cvdRatio>0.01)data.cvdState="BUYERS CONFIRM";else if(priceChangePct<-0.15&&cvdRatio<-0.01)data.cvdState="SELLERS CONFIRM"}else if(trades.length===0)data.cvdState="UNAVAILABLE";
   if(priceChangePct!=null&&oiChangePct!=null){if(priceChangePct>0.15&&oiChangePct>1)data.positioning="PRICE + OI: LONG PARTICIPATION";else if(priceChangePct>0.15&&oiChangePct<-1)data.positioning="PRICE UP + OI DOWN: SHORT COVERING";else if(priceChangePct<-0.15&&oiChangePct>1)data.positioning="PRICE DOWN + OI UP: SHORT PARTICIPATION";else if(priceChangePct<-0.15&&oiChangePct<-1)data.positioning="PRICE DOWN + OI DOWN: LONG LIQUIDATION"}else if(!Number.isFinite(oiChangePct))data.positioning=Number.isFinite(currentOi)?"OI CHANGE NOT AVAILABLE":"OI UNAVAILABLE";
   return data;
@@ -330,6 +355,7 @@ async function derivatives(symbol,interval){
   if(Number.isFinite(live.oi))data.oi=live.oi;
   if(Number.isFinite(live.fundingRate))data.fundingRate=live.fundingRate;
   if(Number.isFinite(live.markPrice))data.markPrice=live.markPrice;
+  if(live.orderBook)data.orderBook=live.orderBook;
   if(live.liqLong||live.liqShort){
     data.longLiquidations=live.liqLong;data.shortLiquidations=live.liqShort;
     data.liquidationTotal=live.liqLong+live.liqShort;
