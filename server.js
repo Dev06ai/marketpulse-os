@@ -9,7 +9,7 @@ const labels={BTCUSDT:'BTC',ETHUSDT:'ETH',SOLUSDT:'SOL',BNBUSDT:'BNB',XRPUSDT:'X
 const KRAKEN_PAIRS={BTCUSDT:'XBTUSD',ETHUSDT:'ETHUSD',SOLUSDT:'SOLUSD',BNBUSDT:'BNBUSD',XRPUSDT:'XRPUSD',DOGEUSDT:'DOGEUSD',ADAUSDT:'ADAUSD'};
 const CACHE=new Map(); const TTL=25000;
 const SCAN_CACHE=new Map(); const SCAN_TTL=20000;
-const PHASE2_VERSION=2;
+const PHASE2_VERSION=2; const PHASE3_VERSION=3;
 const OPENAI_API_KEY=process.env.OPENAI_API_KEY||"";
 const OPENAI_MODEL=process.env.OPENAI_MODEL||"gpt-5.6-luna";
 const AI_LIMIT_MS=8000; const AI_CALLS=new Map();
@@ -460,6 +460,7 @@ const server=http.createServer(async(req,res)=>{
           backtest:backtest(sample),validation:walkForwardBacktest(sample),setupStats,
           source:'Kraken spot',
           phase2:PHASE2_VERSION,
+          phase3:PHASE3_VERSION,
           dataQuality:{candleCount:candles.length,candleAgeMs:candles.length?Math.max(0,Date.now()-Number(candles[candles.length-1].t)):null,derivativesAvailable:Boolean(deriv?.available),derivativesCompleteness:deriv?.completeness||null},
           updatedAt:Date.now()
         });
@@ -543,7 +544,7 @@ const server=http.createServer(async(req,res)=>{
         checks.liquidations=Boolean(Array.isArray(d?.series?.liq)?d.series.liq.length>0:Boolean(d&&d.liquidationTotal!=null));
         if(!checks.derivatives)derivativesError="No derivatives provider returned usable data";
       }catch(e){derivativesError=String(e.message||e)}
-      return send(res,200,{ok:checks.server&&checks.marketEngine&&checks.learning&&checks.memory&&checks.marketData,checks,marketError,derivativesError,phase2:PHASE2_VERSION,routes:{core:true,coreScan:true,coreFlow:true,cycle:true,ai:true,memory:true,learning:true},timestamp:Date.now()});
+      return send(res,200,{ok:checks.server&&checks.marketEngine&&checks.learning&&checks.memory&&checks.marketData,checks,marketError,derivativesError,phase2:PHASE2_VERSION,phase3:PHASE3_VERSION,routes:{core:true,coreScan:true,coreFlow:true,cycle:true,ai:true,memory:true,learning:true,replay:true,dna:true,research:true},timestamp:Date.now()});
     }
     if(req.method==='GET'&&u.pathname==='/api/live'){
       const symbol=(u.searchParams.get('symbol')||'BTCUSDT').toUpperCase(),interval=u.searchParams.get('interval')||'1h';
