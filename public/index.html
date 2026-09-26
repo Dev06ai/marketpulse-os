@@ -1670,8 +1670,8 @@ function adminRenderEmergency(c){
   $("acMaintenanceMessage").value=c.maintenanceMessage||"";$("acMode").value=c.mode||"normal";
 }
 function adminRenderBroadcasts(rows){
-  state.adminBroadcasts=rows||[];$("acBroadcasts").innerHTML=(rows||[]).slice(0,8).map(function(x){return'<div class="adminLine"><div><b>'+safeHtml(x.title)+'</b><div class="small">'+safeHtml(x.body).slice(0,100)+'</div></div><button class="btn" data-broadcast-toggle="'+x.id+'">'+(x.active?"Deactivate":"Activate")+'</button></div>'}).join("")||'<div class="small">No broadcasts.</div>';
-  $("acBroadcasts").querySelectorAll("[data-broadcast-toggle]").forEach(function(b){b.addEventListener("click",function(){adminToggleBroadcast(b.dataset.broadcastToggle,!b.textContent.includes("Activate"))})});
+  state.adminBroadcasts=rows||[];$("acBroadcasts").innerHTML=(rows||[]).slice(0,8).map(function(x){return'<div class="adminLine"><div><b>'+safeHtml(x.title)+'</b><div class="small">'+safeHtml(x.body).slice(0,100)+'</div></div><button class="btn" data-broadcast-toggle="'+x.id+'" data-broadcast-active="'+(x.active?"true":"false")+'">'+(x.active?"Deactivate":"Activate")+'</button></div>'}).join("")||'<div class="small">No broadcasts.</div>';
+  $("acBroadcasts").querySelectorAll("[data-broadcast-toggle]").forEach(function(b){b.addEventListener("click",function(){adminToggleBroadcast(b.dataset.broadcastToggle,b.dataset.broadcastActive!=="true")})});
 }
 function adminRenderTickets(rows){
   state.adminTickets=rows||[];$("acSupportTable").innerHTML=(rows||[]).slice(0,25).map(function(x){return'<tr><td>'+safeHtml(x.email||"—")+'</td><td>'+safeHtml(x.subject)+'</td><td>'+safeHtml(x.status)+'</td><td>'+adminDate(x.updatedAt)+'</td><td><button class="btn" data-ticket="'+x.id+'">Reply</button></td></tr>'}).join("")||'<tr><td colspan="5" class="small">No support tickets.</td></tr>';
