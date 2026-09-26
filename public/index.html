@@ -544,7 +544,7 @@ body.admin-mode .nav button.adminNav,body.admin-mode .mobileMenu button.adminNav
     <div class="sectionHead"><div><div class="title">System control</div><div class="sub">Run internal checks and review protected infrastructure state.</div></div><button id="adminRunCheck" class="btn primary">Run full system check</button></div>
     <div class="adminGrid">
       <div class="adminMetric"><div class="label">Admin identity</div><div class="v" id="adminIdentity">—</div><div class="s" id="adminConfigState">—</div></div>
-      <div class="adminMetric"><div class="label">Backend storage</div><div class="v" id="adminStorage">—</div><div class="s">Internal persistence state</div></div>
+      <div class="adminMetric"><div class="label">Backend storage</div><div class="v" id="adminStorage">—</div><div class="s" id="adminStorageDetail">Verifying live connection…</div></div>
       <div class="adminMetric"><div class="label">Core system</div><div class="v" id="adminCoreState">READY</div><div class="s" id="adminHealthSummary">Run a check to inspect services</div></div>
     </div>
     <div class="section card" style="margin-top:10px"><div class="title">Protected checks</div><div class="healthGrid" id="adminHealthGrid"></div><div class="sub" id="adminHealthText" style="margin-top:7px">Owner-only system diagnostics.</div></div>
@@ -1386,9 +1386,9 @@ async function loadAdminConsole(){
   if($("adminSecurityStatus"))$("adminSecurityStatus").textContent=state.adminMfaEnabled?"Owner MFA: ACTIVE · hardened sessions":"Owner MFA: NOT CONFIGURED · add MARKETPULSE_ADMIN_TOTP_SECRET in Render";
   if($("adminConfigState"))$("adminConfigState").textContent=state.adminConfigured?(state.adminMfaEnabled?"Admin email + MFA configured":"Admin email configured · MFA not enabled"):"Admin env not configured";
   try{
-    var r=await api("/api/memory/status",5000);
-    if($("adminStorage"))$("adminStorage").textContent=r.durable?"Postgres":"Local fallback";
-  }catch{if($("adminStorage"))$("adminStorage").textContent="Unavailable"}
+    var r=await api("/api/admin/storage-health",7000);
+    if($("adminStorage"))$("adminStorage").textContent=r.connected?"Postgres":"Local fallback";if($("adminStorageDetail"))$("adminStorageDetail").textContent=r.connected?"Live database connection verified":"Running on local fallback storage";
+  }catch{if($("adminStorage"))$("adminStorage").textContent="Unavailable";if($("adminStorageDetail"))$("adminStorageDetail").textContent=e.message||"Storage health check failed"}
 }
 async function runAdminSystemCheck(){
   if(!state.account?.isAdmin)return;
