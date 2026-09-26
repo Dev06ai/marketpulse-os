@@ -46,17 +46,20 @@ button,input,select,textarea{font:inherit}.wrap{width:min(1440px,calc(100% - 26p
 
 .executionGrid{display:grid;grid-template-columns:1.2fr .8fr;gap:10px}.executionMetricGrid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}.executionMetric{background:#0d0d10;border:1px solid rgba(255,255,255,.07);border-radius:12px;padding:11px;min-width:0}.executionMetric .v{font-size:18px;font-weight:800;margin-top:5px}.executionMetric .subv{font-size:11px;color:#858792;margin-top:3px}.executionPanel{background:#0e0e11;border:1px solid rgba(255,255,255,.07);border-radius:14px;padding:12px}.executionActions{display:flex;gap:7px;flex-wrap:wrap;align-items:end}.executionActions label{display:grid;gap:5px;font-size:11px;color:#92939e}.executionActions select,.executionActions input{min-width:120px}.executionBadge{display:inline-flex;align-items:center;border:1px solid rgba(255,255,255,.08);border-radius:999px;padding:4px 9px;font-size:10px;letter-spacing:.08em;color:#c1c2ca}.executionTable{width:100%;border-collapse:collapse;font-size:11px}.executionTable th,.executionTable td{padding:7px 6px;border-bottom:1px solid rgba(255,255,255,.06);text-align:left;vertical-align:top}.executionTable th{color:#8e909b;font-weight:600}.executionMono{font-variant-numeric:tabular-nums}.executionOk{color:#9BE7C4}.executionWarn{color:#FFCF99}.executionBad{color:#FF9B9B}.executionNote{margin-top:8px;color:#9597a2;font-size:12px;line-height:1.5}.executionRows{display:grid;gap:7px}.executionRow{display:grid;grid-template-columns:100px 1fr auto;gap:8px;align-items:center;padding:8px;border:1px solid rgba(255,255,255,.05);border-radius:10px;background:#101014}.executionSmall{font-size:11px;color:#858792}.executionControl{display:flex;gap:7px;flex-wrap:wrap;align-items:center}.executionControl .btn{min-height:34px}.executionDanger{border-color:rgba(255,120,120,.25)!important}.executionLock{background:#161316;border-color:rgba(255,170,120,.18)}@media(max-width:860px){.executionGrid{grid-template-columns:1fr}.executionMetricGrid{grid-template-columns:1fr 1fr}}@media(max-width:560px){.executionMetricGrid{grid-template-columns:1fr}.executionActions{align-items:stretch}.executionActions label,.executionActions select,.executionActions input{width:100%}.executionRow{grid-template-columns:1fr}.executionControl{width:100%}}
 
+
+.portfolioGrid{display:grid;grid-template-columns:1.15fr .85fr;gap:10px}.portfolioMetricGrid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}.portfolioMetric,.portfolioPanel{background:#0f0f13;border:1px solid rgba(255,255,255,.07);border-radius:14px;padding:12px}.portfolioMetric .v{font-size:19px;font-weight:900;margin-top:5px}.portfolioMetric .subv{font-size:11px;color:#858792;margin-top:3px}.portfolioBars{display:grid;gap:7px}.portfolioBarRow{display:grid;grid-template-columns:70px 1fr 60px;gap:8px;align-items:center;font-size:11px}.portfolioBar{height:7px;background:#1a1a1f;border-radius:99px;overflow:hidden}.portfolioBar i{display:block;height:100%;background:linear-gradient(90deg,#67e8ff,#b78cff)}.portfolioTable{width:100%;border-collapse:collapse;font-size:11px}.portfolioTable th,.portfolioTable td{padding:7px 6px;border-bottom:1px solid rgba(255,255,255,.06);text-align:left}.portfolioTable th{color:#8e909b;font-weight:600}.portfolioPill{display:inline-flex;align-items:center;border:1px solid rgba(255,255,255,.08);border-radius:999px;padding:4px 8px;font-size:10px;color:#bfc1ca}.portfolioOk{color:#9BE7C4}.portfolioWarn{color:#FFCF99}.portfolioBad{color:#FF9B9B}.portfolioHeat{display:grid;grid-template-columns:repeat(7,1fr);gap:5px}.portfolioCell{padding:8px 5px;border:1px solid rgba(255,255,255,.06);border-radius:9px;text-align:center;background:#101014}.portfolioCell b{display:block;font-size:11px}.portfolioCell span{display:block;font-size:9px;color:#858792;margin-top:3px}.portfolioCorr{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}.portfolioCorrCell{height:32px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:8px;border:1px solid rgba(255,255,255,.045)}.portfolioStress{display:grid;grid-template-columns:1fr 1fr;gap:8px}.portfolioStressCard{padding:10px;border:1px solid rgba(255,255,255,.07);border-radius:10px;background:#101014}.portfolioStressCard .v{font-size:17px;font-weight:900;margin-top:4px}.portfolioEvent{display:grid;grid-template-columns:90px 1fr;gap:8px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,.06)}.portfolioEvent:last-child{border-bottom:0}.portfolioSmall{font-size:11px;color:#858792}.portfolioActions{display:flex;gap:7px;flex-wrap:wrap;align-items:end}.portfolioActions label{display:grid;gap:5px;font-size:11px;color:#92939e}.portfolioActions input{min-width:110px}.portfolioNote{margin-top:8px;color:#9597a2;font-size:12px;line-height:1.5}@media(max-width:860px){.portfolioGrid{grid-template-columns:1fr}.portfolioMetricGrid{grid-template-columns:1fr 1fr}.portfolioHeat,.portfolioCorr{grid-template-columns:repeat(4,1fr)}}@media(max-width:560px){.portfolioMetricGrid{grid-template-columns:1fr}.portfolioHeat,.portfolioCorr{grid-template-columns:repeat(2,1fr)}.portfolioActions{align-items:stretch}.portfolioActions label,.portfolioActions input{width:100%}}
+
 </style>
 </head>
 <body>
 <header class="header"><div class="headerInner">
   <div class="logo"><div class="mark" aria-label="MarketPulse logo"></div><div><div class="brandK">CRYPTO MARKET INTELLIGENCE</div><div class="brandName">MarketPulse</div><div class="brandSub">Less noise. More signal. Better decisions.</div></div></div>
   <nav class="nav" id="nav">
-    <button class="active" data-view="overview">Intel</button><button data-view="scanner">Scanner</button><button data-view="flow">Flow</button><button data-view="signals">Signals</button><button data-view="lab">Lab</button><button data-view="replay">Replay</button><button data-view="dna">DNA</button><button data-view="research">Research</button><button data-view="edge">Edge</button><button data-view="execution">Execution</button><button data-view="ai">AI Copilot</button><button data-view="brain">Brain</button><button data-view="alerts">Alerts</button><button data-view="risk">Risk</button>
+    <button class="active" data-view="overview">Intel</button><button data-view="scanner">Scanner</button><button data-view="flow">Flow</button><button data-view="signals">Signals</button><button data-view="lab">Lab</button><button data-view="replay">Replay</button><button data-view="dna">DNA</button><button data-view="research">Research</button><button data-view="edge">Edge</button><button data-view="execution">Execution</button><button data-view="portfolio">Portfolio</button><button data-view="ai">AI Copilot</button><button data-view="brain">Brain</button><button data-view="alerts">Alerts</button><button data-view="risk">Risk</button>
   </nav>
   <button id="mobileMenuBtn" class="mobileMenuBtn" aria-label="Open MarketPulse menu" aria-expanded="false">☰</button>
   <div id="mobileMenu" class="mobileMenu" aria-hidden="true">
-    <button data-view="overview">Intel</button><button data-view="scanner">Scanner</button><button data-view="flow">Flow</button><button data-view="signals">Signals</button><button data-view="lab">Lab</button><button data-view="replay">Replay</button><button data-view="dna">DNA</button><button data-view="research">Research</button><button data-view="edge">Edge</button><button data-view="execution">Execution</button><button data-view="ai">AI Copilot</button><button data-view="brain">Brain</button><button data-view="alerts">Alerts</button><button data-view="risk">Risk</button>
+    <button data-view="overview">Intel</button><button data-view="scanner">Scanner</button><button data-view="flow">Flow</button><button data-view="signals">Signals</button><button data-view="lab">Lab</button><button data-view="replay">Replay</button><button data-view="dna">DNA</button><button data-view="research">Research</button><button data-view="edge">Edge</button><button data-view="execution">Execution</button><button data-view="portfolio">Portfolio</button><button data-view="ai">AI Copilot</button><button data-view="brain">Brain</button><button data-view="alerts">Alerts</button><button data-view="risk">Risk</button>
   </div>
   <div class="headerTools"><span class="dataState"><i class="liveDot"></i><span id="dataState">Connecting</span></span><select id="symbol" class="select"></select><select id="interval" class="select"><option>15m</option><option selected>1h</option><option>4h</option><option>1d</option></select><button id="refresh" class="btn primary">Refresh</button></div>
 </div></header>
@@ -295,6 +298,59 @@ button,input,select,textarea{font:inherit}.wrap{width:min(1440px,calc(100% - 26p
     <div class="section card"><div class="title">Safety boundary</div><div class="executionNote">Phase 5 exposes SIMULATION and BYBIT TESTNET only. Live/production order routing is not enabled. Bybit order acknowledgements are asynchronous, so the private order/execution/position streams and reconciliation layer are the source of execution state after submission.</div></div>
   </section>
 
+  <section id="view-portfolio" class="view">
+    <div class="sectionHead"><div><div class="title">Portfolio OS</div><div class="sub">Phase 6 maps concentration, aggregate risk, correlated clusters and stress impact across the whole trading book.</div></div><div class="portfolioPill">PHASE 6 · PORTFOLIO INTELLIGENCE</div></div>
+
+    <div class="portfolioMetricGrid">
+      <div class="portfolioMetric"><div class="label">Portfolio risk</div><div class="v" id="pfRisk">0.00%</div><div class="subv" id="pfRiskMeta">Limit 4.00%</div></div>
+      <div class="portfolioMetric"><div class="label">Gross exposure</div><div class="v" id="pfExposure">0.00%</div><div class="subv" id="pfExposureMeta">Across tracked assets</div></div>
+      <div class="portfolioMetric"><div class="label">Concentration</div><div class="v" id="pfConcentration">—</div><div class="subv" id="pfConcentrationMeta">Largest symbol exposure</div></div>
+      <div class="portfolioMetric"><div class="label">Portfolio guard</div><div class="v" id="pfGuard">WITHIN LIMITS</div><div class="subv" id="pfGuardMeta">No portfolio-level warnings</div></div>
+    </div>
+
+    <div class="section portfolioGrid">
+      <div class="portfolioPanel">
+        <div class="sectionHead"><div><div class="title">Exposure map</div><div class="sub">Current Phase 5 positions + active execution intents.</div></div><span class="portfolioPill" id="pfLookback">60 bars</span></div>
+        <div id="pfAssetRows" class="portfolioBars"></div>
+        <div class="portfolioNote">Exposure is descriptive notional exposure relative to the configured account. Risk uses stored stop-based risk for positions/intents.</div>
+      </div>
+      <div class="portfolioPanel">
+        <div class="sectionHead"><div><div class="title">Correlated clusters</div><div class="sub">Assets with absolute return correlation above the configured threshold are grouped.</div></div><span class="portfolioPill" id="pfCorrThreshold">0.85</span></div>
+        <div id="pfClusterRows" class="portfolioBars"></div>
+        <div class="portfolioNote">Correlation is computed from the selected market-history lookback. It is not a forecast.</div>
+      </div>
+    </div>
+
+    <div class="section portfolioGrid">
+      <div class="portfolioPanel"><div class="sectionHead"><div><div class="title">Asset monitor</div><div class="sub">Market state + portfolio exposure in one view.</div></div></div>
+        <div class="tableScroll"><table class="portfolioTable"><thead><tr><th>Asset</th><th>Price</th><th>24h</th><th>Regime</th><th>Call</th><th>Score</th><th>Exposure</th><th>Risk</th></tr></thead><tbody id="pfAssetTable"></tbody></table></div>
+      </div>
+      <div class="portfolioPanel"><div class="sectionHead"><div><div class="title">Stress lab</div><div class="sub">Illustrative immediate P/L under the configured parallel move.</div></div></div>
+        <div id="pfStress" class="portfolioStress"></div>
+        <div class="portfolioNote">Stress is a simple parallel-price scenario using current entries and quantities. It is not a liquidation model.</div>
+      </div>
+    </div>
+
+    <div class="section portfolioGrid">
+      <div class="portfolioPanel"><div class="sectionHead"><div><div class="title">Correlation matrix</div><div class="sub">Latest return correlation across the tracked universe.</div></div></div><div id="pfCorrMatrix" class="portfolioCorr"></div></div>
+      <div class="portfolioPanel"><div class="sectionHead"><div><div class="title">Portfolio limits</div><div class="sub">These limits are also consulted by Phase 5 execution.</div></div></div>
+        <div class="portfolioActions">
+          <label>Account<input id="pfAccount" type="number" min="0" step="100" value="100000"></label>
+          <label>Max portfolio risk %<input id="pfMaxRisk" type="number" min=".5" max="20" step=".1" value="4"></label>
+          <label>Max symbol exposure %<input id="pfMaxSymbol" type="number" min=".25" max="20" step=".25" value="2"></label>
+          <label>Max correlated risk %<input id="pfMaxCluster" type="number" min=".5" max="20" step=".1" value="3"></label>
+          <label>Correlation threshold<input id="pfCorrLimit" type="number" min=".6" max=".99" step=".01" value=".85"></label>
+          <label>Stress move %<input id="pfStressMove" type="number" min="1" max="25" step="1" value="5"></label>
+          <button id="pfSaveConfig" class="btn primary">Save portfolio rules</button>
+          <button id="pfRefresh" class="btn">Refresh portfolio</button>
+        </div>
+        <div class="portfolioNote" id="pfConfigNote">Portfolio limits are server-side and persist independently of the browser.</div>
+      </div>
+    </div>
+
+    <div class="section portfolioPanel"><div class="sectionHead"><div><div class="title">Portfolio events</div><div class="sub">Changes to portfolio guard state and saved configuration.</div></div></div><div id="pfEvents"></div></div>
+  </section>
+
   <section id="view-risk" class="view"><div class="sectionHead"><div><div class="title">Risk Lab</div><div class="sub">Position size should follow the invalidation.</div></div></div><div class="card"><div class="inputs"><input id="ra" type="number" value="5000" placeholder="Account"><input id="rrisk" type="number" value="1" step=".05" placeholder="Risk %"><input id="rentry" type="number" value="84000" placeholder="Entry"><input id="rstop" type="number" value="82000" placeholder="Stop"></div><div class="result" id="riskOut">—</div></div></section>
 
   <div id="chartModal" class="modal" aria-hidden="true"><div class="modalCard"><div class="modalTop"><h3>Chart settings</h3><button id="chartClose" class="modalClose">×</button></div><div class="sub" style="margin-top:6px">Choose a visual preset or customize the candle colors. Settings persist in this browser.</div><div class="presetGrid" id="presetGrid"><button class="preset" data-preset="aurora"><div class="preview" style="background:#07131a;--pc1:#9BE7C4;--pc2:#FFB38A"><i></i><i></i><i></i><i></i></div><b>Aurora</b><small>Mint / ember</small></button><button class="preset" data-preset="lavender"><div class="preview" style="background:#0e1018;--pc1:#E5D0FF;--pc2:#FFB8D8"><i></i><i></i><i></i><i></i></div><b>Lavender</b><small>Soft / premium</small></button><button class="preset" data-preset="forest"><div class="preview" style="background:#08120f;--pc1:#A8E6CF;--pc2:#F8C6A0"><i></i><i></i><i></i><i></i></div><b>Forest</b><small>Mint / coral</small></button><button class="preset" data-preset="classic"><div class="preview" style="background:#090909;--pc1:#22c55e;--pc2:#ef4444"><i></i><i></i><i></i><i></i></div><b>Classic</b><small>Green / red</small></button><button class="preset" data-preset="mono"><div class="preview" style="background:#090909;--pc1:#f1f5f9;--pc2:#64748b"><i></i><i></i><i></i><i></i></div><b>Mono</b><small>White / slate</small></button></div><div class="colorGrid"><div class="colorItem"><span>Bull candle</span><input id="bullColor" type="color"></div><div class="colorItem"><span>Bear candle</span><input id="bearColor" type="color"></div><div class="colorItem"><span>Show volume</span><input id="showVolume" type="checkbox" checked></div><div class="colorItem"><span>Show EMA</span><input id="showEma" type="checkbox" checked></div></div><div class="axisNote">The chart keeps the right-side price scale, current-price marker, volume context and EMA optional.</div><div class="modalFoot"><button id="chartCancel" class="btn">Cancel</button><button id="chartApply" class="btn primary">Apply</button></div></div></div>
@@ -325,7 +381,8 @@ var state={
   signals:JSON.parse(localStorage.getItem("mp-stable-signals")||"[]"),
   journal:JSON.parse(localStorage.getItem("mp-stable-journal")||"[]"),
   edge:null,
-  execution:null
+  execution:null,
+  portfolio:null
 };
 
 function $(id){return document.getElementById(id)}
@@ -682,6 +739,53 @@ async function closeSimulation(id){
   try{var r=await fetch("/api/execution/close-sim",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({positionId:id,exitPrice:+val})}),j=await r.json();if(!r.ok)throw Error(j.error||"Close failed");renderExecution(j)}catch(e){$("exControlNote").textContent="Simulation close failed: "+e.message}
 }
 
+
+function portfolioClass(v){return v>=0?"portfolioOk":""}
+function corrCellStyle(v){
+  if(v==null)return "background:#17171b;color:#777";
+  var a=Math.abs(Number(v)||0),alpha=Math.max(.08,Math.min(.65,a));
+  return "background:rgba(103,232,255,"+alpha+");color:#dcecf7";
+}
+function renderPortfolio(data){
+  state.portfolio=data||null;if(!data||!data.portfolio)return;
+  var p=data.portfolio,cfg=data.config||{},assets=data.assets||[];
+  $("pfRisk").textContent=(Number(p.grossRiskPct)||0).toFixed(2)+"%";
+  $("pfRiskMeta").textContent="Limit "+(Number(cfg.maxPortfolioRiskPct)||0).toFixed(2)+"%";
+  $("pfExposure").textContent=(Number(p.grossExposurePct)||0).toFixed(2)+"%";
+  var top=p.concentration?.[0];$("pfConcentration").textContent=top?String(top.symbol||"—")+" "+Number(top.pct||0).toFixed(2)+"%":"—";
+  $("pfConcentrationMeta").textContent=top?"Largest symbol exposure":"No exposure";
+  $("pfGuard").textContent=p.guardState||"WITHIN LIMITS";
+  $("pfGuard").className="v "+(p.warnings?.length?"portfolioBad":"portfolioOk");
+  $("pfGuardMeta").textContent=p.warnings?.length?p.warnings.join(" · "):"No portfolio-level warnings";
+  $("pfLookback").textContent=fmt(data.lookback||cfg.correlationLookback)+" bars";
+  $("pfCorrThreshold").textContent=Number(cfg.correlationBlockThreshold||.85).toFixed(2);
+  var maxBar=Math.max(1,Number(cfg.maxSymbolExposurePct)||2);
+  $("pfAssetRows").innerHTML=assets.map(function(x){
+    var width=Math.min(100,(Number(x.exposurePct||0)/maxBar)*100);
+    return'<div class="portfolioBarRow"><b>'+safeHtml(x.label||x.symbol)+'</b><div class="portfolioBar"><i style="width:'+width.toFixed(0)+'%"></i></div><span>'+Number(x.exposurePct||0).toFixed(2)+'%</span></div>';
+  }).join("")||'<div class="portfolioSmall">No assets.</div>';
+  $("pfClusterRows").innerHTML=(p.clusters||[]).map(function(x){
+    return'<div class="portfolioBarRow"><b>'+safeHtml((x.members||[]).join(" + "))+'</b><div class="portfolioBar"><i style="width:'+Math.min(100,(Number(x.riskPct||0)/(Number(cfg.maxCorrelatedClusterRiskPct)||3))*100).toFixed(0)+'%"></i></div><span>'+Number(x.riskPct||0).toFixed(2)+'% R</span></div>';
+  }).join("")||'<div class="portfolioSmall">No correlated clusters.</div>';
+  $("pfAssetTable").innerHTML=assets.map(function(x){
+    return'<tr><td><b>'+safeHtml(x.label||x.symbol)+'</b></td><td>'+fmt(x.price)+'</td><td>'+pct(x.change24h)+'</td><td>'+safeHtml(x.regime||"—")+'</td><td>'+safeHtml(x.side||"WAIT")+'</td><td>'+fmt(x.score)+'</td><td>'+Number(x.exposurePct||0).toFixed(2)+'%</td><td>'+Number(x.riskPct||0).toFixed(2)+'%</td></tr>';
+  }).join("")||'<tr><td colspan="8">No portfolio data.</td></tr>';
+  var syms=Object.keys(p.correlation||{}),matrix=[];
+  syms.forEach(function(a){matrix.push('<div class="portfolioCorrCell" style="'+corrCellStyle(1)+'">'+safeHtml(a.replace("USDT",""))+'</div>')});
+  syms.forEach(function(a){syms.forEach(function(b){var v=p.correlation?.[a]?.[b];matrix.push('<div class="portfolioCorrCell" style="'+corrCellStyle(v)+'">'+(v==null?"—":Number(v).toFixed(2))+'</div>')})});
+  $("pfCorrMatrix").innerHTML=matrix.join("")||'<div class="portfolioSmall">Correlation unavailable.</div>';
+  $("pfStress").innerHTML=(p.stress?.rows||[]).map(function(x){return'<div class="portfolioStressCard"><div class="label">'+safeHtml(x.label)+'</div><div class="v '+(Number(x.pnl)>=0?"portfolioOk":"portfolioBad")+'">'+fmt(x.pnl)+'</div><div class="portfolioSmall">Parallel move '+Number(x.movePct).toFixed(1)+'%</div></div>'}).join("")||'<div class="portfolioSmall">No open exposure.</div>';
+  $("pfAccount").value=cfg.account??100000;$("pfMaxRisk").value=cfg.maxPortfolioRiskPct??4;$("pfMaxSymbol").value=cfg.maxSymbolExposurePct??2;$("pfMaxCluster").value=cfg.maxCorrelatedClusterRiskPct??3;$("pfCorrLimit").value=cfg.correlationBlockThreshold??.85;$("pfStressMove").value=cfg.stressMovePct??5;
+  $("pfEvents").innerHTML=(data.events||[]).slice(0,12).map(function(e){return'<div class="portfolioEvent"><span class="portfolioSmall">'+new Date(e.ts).toLocaleTimeString()+'</span><div><b>'+safeHtml(e.type)+'</b><div class="portfolioSmall">'+safeHtml(e.message)+'</div></div></div>'}).join("")||'<div class="portfolioSmall">No portfolio events.</div>';
+}
+async function loadPortfolio(){
+  try{renderPortfolio(await api("/api/portfolio?interval="+encodeURIComponent(state.interval)+"&lookback="+encodeURIComponent($("pfLookback")?.textContent?.match(/\\d+/)?.[0]||60),12000))}catch(e){if($("pfConfigNote"))$("pfConfigNote").textContent="Portfolio refresh failed: "+e.message}
+}
+async function savePortfolioConfig(){
+  var payload={account:+$("pfAccount").value||0,maxPortfolioRiskPct:+$("pfMaxRisk").value||4,maxSymbolExposurePct:+$("pfMaxSymbol").value||2,maxCorrelatedClusterRiskPct:+$("pfMaxCluster").value||3,correlationBlockThreshold:+$("pfCorrLimit").value||.85,stressMovePct:+$("pfStressMove").value||5};
+  try{var r=await fetch("/api/portfolio/config",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)}),j=await r.json();if(!r.ok)throw Error(j.error||"Portfolio config failed");$("pfConfigNote").textContent="Portfolio rules saved.";await loadPortfolio()}catch(e){$("pfConfigNote").textContent="Save failed: "+e.message}
+}
+
 var replayState={dataset:null,cursor:0,timer:null,playing:false};
 
 function syncPhase3Symbols(){
@@ -847,7 +951,7 @@ async function loadCore(){
   try{
     var d=await api("/api/core?symbol="+encodeURIComponent(state.symbol)+"&interval="+encodeURIComponent(state.interval),9000);
     state.market=d;setStatus("Core market intelligence connected","ok");$("dataState").textContent="Live";renderMarket();
-    loadEdge();loadExecution();loadScan();loadCycle();
+    loadEdge();loadExecution();loadPortfolio();loadScan();loadCycle();
   }catch(e){
     setStatus("Core market connection failed. The interface is running; retrying automatically.","warn");$("dataState").textContent="Retry";
     $("thesis").textContent="The application is healthy, but the market data provider did not respond.";
@@ -864,6 +968,8 @@ async function askAI(){
 }
 
 
+$("pfSaveConfig").addEventListener("click",savePortfolioConfig);
+$("pfRefresh").addEventListener("click",loadPortfolio);
 $("exSaveConfig").addEventListener("click",saveExecutionConfig);
 $("exPrepare").addEventListener("click",prepareExecution);
 $("exSubmit").addEventListener("click",function(){submitExecution()});
@@ -911,7 +1017,7 @@ async function syncMemory(){
 syncPhase3Symbols();
 $("loadReplay").addEventListener("click",loadReplay);$("toggleReplay").addEventListener("click",toggleReplay);$("replayCursor").addEventListener("input",function(){replayState.cursor=+this.value;renderReplayFrame()});
 $("refreshDNA").addEventListener("click",refreshDNA);$("loadDNA").addEventListener("click",loadDNA);$("runResearch").addEventListener("click",runResearch);
-$("askAi").addEventListener("click",askAI);$("sync").addEventListener("click",syncMemory);$("runSystemCheck").addEventListener("click",runSystemCheck);$("notifBtn").addEventListener("click",enableNotifications);$("alertScore").addEventListener("input",renderAlerts);$("chartSettings").addEventListener("click",openChartSettings);$("chartClose").addEventListener("click",closeChartSettings);$("chartCancel").addEventListener("click",closeChartSettings);$("chartApply").addEventListener("click",applyChartSettings);document.querySelectorAll("[data-preset]").forEach(function(b){b.addEventListener("click",function(){document.querySelectorAll("[data-preset]").forEach(function(x){x.classList.remove("active")});b.classList.add("active");$("bullColor").value=CHART_PRESETS[b.dataset.preset].bull;$("bearColor").value=CHART_PRESETS[b.dataset.preset].bear})});$("aiMarketMode").addEventListener("click",function(){state.aiMode="market";$("aiMarketMode").classList.add("on");$("aiTradeMode").classList.remove("on");$("tradeFields").classList.add("hidden")});$("aiTradeMode").addEventListener("click",function(){state.aiMode="trade";$("aiTradeMode").classList.add("on");$("aiMarketMode").classList.remove("on");$("tradeFields").classList.remove("hidden")});runSystemCheck();renderSignals();loadExecution();setInterval(loadExecution,10000);
+$("askAi").addEventListener("click",askAI);$("sync").addEventListener("click",syncMemory);$("runSystemCheck").addEventListener("click",runSystemCheck);$("notifBtn").addEventListener("click",enableNotifications);$("alertScore").addEventListener("input",renderAlerts);$("chartSettings").addEventListener("click",openChartSettings);$("chartClose").addEventListener("click",closeChartSettings);$("chartCancel").addEventListener("click",closeChartSettings);$("chartApply").addEventListener("click",applyChartSettings);document.querySelectorAll("[data-preset]").forEach(function(b){b.addEventListener("click",function(){document.querySelectorAll("[data-preset]").forEach(function(x){x.classList.remove("active")});b.classList.add("active");$("bullColor").value=CHART_PRESETS[b.dataset.preset].bull;$("bearColor").value=CHART_PRESETS[b.dataset.preset].bear})});$("aiMarketMode").addEventListener("click",function(){state.aiMode="market";$("aiMarketMode").classList.add("on");$("aiTradeMode").classList.remove("on");$("tradeFields").classList.add("hidden")});$("aiTradeMode").addEventListener("click",function(){state.aiMode="trade";$("aiTradeMode").classList.add("on");$("aiMarketMode").classList.remove("on");$("tradeFields").classList.remove("hidden")});runSystemCheck();renderSignals();loadExecution();setInterval(loadExecution,10000);setInterval(loadPortfolio,15000);
 
 ["panYUp","panL","panR","panYDown","zoomOut","zoomIn","zoomReset"].forEach(function(id){
   $(id).addEventListener("click",function(){
