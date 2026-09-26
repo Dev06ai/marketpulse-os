@@ -1044,100 +1044,78 @@ function drawMain(){
   var c=$("mainChart");if(!c)return;
   var out=setupCanvas(c,390),ctx=out.ctx,W=out.W,H=out.H,dataAll=state.market.candles||[];
   if(!dataAll.length)return;
-  var visible=Math.max(36,Math.min(220,Math.round(state.chartVisible||96)));
-  if(visible>dataAll.length)visible=dataAll.length;
-  var maxOffset=Math.max(0,dataAll.length-visible);
-  var offset=Math.max(0,Math.min(maxOffset,Math.round(state.chartOffset||0)));
-  var end=Math.max(visible,dataAll.length-offset),start=Math.max(0,end-visible),data=dataAll.slice(start,end);
-  var vals=data.flatMap(function(x){return[Number(x.h),Number(x.l)]}).filter(Number.isFinite);
+  var total=dataAll.length,visible=Math.max(36,Math.min(220,Math.round(state.chartVisible||96)));
+  visible=Math.min(visible,total);
+  var offset=Math.max(0,Math.min(Math.max(0,total-visible),Math.round(state.chartOffset||0)));
+  var end=total-offset,start=Math.max(0,end-visible),data=dataAll.slice(start,end);
+  var vals=data.flatMap(function(x){return[Number(x.h),Number(x.l)]});
   var dataHi=Math.max.apply(null,vals),dataLo=Math.min.apply(null,vals),dataRange=(dataHi-dataLo)||1;
-  var theme=chartTheme();
-  var model=state.market.analysis||{};
-  var includeLevels=[model.entryLow,model.entryHigh,model.stop,model.tp1].map(Number).filter(Number.isFinite);
-  if(state.chartAutoScale && includeLevels.length){dataHi=Math.max(dataHi,Math.max.apply(null,includeLevels));dataLo=Math.min(dataLo,Math.min.apply(null,includeLevels));dataRange=(dataHi-dataLo)||1}
-  var yZoom=Math.max(.35,Math.min(3.2,state.chartYZoom||1)),range=dataRange/yZoom,center=(dataHi+dataLo)/2-(state.chartYShift||0)*dataRange;
-  if(state.chartAutoScale){range=dataRange;center=(dataHi+dataLo)/2}
-  var hi=center+range/2,lo=center-range/2;
-  var left=14,right=74,top=12,bottom=28,pw=Math.max(120,W-left-right),ph=Math.max(80,H-top-bottom),xstep=pw/Math.max(1,data.length-1);
+  var yZoom=Math.max(.35,Math.min(3.2,state.chartYZoom||1)),range=dataRange/yZoom;
+  var center=(dataHi+dataLo)/2-(state.chartYShift||0)*dataRange,hi=center+range/2,lo=center-range/2;
+  var left=14,right=72,top=14,bottom=34,pw=W-left-right,ph=H-top-bottom,xstep=pw/Math.max(1,data.length-1);
   function scale(v){return top+(hi-v)/range*ph}
-  function colorRgba(hex,a){
-    var m=String(hex||"").match(/^#([0-9a-f]{6})$/i);if(!m)return "rgba(255,255,255,"+a+")";
-    var n=parseInt(m[1],16),r=(n>>16)&255,g=(n>>8)&255,b=n&255;return "rgba("+r+","+g+","+b+","+a+")";
+  function priceAtY(py){return hi-((py-top)/ph)*range}
+  function chartTime(ts){
+    var d=new Date(Number(ts)||0);if(!Number.isFinite(d.getTime()))return"—";
+    return visible>96?d.toLocaleDateString(undefined,{month:"short",day:"2-digit"}):d.toLocaleTimeString(undefined,{hour:"2-digit",minute:"2-digit"});
   }
-  ctx.fillStyle=theme.bg;ctx.fillRect(0,0,W,H);
+  var theme=chartTheme();ctx.fillStyle=theme.bg;ctx.fillRect(0,0,W,H);
 
-  // Grid + price axis
-  ctx.strokeStyle=theme.grid;ctx.lineWidth=1;ctx.font="9px system-ui";ctx.fillStyle=theme.axis;ctx.textAlign="left";
-  for(var gy=0;gy<=6;gy++){
-    var yy=top+gy*ph/6,val=hi-range*gy/6;
+  ctx.strokeStyle=theme.grid;ctx.lineWidth=1;ctx.font="9px system-ui";ctx.fillStyle=theme.axis;
+  ctx.textAlign="right";
+  for(var gy=0;gy<6;gy++){
+    var yy=top+gy*ph/5,val=hi-range*gy/5;
     ctx.beginPath();ctx.moveTo(left,yy);ctx.lineTo(left+pw,yy);ctx.stroke();
-    ctx.fillText(fmt(val),left+pw+8,yy+3);
+    ctx.fillText(fmt(val),left+pw+64,yy+3);
   }
-  for(var gx=0;gx<6;gx++){
-    var xg=left+gx*pw/5;
+  ctx.textAlign="center";
+  var labels=5;
+  for(var gx=0;gx<labels;gx++){
+    var gi=Math.min(data.length-1,Math.round(gx*(data.length-1)/(labels-1))),xg=left+gi*xstep;
     ctx.beginPath();ctx.moveTo(xg,top);ctx.lineTo(xg,top+ph);ctx.stroke();
+    ctx.fillText(chartTime(data[gi].t),xg,H-9);
   }
+  ctx.textAlign="left";
 
-  // Candles / line
   var volMax=Math.max.apply(null,data.map(function(x){return Number(x.v)||0}))||1;
-  var showVolume=chartSettings.showVolume!==false;
-  var candleMode=state.chartType!=="line";
-  var closes=[];
   for(var i=0;i<data.length;i++){
-    var row=data[i],x=left+i*xstep,o=scale(Number(row.o)),h=scale(Number(row.h)),l=scale(Number(row.l)),cl=scale(Number(row.c)),bull=Number(row.c)>=Number(row.o),col=bull?theme.bull:theme.bear;
-    closes.push(Number(row.c));
-    if(candleMode){
-      ctx.strokeStyle=col;ctx.lineWidth=Math.max(1,Math.min(1.8,xstep*.16));ctx.beginPath();ctx.moveTo(x,h);ctx.lineTo(x,l);ctx.stroke();
-      var bw=Math.max(2,Math.min(10,xstep*.66));ctx.fillStyle=col;ctx.fillRect(x-bw/2,Math.min(o,cl),bw,Math.max(1.4,Math.abs(cl-o)));
-    }
-    if(showVolume){
-      var vh=24*((Number(row.v)||0)/volMax);ctx.globalAlpha=.18;ctx.fillStyle=col;ctx.fillRect(x-Math.max(1,xstep*.30),H-26-vh,Math.max(2,xstep*.60),vh);ctx.globalAlpha=1;
-    }
+    var x=left+i*xstep,o=scale(data[i].o),h=scale(data[i].h),l=scale(data[i].l),cl=scale(data[i].c),bull=data[i].c>=data[i].o,col=bull?theme.bull:theme.bear;
+    ctx.strokeStyle=col;ctx.lineWidth=Math.max(1,Math.min(1.8,xstep*.12));ctx.beginPath();ctx.moveTo(x,h);ctx.lineTo(x,l);ctx.stroke();
+    var bw=Math.max(2,Math.min(9,xstep*.62));ctx.fillStyle=col;ctx.fillRect(x-bw/2,Math.min(o,cl),bw,Math.max(1.2,Math.abs(cl-o)));
+    if(chartSettings.showVolume!==false){var vh=24*((Number(data[i].v)||0)/volMax);ctx.globalAlpha=.18;ctx.fillStyle=col;ctx.fillRect(x-bw/2,H-29-vh,bw,vh);ctx.globalAlpha=1;}
   }
-  if(!candleMode){
-    var pts=closes.map(function(v,i){return[left+i*xstep,scale(v)]});
-    ctx.save();ctx.globalAlpha=.12;ctx.strokeStyle=theme.ema;ctx.lineWidth=8;ctx.lineCap="round";line(ctx,pts);ctx.restore();
-    ctx.save();ctx.strokeStyle=theme.ema;ctx.lineWidth=2.2;ctx.lineCap="round";ctx.lineJoin="round";line(ctx,pts);ctx.restore();
-  }
-  ctx.fillStyle="rgba(255,255,255,.30)";ctx.font="8px system-ui";ctx.textAlign="left";ctx.fillText("VOL",left+4,H-8);
+  ctx.fillStyle="rgba(255,255,255,.28)";ctx.font="8px system-ui";ctx.fillText("VOL",left+3,H-9);
 
-  // EMA
   var k=2/21,ema=dataAll[0].c,emaPts=[];
   for(i=0;i<dataAll.length;i++){ema=i?dataAll[i].c*k+ema*(1-k):dataAll[i].c;if(i>=start&&i<end)emaPts.push([left+(i-start)*xstep,scale(ema)])}
-  if(chartSettings.showEma!==false){ctx.save();ctx.globalAlpha=.12;ctx.strokeStyle=theme.ema;ctx.lineWidth=6;line(ctx,emaPts);ctx.restore();ctx.strokeStyle=theme.ema;ctx.lineWidth=2;ctx.lineCap="round";line(ctx,emaPts)}
+  if(chartSettings.showEma!==false){
+    ctx.save();ctx.strokeStyle="rgba(255,255,255,.08)";ctx.lineWidth=6;ctx.lineCap="round";line(ctx,emaPts);ctx.restore();
+    ctx.strokeStyle=theme.ema;ctx.lineWidth=2.1;ctx.lineCap="round";line(ctx,emaPts);
+  }
 
-  // Entry / stop / target levels
+  var current=dataAll[dataAll.length-1].c,cy=scale(current),model=state.market&&state.market.analysis;
   if(model){
     [{name:"ENTRY",value:model.entryLow,color:theme.ema},{name:"STOP",value:model.stop,color:theme.bear},{name:"TP1",value:model.tp1,color:theme.bull}].forEach(function(z){
-      var level=Number(z.value);if(!Number.isFinite(level)||level<lo||level>hi)return;
-      var yy=scale(level);ctx.save();ctx.setLineDash([6,5]);ctx.strokeStyle=z.color;ctx.globalAlpha=.60;ctx.beginPath();ctx.moveTo(left,yy);ctx.lineTo(left+pw,yy);ctx.stroke();ctx.restore();
-      ctx.fillStyle=z.color;ctx.font="800 8px system-ui";ctx.textAlign="left";ctx.fillText(z.name,left+5,yy-5);
+      if(!Number.isFinite(Number(z.value)))return;
+      var yy=scale(Number(z.value));if(yy<top||yy>top+ph)return;
+      ctx.save();ctx.setLineDash([5,5]);ctx.strokeStyle=z.color;ctx.globalAlpha=.55;ctx.beginPath();ctx.moveTo(left,yy);ctx.lineTo(left+pw,yy);ctx.stroke();ctx.restore();
+      ctx.fillStyle=z.color;ctx.font="700 8px system-ui";ctx.fillText(z.name,left+5,yy-4);
     });
   }
 
-  var current=Number(dataAll[dataAll.length-1].c),cy=scale(current);
-  if(cy>=top&&cy<=top+ph){
-    ctx.setLineDash([4,4]);ctx.strokeStyle="rgba(255,255,255,.28)";ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(left,cy);ctx.lineTo(left+pw,cy);ctx.stroke();ctx.setLineDash([]);
-    ctx.fillStyle=theme.bull;ctx.beginPath();ctx.roundRect(left+pw+4,cy-10,64,20,6);ctx.fill();ctx.fillStyle="#06121b";ctx.font="800 9px system-ui";ctx.textAlign="center";ctx.fillText(fmt(current),left+pw+36,cy+3);
-  }
+  ctx.setLineDash([4,4]);ctx.strokeStyle="rgba(255,255,255,.24)";ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(left,cy);ctx.lineTo(left+pw,cy);ctx.stroke();ctx.setLineDash([]);
+  ctx.fillStyle=theme.bull;ctx.beginPath();ctx.roundRect(left+pw+5,cy-11,58,22,6);ctx.fill();ctx.fillStyle="#06121b";ctx.font="800 9px system-ui";ctx.textAlign="center";ctx.fillText(fmt(current),left+pw+34,cy+3);ctx.textAlign="left";
 
-  // Time axis
-  ctx.fillStyle=theme.axis;ctx.font="8px system-ui";ctx.textAlign="center";
-  var labelStep=Math.max(1,Math.floor(data.length/5));
-  for(i=0;i<data.length;i+=labelStep){
-    var tx=left+i*xstep,ts=Number(data[i].t),label=Number.isFinite(ts)?new Date(ts).toLocaleTimeString([],{"hour":"2-digit","minute":"2-digit"}):String(i+1);
-    ctx.fillText(label,tx,H-8);
-  }
-
-  // Crosshair
   if(state.crossX!=null){
-    var rx=Math.max(left,Math.min(left+pw,state.crossX)),idx=Math.max(0,Math.min(data.length-1,Math.round((rx-left)/xstep))),row=data[idx];
-    var ry=state.crossY==null?scale(Number(row.c)):Math.max(top,Math.min(top+ph,state.crossY));
-    ctx.save();ctx.setLineDash([4,4]);ctx.strokeStyle="rgba(255,255,255,.32)";ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(rx,top);ctx.lineTo(rx,top+ph);ctx.stroke();ctx.beginPath();ctx.moveTo(left,ry);ctx.lineTo(left+pw,ry);ctx.stroke();ctx.restore();
-    var hoverPrice=hi-(ry-top)/ph*range;
-    ctx.fillStyle="rgba(6,9,14,.96)";ctx.strokeStyle="rgba(255,255,255,.16)";ctx.beginPath();ctx.roundRect(left+pw+4,ry-10,64,20,6);ctx.fill();ctx.stroke();
-    ctx.fillStyle="#dcecff";ctx.font="800 8px system-ui";ctx.textAlign="center";ctx.fillText(fmt(hoverPrice),left+pw+36,ry+3);
-    $("ohlc").textContent="Time "+(Number.isFinite(Number(row.t))?new Date(Number(row.t)).toLocaleString():idx)+" · O "+fmt(row.o)+" · H "+fmt(row.h)+" · L "+fmt(row.l)+" · C "+fmt(row.c)+" · V "+fmt(row.v);
+    var idx=Math.max(0,Math.min(data.length-1,Math.round((state.crossX-left)/Math.max(1,xstep)))),row=data[idx];
+    var rx=left+idx*xstep,crossPy=Number.isFinite(state.crossY)?Math.max(top,Math.min(top+ph,state.crossY)):scale(row.c),crossPrice=priceAtY(crossPy);
+    ctx.save();
+    ctx.setLineDash([3,3]);ctx.strokeStyle="rgba(255,255,255,.30)";ctx.lineWidth=1;
+    ctx.beginPath();ctx.moveTo(rx,top);ctx.lineTo(rx,top+ph);ctx.moveTo(left,crossPy);ctx.lineTo(left+pw,crossPy);ctx.stroke();ctx.restore();
+    ctx.fillStyle="#eef6ff";ctx.beginPath();ctx.roundRect(left+pw+5,crossPy-9,62,18,5);ctx.fill();
+    ctx.fillStyle="#071019";ctx.font="800 8px system-ui";ctx.textAlign="center";ctx.fillText(fmt(crossPrice),left+pw+36,crossPy+3);ctx.textAlign="left";
+    var when=chartTime(row.t),tooltip="O "+fmt(row.o)+" · H "+fmt(row.h)+" · L "+fmt(row.l)+" · C "+fmt(row.c)+" · V "+fmt(row.v);
+    $("ohlc").textContent=when+" · "+tooltip;
   }else{
     $("ohlc").textContent="Move over chart";
   }
@@ -1415,6 +1393,12 @@ function renderExecution(data){
   $("exControlNote").textContent=data.mode==="TESTNET"
     ?(h.credentialsConfigured?"Testnet configured. A setup must be armed and reconciled before submission.":"Add BYBIT_API_KEY and BYBIT_API_SECRET as server-side Render environment variables; never paste them into chat or the browser.")
     :"Simulation mode is fully local. It is the safe place to test the complete intent → risk check → fill → close lifecycle.";
+  ["exMode","exGate","exRecon","exDailyLoss"].forEach(function(id){var el=$(id);if(!el||!el.parentElement)return;el.parentElement.classList.remove("state-ok","state-blocked","state-warn");var text=String(el.textContent||"");el.parentElement.classList.add(/PASS|READY|SAFE|0\.00%$/.test(text)?"state-ok":/BLOCKED|KILL|ERROR/.test(text)?"state-blocked":"state-warn")});
+  $("exPrepare").disabled=data.mode!=="SIMULATION"&&(!c.armed||!c.reconciliation?.ok);
+  $("exSubmit").disabled=!orders.length||!orders.some(function(o){return ["INTENT","APPROVED"].indexOf(o.status)>=0})||Boolean(c.killSwitch);
+  $("exReconcileBtn").disabled=data.mode!=="TESTNET";
+  $("exArm").disabled=data.mode!=="TESTNET"||!h.credentialsConfigured||Boolean(c.armed);
+  $("exKill").disabled=Boolean(c.killSwitch);
   var health=[
     ["Adapter",h.adapter||"Bybit Testnet adapter", "executionOk"],
     ["Credentials",data.mode==="SIMULATION"?"Not needed in Simulation":(h.credentialsConfigured?"Configured":"Not configured"),data.mode==="SIMULATION"||h.credentialsConfigured?"executionOk":"executionWarn"],
@@ -1694,6 +1678,12 @@ function applyGateVisual(cardId,chipId,decision){
   var cls=gateDecisionClass(decision);if(cls)card.classList.add(cls);
   chip.textContent=decision||"WAITING";
 }
+function renderGateChecks(id,items){
+  var el=$(id);if(!el)return;
+  el.innerHTML=(items||[]).map(function(x){
+    return '<div class="gateCheck '+(x.state==="ok"?"ok":x.state==="bad"?"bad":"warn")+'"><b>'+safeHtml(x.label)+'</b><span>'+safeHtml(x.value)+'</span></div>';
+  }).join("");
+}
 function setGateExplain(id,decision,reasons){
   var el=$(id);if(!el)return;
   if(decision==="BLOCKED")el.textContent="DON'T TRADE — one or more safety checks failed.";
@@ -1715,10 +1705,19 @@ async function loadPropFirmGuard(){
     var d=await api("/api/propfirm?"+q.toString(),8500),g=d.gate||{};
     applyGateVisual("pfgCard","pfgGateChip",g.decision||"WAITING");
     setGateExplain("pfgExplain",g.decision,g.reasons);
+    $("pfgDecisionText").textContent=g.decision==="ELIGIBLE"?"PASS":g.decision==="ELIGIBLE_WITH_WARNINGS"?"CAUTION":g.decision==="BLOCKED"?"BLOCKED":"WAITING";
     $("pfgResult").textContent=(g.signalSide||"WAIT")+" · score "+fmt(g.score)+" · R:R "+Number(g.rr||0).toFixed(2)+" · remaining risk "+fmt(g.riskHeadroomCash||0);
+    renderGateChecks("pfgChecks",[
+      {label:"Signal",state:Number(g.score)>=Number(g.config?.minSignalScore||72)?"ok":"bad",value:fmt(g.score)+"/"+fmt(g.config?.minSignalScore||72)},
+      {label:"Reward / risk",state:Number(g.rr)>=Number(g.config?.minRR||1.5)?"ok":"bad",value:Number(g.rr||0).toFixed(2)+"R"},
+      {label:"Market confirm",state:(Number(g.consensusQualityPct||0)>=Number(g.config?.minConsensusQualityPct||85)&&Number(g.independentSourceCount||0)>=2)?"ok":"bad",value:Number(g.consensusQualityPct||0).toFixed(0)+"%"},
+      {label:"Flow",state:g.flow&&g.flow!=="UNKNOWN"&&g.flow!=="MIXED"?"ok":"warn",value:g.flow||"Unavailable"},
+      {label:"Account safety",state:Number(g.riskHeadroomCash||0)>0&&Number(g.dailyLossPct||0)<Number(g.config?.maxDailyLossPct||3)&&Number(g.maxDrawdownPct||0)<Number(g.config?.maxDrawdownPct||6)?"ok":"bad",value:fmt(g.riskHeadroomCash||0)+" headroom"}
+    ]);
     $("pfgReasons").textContent=(g.reasons&&g.reasons.length?("Why blocked: "+g.reasons.map(friendlyGateReason).join(" · ")):("Checks passed"+(g.warnings&&g.warnings.length?(" · Caution: "+g.warnings.map(friendlyGateReason).join(" · ")):"")));
   }catch(e){
-    $("pfgGateChip").textContent="ERROR";$("pfgResult").textContent="Prop guard unavailable";$("pfgReasons").textContent=e.message||"Request failed";
+    applyGateVisual("pfgCard","pfgGateChip","BLOCKED");setGateExplain("pfgExplain","BLOCKED",["DATA_QUALITY_BELOW_THRESHOLD"]);
+    $("pfgDecisionText").textContent="BLOCKED";$("pfgResult").textContent="Safety check unavailable";$("pfgReasons").textContent=e.message||"Request failed";
   }
 }
 async function loadEventGuard(){
@@ -1735,10 +1734,19 @@ async function loadEventGuard(){
     var d=await api("/api/propfirm/event?"+q.toString(),8500),g=d.gate||{};
     applyGateVisual("ecgCard","ecgGateChip",g.decision||"WAITING");
     setGateExplain("ecgExplain",g.decision,g.reasons);
-    $("ecgResult").textContent=(g.eventSide||"WAIT")+" · max "+Number(g.maxContracts||0)+" contract(s) · max loss "+fmt(g.maxLoss||0)+" · max profit "+fmt(g.maxProfit||0)+" · payoff "+Number(g.payoffR||0).toFixed(2)+"R"+(g.strikeDistanceBps!=null?" · strike distance "+Number(g.strikeDistanceBps).toFixed(1)+" bps":"");
+    $("ecgDecisionText").textContent=g.decision==="ELIGIBLE"?"PASS":g.decision==="ELIGIBLE_WITH_WARNINGS"?"CAUTION":g.decision==="BLOCKED"?"BLOCKED":"WAITING";
+    $("ecgResult").textContent=(g.eventSide||"WAIT")+" · "+Number(g.maxContracts||0)+" contract(s) · max loss "+fmt(g.maxLoss||0)+" · max profit "+fmt(g.maxProfit||0)+" · payoff "+Number(g.payoffR||0).toFixed(2)+"R"+(g.strikeDistanceBps!=null?" · strike distance "+Number(g.strikeDistanceBps).toFixed(1)+" bps":"");
+    renderGateChecks("ecgChecks",[
+      {label:"Direction",state:g.eventSide&&g.signalSide&&g.eventSide===g.signalSide?"ok":"bad",value:g.eventSide||"Choose UP/DOWN"},
+      {label:"Payout",state:Number(g.payoffR||0)>=Number(g.config?.minRR||1.5)?"ok":"bad",value:Number(g.payoffR||0).toFixed(2)+"R"},
+      {label:"Risk budget",state:Number(g.maxContracts||0)>0?"ok":"bad",value:Number(g.maxContracts||0)+" max"},
+      {label:"Strike",state:g.strikePrice!=null&&Number(g.strikeDistanceBps||0)>=Number(g.config?.eventMinStrikeDistanceBps||1)?"ok":"bad",value:g.strikePrice!=null?fmt(g.strikePrice):"Enter strike"},
+      {label:"Expiry",state:Number(g.secondsToExpiry||0)>=Number(g.config?.eventMinSecondsToExpiry||30)?"ok":"bad",value:g.secondsToExpiry!=null?Math.max(0,Math.round(g.secondsToExpiry))+"s":"Enter expiry"}
+    ]);
     $("ecgReasons").textContent=(g.reasons&&g.reasons.length?("Why blocked: "+g.reasons.map(friendlyGateReason).join(" · ")):("Checks passed"+(g.warnings&&g.warnings.length?(" · Caution: "+g.warnings.map(friendlyGateReason).join(" · ")):"")))+".";
   }catch(e){
-    $("ecgGateChip").textContent="ERROR";$("ecgResult").textContent="Event guard unavailable";$("ecgReasons").textContent=e.message||"Request failed";
+    applyGateVisual("ecgCard","ecgGateChip","BLOCKED");setGateExplain("ecgExplain","BLOCKED",["DATA_QUALITY_BELOW_THRESHOLD"]);
+    $("ecgDecisionText").textContent="BLOCKED";$("ecgResult").textContent="Safety check unavailable";$("ecgReasons").textContent=e.message||"Request failed";
   }
 }
 function calc(){
@@ -2208,50 +2216,61 @@ $("askAi").addEventListener("click",askAI);$("sync").addEventListener("click",sy
 ["panYUp","panL","panR","panYDown","zoomOut","zoomIn","zoomReset"].forEach(function(id){
   $(id).addEventListener("click",function(){
     var total=state.market&&state.market.candles?state.market.candles.length:0;
-    if(id==="zoomReset"){state.chartVisible=96;state.chartOffset=0;state.chartYZoom=1;state.chartYShift=0;state.chartAutoScale=true}
-    if(id==="zoomIn")state.chartVisible=Math.max(36,(state.chartVisible||96)-20)
-    if(id==="zoomOut")state.chartVisible=Math.min(220,(state.chartVisible||96)+20)
-    if(id==="panYUp"){state.chartAutoScale=false;state.chartYShift=Math.min(1.5,(state.chartYShift||0)+.14)}
-    if(id==="panYDown"){state.chartAutoScale=false;state.chartYShift=Math.max(-1.5,(state.chartYShift||0)-.14)}
-    if(id==="panL")state.chartOffset=Math.min(Math.max(0,total-state.chartVisible),(state.chartOffset||0)+15)
-    if(id==="panR")state.chartOffset=Math.max(0,(state.chartOffset||0)-15)
-    queueChartDraw()
+    if(id==="zoomReset"){state.chartVisible=Math.min(96,total);state.chartOffset=0;state.chartYZoom=1;state.chartYShift=0}
+    if(id==="zoomIn"){var old=state.chartVisible||96;state.chartVisible=Math.max(36,Math.round(old*.82));state.chartOffset=Math.min(state.chartOffset||0,Math.max(0,total-state.chartVisible))}
+    if(id==="zoomOut"){var old2=state.chartVisible||96;state.chartVisible=Math.min(220,Math.min(total,Math.round(old2*1.22)));state.chartOffset=Math.min(state.chartOffset||0,Math.max(0,total-state.chartVisible))}
+    if(id==="panYUp")state.chartYShift=Math.min(1.5,(state.chartYShift||0)+.14);
+    if(id==="panYDown")state.chartYShift=Math.max(-1.5,(state.chartYShift||0)-.14);
+    if(id==="panL")state.chartOffset=Math.min(Math.max(0,total-(state.chartVisible||96)),(state.chartOffset||0)+Math.max(4,Math.round((state.chartVisible||96)*.12)));
+    if(id==="panR")state.chartOffset=Math.max(0,(state.chartOffset||0)-Math.max(4,Math.round((state.chartVisible||96)*.12)));
+    drawMain();
   })
 });
-$("chartCandles").addEventListener("click",function(){state.chartType="candles";this.classList.add("active");$("chartLine").classList.remove("active");queueChartDraw()});
-$("chartLine").addEventListener("click",function(){state.chartType="line";this.classList.add("active");$("chartCandles").classList.remove("active");queueChartDraw()});
-$("chartAuto").addEventListener("click",function(){state.chartAutoScale=true;state.chartYShift=0;this.classList.add("active");$("chartFit").classList.remove("active");queueChartDraw()});
-$("chartFit").addEventListener("click",function(){state.chartAutoScale=true;state.chartYZoom=1;state.chartYShift=0;this.classList.add("active");$("chartAuto").classList.remove("active");queueChartDraw()});
 
-var chart=$("mainChart"),chartFrame=0;
-function queueChartDraw(){if(chartFrame)return;chartFrame=requestAnimationFrame(function(){chartFrame=0;if(state.market)drawMain()})}
-var drag={on:false,x:0,y:0};
+var chart=$("mainChart"),drag={on:false,x:0,y:0};
+function resetChartView(){var total=state.market?.candles?.length||0;state.chartVisible=Math.min(96,total);state.chartOffset=0;state.chartYZoom=1;state.chartYShift=0;state.crossX=null;state.crossY=null;drawMain()}
+function updateCrosshair(e){
+  if(!state.market)return;
+  var r=chart.getBoundingClientRect();
+  state.crossX=e.clientX-r.left;state.crossY=e.clientY-r.top;queueChartDraw();
+}
+chart.addEventListener("pointerdown",function(e){
+  if(e.button!==0)return;
+  drag.on=true;drag.x=e.clientX;drag.y=e.clientY;
+  try{chart.setPointerCapture(e.pointerId)}catch{}
+  updateCrosshair(e);
+});
 chart.addEventListener("pointermove",function(e){
   if(!state.market)return;
-  var r=chart.getBoundingClientRect(),x=e.clientX-r.left,y=e.clientY-r.top;
-  state.crossX=x;state.crossY=y;
+  var r=chart.getBoundingClientRect();
+  state.crossX=e.clientX-r.left;state.crossY=e.clientY-r.top;
   if(drag.on){
     var dx=e.clientX-drag.x,dy=e.clientY-drag.y;drag.x=e.clientX;drag.y=e.clientY;
-    if(Math.abs(dx)>1){var step=-dx/(Math.max(1,chart.clientWidth)/Math.max(36,state.chartVisible));var total=state.market.candles.length;state.chartOffset=Math.max(0,Math.min(Math.max(0,total-state.chartVisible),(state.chartOffset||0)+step))}
-    if(Math.abs(dy)>1){state.chartAutoScale=false;state.chartYShift=Math.max(-1.5,Math.min(1.5,(state.chartYShift||0)+dy/Math.max(1,chart.clientHeight)*1.2));$("chartAuto").classList.remove("active")}
+    var total=state.market.candles.length;
+    if(Math.abs(dx)>1){var step=Math.max(1,Math.round(-dx/Math.max(1,chart.clientWidth/Math.max(1,state.chartVisible))*0.9));state.chartOffset=Math.max(0,Math.min(Math.max(0,total-state.chartVisible),state.chartOffset+step))}
+    if(Math.abs(dy)>1){state.chartYShift=Math.max(-1.5,Math.min(1.5,(state.chartYShift||0)+dy/Math.max(1,chart.clientHeight)*1.15))}
   }
   queueChartDraw();
 });
-chart.addEventListener("pointerleave",function(){state.crossX=null;state.crossY=null;if(state.market)queueChartDraw()});
+chart.addEventListener("pointerleave",function(){if(!drag.on){state.crossX=null;state.crossY=null;drawMain()}});
+chart.addEventListener("pointerup",function(){drag.on=false});
+chart.addEventListener("pointercancel",function(){drag.on=false});
+chart.addEventListener("dblclick",function(e){e.preventDefault();resetChartView()});
 chart.addEventListener("wheel",function(e){
-  if(!state.market)return;e.preventDefault();
+  if(!state.market)return;
+  e.preventDefault();
+  var total=state.market.candles.length,oldVisible=Math.min(total,state.chartVisible||96),oldOffset=Math.max(0,Math.min(total-oldVisible,state.chartOffset||0));
   var r=chart.getBoundingClientRect(),rel=Math.max(0,Math.min(1,(e.clientX-r.left)/Math.max(1,r.width)));
-  var total=state.market.candles.length,oldVisible=Math.max(36,Math.min(220,state.chartVisible||96)),oldMax=Math.max(0,total-oldVisible),oldOffset=Math.max(0,Math.min(oldMax,state.chartOffset||0));
-  var cursorIndex=oldOffset+rel*(oldVisible-1);
-  var nextVisible=Math.max(36,Math.min(220,oldVisible*(e.deltaY>0?1.12:.89)));
-  var nextMax=Math.max(0,total-nextVisible);
-  state.chartVisible=nextVisible;
-  state.chartOffset=Math.max(0,Math.min(nextMax,cursorIndex-rel*(nextVisible-1)));
-  queueChartDraw();
+  var oldStart=total-oldOffset-oldVisible,anchor=oldStart+rel*(oldVisible-1);
+  var newVisible=Math.max(36,Math.min(220,total,Math.round(oldVisible*(e.deltaY>0?1.16:.86))));
+  if(newVisible===oldVisible)return;
+  var newStart=Math.round(anchor-rel*(newVisible-1));newStart=Math.max(0,Math.min(total-newVisible,newStart));
+  state.chartVisible=newVisible;state.chartOffset=total-newVisible-newStart;updateCrosshair(e);
+  drawMain();
 },{passive:false});
-chart.addEventListener("dblclick",function(){state.chartVisible=96;state.chartOffset=0;state.chartYZoom=1;state.chartYShift=0;state.chartAutoScale=true;queueChartDraw()});
-chart.addEventListener("pointerdown",function(e){drag.on=true;drag.x=e.clientX;drag.y=e.clientY;try{chart.setPointerCapture(e.pointerId)}catch{}});
-["pointerup","pointercancel"].forEach(function(ev){chart.addEventListener(ev,function(){drag.on=false})});
+var chartFrame=0;
+function queueChartDraw(){if(chartFrame)return;chartFrame=requestAnimationFrame(function(){chartFrame=0;if(state.market)drawMain()})}
+
 window.addEventListener("resize",function(){if(state.market){queueChartDraw();renderCycle()}});
 
 populateSymbols();$("interval").value=state.interval;renderJournal();renderBrainInsights();renderAlerts();calc();
