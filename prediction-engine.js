@@ -1,0 +1,188 @@
+const marketEngine=require("./market-engine");
+
+const FEATURE_NAMES=[
+  "base_score","rsi","adx","atr_pct","volume_z","range_position",
+  "ema20_gap","ema50_gap","structure","side",
+  "mtf_alignment","cvd_ratio","oi_change_pct","funding",
+  "liq_imbalance","book_imbalance","book_spread_bps","micro_delta_bps",
+  "depth_imbalance","flow_price_delta"
+];
+
+const clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
+const finite=(x,f=0)=>Number.isFinite(Number(x))?Number(x):f;
+const sigmoid=x=>1/(1+Math.exp(-clamp(x,-30,30)));
+
+function sideNum(side){return side==="LONG"?1:side==="SHORT"?-1:0}
+function structureNum(s){
+  if(!s)return 0;
+  if(String(s).includes("HIGHER")||String(s).includes("BULLISH"))return 1;
+  if(String(s).includes("LOWER")||String(s).includes("BEARISH"))return -1;
+  return 0;
+}
+function buildFeatures(a,ctx={}){
+  const d=a?.derivatives||{},o=ctx.orderbook||a?.microstructure||{};
+  const side=sideNum(a?.side);
+  const mtf=((a?.mtf?.higher==="UPTREND"&&side>0)||(a?.mtf?.higher==="DOWNTREND"&&side<0)?1:0)
+    +((a?.mtf?.lower==="UPTREND"&&side>0)||(a?.mtf?.lower==="DOWNTREND"&&side<0)?1:0)
+    -((a?.mtf?.higher==="DOWNTREND"&&side>0)||(a?.mtf?.higher==="UPTREND"&&side<0)?1:0)
+    -((a?.mtf?.lower==="DOWNTREND"&&side>0)||(a?.mtf?.lower==="UPTREND"&&side<0)?1:0);
+  const cvd=finite(d.cvdRatio,finite(ctx.takerFlow,0));
+  const oi=finite(d.oiChangePct,0);
+  const funding=finite(d.fundingRate,0)*1000;
+  const liqLong=finite(d.longLiquidations,0),liqShort=finite(d.shortLiquidations,0),liqTotal=liqLong+liqShort;
+  const liq=(liqLong-liqShort)/(liqTotal||1);
+  const flowPrice=finite(d.flowPriceChangePct,finite(d.tradePriceChangePct,0));
+  return {
+    base_score:finite(a?.score)/100,
+    rsi:(finite(a?.rsi,50)-50)/50,
+    adx:clamp(finite(a?.adx)/40,0,1.5),
+    atr_pct:clamp(finite(a?.atrPct)/5,-2,2),
+    volume_z:clamp(finite(a?.volumeZ)/3,-2,2),
+    range_position:clamp(finite(a?.rangePosition,.5)*2-1,-1,1),
+    ema20_gap:clamp((finite(a?.price)-finite(a?.ema20,a?.price))/(finite(a?.price)||1)*100,-5,5)/5,
+    ema50_gap:clamp((finite(a?.price)-finite(a?.ema50,a?.price))/(finite(a?.price)||1)*100,-8,8)/8,
+    structure:structureNum(a?.structure),
+    side,
+    mtf_alignment:clamp(mtf/2,-1,1),
+    cvd_ratio:clamp(cvd,-1,1),
+    oi_change_pct:clamp(oi/5,-2,2),
+    funding:clamp(funding,-2,2),
+    liq_imbalance:clamp(liq,-1,1),
+    book_imbalance:clamp(finite(o.imbalance,0),-1,1),
+    book_spread_bps:clamp(finite(o.spreadBps,0)/10,0,3),
+    micro_delta_bps:clamp(finite(o.microDeltaBps,0)/10,-3,3),
+    depth_imbalance:clamp(finite(o.depthImbalance,0),-1,1),
+    flow_price_delta:clamp(flowPrice/2,-2,2)
+  };
+}
+
+function vector(f){return FEATURE_NAMES.map(k=>finite(f?.[k],0))}
+function meanStd(rows){
+  const n=rows.length||1,dim=FEATURE_NAMES.length,mean=Array(dim).fill(0),std=Array(dim).fill(0);
+  for(const r of rows){const x=vector(r);for(let j=0;j<dim;j++)mean[j]+=x[j]}
+  for(let j=0;j<dim;j++)mean[j]/=n;
+  for(const r of rows){const x=vector(r);for(let j=0;j<dim;j++)std[j]+=(x[j]-mean[j])**2}
+  for(let j=0;j<dim;j++)std[j]=Math.sqrt(std[j]/n)||1;
+  return {mean,std};
+}
+function standardize(x,scaler){return x.map((v,i)=>(v-scaler.mean[i])/scaler.std[i])}
+function dot(w,x){let s=w[0]||0;for(let i=0;i<x.length;i++)s+=(w[i+1]||0)*x[i];return s}
+
+function trainLogistic(rows,options={}){
+  if(!Array.isArray(rows)||rows.length<120)throw new Error("At least 120 resolved training samples are required.");
+  const epochs=Math.max(80,Math.min(500,Number(options.epochs)||260)),lr=Number(options.lr)||0.05,l2=Number(options.l2)||0.015;
+  const split=Math.max(80,Math.floor(rows.length*.7));
+  const train=rows.slice(0,split),test=rows.slice(split);
+  const scaler=meanStd(train),w=Array(FEATURE_NAMES.length+1).fill(0);
+  for(let epoch=0;epoch<epochs;epoch++){
+    const g=Array(w.length).fill(0);
+    for(const r of train){
+      const x=standardize(vector(r.features),scaler),p=sigmoid(dot(w,x)),e=p-r.label;
+      g[0]+=e;
+      for(let j=0;j<x.length;j++)g[j+1]+=e*x[j];
+    }
+    const inv=1/train.length;
+    for(let j=0;j<w.length;j++){const penalty=j?l2*w[j]:0;w[j]-=lr*(g[j]*inv+penalty)}
+  }
+  const evaluate=(set)=>{
+    let brier=0,logLoss=0,correct=0;
+    for(const r of set){
+      const p=sigmoid(dot(w,standardize(vector(r.features),scaler)));
+      brier+=(p-r.label)**2;
+      logLoss-=r.label*Math.log(Math.max(p,1e-6))+(1-r.label)*Math.log(Math.max(1-p,1e-6));
+      if((p>=.5?1:0)===r.label)correct++;
+    }
+    const n=set.length||1;
+    return {n,brier:brier/n,logLoss:logLoss/n,accuracy:correct/n*100};
+  };
+  const trainMetrics=evaluate(train),validation=evaluate(test);
+  return {
+    version:1,
+    kind:"binary_setup_quality",
+    trainedAt:Date.now(),
+    samples:rows.length,
+    featureNames:FEATURE_NAMES,
+    scaler,
+    weights:w,
+    trainMetrics,
+    validationMetrics:validation
+  };
+}
+function predict(model,features){
+  if(!model?.weights||!model?.scaler)return null;
+  const p=sigmoid(dot(model.weights,standardize(vector(features),model.scaler)));
+  return clamp(p,0,1);
+}
+function outcomeForSetup(a,candles,i,horizon){
+  if(!a||a.side==="WAIT"||!Number.isFinite(a.stop)||!Number.isFinite(a.tp1))return null;
+  const end=Math.min(candles.length-1,i+Math.max(1,horizon||12));
+  for(let j=i+1;j<=end;j++){
+    const x=candles[j];
+    if(a.side==="LONG"){
+      if(x.l<=a.stop)return 0;
+      if(x.h>=a.tp1)return 1;
+    }else if(a.side==="SHORT"){
+      if(x.h>=a.stop)return 0;
+      if(x.l<=a.tp1)return 1;
+    }
+  }
+  return null;
+}
+function buildTrainingRows(candles,interval="1h"){
+  const rows=[];
+  if(!Array.isArray(candles)||candles.length<260)return rows;
+  const horizon=interval==="15m"?16:interval==="4h"?6:interval==="1d"?3:12;
+  for(let i=220;i<candles.length-horizon;i++){
+    let a;
+    try{
+      a=marketEngine.analyze(candles.slice(0,i+1),{interval});
+    }catch{continue}
+    if(a.side==="WAIT"||a.status==="WAITING")continue;
+    const label=outcomeForSetup(a,candles,i,horizon);
+    if(label===null)continue;
+    const c=candles[i],prev=candles[Math.max(0,i-1)];
+    const buyPressure=Number.isFinite(c?.takerBuyQuote)?(2*Number(c.takerBuyQuote)-Number(c.quoteVolume||0))/(Number(c.quoteVolume||1)):0;
+    const features=buildFeatures(a,{takerFlow:buyPressure,orderbook:{},derivatives:a.derivatives});
+    // Prevent a training sample from ever seeing data after its decision candle.
+    if(prev?.c===c?.c&&prev?.t===c?.t)continue;
+    rows.push({timestamp:c.t,label,features,side:a.side,score:a.score,type:a.type});
+  }
+  return rows;
+}
+function applyModel(a,model,ctx={}){
+  const features=buildFeatures(a,ctx);
+  const p=predict(model,features);
+  const out={
+    enabled:Boolean(model&&p!==null),
+    probability:p,
+    featureQuality:{
+      orderbook:Boolean(ctx.orderbook?.valid),
+      derivatives:Boolean(a.derivatives?.available),
+      liveFlow:Boolean(a.derivatives?.livePointCount)
+    },
+    modelVersion:model?.version??null,
+    validation:model?.validationMetrics||null,
+    edge:null,
+    scoreAdjustment:0
+  };
+  if(p===null){a.predictionModel=out;return a}
+  const directionProb=a.side==="LONG"?p:a.side==="SHORT"?1-p:.5;
+  const dataReady=out.featureQuality.derivatives||out.featureQuality.orderbook;
+  out.probability=directionProb;
+  out.edge=(directionProb-.5)*100;
+  if(!dataReady){out.scoreAdjustment=-2;out.note="Microstructure inputs incomplete; model influence reduced."}
+  else{
+    out.scoreAdjustment=clamp((directionProb-.5)*24,-12,12);
+    if(directionProb<.54)out.note="Model edge is weak; directional setup is being downgraded.";
+    else if(directionProb>=.68)out.note="Model evidence supports the rule-based setup.";
+    else out.note="Model evidence is supportive but not decisive.";
+  }
+  a.score=clamp(Math.round(finite(a.score)+out.scoreAdjustment),0,92);
+  a.predictionModel=out;
+  a.probabilityLabel=directionProb>=.78?"VERY HIGH MODEL SUPPORT":directionProb>=.68?"HIGH MODEL SUPPORT":directionProb>=.58?"MODERATE MODEL SUPPORT":"LOW MODEL SUPPORT";
+  if(a.side!=="WAIT"&&a.status==="READY"&&directionProb<.58)a.status="WATCH";
+  if(a.side!=="WAIT"&&a.status==="WATCH"&&directionProb<.50)a.status="WAITING";
+  return a;
+}
+
+module.exports={FEATURE_NAMES,buildFeatures,buildTrainingRows,trainLogistic,predict,applyModel};
