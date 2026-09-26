@@ -45,17 +45,20 @@ button,input,select,textarea{font:inherit}.wrap{width:min(1440px,calc(100% - 26p
 @media(max-width:860px){.edgeGrid,.edgeMetricGrid{grid-template-columns:1fr 1fr}.edgeRow{grid-template-columns:120px 1fr 60px}}
 @media(max-width:560px){.edgeGrid,.edgeMetricGrid{grid-template-columns:1fr}.edgeAction{align-items:stretch}.edgeAction label{width:100%}.edgeAction input{width:100%}}
 </style>
+
+.executionGrid{display:grid;grid-template-columns:1.2fr .8fr;gap:10px}.executionMetricGrid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}.executionMetric{background:#0d0d10;border:1px solid rgba(255,255,255,.07);border-radius:12px;padding:11px;min-width:0}.executionMetric .v{font-size:18px;font-weight:800;margin-top:5px}.executionMetric .subv{font-size:11px;color:#858792;margin-top:3px}.executionPanel{background:#0e0e11;border:1px solid rgba(255,255,255,.07);border-radius:14px;padding:12px}.executionActions{display:flex;gap:7px;flex-wrap:wrap;align-items:end}.executionActions label{display:grid;gap:5px;font-size:11px;color:#92939e}.executionActions select,.executionActions input{min-width:120px}.executionBadge{display:inline-flex;align-items:center;border:1px solid rgba(255,255,255,.08);border-radius:999px;padding:4px 9px;font-size:10px;letter-spacing:.08em;color:#c1c2ca}.executionTable{width:100%;border-collapse:collapse;font-size:11px}.executionTable th,.executionTable td{padding:7px 6px;border-bottom:1px solid rgba(255,255,255,.06);text-align:left;vertical-align:top}.executionTable th{color:#8e909b;font-weight:600}.executionMono{font-variant-numeric:tabular-nums}.executionOk{color:#9BE7C4}.executionWarn{color:#FFCF99}.executionBad{color:#FF9B9B}.executionNote{margin-top:8px;color:#9597a2;font-size:12px;line-height:1.5}.executionRows{display:grid;gap:7px}.executionRow{display:grid;grid-template-columns:100px 1fr auto;gap:8px;align-items:center;padding:8px;border:1px solid rgba(255,255,255,.05);border-radius:10px;background:#101014}.executionSmall{font-size:11px;color:#858792}.executionControl{display:flex;gap:7px;flex-wrap:wrap;align-items:center}.executionControl .btn{min-height:34px}.executionDanger{border-color:rgba(255,120,120,.25)!important}.executionLock{background:#161316;border-color:rgba(255,170,120,.18)}@media(max-width:860px){.executionGrid{grid-template-columns:1fr}.executionMetricGrid{grid-template-columns:1fr 1fr}}@media(max-width:560px){.executionMetricGrid{grid-template-columns:1fr}.executionActions{align-items:stretch}.executionActions label,.executionActions select,.executionActions input{width:100%}.executionRow{grid-template-columns:1fr}.executionControl{width:100%}}
+
 </style>
 </head>
 <body>
 <header class="header"><div class="headerInner">
   <div class="logo"><div class="mark" aria-label="MarketPulse logo"></div><div><div class="brandK">CRYPTO MARKET INTELLIGENCE</div><div class="brandName">MarketPulse</div><div class="brandSub">Less noise. More signal. Better decisions.</div></div></div>
   <nav class="nav" id="nav">
-    <button class="active" data-view="overview">Intel</button><button data-view="scanner">Scanner</button><button data-view="flow">Flow</button><button data-view="signals">Signals</button><button data-view="lab">Lab</button><button data-view="replay">Replay</button><button data-view="dna">DNA</button><button data-view="research">Research</button><button data-view="edge">Edge</button><button data-view="ai">AI Copilot</button><button data-view="brain">Brain</button><button data-view="alerts">Alerts</button><button data-view="risk">Risk</button>
+    <button class="active" data-view="overview">Intel</button><button data-view="scanner">Scanner</button><button data-view="flow">Flow</button><button data-view="signals">Signals</button><button data-view="lab">Lab</button><button data-view="replay">Replay</button><button data-view="dna">DNA</button><button data-view="research">Research</button><button data-view="edge">Edge</button><button data-view="execution">Execution</button><button data-view="ai">AI Copilot</button><button data-view="brain">Brain</button><button data-view="alerts">Alerts</button><button data-view="risk">Risk</button>
   </nav>
   <button id="mobileMenuBtn" class="mobileMenuBtn" aria-label="Open MarketPulse menu" aria-expanded="false">☰</button>
   <div id="mobileMenu" class="mobileMenu" aria-hidden="true">
-    <button data-view="overview">Intel</button><button data-view="scanner">Scanner</button><button data-view="flow">Flow</button><button data-view="signals">Signals</button><button data-view="lab">Lab</button><button data-view="replay">Replay</button><button data-view="dna">DNA</button><button data-view="research">Research</button><button data-view="edge">Edge</button><button data-view="ai">AI Copilot</button><button data-view="brain">Brain</button><button data-view="alerts">Alerts</button><button data-view="risk">Risk</button>
+    <button data-view="overview">Intel</button><button data-view="scanner">Scanner</button><button data-view="flow">Flow</button><button data-view="signals">Signals</button><button data-view="lab">Lab</button><button data-view="replay">Replay</button><button data-view="dna">DNA</button><button data-view="research">Research</button><button data-view="edge">Edge</button><button data-view="execution">Execution</button><button data-view="ai">AI Copilot</button><button data-view="brain">Brain</button><button data-view="alerts">Alerts</button><button data-view="risk">Risk</button>
   </div>
   <div class="headerTools"><span class="dataState"><i class="liveDot"></i><span id="dataState">Connecting</span></span><select id="symbol" class="select"></select><select id="interval" class="select"><option>15m</option><option selected>1h</option><option>4h</option><option>1d</option></select><button id="refresh" class="btn primary">Refresh</button></div>
 </div></header>
@@ -234,6 +237,66 @@ button,input,select,textarea{font:inherit}.wrap{width:min(1440px,calc(100% - 26p
     <div class="section edgePanel"><div class="sectionHead"><div><div class="title">Personal edge analytics</div><div class="sub">Descriptive summaries of your stored paper/manual journal.</div></div></div><div class="tableScroll"><table class="edgeTable"><thead><tr><th>Dimension</th><th>Group</th><th>N</th><th>Avg R</th><th>Net R</th></tr></thead><tbody id="edgePersonalRows"></tbody></table></div></div>
   </section>
 
+  <section id="view-execution" class="view">
+    <div class="sectionHead"><div><div class="title">Execution OS</div><div class="sub">Phase 5 turns approved plans into controlled simulation or Bybit testnet intents. Production/live order routing is deliberately locked.</div></div><div class="executionBadge executionLock">PHASE 5 · TESTNET GATED</div></div>
+
+    <div class="executionMetricGrid">
+      <div class="executionMetric"><div class="label">Mode</div><div class="v" id="exMode">SIMULATION</div><div class="subv" id="exModeMeta">Local simulated execution</div></div>
+      <div class="executionMetric"><div class="label">Execution gate</div><div class="v" id="exGate">BLOCKED</div><div class="subv" id="exGateMeta">Kill switch active</div></div>
+      <div class="executionMetric"><div class="label">Reconciliation</div><div class="v" id="exRecon">PASS</div><div class="subv" id="exReconMeta">Simulation mode</div></div>
+      <div class="executionMetric"><div class="label">Daily loss</div><div class="v executionMono" id="exDailyLoss">0.00%</div><div class="subv" id="exRiskMeta">Open risk 0.00%</div></div>
+    </div>
+
+    <div class="section executionGrid">
+      <div class="executionPanel">
+        <div class="sectionHead"><div><div class="title">Control center</div><div class="sub">The server holds credentials. This browser never receives exchange secrets.</div></div><span class="executionBadge" id="exCredential">NO TESTNET KEYS</span></div>
+        <div class="executionActions">
+          <label>Mode<select id="exModeSelect"><option value="SIMULATION">SIMULATION</option><option value="TESTNET">BYBIT TESTNET</option></select></label>
+          <label>Account<input id="exAccount" type="number" min="0" step="100" value="100000"></label>
+          <label>Risk / trade %<input id="exRiskPct" type="number" min=".05" max="5" step=".05" value="1"></label>
+          <label>Max open risk %<input id="exMaxOpenRisk" type="number" min=".5" max="10" step=".1" value="2.5"></label>
+          <label>Max daily loss %<input id="exMaxDailyLoss" type="number" min=".5" max="20" step=".1" value="3"></label>
+          <label>Max positions<input id="exMaxPositions" type="number" min="1" max="20" step="1" value="3"></label>
+          <label>Max symbol exposure %<input id="exMaxSymbol" type="number" min=".25" max="20" step=".25" value="2"></label>
+          <label>Orders / minute<input id="exOrderRate" type="number" min="1" max="60" step="1" value="10"></label>
+          <label>Max entry drift (bps)<input id="exSlippage" type="number" min="0" max="200" step="1" value="20"></label>
+        </div>
+        <div class="executionControl" style="margin-top:9px">
+          <button id="exSaveConfig" class="btn primary">Save execution rules</button>
+          <button id="exPrepare" class="btn">Prepare from Edge signal</button>
+          <button id="exSubmit" class="btn primary">Submit latest intent</button>
+          <button id="exReconcileBtn" class="btn">Reconcile exchange</button>
+          <button id="exKill" class="btn executionDanger">Kill switch</button>
+          <button id="exArm" class="btn">Arm testnet</button>
+        </div>
+        <div class="executionNote" id="exControlNote">Simulation is local. Switching to testnet requires server-side Bybit testnet keys, an explicit arm action, and a successful reconciliation.</div>
+      </div>
+
+      <div class="executionPanel">
+        <div class="sectionHead"><div><div class="title">Health</div><div class="sub">Connection and safety state.</div></div></div>
+        <div id="exHealthRows" class="executionRows"></div>
+      </div>
+    </div>
+
+    <div class="section executionGrid">
+      <div class="executionPanel">
+        <div class="sectionHead"><div><div class="title">Orders</div><div class="sub">Intent lifecycle: INTENT → VALIDATING → APPROVED → SUBMITTED → ACKNOWLEDGED → OPEN → FILLED.</div></div><span class="executionBadge" id="exOrderCount">0 orders</span></div>
+        <div class="tableScroll"><table class="executionTable"><thead><tr><th>Status</th><th>Asset</th><th>Side</th><th>Entry</th><th>Stop</th><th>TP</th><th>Qty</th><th>Action</th></tr></thead><tbody id="exOrderRows"></tbody></table></div>
+      </div>
+      <div class="executionPanel">
+        <div class="sectionHead"><div><div class="title">Positions</div><div class="sub">Only simulation positions or positions observed through Bybit's private stream.</div></div><span class="executionBadge" id="exPositionCount">0</span></div>
+        <div class="tableScroll"><table class="executionTable"><thead><tr><th>Asset</th><th>Side</th><th>Qty</th><th>Entry</th><th>Mark</th><th>P/L</th><th>Action</th></tr></thead><tbody id="exPositionRows"></tbody></table></div>
+      </div>
+    </div>
+
+    <div class="section executionGrid">
+      <div class="executionPanel"><div class="sectionHead"><div><div class="title">Execution journal</div><div class="sub">Every simulation/testnet lifecycle event is recorded server-side.</div></div></div><div id="exJournalRows" class="executionRows"></div></div>
+      <div class="executionPanel"><div class="sectionHead"><div><div class="title">Event stream</div><div class="sub">Order, risk, reconciliation and kill-switch events.</div></div></div><div id="exEventRows" class="executionRows"></div></div>
+    </div>
+
+    <div class="section card"><div class="title">Safety boundary</div><div class="executionNote">Phase 5 exposes SIMULATION and BYBIT TESTNET only. Live/production order routing is not enabled. Bybit order acknowledgements are asynchronous, so the private order/execution/position streams and reconciliation layer are the source of execution state after submission.</div></div>
+  </section>
+
   <section id="view-risk" class="view"><div class="sectionHead"><div><div class="title">Risk Lab</div><div class="sub">Position size should follow the invalidation.</div></div></div><div class="card"><div class="inputs"><input id="ra" type="number" value="5000" placeholder="Account"><input id="rrisk" type="number" value="1" step=".05" placeholder="Risk %"><input id="rentry" type="number" value="84000" placeholder="Entry"><input id="rstop" type="number" value="82000" placeholder="Stop"></div><div class="result" id="riskOut">—</div></div></section>
 
   <div id="chartModal" class="modal" aria-hidden="true"><div class="modalCard"><div class="modalTop"><h3>Chart settings</h3><button id="chartClose" class="modalClose">×</button></div><div class="sub" style="margin-top:6px">Choose a visual preset or customize the candle colors. Settings persist in this browser.</div><div class="presetGrid" id="presetGrid"><button class="preset" data-preset="aurora"><div class="preview" style="background:#07131a;--pc1:#9BE7C4;--pc2:#FFB38A"><i></i><i></i><i></i><i></i></div><b>Aurora</b><small>Mint / ember</small></button><button class="preset" data-preset="lavender"><div class="preview" style="background:#0e1018;--pc1:#E5D0FF;--pc2:#FFB8D8"><i></i><i></i><i></i><i></i></div><b>Lavender</b><small>Soft / premium</small></button><button class="preset" data-preset="forest"><div class="preview" style="background:#08120f;--pc1:#A8E6CF;--pc2:#F8C6A0"><i></i><i></i><i></i><i></i></div><b>Forest</b><small>Mint / coral</small></button><button class="preset" data-preset="classic"><div class="preview" style="background:#090909;--pc1:#22c55e;--pc2:#ef4444"><i></i><i></i><i></i><i></i></div><b>Classic</b><small>Green / red</small></button><button class="preset" data-preset="mono"><div class="preview" style="background:#090909;--pc1:#f1f5f9;--pc2:#64748b"><i></i><i></i><i></i><i></i></div><b>Mono</b><small>White / slate</small></button></div><div class="colorGrid"><div class="colorItem"><span>Bull candle</span><input id="bullColor" type="color"></div><div class="colorItem"><span>Bear candle</span><input id="bearColor" type="color"></div><div class="colorItem"><span>Show volume</span><input id="showVolume" type="checkbox" checked></div><div class="colorItem"><span>Show EMA</span><input id="showEma" type="checkbox" checked></div></div><div class="axisNote">The chart keeps the right-side price scale, current-price marker, volume context and EMA optional.</div><div class="modalFoot"><button id="chartCancel" class="btn">Cancel</button><button id="chartApply" class="btn primary">Apply</button></div></div></div>
@@ -263,7 +326,8 @@ var state={
   watch:JSON.parse(localStorage.getItem("mp-watch")||"[]"),
   signals:JSON.parse(localStorage.getItem("mp-stable-signals")||"[]"),
   journal:JSON.parse(localStorage.getItem("mp-stable-journal")||"[]"),
-  edge:null
+  edge:null,
+  execution:null
 };
 
 function $(id){return document.getElementById(id)}
@@ -540,6 +604,86 @@ async function saveServerJournal(row){
   try{await fetch("/api/edge/journal",{method:"POST",headers:{"Content-Type":"application/json","x-marketpulse-device":deviceId()},body:JSON.stringify({entry:row})})}catch(e){}
 }
 
+
+function escapeHtmlExec(v){return safeHtml(String(v==null?"":v))}
+function executionStatusClass(status){
+  status=String(status||"");
+  return /FILLED|OPEN|ACKNOWLEDGED|PASS/.test(status)?"executionOk":/REJECT|BLOCK|KILL|MISMATCH|ERROR/.test(status)?"executionBad":"executionWarn";
+}
+function renderExecution(data){
+  state.execution=data||null;if(!data)return;
+  var c=data.control||{},cfg=data.config||{},m=data.metrics||{},h=data.health||{};
+  $("exMode").textContent=data.mode||"SIMULATION";
+  $("exModeMeta").textContent=data.mode==="TESTNET"?"Bybit testnet":"Local simulated execution";
+  $("exGate").textContent=c.killSwitch?"BLOCKED":(c.armed||data.mode==="SIMULATION"?"ARMED":"BLOCKED");
+  $("exGateMeta").textContent=c.killSwitch?"Kill switch active":(data.mode==="SIMULATION"?"Simulation available":"Explicit testnet arm active");
+  $("exRecon").textContent=c.reconciliation?.ok?"PASS":"BLOCKED";
+  $("exReconMeta").textContent=c.reconciliation?.detail||"Reconciliation required";
+  $("exDailyLoss").textContent=(Number(m.dailyLossPct)||0).toFixed(2)+"%";
+  $("exRiskMeta").textContent="Open risk "+(Number(m.openRiskPct)||0).toFixed(2)+"% · "+fmt(m.activePositions||0)+" active";
+  $("exCredential").textContent=h.credentialsConfigured?"TESTNET KEYS READY":"NO TESTNET KEYS";
+  $("exCredential").className="executionBadge "+(h.credentialsConfigured?"executionOk":"executionWarn");
+  $("exModeSelect").value=data.mode||"SIMULATION";
+  $("exAccount").value=cfg.account??100000;$("exRiskPct").value=cfg.riskPct??1;$("exMaxOpenRisk").value=cfg.maxOpenRiskPct??2.5;$("exMaxDailyLoss").value=cfg.maxDailyLossPct??3;$("exMaxPositions").value=cfg.maxPositions??3;$("exMaxSymbol").value=cfg.maxSymbolExposurePct??2;$("exOrderRate").value=cfg.maxOrdersPerMinute??10;$("exSlippage").value=cfg.maxSlippageBps??20;
+  $("exControlNote").textContent=data.mode==="TESTNET"
+    ?(h.credentialsConfigured?"Testnet configured. Submit remains blocked until reconciliation passes after an explicit arm.":"Add BYBIT_API_KEY and BYBIT_API_SECRET as server-side Render environment variables; never paste them into chat or the browser.")
+    :"Simulation is local and never sends exchange orders.";
+  var health=[
+    ["Adapter",h.adapter||"Bybit Testnet adapter", "executionOk"],
+    ["Credentials",h.credentialsConfigured?"Configured":"Not configured",h.credentialsConfigured?"executionOk":"executionWarn"],
+    ["Private WebSocket",h.privateWsConnected?"Connected":"Disconnected",h.privateWsConnected?"executionOk":"executionWarn"],
+    ["Reconciliation",c.reconciliation?.ok?"PASS":"BLOCKED",c.reconciliation?.ok?"executionOk":"executionBad"],
+    ["Live mode","Disabled in Phase 5","executionWarn"],
+    ["Last error",h.lastError||"None",h.lastError?"executionBad":"executionOk"]
+  ];
+  $("exHealthRows").innerHTML=health.map(function(x){return'<div class="executionRow"><span>'+escapeHtmlExec(x[0])+'</span><b class="'+x[2]+'">'+escapeHtmlExec(x[1])+'</b><span></span></div>'}).join("");
+  var orders=(data.orders||[]);
+  $("exOrderCount").textContent=fmt(orders.length)+" orders";
+  $("exOrderRows").innerHTML=orders.slice(0,40).map(function(o){
+    var canSubmit=["INTENT","APPROVED"].indexOf(o.status)>=0,canCancel=["INTENT","APPROVED","SUBMITTED","ACKNOWLEDGED","OPEN","PARTIALLY_FILLED","CANCEL_REQUESTED"].indexOf(o.status)>=0;
+    var action=(canSubmit?'<button class="btn" data-ex-submit="'+escapeHtmlExec(o.id)+'">Submit</button> ':'')+(canCancel?'<button class="btn" data-ex-cancel="'+escapeHtmlExec(o.id)+'">Cancel</button>':'');
+    return'<tr><td><span class="'+executionStatusClass(o.status)+'">'+escapeHtmlExec(o.status)+'</span></td><td>'+escapeHtmlExec(o.symbol)+'</td><td>'+escapeHtmlExec(o.side)+'</td><td>'+fmt(o.entry)+'</td><td>'+fmt(o.stop)+'</td><td>'+fmt(o.target)+'</td><td>'+fmt(o.qty)+'</td><td>'+action+'</td></tr>';
+  }).join("")||'<tr><td colspan="8" class="executionSmall">No execution intents yet.</td></tr>';
+  var positions=(data.positions||[]);
+  $("exPositionCount").textContent=fmt(positions.length);
+  $("exPositionRows").innerHTML=positions.map(function(p){
+    var action=data.mode==="SIMULATION"?'<button class="btn" data-ex-close="'+escapeHtmlExec(p.id)+'">Close sim</button>':'—';
+    return'<tr><td>'+escapeHtmlExec(p.symbol)+'</td><td>'+escapeHtmlExec(p.side)+'</td><td>'+fmt(p.qty)+'</td><td>'+fmt(p.entry)+'</td><td>'+fmt(p.markPrice)+'</td><td>'+fmt(p.unrealisedPnl??0)+'</td><td>'+action+'</td></tr>';
+  }).join("")||'<tr><td colspan="7" class="executionSmall">No open positions.</td></tr>';
+  $("exJournalRows").innerHTML=(data.journal||[]).slice(0,20).map(function(x){return'<div class="executionRow"><span class="executionSmall">'+new Date(Number(x.ts)||Date.now()).toLocaleTimeString()+'</span><div><b>'+escapeHtmlExec(x.type||"EVENT")+'</b><div class="executionSmall">'+escapeHtmlExec(x.message||x.symbol||"")+'</div></div><span class="executionMono">'+(x.resultR==null?"":Number(x.resultR).toFixed(2)+"R")+'</span></div>'}).join("")||'<div class="executionSmall">No execution journal entries.</div>';
+  $("exEventRows").innerHTML=(data.events||[]).slice(0,20).map(function(x){return'<div class="executionRow"><span class="executionSmall">'+new Date(Number(x.ts)||Date.now()).toLocaleTimeString()+'</span><div><b>'+escapeHtmlExec(x.type)+'</b><div class="executionSmall">'+escapeHtmlExec(x.message)+'</div></div><span></span></div>'}).join("")||'<div class="executionSmall">No execution events.</div>';
+}
+async function loadExecution(){
+  try{renderExecution(await api("/api/execution",5000))}catch(e){}
+}
+async function saveExecutionConfig(){
+  var payload={mode:$("exModeSelect").value,account:+$("exAccount").value||0,riskPct:+$("exRiskPct").value||1,maxOpenRiskPct:+$("exMaxOpenRisk").value||2.5,maxDailyLossPct:+$("exMaxDailyLoss").value||3,maxPositions:+$("exMaxPositions").value||3,maxSymbolExposurePct:+$("exMaxSymbol").value||2,maxOrdersPerMinute:+$("exOrderRate").value||10,maxSlippageBps:+$("exSlippage").value||20};
+  try{var r=await fetch("/api/execution/config",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)}),j=await r.json();if(!r.ok)throw Error(j.error||"Config failed");renderExecution(j)}catch(e){$("exControlNote").textContent="Config failed: "+e.message}
+}
+async function prepareExecution(){
+  try{var r=await fetch("/api/execution/prepare",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({symbol:state.symbol,interval:state.interval})}),j=await r.json();if(!r.ok)throw Error(j.error||"No executable Edge signal");$("exControlNote").textContent="Intent "+(j.order?.id||"")+' prepared from the current Edge signal.';await loadExecution()}catch(e){$("exControlNote").textContent="Prepare blocked: "+e.message}
+}
+async function submitExecution(id){
+  try{var r=await fetch("/api/execution/submit",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:id||((state.execution?.orders||[])[0]?.id)})}),j=await r.json();if(!r.ok)throw Error(j.error||"Submit failed");$("exControlNote").textContent="Order lifecycle updated: "+(j.order?.status||"—");await loadExecution()}catch(e){$("exControlNote").textContent="Submit blocked: "+e.message}
+}
+async function cancelExecution(id){
+  try{var r=await fetch("/api/execution/cancel",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id})}),j=await r.json();if(!r.ok)throw Error(j.error||"Cancel failed");await loadExecution()}catch(e){$("exControlNote").textContent="Cancel failed: "+e.message}
+}
+async function reconcileExecution(){
+  try{var r=await fetch("/api/execution/reconcile",{method:"POST",headers:{"Content-Type":"application/json"}}),j=await r.json();if(!r.ok)throw Error(j.error||"Reconciliation failed");await loadExecution()}catch(e){$("exControlNote").textContent="Reconciliation failed: "+e.message}
+}
+async function killExecution(){
+  try{var r=await fetch("/api/execution/kill",{method:"POST",headers:{"Content-Type":"application/json"}}),j=await r.json();if(!r.ok)throw Error(j.error||"Kill switch failed");await loadExecution()}catch(e){$("exControlNote").textContent="Kill switch error: "+e.message}
+}
+async function armExecution(){
+  try{var r=await fetch("/api/execution/arm",{method:"POST",headers:{"Content-Type":"application/json"}}),j=await r.json();if(!r.ok)throw Error(j.error||"Arm failed");await loadExecution()}catch(e){$("exControlNote").textContent="Arm blocked: "+e.message}
+}
+async function closeSimulation(id){
+  var p=(state.execution?.positions||[]).find(function(x){return x.id===id});if(!p)return;
+  var val=prompt("Exit price for simulation position on "+p.symbol, String(p.markPrice||p.entry));if(val===null)return;
+  try{var r=await fetch("/api/execution/close-sim",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({positionId:id,exitPrice:+val})}),j=await r.json();if(!r.ok)throw Error(j.error||"Close failed");renderExecution(j)}catch(e){$("exControlNote").textContent="Simulation close failed: "+e.message}
+}
+
 var replayState={dataset:null,cursor:0,timer:null,playing:false};
 
 function syncPhase3Symbols(){
@@ -644,7 +788,7 @@ function checkAlerts(rows){
   });
 }
 async function enableNotifications(){if(!("Notification"in window)){$("notifState").textContent="Browser notifications unavailable";return}var p=await Notification.requestPermission();$("notifState").textContent=p;$("notifBtn").textContent=p==="granted"?"Notifications enabled":"Enable notifications"}
-async function runSystemCheck(){ $("healthGrid").innerHTML='<div class="small">Running core checks…</div>';try{var d=await api("/api/system-check",8000),checks=d.checks||{};var names=["server","marketEngine","learning","memory","marketData","derivatives","oi","cvd","liquidations"];$("healthGrid").innerHTML=names.map(function(n){return'<div class="healthItem"><span class="healthDot '+(checks[n]?"ok":"bad")+'"></span><b>'+n+"</b></div>"}).join("");$("healthText").textContent=(d.ok?"Core market stack passed. ":"Core market stack needs attention. ")+(d.marketError||d.derivativesError||"")+" · OI/CVD/liquidations are reported separately above."; }catch(e){$("healthText").textContent="System check failed: "+e.message}}
+async function runSystemCheck(){ $("healthGrid").innerHTML='<div class="small">Running core checks…</div>';try{var d=await api("/api/system-check",8000),checks=d.checks||{};var names=["server","marketEngine","learning","memory","marketData","derivatives","oi","cvd","liquidations","execution"];$("healthGrid").innerHTML=names.map(function(n){return'<div class="healthItem"><span class="healthDot '+(checks[n]?"ok":"bad")+'"></span><b>'+n+"</b></div>"}).join("");$("healthText").textContent=(d.ok?"Core market stack passed. ":"Core market stack needs attention. ")+(d.marketError||d.derivativesError||"")+" · OI/CVD/liquidations are reported separately above."; }catch(e){$("healthText").textContent="System check failed: "+e.message}}
 function calc(){
   var a=+$("ca").value||0,r=(+$("cr").value||0)/100,e=+$("ce").value||0,s=+$("cs").value||0,b=a*r,d=Math.abs(e-s);$("sizeResult").textContent=d?"Risk "+fmt(b)+" · Position size "+fmt(b/d)+" units":"Enter valid stop";
   var re=+$("re").value||0,rs=+$("rs").value||0,rt=+$("rt").value||0,rd=Math.abs(re-rs),rw=Math.abs(rt-re),dir=$("rdirection").value;$("rrResult").textContent=rd?(rw/rd).toFixed(2)+"R · "+dir:"—";
@@ -705,7 +849,7 @@ async function loadCore(){
   try{
     var d=await api("/api/core?symbol="+encodeURIComponent(state.symbol)+"&interval="+encodeURIComponent(state.interval),9000);
     state.market=d;setStatus("Core market intelligence connected","ok");$("dataState").textContent="Live";renderMarket();
-    loadEdge();loadScan();loadCycle();
+    loadEdge();loadExecution();loadScan();loadCycle();
   }catch(e){
     setStatus("Core market connection failed. The interface is running; retrying automatically.","warn");$("dataState").textContent="Retry";
     $("thesis").textContent="The application is healthy, but the market data provider did not respond.";
@@ -721,6 +865,15 @@ async function askAI(){
   try{var r=await fetch("/api/ai",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)}),j=await r.json();if(!r.ok)throw Error(j.error||"AI failed");$("aiOut").textContent=j.text||"No response";$("aiStatus").textContent="Copilot ready"}catch(e){$("aiOut").textContent=e.message;$("aiStatus").textContent="Copilot unavailable"}
 }
 
+
+$("exSaveConfig").addEventListener("click",saveExecutionConfig);
+$("exPrepare").addEventListener("click",prepareExecution);
+$("exSubmit").addEventListener("click",function(){submitExecution()});
+$("exReconcileBtn").addEventListener("click",reconcileExecution);
+$("exKill").addEventListener("click",killExecution);
+$("exArm").addEventListener("click",armExecution);
+$("exOrderRows").addEventListener("click",function(e){var b=e.target.closest("[data-ex-submit],[data-ex-cancel]");if(!b)return;if(b.dataset.exSubmit)submitExecution(b.dataset.exSubmit);else cancelExecution(b.dataset.exCancel)});
+$("exPositionRows").addEventListener("click",function(e){var b=e.target.closest("[data-ex-close]");if(b)closeSimulation(b.dataset.exClose)});
 $("refresh").addEventListener("click",loadCore);
 $("symbol").addEventListener("change",function(){state.symbol=this.value;loadCore()});
 $("interval").addEventListener("change",function(){state.interval=this.value;loadCore()});
@@ -760,7 +913,7 @@ async function syncMemory(){
 syncPhase3Symbols();
 $("loadReplay").addEventListener("click",loadReplay);$("toggleReplay").addEventListener("click",toggleReplay);$("replayCursor").addEventListener("input",function(){replayState.cursor=+this.value;renderReplayFrame()});
 $("refreshDNA").addEventListener("click",refreshDNA);$("loadDNA").addEventListener("click",loadDNA);$("runResearch").addEventListener("click",runResearch);
-$("askAi").addEventListener("click",askAI);$("sync").addEventListener("click",syncMemory);$("runSystemCheck").addEventListener("click",runSystemCheck);$("notifBtn").addEventListener("click",enableNotifications);$("alertScore").addEventListener("input",renderAlerts);$("chartSettings").addEventListener("click",openChartSettings);$("chartClose").addEventListener("click",closeChartSettings);$("chartCancel").addEventListener("click",closeChartSettings);$("chartApply").addEventListener("click",applyChartSettings);document.querySelectorAll("[data-preset]").forEach(function(b){b.addEventListener("click",function(){document.querySelectorAll("[data-preset]").forEach(function(x){x.classList.remove("active")});b.classList.add("active");$("bullColor").value=CHART_PRESETS[b.dataset.preset].bull;$("bearColor").value=CHART_PRESETS[b.dataset.preset].bear})});$("aiMarketMode").addEventListener("click",function(){state.aiMode="market";$("aiMarketMode").classList.add("on");$("aiTradeMode").classList.remove("on");$("tradeFields").classList.add("hidden")});$("aiTradeMode").addEventListener("click",function(){state.aiMode="trade";$("aiTradeMode").classList.add("on");$("aiMarketMode").classList.remove("on");$("tradeFields").classList.remove("hidden")});runSystemCheck();renderSignals();
+$("askAi").addEventListener("click",askAI);$("sync").addEventListener("click",syncMemory);$("runSystemCheck").addEventListener("click",runSystemCheck);$("notifBtn").addEventListener("click",enableNotifications);$("alertScore").addEventListener("input",renderAlerts);$("chartSettings").addEventListener("click",openChartSettings);$("chartClose").addEventListener("click",closeChartSettings);$("chartCancel").addEventListener("click",closeChartSettings);$("chartApply").addEventListener("click",applyChartSettings);document.querySelectorAll("[data-preset]").forEach(function(b){b.addEventListener("click",function(){document.querySelectorAll("[data-preset]").forEach(function(x){x.classList.remove("active")});b.classList.add("active");$("bullColor").value=CHART_PRESETS[b.dataset.preset].bull;$("bearColor").value=CHART_PRESETS[b.dataset.preset].bear})});$("aiMarketMode").addEventListener("click",function(){state.aiMode="market";$("aiMarketMode").classList.add("on");$("aiTradeMode").classList.remove("on");$("tradeFields").classList.add("hidden")});$("aiTradeMode").addEventListener("click",function(){state.aiMode="trade";$("aiTradeMode").classList.add("on");$("aiMarketMode").classList.remove("on");$("tradeFields").classList.remove("hidden")});runSystemCheck();renderSignals();loadExecution();setInterval(loadExecution,10000);
 
 ["panYUp","panL","panR","panYDown","zoomOut","zoomIn","zoomReset"].forEach(function(id){
   $(id).addEventListener("click",function(){
