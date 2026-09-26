@@ -995,7 +995,7 @@ const server=http.createServer(async(req,res)=>{
             qualityPct: deriv?.available ? 100 : 80,
             consensusQualityPct:dataConsensus?.consensusQualityPct,
             priceDispersionBps:dataConsensus?.priceDispersionBps,
-            providerCount:dataConsensus?.sourceCount
+            providerCount:dataConsensus?.sourceCount,independentSourceCount:dataConsensus?.independentSourceCount
           },
           equity:propConfig.startingEquity,
           dayStartEquity:propConfig.startingEquity,
@@ -1056,7 +1056,7 @@ const server=http.createServer(async(req,res)=>{
             });
             const gate=propFirm.evaluateStandard({
               analysis,derivatives:deriv,
-              dataQuality:{candleAgeMs:candles.length?Math.max(0,Date.now()-Number(candles[candles.length-1].t)):null,qualityPct:deriv?.available?100:80,consensusQualityPct:consensus?.consensusQualityPct,priceDispersionBps:consensus?.priceDispersionBps,providerCount:consensus?.sourceCount},
+              dataQuality:{candleAgeMs:candles.length?Math.max(0,Date.now()-Number(candles[candles.length-1].t)):null,qualityPct:deriv?.available?100:80,consensusQualityPct:consensus?.consensusQualityPct,priceDispersionBps:consensus?.priceDispersionBps,providerCount:consensus?.sourceCount,independentSourceCount:consensus?.independentSourceCount},
               equity:config.startingEquity,dayStartEquity:config.startingEquity,peakEquity:config.startingEquity,config
             });
             return {symbol,interval,analysis,derivatives:deriv,consensus,gate,updatedAt:Date.now()};
@@ -1093,7 +1093,7 @@ const server=http.createServer(async(req,res)=>{
         });
         const gate=propFirm.evaluateEventContract({
           analysis,derivatives:deriv,
-          dataQuality:{candleAgeMs:candles.length?Math.max(0,Date.now()-Number(candles[candles.length-1].t)):null,qualityPct:deriv?.available?100:80,consensusQualityPct:consensus?.consensusQualityPct,priceDispersionBps:consensus?.priceDispersionBps,providerCount:consensus?.sourceCount},
+          dataQuality:{candleAgeMs:candles.length?Math.max(0,Date.now()-Number(candles[candles.length-1].t)):null,qualityPct:deriv?.available?100:80,consensusQualityPct:consensus?.consensusQualityPct,priceDispersionBps:consensus?.priceDispersionBps,providerCount:consensus?.sourceCount,independentSourceCount:consensus?.independentSourceCount},
           equity:config.startingEquity,dayStartEquity:config.startingEquity,peakEquity:config.startingEquity,
           side:String(u.searchParams.get('side')||"").toUpperCase(),
           premium:Number(u.searchParams.get('premium')),
