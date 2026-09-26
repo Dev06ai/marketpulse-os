@@ -503,7 +503,7 @@ async function historicalBinanceDerivatives(symbol,interval){
   const qs="symbol="+encodeURIComponent(symbol)+"&period="+period+"&limit=500";
   const endpoints={
     oi:"/futures/data/openInterestHist?"+qs+"&contractType=PERPETUAL",
-    taker:"/futures/data/takerlongshortRatio?"+qs+"&contractType=PERPETUAL",
+    taker:"/futures/data/takerBuySellVol?"+qs+"&contractType=PERPETUAL",
     accounts:"/futures/data/topLongShortAccountRatio?"+qs+"&contractType=PERPETUAL"
   };
   const safe=async path=>{try{return await fetchJson(base+path,6000)}catch{return[]}};
@@ -1079,9 +1079,9 @@ const server=http.createServer(async(req,res)=>{
             }catch{return[]}
           }));
           records=sets.flat();
-          try{await learning.trainFromReplay(records)}catch{}
           try{await storage.saveSignalDNA(records)}catch{}
         }
+        try{await learning.trainFromReplay(records)}catch{}
         return send(res,200,{ok:true,filters:{symbol:symbol||"ALL",interval:interval||"ALL"},summary:summarizeDNA(records),records:records.slice(0,limit),learning:await learning.status(),updatedAt:Date.now()});
       }catch(e){return send(res,503,{ok:false,error:e.message})}
     }
