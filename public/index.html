@@ -218,14 +218,120 @@ body{font-size:14px}
 #callMetric.signal-short{border-color:rgba(248,113,113,.45)!important;background:linear-gradient(180deg,rgba(248,113,113,.12),rgba(8,8,11,.94))!important;box-shadow:0 0 30px rgba(248,113,113,.18),var(--shadow)!important}
 #callMetric.signal-wait{border-color:rgba(192,132,252,.48)!important;background:linear-gradient(180deg,rgba(192,132,252,.13),rgba(8,8,11,.94))!important;box-shadow:0 0 30px rgba(192,132,252,.20),var(--shadow)!important}
 <style id="chart-layout-final">
-.chartHeaderTools{display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap}
-.chartTimeframes{display:flex;gap:3px;flex:0 0 auto}
-.chartTools{display:grid!important;grid-template-columns:repeat(10,max-content)!important;gap:4px!important;align-items:center;justify-content:end!important}
+/* Final Price Action layout: title stays left, controls have their own clean area. */
+#priceActionSection .sectionHead{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) auto;
+  align-items:start;
+  gap:16px;
+  margin-bottom:12px;
+}
+#priceActionSection .sectionHead>div:first-child{min-width:0}
+#priceActionSection .chartHeaderTools{
+  min-width:0;
+  max-width:none;
+  display:flex;
+  align-items:center;
+  justify-content:flex-end;
+  gap:8px;
+  flex-wrap:wrap;
+}
+#priceActionSection .chartTimeframes{
+  display:flex;
+  flex:0 0 auto;
+  gap:4px;
+}
+#priceActionSection .chartTools{
+  display:flex!important;
+  flex:0 0 auto;
+  align-items:center;
+  justify-content:flex-end;
+  gap:4px!important;
+  flex-wrap:nowrap;
+}
+#priceActionSection .chartTools button,
+#priceActionSection .chartTf{
+  white-space:nowrap;
+  flex:0 0 auto;
+}
+#priceActionSection .chartTimeframes .chartTf{
+  min-width:42px;
+  text-align:center;
+}
+@media(max-width:1100px) and (min-width:901px){
+  #priceActionSection .sectionHead{
+    grid-template-columns:1fr;
+    gap:10px;
+  }
+  #priceActionSection .chartHeaderTools{
+    justify-content:flex-start;
+  }
+}
 @media(max-width:900px){
-  .chartHeaderTools{width:100%;flex-direction:column;align-items:stretch}
-  .chartTimeframes{width:100%;display:grid;grid-template-columns:repeat(5,1fr);gap:4px}
-  .chartTools{width:100%;grid-template-columns:repeat(4,minmax(0,1fr))!important;gap:5px!important}
-  .chartTools button{width:100%;min-width:0;padding:7px 5px}
+  #priceActionSection .sectionHead{
+    display:flex;
+    flex-direction:column;
+    align-items:stretch;
+    gap:10px;
+    margin-bottom:10px;
+  }
+  #priceActionSection .chartHeaderTools{
+    width:100%;
+    display:flex;
+    flex-direction:column;
+    align-items:stretch;
+    gap:7px;
+  }
+  #priceActionSection .chartTimeframes{
+    width:100%;
+    display:grid;
+    grid-template-columns:repeat(5,minmax(0,1fr));
+    gap:5px;
+  }
+  #priceActionSection .chartTimeframes .chartTf{
+    width:100%;
+    min-width:0;
+    padding:7px 3px;
+  }
+  #priceActionSection .chartTools{
+    width:100%;
+    display:grid!important;
+    grid-template-columns:repeat(4,minmax(0,1fr))!important;
+    gap:5px!important;
+    justify-content:stretch;
+  }
+  #priceActionSection .chartTools button{
+    width:100%;
+    min-width:0;
+    min-height:34px;
+    padding:7px 4px;
+    overflow:hidden;
+    text-overflow:ellipsis;
+  }
+  #priceActionSection .chartTools .zoomBtn{
+    font-size:0;
+  }
+  #priceActionSection .chartTools #zoomOut::after{
+    content:"−";
+    font-size:15px;
+    line-height:1;
+  }
+  #priceActionSection .chartTools #zoomIn::after{
+    content:"+";
+    font-size:15px;
+    line-height:1;
+  }
+  #priceActionSection .chartTools #zoomReset{
+    font-size:10px;
+  }
+  #priceActionSection .chartTools .chartFocusBtn{
+    display:none!important;
+  }
+}
+@media(max-width:420px){
+  #priceActionSection .chartTimeframes{gap:4px}
+  #priceActionSection .chartTools{grid-template-columns:repeat(3,minmax(0,1fr))!important}
+  #priceActionSection .chartTools button{min-height:36px}
 }
 </style></style><style id="phase8-style">
 #accountBtn{font-weight:800}
