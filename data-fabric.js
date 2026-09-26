@@ -108,17 +108,19 @@ function summarizeSources(rows){
   const low=prices[0],high=prices[prices.length-1];
   const dispersion=median>0?((high-low)/median)*10000:null;
   const sourceCount=valid.length;
+  const independentSourceCount=valid.filter(x=>x.role==="spot-price-cross-check"||x.role==="derivatives-mark-cross-check").length;
   let consensus="SINGLE_SOURCE";
-  let quality=sourceCount===1?72:88;
-  if(sourceCount>=2){
+  let quality=independentSourceCount===0?45:independentSourceCount===1?72:88;
+  if(independentSourceCount>=2){
     if(dispersion!==null&&dispersion<=15){consensus="CONFIRMED";quality=98}
-    else if(dispersion!==null&&dispersion<=40){consensus="ALIGNED";quality=92}
-    else if(dispersion!==null&&dispersion<=80){consensus="WATCH";quality=82}
-    else {consensus="CONFLICT";quality=55}
+    else if(dispersion!==null&&dispersion<=40){consensus="ALIGNED";quality=93}
+    else if(dispersion!==null&&dispersion<=80){consensus="WATCH";quality=78}
+    else {consensus="CONFLICT";quality=50}
   }
   return {
     sources:rows.map(x=>Object.assign({},x)),
     sourceCount,
+    independentSourceCount,
     consensus,
     consensusQualityPct:clamp(quality,0,100),
     priceDispersionBps:dispersion,
