@@ -712,8 +712,8 @@ body.admin-mode .nav button.adminNav,body.admin-mode .mobileMenu button.adminNav
     <div class="inputs">
       <input id="acMaintenanceMessage" placeholder="Maintenance message">
       <select id="acMode"><option value="normal">Normal</option><option value="read_only">Read-only</option><option value="maintenance">Maintenance</option></select>
-      <input id="acSessionHours" type="number" min="1" max="24" placeholder="Owner session hours">
-      <input id="acUserSessionDays" type="number" min="1" max="90" placeholder="User session days">
+      <div class="mini"><div class="mini k">OWNER SESSION</div><div class="mini v">Configured securely in Render · default 8 hours</div></div>
+      <div class="mini"><div class="mini k">USER SESSION</div><div class="mini v">Configured in Render · default 30 days</div></div>
     </div>
   </div>
 
@@ -1690,7 +1690,7 @@ async function adminApplyEmergency(){
   try{await apiPost("/api/admin/emergency",payload);await loadAdminCenter()}catch(e){alert(e.message)}
 }
 async function adminSaveConfig(){
-  try{var current=state.adminOverview?.config||{};var payload=Object.assign({},current,{maintenanceMessage:$("acMaintenanceMessage").value,mode:$("acMode").value,updatedAt:Date.now()});await apiPost("/api/admin/config",payload);localStorage.setItem("mp-admin-session-hours",String($("acSessionHours").value||8));localStorage.setItem("mp-user-session-days",String($("acUserSessionDays").value||30));await loadAdminCenter()}catch(e){alert(e.message)}
+  try{var current=state.adminOverview?.config||{};var payload=Object.assign({},current,{maintenanceMessage:$("acMaintenanceMessage").value,mode:$("acMode").value,updatedAt:Date.now()});await apiPost("/api/admin/config",payload);await loadAdminCenter()}catch(e){alert(e.message)}
 }
 async function adminPublishBroadcast(){
   try{await apiPost("/api/admin/broadcasts",{title:$("acBroadcastTitle").value,body:$("acBroadcastBody").value,audience:$("acBroadcastAudience").value,expiresAt:$("acBroadcastExpiry").value?new Date($("acBroadcastExpiry").value).toISOString():null});$("acBroadcastTitle").value="";$("acBroadcastBody").value="";await loadAdminCenter()}catch(e){alert(e.message)}
