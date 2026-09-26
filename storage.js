@@ -226,7 +226,7 @@ async function init(){
         payload JSONB NOT NULL DEFAULT '{}'::jsonb,
         created_by TEXT NOT NULL,
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-      `);
+      )`);
       await pool.query(`CREATE TABLE IF NOT EXISTS marketpulse_account_memory (
         user_id UUID PRIMARY KEY REFERENCES marketpulse_users(id) ON DELETE CASCADE,
         payload JSONB NOT NULL DEFAULT '{}'::jsonb,
