@@ -478,7 +478,7 @@ function renderEdge(data){
   state.edge=data||null;if(!data)return;
   var sig=data.signal||null,q=data.quality||{},ev=data.evidence||{},paper=data.paper||{},health=data.health||{},risk=data.risk||{};
   $("edgeSignal").textContent=sig?(sig.side+" · "+sig.lifecycle):"NO ACTIVE SIGNAL";
-  $("edgeSignalMeta").textContent=sig?(sig.symbol+" · "+sig.type+" · "+fmt(sig.score)+"/100"):"The current market is waiting for a tracked directional setup.";
+  $("edgeSignalMeta").textContent=sig?(sig.symbol+" · "+sig.type+" · "+(sig.profile||"NO PROFILE")+" · "+fmt(sig.score)+"/100"):"The current market is waiting for a tracked directional setup.";
   $("edgeEvidenceN").textContent=fmt(ev.sample||0);
   $("edgeEvidenceMeta").textContent=ev.available?(fmt(ev.resolved||0)+" resolved · "+fmt(ev.targets||0)+" targets · "+fmt(ev.stops||0)+" stops"):"No matched DNA yet";
   $("edgeNetR").textContent=(Number(paper.netR)||0).toFixed(2)+"R";
