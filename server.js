@@ -117,6 +117,77 @@ function applySignalStability(decision,symbol,interval){
     deploymentGate:{...(d.deploymentGate||{}),state:"PAPER_ONLY"},
     signalStability:{state:"RELEASED",side:row.side,confirmations:row.confirmations,required:SIGNAL_CONFIRMATIONS_REQUIRED,misses:SIGNAL_RELEASE_MISSES}};
 }
+function sanitizeFinalDecision(decision){
+  const d=decision||{};
+  const eligible=Boolean(d.liveSignalEligible===true&&d.state==="READY"&&["LONG","SHORT"].includes(String(d.action||"").toUpperCase()));
+  if(eligible)return d;
+
+  const candidate={
+    action:d.rawAction||d.analysis?.side||d.market?.side||"WAIT",
+    state:d.state||"NO_TRADE",
+    market:d.market||null,
+    levels:d.levels||null,
+    thesis:d.evidence?.thesis||null,
+    type:d.market?.type||null,
+    strategyFamily:d.analysis?.strategyFamily||d.strategyFamily||"NONE"
+  };
+
+  const neutral={
+    ...d,
+    candidateEvidence:candidate,
+    action:"WAIT",
+    state:"NO_TRADE",
+    liveSignalEligible:false,
+    market:{
+      ...(d.market||{}),
+      side:"WAIT",
+      status:"WAITING",
+      type:"NO TRADE",
+      bias:"Neutral",
+      directionalLean:"NEUTRAL",
+      probabilityLabel:"LOW CONFLUENCE"
+    },
+    levels:{
+      ...(d.levels||{}),
+      side:"WAIT",
+      entryLow:null,
+      entryHigh:null,
+      entry:null,
+      stop:null,
+      tp1:null,
+      tp2:null,
+      rr:null,
+      riskDistance:null,
+      target1Distance:null
+    },
+    evidence:{
+      ...(d.evidence||{}),
+      thesis:[
+        d.stale
+          ?"Live decision data is stale; directional output is suppressed until a fresh decision is available."
+          :"No trade — the directional candidate has not cleared the final confirmation, validation, data, and risk gates."
+      ],
+      primaryScenario:"Wait for a confirmed directional setup.",
+      invalidationScenario:"A new closed-candle setup plus all final safety gates must clear before a direction is shown.",
+      contributors:[],
+      strictGate:{
+        ...(d.evidence?.strictGate||{}),
+        eligible:false
+      }
+    },
+    strategyFamily:"NONE",
+    deploymentGate:{
+      ...(d.deploymentGate||{}),
+      state:String(d.deploymentGate?.state||"PAPER_ONLY").toUpperCase()==="BLOCKED"?"BLOCKED":"PAPER_ONLY"
+    },
+    operational:{
+      ...(d.operational||{}),
+      liveUse:"PAPER_ONLY"
+    }
+  };
+
+  return neutral;
+}
 const PHASE1113_CACHE=new Map(); const PHASE1113_JOBS=new Set(); const PHASE1113_TTL=10*60*1000;
 const OPENAI_API_KEY=process.env.OPENAI_API_KEY||"";
 const OPENAI_MODEL=process.env.OPENAI_MODEL||"gpt-5.6-luna";
@@ -357,8 +428,9 @@ async function buildDecisionSnapshot(symbol,interval,query){
     });
     const gatedDecision=phase1113.applyDeploymentGate(decision,validation1113,{basePolicy:{minScore:config.minSignalScore,minRR:config.minRR}});
     const stableDecision=applySignalStability(gatedDecision,symbol,interval);
+    const finalDecision=sanitizeFinalDecision(stableDecision);
     const payload={
-      ok:true,...stableDecision,analysis,derivatives:flow,consensus,
+      ok:true,...finalDecision,analysis,derivatives:flow,consensus,
       learning:learned?await learning.status().catch(()=>null):null,
       backtest:analytics?.backtest||null,validation:analytics?.validation||null,setupStats:analytics?.setupStats||null,
       phase11_13:validation1113,phase11:PHASE11_VERSION,phase12:PHASE12_VERSION,phase13:PHASE13_VERSION,
