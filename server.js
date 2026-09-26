@@ -167,22 +167,46 @@ async function getKraken(symbol,interval,timeoutMs=DATA_TIMEOUT_MS){
   const key=Object.keys(body.result||{}).find(k=>k!=='last');if(!key)throw new Error('Kraken returned no OHLC data');
   return (body.result[key]||[]).slice(-Math.min(KLINE_LIMIT,720)).map(x=>({t:+x[0]*1000,o:+x[1],h:+x[2],l:+x[3],c:+x[4],v:+x[6],source:'kraken'}));
 }
+async function getBybitKlines(symbol,interval,timeoutMs=2200){
+  const bybitIntervalMap={"15m":"15","1h":"60","4h":"240","1d":"D"};
+  const iv=bybitIntervalMap[interval]||"60";
+  const hosts=["https://api.bybit.com","https://api.bytick.com"];
+  let lastErr=null;
+  for(const host of hosts){
+    try{
+      const u=new URL(host+"/v5/market/kline");
+      u.searchParams.set("category","linear");
+      u.searchParams.set("symbol",symbol);
+      u.searchParams.set("interval",iv);
+      u.searchParams.set("limit",String(Math.min(KLINE_LIMIT,1000)));
+      const j=await fetchJson(u.toString(),timeoutMs);
+      if(Number(j?.retCode)!==0)throw Error(j?.retMsg||("Bybit error "+j?.retCode));
+      const rows=Array.isArray(j?.result?.list)?j.result.list.slice().reverse():[];
+      const mapped=rows.map(x=>({t:+x[0],o:+x[1],h:+x[2],l:+x[3],c:+x[4],v:+x[5],source:"bybit"})).filter(x=>[x.t,x.o,x.h,x.l,x.c,x.v].every(Number.isFinite));
+      if(mapped.length<220)throw Error("Bybit returned insufficient candles");
+      return mapped;
+    }catch(e){lastErr=e}
+  }
+  throw lastErr||new Error("Bybit kline request failed");
+}
 async function getFastKlines(symbol,interval){
   const key="FAST|"+symbol+"|"+interval,hit=CACHE.get(key);
   if(hit&&Date.now()-hit.ts<8000)return hit.rows;
+  const providers=[
+    ["bybit",()=>getBybitKlines(symbol,interval,2200)],
+    ["kraken",()=>getKraken(symbol,interval,2600)],
+    ["binance",()=>getBinance(symbol,interval,1900)]
+  ];
   try{
-    const rows=await getKraken(symbol,interval,2800);
+    const rows=await Promise.any(providers.map(([,fn])=>Promise.resolve().then(fn).then(rows=>{
+      if(!Array.isArray(rows)||rows.length<220)throw Error("Provider returned insufficient candles");
+      return rows;
+    })));
     CACHE.set(key,{ts:Date.now(),rows});
     return rows;
   }catch{
-    try{
-      const rows=await getBinance(symbol,interval,1800);
-      CACHE.set(key,{ts:Date.now(),rows});
-      return rows;
-    }catch{
-      if(hit?.rows)return hit.rows;
-      throw Error("No fast market data source available");
-    }
+    if(hit?.rows)return hit.rows;
+    throw Error("No fast market data source available");
   }
 }
 async function klines(symbol,interval){
