@@ -1,5 +1,6 @@
 const assert=require("assert");
 const {analyze,backtest,backtestBySetup,walkForwardBacktest}=require("../market-engine");
+const phase4=require("../phase4");
 
 function candles(n=420){
   const out=[];let p=100;
@@ -29,7 +30,16 @@ const w=walkForwardBacktest(c);
 assert(w.train&&w.validation,"walk forward");
 const s=backtestBySetup(c);
 assert(s&&typeof s==="object","setup stats");
-console.log("MarketPulse Phase 2 smoke checks passed:",{
+const p4=phase4.createState();
+const rq=phase4.riskCheck({entry:100,stop:95,target:110,rr:2},p4.config,0);
+assert(rq.allowed,"phase4 risk gate");
+assert(rq.rr>=1.5,"phase4 rr");
+const q4=phase4.signalQuality({score:80,status:"READY",components:[{name:"Momentum",value:11}]},{sample:20,matchScore:82});
+assert(q4.components.length===1&&q4.marketScore===80,"phase4 quality");
+const p4s=phase4.summarizeTrades([{resultR:1,pnl:100},{resultR:-1,pnl:-50}]);
+assert(p4s.trades===2&&p4s.netR===0,"phase4 paper summary");
+
+console.log("MarketPulse Phase 4 smoke checks passed:",{
   price:a.price,score:a.score,status:a.status,backtestTrades:b.trades,
   validationTrades:w.validation.trades,setupBuckets:Object.keys(s).length
 });
