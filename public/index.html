@@ -112,6 +112,24 @@ button,input,select,textarea{font:inherit}.wrap{width:min(1440px,calc(100% - 26p
 .gateCard.gate-warning .gateExplain{color:#fde68a;background:rgba(120,53,15,.20);border-color:rgba(251,191,36,.20)}
 .gateReason{margin-top:5px;font-size:10px;color:#a8abb5}
 .gateHint{font-size:10px;color:#8a8d98;margin-top:5px}
+</style><style id="beginner-guard-and-tradingview-style">
+.gateChecks{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px;margin-top:8px}
+.gateCheck{padding:7px 8px;border:1px solid rgba(255,255,255,.07);border-radius:9px;background:#101014;font-size:9px;min-height:42px}
+.gateCheck b{display:block;font-size:8px;color:#8d91a0;text-transform:uppercase;letter-spacing:.04em}
+.gateCheck span{display:block;margin-top:4px;font-weight:850;color:#cfd3dc}
+.gateCheck.ok span{color:#9BE7C4}.gateCheck.bad span{color:#FF9B9B}.gateCheck.warn span{color:#FFCF99}
+.gatePrimary{display:flex;align-items:center;gap:8px;margin-top:8px}.gatePrimary .gateIcon{width:9px;height:9px;border-radius:50%;background:#7b7e88}
+.gateCard.gate-blocked .gatePrimary .gateIcon{background:#f87171;box-shadow:0 0 12px rgba(248,113,113,.65)}
+.gateCard.gate-passed .gatePrimary .gateIcon{background:#4ade80;box-shadow:0 0 12px rgba(74,222,128,.55)}
+.gateCard.gate-warning .gatePrimary .gateIcon{background:#fbbf24;box-shadow:0 0 12px rgba(251,191,36,.45)}
+.chartWrap{cursor:crosshair}
+.chartCanvas{will-change:transform}
+.executionMetric.state-ok{border-color:rgba(74,222,128,.34);background:rgba(20,83,45,.14)}
+.executionMetric.state-blocked{border-color:rgba(248,113,113,.38);background:rgba(127,29,29,.14)}
+.executionMetric.state-warn{border-color:rgba(251,191,36,.30);background:rgba(120,53,15,.12)}
+.executionActionPrimary{min-width:165px}
+@media(max-width:900px){.gateChecks{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:560px){.gateChecks{grid-template-columns:1fr}}
 </style><style id="execution-beginner-style">
 .executionBeginner{grid-column:1/-1;border-color:rgba(103,232,255,.16);background:linear-gradient(180deg,rgba(103,232,255,.045),rgba(14,14,17,.96))}
 .executionSteps{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;margin-top:9px}
@@ -412,31 +430,35 @@ body.admin-mode .nav button.adminNav,body.admin-mode .mobileMenu button.adminNav
       <div class="card gateCard" id="pfgCard">
         <div class="sectionHead"><div><div class="title">Prop Firm Guard</div><div class="sub">Green = trade checks passed · Amber = caution · Red = blocked. Set these to your evaluation rules.</div></div><span class="chip" id="pfgGateChip">WAITING</span></div>
         <div class="inputs">
-          <label class="small">Account<input id="pfgEvalAccount" type="number" value="5000" min="1"></label>
-          <label class="small">Equity<input id="pfgEquity" type="number" value="5000" min="1"></label>
-          <label class="small">Daily loss %<input id="pfgDailyLoss" type="number" value="3" step=".1"></label>
-          <label class="small">Max drawdown %<input id="pfgMaxDD" type="number" value="6" step=".1"></label>
-          <label class="small">Risk / trade %<input id="pfgRiskTrade" type="number" value=".5" step=".05"></label>
-          <label class="small">Min score<input id="pfgScore" type="number" value="72" min="0" max="100"></label>
-          <label class="small">Min R:R<input id="pfgRR" type="number" value="1.5" step=".1"></label>
+          <label class="small">Evaluation size<input id="pfgEvalAccount" type="number" value="5000" min="1"></label>
+          <label class="small">Current equity<input id="pfgEquity" type="number" value="5000" min="1"></label>
+          <label class="small">Max loss today %<input id="pfgDailyLoss" type="number" value="3" step=".1"></label>
+          <label class="small">Max account loss %<input id="pfgMaxDD" type="number" value="6" step=".1"></label>
+          <label class="small">Risk per trade %<input id="pfgRiskTrade" type="number" value=".5" step=".05"></label>
+          <label class="small">Minimum signal strength<input id="pfgScore" type="number" value="72" min="0" max="100"></label>
+          <label class="small">Minimum reward / risk<input id="pfgRR" type="number" value="1.5" step=".1"></label>
         </div>
-        <button id="pfgRefresh" class="btn primary" style="margin-top:8px">Evaluate current setup</button>
-        <div class="result" id="pfgResult" style="margin-top:8px">Waiting for market data.</div><div class="gateExplain" id="pfgExplain">The guard checks signal quality, market confirmation and account safety before it allows a setup.</div>
+        <button id="pfgRefresh" class="btn primary" style="margin-top:8px">Check this setup</button>
+        <div class="gatePrimary"><span class="gateIcon"></span><b>Decision:</b><span id="pfgDecisionText">Waiting for data</span></div>
+        <div class="result" id="pfgResult" style="margin-top:8px">Waiting for market data.</div>
+        <div class="gateChecks" id="pfgChecks"></div><div class="gateExplain" id="pfgExplain">The guard checks signal quality, market confirmation and account safety before it allows a setup.</div>
         <div class="watchNote" id="pfgReasons" style="margin-top:6px">No gate result yet.</div><div class="gateHint">Tip: you do not need to understand every technical metric. A green result means the safety rules are satisfied; red means do not treat the setup as approved.</div>
       </div>
       <div class="card gateCard" id="ecgCard">
         <div class="sectionHead"><div><div class="title">Event Contract Guard</div><div class="sub">Beginner mode: enter exactly what the venue shows. Green = all checks pass · Red = blocked.</div></div><span class="chip" id="ecgGateChip">WAITING</span></div>
         <div class="inputs">
-          <label class="small">Venue<select id="ecgVenue"><option>GENERIC</option><option>TOOBIT</option><option>XT</option></select></label>
-          <label class="small">Direction<select id="ecgSide"><option>UP</option><option>DOWN</option></select></label>
-          <label class="small">Premium / stake<input id="ecgPremium" type="number" value="10" min="0" step=".01"></label>
+          <label class="small">Platform<select id="ecgVenue"><option>GENERIC</option><option>TOOBIT</option><option>XT</option></select></label>
+          <label class="small">Contract direction<select id="ecgSide"><option>UP</option><option>DOWN</option></select></label>
+          <label class="small">Cost if wrong<input id="ecgPremium" type="number" value="10" min="0" step=".01"></label>
           <label class="small">Payout if correct<input id="ecgPayout" type="number" value="20" min="0" step=".01"></label>
-          <label class="small">Strike price<input id="ecgStrike" type="number" value="" min="0" step=".01" placeholder="Optional"></label>
-          <label class="small">Expiry (minutes)<input id="ecgExpiryMin" type="number" value="5" min="0.5" step=".5"></label>
-          <label class="small">Fee<input id="ecgFee" type="number" value="0" min="0" step=".01"></label>
+          <label class="small">Strike price<input title="The price level the contract settles against." id="ecgStrike" type="number" value="" min="0" step=".01" placeholder="Optional"></label>
+          <label class="small">Minutes until expiry<input id="ecgExpiryMin" type="number" value="5" min="0.5" step=".5"></label>
+          <label class="small">Fee / cost<input id="ecgFee" type="number" value="0" min="0" step=".01"></label>
         </div>
-        <button id="ecgRefresh" class="btn primary" style="margin-top:8px">Evaluate event contract</button>
-        <div class="result" id="ecgResult" style="margin-top:8px">Enter the contract terms shown by the venue.</div><div class="gateExplain" id="ecgExplain">This does not predict the market by itself. It checks whether the contract terms and MarketPulse evidence make the trade permissible.</div>
+        <button id="ecgRefresh" class="btn primary" style="margin-top:8px">Check this contract</button>
+        <div class="gatePrimary"><span class="gateIcon"></span><b>Decision:</b><span id="ecgDecisionText">Waiting for data</span></div>
+        <div class="result" id="ecgResult" style="margin-top:8px">Enter the contract terms shown by the venue.</div>
+        <div class="gateChecks" id="ecgChecks"></div><div class="gateExplain" id="ecgExplain">This does not predict the market by itself. It checks whether the contract terms and MarketPulse evidence make the trade permissible.</div>
         <div class="watchNote" id="ecgReasons" style="margin-top:6px">The gate never places an order.</div><div class="gateHint">Beginner rule: if this box is red, skip the contract rather than trying to force a trade.</div>
       </div>
     </div>
