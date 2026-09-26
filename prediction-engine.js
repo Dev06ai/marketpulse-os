@@ -9,7 +9,7 @@ function buildFeatures(a,ctx={}){
   const oi=finite(d.oiChangePct,0);
   const funding=finite(d.fundingRate,0)*1000;
   const liqLong=finite(d.longLiquidations,0),liqShort=finite(d.shortLiquidations,0),liqTotal=liqLong+liqShort;
-  const liq=(liqLong-liqShort)/(liqTotal||1);
+  const liqImbalance=(liqLong-liqShort)/(liqTotal||1);
   const flowPrice=finite(d.flowPriceChangePct,finite(d.tradePriceChangePct,0));
   return {
     base_score:finite(a?.score)/100,
@@ -26,12 +26,16 @@ function buildFeatures(a,ctx={}){
     cvd_ratio:clamp(cvd,-1,1),
     oi_change_pct:clamp(oi/5,-2,2),
     funding:clamp(funding,-2,2),
-    liq_imbalance:clamp(liq,-1,1),
+    liq_imbalance:clamp(liqImbalance,-1,1),
     book_imbalance:clamp(finite(o.imbalance,0),-1,1),
     book_spread_bps:clamp(finite(o.spreadBps,0)/10,0,3),
     micro_delta_bps:clamp(finite(o.microDeltaBps,0)/10,-3,3),
     depth_imbalance:clamp(finite(o.depthImbalance,0),-1,1),
-    flow_price_delta:clamp(flowPrice/2,-2,2)
+    flow_price_delta:clamp(flowPrice/2,-2,2),
+    liquidity_above_proximity:clamp(finite(liq.aboveDist,0),-10,10)/10,
+    liquidity_below_proximity:clamp(finite(liq.belowDist,0),-10,10)/10,
+    sweep_bias:clamp(finite(liq.sweepBias,0),-1,1),
+    break_strength:clamp(finite(liq.breakStrength,.5)*2-1,-1,1)
   };
 }
 
