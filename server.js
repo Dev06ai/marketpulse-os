@@ -17,7 +17,7 @@ const labels={BTCUSDT:'BTC',ETHUSDT:'ETH',SOLUSDT:'SOL',BNBUSDT:'BNB',XRPUSDT:'X
 const KRAKEN_PAIRS={BTCUSDT:'XBTUSD',ETHUSDT:'ETHUSD',SOLUSDT:'SOLUSD',BNBUSDT:'BNBUSD',XRPUSDT:'XRPUSD',DOGEUSDT:'DOGEUSD',ADAUSDT:'ADAUSD'};
 const CACHE=new Map(); const TTL=45000;
 const SCAN_CACHE=new Map(); const SCAN_TTL=20000;
-const PHASE2_VERSION=2; const PHASE3_VERSION=3; const PHASE4_VERSION=4; const PHASE5_VERSION=5; const PHASE6_VERSION=6; const PHASE7_VERSION=7;
+const PHASE2_VERSION=2; const PHASE3_VERSION=3; const PHASE4_VERSION=4; const PHASE5_VERSION=5; const PHASE6_VERSION=6; const PHASE7_VERSION=7; const PHASE7_DATA_VERSION=2;
 const OPENAI_API_KEY=process.env.OPENAI_API_KEY||"";
 const OPENAI_MODEL=process.env.OPENAI_MODEL||"gpt-5.6-luna";
 const AI_LIMIT_MS=8000; const AI_CALLS=new Map();
@@ -555,10 +555,11 @@ async function historicalBinanceDerivatives(symbol,interval){
   const endpoints={
     oi:"/futures/data/openInterestHist?"+qs+"&contractType=PERPETUAL",
     taker:"/futures/data/takerBuySellVol?"+qs+"&contractType=PERPETUAL",
-    accounts:"/futures/data/topLongShortAccountRatio?"+qs+"&contractType=PERPETUAL"
+    accounts:"/futures/data/topLongShortAccountRatio?"+qs+"&contractType=PERPETUAL",
+    funding:"/fapi/v1/fundingRate?symbol="+encodeURIComponent(symbol)+"&limit=500"
   };
   const safe=async path=>{try{return await fetchJson(base+path,6000)}catch{return[]}};
-  const [oi,taker,accounts]=await Promise.all([safe(endpoints.oi),safe(endpoints.taker),safe(endpoints.accounts)]);
+  const [oi,taker,accounts,funding]=await Promise.all([safe(endpoints.oi),safe(endpoints.taker),safe(endpoints.accounts),safe(endpoints.funding)]);
   const rows=new Map();
   const put=(ts,patch)=>{const k=Number(ts);if(!Number.isFinite(k))return;const x=rows.get(k)||{t:k};Object.assign(x,patch);rows.set(k,x)};
   (Array.isArray(oi)?oi:[]).forEach((x,i,a)=>{
@@ -567,11 +568,20 @@ async function historicalBinanceDerivatives(symbol,interval){
   });
   (Array.isArray(taker)?taker:[]).forEach(x=>{
     const buy=Number(x.takerBuyVolValue??x.takerBuyVol),sell=Number(x.takerSellVolValue??x.takerSellVol);
-    put(x.timestamp,{takerImbalance:Number.isFinite(buy)&&Number.isFinite(sell)&&buy+sell?(buy-sell)/(buy+sell):null});
+    const total=buy+sell;
+    put(x.timestamp,{
+      takerBuyVol:buy,takerSellVol:sell,
+      takerImbalance:Number.isFinite(buy)&&Number.isFinite(sell)&&total>0?(buy-sell)/total:null,
+      cvdDelta:Number.isFinite(buy)&&Number.isFinite(sell)?buy-sell:null,
+      cvdRatio:Number.isFinite(buy)&&Number.isFinite(sell)&&total>0?(buy-sell)/total:null
+    });
   });
   (Array.isArray(accounts)?accounts:[]).forEach(x=>{
     const longPct=Number(x.longAccount)*100,shortPct=Number(x.shortAccount)*100;
     put(x.timestamp,{longPercent:Number.isFinite(longPct)?longPct:null,shortPercent:Number.isFinite(shortPct)?shortPct:null,longShortRatio:Number(x.longShortRatio)});
+  });
+  (Array.isArray(funding)?funding:[]).forEach(x=>{
+    put(x.fundingTime,{fundingRate:Number(x.fundingRate)});
   });
   const out=Array.from(rows.values()).sort((a,b)=>a.t-b.t);
   HIST_DERIV_CACHE.set(key,{ts:Date.now(),rows:out});
@@ -598,7 +608,8 @@ async function buildReplayDataset(symbol,interval,{points=60,bars=420}={}){
       oi:rawD.oi??null,oiChangePct:rawD.oiChangePct??null,
       takerImbalance:rawD.takerImbalance??null,
       longPercent:rawD.longPercent??null,shortPercent:rawD.shortPercent??null,longShortRatio:rawD.longShortRatio??null,
-      cvdDelta:null,cvdRatio:null,cvdState:"HISTORICAL TAKER FLOW",positioning:"HISTORICAL OI",
+      cvdDelta:rawD.cvdDelta??null,cvdRatio:rawD.cvdRatio??null,cvdState:Number.isFinite(rawD.cvdDelta)?(rawD.cvdDelta>0?"BUYERS PRESSURE":rawD.cvdDelta<0?"SELLERS PRESSURE":"BALANCED"):"UNAVAILABLE",positioning:"HISTORICAL OI",
+      fundingRate:rawD.fundingRate??null,
       liquidationBias:"UNKNOWN",liquidationTotal:null,orderBook:null,errors:[]
     }:null;
     const a=analyze(window,{interval,deriv});
