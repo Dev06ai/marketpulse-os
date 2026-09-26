@@ -2020,6 +2020,19 @@ setInterval(function(){if(document.visibilityState==="visible")loadPhase7()},600
     </div>
     <div id="accountUser" class="hidden">
       <div class="card" style="margin-top:12px"><div class="label">SIGNED IN</div><div class="value" id="accountEmailText" style="font-size:16px">—</div><div class="sub" style="margin-top:5px">Your account-backed workspace is active.</div></div>
+      <div id="supportUserPanel" class="card" style="margin-top:10px">
+        <div class="label">SUPPORT &amp; FEEDBACK</div>
+        <div class="sub">Report a bug, ask a question or send a suggestion.</div>
+        <div class="inputs one" style="margin-top:8px">
+          <select id="supportCategory"><option value="question">Question</option><option value="bug">Bug report</option><option value="suggestion">Suggestion</option><option value="report">Report</option></select>
+          <input id="supportSubject" placeholder="Subject">
+          <textarea id="supportMessage" placeholder="Describe what you need help with…"></textarea>
+        </div>
+        <button id="supportSend" class="btn primary" style="margin-top:8px">Send to MarketPulse</button>
+        <div id="supportUserStatus" class="small" style="margin-top:7px"></div>
+        <div class="small" style="margin-top:9px">Your recent tickets</div>
+        <div id="supportUserTickets" class="adminList"></div>
+      </div>
       <button id="accountLogout" class="btn" style="margin-top:8px">Sign out</button>
     </div>
   </div>
