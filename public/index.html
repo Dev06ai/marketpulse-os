@@ -1023,6 +1023,7 @@ function populateSymbols(){
   $("symbol").innerHTML=html;
   $("symbol").value=state.symbol;
 }
+populateSymbols();
 
 const CHART_PRESETS={aurora:{bg:"#06131a",grid:"rgba(170,205,220,.10)",axis:"#a9bbc8",bull:"#9BE7C4",bear:"#FFB38A",ema:"#E5D0FF"},lavender:{bg:"#0d1018",grid:"rgba(205,196,235,.10)",axis:"#b8b1c7",bull:"#E5D0FF",bear:"#FFB8D8",ema:"#9CCBFF"},forest:{bg:"#07120f",grid:"rgba(160,210,190,.10)",axis:"#9fb8ad",bull:"#A8E6CF",bear:"#F8C6A0",ema:"#D8C3FF"},classic:{bg:"#080808",grid:"rgba(220,220,220,.10)",axis:"#c9c9c9",bull:"#22c55e",bear:"#ef4444",ema:"#f3f4f6"},mono:{bg:"#090909",grid:"rgba(230,235,245,.10)",axis:"#d8dee9",bull:"#f1f5f9",bear:"#64748b",ema:"#94a3b8"}};
 var chartSettings=JSON.parse(localStorage.getItem("mp-chart")||"null")||{preset:"aurora",bull:"#9BE7C4",bear:"#FFB38A",showVolume:true,showEma:true};
@@ -1845,6 +1846,26 @@ function renderMarketNoFlow(){
   $("oi").textContent=der.oi!=null?fmt(der.oi):"UNAVAILABLE";$("oiS").textContent=der.oiChangePct!=null?pct(der.oiChangePct)+" recent":"Current snapshot";$("cvd").textContent=der.cvdState||"UNAVAILABLE";$("cvdS").textContent=der.cvdDelta!=null?"Δ "+fmt(der.cvdDelta):"No CVD feed";$("pos").textContent=der.positioning||"UNAVAILABLE";$("fund").textContent=der.fundingRate!=null?"Funding "+(Number(der.fundingRate)*100).toFixed(4)+"%":"Funding unavailable";$("liq").textContent=der.liquidationBias&&der.liquidationBias!=="UNKNOWN"?der.liquidationBias:"UNAVAILABLE";$("liqS").textContent=der.liquidationTotal!=null?"Total "+fmt(der.liquidationTotal):"No liquidation feed";$("flowSource").textContent=der.provider?(String(der.provider).slice(0,30)+(der.livePointCount?" · LIVE":"")):(der.available?"LIVE":"UNAVAILABLE");
 }
 
+async function loadFastTicker(){
+  var symbol=state.symbol;
+  try{
+    var d=await api("/api/fast-ticker?symbol="+encodeURIComponent(symbol),3500);
+    if(symbol!==state.symbol)return;
+    if(Number.isFinite(Number(d.price))){
+      $("mPrice").textContent=fmt(d.price);
+      if(!state.market){
+        $("mChange").textContent="LIVE · "+String(d.source||"market feed");
+        $("mRegime").textContent="CONNECTING";
+        $("mCall").textContent="WAIT";
+        $("mBias").textContent="Waiting for full market context";
+        $("mScore").textContent="—";
+        $("mMom").textContent="—";
+        $("mStructure").textContent="—";
+      }
+      $("dataState").textContent="Live";
+    }
+  }catch{}
+}
 async function loadCoreEnrichment(){
   if(!state.market)return;
   try{
@@ -1902,21 +1923,22 @@ function queueSecondaryBoot(){
 async function loadCore(){
   if(state.busy)return;
   if(state.bootRetryTimer){clearTimeout(state.bootRetryTimer);state.bootRetryTimer=null}
-  state.busy=true;setStatus("Loading core market intelligence…");$("dataState").textContent="Connecting";$("symbol").value=state.symbol;
+  state.busy=true;setStatus("Loading BTC market data…");$("dataState").textContent="Connecting";$("symbol").value=state.symbol;
+  const requestedSymbol=state.symbol,requestedInterval=state.interval;
   try{
-    var d=await api("/api/core?symbol="+encodeURIComponent(state.symbol)+"&interval="+encodeURIComponent(state.interval),9000);
-    state.market=d;state.bootRetry=0;setStatus("Core market intelligence connected","ok");$("dataState").textContent="Live";renderMarket();
-    deferTask(loadCoreEnrichment,120);
-    deferTask(loadDataFabric,700);
-    deferTask(loadPropFirmGuard,900);
+    var d=await api("/api/core?symbol="+encodeURIComponent(requestedSymbol)+"&interval="+encodeURIComponent(requestedInterval),5500);
+    if(requestedSymbol!==state.symbol||requestedInterval!==state.interval)return;
+    state.market=d;state.bootRetry=0;setStatus("Live market data connected","ok");$("dataState").textContent="Live";renderMarket();
+    deferTask(loadCoreEnrichment,150);
+    deferTask(loadDataFabric,800);
+    deferTask(loadPropFirmGuard,1000);
     deferTask(loadCoreAnalytics,1800);
     if(!state.secondaryStarted)queueSecondaryBoot();
-    else if(state.activeView==="overview"){deferTask(loadScan,80);deferTask(loadCycle,140);deferTask(loadCoreEnrichment,120);deferTask(loadCoreAnalytics,500)}
+    else if(state.activeView==="overview"){deferTask(loadScan,120);deferTask(loadCycle,180);deferTask(loadCoreEnrichment,250);deferTask(loadCoreAnalytics,600)}
   }catch(e){
     state.bootRetry=Math.min((state.bootRetry||0)+1,5);
-    setStatus("Core market connection failed. Retrying shortly…","warn");$("dataState").textContent="Retry";
-    $("thesis").textContent="The interface is ready. Waiting for the live market source to respond…";
-    var delay=Math.min(8000,Math.max(800,Math.pow(2,state.bootRetry-1)*900));
+    setStatus("Market source is waking up — price feed stays active and will retry automatically…","warn");$("dataState").textContent="Retrying";
+    var delay=Math.min(6500,Math.max(700,Math.pow(2,state.bootRetry-1)*700));
     state.bootRetryTimer=setTimeout(function(){state.bootRetryTimer=null;loadCore()},delay);
   }finally{state.busy=false}
 }
@@ -1945,7 +1967,8 @@ $("refresh").addEventListener("click",loadCore);
 $("dcfRefresh").addEventListener("click",loadDataFabric);
 $("pfgRefresh").addEventListener("click",loadPropFirmGuard);
 $("ecgRefresh").addEventListener("click",loadEventGuard);
-$("symbol").addEventListener("change",function(){state.symbol=this.value;loadCore()});
+$("symbol").addEventListener("change",function(){state.symbol=this.value;loadFastTicker();loadCore()});
+$("interval").addEventListener("change",function(){state.interval=this.value;loadCore()});
 function deviceId(){
   var k="mp-device-id",id=localStorage.getItem(k);
   var valid=/^[a-f0-9-]{16,128}$/i.test(String(id||""));
@@ -2340,10 +2363,11 @@ $("chartLine").addEventListener("click",function(){state.chartType="line";$("cha
 $("chartFit").addEventListener("click",function(){state.chartYZoom=1;state.chartYShift=0;queueChartDraw()});
 
 
-populateSymbols();$("interval").value=state.interval;renderJournal();renderBrainInsights();renderAlerts();calc();
+$("interval").value=state.interval;renderJournal();renderBrainInsights();renderAlerts();calc();
 setStatus("MarketPulse ready. Connecting to live market data…");
+loadFastTicker();
 loadCore();
-setInterval(function(){if(document.visibilityState==="visible")loadCore()},45000);
+setInterval(function(){if(document.visibilityState==="visible"){loadFastTicker();if(!state.market&&!state.busy)loadCore()}},8000);
 setInterval(function(){if(document.visibilityState!=="visible")return; if(state.activeView==="execution")loadExecution(); if(state.activeView==="portfolio")loadPortfolio(); if(state.activeView==="edge")loadEdge(); if(state.activeView==="brain"){loadPhase7();loadPhase7Health()}},15000);
 
 function mp7FmtR(v){var n=Number(v);return Number.isFinite(n)?(n>0?"+":"")+n.toFixed(2)+"R":"—"}
