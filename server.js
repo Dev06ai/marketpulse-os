@@ -164,20 +164,71 @@ async function buildDecisionSnapshot(symbol,interval,query){
   const key=symbol+"|"+interval,now=Date.now(),cached=DECISION_CACHE.get(key);
   if(cached&&now-cached.ts<DECISION_TTL)return Object.assign({cache:"fresh",cacheAgeMs:now-cached.ts},cached.payload);
   try{
-    const candles=await getFastKlines(symbol,interval);if(!candles||candles.length<220)throw Error("Insufficient candles");
+    const candles=await getFastKlines(symbol,interval);
+    if(!candles||candles.length<220)throw Error("Insufficient candles");
     const lower=interval==="15m"?null:await Promise.race([klines(symbol,"15m"),new Promise(resolve=>setTimeout(()=>resolve(null),1500))]).catch(()=>null);
     const higher=interval==="4h"?null:await Promise.race([klines(symbol,"4h"),new Promise(resolve=>setTimeout(()=>resolve(null),1500))]).catch(()=>null);
     const deriv=await Promise.race([derivatives(symbol,interval),new Promise(resolve=>setTimeout(()=>resolve(null),2600))]).catch(()=>null);
-    const consensus=await Promise.race([dataFabric.assess(symbol,interval,{primaryPrice:candles[candles.length-1]?.c,primaryAgeMs:candles[candles.length-1]?.t?now-Number(candles[candles.length-1].t):null,primarySource:candles?.[0]?.source,liveFlow:flowBucket(symbol)}),new Promise(resolve=>setTimeout(()=>resolve(null),1500))]).catch(()=>null);
-    let analysis=analyze(candles,{interval,lower:lower&&lower.length>=220?analyze(lower,{interval:"15m"}):null,higher:higher&&higher.length>=220?analyze(higher,{interval:"4h"}):null,deriv});
-    let learned=null;try{learned=await Promise.race([learning.process(symbol,interval,candles,analysis),new Promise(resolve=>setTimeout(()=>resolve(null),500))]);if(learned?.analysis)analysis=learned.analysis}catch{}
-    const flow=mergeFlowSnapshot(symbol,deriv||{}),analytics=queueCoreAnalytics(symbol,interval,candles);
-    const config=propFirm.normalizeConfig({accountSize:Number(query.accountSize||process.env.PROP_ACCOUNT_SIZE||5000),startingEquity:Number(query.equity||process.env.PROP_STARTING_EQUITY||5000),dailyLossLimitPct:Number(query.dailyLossLimitPct||process.env.PROP_DAILY_LOSS_PCT||3),maxDrawdownPct:Number(query.maxDrawdownPct||process.env.PROP_MAX_DRAWDOWN_PCT||6),riskPerTradePct:Number(query.riskPerTradePct||process.env.PROP_RISK_PER_TRADE_PCT||0.5),maxOpenRiskPct:Number(query.maxOpenRiskPct||process.env.PROP_MAX_OPEN_RISK_PCT||1),minSignalScore:Number(query.minSignalScore||process.env.PROP_MIN_SIGNAL_SCORE||72),minRR:Number(query.minRR||process.env.PROP_MIN_RR||1.5),minConsensusQualityPct:Number(query.minConsensusQualityPct||process.env.PROP_MIN_CONSENSUS_QUALITY_PCT||85),maxPriceDispersionBps:Number(query.maxPriceDispersionBps||process.env.PROP_MAX_PRICE_DISPERSION_BPS||80),blockMixedFlow:String(query.blockMixedFlow||process.env.PROP_BLOCK_MIXED_FLOW||"true")!=="false"});
-    const gate=propFirm.evaluateStandard({analysis,derivatives:flow,dataQuality:{candleAgeMs:candles.length?Math.max(0,now-Number(candles[candles.length-1].t)):null,qualityPct:flow?.available?100:80,consensusQualityPct:consensus?.consensusQualityPct,priceDispersionBps:consensus?.priceDispersionBps,providerCount:consensus?.sourceCount,independentSourceCount:consensus?.independentSourceCount},equity:config.startingEquity,dayStartEquity:config.startingEquity,peakEquity:config.startingEquity,config});
-    const decision=phase910.evaluate({symbol,interval,analysis,lower:lower&&lower.length>=220?analyze(lower,{interval:"15m"}):null,higher:higher&&higher.length>=220?analyze(higher,{interval:"4h"}):null,derivatives:flow,consensus,dataQuality:{candleAgeMs:candles.length?Math.max(0,now-Number(candles[candles.length-1].t)):null},liveFlow:flow,validation:analytics?.validation||null,propGate:gate});
-    const payload={ok:true,...decision,analysis,derivatives:flow,consensus,learning:learned?await learning.status().catch(()=>null):null,backtest:analytics?.backtest||null,validation:analytics?.validation||null,setupStats:analytics?.setupStats||null,updatedAt:now};
-    DECISION_CACHE.set(key,{ts:now,payload});DECISION_LAST_GOOD.set(key,{ts:now,payload});return Object.assign({cache:"fresh",cacheAgeMs:0},payload);
-  }catch(e){const last=DECISION_LAST_GOOD.get(key);if(last)return Object.assign({cache:"stale",stale:true,cacheAgeMs:Math.max(0,now-last.ts),degraded:String(e.message||e)},last.payload);throw e}
+    const consensus=await Promise.race([dataFabric.assess(symbol,interval,{
+      primaryPrice:candles[candles.length-1]?.c,
+      primaryAgeMs:candles[candles.length-1]?.t?now-Number(candles[candles.length-1].t):null,
+      primarySource:candles?.[0]?.source,
+      liveFlow:flowBucket(symbol)
+    }),new Promise(resolve=>setTimeout(()=>resolve(null),1500))]).catch(()=>null);
+    const lowerAnalysis=lower&&lower.length>=220?analyze(lower,{interval:"15m"}):null;
+    const higherAnalysis=higher&&higher.length>=220?analyze(higher,{interval:"4h"}):null;
+    let analysis=analyze(candles,{interval,lower:lowerAnalysis,higher:higherAnalysis,deriv});
+    let learned=null;
+    try{
+      learned=await Promise.race([learning.process(symbol,interval,candles,analysis),new Promise(resolve=>setTimeout(()=>resolve(null),500))]);
+      if(learned?.analysis)analysis=learned.analysis;
+    }catch{}
+    const flow=mergeFlowSnapshot(symbol,deriv||{});
+    const analytics=queueCoreAnalytics(symbol,interval,candles);
+    const config=propFirm.normalizeConfig({
+      accountSize:Number(query.accountSize||process.env.PROP_ACCOUNT_SIZE||5000),
+      startingEquity:Number(query.equity||process.env.PROP_STARTING_EQUITY||5000),
+      dailyLossLimitPct:Number(query.dailyLossLimitPct||process.env.PROP_DAILY_LOSS_PCT||3),
+      maxDrawdownPct:Number(query.maxDrawdownPct||process.env.PROP_MAX_DRAWDOWN_PCT||6),
+      riskPerTradePct:Number(query.riskPerTradePct||process.env.PROP_RISK_PER_TRADE_PCT||0.5),
+      maxOpenRiskPct:Number(query.maxOpenRiskPct||process.env.PROP_MAX_OPEN_RISK_PCT||1),
+      minSignalScore:Number(query.minSignalScore||process.env.PROP_MIN_SIGNAL_SCORE||72),
+      minRR:Number(query.minRR||process.env.PROP_MIN_RR||1.5),
+      minConsensusQualityPct:Number(query.minConsensusQualityPct||process.env.PROP_MIN_CONSENSUS_QUALITY_PCT||85),
+      maxPriceDispersionBps:Number(query.maxPriceDispersionBps||process.env.PROP_MAX_PRICE_DISPERSION_BPS||80),
+      blockMixedFlow:String(query.blockMixedFlow||process.env.PROP_BLOCK_MIXED_FLOW||"true")!=="false"
+    });
+    const gate=propFirm.evaluateStandard({
+      analysis,derivatives:flow,
+      dataQuality:{
+        candleAgeMs:candles.length?Math.max(0,now-Number(candles[candles.length-1].t)):null,
+        qualityPct:flow?.available?100:80,
+        consensusQualityPct:consensus?.consensusQualityPct,
+        priceDispersionBps:consensus?.priceDispersionBps,
+        providerCount:consensus?.sourceCount,
+        independentSourceCount:consensus?.independentSourceCount
+      },
+      equity:config.startingEquity,dayStartEquity:config.startingEquity,peakEquity:config.startingEquity,config
+    });
+    const decision=phase910.evaluate({
+      symbol,interval,analysis,lower:lowerAnalysis,higher:higherAnalysis,derivatives:flow,consensus,
+      dataQuality:{candleAgeMs:candles.length?Math.max(0,now-Number(candles[candles.length-1].t)):null},
+      liveFlow:flow,validation:analytics?.validation||null,propGate:gate
+    });
+    const payload={
+      ok:true,...decision,analysis,derivatives:flow,consensus,
+      learning:learned?await learning.status().catch(()=>null):null,
+      backtest:analytics?.backtest||null,validation:analytics?.validation||null,setupStats:analytics?.setupStats||null,
+      updatedAt:now
+    };
+    DECISION_CACHE.set(key,{ts:now,payload});
+    DECISION_LAST_GOOD.set(key,{ts:now,payload});
+    return Object.assign({cache:"fresh",cacheAgeMs:0},payload);
+  }catch(e){
+    const last=DECISION_LAST_GOOD.get(key);
+    if(last)return Object.assign({cache:"stale",stale:true,cacheAgeMs:Math.max(0,now-last.ts),degraded:String(e.message||e)},last.payload);
+    throw e;
+  }
 }
 
 function authKey(ip,email,type){return type+":"+String(ip||"unknown")+":"+String(email||"").toLowerCase()}
@@ -455,7 +506,7 @@ async function bybitDerivatives(symbol,interval){
   const first=trades[0]?.price,lastT=trades[trades.length-1]?.price,priceChangePct=Number.isFinite(first)&&first?((lastT-first)/first)*100:null,cvdRatio=total?cvd/total:null;
   const live=flowBucket(symbol),liveCvd=live.cvdNotional?live.cvd:cvd,liveCvdRatio=live.cvdNotional?live.cvd/live.cvdNotional:cvdRatio,liqTotal=live.liqLong+live.liqShort,liqBias=liqTotal?(live.liqLong>live.liqShort?"LONG LIQS DOMINANT":"SHORT LIQS DOMINANT"):"UNAVAILABLE";
   const liveOrderBook=live.orderBook||orderBook;
-  const data={available:Boolean(ticker||oiPayload||tradePayload||bookPayload||live.cvdNotional||liqTotal),provider:"Bybit linear futures"+(live.cvdNotional||liqTotal?" ∑ live stream":""),oi:Number.isFinite(currentOi)?currentOi:null,oiChangePct,cvdDelta:liveCvd,cvdRatio:liveCvdRatio,cvdState:"MIXED",positioning:"MIXED",tradeCount:trades.length,fundingRate:ticker&&Number.isFinite(+ticker.fundingRate)?normalizeFundingRate(ticker.fundingRate):null,markPrice:ticker&&Number.isFinite(+ticker.markPrice)?+ticker.markPrice:null,tradePriceChangePct:priceChangePct,takerImbalance:liveCvdRatio,longLiquidations:live.liqLong,shortLiquidations:live.liqShort,liquidationTotal:liqTotal,liquidationBias:liqBias,orderBook:liveOrderBook,livePointCount:live.points.length,liveHistory:live.points.slice(-120),errors,updatedAt:Date.now()};
+  const data={available:Boolean(ticker||oiPayload||tradePayload||bookPayload||live.cvdNotional||liqTotal),provider:"Bybit linear futures"+(live.cvdNotional||liqTotal?" ¬∑ live stream":""),oi:Number.isFinite(currentOi)?currentOi:null,oiChangePct,cvdDelta:liveCvd,cvdRatio:liveCvdRatio,cvdState:"MIXED",positioning:"MIXED",tradeCount:trades.length,fundingRate:ticker&&Number.isFinite(+ticker.fundingRate)?normalizeFundingRate(ticker.fundingRate):null,markPrice:ticker&&Number.isFinite(+ticker.markPrice)?+ticker.markPrice:null,tradePriceChangePct:priceChangePct,takerImbalance:liveCvdRatio,longLiquidations:live.liqLong,shortLiquidations:live.liqShort,liquidationTotal:liqTotal,liquidationBias:liqBias,orderBook:liveOrderBook,livePointCount:live.points.length,liveHistory:live.points.slice(-120),errors,updatedAt:Date.now()};
   if(priceChangePct!=null&&cvdRatio!=null){if(priceChangePct>0.15&&cvdRatio<-0.01)data.cvdState="BEARISH DIVERGENCE";else if(priceChangePct<-0.15&&cvdRatio>0.01)data.cvdState="BULLISH DIVERGENCE";else if(priceChangePct>0.15&&cvdRatio>0.01)data.cvdState="BUYERS CONFIRM";else if(priceChangePct<-0.15&&cvdRatio<-0.01)data.cvdState="SELLERS CONFIRM"}else if(trades.length===0)data.cvdState="UNAVAILABLE";
   if(priceChangePct!=null&&oiChangePct!=null){if(priceChangePct>0.15&&oiChangePct>1)data.positioning="PRICE + OI: LONG PARTICIPATION";else if(priceChangePct>0.15&&oiChangePct<-1)data.positioning="PRICE UP + OI DOWN: SHORT COVERING";else if(priceChangePct<-0.15&&oiChangePct>1)data.positioning="PRICE DOWN + OI UP: SHORT PARTICIPATION";else if(priceChangePct<-0.15&&oiChangePct<-1)data.positioning="PRICE DOWN + OI DOWN: LONG LIQUIDATION"}else if(!Number.isFinite(oiChangePct))data.positioning=Number.isFinite(currentOi)?"OI CHANGE NOT AVAILABLE":"OI UNAVAILABLE";
   return mergeFlowSnapshot(symbol,data);
@@ -552,7 +603,7 @@ async function derivatives(symbol,interval){
   if(!Array.isArray(data.series.cvd)||data.series.cvd.length<2)data.series.cvd=live.points.map(x=>x.cvdRatio??x.cvd).filter(Number.isFinite);
   if(!Array.isArray(data.series.oi)||data.series.oi.length<2)data.series.oi=live.points.map(x=>x.oi).filter(Number.isFinite);
   if(!Array.isArray(data.series.liq)||data.series.liq.length<2)data.series.liq=live.points.map(x=>x.liqTotal).filter(Number.isFinite);
-  data.provider=(data.provider||"Derivatives")+" ∑ live flow";
+  data.provider=(data.provider||"Derivatives")+" ¬∑ live flow";
   data.liveHistory=live.points.slice(-180);
   data.livePointCount=live.points.length;
   data=mergeFlowSnapshot(symbol,data);
@@ -622,18 +673,18 @@ function aiSystem(){
 }
 
 function liteCopilot(mode,market,trade,question){
-  const m=market||{},call=String(m.status==="READY"?m.type:m.status==="WATCH"?"WATCH":m.status==="WAITING"?"NO TRADE":m.type||"NO TRADE"),regime=String(m.regime||"UNKNOWN"),score=Number(m.score||0),rsi=Number.isFinite(Number(m.rsi))?Number(m.rsi).toFixed(2):+ßuÁ‚ùÁT",adx=Number.isFinite(Number(m.adx))?Number(m.adx).toFixed(2):"∫w^~)ﬁt",structure=String(m.structure||"È›y¯ßy‘"),mtf=m.mtf?("4H "+(m.mtf.higher||"UNKNOWN")+" ∑ 15M "+(m.mtf.lower||"UNKNOWN")):"",deriv=m.derivatives||{};
+  const m=market||{},call=String(m.status==="READY"?m.type:m.status==="WATCH"?"WATCH":m.status==="WAITING"?"NO TRADE":m.type||"NO TRADE"),regime=String(m.regime||"UNKNOWN"),score=Number(m.score||0),rsi=Number.isFinite(Number(m.rsi))?Number(m.rsi).toFixed(2):"‚Äî",adx=Number.isFinite(Number(m.adx))?Number(m.adx).toFixed(2):"‚Äî",structure=String(m.structure||"‚Äî"),mtf=m.mtf?("4H "+(m.mtf.higher||"UNKNOWN")+" ¬∑ 15M "+(m.mtf.lower||"UNKNOWN")):"",deriv=m.derivatives||{};
   if(mode==="trade"){
     const entry=Number(trade?.entry),stop=Number(trade?.stop),target=Number(trade?.target),side=String(trade?.side||""),risk=Number.isFinite(entry)&&Number.isFinite(stop)?Math.abs(entry-stop):NaN,reward=Number.isFinite(entry)&&Number.isFinite(target)?Math.abs(target-entry):NaN,rr=Number.isFinite(risk)&&risk?reward/risk:NaN;
-    const lines=["MarketPulse Lite review","", "Market context: "+regime+" ∑ "+call+" ∑ confluence "+score+"/100.","Momentum: RSI "+rsi+" ∑ ADX "+adx+" ∑ structure "+structure+".",mtf?"Timeframe context: "+mtf+".":"",deriv.cvdState?"Derivatives: "+deriv.cvdState+" ∑ "+(deriv.positioning||"positioning unavailable")+".":""].filter(Boolean);
-    if(side)lines.push("Your plan: "+side+(Number.isFinite(rr)?" ∑ planned R:R "+rr.toFixed(2)+"R.":""));
+    const lines=["MarketPulse Lite review","", "Market context: "+regime+" ¬∑ "+call+" ¬∑ confluence "+score+"/100.","Momentum: RSI "+rsi+" ¬∑ ADX "+adx+" ¬∑ structure "+structure+".",mtf?"Timeframe context: "+mtf+".":"",deriv.cvdState?"Derivatives: "+deriv.cvdState+" ¬∑ "+(deriv.positioning||"positioning unavailable")+".":""].filter(Boolean);
+    if(side)lines.push("Your plan: "+side+(Number.isFinite(rr)?" ¬∑ planned R:R "+rr.toFixed(2)+"R.":""));
     if(call==="NO TRADE")lines.push("The dashboard currently sees insufficient alignment. That matters more than whether the trade eventually wins or loses.");
     else if(Number.isFinite(rr)&&rr<1.5)lines.push("Your planned R:R is below 1.5R. Check whether the invalidation is structural before proceeding.");
     else if(Number.isFinite(rr))lines.push("Your planned R:R is "+rr.toFixed(2)+"R. Check that the invalidation is structural rather than arbitrary.");
     lines.push("Question: "+(question||"Review this trade."),"Note: Lite mode uses deterministic MarketPulse rules. Add API credits to unlock full AI reasoning.");
     return lines.join("\n");
   }
-  return ["MarketPulse Lite","", "Market context: "+regime+" ∑ "+call+" ∑ confluence "+score+"/100.","Momentum: RSI "+rsi+" ∑ ADX "+adx+" ∑ structure "+structure+".",mtf?"Multi-timeframe: "+mtf+".":"",deriv.cvdState?"Derivatives: "+deriv.cvdState+" ∑ "+(deriv.positioning||"positioning unavailable")+".":"",call==="NO TRADE"?"Read: wait for alignment instead of forcing a trade.":"Read: treat this as a setup to validate, not a guarantee.","Question: "+(question||"What is the market doing?"),"Full AI reasoning will be available when API credits are added."].filter(Boolean).join("\n");
+  return ["MarketPulse Lite","", "Market context: "+regime+" ¬∑ "+call+" ¬∑ confluence "+score+"/100.","Momentum: RSI "+rsi+" ¬∑ ADX "+adx+" ¬∑ structure "+structure+".",mtf?"Multi-timeframe: "+mtf+".":"",deriv.cvdState?"Derivatives: "+deriv.cvdState+" ¬∑ "+(deriv.positioning||"positioning unavailable")+".":"",call==="NO TRADE"?"Read: wait for alignment instead of forcing a trade.":"Read: treat this as a setup to validate, not a guarantee.","Question: "+(question||"What is the market doing?"),"Full AI reasoning will be available when API credits are added."].filter(Boolean).join("\n");
 }
 
 function replayOutcome(candles,index,analysis,horizon=12){
@@ -1155,7 +1206,13 @@ const server=http.createServer(async(req,res)=>{
     if(req.method==='GET'&&u.pathname==='/api/decision'){
       const symbol=(u.searchParams.get('symbol')||'BTCUSDT').toUpperCase(),interval=u.searchParams.get('interval')||'1h';
       if(!SYMBOLS.includes(symbol)||!['15m','30m','1h','4h','1d'].includes(interval))return send(res,400,{ok:false,error:'Unsupported symbol or interval'});
-      try{return send(res,200,await Promise.race([buildDecisionSnapshot(symbol,interval,u.searchParams),new Promise((_,reject)=>setTimeout(()=>reject(new Error('DECISION_ENGINE_TIMEOUT')),8500))]))}catch(e){return send(res,503,{ok:false,error:String(e.message||e),phase9:PHASE9_VERSION,phase10:PHASE10_VERSION})}
+      try{
+        const payload=await Promise.race([
+          buildDecisionSnapshot(symbol,interval,u.searchParams),
+          new Promise((_,reject)=>setTimeout(()=>reject(new Error('DECISION_ENGINE_TIMEOUT')),8500))
+        ]);
+        return send(res,200,payload);
+      }catch(e){return send(res,503,{ok:false,error:String(e.message||e),phase9:PHASE9_VERSION,phase10:PHASE10_VERSION})}
     }
     if(req.method==='GET'&&u.pathname==='/api/core'){
       const symbol=(u.searchParams.get('symbol')||'BTCUSDT').toUpperCase(),interval=u.searchParams.get('interval')||'1h';
@@ -1358,7 +1415,7 @@ const server=http.createServer(async(req,res)=>{
       const symbol=(u.searchParams.get('symbol')||'BTCUSDT').toUpperCase(),interval=u.searchParams.get('interval')||'1h';
       if(!SYMBOLS.includes(symbol))return send(res,400,{error:'Unsupported symbol'});
       try{
-        const warm=mergeFlowSnapshot(symbol,{provider:"Bybit linear futures ∑ live stream"});
+        const warm=mergeFlowSnapshot(symbol,{provider:"Bybit linear futures ¬∑ live stream"});
         const result=await Promise.race([
           Promise.allSettled([bybitDerivatives(symbol,interval),derivatives(symbol,interval)]).then(function(rs){
             for(const r of rs){if(r.status==="fulfilled"&&r.value)return mergeFlowSnapshot(symbol,r.value)}
@@ -1367,7 +1424,7 @@ const server=http.createServer(async(req,res)=>{
           new Promise(resolve=>setTimeout(()=>resolve(warm),6500))
         ]);
         const data=mergeFlowSnapshot(symbol,result||warm);
-        data.provider=(data.provider||"Bybit linear futures")+(data.liveConnected||data.livePointCount?" ∑ live stream":"");
+        data.provider=(data.provider||"Bybit linear futures")+(data.liveConnected||data.livePointCount?" ¬∑ live stream":"");
         return send(res,200,{ok:true,data});
       }catch(e){
         return send(res,200,{ok:true,data:mergeFlowSnapshot(symbol,{provider:"Bybit live stream"}),error:String(e.message||e)});
@@ -1555,7 +1612,7 @@ const server=http.createServer(async(req,res)=>{
       try{checks.execution=Boolean(await execution.snapshot())}catch(e){checks.execution=false}
       try{checks.portfolio=Boolean(await phase6.snapshot())}catch(e){checks.portfolio=false}
       try{const st=phase7.selfTest();checks.phase7=Boolean(st&&st.ok)}catch(e){checks.phase7=false}
-       try{const st=phase910.selfTest();checks.decisionEngine=Boolean(st&&st.ok)}catch(e){checks.decisionEngine=false}
+      try{const st=phase910.selfTest();checks.decisionEngine=Boolean(st&&st.ok)}catch(e){checks.decisionEngine=false}
       const result={ok:Object.values(checks).every(Boolean),checks,marketError,derivativesError,phase2:PHASE2_VERSION,phase3:PHASE3_VERSION,phase4:PHASE4_VERSION,phase5:PHASE5_VERSION,phase6:PHASE6_VERSION,phase7:PHASE7_VERSION,routes:{core:true,chart:true,coreAnalytics:true,decision:true,coreScan:true,coreFlow:true,cycle:true,ai:true,memory:true,learning:true,replay:true,dna:true,research:true,edge:true,edgeHealth:true,edgeConfig:true,edgeJournal:true,execution:true,executionConfig:true,executionArm:true,executionKill:true,executionReconcile:true,portfolio:true,portfolioConfig:true,phase7Analytics:true,phase7Health:true},timestamp:Date.now()};await auditAdmin(req,"Ran full system check","system",null,{ok:result.ok,checks});return send(res,200,result);
     }
     if(req.method==='GET'&&u.pathname==='/api/live'){
