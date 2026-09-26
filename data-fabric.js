@@ -160,4 +160,4 @@ async function assess(symbol,interval="1h",context={}){
   });
 }
 
-module.exports={VERSION,KRAKEN_SPOT_PAIRS,COINBASE_PRODUCTS,coinbaseSnapshot,krakenSnapshot,binanceSnapshot,assess};
+module.exports={VERSION,KRAKEN_SPOT_PAIRS,COINBASE_PRODUCTS,coinbaseSnapshot,krakenSnapshot,binanceSnapshot,summarizeSources,assess};
