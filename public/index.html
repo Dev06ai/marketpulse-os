@@ -3265,6 +3265,15 @@ setInterval(function(){
     if(!state.market&&!state.busy)scheduleInitialBoot(0);
   }
 },5000);
+
+// Main live price-action cycle: refresh the visible market structure/chart snapshot every 12 seconds.
+// The busy guard prevents overlapping requests; the decision engine is refreshed by loadCore's
+// normal background sequence so expensive validation work remains cached.
+setInterval(function(){
+  if(document.visibilityState!=="visible")return;
+  if(state.activeView==="overview"&&!state.busy)loadCore();
+},12000);
+
 setInterval(function(){if(document.visibilityState!=="visible")return; if((state.activeView==="overview"||state.activeView==="flow")&&!state.flowBusy)loadFlow(true); if(state.activeView==="scanner"&&(!state.scan||!state.scan.length))loadScan(true); if(state.activeView==="execution")loadExecution(); if(state.activeView==="portfolio")loadPortfolio(); if(state.activeView==="edge")loadEdge(); if(state.activeView==="brain"){loadPhase7();loadPhase7Health()}},15000);
 
 function mp7FmtR(v){var n=Number(v);return Number.isFinite(n)?(n>0?"+":"")+n.toFixed(2)+"R":"—"}
