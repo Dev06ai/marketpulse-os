@@ -682,7 +682,7 @@ async function listSecurityEvents(limit=200){
 }
 async function recordUsageEvent(userId,feature,action="view",symbol=null,interval=null,metadata={}){
   await init();const row={userId:userId||null,feature:String(feature||"unknown").slice(0,100),action:String(action||"view").slice(0,100),symbol:symbol?String(symbol).slice(0,32):null,interval:interval?String(interval).slice(0,16):null,metadata:metadata||{},createdAt:new Date().toISOString()};
-  if(mode==="postgres"){await pool.query("INSERT INTO marketpulse_usage_events(user_id,feature,action,symbol,"interval",metadata) VALUES($1,$2,$3,$4,$5,$6)",[row.userId,row.feature,row.action,row.symbol,row.interval,row.metadata]);return}
+  if(mode==="postgres"){await pool.query('INSERT INTO marketpulse_usage_events(user_id,feature,action,symbol,"interval",metadata) VALUES($1,$2,$3,$4,$5,$6)',[row.userId,row.feature,row.action,row.symbol,row.interval,row.metadata]);return}
   const all=readLocal();all.__usage_events__=Array.isArray(all.__usage_events__)?all.__usage_events__:[];all.__usage_events__.push(row);all.__usage_events__=all.__usage_events__.slice(-5000);writeLocal(all);
 }
 async function recentUsageEvents(limit=80){
