@@ -4,8 +4,9 @@ Crypto market analytics and educational decision support.
 
 Features:
 - BTC, ETH, SOL, BNB, XRP, DOGE and ADA
-- 15m, 1h, 4h and 1d
-- EMA 20/50/200, RSI, ATR, ADX and volume z-score
+- 15m, 30m, 1h, 4h and 1d chart intervals
+- Price-action chart with optional 50 EMA, volume, crosshair, zoom and pan
+- Market analysis uses additional internal indicators such as RSI, ATR, ADX and volume context
 - Regime detection and setup classification
 - Entry zone, invalidation and targets
 - Simple historical sanity-check backtest
