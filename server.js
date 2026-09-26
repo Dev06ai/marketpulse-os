@@ -1268,17 +1268,22 @@ const server=http.createServer(async(req,res)=>{
     if(req.method==='GET'&&u.pathname==='/api/core-scan'){
       const interval=u.searchParams.get('interval')||'1h',hit=SCAN_CACHE.get(interval);
       if(hit&&Date.now()-hit.ts<SCAN_TTL)return send(res,200,hit.payload);
-      const rows=await Promise.all(SYMBOLS.map(async symbol=>{
+      const scanOne=async symbol=>{
         try{
-          const candles=await klines(symbol,interval);if(!candles||candles.length<220)throw Error('Insufficient candles');
-          const higher=interval==='4h'?null:await Promise.race([klines(symbol,'4h'),new Promise(resolve=>setTimeout(()=>resolve(null),1500))]).catch(()=>null);
-          const lower=interval==='15m'?null:await Promise.race([klines(symbol,'15m'),new Promise(resolve=>setTimeout(()=>resolve(null),1500))]).catch(()=>null);
+          const candles=await Promise.race([klines(symbol,interval),new Promise((_,reject)=>setTimeout(()=>reject(Error('Primary scan timeout')),6500))]);
+          if(!candles||candles.length<220)throw Error('Insufficient candles');
+          const higher=interval==='4h'?null:await Promise.race([klines(symbol,'4h'),new Promise(resolve=>setTimeout(()=>resolve(null),1100))]).catch(()=>null);
+          const lower=interval==='15m'?null:await Promise.race([klines(symbol,'15m'),new Promise(resolve=>setTimeout(()=>resolve(null),1100))]).catch(()=>null);
           let analysis=analyze(candles,{interval,lower:lower&&lower.length>=220?analyze(lower,{interval:'15m'}):null,higher:higher&&higher.length>=220?analyze(higher,{interval:'4h'}):null,deriv:null});
-          try{const learned=await Promise.race([learning.process(symbol,interval,candles,analysis),new Promise(resolve=>setTimeout(()=>resolve(null),250))]);if(learned?.analysis)analysis=learned.analysis}catch{}
+          try{const learned=await Promise.race([learning.process(symbol,interval,candles,analysis),new Promise(resolve=>setTimeout(()=>resolve(null),200))]);if(learned?.analysis)analysis=learned.analysis}catch{}
           return{symbol,label:labels[symbol]||symbol,price:analysis.price,change24h:analysis.change24h,regime:analysis.regime,side:analysis.side,type:analysis.type,status:analysis.status,score:analysis.score,bias:analysis.bias,probabilityLabel:analysis.probabilityLabel,structure:analysis.structure,derivatives:null};
-        }catch(e){return{symbol,label:labels[symbol]||symbol,status:'WAITING',side:'WAIT',score:0,error:e.message}}
-      }));
-      const payload={ok:true,interval,rows,updatedAt:Date.now(),cacheTtlMs:SCAN_TTL,mode:"fast-cached-scan"};SCAN_CACHE.set(interval,{ts:Date.now(),payload});return send(res,200,payload);
+        }catch(e){
+          return{symbol,label:labels[symbol]||symbol,status:'WAITING',side:'WAIT',score:0,error:e.message};
+        }
+      };
+      const rows=await Promise.all(SYMBOLS.map(scanOne));
+      const payload={ok:true,interval,rows,updatedAt:Date.now(),cacheTtlMs:SCAN_TTL,mode:"fast-cached-scan-v2"};
+      SCAN_CACHE.set(interval,{ts:Date.now(),payload});return send(res,200,payload);
     }
 
 
