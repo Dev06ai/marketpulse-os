@@ -1,26 +1,5 @@
-const marketEngine=require("./market-engine");
-
-const FEATURE_NAMES=[
-  "base_score","rsi","adx","atr_pct","volume_z","range_position",
-  "ema20_gap","ema50_gap","structure","side",
-  "mtf_alignment","cvd_ratio","oi_change_pct","funding",
-  "liq_imbalance","book_imbalance","book_spread_bps","micro_delta_bps",
-  "depth_imbalance","flow_price_delta"
-];
-
-const clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
-const finite=(x,f=0)=>Number.isFinite(Number(x))?Number(x):f;
-const sigmoid=x=>1/(1+Math.exp(-clamp(x,-30,30)));
-
-function sideNum(side){return side==="LONG"?1:side==="SHORT"?-1:0}
-function structureNum(s){
-  if(!s)return 0;
-  if(String(s).includes("HIGHER")||String(s).includes("BULLISH"))return 1;
-  if(String(s).includes("LOWER")||String(s).includes("BEARISH"))return -1;
-  return 0;
-}
 function buildFeatures(a,ctx={}){
-  const d=ctx.derivatives||a?.derivatives||{},o=ctx.orderbook||a?.microstructure||{};
+  const d=ctx.derivatives||a?.derivatives||{},o=ctx.orderbook||a?.microstructure||{},liq=ctx.liquidity||liquidityContext(ctx.candles||[]);
   const side=sideNum(a?.side);
   const mtf=((a?.mtf?.higher==="UPTREND"&&side>0)||(a?.mtf?.higher==="DOWNTREND"&&side<0)?1:0)
     +((a?.mtf?.lower==="UPTREND"&&side>0)||(a?.mtf?.lower==="DOWNTREND"&&side<0)?1:0)
@@ -129,7 +108,7 @@ function trainLogistic(rows,options={}){
   };
 }
 function predict(model,features){
-  if(!model?.weights||!model?.scaler)return null;
+  if(!model?.weights||!model?.scaler||!Array.isArray(model.featureNames)||model.featureNames.length!==FEATURE_NAMES.length)return null;
   const p=sigmoid(dot(model.weights,standardize(vector(features),model.scaler)));
   return clamp(p,0,1);
 }
@@ -174,7 +153,7 @@ function buildTrainingRows(candles,interval="1h",context={}){
       oiChangePct:Number.isFinite(Number(oiCtx?.oiChangePct))?Number(oiCtx.oiChangePct):null,
       fundingRate:Number.isFinite(Number(fundCtx?.fundingRate))?Number(fundCtx.fundingRate):null
     };
-    const features=buildFeatures(a,{takerFlow:buyPressure,orderbook:{},derivatives});
+    const features=buildFeatures(a,{takerFlow:buyPressure,orderbook:{},derivatives,candles:candles.slice(0,i+1)});
     rows.push({timestamp:ts,label,features,side:a.side,score:a.score,type:a.type});
   }
   return rows;
