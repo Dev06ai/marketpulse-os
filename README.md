@@ -25,3 +25,12 @@ Then open http://localhost:3000
 - Breakdowns by asset, side, regime, setup, hour and weekday.
 - Journal data-quality checks and CSV export from the dashboard.
 - Phase 7 analytics and health endpoints integrated into the system check.
+
+
+## Phase 8
+- Optional user accounts with secure password hashing and 30-day HTTP-only sessions.
+- Account-backed memory for journal, signals, watchlist and UI/trading preferences when Postgres is configured.
+- Anonymous/device mode remains available as a fallback.
+- Journal trade edit/delete controls and cross-device account sync.
+- Auth rate limiting and hardened JSON response headers.
+- Product version: 2.1.0.
