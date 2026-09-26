@@ -1,3 +1,40 @@
+const marketEngine=require("./market-engine");
+
+const FEATURE_NAMES=[
+  "base_score","rsi","adx","atr_pct","volume_z","range_position",
+  "ema20_gap","ema50_gap","structure","side",
+  "mtf_alignment","cvd_ratio","oi_change_pct","funding",
+  "liq_imbalance","book_imbalance","book_spread_bps","micro_delta_bps",
+  "depth_imbalance","flow_price_delta",
+  "liquidity_above_proximity","liquidity_below_proximity","sweep_bias","break_strength"
+];
+
+const clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
+const finite=(x,f=0)=>Number.isFinite(Number(x))?Number(x):f;
+const sigmoid=x=>1/(1+Math.exp(-clamp(x,-30,30)));
+
+function sideNum(side){return side==="LONG"?1:side==="SHORT"?-1:0}
+function structureNum(s){
+  if(!s)return 0;
+  if(String(s).includes("HIGHER")||String(s).includes("BULLISH"))return 1;
+  if(String(s).includes("LOWER")||String(s).includes("BEARISH"))return -1;
+  return 0;
+}function liquidityContext(candles){
+  if(!Array.isArray(candles)||candles.length<30)return {valid:false};
+  const i=candles.length-1,last=candles[i],prev=candles.slice(Math.max(0,i-48),i);
+  const trs=[];for(let j=0;j<prev.length;j++){const x=prev[j],q=prev[Math.max(0,j-1)]||x;trs.push(Math.max(x.h-x.l,Math.abs(x.h-q.c),Math.abs(x.l-q.c)))}
+  const atr=trs.reduce((a,b)=>a+b,0)/(trs.length||1);
+  const highs=prev.map(x=>x.h).sort((a,b)=>b-a),lows=prev.map(x=>x.l).sort((a,b)=>a-b);
+  const cluster=(vals)=>{if(!vals.length)return null;const ref=vals[0],tol=atr*.45,count=vals.filter(v=>Math.abs(v-ref)<=tol).length;return count>=2?ref:null};
+  let above=cluster(highs),below=cluster(lows);if(above===null)above=Math.max(...prev.map(x=>x.h));if(below===null)below=Math.min(...prev.map(x=>x.l));
+  const aboveDist=atr?(above-last.c)/atr:0,belowDist=atr?(last.c-below)/atr:0;
+  const recent=prev.slice(-12),rh=Math.max(...recent.map(x=>x.h)),rl=Math.min(...recent.map(x=>x.l));
+  const buySweep=last.h>rh&&last.c<rh,sellSweep=last.l<rl&&last.c>rl;
+  const recentRange=Math.max(...prev.map(x=>x.h))-Math.min(...prev.map(x=>x.l));
+  const breakStrength=recentRange?(last.c-Math.min(...prev.map(x=>x.l)))/recentRange:.5;
+  return {valid:true,atr,liquidityAbove:above,liquidityBelow:below,aboveDist,belowDist,sweepBias:buySweep?-1:sellSweep?1:0,breakStrength};
+}
+
 function buildFeatures(a,ctx={}){
   const d=ctx.derivatives||a?.derivatives||{},o=ctx.orderbook||a?.microstructure||{},liq=ctx.liquidity||liquidityContext(ctx.candles||[]);
   const side=sideNum(a?.side);
@@ -98,7 +135,7 @@ function trainLogistic(rows,options={}){
   const fit=fitLogistic(train,epochs,lr,l2);
   const trainMetrics=evaluateModel(fit,train),validation=evaluateModel(fit,test),walkForward=walkForwardValidation(rows,3);
   return {
-    version:2,
+    version:3,
     kind:"binary_setup_quality",
     trainedAt:Date.now(),
     samples:rows.length,
