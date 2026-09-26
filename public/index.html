@@ -2093,14 +2093,24 @@ function drawFlowData(data){
 }
 function renderFlowView(data){
   data=data||{};
-  $("fOi").textContent=data.oi!=null?fmt(data.oi):"UNAVAILABLE";
-  $("fOiS").textContent=data.oiChangePct!=null?pct(data.oiChangePct)+" recent":"Current snapshot";
-  $("fCvd").textContent=data.cvdState||"UNAVAILABLE";
-  $("fCvdS").textContent=data.cvdDelta!=null?"Δ "+fmt(data.cvdDelta):"No CVD feed";
-  $("fPos").textContent=data.positioning||"UNAVAILABLE";
-  $("fFund").textContent=data.fundingRate!=null?"Funding "+(Number(data.fundingRate)*100).toFixed(4)+"%":"Funding unavailable";
-  $("fLiq").textContent=data.liquidationBias&&data.liquidationBias!=="UNKNOWN"?data.liquidationBias:"UNAVAILABLE";
-  $("fLiqS").textContent=data.liquidationTotal!=null?"Total "+fmt(data.liquidationTotal):"No liquidation feed";
+  var hist=Array.isArray(data.liveHistory)?data.liveHistory.filter(Boolean):[];
+  var last=hist.length?hist[hist.length-1]:{},prev=hist.length>1?hist[hist.length-2]:{};
+  var oi=data.oi!=null?Number(data.oi):(last.oi!=null?Number(last.oi):null);
+  var cvd=data.cvdDelta!=null?Number(data.cvdDelta):(last.cvd!=null?Number(last.cvd):null);
+  var liq=data.liquidationTotal!=null?Number(data.liquidationTotal):(last.liqTotal!=null?Number(last.liqTotal):null);
+  var oiChange=Number.isFinite(Number(data.oiChangePct))?Number(data.oiChangePct):(Number.isFinite(oi)&&Number.isFinite(Number(prev.oi))&&Number(prev.oi)!==0?((oi-Number(prev.oi))/Math.abs(Number(prev.oi)))*100:null);
+  var cvdState=data.cvdState||(Number.isFinite(cvd)?(cvd>0?"BUYERS PRESSURE":cvd<0?"SELLERS PRESSURE":"BALANCED"):"WAITING");
+  var pos=data.positioning||(Number.isFinite(oiChange)?(oiChange>1?"OI RISING":oiChange<-1?"OI FALLING":"OI FLAT"):"WAITING");
+  var liqBias=data.liquidationBias&&data.liquidationBias!=="UNKNOWN"?data.liquidationBias:null;
+  if(!liqBias&&Number.isFinite(liq)&&liq>0){var ll=Number(data.longLiquidations||last.liqLong||0),sl=Number(data.shortLiquidations||last.liqShort||0);liqBias=ll>sl?"LONG LIQS DOMINANT":sl>ll?"SHORT LIQS DOMINANT":"LIQUIDATION ACTIVITY"}
+  $("fOi").textContent=Number.isFinite(oi)?fmt(oi):"WAITING";
+  $("fOiS").textContent=Number.isFinite(oiChange)?pct(oiChange)+" recent":"Live snapshot";
+  $("fCvd").textContent=cvdState;
+  $("fCvdS").textContent=Number.isFinite(cvd)?"Δ "+fmt(cvd):"Live flow warming";
+  $("fPos").textContent=pos;
+  $("fFund").textContent=data.fundingRate!=null?"Funding "+(Number(data.fundingRate)*100).toFixed(4)+"%":"Funding warming";
+  $("fLiq").textContent=liqBias||"WAITING";
+  $("fLiqS").textContent=Number.isFinite(liq)?"Total "+fmt(liq):"Live liquidation stream warming";
 }
 async function loadFlow(force){
   if(state.flowBusy&&!force)return;
@@ -2126,7 +2136,21 @@ async function loadFlow(force){
 
 function renderMarketNoFlow(){
   var d=state.market,der=d&&d.derivatives||{};if(!d)return;
-  $("oi").textContent=der.oi!=null?fmt(der.oi):"UNAVAILABLE";$("oiS").textContent=der.oiChangePct!=null?pct(der.oiChangePct)+" recent":"Current snapshot";$("cvd").textContent=der.cvdState||"UNAVAILABLE";$("cvdS").textContent=der.cvdDelta!=null?"Δ "+fmt(der.cvdDelta):"No CVD feed";$("pos").textContent=der.positioning||"UNAVAILABLE";$("fund").textContent=der.fundingRate!=null?"Funding "+(Number(der.fundingRate)*100).toFixed(4)+"%":"Funding unavailable";$("liq").textContent=der.liquidationBias&&der.liquidationBias!=="UNKNOWN"?der.liquidationBias:"UNAVAILABLE";$("liqS").textContent=der.liquidationTotal!=null?"Total "+fmt(der.liquidationTotal):"No liquidation feed";$("flowSource").textContent=der.provider?(String(der.provider).slice(0,30)+(der.livePointCount?" · LIVE":"")):(der.available?"LIVE":"UNAVAILABLE");
+  var hist=Array.isArray(der.liveHistory)?der.liveHistory.filter(Boolean):[],last=hist.length?hist[hist.length-1]:{},prev=hist.length>1?hist[hist.length-2]:{};
+  var oi=der.oi!=null?Number(der.oi):(last.oi!=null?Number(last.oi):null);
+  var cvd=der.cvdDelta!=null?Number(der.cvdDelta):(last.cvd!=null?Number(last.cvd):null);
+  var liq=der.liquidationTotal!=null?Number(der.liquidationTotal):(last.liqTotal!=null?Number(last.liqTotal):null);
+  var oiChange=der.oiChangePct;
+  if(oiChange==null&&Number.isFinite(oi)&&Number.isFinite(Number(prev.oi))&&Number(prev.oi)!==0)oiChange=((oi-Number(prev.oi))/Math.abs(Number(prev.oi)))*100;
+  var cvdState=der.cvdState||(Number.isFinite(cvd)?(cvd>0?"BUYERS PRESSURE":cvd<0?"SELLERS PRESSURE":"BALANCED"):"WAITING");
+  var pos=der.positioning||(Number.isFinite(Number(oiChange))?(Number(oiChange)>1?"OI RISING":Number(oiChange)<-1?"OI FALLING":"OI FLAT"):"WAITING");
+  var liqBias=der.liquidationBias&&der.liquidationBias!=="UNKNOWN"?der.liquidationBias:null;
+  if(!liqBias&&Number.isFinite(liq)&&liq>0){var ll=Number(der.longLiquidations||last.liqLong||0),sl=Number(der.shortLiquidations||last.liqShort||0);liqBias=ll>sl?"LONG LIQS DOMINANT":sl>ll?"SHORT LIQS DOMINANT":"LIQUIDATION ACTIVITY"}
+  $("oi").textContent=Number.isFinite(oi)?fmt(oi):"WAITING";$("oiS").textContent=Number.isFinite(Number(oiChange))?pct(Number(oiChange))+" recent":"Live snapshot";
+  $("cvd").textContent=cvdState;$("cvdS").textContent=Number.isFinite(cvd)?"Δ "+fmt(cvd):"Live flow warming";
+  $("pos").textContent=pos;$("fund").textContent=der.fundingRate!=null?"Funding "+(Number(der.fundingRate)*100).toFixed(4)+"%":"Funding warming";
+  $("liq").textContent=liqBias||"WAITING";$("liqS").textContent=Number.isFinite(liq)?"Total "+fmt(liq):"Live liquidation stream warming";
+  $("flowSource").textContent=der.provider?(String(der.provider).slice(0,44)+(der.livePointCount?" · LIVE":"")):(der.available?"LIVE":"CONNECTING");
 }
 
 async function loadFastTicker(){
