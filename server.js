@@ -5,6 +5,7 @@ const phase4=require('./phase4');
 const execution=require('./execution');
 const phase6=require('./phase6');
 const phase7=require('./phase7');
+const auth=require('./auth');
 const WebSocket=require('ws');
 const PORT=Number(process.env.PORT||3000);
 const SYMBOLS=(process.env.SYMBOLS||'BTCUSDT,ETHUSDT,SOLUSDT,BNBUSDT,XRPUSDT,DOGEUSDT,ADAUSDT').split(',').map(s=>s.trim()).filter(Boolean);
@@ -467,6 +468,48 @@ const server=http.createServer(async(req,res)=>{
     }
     
     if(req.method==='GET'&&u.pathname==='/api/learning/status')return send(res,200,await learning.status());
+
+    if(req.method==='GET'&&u.pathname==='/api/auth/me'){
+      try{
+        const user=await auth.userFromRequest(req);
+        return send(res,200,{ok:true,authenticated:Boolean(user),user:user?{id:user.id,email:user.email,expiresAt:user.expiresAt}:null});
+      }catch(e){return send(res,500,{ok:false,error:e.message})}
+    }
+    if(req.method==='POST'&&(u.pathname==='/api/auth/register'||u.pathname==='/api/auth/login')){
+      let raw="";for await(const chunk of req)raw+=chunk;
+      let body={};try{body=JSON.parse(raw||"{}")}catch{return send(res,400,{ok:false,error:"Invalid JSON"})}
+      try{
+        if(u.pathname==='/api/auth/register'){
+          const user=await auth.register(body.email,body.password);
+          const logged=await auth.login(body.email,body.password);
+          res.setHeader("Set-Cookie",logged.setCookie);
+          return send(res,201,{ok:true,user:logged.user});
+        }
+        const logged=await auth.login(body.email,body.password);
+        res.setHeader("Set-Cookie",logged.setCookie);
+        return send(res,200,{ok:true,user:logged.user});
+      }catch(e){
+        const code=e.message==="EMAIL_EXISTS"||e.message==="INVALID_CREDENTIALS"?400:422;
+        return send(res,code,{ok:false,error:e.message==="EMAIL_EXISTS"?"An account with this email already exists.":e.message==="INVALID_CREDENTIALS"?"Email or password is incorrect.":e.message});
+      }
+    }
+    if(req.method==='POST'&&u.pathname==='/api/auth/logout'){
+      try{const x=await auth.logout(req);res.setHeader("Set-Cookie",x.setCookie);return send(res,200,{ok:true})}catch(e){return send(res,500,{ok:false,error:e.message})}
+    }
+    if(req.method==='GET'&&u.pathname==='/api/account/memory'){
+      const user=await auth.userFromRequest(req);if(!user)return send(res,401,{ok:false,error:"Authentication required"});
+      try{
+        const memory=await storage.getAccountMemory(user.id);
+        return send(res,200,{ok:true,user:{id:user.id,email:user.email},memory});
+      }catch(e){return send(res,500,{ok:false,error:e.message})}
+    }
+    if(req.method==='POST'&&u.pathname==='/api/account/memory'){
+      const user=await auth.userFromRequest(req);if(!user)return send(res,401,{ok:false,error:"Authentication required"});
+      let raw="";for await(const chunk of req)raw+=chunk;
+      let body={};try{body=JSON.parse(raw||"{}")}catch{return send(res,400,{ok:false,error:"Invalid JSON"})}
+      try{return send(res,200,{ok:true,memory:await storage.saveAccountMemory(user.id,body.memory||{})})}catch(e){return send(res,400,{ok:false,error:e.message})}
+    }
+
     if(req.method==='GET'&&u.pathname==='/api/config')return send(res,200,{symbols:SYMBOLS,labels,intervals:['15m','1h','4h','1d'],memory:storage.status(),learning:{state:'LOADING'},phase4:PHASE4_VERSION,phase5:PHASE5_VERSION,phase6:PHASE6_VERSION,phase7:PHASE7_VERSION});if(req.method==='POST'&&u.pathname==='/api/ai'){
       if(!aiAllowed(req)) return send(res,429,{error:"Slow down for a few seconds."});
       let raw=""; for await(const chunk of req) raw+=chunk; let body={}; try{body=JSON.parse(raw||"{}")}catch{return send(res,400,{error:"Invalid JSON"})}
