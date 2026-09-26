@@ -62,7 +62,8 @@ async function fetchKrakenKlines(symbol, interval = "1h", options = {}) {
   const pair=map[String(symbol).toUpperCase()];
   if(!pair)throw new Error("Unsupported Kraken symbol");
   const limit=Math.max(1,Math.min(720,Number(options.maxBars||720)));
-  const mins={15m:15,1h:60,4h:240,1d:1440}[interval];
+  const minsByInterval={"15m":15,"1h":60,"4h":240,"1d":1440};
+  const mins=minsByInterval[interval];
   const u=new URL("https://api.kraken.com/0/public/OHLC");
   u.searchParams.set("pair",pair);u.searchParams.set("interval",String(mins));
   const body=await fetchJson(u,6000);
