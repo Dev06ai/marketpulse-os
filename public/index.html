@@ -117,7 +117,7 @@ button,input,select,textarea{font:inherit}.wrap{width:min(1440px,calc(100% - 26p
   --important:#d8c3ff;
 }
 body{font-size:14px}
-.title{font-size:18px;color:var(--headline);text-shadow:0 0 18px rgba(103,232,255,.08)}
+.title{font-size:18px;background:linear-gradient(90deg,#f5f9ff 0%,#67e8ff 54%,#c084fc 100%);-webkit-background-clip:text;background-clip:text;color:transparent;text-shadow:0 0 18px rgba(103,232,255,.08)}
 .sectionHead .title{color:var(--headline)}
 .label{font-size:10px;color:#9fb2c7;letter-spacing:.015em}
 .sub,.subv{font-size:10px;color:#9aa9bb}
@@ -1163,7 +1163,8 @@ async function loadCore(){
   try{
     var d=await api("/api/core?symbol="+encodeURIComponent(state.symbol)+"&interval="+encodeURIComponent(state.interval),9000);
     state.market=d;setStatus("Core market intelligence connected","ok");$("dataState").textContent="Live";renderMarket();
-    queueSecondaryBoot();
+    if(!state.secondaryStarted)queueSecondaryBoot();
+    else if(state.activeView==="overview"){deferTask(loadScan,80);deferTask(loadCycle,140)}
   }catch(e){
     setStatus("Core market connection failed. The interface is running; retrying automatically.","warn");$("dataState").textContent="Retry";
     $("thesis").textContent="The interface is responsive, but the live market source did not respond. Retrying automatically.";
