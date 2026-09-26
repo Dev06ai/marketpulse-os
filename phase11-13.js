@@ -190,7 +190,7 @@ function applyDeploymentGate(decision,validation,opts={}){
 
 function selfTest(){
   const candles=[];
-  for(let i=0;i<560;i++)candles.push({t:Date.now()+i*3600000,o:99,h:103,l:98,c:101,v:1000+i});
+  for(let i=0;i<560;i++)candles.push({t:Date.now()+i*3600000,o:99,h:103,l:99,c:101,v:1000+i});
   const fakeAnalyze=()=>({});
   const fakePhase={
     evaluate:()=>({
