@@ -815,12 +815,45 @@ function api(url,timeout){
   })
 }
 
+async function loadPublicConfig(){
+  try{
+    var d=await api("/api/config",5000);state.flags=d.flags||{};
+    if(d.maintenance){setStatus(d.maintenanceMessage||"MarketPulse is temporarily unavailable.","warn")}
+    else if(d.readOnly){setStatus("MarketPulse is in read-only mode. Viewing remains available.","warn")}
+    applyFeatureFlags();loadPublicBroadcasts();
+  }catch{}
+}
+function applyFeatureFlags(){
+  var map={copilot_enabled:"copilot",research_enabled:"research",replay_enabled:"replay"};
+  Object.keys(map).forEach(function(k){var b=document.querySelector('[data-view="'+map[k]+'"]');if(b)b.style.display=state.flags[k]?.enabled===false?"none":""});
+  var support=$("supportUserPanel");if(support)support.style.display=state.flags.support_enabled?.enabled===false?"none":"";
+  var bc=$("broadcastBar");if(bc&&state.flags.broadcasts_enabled?.enabled===false)bc.classList.remove("show");
+}
+async function loadPublicBroadcasts(){
+  if(state.flags.broadcasts_enabled?.enabled===false)return;
+  try{var d=await api("/api/broadcasts/active",5000),rows=d.broadcasts||[];if(!rows.length){$("broadcastBar").classList.remove("show");return}var b=rows[0];$("broadcastTitle").textContent=b.title;$("broadcastBody").textContent=b.body;$("broadcastBar").classList.add("show")}catch{}
+}
+async function trackActivity(feature,action,symbol,interval,metadata){
+  try{fetch("/api/telemetry/event",{method:"POST",headers:{"Content-Type":"application/json","x-marketpulse-device":deviceId()},body:JSON.stringify({feature,action,symbol:symbol||null,interval:interval||null,metadata:metadata||{}})}).catch(()=>{})}catch{}
+}
+function renderUserTickets(rows){
+  var el=$("supportUserTickets");if(!el)return;
+  el.innerHTML=(rows||[]).slice(0,6).map(function(x){return'<div class="adminLine"><div><b>'+safeHtml(x.subject)+'</b><div class="small">'+safeHtml(x.status)+' · '+adminDate(x.updatedAt)+'</div></div><span>'+safeHtml(String(x.adminReply||"Awaiting reply").slice(0,70))+'</span></div>'}).join("")||'<div class="small">No tickets yet.</div>';
+}
+async function loadUserTickets(){
+  if(!state.account)return;
+  try{var d=await api("/api/support/tickets",5000);renderUserTickets(d.tickets||[])}catch{}
+}
+async function submitUserTicket(){
+  var subject=$("supportSubject").value.trim(),message=$("supportMessage").value.trim();if(!subject||!message){$("supportUserStatus").textContent="Subject and message are required.";return}
+  try{await apiPost("/api/support/tickets",{category:$("supportCategory").value,subject,message});$("supportUserStatus").textContent="Sent. We'll respond in your account.";$("supportSubject").value="";$("supportMessage").value="";loadUserTickets()}catch(e){$("supportUserStatus").textContent=e.message}
+}
 function setView(name){
   if((name==="admin"||name==="execution")&&!state.account?.isAdmin){name="overview"}
   document.querySelectorAll(".view").forEach(function(v){v.classList.toggle("active",v.id==="view-"+name)});
   document.querySelectorAll(".nav button,.mobileMenu button").forEach(function(b){b.classList.toggle("active",b.dataset.view===name)});
   var menu=$("mobileMenu"),btn=$("mobileMenuBtn");if(menu){menu.classList.remove("open");menu.setAttribute("aria-hidden","true")}if(btn)btn.setAttribute("aria-expanded","false");
-  state.activeView=name;window.scrollTo(0,0);
+  state.activeView=name;window.scrollTo(0,0);trackActivity("navigation","view",state.symbol,state.interval,{view:name});
   if(name==="flow"){loadFlow()}
   if(name==="edge"){loadEdge()}
   if(name==="execution"&&state.account?.isAdmin){loadExecution()}
@@ -1793,13 +1826,13 @@ async function submitAccount(){
     }
     state.account=j.user;state.adminMfaEnabled=Boolean(j.user&&j.user.mfaEnabled);state.pendingAnonymousMemory=anonymous;state.adminMfaRequired=false;renderAccount();await syncMemory({migrateAnonymous:true,save:true});
     $("accountError").textContent="";$("accountPassword").value="";if($("accountMfa"))$("accountMfa").value="";closeAccount();
-    $("memoryText").textContent=state.account.isAdmin?"Owner security is active.":"Account sync active.";
+    $("memoryText").textContent=state.account.isAdmin?"Owner security is active.":"Account sync active.";loadUserTickets();
   }catch(e){$("accountError").textContent=e.message}
 }
 async function logoutAccount(){
   try{
     await fetch("/api/auth/logout",{method:"POST"});
-    state.account=null;state.pendingAnonymousMemory=null;state.adminMfaRequired=false;
+    state.account=null;state.pendingAnonymousMemory=null;state.adminMfaRequired=false;state.adminTickets=[];
     state.journal=[];state.signals=[];state.watch=[];
     localStorage.removeItem("mp-stable-journal");localStorage.removeItem("mp-stable-signals");localStorage.removeItem("mp-watch");
     renderAccount();await syncMemory();$("memoryText").textContent="Signed out. Anonymous device memory restored; account data remains isolated.";
@@ -1981,13 +2014,15 @@ function initAccountUI(){
   accountLogout.addEventListener("click",logoutAccount);
   accountModal.addEventListener("click",function(e){if(e.target===this)closeAccount()});
   renderAccount();
-  loadAuth();
+  loadAuth();loadPublicConfig();
   setInterval(sendPresence,30000);
   var adminRun=$("adminRunCheck"),adminExec=$("adminOpenExecution");
   if($("adminUsersRefresh"))$("adminUsersRefresh").addEventListener("click",loadAdminUsers);
   if($("adminUsersSearch"))$("adminUsersSearch").addEventListener("input",adminRenderUsers);
   sendPresence();
 
+  if($("supportSend"))$("supportSend").addEventListener("click",submitUserTicket);
+  if($("broadcastClose"))$("broadcastClose").addEventListener("click",function(){$("broadcastBar").classList.remove("show")});
   if(adminRun)adminRun.addEventListener("click",runAdminSystemCheck);
   if(adminExec)adminExec.addEventListener("click",function(){setView("execution")});
   if($("adminRefreshCenter"))$("adminRefreshCenter").addEventListener("click",loadAdminCenter);
