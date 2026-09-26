@@ -542,6 +542,10 @@ const server=http.createServer(async(req,res)=>{
       return send(res,200,{ok:true,storage:saved.storage,durable:saved.storage==="postgres",updatedAt:saved.updatedAt});
     }
     if(req.method==='GET'&&u.pathname==='/api/memory/status')return send(res,200,storage.status());
+    if(req.method==='GET'&&u.pathname==='/api/admin/storage-health'){
+      const guard=await auth.requireAdmin(req);if(!guard.ok)return send(res,guard.status,{ok:false,error:guard.error});
+      try{return send(res,200,await storage.health())}catch(e){return send(res,503,{ok:false,mode:'unknown',connected:false,source:'Unavailable',error:String(e.message||e)})}
+    }
     if(req.method==='GET'&&u.pathname==='/api/analytics'){
       const device=String(u.searchParams.get('device')||requestDevice(req));
       try{
