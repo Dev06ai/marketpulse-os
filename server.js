@@ -422,7 +422,16 @@ function summarizeDNA(records){
   return {total:rows.length,resolved:resolved.length,triggered:triggered.length,targetHits:resolved.filter(x=>x.outcome?.status==="TARGET_1").length,stops:resolved.filter(x=>x.outcome?.status==="STOP").length,ambiguous:resolved.filter(x=>x.outcome?.status==="AMBIGUOUS").length,notTriggered:rows.filter(x=>x.outcome?.status==="NOT_TRIGGERED").length,netR:resolved.reduce((a,x)=>a+(Number(x.outcome?.resultR)||0),0),byRegime:by(r=>r.regime),bySide:by(r=>r.side),byType:by(r=>r.type),byStatus:by(r=>r.status),byScore:scoreBuckets};
 }
 
-function staticFile(req,res){const reqPath=req.url==='/'?'/index.html':req.url.split('?')[0],file=path.join(__dirname,'public',reqPath),root=path.join(__dirname,'public');if(!file.startsWith(root))return send(res,403,{error:'Forbidden'});fs.readFile(file,(e,d)=>{if(e)return send(res,404,{error:'Not found'});const ext=path.extname(file);res.writeHead(200,{'Content-Type':ext==='.html'?'text/html; charset=utf-8':ext==='.json'?'application/json; charset=utf-8':'text/plain; charset=utf-8'});res.end(d)})}
+function staticFile(req,res){
+  const reqPath=req.url==='/'?'/index.html':req.url.split('?')[0],root=path.resolve(__dirname,'public'),file=path.resolve(root,'.'+reqPath),relative=path.relative(root,file);
+  if(relative.startsWith('..')||path.isAbsolute(relative))return send(res,403,{error:'Forbidden'});
+  fs.readFile(file,(e,d)=>{
+    if(e)return send(res,404,{error:'Not found'});
+    const ext=path.extname(file),type=ext==='.html'?'text/html; charset=utf-8':ext==='.json'?'application/json; charset=utf-8':'text/plain; charset=utf-8';
+    res.writeHead(200,{'Content-Type':type,'Cache-Control':'no-store','X-Content-Type-Options':'nosniff','X-Frame-Options':'DENY','Referrer-Policy':'strict-origin-when-cross-origin'});
+    res.end(d);
+  });
+}
 
 const server=http.createServer(async(req,res)=>{
   try{
