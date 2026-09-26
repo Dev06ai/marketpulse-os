@@ -551,7 +551,7 @@ body.admin-mode .nav button.adminNav,body.admin-mode .mobileMenu button.adminNav
   </div>
   <div class="grid2">
     <div class="card adminPanel"><div class="title">Execution controls</div><div class="sub">Testnet/simulation execution controls are available only to the owner.</div><button id="adminOpenExecution" class="btn" style="margin-top:9px">Open Execution Control</button></div>
-    <div class="card adminPanel"><div class="title">Admin boundary</div><div class="sub">Trader accounts cannot access protected admin endpoints even if they manually call the API.</div><div class="chip c" style="margin-top:9px">SERVER ENFORCED</div></div>
+    <div class="card adminPanel"><div class="title">Admin boundary</div><div class="sub">Trader accounts cannot access protected admin endpoints even if they manually call the API.</div><div class="chip c" style="margin-top:9px">SERVER ENFORCED</div><div class="small" id="adminSecurityStatus" style="margin-top:8px">Security posture: checking…</div></div>
   </div>
 </section>
 
@@ -1383,11 +1383,12 @@ function setAccountMode(mode){
 async function loadAdminConsole(){
   if(!state.account?.isAdmin)return;
   if($("adminIdentity"))$("adminIdentity").textContent=state.account.email;
-  if($("adminConfigState"))$("adminConfigState").textContent=state.adminConfigured?"Admin email configured":"Admin env not configured";
+  if($("adminSecurityStatus"))$("adminSecurityStatus").textContent=state.adminMfaEnabled?"Owner MFA: ACTIVE · hardened sessions":"Owner MFA: NOT CONFIGURED · add MARKETPULSE_ADMIN_TOTP_SECRET in Render";
+  if($("adminConfigState"))$("adminConfigState").textContent=state.adminConfigured?(state.adminMfaEnabled?"Admin email + MFA configured":"Admin email configured · MFA not enabled"):"Admin env not configured";
   try{
     var r=await api("/api/memory/status",5000);
     if($("adminStorage"))$("adminStorage").textContent=r.durable?"Postgres":"Local fallback";
-  }catch{$("adminStorage").textContent="Unavailable"}
+  }catch{if($("adminStorage"))$("adminStorage").textContent="Unavailable"}
 }
 async function runAdminSystemCheck(){
   if(!state.account?.isAdmin)return;
@@ -1430,7 +1431,7 @@ async function submitAccount(){
     if(j.requiresMfa){
       accountMode="login";state.adminMfaRequired=true;$("accountLoginMode").classList.add("on");$("accountRegisterMode").classList.remove("on");$("accountSubmit").textContent="Sign in";renderAccount();$("accountError").textContent="Account created. Enter your authenticator code to finish owner sign-in.";return;
     }
-    state.account=j.user;state.pendingAnonymousMemory=anonymous;renderAccount();await syncMemory({migrateAnonymous:true,save:true});
+    state.account=j.user;state.pendingAnonymousMemory=anonymous;state.adminMfaRequired=false;renderAccount();await syncMemory({migrateAnonymous:true,save:true});
     $("accountError").textContent="";$("accountPassword").value="";if($("accountMfa"))$("accountMfa").value="";closeAccount();
     $("memoryText").textContent=state.account.isAdmin?"Owner security is active.":"Account sync active.";
   }catch(e){$("accountError").textContent=e.message}
@@ -1438,7 +1439,7 @@ async function submitAccount(){
 async function logoutAccount(){
   try{
     await fetch("/api/auth/logout",{method:"POST"});
-    state.account=null;state.pendingAnonymousMemory=null;
+    state.account=null;state.pendingAnonymousMemory=null;state.adminMfaRequired=false;
     state.journal=[];state.signals=[];state.watch=[];
     localStorage.removeItem("mp-stable-journal");localStorage.removeItem("mp-stable-signals");localStorage.removeItem("mp-watch");
     renderAccount();await syncMemory();$("memoryText").textContent="Signed out. Anonymous device memory restored; account data remains isolated.";
