@@ -41,6 +41,19 @@ function csrfCookie(){
   return CSRF_COOKIE+"="+crypto.randomBytes(32).toString("hex")+"; Path=/; SameSite=Strict; Max-Age=86400;"+secure;
 }
 const ADMIN_ONLY_PREFIXES=['/api/admin/users'];
+const LIVE_VISITORS=new Map();
+function markLiveVisitor(device,registered){
+  const id=String(device||"").slice(0,128);
+  if(!id)return;
+  LIVE_VISITORS.set(id,{lastSeen:Date.now(),registered:Boolean(registered)});
+}
+function liveVisitorStats(){
+  const cutoff=Date.now()-120000;
+  let visitors=0,registered=0;
+  for(const [id,row] of LIVE_VISITORS){if(row.lastSeen<cutoff){LIVE_VISITORS.delete(id);continue}visitors++;if(row.registered)registered++}
+  return {liveVisitors:visitors,liveRegistered:registered};
+}
+
 const ADMIN_ONLY_PATHS=new Set([
   '/api/memory/status',
   '/api/phase7/health',
@@ -583,8 +596,9 @@ const server=http.createServer(async(req,res)=>{
     }
     if(req.method==='POST'&&u.pathname==='/api/auth/presence'){
       const user=await auth.userFromRequest(req);
-      if(!user)return send(res,401,{ok:false,error:"Authentication required"});
-      return send(res,200,{ok:true,online:true});
+      const device=String(req.headers["x-marketpulse-device"]||"").slice(0,128);
+      markLiveVisitor(device,Boolean(user));
+      return send(res,200,{ok:true,online:Boolean(user),live:liveVisitorStats()});
     }
     if(req.method==='POST'&&(u.pathname==='/api/auth/register'||u.pathname==='/api/auth/login')){
       let raw="";for await(const chunk of req)raw+=chunk;
@@ -624,7 +638,7 @@ const server=http.createServer(async(req,res)=>{
       try{
         const stats=await storage.userStats();
         const users=await storage.listUsers(Math.min(500,Math.max(1,Number(u.searchParams.get('limit')||200))));
-        return send(res,200,{ok:true,stats,users});
+        return send(res,200,{ok:true,stats:{...stats,...liveVisitorStats()},users});
       }catch(e){return send(res,503,{ok:false,error:String(e.message||e)})}
     }
     if(req.method==='POST'&&u.pathname.startsWith('/api/admin/users/')&&u.pathname.endsWith('/action')){
