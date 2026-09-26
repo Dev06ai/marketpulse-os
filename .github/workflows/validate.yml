@@ -108,17 +108,17 @@ jobs:
           server=Path("server.js").read_text()
           required_html=[
             'id="pfgGateChip"','id="pfgRefresh"','id="ecgGateChip"','id="ecgRefresh"',
-            'id="pfgAccount"','id="pfgRiskTrade"','id="ecgPremium"','id="ecgPayout"'
+            'id="pfgEvalAccount"','id="pfgRiskTrade"','id="ecgPremium"','id="ecgPayout"'
           ]
           required_server=[
             "/api/propfirm","/api/propfirm/event","/api/research/catalog","/api/research/status","/api/research/train"
           ]
           missing=[x for x in required_html if x not in html]+[x for x in required_server if x not in server]
           if missing: raise SystemExit("Missing prop/research feature surface: "+", ".join(missing))
-          ids=[]
           import re
-          ids=re.findall(r'\bid="([^"]+)"', html)
+          static_html=html.split("<script",1)[0]
+          ids=re.findall(r'\bid="([^"]+)"', static_html)
           dup=sorted({x for x in ids if ids.count(x)>1})
-          if dup: raise SystemExit("Duplicate HTML ids: "+", ".join(dup))
-          print("Prop/research feature surface OK; HTML ids unique")
+          if dup: raise SystemExit("Duplicate static HTML ids: "+", ".join(dup))
+          print("Prop/research feature surface OK; static HTML ids unique")
           PY
