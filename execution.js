@@ -277,7 +277,7 @@ async function marketGate(plan,state){
       return {allowed:true,reason:"PASS",entry:price,stop:Number(formatPrice(stop,tick)),target:Number(formatPrice(target,tick)),qty,riskCash,rr,markPrice:mark,driftBps:mark?Math.abs(price-mark)/mark*10000:null,instrument:inst,portfolio:portfolioGate};
     }catch(e){return {allowed:false,reason:"MARKET VALIDATION FAILED: "+e.message}}
   }
-  const portfolioGate=await phase6.executionGate({symbol,side:p.side,entry,stop,target,qty,riskCash},state);
+  const portfolioGate=await phase6.executionGate({symbol,side:p.side,entry,stop,target,qty,riskCash,intentId:p.id},state);
   if(!portfolioGate.allowed)return Object.assign({allowed:false},portfolioGate);
   return {allowed:true,reason:"PASS",entry,stop,target,qty,riskCash,rr,markPrice:null,driftBps:null,portfolio:portfolioGate};
 }
