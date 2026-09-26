@@ -1720,24 +1720,13 @@ function renderCycle(){
 
 function renderMarket(){
   var d=state.market,a=d&&d.analysis;if(!d||!a)return;
-  var signalState=a.side==="LONG"?"signal-long":a.side==="SHORT"?"signal-short":"signal-wait";
-  var accent=a.side==="LONG"?"#4ade80":a.side==="SHORT"?"#f87171":"#c084fc";
-  var glow=a.side==="LONG"?"rgba(74,222,128,.18)":a.side==="SHORT"?"rgba(248,113,113,.18)":"rgba(192,132,252,.20)";
-  var decision=document.querySelector(".decisionSection"),callMetric=$("callMetric");
-  if(decision){decision.classList.remove("signal-long","signal-short","signal-wait");decision.classList.add(signalState);decision.style.setProperty("--signal-accent",accent);decision.style.setProperty("--signal-glow",glow)}
-  callMetric.classList.remove("signal-long","signal-short","signal-wait");callMetric.classList.add(signalState);
-  $("mCall").style.color=accent;$("mCall").style.textShadow="0 0 20px "+glow;$("quality").style.color=accent;$("quality").style.textShadow="0 0 18px "+glow;$("mBias").style.color=accent;
+
+  // Raw/core analysis updates market context only. The final gated decision
+  // engine is the sole authority for Signal + Decision Center UI.
   $("mPrice").textContent=fmt(a.price);$("mChange").textContent=pct(a.change24h)+" / 24h";
   $("mRegime").textContent=a.regime||"—";$("mMood").textContent="Mood: "+(a.mood||"—");
-  $("mCall").textContent=a.side==="LONG"?"LONG":a.side==="SHORT"?"SHORT":"NO TRADE";$("mBias").textContent=a.side==="LONG"?"Bullish setup":a.side==="SHORT"?"Bearish setup":"Neutral / waiting";
-  $("mScore").textContent=fmt(a.score);$("mMom").textContent=fmt(a.rsi)+" / "+fmt(a.adx);$("mStructure").textContent=a.structure||"—";
-  $("thesisTitle").textContent=a.status==="WAITING"?"No trade":(a.type||"Market context");$("thesisState").textContent=(a.status||"WAITING")+" · "+(a.probabilityLabel||"");
-  $("thesisScore").textContent=fmt(a.score)+"/100";$("thesis").textContent=(a.thesisParts||[a.thesis||"Market context available."]).join(" ");
-  $("primary").textContent=a.primaryScenario||"—";$("alternate").textContent=a.alternateScenario||"—";
-  $("thesisChips").innerHTML=[["4H",a.mtf&&a.mtf.higher],["15M",a.mtf&&a.mtf.lower],["Mood",a.mood],["Structure",a.structure]].map(function(x){return'<span class="chip c">'+x[0]+": "+(x[1]||"—")+"</span>"}).join("");
-  $("quality").textContent=fmt(a.score)+"/100";
-  $("components").innerHTML=(a.components||[]).map(function(x){var max=({Regime:16,"Trend strength":11,Momentum:11,Volume:9,Structure:9,"4H alignment":9,"15M alignment":7,"CVD pressure":10,"OI context":8,"Liquidation context":6})[x.name]||10;return'<div class="rowLine"><span class="small">'+x.name+'</span><b style="font-size:9px;text-align:right">'+x.value+"/"+max+'</b><div class="bar"><i style="width:'+Math.max(0,Math.min(100,x.value/max*100))+'%"></i></div></div>'}).join("");
-  $("entry").textContent=a.entryLow!=null?fmt(a.entryLow)+" → "+fmt(a.entryHigh):"Wait";$("stop").textContent=fmt(a.stop);$("target").textContent=fmt(a.tp1);$("rr").textContent=a.rr?Number(a.rr).toFixed(2)+"R":"—";
+  $("mMom").textContent=fmt(a.rsi)+" / "+fmt(a.adx);$("mStructure").textContent=a.structure||"—";
+
   renderMarketNoFlow();
   $("adaptiveChip").textContent=d.learning&&d.learning.state?("Adaptive: "+String(d.learning.state).toLowerCase()):"Adaptive: background learning";
   $("learnState").textContent=d.learning&&d.learning.state?d.learning.state:"COLLECTING";$("learnN").textContent=d.learning&&d.learning.resolved!=null?d.learning.resolved:0;$("learnWin").textContent=d.learning&&d.learning.winRate!=null?Number(d.learning.winRate).toFixed(1)+"%":"—";$("learnAdj").textContent=d.learning&&d.learning.lastAdjustment!=null?Number(d.learning.lastAdjustment).toFixed(1):"0.0";$("learnPersist").textContent=d.learning&&d.learning.durable?"Postgres cloud":(d.learning?"Local fallback":"—");$("learnNote").textContent=d.learning&&d.learning.state==="ADAPTIVE"?"Adaptive calibration active. Historical outcomes are influencing confluence.":"Collecting resolved outcomes before calibration.";
