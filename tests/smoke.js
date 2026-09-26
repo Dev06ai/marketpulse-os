@@ -4,6 +4,7 @@ const {analyze,backtest,backtestBySetup,walkForwardBacktest}=require("../market-
 const phase4=require("../phase4");
 const execution=require("../execution");
 const phase6=require("../phase6");
+const prediction=require("../prediction-engine");
 
 function candles(n=420){
   const out=[];let p=100;
@@ -21,6 +22,15 @@ function candles(n=420){
 }
 const c=candles();
 const a=analyze(c,{interval:"1h"});
+const pf=prediction.buildFeatures(a,{candles:c,orderbook:{valid:true,imbalance:.1,depthImbalance:.05},derivatives:{available:true,cvdRatio:.02,oiChangePct:1.2,fundingRate:.0001}});
+assert(prediction.FEATURE_NAMES.length===24,"prediction feature count");
+assert(Object.keys(pf).length===prediction.FEATURE_NAMES.length,"prediction feature vector");
+const modelRows=[];for(let i=0;i<620;i++){const x={};for(const k of prediction.FEATURE_NAMES)x[k]=Math.sin(i*.07+k.length*.03);modelRows.push({label:i%5?1:0,features:x})}
+const pm=prediction.trainLogistic(modelRows,{epochs:80,lr:.04,l2:.02});
+assert(pm.version===3,"prediction model version");
+assert(pm.walkForwardMetrics.folds===3,"walk-forward folds");
+assert(pm.walkForwardMetrics.allFoldsBeatBaseline===true,"walk-forward baseline gate");
+assert(Number.isFinite(prediction.predict(pm,pf)),"prediction finite");
 assert(Number.isFinite(a.price),"price");
 assert(Number.isFinite(a.score),"score");
 assert(a.components.length===10,"10 confluence components");
