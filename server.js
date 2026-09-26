@@ -3,6 +3,7 @@ const storage=require('./storage');
 const learning=require('./learning');
 const phase4=require('./phase4');
 const execution=require('./execution');
+const phase6=require('./phase6');
 const WebSocket=require('ws');
 const PORT=Number(process.env.PORT||3000);
 const SYMBOLS=(process.env.SYMBOLS||'BTCUSDT,ETHUSDT,SOLUSDT,BNBUSDT,XRPUSDT,DOGEUSDT,ADAUSDT').split(',').map(s=>s.trim()).filter(Boolean);
@@ -11,7 +12,7 @@ const labels={BTCUSDT:'BTC',ETHUSDT:'ETH',SOLUSDT:'SOL',BNBUSDT:'BNB',XRPUSDT:'X
 const KRAKEN_PAIRS={BTCUSDT:'XBTUSD',ETHUSDT:'ETHUSD',SOLUSDT:'SOLUSD',BNBUSDT:'BNBUSD',XRPUSDT:'XRPUSD',DOGEUSDT:'DOGEUSD',ADAUSDT:'ADAUSD'};
 const CACHE=new Map(); const TTL=25000;
 const SCAN_CACHE=new Map(); const SCAN_TTL=20000;
-const PHASE2_VERSION=2; const PHASE3_VERSION=3; const PHASE4_VERSION=4; const PHASE5_VERSION=5;
+const PHASE2_VERSION=2; const PHASE3_VERSION=3; const PHASE4_VERSION=4; const PHASE5_VERSION=5; const PHASE6_VERSION=6;
 const OPENAI_API_KEY=process.env.OPENAI_API_KEY||"";
 const OPENAI_MODEL=process.env.OPENAI_MODEL||"gpt-5.6-luna";
 const AI_LIMIT_MS=8000; const AI_CALLS=new Map();
@@ -421,7 +422,7 @@ const server=http.createServer(async(req,res)=>{
     }
     if(req.method==='GET'&&u.pathname==='/api/memory/status')return send(res,200,storage.status());
     if(req.method==='GET'&&u.pathname==='/api/learning/status')return send(res,200,await learning.status());
-    if(req.method==='GET'&&u.pathname==='/api/config')return send(res,200,{symbols:SYMBOLS,labels,intervals:['15m','1h','4h','1d'],memory:storage.status(),learning:{state:'LOADING'},phase4:PHASE4_VERSION,phase5:PHASE5_VERSION});if(req.method==='POST'&&u.pathname==='/api/ai'){
+    if(req.method==='GET'&&u.pathname==='/api/config')return send(res,200,{symbols:SYMBOLS,labels,intervals:['15m','1h','4h','1d'],memory:storage.status(),learning:{state:'LOADING'},phase4:PHASE4_VERSION,phase5:PHASE5_VERSION,phase6:PHASE6_VERSION});if(req.method==='POST'&&u.pathname==='/api/ai'){
       if(!aiAllowed(req)) return send(res,429,{error:"Slow down for a few seconds."});
       let raw=""; for await(const chunk of req) raw+=chunk; let body={}; try{body=JSON.parse(raw||"{}")}catch{return send(res,400,{error:"Invalid JSON"})}
       const mode=body.mode==="trade"?"trade":"market";
@@ -565,6 +566,46 @@ const server=http.createServer(async(req,res)=>{
       try{return send(res,200,await execution.closeSimulationPosition(body.positionId,body.exitPrice))}catch(e){return send(res,400,{error:e.message})}
     }
 
+    if(req.method==='GET'&&u.pathname==='/api/portfolio'){
+      const interval=u.searchParams.get('interval')||'1h';
+      const lookback=Math.min(180,Math.max(20,Number(u.searchParams.get('lookback')||60)));
+      try{
+        const [sets,ex,p6]=await Promise.all([
+          Promise.all(SYMBOLS.map(async sym=>({symbol:sym,candles:await klines(sym,interval)}))),
+          execution.snapshot(),
+          phase6.snapshot()
+        ]);
+        const series={};const assets=[];
+        for(const row of sets){
+          series[row.symbol]=row.candles||[];
+          const a=analyze(row.candles||[],{interval});
+          const pos=(ex.positions||[]).filter(x=>x.symbol===row.symbol);
+          const ord=(ex.orders||[]).filter(x=>x.symbol===row.symbol&&!["CANCELLED","REJECTED","EXPIRED","CLOSED"].includes(x.status));
+          assets.push({
+            symbol:row.symbol,label:labels[row.symbol]||row.symbol,price:a.price,change24h:a.change24h,regime:a.regime,
+            side:a.side,status:a.status,score:a.score,positionQty:pos.reduce((s,x)=>s+(Number(x.qty)||0),0),
+            activeOrders:ord.length,exposurePct:null,riskPct:null
+          });
+        }
+        const cfg=Object.assign({},p6.config,{account:ex.config?.account??p6.config.account});
+        const portfolio=phase6.buildPortfolio(cfg,ex.positions||[],ex.orders||[],Object.fromEntries(Object.entries(series).map(([s,v])=>[s,v.slice(-(lookback+1))])));
+        assets.forEach(x=>{x.exposurePct=portfolio.exposureBySymbol[x.symbol]||0;x.riskPct=portfolio.riskBySymbol[x.symbol]||0});
+        portfolio=await phase6.savePortfolio(Object.assign(portfolio,{interval,lookback,assets}));
+        return send(res,200,{ok:true,interval,lookback,config:cfg,assets,portfolio:portfolio.portfolio,events:portfolio.events,updatedAt:Date.now()});
+      }catch(e){return send(res,503,{ok:false,error:e.message})}
+    }
+    if(req.method==='POST'&&u.pathname==='/api/portfolio/config'){
+      let raw="";for await(const chunk of req)raw+=chunk;let body={};try{body=JSON.parse(raw||"{}")}catch{return send(res,400,{error:"Invalid JSON"})}
+      try{return send(res,200,await phase6.setConfig({
+        account:body.account,maxPortfolioRiskPct:body.maxPortfolioRiskPct,maxSymbolExposurePct:body.maxSymbolExposurePct,
+        maxCorrelatedClusterRiskPct:body.maxCorrelatedClusterRiskPct,correlationLookback:body.correlationLookback,
+        correlationBlockThreshold:body.correlationBlockThreshold,stressMovePct:body.stressMovePct
+      }))}catch(e){return send(res,400,{error:e.message})}
+    }
+    if(req.method==='GET'&&u.pathname==='/api/portfolio/health'){
+      try{const x=await phase6.snapshot();return send(res,200,{ok:true,config:x.config,portfolio:x.portfolio,events:x.events,updatedAt:x.updatedAt})}catch(e){return send(res,503,{ok:false,error:e.message})}
+    }
+
     if(req.method==='GET'&&u.pathname==='/api/replay'){
       const symbol=(u.searchParams.get('symbol')||'BTCUSDT').toUpperCase(),interval=u.searchParams.get('interval')||'1h',points=Math.min(120,Math.max(12,Number(u.searchParams.get('points')||60))),bars=Math.min(4200,Math.max(240,Number(u.searchParams.get('bars')||(interval==="1d"?1800:420))));
       if(!SYMBOLS.includes(symbol))return send(res,400,{error:'Unsupported symbol'});
@@ -606,7 +647,7 @@ const server=http.createServer(async(req,res)=>{
     }
 
     if(req.method==='GET'&&u.pathname==='/api/system-check'){
-      const checks={server:true,marketEngine:true,learning:false,memory:false,marketData:false,derivatives:false,oi:false,cvd:false,liquidations:false,execution:true};
+      const checks={server:true,marketEngine:true,learning:false,memory:false,marketData:false,derivatives:false,oi:false,cvd:false,liquidations:false,execution:true,portfolio:true};
       let marketError=null,derivativesError=null;
       try{checks.learning=Boolean(await learning.status())}catch(e){}
       try{checks.memory=Boolean(storage.status())}catch(e){}
@@ -618,7 +659,7 @@ const server=http.createServer(async(req,res)=>{
         checks.liquidations=Boolean(Array.isArray(d?.series?.liq)?d.series.liq.length>0:Boolean(d&&d.liquidationTotal!=null));
         if(!checks.derivatives)derivativesError="No derivatives provider returned usable data";
       }catch(e){derivativesError=String(e.message||e)}
-      return send(res,200,{ok:checks.server&&checks.marketEngine&&checks.learning&&checks.memory&&checks.marketData&&checks.execution,checks,marketError,derivativesError,phase2:PHASE2_VERSION,phase3:PHASE3_VERSION,phase4:PHASE4_VERSION,phase5:PHASE5_VERSION,routes:{core:true,coreScan:true,coreFlow:true,cycle:true,ai:true,memory:true,learning:true,replay:true,dna:true,research:true,edge:true,edgeHealth:true,edgeConfig:true,edgeJournal:true,execution:true,executionConfig:true,executionArm:true,executionKill:true,executionReconcile:true},timestamp:Date.now()});
+      return send(res,200,{ok:checks.server&&checks.marketEngine&&checks.learning&&checks.memory&&checks.marketData&&checks.execution,checks,marketError,derivativesError,phase2:PHASE2_VERSION,phase3:PHASE3_VERSION,phase4:PHASE4_VERSION,phase5:PHASE5_VERSION,phase6:PHASE6_VERSION,routes:{core:true,coreScan:true,coreFlow:true,cycle:true,ai:true,memory:true,learning:true,replay:true,dna:true,research:true,edge:true,edgeHealth:true,edgeConfig:true,edgeJournal:true,execution:true,executionConfig:true,executionArm:true,executionKill:true,executionReconcile:true,portfolio:true,portfolioConfig:true},timestamp:Date.now()});
     }
     if(req.method==='GET'&&u.pathname==='/api/live'){
       const symbol=(u.searchParams.get('symbol')||'BTCUSDT').toUpperCase(),interval=u.searchParams.get('interval')||'1h';
