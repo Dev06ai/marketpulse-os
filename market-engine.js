@@ -55,6 +55,16 @@ function adx(c,p=14){
 
 function volumeZ(v,p=30){const m=sma(v,p),s=stdev(v,p),i=v.length-1;return Number.isFinite(m[i])&&s[i]?((v[i]-m[i])/s[i]):0}
 
+function normalizeOrderFlow(deriv){
+  const ob=deriv&&typeof deriv.orderBook==="object"?deriv.orderBook:{};
+  const imbalance=Number.isFinite(+ob.imbalance)?+ob.imbalance:null;
+  const microBias=Number.isFinite(+ob.micropriceBias)?+ob.micropriceBias:null;
+  const spreadBps=Number.isFinite(+ob.spreadBps)?+ob.spreadBps:null;
+  const depth=Number.isFinite(+ob.depthNotional)?+ob.depthNotional:null;
+  const taker=Number.isFinite(+deriv?.takerImbalance)?+deriv.takerImbalance:null;
+  return {imbalance,microBias,spreadBps,depth,taker};
+}
+
 function structure(c){
   const i=c.length-1, recent=c.slice(Math.max(0,i-30),i+1);
   const mid=Math.max(3,Math.floor(recent.length/4));
@@ -109,6 +119,11 @@ function analyze(c,ctx={}){
   const currentOi=Number.isFinite(deriv?.oi)?deriv.oi:null;
   const liquidationBias=deriv?.liquidationBias||"UNKNOWN";
   const liquidationTotal=Number.isFinite(deriv?.liquidationTotal)?deriv.liquidationTotal:null;
+  const flow=normalizeOrderFlow(deriv);
+  const orderBookImbalance=flow.imbalance;
+  const micropriceBias=flow.microBias;
+  const spreadBps=flow.spreadBps;
+  const takerImbalance=flow.taker;
   const longPercent=Number.isFinite(deriv?.longPercent)?deriv.longPercent:null;
   const shortPercent=Number.isFinite(deriv?.shortPercent)?deriv.shortPercent:null;
   const longShortRatio=Number.isFinite(deriv?.longShortRatio)?deriv.longShortRatio:null;
@@ -156,7 +171,13 @@ function analyze(c,ctx={}){
       ((side==="LONG"&&(positioning.includes("LONG PARTICIPATION")||positioning.includes("SHORT COVERING")))||
        (side==="SHORT"&&(positioning.includes("SHORT PARTICIPATION")||positioning.includes("LONG LIQUIDATION"))))?8:4},
     {name:"Liquidation context",value:side==="WAIT"||!liquidationBias||liquidationBias==="UNKNOWN"?2:
-      ((side==="LONG"&&liquidationBias==="SHORT LIQS DOMINANT")||(side==="SHORT"&&liquidationBias==="LONG LIQS DOMINANT"))?6:3}
+      ((side==="LONG"&&liquidationBias==="SHORT LIQS DOMINANT")||(side==="SHORT"&&liquidationBias==="LONG LIQS DOMINANT"))?6:3},
+    {name:"Order-book imbalance",value:side==="WAIT"||orderBookImbalance===null?3:
+      ((side==="LONG"&&orderBookImbalance>=0.12)||(side==="SHORT"&&orderBookImbalance<=-0.12))?7:
+      ((side==="LONG"&&orderBookImbalance<=-0.12)||(side==="SHORT"&&orderBookImbalance>=0.12))?0:4},
+    {name:"Taker flow",value:side==="WAIT"||takerImbalance===null?3:
+      ((side==="LONG"&&takerImbalance>=0.08)||(side==="SHORT"&&takerImbalance<=-0.08))?7:
+      ((side==="LONG"&&takerImbalance<=-0.08)||(side==="SHORT"&&takerImbalance>=0.08))?1:4}
   ];  let score=components.reduce((sum,x)=>sum+x.value,0);
   if((side==="LONG"&&mtf4==="DOWNTREND")||(side==="SHORT"&&mtf4==="UPTREND")){score-=20;contributors.push("4H conflict");reasons.push("The 4H trend directly conflicts with this direction");}
   if((side==="LONG"&&mtf15==="DOWNTREND")||(side==="SHORT"&&mtf15==="UPTREND")){score-=10;contributors.push("15M conflict");reasons.push("The 15M trend is working against this direction");}
@@ -165,6 +186,14 @@ function analyze(c,ctx={}){
   if((side==="LONG"&&positioning.includes("SHORT PARTICIPATION"))||(side==="SHORT"&&positioning.includes("LONG PARTICIPATION"))){score-=6;contributors.push("OI conflict");}
   if((side==="LONG"&&liquidationBias==="LONG LIQS DOMINANT")||(side==="SHORT"&&liquidationBias==="SHORT LIQS DOMINANT")){score-=5;contributors.push("liquidation conflict");reasons.push("Recent liquidation pressure is working against this direction");}
   if((side==="LONG"&&liquidationBias==="SHORT LIQS DOMINANT")||(side==="SHORT"&&liquidationBias==="LONG LIQS DOMINANT")){score+=3;contributors.push("liquidation tailwind");}
+  if(orderBookImbalance!==null){
+    if((side==="LONG"&&orderBookImbalance<=-0.12)||(side==="SHORT"&&orderBookImbalance>=0.12)){score-=5;contributors.push("order-book conflict");reasons.push("Top-of-book depth is leaning against the setup");}
+    else if((side==="LONG"&&orderBookImbalance>=0.12)||(side==="SHORT"&&orderBookImbalance<=-0.12)){score+=3;contributors.push("order-book confirmation");}
+  }
+  if(takerImbalance!==null){
+    if((side==="LONG"&&takerImbalance<=-0.08)||(side==="SHORT"&&takerImbalance>=0.08)){score-=4;contributors.push("taker-flow conflict");}
+    else if((side==="LONG"&&takerImbalance>=0.08)||(side==="SHORT"&&takerImbalance<=-0.08)){score+=3;contributors.push("taker-flow confirmation");}
+  }
   if(regime==="HIGH VOLATILITY"){score-=14;contributors.push("volatility penalty");reasons.push("Volatility is elevated enough to reduce setup quality");}
   if(side==="WAIT")score=Math.min(score,54);
   score=clamp(Math.round(score),0,92);
@@ -214,6 +243,8 @@ function analyze(c,ctx={}){
   if(deriv){
     thesis.push("Derivatives flow: "+cvdState.toLowerCase()+"; positioning: "+positioning.toLowerCase()+".");
     if(liquidationBias&&liquidationBias!=="UNKNOWN")thesis.push("Liquidations: "+liquidationBias.toLowerCase()+".");
+    if(orderBookImbalance!==null)thesis.push("Order-book imbalance: "+(orderBookImbalance>0?"bid-side":"ask-side")+" depth is dominant by "+Math.abs(orderBookImbalance*100).toFixed(1)+"%.");
+    if(takerImbalance!==null)thesis.push("Taker flow imbalance is "+(takerImbalance>0?"buy-dominant":"sell-dominant")+" at "+Math.abs(takerImbalance*100).toFixed(1)+"%.");
     if(longPercent!==null&&shortPercent!==null)thesis.push("Futures positioning split is approximately "+longPercent.toFixed(1)+"% long / "+shortPercent.toFixed(1)+"% short.");
     if(Math.abs(oiChangePct||0)>=3)thesis.push("Open interest has moved "+(oiChangePct>0?"higher":"lower")+" by "+Math.abs(oiChangePct).toFixed(1)+"% over the recent futures window.");
     if(cvdState.includes("DIVERGENCE"))thesis.push("CVD divergence is a warning that price and aggressive futures flow are not fully agreeing.");
@@ -241,7 +272,7 @@ function analyze(c,ctx={}){
     price,change24h,ema20:E20[i],ema50:E50[i],ema200:E200[i],rsi:rsiNow,adx:adxNow,atrPct:atrNow/price*100,volumeZ:vz,
     regime,mood,momentum,volState,structure:st.state,type,side,bias,directionalLean,probabilityLabel,
     score,status,reasons,contributors,components,
-    derivatives:{available:!!deriv,oi:currentOi,cvdState,positioning,oiChangePct,cvdDelta,cvdRatio:deriv?.cvdRatio??null,flowPriceChangePct,tradeCount:deriv?.tradeCount??0,fundingRate:deriv?.fundingRate??null,longPercent,shortPercent,longShortRatio,liquidationBias:liquidationBias&&liquidationBias!=="UNKNOWN"?liquidationBias:"NOT AVAILABLE",liquidationTotal,provider:deriv?.provider??null,errors:deriv?.errors??[]},
+    derivatives:{available:!!deriv,oi:currentOi,cvdState,positioning,oiChangePct,cvdDelta,cvdRatio:deriv?.cvdRatio??null,flowPriceChangePct,tradeCount:deriv?.tradeCount??0,fundingRate:deriv?.fundingRate??null,longPercent,shortPercent,longShortRatio,liquidationBias:liquidationBias&&liquidationBias!=="UNKNOWN"?liquidationBias:"NOT AVAILABLE",liquidationTotal,orderBookImbalance,micropriceBias,spreadBps,takerImbalance,depthNotional:flow.depth,provider:deriv?.provider??null,errors:deriv?.errors??[]},
     thesis:thesis.join(" "),thesisParts:thesis,
     primaryScenario,alternateScenario,
     mtf:{lower:mtf15,higher:mtf4},stop,tp1,tp2,entryLow:el,entryHigh:eh,rr,
