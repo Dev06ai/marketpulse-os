@@ -1055,7 +1055,7 @@ function drawMain(){
   var end=total-offset,start=Math.max(0,end-visible),data=dataAll.slice(start,end);
   var vals=data.flatMap(function(x){return[Number(x.h),Number(x.l)]});
   var dataHi=Math.max.apply(null,vals),dataLo=Math.min.apply(null,vals),dataRange=(dataHi-dataLo)||1;
-  var yZoom=Math.max(.35,Math.min(3.2,state.chartYZoom||1)),range=dataRange/yZoom;
+  var yZoom=Math.max(.35,Math.min(3.2,state.chartYZoom||1)),range=state.chartAutoScale?dataRange/yZoom:dataRange/yZoom;
   var center=(dataHi+dataLo)/2-(state.chartYShift||0)*dataRange,hi=center+range/2,lo=center-range/2;
   var left=14,right=72,top=14,bottom=34,pw=W-left-right,ph=H-top-bottom,xstep=pw/Math.max(1,data.length-1);
   function scale(v){return top+(hi-v)/range*ph}
@@ -1083,11 +1083,26 @@ function drawMain(){
   ctx.textAlign="left";
 
   var volMax=Math.max.apply(null,data.map(function(x){return Number(x.v)||0}))||1;
-  for(var i=0;i<data.length;i++){
-    var x=left+i*xstep,o=scale(data[i].o),h=scale(data[i].h),l=scale(data[i].l),cl=scale(data[i].c),bull=data[i].c>=data[i].o,col=bull?theme.bull:theme.bear;
-    ctx.strokeStyle=col;ctx.lineWidth=Math.max(1,Math.min(1.8,xstep*.12));ctx.beginPath();ctx.moveTo(x,h);ctx.lineTo(x,l);ctx.stroke();
-    var bw=Math.max(2,Math.min(9,xstep*.62));ctx.fillStyle=col;ctx.fillRect(x-bw/2,Math.min(o,cl),bw,Math.max(1.2,Math.abs(cl-o)));
-    if(chartSettings.showVolume!==false){var vh=24*((Number(data[i].v)||0)/volMax);ctx.globalAlpha=.18;ctx.fillStyle=col;ctx.fillRect(x-bw/2,H-29-vh,bw,vh);ctx.globalAlpha=1;}
+  if(state.chartType==="line"){
+    var pts=data.map(function(row,idx){return[left+idx*xstep,scale(Number(row.c))]});
+    if(pts.length>1){
+      ctx.save();ctx.globalAlpha=.16;ctx.strokeStyle=theme.ema;ctx.lineWidth=8;ctx.lineCap="round";line(ctx,pts);ctx.restore();
+      ctx.save();ctx.strokeStyle=theme.ema;ctx.lineWidth=2.25;ctx.lineCap="round";ctx.lineJoin="round";line(ctx,pts);ctx.restore();
+    }
+    for(var li=0;li<data.length;li++){
+      var lx=left+li*xstep,lvh=scale(data[li].c);
+      if(li===data.length-1||li%Math.max(1,Math.round(data.length/24))===0){
+        ctx.fillStyle=theme.ema;ctx.beginPath();ctx.arc(lx,lvh,2.1,0,Math.PI*2);ctx.fill();
+      }
+      if(chartSettings.showVolume!==false){var lvhv=24*((Number(data[li].v)||0)/volMax);ctx.globalAlpha=.16;ctx.fillStyle=data[li].c>=data[li].o?theme.bull:theme.bear;ctx.fillRect(lx-1,H-29-lvhv,2,lvhv);ctx.globalAlpha=1;}
+    }
+  }else{
+    for(var i=0;i<data.length;i++){
+      var x=left+i*xstep,o=scale(data[i].o),h=scale(data[i].h),l=scale(data[i].l),cl=scale(data[i].c),bull=data[i].c>=data[i].o,col=bull?theme.bull:theme.bear;
+      ctx.strokeStyle=col;ctx.lineWidth=Math.max(1,Math.min(1.8,xstep*.12));ctx.beginPath();ctx.moveTo(x,h);ctx.lineTo(x,l);ctx.stroke();
+      var bw=Math.max(2,Math.min(9,xstep*.62));ctx.fillStyle=col;ctx.fillRect(x-bw/2,Math.min(o,cl),bw,Math.max(1.2,Math.abs(cl-o)));
+      if(chartSettings.showVolume!==false){var vh=24*((Number(data[i].v)||0)/volMax);ctx.globalAlpha=.18;ctx.fillStyle=col;ctx.fillRect(x-bw/2,H-29-vh,bw,vh);ctx.globalAlpha=1;}
+    }
   }
   ctx.fillStyle="rgba(255,255,255,.28)";ctx.font="8px system-ui";ctx.fillText("VOL",left+3,H-9);
 
@@ -1729,7 +1744,8 @@ async function loadPropFirmGuard(){
       {label:"Flow",state:g.flow&&g.flow!=="UNKNOWN"&&g.flow!=="MIXED"?"ok":"warn",value:g.flow||"Unavailable"},
       {label:"Account safety",state:Number(g.riskHeadroomCash||0)>0&&Number(g.dailyLossPct||0)<Number(g.config?.maxDailyLossPct||3)&&Number(g.maxDrawdownPct||0)<Number(g.config?.maxDrawdownPct||6)?"ok":"bad",value:fmt(g.riskHeadroomCash||0)+" headroom"}
     ]);
-    $("pfgReasons").textContent=(g.reasons&&g.reasons.length?("Why blocked: "+g.reasons.map(friendlyGateReason).join(" · ")):("Checks passed"+(g.warnings&&g.warnings.length?(" · Caution: "+g.warnings.map(friendlyGateReason).join(" · ")):"")));
+    var pfgWhy=g.reasons&&g.reasons.length?g.reasons.map(friendlyGateReason):[];
+    $("pfgReasons").textContent=pfgWhy.length?("What stopped it: "+pfgWhy.slice(0,3).join(" · ")):("All hard safety checks passed"+(g.warnings&&g.warnings.length?(" · Caution: "+g.warnings.map(friendlyGateReason).join(" · "):"")));
   }catch(e){
     applyGateVisual("pfgCard","pfgGateChip","BLOCKED");setGateExplain("pfgExplain","BLOCKED",["DATA_QUALITY_BELOW_THRESHOLD"]);
     $("pfgDecisionText").textContent="BLOCKED";$("pfgResult").textContent="Safety check unavailable";$("pfgReasons").textContent=e.message||"Request failed";
@@ -1758,7 +1774,8 @@ async function loadEventGuard(){
       {label:"Strike",state:g.strikePrice!=null&&Number(g.strikeDistanceBps||0)>=Number(g.config?.eventMinStrikeDistanceBps||1)?"ok":"bad",value:g.strikePrice!=null?fmt(g.strikePrice):"Enter strike"},
       {label:"Expiry",state:Number(g.secondsToExpiry||0)>=Number(g.config?.eventMinSecondsToExpiry||30)?"ok":"bad",value:g.secondsToExpiry!=null?Math.max(0,Math.round(g.secondsToExpiry))+"s":"Enter expiry"}
     ]);
-    $("ecgReasons").textContent=(g.reasons&&g.reasons.length?("Why blocked: "+g.reasons.map(friendlyGateReason).join(" · ")):("Checks passed"+(g.warnings&&g.warnings.length?(" · Caution: "+g.warnings.map(friendlyGateReason).join(" · ")):"")))+".";
+    var ecgWhy=g.reasons&&g.reasons.length?g.reasons.map(friendlyGateReason):[];
+    $("ecgReasons").textContent=ecgWhy.length?("What stopped it: "+ecgWhy.slice(0,3).join(" · ")):("All hard safety checks passed"+(g.warnings&&g.warnings.length?(" · Caution: "+g.warnings.map(friendlyGateReason).join(" · "):"")))+".";
   }catch(e){
     applyGateVisual("ecgCard","ecgGateChip","BLOCKED");setGateExplain("ecgExplain","BLOCKED",["DATA_QUALITY_BELOW_THRESHOLD"]);
     $("ecgDecisionText").textContent="BLOCKED";$("ecgResult").textContent="Safety check unavailable";$("ecgReasons").textContent=e.message||"Request failed";
@@ -2243,7 +2260,17 @@ $("askAi").addEventListener("click",askAI);$("sync").addEventListener("click",sy
   })
 });
 
-var chart=$("mainChart"),drag={on:false,x:0,y:0};
+var chart=$("mainChart"),drag={on:false,x:0,y:0},touch={};
+function setChartType(type){
+  state.chartType=type==="line"?"line":"candles";
+  $("chartCandles").classList.toggle("active",state.chartType==="candles");
+  $("chartLine").classList.toggle("active",state.chartType==="line");
+  queueChartDraw();
+}
+function fitChartToVisible(){
+  state.chartAutoScale=true;state.chartYZoom=1;state.chartYShift=0;queueChartDraw();
+}
+
 function resetChartView(){var total=state.market?.candles?.length||0;state.chartVisible=Math.min(96,total);state.chartOffset=0;state.chartYZoom=1;state.chartYShift=0;state.crossX=null;state.crossY=null;drawMain()}
 function updateCrosshair(e){
   if(!state.market)return;
@@ -2272,6 +2299,36 @@ chart.addEventListener("pointerleave",function(){if(!drag.on){state.crossX=null;
 chart.addEventListener("pointerup",function(){drag.on=false});
 chart.addEventListener("pointercancel",function(){drag.on=false});
 chart.addEventListener("dblclick",function(e){e.preventDefault();resetChartView()});
+chart.addEventListener("touchstart",function(e){
+  if(e.touches.length===1){touch={mode:"pan",x:e.touches[0].clientX,y:e.touches[0].clientY}}
+  else if(e.touches.length===2){
+    var a=e.touches[0],b=e.touches[1];
+    touch={mode:"pinch",distance:Math.hypot(a.clientX-b.clientX,a.clientY-b.clientY),visible:state.chartVisible||96,midX:(a.clientX+b.clientX)/2};
+  }
+},{passive:true});
+chart.addEventListener("touchmove",function(e){
+  if(!state.market)return;
+  if(e.touches.length===1&&touch.mode==="pan"){
+    var t=e.touches[0],dx=t.clientX-touch.x,dy=t.clientY-touch.y,total=state.market.candles.length;
+    if(Math.abs(dx)>1)state.chartOffset=Math.max(0,Math.min(Math.max(0,total-(state.chartVisible||96)),state.chartOffset+Math.round(-dx/Math.max(1,chart.clientWidth/Math.max(1,state.chartVisible))*1.1)));
+    if(Math.abs(dy)>1)state.chartYShift=Math.max(-1.5,Math.min(1.5,(state.chartYShift||0)+dy/Math.max(1,chart.clientHeight)));
+    touch.x=t.clientX;touch.y=t.clientY;queueChartDraw();
+  }else if(e.touches.length===2&&touch.mode==="pinch"){
+    var a=e.touches[0],b=e.touches[1],d=Math.hypot(a.clientX-b.clientX,a.clientY-b.clientY);
+    if(touch.distance>0){
+      var total=state.market.candles.length,old=touch.visible||96,newVisible=Math.max(36,Math.min(220,total,Math.round(old*(touch.distance/d))));
+      if(newVisible!==old){
+        var r=chart.getBoundingClientRect(),rel=Math.max(0,Math.min(1,(touch.midX-r.left)/Math.max(1,r.width)));
+        var oldOffset=state.chartOffset||0,oldStart=total-oldOffset-old,anchor=oldStart+rel*(old-1);
+        var newStart=Math.max(0,Math.min(total-newVisible,Math.round(anchor-rel*(newVisible-1))));
+        state.chartVisible=newVisible;state.chartOffset=total-newVisible-newStart;touch.visible=newVisible;touch.distance=d;queueChartDraw();
+      }
+    }
+    e.preventDefault();
+  }
+},{passive:false});
+chart.addEventListener("touchend",function(){touch={}});
+
 chart.addEventListener("wheel",function(e){
   if(!state.market)return;
   e.preventDefault();
@@ -2288,6 +2345,10 @@ var chartFrame=0;
 function queueChartDraw(){if(chartFrame)return;chartFrame=requestAnimationFrame(function(){chartFrame=0;if(state.market)drawMain()})}
 
 window.addEventListener("resize",function(){if(state.market){queueChartDraw();renderCycle()}});
+["chartCandles","chartLine"].forEach(function(id){$(id).addEventListener("click",function(){setChartType(id==="chartLine"?"line":"candles")})});
+$("chartAuto").addEventListener("click",function(){state.chartAutoScale=true;fitChartToVisible()});
+$("chartFit").addEventListener("click",function(){fitChartToVisible()});
+
 
 populateSymbols();$("interval").value=state.interval;renderJournal();renderBrainInsights();renderAlerts();calc();
 setStatus("MarketPulse ready. Connecting to live market data…");
