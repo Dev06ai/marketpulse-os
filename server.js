@@ -492,14 +492,64 @@ async function historicalCandles(symbol,interval,bars){
   return klines(symbol,interval);
 }
 
+const HIST_DERIV_CACHE=new Map();
+const HIST_DERIV_TTL=15*60*1000;
+function binanceDerivPeriod(interval){return ({'15m':'15m','1h':'1h','4h':'4h','1d':'1d'})[interval]||'1h'}
+async function historicalBinanceDerivatives(symbol,interval){
+  const key=symbol+"|"+interval,hit=HIST_DERIV_CACHE.get(key);
+  if(hit&&Date.now()-hit.ts<HIST_DERIV_TTL)return hit.rows;
+  const period=binanceDerivPeriod(interval),base="https://fapi.binance.com";
+  const qs="symbol="+encodeURIComponent(symbol)+"&period="+period+"&limit=500";
+  const endpoints={
+    oi:"/futures/data/openInterestHist?"+qs+"&contractType=PERPETUAL",
+    taker:"/futures/data/takerlongshortRatio?"+qs+"&contractType=PERPETUAL",
+    accounts:"/futures/data/topLongShortAccountRatio?"+qs+"&contractType=PERPETUAL"
+  };
+  const safe=async path=>{try{return await fetchJson(base+path,6000)}catch{return[]}};
+  const [oi,taker,accounts]=await Promise.all([safe(endpoints.oi),safe(endpoints.taker),safe(endpoints.accounts)]);
+  const rows=new Map();
+  const put=(ts,patch)=>{const k=Number(ts);if(!Number.isFinite(k))return;const x=rows.get(k)||{t:k};Object.assign(x,patch);rows.set(k,x)};
+  (Array.isArray(oi)?oi:[]).forEach((x,i,a)=>{
+    const v=Number(x.sumOpenInterestValue??x.sumOpenInterest);put(x.timestamp,{oi:v});
+    if(i>0){const prev=Number(a[i-1].sumOpenInterestValue??a[i-1].sumOpenInterest);if(Number.isFinite(v)&&Number.isFinite(prev)&&prev)rows.get(Number(x.timestamp)).oiChangePct=(v-prev)/prev*100}
+  });
+  (Array.isArray(taker)?taker:[]).forEach(x=>{
+    const buy=Number(x.takerBuyVolValue??x.takerBuyVol),sell=Number(x.takerSellVolValue??x.takerSellVol);
+    put(x.timestamp,{takerImbalance:Number.isFinite(buy)&&Number.isFinite(sell)&&buy+sell?(buy-sell)/(buy+sell):null});
+  });
+  (Array.isArray(accounts)?accounts:[]).forEach(x=>{
+    const longPct=Number(x.longAccount)*100,shortPct=Number(x.shortAccount)*100;
+    put(x.timestamp,{longPercent:Number.isFinite(longPct)?longPct:null,shortPercent:Number.isFinite(shortPct)?shortPct:null,longShortRatio:Number(x.longShortRatio)});
+  });
+  const out=Array.from(rows.values()).sort((a,b)=>a.t-b.t);
+  HIST_DERIV_CACHE.set(key,{ts:Date.now(),rows:out});
+  return out;
+}
+function nearestHistoricalDerivative(rows,ts){
+  if(!Array.isArray(rows)||!rows.length)return null;
+  let lo=0,hi=rows.length-1,best=null;
+  while(lo<=hi){const m=(lo+hi)>>1,x=rows[m];if(x.t<=ts){best=x;lo=m+1}else hi=m-1}
+  return best?{...best}:null;
+}
+
 async function buildReplayDataset(symbol,interval,{points=60,bars=420}={}){
   const candles=await historicalCandles(symbol,interval,bars);
   if(!candles||candles.length<240)throw new Error("Not enough historical candles for replay");
   const usable=Math.max(1,candles.length-220-13),count=Math.max(10,Math.min(Number(points)||60,usable));
   const step=Math.max(1,Math.floor(usable/count)),frames=[];
+  const historicalDeriv=await historicalBinanceDerivatives(symbol,interval).catch(()=>[]);
   for(let idx=220;idx<candles.length-12;idx+=step){
     const window=candles.slice(0,idx+1);
-    const a=analyze(window,{interval});
+    const rawD=nearestHistoricalDerivative(historicalDeriv,candles[idx].t);
+    const deriv=rawD?{
+      available:true,provider:"Binance public futures history",
+      oi:rawD.oi??null,oiChangePct:rawD.oiChangePct??null,
+      takerImbalance:rawD.takerImbalance??null,
+      longPercent:rawD.longPercent??null,shortPercent:rawD.shortPercent??null,longShortRatio:rawD.longShortRatio??null,
+      cvdDelta:null,cvdRatio:null,cvdState:"HISTORICAL TAKER FLOW",positioning:"HISTORICAL OI",
+      liquidationBias:"UNKNOWN",liquidationTotal:null,orderBook:null,errors:[]
+    }:null;
+    const a=analyze(window,{interval,deriv});
     const outcome=replayOutcome(candles,idx,a,12);
     frames.push({
       index:idx,ts:candles[idx].t,price:candles[idx].c,
@@ -507,7 +557,7 @@ async function buildReplayDataset(symbol,interval,{points=60,bars=420}={}){
     });
     if(frames.length>=count)break;
   }
-  return {symbol,interval,candles,frames,coverage:{bars:candles.length,startTs:candles[0]?.t,endTs:candles[candles.length-1]?.t,points:frames.length,horizonBars:12}};
+  return {symbol,interval,candles,frames,coverage:{bars:candles.length,startTs:candles[0]?.t,endTs:candles[candles.length-1]?.t,points:frames.length,horizonBars:12,historicalDerivatives:Boolean(historicalDeriv.length),derivativeRows:historicalDeriv.length}};
 }
 
 function dnaRecordsFromReplay(dataset){
