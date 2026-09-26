@@ -550,8 +550,8 @@ body.admin-mode .nav button.adminNav,body.admin-mode .mobileMenu button.adminNav
 
     <div class="section"><div class="sectionHead"><div><div class="title">Market Overview</div><div class="sub">Long-term context plus a simple view of what is happening now.</div></div><span class="chip">Long-term context</span></div>
       <div class="overGrid">
-        <div class="card"><div class="sectionHead"><div><b>Cycle phase</b><div class="sub" id="cycleText">Waiting for cycle history</div></div><span class="chip c">LIVE</span></div><canvas id="cycleChart" class="miniChart"></canvas><div class="cycleMetric" style="margin-top:7px;font-size:10px"><b id="cycleScore">—</b><span id="cycleDetail" style="color:var(--muted)">—</span></div></div>
-        <div class="card"><div class="sectionHead"><div><b>Drawdown</b><div class="sub">How far price is below the recent high.</div></div><span class="chip">RISK</span></div><canvas id="ddChart" class="miniChart"></canvas><div class="cycleMetric" style="margin-top:7px;font-size:10px"><b id="ddValue">—</b><span id="ddDetail" style="color:var(--muted)">—</span></div></div>
+        <div class="card"><div class="sectionHead"><div><b>Cycle phase</b><div class="sub" id="cycleText">Cycle score on the left · BTC price on the right</div></div><span class="chip c">LIVE</span></div><canvas id="cycleChart" class="miniChart"></canvas><div class="cycleMetric" style="margin-top:7px;font-size:10px"><b id="cycleScore">—</b><span id="cycleDetail" style="color:var(--muted)">—</span></div></div>
+        <div class="card"><div class="sectionHead"><div><b>Drawdown</b><div class="sub">Drawdown on the left · BTC price on the right.</div></div><span class="chip">RISK</span></div><canvas id="ddChart" class="miniChart"></canvas><div class="cycleMetric" style="margin-top:7px;font-size:10px"><b id="ddValue">—</b><span id="ddDetail" style="color:var(--muted)">—</span></div></div>
         <div class="card"><div class="sectionHead"><div><b>Live market screen</b><div class="sub">Best current alignments</div></div><span class="chip">LIVE</span></div><div id="marketRows" class="marketRows"><div class="small">Waiting for scanner…</div></div></div>
       </div>
     </div>
@@ -1548,13 +1548,19 @@ function drawOverviewSpecial(id,sets,height){
   var out=setupCanvas(c,height||205),ctx=out.ctx,W=out.W,H=out.H;
   var state=c.__chartState||{zoom:1,offset:0,hover:null,drag:false};c.__chartState=state;
   var isCycle=id==="cycleChart",color=isCycle?"#31D7EA":"#FF65B1",soft=isCycle?"#0D8DAA":"#8C285E";
-  var left=42,right=84,top=52,bottom=27,pw=Math.max(90,W-left-right),ph=Math.max(60,H-top-bottom);
+  var left=42,right=104,top=52,bottom=27,pw=Math.max(90,W-left-right),ph=Math.max(60,H-top-bottom);
   var vals=(sets[0].values||[]).map(Number).filter(Number.isFinite),n=vals.length;if(!n)return;
+  var priceVals=(sets[0].priceValues||[]).map(Number),hasPrice=priceVals.length===n&&priceVals.some(Number.isFinite);
   var zoom=Math.max(.45,Math.min(1,Number(state.zoom)||1)),visible=Math.max(24,Math.min(n,Math.round(n*zoom))),maxOffset=Math.max(0,n-visible);
   var start=Math.max(0,Math.min(maxOffset,Math.round(state.offset||0))),end=Math.min(n,start+visible),data=vals.slice(start,end);
 
   function rgba(color,a){var m=String(color).match(/^#([0-9a-f]{6})$/i);if(!m)return color;var q=parseInt(m[1],16),r=(q>>16)&255,g=(q>>8)&255,b=q&255;return"rgba("+r+","+g+","+b+","+a+")"}
   function yCycle(v){return top+(100-Math.max(0,Math.min(100,v)))/100*ph}
+  var priceStart=hasPrice?priceVals[start]:null,priceEnd=hasPrice?priceVals[Math.max(start,end-1)]:null;
+  var visiblePrices=hasPrice?priceVals.slice(start,end).filter(Number.isFinite):[];
+  var priceMin=visiblePrices.length?Math.min.apply(null,visiblePrices):0,priceMax=visiblePrices.length?Math.max.apply(null,visiblePrices):0;
+  var priceRange=(priceMax-priceMin)||1,pricePad=priceRange*.06;priceMin=Math.max(0,priceMin-pricePad);priceMax=priceMax+pricePad;
+  function priceFmt(v){return "$"+fmt(v)}
   var dd=data.map(function(v){return isCycle?(Number(v)||0)-100:0});
   if(isCycle){
     // Fixed 0-100 scale with subtle risk-zone bands, similar to professional cycle dashboards.
@@ -1598,14 +1604,22 @@ function drawOverviewSpecial(id,sets,height){
       ctx.beginPath();ctx.moveTo(left,yy);ctx.lineTo(left+pw,yy);ctx.stroke();
       ctx.fillStyle="#91A4B8";ctx.font="800 8px system-ui";ctx.fillText(String(v),left-7,yy+3);
     });
+    if(hasPrice){
+      ctx.fillStyle="#8FA5BA";ctx.font="800 8px system-ui";ctx.textAlign="left";ctx.fillText("BTC PRICE",left+pw+8,26);
+      ctx.textAlign="left";ctx.font="800 8px system-ui";
+      for(var pi=0;pi<5;pi++){
+        var py=top+pi*ph/4,pv=priceMax-(priceMax-priceMin)*pi/4;
+        ctx.fillStyle="#9BAEC1";ctx.fillText(priceFmt(pv),left+pw+8,py+3);
+      }
+    }
 
     var pts=data.map(function(v,i){return[left+i*pw/Math.max(1,data.length-1),yCycle(v)]});
     var area=ctx.createLinearGradient(0,top,0,top+ph);area.addColorStop(0,rgba(color,.18));area.addColorStop(1,rgba(color,0));
     ctx.beginPath();ctx.moveTo(pts[0][0],top+ph);pts.forEach(function(p){ctx.lineTo(p[0],p[1])});ctx.lineTo(pts[pts.length-1][0],top+ph);ctx.closePath();ctx.fillStyle=area;ctx.fill();
     ctx.save();ctx.strokeStyle=rgba(color,.18);ctx.lineWidth=7;ctx.lineJoin="round";ctx.lineCap="round";line(ctx,pts);ctx.restore();
     ctx.save();ctx.strokeStyle=color;ctx.lineWidth=2.7;ctx.lineJoin="round";ctx.lineCap="round";line(ctx,pts);ctx.restore();
-    var last=vals[vals.length-1],ly=yCycle(last);var badgeY=Math.max(top+18,Math.min(top+ph-12,ly));ctx.save();ctx.shadowColor=rgba(color,.55);ctx.shadowBlur=14;ctx.fillStyle=color;ctx.beginPath();ctx.roundRect(left+pw+8,badgeY-11,63,22,7);ctx.fill();ctx.restore();ctx.fillStyle="#061018";ctx.font="900 9px system-ui";ctx.textAlign="center";ctx.fillText(Math.round(last),left+pw+39,badgeY+3);
-    ctx.textAlign="left";ctx.fillStyle="#95A8BB";ctx.font="700 8px system-ui";ctx.fillText("SCORE",left+pw+8,ly-15);
+    var last=vals[vals.length-1],ly=yCycle(last);var badgeY=Math.max(top+16,Math.min(top+ph-16,ly));var scoreX=left+pw-70;ctx.save();ctx.shadowColor=rgba(color,.55);ctx.shadowBlur=14;ctx.fillStyle=color;ctx.beginPath();ctx.roundRect(scoreX,badgeY-11,62,22,7);ctx.fill();ctx.restore();ctx.fillStyle="#061018";ctx.font="900 9px system-ui";ctx.textAlign="center";ctx.fillText(Math.round(last),scoreX+31,badgeY+3);
+    ctx.textAlign="left";ctx.fillStyle="#95A8BB";ctx.font="700 8px system-ui";ctx.fillText("SCORE",scoreX,Math.max(top+8,badgeY-15));
   }else{
     // Drawdown: explicit negative-from-ATH scale, filled area + crisp price line.
     var ddVals=vals.slice(start,end).map(function(v){return (Number(v)-100)}),minDd=Math.min(-1,Math.min.apply(null,ddVals)),ddMin=Math.max(-100,Math.floor((minDd-5)/5)*5),ddMax=0;
@@ -1614,12 +1628,19 @@ function drawOverviewSpecial(id,sets,height){
     // gradient risk field
     var field=ctx.createLinearGradient(0,top,0,top+ph);field.addColorStop(0,"rgba(63,219,126,.07)");field.addColorStop(.22,"rgba(255,190,70,.07)");field.addColorStop(.48,"rgba(255,94,110,.10)");field.addColorStop(1,"rgba(255,49,91,.17)");ctx.fillStyle=field;ctx.fillRect(left,top,pw,ph);
     [-0,-25,-50,-75,ddMin].forEach(function(v,idx){if(v<ddMin||v>0)return;var yy=yDd(v);ctx.strokeStyle=idx===0?"rgba(255,255,255,.20)":"rgba(255,255,255,.065)";ctx.setLineDash(idx===0?[5,4]:[]);ctx.beginPath();ctx.moveTo(left,yy);ctx.lineTo(left+pw,yy);ctx.stroke();ctx.setLineDash([]);ctx.fillStyle="#91A4B8";ctx.textAlign="right";ctx.fillText(String(v)+"%",left-7,yy+3)});
+    if(hasPrice){
+      ctx.fillStyle="#8FA5BA";ctx.font="800 8px system-ui";ctx.textAlign="left";ctx.fillText("BTC PRICE",left+pw+8,26);
+      for(var pi2=0;pi2<5;pi2++){
+        var py2=top+pi2*ph/4,pv2=priceMax-(priceMax-priceMin)*pi2/4;
+        ctx.fillStyle="#9BAEC1";ctx.fillText(priceFmt(pv2),left+pw+8,py2+3);
+      }
+    }
     var pts=ddVals.map(function(v,i){return[left+i*pw/Math.max(1,ddVals.length-1),yDd(v)]});
     var area=ctx.createLinearGradient(0,top,0,top+ph);area.addColorStop(0,"rgba(255,108,147,.02)");area.addColorStop(.25,"rgba(255,103,137,.13)");area.addColorStop(1,"rgba(255,54,90,.30)");
     ctx.beginPath();ctx.moveTo(pts[0][0],yDd(0));pts.forEach(function(p){ctx.lineTo(p[0],p[1])});ctx.lineTo(pts[pts.length-1][0],yDd(0));ctx.closePath();ctx.fillStyle=area;ctx.fill();
     ctx.save();ctx.strokeStyle="rgba(255,105,166,.20)";ctx.lineWidth=7;ctx.lineJoin="round";ctx.lineCap="round";line(ctx,pts);ctx.restore();
     ctx.save();ctx.strokeStyle="#FFF4FB";ctx.lineWidth=2.5;ctx.lineJoin="round";ctx.lineCap="round";line(ctx,pts);ctx.restore();
-    var current=ddVals[ddVals.length-1],cy=yDd(current);ctx.save();ctx.shadowColor="rgba(255,105,166,.50)";ctx.shadowBlur=14;ctx.fillStyle="#F05AA6";ctx.beginPath();ctx.roundRect(left+pw+8,cy-11,65,22,7);ctx.fill();ctx.restore();ctx.fillStyle="#1a0b15";ctx.font="900 9px system-ui";ctx.textAlign="center";ctx.fillText(Number(current).toFixed(1)+"%",left+pw+40,cy+3);
+    var current=ddVals[ddVals.length-1],cy=yDd(current),ddBadgeX=left+pw-72;ctx.save();ctx.shadowColor="rgba(255,105,166,.50)";ctx.shadowBlur=14;ctx.fillStyle="#F05AA6";ctx.beginPath();ctx.roundRect(ddBadgeX,cy-11,65,22,7);ctx.fill();ctx.restore();ctx.fillStyle="#1a0b15";ctx.font="900 9px system-ui";ctx.textAlign="center";ctx.fillText(Number(current).toFixed(1)+"%",ddBadgeX+32,cy+3);
     // Mark a few meaningful troughs.
     var troughs=[];for(var ti=2;ti<ddVals.length-2;ti++){if(ddVals[ti]<=ddVals[ti-1]&&ddVals[ti]<=ddVals[ti+1]&&ddVals[ti]<-20)troughs.push({v:ddVals[ti],i:ti})}
     troughs.sort(function(a,b){return a.v-b.v});troughs=troughs.slice(0,3);ctx.font="800 7px system-ui";ctx.textAlign="center";
@@ -1644,10 +1665,12 @@ function drawOverviewSpecial(id,sets,height){
     var idx=Math.max(0,Math.min(data.length-1,hi)),xx=left+idx*pw/Math.max(1,data.length-1);
     ctx.save();ctx.setLineDash([4,4]);ctx.strokeStyle="rgba(255,255,255,.34)";ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(xx,top);ctx.lineTo(xx,top+ph);ctx.stroke();ctx.restore();
     var value=Number(vals[start+idx]),labelVal=isCycle?fmt(value):fmt(value-100)+"%";
-    var boxW=Math.min(220,pw-12),boxH=34,boxX=Math.max(left+5,Math.min(W-right-boxW,xx-boxW/2)),boxY=top+7;
+    var hvPrice=hasPrice?Number(priceVals[start+idx]):null;
+    var boxW=Math.min(230,pw-12),boxH=hasPrice?48:34,boxX=Math.max(left+5,Math.min(left+pw-boxW-5,xx-boxW/2)),boxY=top+7;
     ctx.save();ctx.fillStyle="rgba(4,8,13,.95)";ctx.strokeStyle=isCycle?rgba(color,.3):"rgba(255,105,166,.30)";ctx.shadowColor=rgba(isCycle?color:"#FF65B1",.20);ctx.shadowBlur=16;ctx.beginPath();ctx.roundRect(boxX,boxY,boxW,boxH,8);ctx.fill();ctx.stroke();ctx.restore();
     ctx.fillStyle="#DCEBFA";ctx.textAlign="left";ctx.font="850 8px system-ui";ctx.fillText("BAR "+(start+idx+1),boxX+9,boxY+12);
     ctx.fillStyle=isCycle?color:"#F6B4D6";ctx.font="900 10px system-ui";ctx.fillText(labelVal,boxX+9,boxY+27);
+    if(Number.isFinite(hvPrice)){ctx.fillStyle="#A9BACB";ctx.font="800 9px system-ui";ctx.fillText("BTC "+priceFmt(hvPrice),boxX+9,boxY+42);}
   }
 
   c.__values=sets[0].values;c.__redraw=function(){drawOverviewSpecial(id,sets,height)};c.__seriesLength=n;c.__series=sets;c.style.pointerEvents="auto";c.style.touchAction="none";
@@ -1657,8 +1680,8 @@ function drawOverviewSpecial(id,sets,height){
       var st=c.__chartState||{zoom:1,offset:0,hover:null,drag:false},r=c.getBoundingClientRect();
       var rel=Math.max(0,Math.min(1,(e.clientX-r.left)/Math.max(1,r.width))),len=c.__seriesLength||n,vis=Math.max(24,Math.round(len*(st.zoom||1))),max=Math.max(0,len-vis),off=Math.max(0,Math.min(max,Math.round(st.offset||0)));
       st.hover=Math.max(0,Math.min(vis-1,Math.round(rel*(vis-1))));c.__chartState=st;
-      var abs=Math.min(len-1,off+st.hover),v=Number(sets[0].values[abs]);
-      var el=id==="cycleChart"?"cycleDetail":"ddDetail";if($(el))$(el).textContent=isCycle?"Bar "+(abs+1)+" · Score "+Math.round(v):"Bar "+(abs+1)+" · Drawdown "+fmt(v-100)+"%";
+      var abs=Math.min(len-1,off+st.hover),v=Number(sets[0].values[abs]),hv=hasPrice?Number(priceVals[abs]):null;
+      var el=id==="cycleChart"?"cycleDetail":"ddDetail";if($(el))$(el).textContent=(isCycle?"Bar "+(abs+1)+" · Score "+Math.round(v):"Bar "+(abs+1)+" · Drawdown "+fmt(v-100)+"%")+(Number.isFinite(hv)?" · BTC "+priceFmt(hv):"");
       c.__redraw&&c.__redraw();
     },{passive:false});
     c.addEventListener("pointerleave",function(){var st=c.__chartState||{};st.hover=null;c.__chartState=st;c.__redraw&&c.__redraw()});
@@ -1684,8 +1707,8 @@ function renderCycle(){
   $("cycleChart").__values=score;$("ddChart").__values=dd;$("cycleChart").__kind="Cycle score";$("ddChart").__kind="Drawdown";
   var cycleH=Math.max(180,Math.round($("cycleChart").getBoundingClientRect().height||205));
   var ddH=Math.max(180,Math.round($("ddChart").getBoundingClientRect().height||205));
-  drawSimpleSeries("cycleChart",[{name:"Cycle",values:score,color:"#22D3EE"}],cycleH);
-  drawSimpleSeries("ddChart",[{name:"High-water",values:dd,color:"#F472B6"}],ddH);bindMiniHover("cycleChart","cycleDetail");bindMiniHover("ddChart","ddDetail");
+  drawSimpleSeries("cycleChart",[{name:"Cycle",values:score,priceValues:close,color:"#22D3EE"}],cycleH);
+  drawSimpleSeries("ddChart",[{name:"High-water",values:dd,priceValues:close,color:"#F472B6"}],ddH);bindMiniHover("cycleChart","cycleDetail");bindMiniHover("ddChart","ddDetail");
 }
 
 function renderMarket(){
