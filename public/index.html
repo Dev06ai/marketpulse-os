@@ -1661,7 +1661,7 @@ function adminRenderFlags(flags){
 }
 function adminRenderEmergency(c){
   adminSetToggle("acMaintenance",c.maintenanceMode);adminSetToggle("acReadOnly",c.readOnlyMode);adminSetToggle("acRegistrations",c.registrationsEnabled!==false);adminSetToggle("acAI",c.aiEnabled!==false);adminSetToggle("acExecution",c.executionEnabled!==false);adminSetToggle("acMarketData",c.marketDataEnabled!==false);
-  $("acMaintenanceMessage").value=c.maintenanceMessage||"";$("acMode").value=c.mode||"normal";$("acSessionHours").value=Number(localStorage.getItem("mp-admin-session-hours")||8);$("acUserSessionDays").value=Number(localStorage.getItem("mp-user-session-days")||30);
+  $("acMaintenanceMessage").value=c.maintenanceMessage||"";$("acMode").value=c.mode||"normal";
 }
 function adminRenderBroadcasts(rows){
   state.adminBroadcasts=rows||[];$("acBroadcasts").innerHTML=(rows||[]).slice(0,8).map(function(x){return'<div class="adminLine"><div><b>'+safeHtml(x.title)+'</b><div class="small">'+safeHtml(x.body).slice(0,100)+'</div></div><button class="btn" data-broadcast-toggle="'+x.id+'">'+(x.active?"Deactivate":"Activate")+'</button></div>'}).join("")||'<div class="small">No broadcasts.</div>';
