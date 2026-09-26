@@ -1968,6 +1968,31 @@ $("exArm").addEventListener("click",armExecution);
 $("exOrderRows").addEventListener("click",function(e){var b=e.target.closest("[data-ex-submit],[data-ex-cancel]");if(!b)return;if(b.dataset.exSubmit)submitExecution(b.dataset.exSubmit);else cancelExecution(b.dataset.exCancel)});
 $("exPositionRows").addEventListener("click",function(e){var b=e.target.closest("[data-ex-close]");if(b)closeSimulation(b.dataset.exClose)});
 $("refresh").addEventListener("click",loadCore);
+
+// HARD BOOT WATCHDOG: placed immediately after the manual Refresh handler so
+// later UI initialization errors cannot prevent the market core from starting.
+(function installBootWatchdog(){
+  var watchdogTries=0,watchdogTimer=null;
+  function wakeMarketCore(){
+    try{
+      if(state.market||state.busy)return;
+      watchdogTries++;
+      if($("statusBar")&&watchdogTries===1)setStatus("Connecting to live market data…");
+      loadFastTicker();
+      loadCore();
+    }catch(e){
+      if($("statusBar"))setStatus("Market startup retrying automatically…","warn");
+    }
+  }
+  window.__marketpulseWake=function(){wakeMarketCore()};
+  window.addEventListener("load",wakeMarketCore,{once:false});
+  window.addEventListener("pageshow",wakeMarketCore);
+  watchdogTimer=setInterval(function(){
+    if(document.visibilityState==="visible"&&!state.market&&!state.busy)wakeMarketCore();
+    if(state.market&&watchdogTimer){clearInterval(watchdogTimer);watchdogTimer=null}
+  },2500);
+  setTimeout(wakeMarketCore,0);
+})();
 $("dcfRefresh").addEventListener("click",loadDataFabric);
 $("pfgRefresh").addEventListener("click",loadPropFirmGuard);
 $("ecgRefresh").addEventListener("click",loadEventGuard);
