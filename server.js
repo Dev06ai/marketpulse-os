@@ -1314,7 +1314,7 @@ const server=http.createServer(async(req,res)=>{
       try{
         const cached=PHASE1113_CACHE.get("P11-13|"+symbol+"|"+interval);
         if(cached&&Date.now()-cached.ts<PHASE1113_TTL)return send(res,200,{ok:true,ready:true,symbol,interval,...cached.payload,updatedAt:cached.ts});
-        const candles=await getFastKlines(symbol,interval);
+        const candles=closedCandles(await getFastKlines(symbol,interval),interval,Date.now());
         const validation=queuePhase1113Validation(symbol,interval,candles);
         if(validation)return send(res,200,{ok:true,ready:true,symbol,interval,...validation,updatedAt:Date.now()});
         return send(res,200,{ok:true,ready:false,symbol,interval,message:'Validation is warming up in the background.',phase11:PHASE11_VERSION,phase12:PHASE12_VERSION,phase13:PHASE13_VERSION});
