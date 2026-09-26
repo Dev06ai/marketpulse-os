@@ -1259,14 +1259,22 @@ async function submitAccount(){
   var email=$("accountEmail").value.trim(),password=$("accountPassword").value;
   $("accountError").textContent="Working…";
   try{
+    var anonymous={journal:state.journal.slice(),signals:state.signals.slice(),watch:(state.watch||[]).slice()};
     var r=await fetch(accountMode==="login"?"/api/auth/login":"/api/auth/register",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({email,password})});
     var j=await r.json();if(!r.ok)throw Error(j.error||"Account request failed");
-    state.account=j.user;renderAccount();await syncMemory();$("accountError").textContent="";$("accountPassword").value="";closeAccount();
-    $("memoryText").textContent="Cloud account synced. Your journal and watchlist are linked to this account.";
+    state.account=j.user;state.pendingAnonymousMemory=anonymous;renderAccount();await syncMemory({migrateAnonymous:true,save:true});
+    $("accountError").textContent="";$("accountPassword").value="";closeAccount();
+    $("memoryText").textContent="Account sync active. Your workspace is isolated to this account.";
   }catch(e){$("accountError").textContent=e.message}
 }
 async function logoutAccount(){
-  try{await fetch("/api/auth/logout",{method:"POST"});state.account=null;renderAccount();await syncMemory();$("memoryText").textContent="Signed out. Browser/device memory remains available."}catch(e){$("accountError").textContent=e.message}
+  try{
+    await fetch("/api/auth/logout",{method:"POST"});
+    state.account=null;state.pendingAnonymousMemory=null;
+    state.journal=[];state.signals=[];state.watch=[];
+    localStorage.removeItem("mp-stable-journal");localStorage.removeItem("mp-stable-signals");localStorage.removeItem("mp-watch");
+    renderAccount();await syncMemory();$("memoryText").textContent="Signed out. Anonymous device memory restored; account data remains isolated.";
+  }catch(e){$("accountError").textContent=e.message}
 }
 function editJournal(ts){
   var row=state.journal.find(function(x){return Number(x.ts)===Number(ts)});if(!row)return;
