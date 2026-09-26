@@ -407,9 +407,12 @@ body.admin-mode .nav button.adminNav,body.admin-mode .mobileMenu button.adminNav
       <div class="card">
         <div class="sectionHead"><div><div class="title">Event Contract Guard</div><div class="sub">For fixed-risk Higher/Lower or UP/DOWN products. Uses the venue's displayed premium and payout.</div></div><span class="chip" id="ecgGateChip">WAITING</span></div>
         <div class="inputs">
+          <label class="small">Venue<select id="ecgVenue"><option>GENERIC</option><option>TOOBIT</option><option>XT</option></select></label>
           <label class="small">Direction<select id="ecgSide"><option>UP</option><option>DOWN</option></select></label>
           <label class="small">Premium / stake<input id="ecgPremium" type="number" value="10" min="0" step=".01"></label>
           <label class="small">Payout if correct<input id="ecgPayout" type="number" value="20" min="0" step=".01"></label>
+          <label class="small">Strike price<input id="ecgStrike" type="number" value="" min="0" step=".01" placeholder="Optional"></label>
+          <label class="small">Expiry (minutes)<input id="ecgExpiryMin" type="number" value="5" min="0.5" step=".5"></label>
           <label class="small">Fee<input id="ecgFee" type="number" value="0" min="0" step=".01"></label>
         </div>
         <button id="ecgRefresh" class="btn primary" style="margin-top:8px">Evaluate event contract</button>
@@ -1555,11 +1558,12 @@ async function loadEventGuard(){
       accountSize:$("pfgEvalAccount").value||5000,equity:$("pfgEquity").value||5000,
       dailyLossLimitPct:$("pfgDailyLoss").value||3,maxDrawdownPct:$("pfgMaxDD").value||6,
       riskPerTradePct:$("pfgRiskTrade").value||.5,minSignalScore:$("pfgScore").value||72,minRR:$("pfgRR").value||1.5,
-      side:$("ecgSide").value,premium:$("ecgPremium").value,payout:$("ecgPayout").value,fee:$("ecgFee").value
+      side:$("ecgSide").value,premium:$("ecgPremium").value,payout:$("ecgPayout").value,fee:$("ecgFee").value,
+      venue:$("ecgVenue").value,strikePrice:$("ecgStrike").value,expirationAt:String(Date.now()+((Number($("ecgExpiryMin").value)||5)*60000)),strictContractContext:$("ecgStrike").value?true:false
     });
     var d=await api("/api/propfirm/event?"+q.toString(),8500),g=d.gate||{};
     $("ecgGateChip").textContent=g.decision||"UNKNOWN";
-    $("ecgResult").textContent=(g.eventSide||"WAIT")+" · max "+Number(g.maxContracts||0)+" contract(s) · max loss "+fmt(g.maxLoss||0)+" · max profit "+fmt(g.maxProfit||0)+" · payoff "+Number(g.payoffR||0).toFixed(2)+"R";
+    $("ecgResult").textContent=(g.eventSide||"WAIT")+" · max "+Number(g.maxContracts||0)+" contract(s) · max loss "+fmt(g.maxLoss||0)+" · max profit "+fmt(g.maxProfit||0)+" · payoff "+Number(g.payoffR||0).toFixed(2)+"R"+(g.strikeDistanceBps!=null?" · strike distance "+Number(g.strikeDistanceBps).toFixed(1)+" bps":"");
     $("ecgReasons").textContent=(g.reasons&&g.reasons.length?("BLOCK: "+g.reasons.join(" · ")):("Gate clear"+(g.warnings&&g.warnings.length?(" · Warnings: "+g.warnings.join(" · ")):"")))+".";
   }catch(e){
     $("ecgGateChip").textContent="ERROR";$("ecgResult").textContent="Event guard unavailable";$("ecgReasons").textContent=e.message||"Request failed";
