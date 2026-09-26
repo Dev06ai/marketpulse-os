@@ -1366,8 +1366,8 @@ function renderAccount(){
   sub.textContent=admin?"Owner account · admin controls unlocked":state.account?"Account-backed workspace active.":"Optional account for synced journal, watchlists and preferences.";
   if(state.account&&email)email.textContent=state.account.email;
   var ex=$("executionNav");if(ex)ex.classList.toggle("adminNav",!admin);
-  if(ex)ex.style.display=admin?"":"none";
-  var an=$("adminNav"),am=$("adminNavMobile");if(an)an.style.display=admin?"":"none";if(am)am.style.display=admin?"":"none";
+  if(ex)ex.style.display=admin?"block":"none";
+  var an=$("adminNav"),am=$("adminNavMobile");if(an)an.style.display=admin?"block":"none";if(am)am.style.display=admin?"block":"none";
 }
 function openAccount(){renderAccount();$("accountModal").classList.add("open");$("accountModal").setAttribute("aria-hidden","false")}
 function closeAccount(){ $("accountModal").classList.remove("open");$("accountModal").setAttribute("aria-hidden","true");$("accountError").textContent=""}
