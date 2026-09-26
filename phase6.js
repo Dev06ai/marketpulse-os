@@ -183,7 +183,7 @@ async function snapshot(){
   return {version:VERSION,storage:loaded.storage,config:s.config,portfolio:s.lastPortfolio||null,events:s.events.slice().reverse().slice(0,50),updatedAt:s.updatedAt};
 }
 async function executionGate(plan,executionState){
-  const loaded=await load(),s=loaded.state,cfg=s.config;
+  const loaded=await load(),s=loaded.state,cfg=Object.assign({},s.config,{account:finite(executionState?.config?.account,s.config.account)});
   const existingPositions=executionState?.positions||[],existingOrders=executionState?.orders||[];
   const testPositions=existingPositions.concat([{
     symbol:String(plan.symbol||"").toUpperCase(),
