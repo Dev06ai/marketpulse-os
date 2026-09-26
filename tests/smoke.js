@@ -1,4 +1,5 @@
 const assert=require("assert");
+(async()=>{
 const {analyze,backtest,backtestBySetup,walkForwardBacktest}=require("../market-engine");
 const phase4=require("../phase4");
 const execution=require("../execution");
@@ -50,3 +51,4 @@ console.log("MarketPulse Phase 5 smoke checks passed:",{
   price:a.price,score:a.score,status:a.status,backtestTrades:b.trades,
   validationTrades:w.validation.trades,setupBuckets:Object.keys(s).length
 });
+})();
