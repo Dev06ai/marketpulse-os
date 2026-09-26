@@ -15,6 +15,7 @@ function sanitizeMemory(m){
     signals:Array.isArray(x.signals)?x.signals.slice(-100):[],
     watch:Array.isArray(x.watch)?x.watch.slice(0,50):[],
     alertState:x.alertState&&typeof x.alertState==="object"?x.alertState:{},
+    preferences:x.preferences&&typeof x.preferences==="object"?x.preferences:{},
     lastSignal:x.lastSignal||null,
     activeSignal:x.activeSignal||null,
     updatedAt:Date.now()
