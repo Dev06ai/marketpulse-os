@@ -68,6 +68,36 @@ jobs:
           print("Single authoritative signal UI check OK")
           PY
 
+      - name: Check signal authority and refresh race guards
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          html=Path("public/index.html").read_text()
+          server=Path("server.js").read_text()
+          prop=Path("prop-firm.js").read_text()
+          required_html=[
+            "finalDecisionSeq",
+            "suppressFinalSignal",
+            'if(seq!==state.finalDecisionSeq',
+            'CANDIDATE LONG',
+            'CANDIDATE SHORT'
+          ]
+          if any(x not in html for x in required_html):
+            raise SystemExit("Missing signal authority/race guard surface")
+          if "process.env.PROP_MIN_SIGNAL_SCORE||78" not in server:
+            raise SystemExit("Server prop-firm threshold is not aligned to 78")
+          if "minSignalScore: 78" not in prop:
+            raise SystemExit("Prop-firm default threshold is not 78")
+          start=html.index("function renderMarket(){")
+          end=html.index("\nfunction renderScanner(){",start)
+          raw=html[start:end]
+          forbidden=['mCall).textContent','mBias).textContent','mScore).textContent','thesisTitle','thesisScore','entry").textContent','stop").textContent','target").textContent','rr").textContent']
+          bad=[x for x in forbidden if x in raw]
+          if bad:
+            raise SystemExit("Raw renderMarket writes authoritative signal fields: "+", ".join(bad))
+          print("Signal authority, race guards, candidate labeling and threshold alignment OK")
+          PY
+
       - name: Check Phase 2 feature surface
         run: |
           python - <<'PY'
