@@ -1394,14 +1394,14 @@ function renderExecution(data){
   state.execution=data||null;if(!data)return;
   var c=data.control||{},cfg=data.config||{},m=data.metrics||{},h=data.health||{};
   $("exMode").textContent=data.mode||"SIMULATION";
-  $("exModeMeta").textContent=data.mode==="TESTNET"?"Bybit testnet":"Local simulation — no exchange order is sent";
+  $("exModeMeta").textContent=data.mode==="TESTNET"?"Bybit test environment":"Practice only — no exchange order is sent";
   var executionReady=!c.killSwitch&&(data.mode==="SIMULATION"||c.armed&&Boolean(c.reconciliation?.ok));
   $("exGate").textContent=c.killSwitch?"BLOCKED":(data.mode==="SIMULATION"?"READY":(executionReady?"ARMED":"BLOCKED"));
-  $("exGateMeta").textContent=c.killSwitch?"Kill switch active — new orders are blocked":(data.mode==="SIMULATION"?"Safe local simulation":(c.armed&&c.reconciliation?.ok?"Testnet is armed and reconciled":"Arm + reconcile required before testnet orders"));
-  $("exRecon").textContent=c.reconciliation?.ok?"PASS":"BLOCKED";
-  $("exReconMeta").textContent=data.mode==="SIMULATION"?"No exchange reconciliation needed":(c.reconciliation?.detail||"Reconciliation required");
+  $("exGateMeta").textContent=c.killSwitch?"KILL SWITCH ON — new orders blocked":(data.mode==="SIMULATION"?"SAFE TO PRACTICE — local only":(c.armed&&c.reconciliation?.ok?"READY — testnet checks passed":"BLOCKED — arm and reconcile before testnet submission"));
+  $("exRecon").textContent=c.reconciliation?.ok?"PASS":"NEEDS CHECK";
+  $("exReconMeta").textContent=data.mode==="SIMULATION"?"Simulation has nothing to reconcile":(c.reconciliation?.detail||"Reconciliation required before testnet submission");
   $("exDailyLoss").textContent=(Number(m.dailyLossPct)||0).toFixed(2)+"%";
-  $("exRiskMeta").textContent="Open risk "+(Number(m.openRiskPct)||0).toFixed(2)+"% · "+fmt(m.activePositions||0)+" active";
+  $("exRiskMeta").textContent="Open risk "+(Number(m.openRiskPct)||0).toFixed(2)+"% · "+fmt(m.activePositions||0)+" active · max trade risk "+(Number(cfg.riskPct)||0).toFixed(2)+"%";
   $("exCredential").textContent=data.mode==="SIMULATION"?"NOT NEEDED (SIM)":(h.credentialsConfigured?"TESTNET KEYS READY":"NO TESTNET KEYS");
   $("exCredential").className="executionBadge "+(data.mode==="SIMULATION"||h.credentialsConfigured?"executionOk":"executionWarn");
   $("exSubmit").textContent=data.mode==="SIMULATION"?"Simulate latest intent":"Submit latest intent";
@@ -1446,7 +1446,7 @@ function renderExecution(data){
   $("exEventRows").innerHTML=(data.events||[]).slice(0,20).map(function(x){return'<div class="executionRow"><span class="executionSmall">'+new Date(Number(x.ts)||Date.now()).toLocaleTimeString()+'</span><div><b>'+escapeHtmlExec(x.type)+'</b><div class="executionSmall">'+escapeHtmlExec(x.message)+'</div></div><span></span></div>'}).join("")||'<div class="executionSmall">No execution events.</div>';
 }
 async function loadExecution(){
-  try{renderExecution(await api("/api/execution",5000))}catch(e){}
+  try{renderExecution(await api("/api/execution",5000))}catch(e){$("exControlNote").textContent="Execution status unavailable — refresh the page and check the server.";var gate=$("exGate");if(gate)gate.textContent="STATUS UNAVAILABLE";}
 }
 async function saveExecutionConfig(){
   var payload={mode:$("exModeSelect").value,account:+$("exAccount").value||0,riskPct:+$("exRiskPct").value||1,maxOpenRiskPct:+$("exMaxOpenRisk").value||2.5,maxDailyLossPct:+$("exMaxDailyLoss").value||3,maxPositions:+$("exMaxPositions").value||3,maxSymbolExposurePct:+$("exMaxSymbol").value||2,maxOrdersPerMinute:+$("exOrderRate").value||10,maxSlippageBps:+$("exSlippage").value||20};
