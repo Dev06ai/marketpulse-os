@@ -1747,7 +1747,7 @@ function adminListHtml(items){
   return (items||[]).slice(0,8).map(function(x){return'<div class="adminLine"><b>'+safeHtml(String(x.key??x.feature??x.symbol??x.interval??x.route??"—"))+'</b><span>'+fmt(x.count??x.value??"—")+'</span></div>'}).join("")||'<div class="small">No data yet.</div>';
 }
 function adminStatusBadge(status){
-  status=String(status||"").toLowerCase();return status==="healthy"||status==="configured"||status==="live"?"ok":status==="stale"||status==="degraded"||status==="warning"?"warn":"bad";
+  status=String(status||"").toLowerCase();return status==="healthy"||status==="configured"||status==="live"?"ok":status==="stale"||status==="degraded"||status==="warning"||status==="restricted"?"warn":"bad";
 }
 function adminRenderCommandCenter(){
   var o=state.adminOverview;if(!o)return;
