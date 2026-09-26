@@ -1519,7 +1519,7 @@ function renderMarket(){
   $("quality").textContent=fmt(a.score)+"/100";
   $("components").innerHTML=(a.components||[]).map(function(x){var max=({Regime:16,"Trend strength":11,Momentum:11,Volume:9,Structure:9,"4H alignment":9,"15M alignment":7,"CVD pressure":10,"OI context":8,"Liquidation context":6})[x.name]||10;return'<div class="rowLine"><span class="small">'+x.name+'</span><b style="font-size:9px;text-align:right">'+x.value+"/"+max+'</b><div class="bar"><i style="width:'+Math.max(0,Math.min(100,x.value/max*100))+'%"></i></div></div>'}).join("");
   $("entry").textContent=a.entryLow!=null?fmt(a.entryLow)+" → "+fmt(a.entryHigh):"Wait";$("stop").textContent=fmt(a.stop);$("target").textContent=fmt(a.tp1);$("rr").textContent=a.rr?Number(a.rr).toFixed(2)+"R":"—";
-  var der=d.derivatives||{};$("oi").textContent=der.oi!=null?fmt(der.oi):"UNAVAILABLE";$("oiS").textContent=der.oiChangePct!=null?pct(der.oiChangePct)+" recent":"Current snapshot";$("cvd").textContent=der.cvdState||"UNAVAILABLE";$("cvdS").textContent=der.cvdDelta!=null?"Δ "+fmt(der.cvdDelta):"No CVD feed";$("pos").textContent=der.positioning||"UNAVAILABLE";$("fund").textContent=der.fundingRate!=null?"Funding "+(Number(der.fundingRate)*100).toFixed(4)+"%":"Funding unavailable";$("liq").textContent=der.liquidationBias&&der.liquidationBias!=="UNKNOWN"?der.liquidationBias:"UNAVAILABLE";$("liqS").textContent=der.liquidationTotal!=null?"Total "+fmt(der.liquidationTotal):"No liquidation feed";$("flowSource").textContent=der.provider?(String(der.provider).slice(0,30)+(der.livePointCount?" · LIVE":"")):(der.available?"LIVE":"UNAVAILABLE");
+  renderMarketNoFlow();
   $("adaptiveChip").textContent=d.learning&&d.learning.state?("Adaptive: "+String(d.learning.state).toLowerCase()):"Adaptive: background learning";
   $("learnState").textContent=d.learning&&d.learning.state?d.learning.state:"COLLECTING";$("learnN").textContent=d.learning&&d.learning.resolved!=null?d.learning.resolved:0;$("learnWin").textContent=d.learning&&d.learning.winRate!=null?Number(d.learning.winRate).toFixed(1)+"%":"—";$("learnAdj").textContent=d.learning&&d.learning.lastAdjustment!=null?Number(d.learning.lastAdjustment).toFixed(1):"0.0";$("learnPersist").textContent=d.learning&&d.learning.durable?"Postgres cloud":(d.learning?"Local fallback":"—");$("learnNote").textContent=d.learning&&d.learning.state==="ADAPTIVE"?"Adaptive calibration active. Historical outcomes are influencing confluence.":"Collecting resolved outcomes before calibration.";
   state.validation={backtest:d.backtest,validation:d.validation,setupStats:d.setupStats,learning:d.learning};renderLab();renderBrainInsights();
@@ -2091,6 +2091,23 @@ function drawFlowData(data){
   $("flowSource").textContent=data.available?"LIVE · snapshot":"UNAVAILABLE";
   drawBlankFlow();
 }
+function mergeFlowClient(primary,secondary){
+  var a=primary||{},b=secondary||{},o=Object.assign({},b,a);
+  ["oi","oiChangePct","cvdDelta","cvdRatio","fundingRate","markPrice","liquidationTotal","longLiquidations","shortLiquidations","orderBook"].forEach(function(k){
+    if(o[k]==null&&b[k]!=null)o[k]=b[k];
+  });
+  if(!o.cvdState||o.cvdState==="UNAVAILABLE")o.cvdState=b.cvdState||o.cvdState;
+  if(!o.positioning||o.positioning==="UNAVAILABLE")o.positioning=b.positioning||o.positioning;
+  if(!o.liquidationBias||o.liquidationBias==="UNAVAILABLE"||o.liquidationBias==="UNKNOWN")o.liquidationBias=b.liquidationBias||o.liquidationBias;
+  var h=[];
+  if(Array.isArray(b.liveHistory))h=h.concat(b.liveHistory);
+  if(Array.isArray(a.liveHistory))h=h.concat(a.liveHistory);
+  if(h.length){h.sort(function(x,y){return Number(x.ts||0)-Number(y.ts||0)});o.liveHistory=h.slice(-180);o.livePointCount=o.liveHistory.length}
+  o.available=Boolean(a.available||b.available||o.livePointCount);
+  o.liveConnected=Boolean(a.liveConnected||b.liveConnected);
+  return o;
+}
+
 function renderFlowView(data){
   data=data||{};
   var hist=Array.isArray(data.liveHistory)?data.liveHistory.filter(Boolean):[];
@@ -2181,7 +2198,7 @@ async function loadCoreEnrichment(){
     if(!d.ok)return;
     if(state.market&&state.market.symbol===d.symbol&&state.market.interval===d.interval){
       if(d.analysis)state.market.analysis=d.analysis;
-      state.market.derivatives=d.derivatives||state.market.derivatives;
+      state.market.derivatives=mergeFlowClient(d.derivatives,state.market.derivatives);
       if(d.learning)state.market.learning=d.learning;
       renderMarket();
     }
@@ -2861,7 +2878,7 @@ setInterval(function(){
     if(!state.market&&!state.busy)scheduleInitialBoot(0);
   }
 },5000);
-setInterval(function(){if(document.visibilityState!=="visible")return; if((state.activeView==="overview"||state.activeView==="flow")&&(!state.market?.derivatives||state.flowAttempts))loadFlow(true); if(state.activeView==="scanner"&&(!state.scan||!state.scan.length))loadScan(true); if(state.activeView==="execution")loadExecution(); if(state.activeView==="portfolio")loadPortfolio(); if(state.activeView==="edge")loadEdge(); if(state.activeView==="brain"){loadPhase7();loadPhase7Health()}},15000);
+setInterval(function(){if(document.visibilityState!=="visible")return; if((state.activeView==="overview"||state.activeView==="flow")&&!state.flowBusy)loadFlow(true); if(state.activeView==="scanner"&&(!state.scan||!state.scan.length))loadScan(true); if(state.activeView==="execution")loadExecution(); if(state.activeView==="portfolio")loadPortfolio(); if(state.activeView==="edge")loadEdge(); if(state.activeView==="brain"){loadPhase7();loadPhase7Health()}},15000);
 
 function mp7FmtR(v){var n=Number(v);return Number.isFinite(n)?(n>0?"+":"")+n.toFixed(2)+"R":"—"}
 function mp7FmtPct(v){var n=Number(v);return Number.isFinite(n)?n.toFixed(1)+"%":"—"}
