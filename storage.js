@@ -77,6 +77,11 @@ async function init(){
       await pool.query('CREATE INDEX IF NOT EXISTS idx_signal_dna_lookup ON marketpulse_signal_dna(symbol,interval,candle_ts DESC)');
       await pool.query('CREATE INDEX IF NOT EXISTS idx_signal_dna_regime ON marketpulse_signal_dna(regime,status)');
       await pool.query('CREATE INDEX IF NOT EXISTS idx_learning_open ON marketpulse_learning_predictions(symbol,interval,outcome) WHERE outcome IS NULL');
+      await pool.query(`CREATE TABLE IF NOT EXISTS marketpulse_phase4 (
+        device_id TEXT PRIMARY KEY,
+        payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )`);
       mode="postgres";
     }catch(err){
       mode="local";try{await pool?.end()}catch{}pool=null;
@@ -213,5 +218,26 @@ async function clearSignalDNA({symbol,interval}={}){
   }
   const all=readLocal();let rows=Array.isArray(all.__signal_dna__)?all.__signal_dna__:[];rows=rows.filter(x=>(symbol&&x.symbol!==symbol)||(interval&&x.interval!==interval));all.__signal_dna__=rows;writeLocal(all);
 }
+async function getPhase4State(deviceId){
+  await init();if(!validDeviceId(deviceId))throw new Error("Invalid device id");
+  if(mode==="postgres"){
+    const r=await pool.query("SELECT payload,updated_at FROM marketpulse_phase4 WHERE device_id=$1",[deviceId]);
+    return r.rows[0]?{storage:"postgres",updatedAt:r.rows[0].updated_at,payload:r.rows[0].payload}:{storage:"postgres",updatedAt:null,payload:null};
+  }
+  const all=readLocal();return {storage:"local",updatedAt:all.__phase4__?.[deviceId]?.updatedAt||null,payload:all.__phase4__?.[deviceId]?.payload||null};
+}
+async function savePhase4State(deviceId,state){
+  await init();if(!validDeviceId(deviceId))throw new Error("Invalid device id");
+  const payload=state&&typeof state==="object"?state:{};
+  if(mode==="postgres"){
+    await pool.query(`INSERT INTO marketpulse_phase4(device_id,payload,updated_at)
+      VALUES($1,$2,NOW())
+      ON CONFLICT(device_id) DO UPDATE SET payload=EXCLUDED.payload,updated_at=NOW()`,[deviceId,payload]);
+    return {storage:"postgres",updatedAt:new Date().toISOString(),payload};
+  }
+  const all=readLocal();all.__phase4__=all.__phase4__||{};all.__phase4__[deviceId]={payload,updatedAt:new Date().toISOString()};writeLocal(all);
+  return {storage:"local",updatedAt:all.__phase4__[deviceId].updatedAt,payload};
+}
+
 function status(){return {mode,configured:Boolean(DB_URL&&Pool),durable:mode==="postgres"}}
-module.exports={init,get,save,clear,getLearningState,saveLearningState,recordLearningPrediction,getOpenLearningPredictions,resolveLearningPrediction,saveSignalDNA,getSignalDNA,clearSignalDNA,status};
+module.exports={init,get,save,clear,getLearningState,saveLearningState,recordLearningPrediction,getOpenLearningPredictions,resolveLearningPrediction,saveSignalDNA,getSignalDNA,clearSignalDNA,getPhase4State,savePhase4State,status};
