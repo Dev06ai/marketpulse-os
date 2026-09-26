@@ -1,4 +1,4 @@
-const http=require('http'),fs=require('fs'),path=require('path'),{analyze,backtest,walkForwardBacktest}=require('./market-engine');
+const http=require('http'),fs=require('fs'),path=require('path'),{analyze,backtest,backtestBySetup,walkForwardBacktest}=require('./market-engine');
 const storage=require('./storage');
 const learning=require('./learning');
 const WebSocket=require('ws');
@@ -8,6 +8,8 @@ const KLINE_LIMIT=Number(process.env.KLINE_LIMIT||420);
 const labels={BTCUSDT:'BTC',ETHUSDT:'ETH',SOLUSDT:'SOL',BNBUSDT:'BNB',XRPUSDT:'XRP',DOGEUSDT:'DOGE',ADAUSDT:'ADA'};
 const KRAKEN_PAIRS={BTCUSDT:'XBTUSD',ETHUSDT:'ETHUSD',SOLUSDT:'SOLUSD',BNBUSDT:'BNBUSD',XRPUSDT:'XRPUSD',DOGEUSDT:'DOGEUSD',ADAUSDT:'ADAUSD'};
 const CACHE=new Map(); const TTL=25000;
+const SCAN_CACHE=new Map(); const SCAN_TTL=20000;
+const PHASE2_VERSION=2;
 const OPENAI_API_KEY=process.env.OPENAI_API_KEY||"";
 const OPENAI_MODEL=process.env.OPENAI_MODEL||"gpt-5.6-luna";
 const AI_LIMIT_MS=8000; const AI_CALLS=new Map();
@@ -146,92 +148,41 @@ async function krakenAnalytics(symbol,interval){
   const windows={"15m":6*3600,"1h":24*3600,"4h":3*86400,"1d":7*86400};
   const since=Math.floor((Date.now()-(windows[interval]||24*3600))/1000);
   const base="https://futures.kraken.com/api/charts/v1/analytics/"+pair;
-  const urls={
-    cvd:base+"/cvd?since="+since+"&interval="+secs,
-    oi:base+"/open-interest?since="+since+"&interval="+secs,
-    funding:base+"/funding?since="+since+"&interval="+secs,
-    ls:base+"/long-short-info?since="+since+"&interval="+secs,
-    liq:base+"/liquidation-volume?since="+since+"&interval="+secs
-  };
-  const settled=await Promise.all(Object.entries(urls).map(async([key,url])=>{
-    try{return {key,status:"fulfilled",value:await fetchJson(url)}}
-    catch(e){return {key,status:"rejected",reason:String(e.message||e)}}
-  }));
+  const urls={cvd:base+"/cvd?since="+since+"&interval="+secs,oi:base+"/open-interest?since="+since+"&interval="+secs,funding:base+"/funding?since="+since+"&interval="+secs,ls:base+"/long-short-info?since="+since+"&interval="+secs,liq:base+"/liquidation-volume?since="+since+"&interval="+secs};
+  const settled=await Promise.all(Object.entries(urls).map(async([key,url])=>{try{return{key,status:"fulfilled",value:await fetchJson(url,5000)}}catch(e){return{key,status:"rejected",reason:String(e.message||e)}}}));
   const byName=Object.fromEntries(settled.map(x=>[x.key,x]));
-  const payload=(key)=>byName[key]?.status==="fulfilled"?(byName[key].value?.result||byName[key].value):null;
-  const numericArray=(obj,names)=>{
-    const roots=[obj?.data,obj?.result?.data,obj?.result,obj];
+  const payload=key=>byName[key]?.status==="fulfilled"?(byName[key].value?.result||byName[key].value):null;
+  const arraysFrom=(obj,names)=>{
+    if(!obj)return[];const roots=[obj?.data,obj?.result?.data,obj?.result,obj];
     for(const root of roots){
       if(!root)continue;
-      for(const n of names){
-        const direct=root?.[n];
-        if(Array.isArray(direct)){
-          const out=direct.map(v=>typeof v==="object"?Number(v.value??v.v??v[n]):Number(v)).filter(Number.isFinite);
-          if(out.length)return out;
-        }
-      }
-      if(Array.isArray(root)){
-        for(const n of names){
-          const out=root.map(v=>Number(v?.[n]??v?.value??v?.v)).filter(Number.isFinite);
-          if(out.length)return out;
-        }
-      }
+      for(const name of names){const v=root?.[name];if(Array.isArray(v)){const out=v.map(x=>typeof x==="object"?Number(x.value??x.v??x[name]):Number(x)).filter(Number.isFinite);if(out.length)return out}}
+      if(Array.isArray(root))for(const name of names){const out=root.map(x=>Number(x?.[name]??x?.value??x?.v)).filter(Number.isFinite);if(out.length)return out}
     }
-    return [];
+    return[];
   };
   const cvdPayload=payload("cvd"),oiPayload=payload("oi"),fundingPayload=payload("funding"),lsPayload=payload("ls"),liqPayload=payload("liq");
-  const cvdVals=numericArray(cvdPayload,["cvd","cumulativeVolumeDelta","cumulative_volume_delta"]);
-  const buyVals=numericArray(cvdPayload,["buyVolume","buy_volume","buyNotional"]);
-  const sellVals=numericArray(cvdPayload,["sellVolume","sell_volume","sellNotional"]);
-  const oiVals=numericArray(oiPayload,["openInterest","open_interest","oi"]);
-  const fundingVals=numericArray(fundingPayload,["rate","fundingRate","funding_rate"]);
-  const longPct=numericArray(lsPayload,["longPercent","long_percent","long"]);
-  const shortPct=numericArray(lsPayload,["shortPercent","short_percent","short"]);
-  const ratioVals=numericArray(lsPayload,["ratio","longShortRatio","long_short_ratio"]);
-  const liqLong=numericArray(liqPayload,["longLiquidationVolume","long_liquidation_volume","longVolume","buyVolume","buy_volume"]);
-  const liqShort=numericArray(liqPayload,["shortLiquidationVolume","short_liquidation_volume","shortVolume","sellVolume","sell_volume"]);
-
-  const cvdFirst=cvdVals.length?Number(cvdVals[0]):NaN,cvdLast=cvdVals.length?Number(cvdVals[cvdVals.length-1]):NaN;
+  const cvdVals=arraysFrom(cvdPayload,["cvd","cumulativeVolumeDelta","cumulative_volume_delta"]);
+  const buyVals=arraysFrom(cvdPayload,["buyVolume","buy_volume","buyNotional"]);
+  const sellVals=arraysFrom(cvdPayload,["sellVolume","sell_volume","sellNotional"]);
+  const oiVals=arraysFrom(oiPayload,["openInterest","open_interest","oi"]);
+  const fundingVals=arraysFrom(fundingPayload,["rate","fundingRate","funding_rate"]);
+  const longPct=arraysFrom(lsPayload,["longPercent","long_percent","long"]);
+  const shortPct=arraysFrom(lsPayload,["shortPercent","short_percent","short"]);
+  const ratioVals=arraysFrom(lsPayload,["ratio","longShortRatio","long_short_ratio"]);
+  const liqTotalVals=arraysFrom(liqPayload,["liquidationVolume","liquidation_volume","volume","usdValue"]);
+  const cvdFirst=cvdVals[0],cvdLast=cvdVals[cvdVals.length-1];
   let cvdDelta=Number.isFinite(cvdLast)&&Number.isFinite(cvdFirst)?cvdLast-cvdFirst:null;
-  if(cvdDelta===null&&buyVals.length&&sellVals.length){
-    const n=Math.min(buyVals.length,sellVals.length),buy=buyVals.slice(-n).reduce((a,b)=>a+b,0),sell=sellVals.slice(-n).reduce((a,b)=>a+b,0);
-    cvdDelta=buy-sell;
-  }
-  const oiFirst=oiVals.length?Number(oiVals[0]):NaN,oiLast=oiVals.length?Number(oiVals[oiVals.length-1]):NaN;
-  const oiChangePct=Number.isFinite(oiFirst)&&oiFirst?((oiLast-oiFirst)/oiFirst)*100:null;
-  const fundingRate=fundingVals.length?Number(fundingVals[fundingVals.length-1]):null;
-  const longLast=longPct.length?Number(longPct[longPct.length-1]):null,shortLast=shortPct.length?Number(shortPct[shortPct.length-1]):null,ratioLast=ratioVals.length?Number(ratioVals[ratioVals.length-1]):null;
-  const longLiq=liqLong.reduce((a,b)=>a+b,0),shortLiq=liqShort.reduce((a,b)=>a+b,0),liqTotal=longLiq+shortLiq;
-
-  if(!Number.isFinite(oiLast)&&!Number.isFinite(cvdDelta)&&!longLiq&&!shortLiq&&!Number.isFinite(fundingRate))throw new Error("Kraken futures analytics returned no usable data");
-
-  let cvdState="UNAVAILABLE";
-  if(Number.isFinite(cvdDelta)){if(cvdDelta>0)cvdState="BUYERS PRESSURE";else if(cvdDelta<0)cvdState="SELLERS PRESSURE";else cvdState="BALANCED";}
-  let positioning="OI CHANGE NOT AVAILABLE";
-  if(Number.isFinite(longLast)&&Number.isFinite(shortLast)){
-    positioning=longLast>shortLast+2?"LONG BIAS":shortLast>longLast+2?"SHORT BIAS":"BALANCED";
-  }else if(Number.isFinite(oiChangePct)){
-    positioning=oiChangePct>1?"OI RISING":oiChangePct<-1?"OI FALLING":"OI FLAT";
-  }
-
-  const errors=settled.filter(x=>x.status==="rejected").map(x=>x.key+": "+x.reason);
-  const lengths=[cvdVals.length,oiVals.length,liqLong.length,liqShort.length].filter(Boolean);
-  return {
-    available:true,provider:"Kraken Futures analytics",symbol:pair,
-    oi:Number.isFinite(oiLast)?oiLast:null,oiChangePct,
-    cvdDelta,cvdState,positioning,tradeCount:0,
-    fundingRate:Number.isFinite(fundingRate)?fundingRate:null,markPrice:null,
-    cvdRatio:null,longPercent:longLast,shortPercent:shortLast,longShortRatio:ratioLast,
-    longLiquidations:longLiq,shortLiquidations:shortLiq,liquidationTotal:liqTotal,
-    liquidationBias:liqTotal?(longLiq>shortLiq?"LONG LIQS DOMINANT":"SHORT LIQS DOMINANT"):"UNAVAILABLE",
-    analyticsBuckets:lengths.length?Math.max(...lengths):0,
-    series:{
-      cvd:cvdVals,
-      oi:oiVals,
-      liq:liqLong.length||liqShort.length?Array.from({length:Math.max(liqLong.length,liqShort.length)},(_,i)=>(Number(liqLong[i]||0)+Number(liqShort[i]||0))):[]
-    },
-    updatedAt:Date.now(),errors
-  };
+  if(cvdDelta===null&&buyVals.length&&sellVals.length){const n=Math.min(buyVals.length,sellVals.length),buy=buyVals.slice(-n).reduce((a,b)=>a+b,0),sell=sellVals.slice(-n).reduce((a,b)=>a+b,0);cvdDelta=buy-sell}
+  const oiFirst=oiVals[0],oiLast=oiVals[oiVals.length-1],oiChangePct=Number.isFinite(oiFirst)&&oiFirst?((oiLast-oiFirst)/oiFirst)*100:null;
+  const fundingRate=fundingVals.length?fundingVals[fundingVals.length-1]:null;
+  const longLast=longPct.length?longPct[longPct.length-1]:null,shortLast=shortPct.length?shortPct[shortPct.length-1]:null,ratioLast=ratioVals.length?ratioVals[ratioVals.length-1]:null;
+  const liquidationTotal=liqTotalVals.length?liqTotalVals.reduce((a,b)=>a+b,0):0;
+  if(!Number.isFinite(oiLast)&&!Number.isFinite(cvdDelta)&&liqTotalVals.length===0&&!Number.isFinite(fundingRate)&&!Number.isFinite(longLast))throw new Error("Kraken Futures analytics returned no usable data");
+  const cvdState=Number.isFinite(cvdDelta)?(cvdDelta>0?"BUYERS PRESSURE":cvdDelta<0?"SELLERS PRESSURE":"BALANCED"):"UNAVAILABLE";
+  let positioning="UNAVAILABLE";if(Number.isFinite(longLast)&&Number.isFinite(shortLast))positioning=longLast>shortLast+2?"LONG BIAS":shortLast>longLast+2?"SHORT BIAS":"BALANCED";else if(Number.isFinite(oiChangePct))positioning=oiChangePct>1?"OI RISING":oiChangePct<-1?"OI FALLING":"OI FLAT";
+  const errors=settled.filter(x=>x.status==="rejected").map(x=>x.key+": "+x.reason),lengths=[cvdVals.length,oiVals.length,liqTotalVals.length].filter(Boolean);
+  return{available:true,provider:"Kraken Futures public API",symbol:pair,oi:Number.isFinite(oiLast)?oiLast:null,oiChangePct,cvdDelta,cvdState,positioning,tradeCount:0,fundingRate:Number.isFinite(fundingRate)?fundingRate:null,markPrice:null,cvdRatio:null,longPercent:longLast,shortPercent:shortLast,longShortRatio:ratioLast,liquidationTotal,liquidationBias:liquidationTotal>0?"LIQUIDATION ACTIVITY":"NO LIQUIDATION ACTIVITY",analyticsBuckets:lengths.length?Math.max(...lengths):0,series:{cvd:cvdVals,oi:oiVals,liq:liqTotalVals},completeness:{oi:Number.isFinite(oiLast),cvd:Number.isFinite(cvdDelta),funding:Number.isFinite(fundingRate),positioning:Number.isFinite(longLast)&&Number.isFinite(shortLast),liquidations:liqTotalVals.length>0},errors,updatedAt:Date.now()};
 }
 async function bybitDerivatives(symbol,interval){
   const [oiRes,tradeRes,tickerRes]=await Promise.allSettled([
@@ -346,41 +297,19 @@ function aiSystem(){
 }
 
 function liteCopilot(mode,market,trade,question){
-  const m=market||{}, call=String(m.call||"NO TRADE"), regime=String(m.regime||"UNKNOWN"), mtf=String(m.multitimeframe||"");
-  const score=Number(m.confluence||0), rsi=String(m.rsiAdx||"—"), structure=String(m.structure||"—");
+  const m=market||{},call=String(m.status==="READY"?m.type:m.status==="WATCH"?"WATCH":m.status==="WAITING"?"NO TRADE":m.type||"NO TRADE"),regime=String(m.regime||"UNKNOWN"),score=Number(m.score||0),rsi=Number.isFinite(Number(m.rsi))?Number(m.rsi).toFixed(2):"—",adx=Number.isFinite(Number(m.adx))?Number(m.adx).toFixed(2):"—",structure=String(m.structure||"—"),mtf=m.mtf?("4H "+(m.mtf.higher||"UNKNOWN")+" · 15M "+(m.mtf.lower||"UNKNOWN")):"",deriv=m.derivatives||{};
   if(mode==="trade"){
-    const entry=Number(trade?.entry),stop=Number(trade?.stop),target=Number(trade?.target),side=String(trade?.side||"");
-    const risk=Number.isFinite(entry)&&Number.isFinite(stop)?Math.abs(entry-stop):NaN;
-    const reward=Number.isFinite(entry)&&Number.isFinite(target)?Math.abs(target-entry):NaN;
-    const rr=Number.isFinite(risk)&&risk?reward/risk:NaN;
-    const lines=[
-      "MarketPulse Lite review",
-      "",
-      "Market context: "+regime+" · "+call+" · confluence "+score+"/100.",
-      "Momentum: RSI/ADX "+rsi+" · structure "+structure+".",
-      mtf?"Timeframe context: "+mtf+".":""
-    ].filter(Boolean);
+    const entry=Number(trade?.entry),stop=Number(trade?.stop),target=Number(trade?.target),side=String(trade?.side||""),risk=Number.isFinite(entry)&&Number.isFinite(stop)?Math.abs(entry-stop):NaN,reward=Number.isFinite(entry)&&Number.isFinite(target)?Math.abs(target-entry):NaN,rr=Number.isFinite(risk)&&risk?reward/risk:NaN;
+    const lines=["MarketPulse Lite review","", "Market context: "+regime+" · "+call+" · confluence "+score+"/100.","Momentum: RSI "+rsi+" · ADX "+adx+" · structure "+structure+".",mtf?"Timeframe context: "+mtf+".":"",deriv.cvdState?"Derivatives: "+deriv.cvdState+" · "+(deriv.positioning||"positioning unavailable")+".":""].filter(Boolean);
     if(side)lines.push("Your plan: "+side+(Number.isFinite(rr)?" · planned R:R "+rr.toFixed(2)+"R.":""));
     if(call==="NO TRADE")lines.push("The dashboard currently sees insufficient alignment. That matters more than whether the trade eventually wins or loses.");
-    else if(Number.isFinite(rr)&&rr<1.5)lines.push("Your planned R:R is below 1.5R. That makes the setup less forgiving before fees/slippage.");
+    else if(Number.isFinite(rr)&&rr<1.5)lines.push("Your planned R:R is below 1.5R. Check whether the invalidation is structural before proceeding.");
     else if(Number.isFinite(rr))lines.push("Your planned R:R is "+rr.toFixed(2)+"R. Check that the invalidation is structural rather than arbitrary.");
-    lines.push("Question: "+(question||"Review this trade."));
-    lines.push("Note: Lite mode uses deterministic MarketPulse rules. Add API credits to unlock the full AI Copilot.");
+    lines.push("Question: "+(question||"Review this trade."),"Note: Lite mode uses deterministic MarketPulse rules. Add API credits to unlock full AI reasoning.");
     return lines.join("\n");
   }
-  const lines=[
-    "MarketPulse Lite",
-    "",
-    "BTC/asset context: "+regime+" · "+call+" · confluence "+score+"/100.",
-    "RSI/ADX: "+rsi+" · structure: "+structure+".",
-    mtf?"Multi-timeframe: "+mtf+".":"",
-    call==="NO TRADE"?"Read: wait for alignment instead of forcing a trade.":"Read: treat this as a setup to validate, not a guarantee.",
-    "Question: "+(question||"What is the market doing?"),
-    "Full AI Copilot will be available when API credits are added."
-  ].filter(Boolean);
-  return lines.join("\n");
+  return ["MarketPulse Lite","", "Market context: "+regime+" · "+call+" · confluence "+score+"/100.","Momentum: RSI "+rsi+" · ADX "+adx+" · structure "+structure+".",mtf?"Multi-timeframe: "+mtf+".":"",deriv.cvdState?"Derivatives: "+deriv.cvdState+" · "+(deriv.positioning||"positioning unavailable")+".":"",call==="NO TRADE"?"Read: wait for alignment instead of forcing a trade.":"Read: treat this as a setup to validate, not a guarantee.","Question: "+(question||"What is the market doing?"),"Full AI reasoning will be available when API credits are added."].filter(Boolean).join("\n");
 }
-
 function staticFile(req,res){const reqPath=req.url==='/'?'/index.html':req.url.split('?')[0],file=path.join(__dirname,'public',reqPath),root=path.join(__dirname,'public');if(!file.startsWith(root))return send(res,403,{error:'Forbidden'});fs.readFile(file,(e,d)=>{if(e)return send(res,404,{error:'Not found'});const ext=path.extname(file);res.writeHead(200,{'Content-Type':ext==='.html'?'text/html; charset=utf-8':ext==='.json'?'application/json; charset=utf-8':'text/plain; charset=utf-8'});res.end(d)})}
 
 const server=http.createServer(async(req,res)=>{
@@ -441,7 +370,10 @@ const server=http.createServer(async(req,res)=>{
         return send(res,200,{
           ok:true,symbol,interval,candles,analysis,derivatives:deriv,learning:learningStatus,
           backtest:backtest(sample),validation:walkForwardBacktest(sample),setupStats,
-          source:'Kraken spot',updatedAt:Date.now()
+          source:'Kraken spot',
+          phase2:PHASE2_VERSION,
+          dataQuality:{candleCount:candles.length,candleAgeMs:candles.length?Math.max(0,Date.now()-Number(candles[candles.length-1].t)):null,derivativesAvailable:Boolean(deriv?.available),derivativesCompleteness:deriv?.completeness||null},
+          updatedAt:Date.now()
         });
       }catch(e){return send(res,503,{ok:false,error:String(e.message||e),source:'Kraken spot'})}
     }
@@ -454,17 +386,20 @@ const server=http.createServer(async(req,res)=>{
       }catch(e){return send(res,200,{ok:false,data:null,error:e.message})}
     }
     if(req.method==='GET'&&u.pathname==='/api/core-scan'){
-      const interval=u.searchParams.get('interval')||'1h';
+      const interval=u.searchParams.get('interval')||'1h',hit=SCAN_CACHE.get(interval);
+      if(hit&&Date.now()-hit.ts<SCAN_TTL)return send(res,200,hit.payload);
       const rows=await Promise.all(SYMBOLS.map(async symbol=>{
         try{
-          const candles=await getKraken(symbol,interval);
-          if(!candles||candles.length<220)throw Error('Insufficient candles');
-          let analysis=analyze(candles,{interval});
-          try{const learned=await Promise.race([learning.process(symbol,interval,candles,analysis),new Promise(resolve=>setTimeout(()=>resolve(null),350))]);if(learned?.analysis)analysis=learned.analysis}catch{}
-          return {symbol,label:labels[symbol]||symbol,price:analysis.price,change24h:analysis.change24h,regime:analysis.regime,side:analysis.side,type:analysis.type,status:analysis.status,score:analysis.score,bias:analysis.bias,probabilityLabel:analysis.probabilityLabel,structure:analysis.structure};
-        }catch(e){return {symbol,label:labels[symbol]||symbol,status:'WAITING',side:'WAIT',score:0,error:e.message}}
+          const candles=await getKraken(symbol,interval);if(!candles||candles.length<220)throw Error('Insufficient candles');
+          const higher=interval==='4h'?null:await Promise.race([getKraken(symbol,'4h'),new Promise(resolve=>setTimeout(()=>resolve(null),1200))]).catch(()=>null);
+          const lower=interval==='15m'?null:await Promise.race([getKraken(symbol,'15m'),new Promise(resolve=>setTimeout(()=>resolve(null),1200))]).catch(()=>null);
+          const deriv=await Promise.race([derivatives(symbol,interval),new Promise(resolve=>setTimeout(()=>resolve(null),700))]).catch(()=>null);
+          let analysis=analyze(candles,{interval,lower:lower&&lower.length>=220?analyze(lower,{interval:'15m'}):null,higher:higher&&higher.length>=220?analyze(higher,{interval:'4h'}):null,deriv});
+          try{const learned=await Promise.race([learning.process(symbol,interval,candles,analysis),new Promise(resolve=>setTimeout(()=>resolve(null),250))]);if(learned?.analysis)analysis=learned.analysis}catch{}
+          return{symbol,label:labels[symbol]||symbol,price:analysis.price,change24h:analysis.change24h,regime:analysis.regime,side:analysis.side,type:analysis.type,status:analysis.status,score:analysis.score,bias:analysis.bias,probabilityLabel:analysis.probabilityLabel,structure:analysis.structure,derivatives:analysis.derivatives};
+        }catch(e){return{symbol,label:labels[symbol]||symbol,status:'WAITING',side:'WAIT',score:0,error:e.message}}
       }));
-      return send(res,200,{ok:true,interval,rows});
+      const payload={ok:true,interval,rows,updatedAt:Date.now(),cacheTtlMs:SCAN_TTL};SCAN_CACHE.set(interval,{ts:Date.now(),payload});return send(res,200,payload);
     }
     if(req.method==='GET'&&u.pathname==='/api/system-check'){
       const checks={server:true,marketEngine:true,learning:false,memory:false,marketData:false,derivatives:false,oi:false,cvd:false,liquidations:false};
@@ -474,18 +409,12 @@ const server=http.createServer(async(req,res)=>{
       try{const rows=await getKraken('BTCUSDT','1h');checks.marketData=Boolean(rows&&rows.length>=50)}catch(e){marketError=e.message}
       try{
         const d=await Promise.race([derivatives('BTCUSDT','15m'),new Promise(resolve=>setTimeout(()=>resolve(null),3500))]);
-        checks.derivatives=Boolean(d&&d.available);
-        checks.oi=Boolean(Number.isFinite(Number(d?.oi)));
-        checks.cvd=Boolean(Number.isFinite(Number(d?.cvdDelta))||String(d?.cvdState||'').includes('PRESSURE')||String(d?.cvdState||'').includes('BALANCED'));
-        checks.liquidations=Boolean(Number(d?.liquidationTotal)>0||Number(d?.liveLiquidations?.total)>0);
+        checks.derivatives=Boolean(d&&d.available);checks.oi=Boolean(Number.isFinite(Number(d?.oi)));
+        checks.cvd=Boolean(Number.isFinite(Number(d?.cvdDelta))||["BUYERS PRESSURE","SELLERS PRESSURE","BALANCED"].includes(d?.cvdState));
+        checks.liquidations=Boolean(Array.isArray(d?.series?.liq)?d.series.liq.length>0:Boolean(d&&d.liquidationTotal!=null));
         if(!checks.derivatives)derivativesError="No derivatives provider returned usable data";
       }catch(e){derivativesError=String(e.message||e)}
-      return send(res,200,{
-        ok:checks.server&&checks.marketEngine&&checks.learning&&checks.memory&&checks.marketData,
-        checks,marketError,derivativesError,
-        routes:{core:true,coreScan:true,coreFlow:true,cycle:true,ai:true,memory:true},
-        timestamp:Date.now()
-      });
+      return send(res,200,{ok:checks.server&&checks.marketEngine&&checks.learning&&checks.memory&&checks.marketData,checks,marketError,derivativesError,phase2:PHASE2_VERSION,routes:{core:true,coreScan:true,coreFlow:true,cycle:true,ai:true,memory:true,learning:true},timestamp:Date.now()});
     }
     if(req.method==='GET'&&u.pathname==='/api/live'){
       const symbol=(u.searchParams.get('symbol')||'BTCUSDT').toUpperCase(),interval=u.searchParams.get('interval')||'1h';
