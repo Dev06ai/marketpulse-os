@@ -1017,65 +1017,29 @@ const server=http.createServer(async(req,res)=>{
       try{
         const candles=await klines(symbol,interval);
         if(!candles||candles.length<220)throw Error('Insufficient candles');
-        const lowerPromise=interval==='15m'?Promise.resolve(null):Promise.race([klines(symbol,'15m'),new Promise(resolve=>setTimeout(()=>resolve(null),950))]).catch(()=>null);
-        const higherPromise=interval==='4h'?Promise.resolve(null):Promise.race([klines(symbol,'4h'),new Promise(resolve=>setTimeout(()=>resolve(null),950))]).catch(()=>null);
-        const derivPromise=Promise.race([derivatives(symbol,interval),new Promise(resolve=>setTimeout(()=>resolve(null),900))]).catch(()=>null);
-        const [lower,higher,deriv]=await Promise.all([lowerPromise,higherPromise,derivPromise]);
-        let analysis=analyze(candles,{
-          interval,
-          lower:lower&&lower.length>=220?analyze(lower,{interval:'15m'}):null,
-          higher:higher&&higher.length>=220?analyze(higher,{interval:'4h'}):null,
-          deriv
-        });
-        let learned=null;
+        let analysis=analyze(candles,{interval,lower:null,higher:null,deriv:null});
         try{
-          learned=await Promise.race([
+          const learned=await Promise.race([
             learning.process(symbol,interval,candles,analysis),
-            new Promise(resolve=>setTimeout(()=>resolve(null),180))
+            new Promise(resolve=>setTimeout(()=>resolve(null),120))
           ]);
+          if(learned?.analysis)analysis=learned.analysis;
         }catch{}
-        if(learned?.analysis)analysis=learned.analysis;
         try{phase4.updateLive(requestDevice(req),symbol,interval,analysis,candles).catch(()=>{})}catch{}
-
         const learningStatus=await Promise.race([
           learning.status(),
-          new Promise(resolve=>setTimeout(()=>resolve({phase:2,state:'COLLECTING',durable:storage.status().durable,resolved:0}),180))
+          new Promise(resolve=>setTimeout(()=>resolve({phase:2,state:'COLLECTING',durable:storage.status().durable,resolved:0}),120))
         ]).catch(()=>({phase:2,state:'COLLECTING',durable:storage.status().durable,resolved:0}));
-
         const analytics=queueCoreAnalytics(symbol,interval,candles);
-        const payload={
-          ok:true,symbol,interval,candles,analysis,derivatives:deriv,learning:learningStatus,
-          backtest:analytics?.backtest||null,
-          validation:analytics?.validation||null,
-          setupStats:analytics?.setupStats||null,
-          source:candles?.[0]?.source||'market data',
-          dataConsensus:null,
-          phase2:PHASE2_VERSION,
-          phase3:PHASE3_VERSION,
-          phase4:PHASE4_VERSION,
-          dataQuality:{
-            candleCount:candles.length,
-            candleAgeMs:candles.length?Math.max(0,Date.now()-Number(candles[candles.length-1].t)):null,
-            derivativesAvailable:Boolean(deriv?.available),
-            derivativesCompleteness:deriv?.completeness||null
-          },
-          updatedAt:Date.now(),
-          performance:{fastPath:true,analyticsBackground:true}
-        };
-        return send(res,200,payload);
+        return send(res,200,{
+          ok:true,symbol,interval,candles,analysis,derivatives:null,learning:learningStatus,
+          backtest:analytics?.backtest||null,validation:analytics?.validation||null,setupStats:analytics?.setupStats||null,
+          source:candles?.[0]?.source||'market data',dataConsensus:null,
+          phase2:PHASE2_VERSION,phase3:PHASE3_VERSION,phase4:PHASE4_VERSION,
+          dataQuality:{candleCount:candles.length,candleAgeMs:candles.length?Math.max(0,Date.now()-Number(candles[candles.length-1].t)):null,derivativesAvailable:false},
+          updatedAt:Date.now(),performance:{fastPath:true,enrichmentBackground:true,analyticsBackground:true}
+        });
       }catch(e){return send(res,503,{ok:false,error:String(e.message||e),source:'market data'})}
-    }
-    if(req.method==='GET'&&u.pathname==='/api/core-analytics'){
-      const symbol=(u.searchParams.get('symbol')||'BTCUSDT').toUpperCase(),interval=u.searchParams.get('interval')||'1h';
-      if(!SYMBOLS.includes(symbol))return send(res,400,{ok:false,error:'Unsupported symbol'});
-      const key=String(symbol)+"|"+String(interval),hit=CORE_ANALYTICS_CACHE.get(key);
-      if(hit)return send(res,200,{ok:true,symbol,interval,...hit.payload,updatedAt:hit.ts,ready:true});
-      try{
-        const candles=await klines(symbol,interval);
-        if(!candles||candles.length<240)return send(res,200,{ok:true,symbol,interval,ready:false,backtest:null,validation:null,setupStats:null});
-        const analytics=queueCoreAnalytics(symbol,interval,candles);
-        return send(res,200,{ok:true,symbol,interval,ready:Boolean(analytics),...(analytics||{backtest:null,validation:null,setupStats:null}),ready:Boolean(analytics)});
-      }catch(e){return send(res,200,{ok:false,ready:false,error:String(e.message||e)})}
     }
     if(req.method==='GET'&&u.pathname==='/api/data-fabric'){
       const symbol=(u.searchParams.get('symbol')||'BTCUSDT').toUpperCase(),interval=u.searchParams.get('interval')||'1h';
