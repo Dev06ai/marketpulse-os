@@ -59,3 +59,42 @@ console.log(JSON.stringify({
   deploymentGate:phaseResult.gate,
   validationSummary:phaseResult.summary
 },null,2));
+
+const {detectStrategySetups}=require("./strategy-setups");
+
+function strategyCandles(){
+  const out=[],start=Date.UTC(2026,8,20,0,0,0),hour=3600000;
+  for(let i=0;i<120;i++){
+    const t=start+i*hour;
+    out.push({t,o:100,c:100.4,h:101,l:99,v:1000});
+  }
+  // Prior day profile concentrated around 105, then untouched by later candles.
+  for(let i=0;i<24;i++){
+    out[i].o=104.8;out[i].c=105.2;out[i].h=105.5;out[i].l=104.5;out[i].v=2000;
+  }
+  // Current day's candles remain away from the prior POC until the final SFP.
+  for(let i=24;i<119;i++){
+    out[i].o=107;out[i].c=107.2;out[i].h=108;out[i].l=106;out[i].v=1100;
+  }
+  out[119]={t:start+119*hour,o:105.8,c:104.5,h:107.2,l:104.1,v:2800};
+  return out;
+}
+
+const npoc=detectStrategySetups(strategyCandles(),{interval:"1h"});
+assert(npoc.setup?.kind==="NPOC","Naked POC detector did not identify the synthetic SFP.");
+assert(npoc.setup?.side==="SHORT","Bearish naked POC SFP must map to SHORT.");
+assert(String(npoc.setup?.reason||"").includes("Naked DAILY POC"),"Naked POC thesis reason missing.");
+
+function dlineCandles(){
+  const out=[],start=Date.UTC(2026,8,25,0,0,0),m=15*60000;
+  for(let i=0;i<100;i++)out.push({t:start+i*m,o:100,c:100.2,h:101,l:99,v:1000});
+  out[70]={t:start+70*m,o:100,c:109,h:110,l:99,v:1000};
+  out[85]={t:start+85*m,o:100,c:105,h:106,l:99,v:1000};
+  out[97]={t:start+97*m,o:100,c:102,h:103,l:99,v:1000};
+  out[98]={t:start+98*m,o:100,c:102,h:103,l:99,v:1000};
+  out[99]={t:start+99*m,o:104,c:110,h:111,l:103,v:2200};
+  return out;
+}
+const dline=detectStrategySetups(dlineCandles(),{interval:"15m",higher8h:{regime:"UPTREND"}});
+assert(dline.setup?.kind==="D_LINE_BREAKOUT","D-Line breakout detector did not identify the synthetic breakout.");
+assert(dline.setup?.side==="LONG","Bullish D-Line breakout must map to LONG.");
