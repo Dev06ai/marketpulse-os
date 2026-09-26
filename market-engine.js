@@ -1,6 +1,7 @@
 const clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
 const last=v=>v[v.length-1];
 const {detectMarketStructure}=require("./market-structure");
+const {detectStrategySetups}=require("./strategy-setups");
 const finiteOr=(v,fallback)=>Number.isFinite(v)?v:fallback;
 
 function sma(v,p){const o=[];let s=0;for(let i=0;i<v.length;i++){s+=v[i];if(i>=p)s-=v[i-p];o.push(i+1>=p?s/p:NaN)}return o}
@@ -86,6 +87,17 @@ function analyze(c,ctx={}){
   const E20=ema(closes,20),E50=ema(closes,50),E200=ema(closes,200),R=rsi(closes),A=atr(c),D=adx(c),vz=volumeZ(volumes);
   const atrNow=finiteOr(A[i],Math.max(price*.01,1)),adxNow=finiteOr(D[i],0),rsiNow=finiteOr(R[i],50),st=structure(c);
   const marketStructure=detectMarketStructure(c,{interval:ctx.interval||"1h"});
+  const strategySetups=detectStrategySetups(c,{interval:ctx.interval||"1h",higher8h:ctx.dlineHigher||null});
+  if(strategySetups.setup){
+    marketStructure.strategySetup=strategySetups.setup;
+    marketStructure.strategyDetected=strategySetups.detected;
+    marketStructure.nakedPocs=strategySetups.nakedPocs;
+    marketStructure.dLine=strategySetups.dLine;
+    if(!marketStructure.setup||Number(strategySetups.setup.score)>=Number(marketStructure.setup.score||0)){
+      marketStructure.setup=strategySetups.setup;
+      marketStructure.score=Number(strategySetups.setup.score)||marketStructure.score;
+    }
+  }
 
   const look=c.slice(Math.max(0,i-30),i); // exclude the live candle from structural ranges
   const rangeHigh=Math.max(...look.map(x=>x.h)),rangeLow=Math.min(...look.map(x=>x.l));
@@ -153,15 +165,24 @@ function analyze(c,ctx={}){
   const rangeShort=regime==="RANGE"&&rsiNow>66&&rangePos>.68;
   const ms=marketStructure.setup;
   const msReady=Boolean(ms&&Number(ms.score)>=74);
+  const strategyKind=String(ms?.kind||"").toUpperCase();
+  const strategyReady=Boolean(ms&&["SFP","ORDER_BLOCK","BREAKOUT_RETEST","NPOC","D_LINE_BREAKOUT"].includes(strategyKind)&&Number(ms.score)>=80);
 
-  if(msReady&&ms.side==="LONG"){
-    side="LONG";bias="Bullish";
-    type=ms.kind==="SFP"?ms.timeframe+" SFP LONG":ms.kind==="BREAKOUT_RETEST"?ms.timeframe+" LEVEL RETEST LONG":"ORDER BLOCK REJECTION LONG";
-    reasons.push(ms.reason,"Market-structure trigger is confirmed on a key level.");
-  }else if(msReady&&ms.side==="SHORT"){
-    side="SHORT";bias="Bearish";
-    type=ms.kind==="SFP"?ms.timeframe+" SFP SHORT":ms.kind==="BREAKOUT_RETEST"?ms.timeframe+" LEVEL RETEST SHORT":"ORDER BLOCK REJECTION SHORT";
-    reasons.push(ms.reason,"Market-structure trigger is confirmed on a key level.");
+  const strategyType=(m,dir)=>{
+    const k=String(m?.kind||"").toUpperCase();
+    if(k==="SFP")return String(m.timeframe||"KEY LEVEL")+" SFP "+dir;
+    if(k==="NPOC")return String(m.timeframe||"")+" NPOC SFP "+dir;
+    if(k==="BREAKOUT_RETEST")return String(m.timeframe||"KEY LEVEL")+" LEVEL RETEST "+dir;
+    if(k==="D_LINE_BREAKOUT")return "D-LINE "+dir;
+    if(k==="ORDER_BLOCK")return "ORDER BLOCK REJECTION "+dir;
+    return k+" "+dir;
+  };
+  if(strategyReady&&ms.side==="LONG"){
+    side="LONG";bias="Bullish";type=strategyType(ms,"LONG");
+    reasons.push(ms.reason,"Strategy trigger is confirmed by the market-structure layer.");
+  }else if(strategyReady&&ms.side==="SHORT"){
+    side="SHORT";bias="Bearish";type=strategyType(ms,"SHORT");
+    reasons.push(ms.reason,"Strategy trigger is confirmed by the market-structure layer.");
   }else if(breakoutLong){type="BREAKOUT LONG";side="LONG";bias="Bullish";reasons.push("Price has cleared the prior range high","Volume is expanding with the move","Momentum and trend strength confirm the break");}
   else if(breakoutShort){type="BREAKOUT SHORT";side="SHORT";bias="Bearish";reasons.push("Price has cleared the prior range low","Volume is expanding with the move","Momentum and trend strength confirm the break");}
   else if(trendLong){type="LONG SETUP";side="LONG";bias="Bullish";reasons.push("EMA structure is bullish","Price is interacting with the continuation zone","Momentum supports continuation");}
@@ -177,7 +198,8 @@ function analyze(c,ctx={}){
     {name:"Momentum",value:(side==="LONG"&&rsiNow>=50&&rsiNow<=68)||(side==="SHORT"&&rsiNow>=32&&rsiNow<=50)?11:4},
     {name:"Volume",value:Math.abs(vz)>=1.2?9:Math.abs(vz)>=.5?6:2},
     {name:"Structure",value:(side==="LONG"&&st.state.includes("BULLISH"))||(side==="SHORT"&&st.state.includes("BEARISH"))?9:4},
-    {name:"Key level / price action",value:side!=="WAIT"&&ms?.side===side?clamp(Math.round(ms.score*.14),0,14):3},
+    {name:"Key level / price action",value:side!=="WAIT"&&ms?.side===side?clamp(Math.round(ms.score*.12),0,12):3},
+    {name:"Strategy trigger",value:strategyReady&&ms?.side===side?clamp(Math.round(ms.score*.10),0,10):2},
     {name:"4H alignment",value:(side==="LONG"&&mtf4==="UPTREND")||(side==="SHORT"&&mtf4==="DOWNTREND")?9:(side==="WAIT"||mtf4==="UNKNOWN"?4:0)},
     {name:"15M alignment",value:(side==="LONG"&&mtf15==="UPTREND")||(side==="SHORT"&&mtf15==="DOWNTREND")?7:(side==="WAIT"||mtf15==="UNKNOWN"?3:0)},
     {name:"CVD pressure",value:side==="WAIT"||cvdState==="UNKNOWN"?3:
@@ -233,9 +255,11 @@ function analyze(c,ctx={}){
       const buffer=Math.max(.18*atrNow,price*.00035);
       el=side==="LONG"?price-.08*atrNow:price-.04*atrNow;
       eh=side==="LONG"?price+.04*atrNow:price+.08*atrNow;
+      const triggerBase=Number.isFinite(ms?.sweepPrice)?ms.sweepPrice:
+        (Number.isFinite(ms?.lineNow)?ms.lineNow:(Number.isFinite(ms?.levelPrice)?ms.levelPrice:null));
       const structuralStop=side==="LONG"
-        ?(ms.kind==="SFP"||ms.kind==="ORDER_BLOCK"?ms.sweepPrice??ms.low:ms.levelPrice)-buffer
-        :(ms.kind==="SFP"||ms.kind==="ORDER_BLOCK"?ms.sweepPrice??ms.high:ms.levelPrice)+buffer;
+        ?(ms.kind==="SFP"||ms.kind==="NPOC"||ms.kind==="ORDER_BLOCK"?triggerBase??ms.low:(Number.isFinite(triggerBase)?Math.min(triggerBase,rangeLow):rangeLow))-buffer
+        :(ms.kind==="SFP"||ms.kind==="NPOC"||ms.kind==="ORDER_BLOCK"?triggerBase??ms.high:(Number.isFinite(triggerBase)?Math.max(triggerBase,rangeHigh):rangeHigh))+buffer;
       stop=side==="LONG"?Math.min(price-risk,Number.isFinite(structuralStop)?structuralStop:price-risk):Math.max(price+risk,Number.isFinite(structuralStop)?structuralStop:price+risk);
       const actualRisk=Math.abs(price-stop);
       const nextLevel=side==="LONG"?marketStructure.nearestResistance:marketStructure.nearestSupport;
@@ -319,7 +343,8 @@ function analyze(c,ctx={}){
     price,change24h,ema20:E20[i],ema50:E50[i],ema200:E200[i],rsi:rsiNow,adx:adxNow,atrPct:atrNow/price*100,volumeZ:vz,
     regime,mood,momentum,volState,structure:st.state,type,side,bias,directionalLean,probabilityLabel,
     score,status,reasons,contributors,components,
-    marketStructure:{score:marketStructure.score,setup:marketStructure.setup,levels:marketStructure.levels,previousDay:marketStructure.previousDay,previousWeek:marketStructure.previousWeek,nearestSupport:marketStructure.nearestSupport,nearestResistance:marketStructure.nearestResistance,detected:marketStructure.detected,note:marketStructure.note},
+    strategyFamily:strategyReady?String(ms.kind||"UNKNOWN"):"NONE",
+    marketStructure:{score:marketStructure.score,setup:marketStructure.setup,strategySetup:marketStructure.strategySetup||null,levels:marketStructure.levels,nakedPocs:marketStructure.nakedPocs||strategySetups.nakedPocs||[],dLine:marketStructure.dLine||strategySetups.dLine||null,previousDay:marketStructure.previousDay,previousWeek:marketStructure.previousWeek,nearestSupport:marketStructure.nearestSupport,nearestResistance:marketStructure.nearestResistance,detected:{...(marketStructure.detected||{}),strategy:strategySetups.detected},note:marketStructure.note},
     derivatives:{available:!!deriv,oi:currentOi,cvdState,positioning,oiChangePct,cvdDelta,cvdRatio:deriv?.cvdRatio??null,flowPriceChangePct,tradeCount:deriv?.tradeCount??0,fundingRate:deriv?.fundingRate??null,longPercent,shortPercent,longShortRatio,liquidationBias:liquidationBias&&liquidationBias!=="UNKNOWN"?liquidationBias:"NOT AVAILABLE",liquidationTotal,orderBookImbalance,micropriceBias,spreadBps,takerImbalance,depthNotional:flow.depth,provider:deriv?.provider??null,errors:deriv?.errors??[]},
     thesis:thesis.join(" "),thesisParts:thesis,
     primaryScenario,alternateScenario,

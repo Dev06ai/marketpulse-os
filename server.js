@@ -178,7 +178,14 @@ function queuePhase1113Validation(symbol,interval,candles){
         if(closed.length>=600)source=closed;
       }catch{}
       const sample=source.slice(-1500);
-      const validation=phase1113.runWalkForward(sample,{symbol,interval,basePolicy:{minScore:78,minRR:1.5},step:2,maxSamples:350,minTrades:80,minTestBars:300});
+      let higher8h=null;
+      if(String(interval).toLowerCase()==="15m"){
+        try{
+          const h=await research.fetchBinanceKlines(symbol,"8h",{maxBars:1800});
+          higher8h=closedCandles(h,"8h",Date.now());
+        }catch{}
+      }
+      const validation=phase1113.runWalkForward(sample,{symbol,interval,higher8h,basePolicy:{minScore:78,minRR:1.5},step:2,maxSamples:350,minTrades:80,minTestBars:300});
       PHASE1113_CACHE.set(key,{ts:Date.now(),payload:validation});
       try{
         const state=await storage.getLearningState();
@@ -199,10 +206,13 @@ async function buildDecisionSnapshot(symbol,interval,query){
     if(!candles||candles.length<220)throw Error("Insufficient closed candles");
     const lowerInterval=interval==="15m"?null:"15m";
     const higherInterval=interval==="4h"?"1d":interval==="1d"?null:"4h";
+    const dlineHigherInterval=interval==="15m"?"8h":null;
     const lowerRaw=lowerInterval?await Promise.race([klines(symbol,lowerInterval),new Promise(resolve=>setTimeout(()=>resolve(null),1500))]).catch(()=>null):null;
     const higherRaw=higherInterval?await Promise.race([klines(symbol,higherInterval),new Promise(resolve=>setTimeout(()=>resolve(null),1500))]).catch(()=>null):null;
+    const dlineHigherRaw=dlineHigherInterval?await Promise.race([klines(symbol,dlineHigherInterval),new Promise(resolve=>setTimeout(()=>resolve(null),1700))]).catch(()=>null):null;
     const lower=lowerRaw?closedCandles(lowerRaw,lowerInterval,now):null;
     const higher=higherRaw?closedCandles(higherRaw,higherInterval,now):null;
+    const dlineHigher=dlineHigherRaw?closedCandles(dlineHigherRaw,dlineHigherInterval,now):null;
     const deriv=await Promise.race([derivatives(symbol,interval),new Promise(resolve=>setTimeout(()=>resolve(null),2600))]).catch(()=>null);
     const consensus=await Promise.race([dataFabric.assess(symbol,interval,{
       primaryPrice:candles[candles.length-1]?.c,
@@ -212,7 +222,8 @@ async function buildDecisionSnapshot(symbol,interval,query){
     }),new Promise(resolve=>setTimeout(()=>resolve(null),1500))]).catch(()=>null);
     const lowerAnalysis=lower&&lower.length>=220&&lowerInterval?analyze(lower,{interval:lowerInterval}):null;
     const higherAnalysis=higher&&higher.length>=220&&higherInterval?analyze(higher,{interval:higherInterval}):null;
-    let analysis=analyze(candles,{interval,lower:lowerAnalysis,higher:higherAnalysis,deriv});
+    const dlineHigherAnalysis=dlineHigher&&dlineHigher.length>=100?analyze(dlineHigher,{interval:dlineHigherInterval}):null;
+    let analysis=analyze(candles,{interval,lower:lowerAnalysis,higher:higherAnalysis,dlineHigher:dlineHigherAnalysis,deriv});
     let learned=null;
     try{
       learned=await Promise.race([learning.process(symbol,interval,candles,analysis),new Promise(resolve=>setTimeout(()=>resolve(null),500))]);
@@ -291,7 +302,7 @@ async function getKraken(symbol,interval,timeoutMs=DATA_TIMEOUT_MS){
   return (body.result[key]||[]).slice(-Math.min(KLINE_LIMIT,720)).map(x=>({t:+x[0]*1000,o:+x[1],h:+x[2],l:+x[3],c:+x[4],v:+x[6],source:'kraken'}));
 }
 async function getBybitKlines(symbol,interval,timeoutMs=2200){
-  const bybitIntervalMap={"15m":"15","30m":"30","1h":"60","4h":"240","1d":"D"};
+  const bybitIntervalMap={"15m":"15","30m":"30","1h":"60","4h":"240","8h":"480","1d":"D"};
   const iv=bybitIntervalMap[interval]||"60";
   const hosts=["https://api.bybit.com","https://api.bytick.com"];
   let lastErr=null;

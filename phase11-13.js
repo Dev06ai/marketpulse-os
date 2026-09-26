@@ -116,6 +116,7 @@ function runWalkForward(candles,opts={}){
   const analyze=opts.analyze||require("./market-engine").analyze;
   const phase910=opts.phase910||require("./phase9-10");
   const interval=opts.interval||"1h";
+  const higher8h=Array.isArray(opts.higher8h)?opts.higher8h:null;
   const windowSize=Math.max(220,Math.min(480,Number(opts.windowSize)||360));
   const horizon=Math.max(4,Math.min(48,Number(opts.horizonBars)||12));
   const step=Math.max(1,Math.min(10,Number(opts.step)||2));
@@ -127,7 +128,23 @@ function runWalkForward(candles,opts={}){
   for(let i=start;i<=end&&rows.length<maxSamples;i+=step){
     const window=candles.slice(Math.max(0,i-windowSize+1),i+1);
     let analysis;
-    try{analysis=analyze(window,{interval,lower:null,higher:null,deriv:null})}catch{continue}
+    let dlineHigher=null;
+    if(interval==="15m"&&higher8h&&higher8h.length>=220){
+      const signalTs=Number(candles[i]?.t)||0;
+      const eligibleIndex=(()=>{
+        let lo=0,hi=higher8h.length-1,best=-1;
+        while(lo<=hi){
+          const mid=Math.floor((lo+hi)/2);
+          const t=Number(higher8h[mid]?.t)||0;
+          if(t<=signalTs-480*60*1000){best=mid;lo=mid+1}else hi=mid-1;
+        }
+        return best;
+      })();
+      if(eligibleIndex>=219){
+        try{dlineHigher=analyze(higher8h.slice(0,eligibleIndex+1),{interval:"8h",lower:null,higher:null,deriv:null})}catch{}
+      }
+    }
+    try{analysis=analyze(window,{interval,lower:null,higher:null,dlineHigher,deriv:null})}catch{continue}
     const decision=phase910.evaluate({
       symbol:opts.symbol||"BTCUSDT",interval,analysis,derivatives:{available:false},
       consensus:{consensusQualityPct:90,priceDispersionBps:20,sourceCount:1,independentSourceCount:1},
@@ -160,6 +177,7 @@ function runWalkForward(candles,opts={}){
     method:"rolling walk-forward replay; no future candles used in the signal window",
     limitations:[
       "Historical replay uses OHLCV candles only unless historical derivatives are explicitly supplied.",
+      "D-Line validation uses synchronized 8H OHLCV context when an 8H sample is supplied; it does not reconstruct historical order-book/liquidation microstructure.",
       "Same-bar stop/target conflicts are resolved conservatively in favor of the stop.",
       "Open positions at the replay horizon are marked at the horizon close and capped to ±1R.",
       "Past performance does not establish future profitability."
