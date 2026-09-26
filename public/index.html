@@ -86,17 +86,25 @@ button,input,select,textarea{font:inherit}.wrap{width:min(1440px,calc(100% - 26p
 #mp7-panel .mp7-q{padding:10px;border:1px solid rgba(255,255,255,.06);border-radius:10px;background:#0d0f13;font-size:11px;color:#98a4b6}
 @media(max-width:1050px){#mp7-panel .mp7-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media(max-width:700px){#mp7-panel .mp7-head{align-items:flex-start;flex-direction:column}#mp7-panel .mp7-grid{grid-template-columns:repeat(2,minmax(0,1fr))}#mp7-panel .mp7-cols{grid-template-columns:1fr}#mp7-panel .mp7-quality{grid-template-columns:repeat(2,minmax(0,1fr))}#mp7-panel .mp7-body{padding:14px}}
+</style><style id="ui-audit-style">
+.nav{gap:3px;justify-content:flex-end}
+.nav button{padding:9px 10px;font-size:9px;letter-spacing:.01em}
+.nav button[data-view="lab"]{margin-left:8px}
+.nav button[data-view="edge"]{margin-left:8px}
+.nav button[data-view="brain"]{margin-left:8px}
+@media(max-width:1100px){
+  .logo{min-width:205px}
+  .nav button{padding:8px 7px;font-size:8px}
+  .nav button[data-view="lab"],.nav button[data-view="edge"],.nav button[data-view="brain"]{margin-left:3px}
+}
+#mp7-panel{margin-top:12px}
 </style></head>
 <body>
 <header class="header"><div class="headerInner">
   <div class="logo"><div class="mark" aria-label="MarketPulse logo"></div><div><div class="brandK">CRYPTO MARKET INTELLIGENCE</div><div class="brandName">MarketPulse</div><div class="brandSub">Less noise. More signal. Better decisions.</div></div></div>
-  <nav class="nav" id="nav">
-    <button class="active" data-view="overview">Intel</button><button data-view="scanner">Scanner</button><button data-view="flow">Flow</button><button data-view="signals">Signals</button><button data-view="lab">Lab</button><button data-view="replay">Replay</button><button data-view="dna">DNA</button><button data-view="research">Research</button><button data-view="edge">Edge</button><button data-view="execution">Execution</button><button data-view="portfolio">Portfolio</button><button data-view="ai">AI Copilot</button><button data-view="brain">Brain</button><button data-view="alerts">Alerts</button><button data-view="risk">Risk</button>
-  </nav>
+  <nav class="nav" id="nav"><button class="active" data-view="overview">Command</button><button data-view="scanner">Markets</button><button data-view="signals">Setups</button><button data-view="flow">Flow</button><button data-view="lab">Backtest</button><button data-view="replay">Replay</button><button data-view="dna">DNA</button><button data-view="research">Research</button><button data-view="edge">Edge</button><button data-view="portfolio">Portfolio</button><button data-view="execution">Execution</button><button data-view="brain">Journal</button><button data-view="ai">Copilot</button><button data-view="alerts">Watchlist</button><button data-view="risk">Risk</button></nav>
   <button id="mobileMenuBtn" class="mobileMenuBtn" aria-label="Open MarketPulse menu" aria-expanded="false">☰</button>
-  <div id="mobileMenu" class="mobileMenu" aria-hidden="true">
-    <button data-view="overview">Intel</button><button data-view="scanner">Scanner</button><button data-view="flow">Flow</button><button data-view="signals">Signals</button><button data-view="lab">Lab</button><button data-view="replay">Replay</button><button data-view="dna">DNA</button><button data-view="research">Research</button><button data-view="edge">Edge</button><button data-view="execution">Execution</button><button data-view="portfolio">Portfolio</button><button data-view="ai">AI Copilot</button><button data-view="brain">Brain</button><button data-view="alerts">Alerts</button><button data-view="risk">Risk</button>
-  </div>
+  <div id="mobileMenu" class="mobileMenu" aria-hidden="true"><button data-view="overview">Command</button><button data-view="scanner">Markets</button><button data-view="signals">Setups</button><button data-view="flow">Flow</button><button data-view="lab">Backtest</button><button data-view="replay">Replay</button><button data-view="dna">DNA</button><button data-view="research">Research</button><button data-view="edge">Edge</button><button data-view="portfolio">Portfolio</button><button data-view="execution">Execution</button><button data-view="brain">Journal</button><button data-view="ai">Copilot</button><button data-view="alerts">Watchlist</button><button data-view="risk">Risk</button></div>
   <div class="headerTools"><span class="dataState"><i class="liveDot"></i><span id="dataState">Connecting</span></span><select id="symbol" class="select"></select><select id="interval" class="select"><option>15m</option><option selected>1h</option><option>4h</option><option>1d</option></select><button id="refresh" class="btn primary">Refresh</button></div>
 </div></header>
 
@@ -134,7 +142,7 @@ button,input,select,textarea{font:inherit}.wrap{width:min(1440px,calc(100% - 26p
 
     <div class="section grid2">
       <div class="card">
-        <div class="sectionHead"><div><div class="title">Derivatives Flow</div><div class="sub">OI, CVD, funding and liquidation pressure — normalized for readable comparison.</div></div><span class="chip c" id="flowSource">LIVE</span></div>
+        <div class="sectionHead"><div><div class="title">Positioning &amp; Flow</div><div class="sub">OI, CVD, funding and liquidation pressure — normalized for readable comparison.</div></div><span class="chip c" id="flowSource">LIVE</span></div>
         <div class="flowGrid">
           <div class="card flow"><div class="label">Open interest</div><div class="v" id="oi">—</div><div class="s" id="oiS">—</div></div>
           <div class="card flow"><div class="label">CVD</div><div class="v" id="cvd">—</div><div class="s" id="cvdS">—</div></div>
@@ -176,23 +184,58 @@ button,input,select,textarea{font:inherit}.wrap{width:min(1440px,calc(100% - 26p
     </div>
   </section>
   <section id="view-scanner" class="view">
-    <div class="sectionHead"><div><div class="title">Market Scanner</div><div class="sub">Fast scan across the supported assets.</div></div><div class="filters" id="scanFilters"><button class="on" data-filter="ALL">All</button><button data-filter="LONG">Long</button><button data-filter="SHORT">Short</button><button data-filter="WAIT">No trade</button></div></div>
+    <div class="sectionHead"><div><div class="title">Market Matrix</div><div class="sub">Fast scan across the supported assets.</div></div><div class="filters" id="scanFilters"><button class="on" data-filter="ALL">All</button><button data-filter="LONG">Long</button><button data-filter="SHORT">Short</button><button data-filter="WAIT">No trade</button></div></div>
     <div class="scannerGrid"><div class="card"><div id="scanRows" class="scanRows"><div class="small">Loading scanner…</div></div></div><div class="card"><div class="title">Scanner notes</div><div class="sub" style="margin-top:7px">Scanner is intentionally rule-driven and conservative. A WAIT means alignment is insufficient for a directional setup.</div><div class="section mini"><div class="k">Auto refresh</div><div class="v">Every 45 seconds while the tab is visible.</div></div></div></div>
   </section>
 
-  <section id="view-flow" class="view"><div class="sectionHead"><div><div class="title">Derivatives Flow</div><div class="sub">Focused execution context for the selected asset.</div></div></div><div class="card"><div class="flowGrid"><div class="card flow"><div class="label">Open interest</div><div class="v" id="fOi">—</div><div class="s" id="fOiS">—</div></div><div class="card flow"><div class="label">CVD</div><div class="v" id="fCvd">—</div><div class="s" id="fCvdS">—</div></div><div class="card flow"><div class="label">Positioning</div><div class="v" id="fPos">—</div><div class="s" id="fFund">—</div></div><div class="card flow"><div class="label">Liquidation</div><div class="v" id="fLiq">—</div><div class="s" id="fLiqS">—</div></div></div><canvas id="flowChart2" class="flowChart"></canvas></div></section>
+  <section id="view-flow" class="view"><div class="sectionHead"><div><div class="title">Positioning &amp; Flow</div><div class="sub">Focused execution context for the selected asset.</div></div></div><div class="card"><div class="flowGrid"><div class="card flow"><div class="label">Open interest</div><div class="v" id="fOi">—</div><div class="s" id="fOiS">—</div></div><div class="card flow"><div class="label">CVD</div><div class="v" id="fCvd">—</div><div class="s" id="fCvdS">—</div></div><div class="card flow"><div class="label">Positioning</div><div class="v" id="fPos">—</div><div class="s" id="fFund">—</div></div><div class="card flow"><div class="label">Liquidation</div><div class="v" id="fLiq">—</div><div class="s" id="fLiqS">—</div></div></div><canvas id="flowChart2" class="flowChart"></canvas></div></section>
 
-  <section id="view-signals" class="view"><div class="sectionHead"><div><div class="title">Signal Lifecycle</div><div class="sub">Formation, updates, READY states and invalidation history.</div></div></div><div class="card"><div class="grid4"><div class="mini"><div class="k">Events</div><div class="v" id="sigN">0</div></div><div class="mini"><div class="k">Ready</div><div class="v" id="sigR">0</div></div><div class="mini"><div class="k">Invalidated</div><div class="v" id="sigI">0</div></div><div class="mini"><div class="k">Latest</div><div class="v" id="sigL">—</div></div></div><div id="signalRows" class="signalRows" style="margin-top:8px"></div></div></section>
-  <section id="view-lab" class="view"><div class="sectionHead"><div><div class="title">Validation Lab</div><div class="sub">Historical backtest, walk-forward validation, setup stats and live system health.</div></div><button id="runSystemCheck" class="btn">Run system check</button></div><div class="card"><div class="labGrid"><div class="labMetric"><div class="label">Historical sample</div><div class="v" id="labSample">—</div></div><div class="labMetric"><div class="label">Historical hit rate</div><div class="v" id="labHistRate">—</div></div><div class="labMetric"><div class="label">Historical Net R</div><div class="v" id="labHistR">—</div></div><div class="labMetric"><div class="label">Profit factor</div><div class="v" id="labPF">—</div></div></div><div class="labGrid" style="margin-top:7px"><div class="labMetric"><div class="label">Validation sample</div><div class="v" id="labValSample">—</div></div><div class="labMetric"><div class="label">Out-of-sample hit rate</div><div class="v" id="labValRate">—</div></div><div class="labMetric"><div class="label">Validation Net R</div><div class="v" id="labValR">—</div></div><div class="labMetric"><div class="label">Coverage</div><div class="v" id="labCoverage">—</div></div></div></div><div class="section card"><div class="title">Adaptive component evidence</div><div class="sub" style="margin-bottom:7px">Components only influence calibration after the minimum sample thresholds are met.</div><div style="overflow:auto"><table class="setupTable"><thead><tr><th>Component</th><th>Strong N</th><th>Weak N</th><th>Strong hit</th><th>Weak hit</th><th>Eligible</th></tr></thead><tbody id="componentRows"></tbody></table></div><div class="sub" id="calibrationNote" style="margin-top:7px">No adaptive calibration yet.</div></div>
+  <section id="view-signals" class="view"><div class="sectionHead"><div><div class="title">Active Setups</div><div class="sub">Formation, updates, READY states and invalidation history.</div></div></div><div class="card"><div class="grid4"><div class="mini"><div class="k">Events</div><div class="v" id="sigN">0</div></div><div class="mini"><div class="k">Ready</div><div class="v" id="sigR">0</div></div><div class="mini"><div class="k">Invalidated</div><div class="v" id="sigI">0</div></div><div class="mini"><div class="k">Latest</div><div class="v" id="sigL">—</div></div></div><div id="signalRows" class="signalRows" style="margin-top:8px"></div></div></section>
+  <section id="view-lab" class="view"><div class="sectionHead"><div><div class="title">Backtest &amp; Validation</div><div class="sub">Historical backtest, walk-forward validation, setup stats and live system health.</div></div><button id="runSystemCheck" class="btn">Run system check</button></div><div class="card"><div class="labGrid"><div class="labMetric"><div class="label">Historical sample</div><div class="v" id="labSample">—</div></div><div class="labMetric"><div class="label">Historical hit rate</div><div class="v" id="labHistRate">—</div></div><div class="labMetric"><div class="label">Historical Net R</div><div class="v" id="labHistR">—</div></div><div class="labMetric"><div class="label">Profit factor</div><div class="v" id="labPF">—</div></div></div><div class="labGrid" style="margin-top:7px"><div class="labMetric"><div class="label">Validation sample</div><div class="v" id="labValSample">—</div></div><div class="labMetric"><div class="label">Out-of-sample hit rate</div><div class="v" id="labValRate">—</div></div><div class="labMetric"><div class="label">Validation Net R</div><div class="v" id="labValR">—</div></div><div class="labMetric"><div class="label">Coverage</div><div class="v" id="labCoverage">—</div></div></div></div><div class="section card"><div class="title">Adaptive component evidence</div><div class="sub" style="margin-bottom:7px">Components only influence calibration after the minimum sample thresholds are met.</div><div style="overflow:auto"><table class="setupTable"><thead><tr><th>Component</th><th>Strong N</th><th>Weak N</th><th>Strong hit</th><th>Weak hit</th><th>Eligible</th></tr></thead><tbody id="componentRows"></tbody></table></div><div class="sub" id="calibrationNote" style="margin-top:7px">No adaptive calibration yet.</div></div>
   <div class="section card"><div class="title">Recent calibration history</div><div class="sub" style="margin-bottom:7px">Auditable score adjustments generated only after resolved evidence.</div><div id="calibrationRows" class="signalRows"></div></div>
 
   <div class="section card"><div class="title">Setup validation</div><div class="sub" style="margin-bottom:7px">Per-setup historical evidence from the current dataset.</div><div style="overflow:auto"><table class="setupTable"><thead><tr><th>Setup</th><th>Trades</th><th>Win rate</th><th>Net R</th><th>Expectancy</th></tr></thead><tbody id="setupRows"></tbody></table></div></div><div class="section card"><div class="title">System health</div><div class="healthGrid" id="healthGrid"></div><div class="sub" id="healthText" style="margin-top:7px">Run the check to validate live data, learning and persistence.</div></div></section>
 
   <section id="view-alerts" class="view"><div class="sectionHead"><div><div class="title">Smart Alerts</div><div class="sub">Browser alerts for assets you are actively watching.</div></div><button id="notifBtn" class="btn">Enable notifications</button></div><div class="card"><div class="grid2"><div><div class="label">Setup threshold</div><div class="inputs one"><input id="alertScore" type="number" min="50" max="95" value="75"></div><div class="watchNote">A watched asset can alert when its current confluence reaches the threshold.</div></div><div><div class="label">Alert status</div><div class="result" id="notifState">Notifications not enabled</div><div class="watchNote">Alerts are browser-local and do not execute trades.</div></div></div></div><div class="section card"><div class="sectionHead"><div><div class="title">Watchlist</div><div class="sub">Click a star in Scanner or Intel to watch an asset.</div></div><span class="chip" id="watchCount">0 assets</span></div><div id="alertList" class="alertList"></div></div></section>
 
-  <section id="view-ai" class="view"><div class="sectionHead"><div><div class="title">AI Copilot</div><div class="sub">Ask about the market or have the Copilot review a specific trade plan.</div></div></div><div class="aiModes"><button id="aiMarketMode" class="aiMode on">Market review</button><button id="aiTradeMode" class="aiMode">Trade review</button></div><div class="aiGrid"><div class="card"><textarea id="aiQ" placeholder="Why is BTC a no-trade right now? What would need to change?"></textarea><div id="tradeFields" class="hidden" style="margin-top:8px"><div class="tradeGrid"><input id="tAsset" placeholder="Asset e.g. BTC"><input id="tSide" placeholder="Long / Short"><input id="tEntry" type="number" placeholder="Entry"><input id="tStop" type="number" placeholder="Stop"><input id="tTarget" type="number" placeholder="Target"><input id="tSize" type="number" placeholder="Position size"></div><textarea id="tNotes" style="margin-top:7px" placeholder="Why did you take it? What happened?"></textarea></div><div style="margin-top:7px;display:flex;justify-content:flex-end"><button id="askAi" class="btn primary">Ask Copilot</button></div></div><div class="card"><div class="label" id="aiStatus">Copilot ready</div><div id="aiOut" class="aiOut" style="margin-top:8px">Ask a question about the current market.</div></div></div></section>
+  <section id="view-ai" class="view"><div class="sectionHead"><div><div class="title">Market Copilot</div><div class="sub">Ask about the market or have the Copilot review a specific trade plan.</div></div></div><div class="aiModes"><button id="aiMarketMode" class="aiMode on">Market review</button><button id="aiTradeMode" class="aiMode">Trade review</button></div><div class="aiGrid"><div class="card"><textarea id="aiQ" placeholder="Why is BTC a no-trade right now? What would need to change?"></textarea><div id="tradeFields" class="hidden" style="margin-top:8px"><div class="tradeGrid"><input id="tAsset" placeholder="Asset e.g. BTC"><input id="tSide" placeholder="Long / Short"><input id="tEntry" type="number" placeholder="Entry"><input id="tStop" type="number" placeholder="Stop"><input id="tTarget" type="number" placeholder="Target"><input id="tSize" type="number" placeholder="Position size"></div><textarea id="tNotes" style="margin-top:7px" placeholder="Why did you take it? What happened?"></textarea></div><div style="margin-top:7px;display:flex;justify-content:flex-end"><button id="askAi" class="btn primary">Ask Copilot</button></div></div><div class="card"><div class="label" id="aiStatus">Copilot ready</div><div id="aiOut" class="aiOut" style="margin-top:8px">Ask a question about the current market.</div></div></div></section>
 
-  <section id="view-brain" class="view"><div class="sectionHead"><div><div class="title">Trader Brain</div><div class="sub">Personal memory, journal evidence and execution patterns.</div></div><button id="sync" class="btn">Sync memory</button></div><div class="brainStats"><div class="statCard"><div class="k">Trades</div><div class="v" id="bN">0</div></div><div class="statCard"><div class="k">Net R</div><div class="v" id="bNet">0</div></div><div class="statCard"><div class="k">Win rate</div><div class="v" id="bWin">—</div></div><div class="statCard"><div class="k">Persistence</div><div class="v" id="bPersist">—</div></div></div><div class="brainInsights"><div class="insight"><div class="k">Best regime</div><div class="v" id="bBestRegime">—</div></div><div class="insight"><div class="k">Worst regime</div><div class="v" id="bWorstRegime">—</div></div><div class="insight"><div class="k">Best side</div><div class="v" id="bBestSide">—</div></div><div class="insight"><div class="k">READY context</div><div class="v" id="bReadyRate">—</div></div><div class="insight"><div class="k">Average R</div><div class="v" id="bAvgR">—</div></div></div><div class="section grid2"><div class="card"><div class="title">Trade Journal</div><div class="inputs"><select id="jAsset"><option>BTC</option><option>ETH</option><option>SOL</option><option>BNB</option><option>XRP</option><option>DOGE</option><option>ADA</option></select><select id="jSide"><option>Long</option><option>Short</option></select><input id="jEntry" type="number" placeholder="Entry"><input id="jStop" type="number" placeholder="Stop"><input id="jTarget" type="number" placeholder="Target"><input id="jR" type="number" step=".1" placeholder="Result R"><textarea id="jNote" placeholder="Lesson / notes"></textarea></div><button id="saveJournal" class="btn primary" style="margin-top:7px">Save trade</button><div id="journalRows" class="journalRows" style="margin-top:8px"></div></div><div class="card"><div class="title">Memory</div><div class="sub" id="memoryText" style="margin-top:7px">Local profile active until cloud memory is configured.</div><div class="watchNote">Cloud sync keeps journal and signal history available across refreshes when Postgres is configured.</div></div></div></section>
+  <section id="view-brain" class="view"><div class="sectionHead"><div><div class="title">Trading Journal</div><div class="sub">Personal memory, journal evidence and execution patterns.</div></div><button id="sync" class="btn">Sync memory</button></div><div class="brainStats"><div class="statCard"><div class="k">Trades</div><div class="v" id="bN">0</div></div><div class="statCard"><div class="k">Net R</div><div class="v" id="bNet">0</div></div><div class="statCard"><div class="k">Win rate</div><div class="v" id="bWin">—</div></div><div class="statCard"><div class="k">Persistence</div><div class="v" id="bPersist">—</div></div></div><div class="brainInsights"><div class="insight"><div class="k">Best regime</div><div class="v" id="bBestRegime">—</div></div><div class="insight"><div class="k">Worst regime</div><div class="v" id="bWorstRegime">—</div></div><div class="insight"><div class="k">Best side</div><div class="v" id="bBestSide">—</div></div><div class="insight"><div class="k">READY context</div><div class="v" id="bReadyRate">—</div></div><div class="insight"><div class="k">Average R</div><div class="v" id="bAvgR">—</div></div></div><div class="section grid2"><div class="card"><div class="title">Trade Journal</div><div class="inputs"><select id="jAsset"><option>BTC</option><option>ETH</option><option>SOL</option><option>BNB</option><option>XRP</option><option>DOGE</option><option>ADA</option></select><select id="jSide"><option>Long</option><option>Short</option></select><input id="jEntry" type="number" placeholder="Entry"><input id="jStop" type="number" placeholder="Stop"><input id="jTarget" type="number" placeholder="Target"><input id="jR" type="number" step=".1" placeholder="Result R"><textarea id="jNote" placeholder="Lesson / notes"></textarea></div><button id="saveJournal" class="btn primary" style="margin-top:7px">Save trade</button><div id="journalRows" class="journalRows" style="margin-top:8px"></div></div><div class="card"><div class="title">Memory</div><div class="sub" id="memoryText" style="margin-top:7px">Local profile active until cloud memory is configured.</div><div class="watchNote">Cloud sync keeps journal and signal history available across refreshes when Postgres is configured.</div></div></div><section id="mp7-panel" aria-label="Phase 7 trader analytics">
+  <div class="mp7-head">
+    <div>
+      <div class="mp7-title">TRADER ANALYTICS</div>
+      <div class="mp7-sub">Personal performance, data quality, and journal portability.</div>
+    </div>
+    <div class="mp7-actions">
+      <button id="mp7Refresh" class="mp7-btn">Refresh</button>
+      <button id="mp7Export" class="mp7-btn">Export Journal CSV</button>
+    </div>
+  </div>
+  <div class="mp7-body">
+    <div class="mp7-health"><span id="mp7HealthDot" class="mp7-dot"></span><span id="mp7HealthText">Running Phase 7 health check…</span></div>
+    <div id="mp7Kpis" class="mp7-grid"></div>
+    <div class="mp7-cols mp7-section">
+      <div class="mp7-card">
+        <div class="mp7-section-title">CURRENT INSIGHTS</div>
+        <div id="mp7Insights" class="mp7-insights"></div>
+      </div>
+      <div class="mp7-card">
+        <div class="mp7-section-title">DATA QUALITY</div>
+        <div id="mp7Quality" class="mp7-quality"></div>
+      </div>
+    </div>
+    <div class="mp7-cols mp7-section">
+      <div class="mp7-card">
+        <div class="mp7-section-title">BY ASSET</div>
+        <div id="mp7AssetTable" class="mp7-empty">No journal data yet.</div>
+      </div>
+      <div class="mp7-card">
+        <div class="mp7-section-title">BY SETUP</div>
+        <div id="mp7SetupTable" class="mp7-empty">No journal data yet.</div>
+      </div>
+    </div>
+  </div>
+</section></section>
 
   <section id="view-replay" class="view">
     <div class="sectionHead"><div><div class="title">Replay Lab</div><div class="sub">Freeze the market at a historical candle and step forward without using future candles in the analysis.</div></div><span class="chip phase3Accent">PHASE 3</span></div>
@@ -207,7 +250,7 @@ button,input,select,textarea{font:inherit}.wrap{width:min(1440px,calc(100% - 26p
       <div class="replayTimeline"><input id="replayCursor" type="range" min="0" max="0" value="0" disabled><div class="replayFrameTop" style="margin-top:6px"><span id="replayDate" class="small">No replay loaded</span><span id="replayCounter" class="small">0 / 0</span></div></div>
     </div>
     <div class="section replayGrid">
-      <div class="card"><div class="sectionHead"><div><div class="title">Historical Market Replay</div><div class="sub">The chart stops at the selected candle. The outcome is shown separately.</div></div><span class="chip" id="replayStatus">IDLE</span></div><canvas id="replayCanvas" class="replayCanvas"></canvas></div>
+      <div class="card"><div class="sectionHead"><div><div class="title">Market Replay</div><div class="sub">The chart stops at the selected candle. The outcome is shown separately.</div></div><span class="chip" id="replayStatus">IDLE</span></div><canvas id="replayCanvas" class="replayCanvas"></canvas></div>
       <div class="card"><div class="sectionHead"><div><div class="title">Signal DNA</div><div class="sub">What MarketPulse knew at that exact moment.</div></div></div><div class="replayMetrics"><div class="replayMetric"><div class="label">Confluence</div><div class="v" id="rpScore">—</div></div><div class="replayMetric"><div class="label">State</div><div class="v" id="rpState">—</div></div><div class="replayMetric"><div class="label">Outcome</div><div class="v" id="rpOutcome">—</div></div><div class="replayMetric"><div class="label">R</div><div class="v" id="rpR">—</div></div></div><div class="section mini"><div class="k">Market state</div><div class="replayState" id="rpMarket">—</div></div><div class="section mini"><div class="k">Plan at that moment</div><div class="replayState" id="rpPlan">—</div></div><div class="section mini"><div class="k">What happened next</div><div class="replayState" id="rpOutcomeDetail">—</div></div></div>
     </div>
   </section>
@@ -225,7 +268,7 @@ button,input,select,textarea{font:inherit}.wrap{width:min(1440px,calc(100% - 26p
   </section>
 
   <section id="view-research" class="view">
-    <div class="sectionHead"><div><div class="title">Research Engine</div><div class="sub">Aggregate the Signal DNA dataset by regime, side, setup and score bucket.</div></div><button id="runResearch" class="btn primary">Run Research</button></div>
+    <div class="sectionHead"><div><div class="title">Research</div><div class="sub">Aggregate the Signal DNA dataset by regime, side, setup and score bucket.</div></div><button id="runResearch" class="btn primary">Run Research</button></div>
     <div class="card"><div class="researchToolbar"><label class="small">Asset<select id="researchSymbol"><option value="">All assets</option></select></label><label class="small">Timeframe<select id="researchInterval"><option value="">All</option><option>15m</option><option selected>1h</option><option>4h</option><option>1d</option></select></label><label class="small">Rows<input id="researchLimit" type="number" value="800" min="50" max="2000"></label><span class="chip">Evidence only · no future leakage</span></div></div>
     <div class="section researchStats"><div class="researchStat"><div class="label">Dataset</div><div class="v" id="resTotal">—</div></div><div class="researchStat"><div class="label">Resolved</div><div class="v" id="resResolved">—</div></div><div class="researchStat"><div class="label">Triggered</div><div class="v" id="resTriggered">—</div></div><div class="researchStat"><div class="label">Target hits</div><div class="v" id="resTarget">—</div></div><div class="researchStat"><div class="label">Stops</div><div class="v" id="resStops">—</div></div><div class="researchStat"><div class="label">Net R</div><div class="v" id="resNetR">—</div></div></div>
     <div class="section researchGrid">
@@ -238,7 +281,7 @@ button,input,select,textarea{font:inherit}.wrap{width:min(1440px,calc(100% - 26p
   </section>
 
   <section id="view-edge" class="view">
-    <div class="sectionHead"><div><div class="title">Live Edge</div><div class="sub">Phase 4 connects live signals, historical evidence, paper execution, risk controls and your trading journal.</div></div><div class="edgePill">PHASE 4 · NON-EXECUTING</div></div>
+    <div class="sectionHead"><div><div class="title">Live Edge</div><div class="sub">Phase 4 connects live signals, historical evidence, paper execution, risk controls and your trading journal.</div></div><div class="edgePill">LIVE DECISION SUPPORT</div></div>
     <div class="edgeMetricGrid">
       <div class="edgeMetric"><div class="label">Live signal</div><div class="v" id="edgeSignal">—</div><div class="subv" id="edgeSignalMeta">No active signal</div></div>
       <div class="edgeMetric"><div class="label">Historical sample</div><div class="v edgeMono" id="edgeEvidenceN">—</div><div class="subv" id="edgeEvidenceMeta">No matched DNA</div></div>
@@ -275,7 +318,7 @@ button,input,select,textarea{font:inherit}.wrap{width:min(1440px,calc(100% - 26p
   </section>
 
   <section id="view-execution" class="view">
-    <div class="sectionHead"><div><div class="title">Execution OS</div><div class="sub">Phase 5 turns approved plans into controlled simulation or Bybit testnet intents. Production/live order routing is deliberately locked.</div></div><div class="executionBadge executionLock">PHASE 5 · TESTNET GATED</div></div>
+    <div class="sectionHead"><div><div class="title">Execution Control</div><div class="sub">Phase 5 turns approved plans into controlled simulation or Bybit testnet intents. Production/live order routing is deliberately locked.</div></div><div class="executionBadge executionLock">TESTNET GATED</div></div>
 
     <div class="executionMetricGrid">
       <div class="executionMetric"><div class="label">Mode</div><div class="v" id="exMode">SIMULATION</div><div class="subv" id="exModeMeta">Local simulated execution</div></div>
@@ -335,7 +378,7 @@ button,input,select,textarea{font:inherit}.wrap{width:min(1440px,calc(100% - 26p
   </section>
 
   <section id="view-portfolio" class="view">
-    <div class="sectionHead"><div><div class="title">Portfolio OS</div><div class="sub">Phase 6 maps concentration, aggregate risk, correlated clusters and stress impact across the whole trading book.</div></div><div class="portfolioPill">PHASE 6 · PORTFOLIO INTELLIGENCE</div></div>
+    <div class="sectionHead"><div><div class="title">Portfolio Risk</div><div class="sub">Phase 6 maps concentration, aggregate risk, correlated clusters and stress impact across the whole trading book.</div></div><div class="portfolioPill">PORTFOLIO INTELLIGENCE</div></div>
 
     <div class="portfolioMetricGrid">
       <div class="portfolioMetric"><div class="label">Portfolio risk</div><div class="v" id="pfRisk">0.00%</div><div class="subv" id="pfRiskMeta">Limit 4.00%</div></div>
@@ -392,42 +435,7 @@ button,input,select,textarea{font:inherit}.wrap{width:min(1440px,calc(100% - 26p
   <div id="chartModal" class="modal" aria-hidden="true"><div class="modalCard"><div class="modalTop"><h3>Chart settings</h3><button id="chartClose" class="modalClose">×</button></div><div class="sub" style="margin-top:6px">Choose a visual preset or customize the candle colors. Settings persist in this browser.</div><div class="presetGrid" id="presetGrid"><button class="preset" data-preset="aurora"><div class="preview" style="background:#07131a;--pc1:#9BE7C4;--pc2:#FFB38A"><i></i><i></i><i></i><i></i></div><b>Aurora</b><small>Mint / ember</small></button><button class="preset" data-preset="lavender"><div class="preview" style="background:#0e1018;--pc1:#E5D0FF;--pc2:#FFB8D8"><i></i><i></i><i></i><i></i></div><b>Lavender</b><small>Soft / premium</small></button><button class="preset" data-preset="forest"><div class="preview" style="background:#08120f;--pc1:#A8E6CF;--pc2:#F8C6A0"><i></i><i></i><i></i><i></i></div><b>Forest</b><small>Mint / coral</small></button><button class="preset" data-preset="classic"><div class="preview" style="background:#090909;--pc1:#22c55e;--pc2:#ef4444"><i></i><i></i><i></i><i></i></div><b>Classic</b><small>Green / red</small></button><button class="preset" data-preset="mono"><div class="preview" style="background:#090909;--pc1:#f1f5f9;--pc2:#64748b"><i></i><i></i><i></i><i></i></div><b>Mono</b><small>White / slate</small></button></div><div class="colorGrid"><div class="colorItem"><span>Bull candle</span><input id="bullColor" type="color"></div><div class="colorItem"><span>Bear candle</span><input id="bearColor" type="color"></div><div class="colorItem"><span>Show volume</span><input id="showVolume" type="checkbox" checked></div><div class="colorItem"><span>Show EMA</span><input id="showEma" type="checkbox" checked></div></div><div class="axisNote">The chart keeps the right-side price scale, current-price marker, volume context and EMA optional.</div><div class="modalFoot"><button id="chartCancel" class="btn">Cancel</button><button id="chartApply" class="btn primary">Apply</button></div></div></div>
 
   <div class="foot">MarketPulse is educational decision-support software. It does not place orders, manage funds, or guarantee outcomes. Adaptive learning calibrates from resolved historical examples; it is not a promise of future performance.</div>
-<section id="mp7-panel" aria-label="Phase 7 trader analytics">
-  <div class="mp7-head">
-    <div>
-      <div class="mp7-title">PHASE 7 · TRADER ANALYTICS &amp; QUALITY</div>
-      <div class="mp7-sub">Personal performance layer — descriptive analytics, data quality, and journal portability.</div>
-    </div>
-    <div class="mp7-actions">
-      <button id="mp7Refresh" class="mp7-btn">Refresh</button>
-      <button id="mp7Export" class="mp7-btn">Export Journal CSV</button>
-    </div>
-  </div>
-  <div class="mp7-body">
-    <div class="mp7-health"><span id="mp7HealthDot" class="mp7-dot"></span><span id="mp7HealthText">Running Phase 7 health check…</span></div>
-    <div id="mp7Kpis" class="mp7-grid"></div>
-    <div class="mp7-cols mp7-section">
-      <div class="mp7-card">
-        <div class="mp7-section-title">CURRENT INSIGHTS</div>
-        <div id="mp7Insights" class="mp7-insights"></div>
-      </div>
-      <div class="mp7-card">
-        <div class="mp7-section-title">DATA QUALITY</div>
-        <div id="mp7Quality" class="mp7-quality"></div>
-      </div>
-    </div>
-    <div class="mp7-cols mp7-section">
-      <div class="mp7-card">
-        <div class="mp7-section-title">BY ASSET</div>
-        <div id="mp7AssetTable" class="mp7-empty">No journal data yet.</div>
-      </div>
-      <div class="mp7-card">
-        <div class="mp7-section-title">BY SETUP</div>
-        <div id="mp7SetupTable" class="mp7-empty">No journal data yet.</div>
-      </div>
-    </div>
-  </div>
-</section></main>
+</main>
 <script>
 (function(){
 "use strict";
@@ -439,6 +447,7 @@ var state={
   interval:"1h",
   market:null,
   scan:[],
+  filter:"ALL",
   cycle:null,
   busy:false,
   chartVisible:96,
@@ -1025,7 +1034,7 @@ async function loadCore(){
     loadEdge();loadExecution();loadPortfolio();loadScan();loadCycle();
   }catch(e){
     setStatus("Core market connection failed. The interface is running; retrying automatically.","warn");$("dataState").textContent="Retry";
-    $("thesis").textContent="The application is healthy, but the market data provider did not respond.";
+    $("thesis").textContent="The interface is responsive, but the live market source did not respond. Retrying automatically.";
   }finally{state.busy=false}
 }
 
@@ -1059,7 +1068,16 @@ $("saveEdgeConfig").addEventListener("click",saveEdgeConfig);
 
 function deviceId(){
   var k="mp-device-id",id=localStorage.getItem(k);
-  if(!id){id=(crypto&&crypto.randomUUID)?crypto.randomUUID():("mp-"+Date.now().toString(16)+"-"+Math.random().toString(16).slice(2));localStorage.setItem(k,id)}
+  var valid=/^[a-f0-9-]{16,128}$/i.test(String(id||""));
+  if(!valid){
+    var makeUuid=function(){
+      var s="",i;
+      for(i=0;i<32;i++)s+=Math.floor(Math.random()*16).toString(16);
+      return s.slice(0,8)+"-"+s.slice(8,12)+"-4"+s.slice(13,16)+"-"+(8+Math.floor(Math.random()*4)).toString(16)+s.slice(17,20)+"-"+s.slice(20);
+    };
+    try{id=(typeof crypto!=="undefined"&&crypto.randomUUID)?crypto.randomUUID():makeUuid()}catch(e){id=makeUuid()}
+    localStorage.setItem(k,id);
+  }
   return id;
 }
 function mergeMemoryArrays(a,b,key){
