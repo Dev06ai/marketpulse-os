@@ -25,7 +25,8 @@ jobs:
           python - <<'PY'
           from pathlib import Path
           html = Path("public/index.html").read_text()
-          start = html.index("<script>") + len("<script>")
+          tag = html.index("<script")
+          start = html.index(">", tag) + 1
           end = html.index("</script>", start)
           Path("/tmp/browser.js").write_text(html[start:end])
           PY
