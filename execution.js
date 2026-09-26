@@ -1,6 +1,7 @@
 const crypto=require("crypto");
 let WebSocket=null;try{WebSocket=require("ws")}catch{}
 const storage=require("./storage");
+const phase6=require("./phase6");
 
 const VERSION=1;
 const MODE_VALUES=["SIMULATION","TESTNET"];
@@ -271,10 +272,14 @@ async function marketGate(plan,state){
         const drift=Math.abs(price-mark)/mark*10000;
         if(drift>state.config.maxSlippageBps)return {allowed:false,reason:"ENTRY TOO FAR FROM MARK",markPrice:mark,driftBps:drift};
       }
-      return {allowed:true,reason:"PASS",entry:price,stop:Number(formatPrice(stop,tick)),target:Number(formatPrice(target,tick)),qty,riskCash,rr,markPrice:mark,driftBps:mark?Math.abs(price-mark)/mark*10000:null,instrument:inst};
+      const portfolioGate=await phase6.executionGate({symbol,side:p.side,entry:price,stop:Number(formatPrice(stop,tick)),target:Number(formatPrice(target,tick)),qty,riskCash},state);
+      if(!portfolioGate.allowed)return Object.assign({allowed:false},portfolioGate);
+      return {allowed:true,reason:"PASS",entry:price,stop:Number(formatPrice(stop,tick)),target:Number(formatPrice(target,tick)),qty,riskCash,rr,markPrice:mark,driftBps:mark?Math.abs(price-mark)/mark*10000:null,instrument:inst,portfolio:portfolioGate};
     }catch(e){return {allowed:false,reason:"MARKET VALIDATION FAILED: "+e.message}}
   }
-  return {allowed:true,reason:"PASS",entry,stop,target,qty,riskCash,rr,markPrice:null,driftBps:null};
+  const portfolioGate=await phase6.executionGate({symbol,side:p.side,entry,stop,target,qty,riskCash},state);
+  if(!portfolioGate.allowed)return Object.assign({allowed:false},portfolioGate);
+  return {allowed:true,reason:"PASS",entry,stop,target,qty,riskCash,rr,markPrice:null,driftBps:null,portfolio:portfolioGate};
 }
 
 function findOrder(state,id){
