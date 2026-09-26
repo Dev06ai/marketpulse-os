@@ -1845,6 +1845,24 @@ function renderMarketNoFlow(){
   $("oi").textContent=der.oi!=null?fmt(der.oi):"UNAVAILABLE";$("oiS").textContent=der.oiChangePct!=null?pct(der.oiChangePct)+" recent":"Current snapshot";$("cvd").textContent=der.cvdState||"UNAVAILABLE";$("cvdS").textContent=der.cvdDelta!=null?"Δ "+fmt(der.cvdDelta):"No CVD feed";$("pos").textContent=der.positioning||"UNAVAILABLE";$("fund").textContent=der.fundingRate!=null?"Funding "+(Number(der.fundingRate)*100).toFixed(4)+"%":"Funding unavailable";$("liq").textContent=der.liquidationBias&&der.liquidationBias!=="UNKNOWN"?der.liquidationBias:"UNAVAILABLE";$("liqS").textContent=der.liquidationTotal!=null?"Total "+fmt(der.liquidationTotal):"No liquidation feed";$("flowSource").textContent=der.provider?(String(der.provider).slice(0,30)+(der.livePointCount?" · LIVE":"")):(der.available?"LIVE":"UNAVAILABLE");
 }
 
+async function loadCoreEnrichment(){
+  if(!state.market)return;
+  try{
+    var q="symbol="+encodeURIComponent(state.symbol)+"&interval="+encodeURIComponent(state.interval);
+    var d=await api("/api/core-enrichment?"+q,6000);
+    if(!d.ok)return;
+    if(state.market&&state.market.symbol===d.symbol&&state.market.interval===d.interval){
+      state.market.derivatives=d.derivatives||state.market.derivatives;
+      state.market.analysis=Object.assign({},state.market.analysis,{
+        mtf:Object.assign({},state.market.analysis?.mtf||{},{
+          higher:d.higher?.side||state.market.analysis?.mtf?.higher||null,
+          lower:d.lower?.side||state.market.analysis?.mtf?.lower||null
+        })
+      });
+      renderMarket();
+    }
+  }catch{}
+}
 async function loadCoreAnalytics(){
   try{
     var q="symbol="+encodeURIComponent(state.symbol)+"&interval="+encodeURIComponent(state.interval);
@@ -1888,11 +1906,12 @@ async function loadCore(){
   try{
     var d=await api("/api/core?symbol="+encodeURIComponent(state.symbol)+"&interval="+encodeURIComponent(state.interval),9000);
     state.market=d;state.bootRetry=0;setStatus("Core market intelligence connected","ok");$("dataState").textContent="Live";renderMarket();
-    deferTask(loadDataFabric,100);
-    deferTask(loadPropFirmGuard,160);
+    deferTask(loadCoreEnrichment,120);
+    deferTask(loadDataFabric,700);
+    deferTask(loadPropFirmGuard,900);
     deferTask(loadCoreAnalytics,1800);
     if(!state.secondaryStarted)queueSecondaryBoot();
-    else if(state.activeView==="overview"){deferTask(loadScan,80);deferTask(loadCycle,140);deferTask(loadCoreAnalytics,500)}
+    else if(state.activeView==="overview"){deferTask(loadScan,80);deferTask(loadCycle,140);deferTask(loadCoreEnrichment,120);deferTask(loadCoreAnalytics,500)}
   }catch(e){
     state.bootRetry=Math.min((state.bootRetry||0)+1,5);
     setStatus("Core market connection failed. Retrying shortly…","warn");$("dataState").textContent="Retry";
