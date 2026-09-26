@@ -171,7 +171,7 @@ function queuePhase1113Validation(symbol,interval,candles){
   PHASE1113_JOBS.add(key);
   setTimeout(async()=>{
     try{
-      const validation=phase1113.runWalkForward(sample,{symbol,interval,basePolicy:{minScore:72,minRR:1.5},step:2,maxSamples:350});
+      const validation=phase1113.runWalkForward(sample,{symbol,interval,basePolicy:{minScore:78,minRR:1.5},step:2,maxSamples:350});
       PHASE1113_CACHE.set(key,{ts:Date.now(),payload:validation});
       try{
         const state=await storage.getLearningState();
@@ -262,6 +262,10 @@ function authKey(ip,email,type){return type+":"+String(ip||"unknown")+":"+String
 function requestDevice(req){return String(req.headers["x-marketpulse-device"]||"00000000-0000-0000-0000-000000000000").slice(0,128)}
 
 function mins(interval){return ({'15m':15,'30m':30,'1h':60,'4h':240,'1d':1440})[interval]||60}
+function closedCandles(rows,interval,now=Date.now()){
+  const ms=mins(interval)*60*1000;
+  return (Array.isArray(rows)?rows:[]).filter(x=>Number.isFinite(Number(x?.t))&&Number(x.t)+ms<=now-1000);
+}
 async function getBinance(symbol,interval,timeoutMs=DATA_TIMEOUT_MS){
   const bases=['https://api.binance.com','https://api-gcp.binance.com','https://api1.binance.com'];
   const requests=bases.map(async base=>{const u=new URL(base+'/api/v3/klines');u.searchParams.set('symbol',symbol);u.searchParams.set('interval',interval);u.searchParams.set('limit',String(Math.min(KLINE_LIMIT,1000)));const r=await fetch(u,{signal:timeoutSignal(timeoutMs)});if(!r.ok)throw Error('HTTP '+r.status);const rows=await r.json();return rows.map(x=>({t:x[0],o:+x[1],h:+x[2],l:+x[3],c:+x[4],v:+x[5],source:'binance'}))});
