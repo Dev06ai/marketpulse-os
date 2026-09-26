@@ -532,7 +532,7 @@ body.admin-mode .nav button.adminNav,body.admin-mode .mobileMenu button.adminNav
       <div class="metric"><div class="label">Price</div><div class="value" id="mPrice">—</div><div class="subv" id="mChange">—</div></div>
       <div class="metric"><div class="label">Market mode</div><div class="value" id="mRegime">—</div><div class="subv" id="mMood">—</div></div>
       <div class="metric" id="callMetric"><div class="label">Signal</div><div class="value" id="mCall">—</div><div class="subv" id="mBias">—</div></div>
-      <div class="metric"><div class="label">Confidence score</div><div class="value" style="color:var(--cyan)" id="mScore">—</div><div class="subv">how strongly the signals agree</div></div>
+      <div class="metric"><div class="label">Confluence score</div><div class="value" style="color:var(--cyan)" id="mScore">—</div><div class="subv">how strongly the signals agree</div></div>
       <div class="metric"><div class="label">Momentum / trend</div><div class="value" id="mMom">—</div><div class="subv" id="mStructure">—</div></div>
     </div>
 
@@ -540,7 +540,7 @@ body.admin-mode .nav button.adminNav,body.admin-mode .mobileMenu button.adminNav
       <div class="sectionHead"><div><div class="title">Decision Center</div><div class="sub">A simple summary of what the market is doing and what would change the view.</div></div><span class="chip" id="adaptiveChip">Adaptive: collecting</span></div>
       <div class="grid2">
             <div class="section grid2">
-      <div class="card decisionStateCard"><div class="sectionHead"><div><div class="title" id="thesisTitle">Loading market context…</div><div class="sub" id="thesisState">—</div></div><div class="value" id="thesisScore">—</div></div><div id="thesis" class="thesis">Waiting for the live model.</div><div class="chips" id="thesisChips"></div><div class="scenario"><div class="mini"><div class="k">Primary scenario</div><div class="v" id="primary">—</div></div><div class="mini"><div class="k">What would break it</div><div class="v" id="alternate">—</div></div></div></div>
+      <div class="card decisionStateCard"><div class="sectionHead"><div><div class="title" id="thesisTitle">Loading market context…</div><div class="sub" id="thesisState">—</div></div><div class="value" id="thesisScore">—</div></div><div class="small" id="finalEngineMeta" style="margin-bottom:7px">Phase 9/10 engine warming…</div><div id="thesis" class="thesis">Waiting for the live model.</div><div class="chips" id="thesisChips"></div><div class="scenario"><div class="mini"><div class="k">Primary scenario</div><div class="v" id="primary">—</div></div><div class="mini"><div class="k">What would break it</div><div class="v" id="alternate">—</div></div></div></div>
       <div class="card signalQualityCard"><div class="sectionHead"><div><div class="title">Why the signal looks this way</div><div class="sub">See which parts of the market are helping or weakening the setup.</div></div><span class="value" id="quality">—</span></div><div id="components" class="list"></div></div>
     </div>
       </div>
@@ -2591,6 +2591,40 @@ function queueSecondaryBoot(){
   deferTask(loadEdge,900);
   deferTask(syncMemory,1200);
   setTimeout(function(){if(!state.cycle)loadCycle()},5000);
+}
+
+async function renderFinalDecision(d){
+  if(!d)return;
+  var m=d.market||{},ev=d.evidence||{},lv=d.levels||{},data=d.data||{},pg=d.propGate||{};
+  var side=m.side==="LONG"?"LONG":m.side==="SHORT"?"SHORT":"WAIT";
+  var accent=side==="LONG"?"#4ade80":side==="SHORT"?"#f87171":"#c084fc";
+  var glow=side==="LONG"?"rgba(74,222,128,.18)":side==="SHORT"?"rgba(248,113,133,.18)":"rgba(192,132,252,.20)";
+  $("mCall").textContent=side==="WAIT"?"NO TRADE":side;
+  $("mCall").style.color=accent;$("mCall").style.textShadow="0 0 20px "+glow;
+  $("mBias").textContent=side==="LONG"?"Bullish setup":side==="SHORT"?"Bearish setup":"Neutral / waiting";$("mBias").style.color=accent;
+  $("mScore").textContent=fmt(m.confluenceScore);
+  $("thesisTitle").textContent=m.status==="WAITING"?"No trade":(m.type||"Market context");
+  $("thesisState").textContent=(d.state||"WAITING")+" · "+(m.confluenceLabel||"");
+  $("thesisScore").textContent=fmt(m.confluenceScore)+"/100";
+  $("thesis").textContent=Array.isArray(ev.thesis)?ev.thesis.join(" "):"Decision engine context available.";
+  $("primary").textContent=ev.primaryScenario||"—";$("alternate").textContent=ev.invalidationScenario||"—";
+  $("thesisChips").innerHTML=[["HTF",ev.mtfScore!=null?fmt(ev.mtfScore)+"/100":null],["Flow",ev.flowScore!=null?fmt(ev.flowScore)+"/100":null],["Data",data.score!=null?fmt(data.score)+"/100":null],["Risk",pg.decision||"NOT EVALUATED"]].map(function(x){return'<span class="chip c">'+x[0]+": "+(x[1]||"—")+"</span>"}).join("");
+  $("quality").textContent=fmt(m.confluenceScore)+"/100";$("quality").style.color=accent;
+  $("components").innerHTML=(ev.components||[]).map(function(x){return'<div class="rowLine"><span class="small">'+safeHtml(x.name)+'</span><b style="font-size:9px;text-align:right">'+fmt(x.score)+'/100</b><div class="bar"><i style="width:'+Math.max(0,Math.min(100,Number(x.score)||0))+'%"></i></div></div>'}).join("");
+  $("entry").textContent=lv.entryLow!=null?fmt(lv.entryLow)+" → "+fmt(lv.entryHigh):"Wait";$("stop").textContent=fmt(lv.stop);$("target").textContent=fmt(lv.tp1);$("rr").textContent=lv.rr?Number(lv.rr).toFixed(2)+"R":"—";
+  $("finalEngineMeta").textContent="Phase 9/10 · "+(d.stale?"STALE LAST-GOOD · ":"LIVE · ")+(d.state||"WAITING")+" · data "+fmt(data.score)+"/100 · risk "+(pg.decision||"NOT EVALUATED");
+  var ds=document.querySelector(".decisionSection");if(ds){ds.classList.remove("signal-long","signal-short","signal-wait");ds.classList.add(side==="LONG"?"signal-long":side==="SHORT"?"signal-short":"signal-wait")}
+}
+async function loadFinalDecision(){
+  var symbol=state.symbol,interval=state.interval;
+  try{
+    var q="symbol="+encodeURIComponent(symbol)+"&interval="+encodeURIComponent(interval);
+    var d=await api("/api/decision?"+q,9000);
+    if(symbol!==state.symbol||interval!==state.interval)return;
+    state.finalDecision=d;renderFinalDecision(d);
+  }catch(e){
+    var meta=$("finalEngineMeta");if(meta)meta.textContent="Phase 9/10 · warming / unavailable · existing market engine still active";
+  }
 }
 
 async function loadCore(){
