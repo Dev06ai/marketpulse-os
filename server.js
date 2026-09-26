@@ -41,7 +41,13 @@ function hardSignalBlock(decision){
     gate==="BLOCKED" ||
     reason.includes("data quality") ||
     reason.includes("risk gate") ||
-    reason.includes("stale")
+    reason.includes("stale") ||
+    reason.includes("higher-timeframe trend conflicts") ||
+    reason.includes("15m trend conflicts") ||
+    reason.includes("cvd divergence") ||
+    reason.includes("r:r below") ||
+    reason.includes("derivatives unavailable") ||
+    reason.includes("insufficient derivatives completeness")
   );
 }
 function applySignalStability(decision,symbol,interval){
