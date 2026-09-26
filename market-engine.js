@@ -127,6 +127,9 @@ function analyze(c,ctx={}){
   const longPercent=Number.isFinite(deriv?.longPercent)?deriv.longPercent:null;
   const shortPercent=Number.isFinite(deriv?.shortPercent)?deriv.shortPercent:null;
   const longShortRatio=Number.isFinite(deriv?.longShortRatio)?deriv.longShortRatio:null;
+  const fundingRate=Number.isFinite(deriv?.fundingRate)?deriv.fundingRate:null;
+  const fundingExtreme=Math.abs(fundingRate||0)>=0.001;
+
   let positioning=deriv?.positioning||"UNKNOWN";
   if(oiChangePct!==null&&flowPriceChangePct!==null){
     if(flowPriceChangePct>0.15&&oiChangePct>1)positioning="PRICE + OI: LONG PARTICIPATION";
@@ -184,7 +187,19 @@ function analyze(c,ctx={}){
   if((side==="LONG"&&cvdState==="BEARISH DIVERGENCE")||(side==="SHORT"&&cvdState==="BULLISH DIVERGENCE")){score-=8;contributors.push("CVD divergence");reasons.push("Aggressive flow is diverging from price");}
   if((side==="LONG"&&cvdState==="BUYERS CONFIRM")||(side==="SHORT"&&cvdState==="SELLERS CONFIRM")){score+=4;contributors.push("CVD confirmation");}
   if((side==="LONG"&&positioning.includes("SHORT PARTICIPATION"))||(side==="SHORT"&&positioning.includes("LONG PARTICIPATION"))){score-=6;contributors.push("OI conflict");}
-  if((side==="LONG"&&liquidationBias==="LONG LIQS DOMINANT")||(side==="SHORT"&&liquidationBias==="SHORT LIQS DOMINANT")){score-=5;contributors.push("liquidation conflict");reasons.push("Recent liquidation pressure is working against this direction");}
+  if(fundingRate!==null&&side!=="WAIT"){
+    const adverse=(side==="LONG"&&fundingRate>=0.001)||(side==="SHORT"&&fundingRate<=-0.001);
+    const supportive=(side==="LONG"&&fundingRate<=-0.0005)||(side==="SHORT"&&fundingRate>=0.0005);
+    if(adverse){score-=4;contributors.push("funding crowding");reasons.push("Funding is unusually one-sided against the setup");}
+    else if(supportive){score+=2;contributors.push("funding tailwind");}
+  }
+  if(longShortRatio!==null&&side!=="WAIT"){
+    const adverseCrowding=(side==="LONG"&&longShortRatio>=1.8)||(side==="SHORT"&&longShortRatio<=0.55);
+    const supportiveCrowding=(side==="LONG"&&longShortRatio<=0.75)||(side==="SHORT"&&longShortRatio>=1.33);
+    if(adverseCrowding){score-=3;contributors.push("positioning crowding");reasons.push("Account positioning is unusually crowded on this side");}
+    else if(supportiveCrowding){score+=1;contributors.push("positioning support");}
+  }
+  if((side==="LONG"&&liquidationBias==="LONG LIQS DOMINANT")||(side==="SHORT"&&liquidationBias==="SHORT LIQS DOMINANT")){score-=5;contributors.push("liquidation conflict");reasons.push("Recent liquidation pressure is working against the setup");}
   if((side==="LONG"&&liquidationBias==="SHORT LIQS DOMINANT")||(side==="SHORT"&&liquidationBias==="LONG LIQS DOMINANT")){score+=3;contributors.push("liquidation tailwind");}
   if(orderBookImbalance!==null){
     if((side==="LONG"&&orderBookImbalance<=-0.12)||(side==="SHORT"&&orderBookImbalance>=0.12)){score-=5;contributors.push("order-book conflict");reasons.push("Top-of-book depth is leaning against the setup");}
