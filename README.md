@@ -95,3 +95,14 @@ The final decision layer adds a deterministic Decision Engine on top of the exis
 The dashboard exposes the final state through `GET /api/decision`. Results are cached briefly, and the endpoint keeps the last known good decision available when a downstream provider temporarily fails. The engine is fail-safe and does not execute trades.
 
 Phase 9/10 status is also included in `/api/config` and the admin system check.
+
+## Phase 11 + Phase 12 + Phase 13
+The validation layer now sits after the Phase 9/10 engine and before any live-reliance indication.
+
+- Phase 11 (live validation) checks current data freshness, risk state, engine fail-safe state, and whether the current signal has enough historical evidence behind it.
+- Phase 12 (walk-forward validation) replays the deterministic Phase 9/10 decision logic on rolling historical candle windows without using future candles. Same-bar stop/target conflicts are resolved conservatively in favor of the stop, and the replay explicitly records its OHLCV-only limitations.
+- Phase 13 (adaptive safety) can tighten the minimum confluence threshold when the observed out-of-sample expectancy, profit factor, win rate, or drawdown deteriorates. It never lowers the configured base threshold.
+- Until the validation sample is large enough and the conservative evidence gates pass, the system exposes the result as `PAPER_ONLY` rather than implying that a live signal is validated.
+- The execution layer remains disabled by the decision engine. A `SIGNAL_ELIGIBLE` result means the signal passed the configured validation/data/risk gates for decision support; it is not a guarantee of profit and does not turn on automatic trading.
+
+The current validation payload is available from `GET /api/validation`, while `GET /api/decision` includes the validation summary and deployment gate used by the Decision Center.
