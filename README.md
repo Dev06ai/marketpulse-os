@@ -57,3 +57,22 @@ The owner-only Admin Console includes registration counts for today, this week, 
 
 ## Admin Command Center
 Version 2.5 adds an owner-only command center with private analytics, live activity, security events, server performance telemetry, market-data provider health, feature flags with deterministic rollout percentages, emergency controls, maintenance/read-only modes, broadcasts, support inbox, audit logs, adaptive-learning monitoring, and operational configuration snapshots. Admin-only APIs remain server-enforced behind the existing Owner MFA boundary. Support views intentionally exclude passwords, IP addresses and unnecessary personal data. Operational snapshots cover MarketPulse configuration/flags and do not contain credentials or password hashes; provider-level database backups remain the responsibility of the managed Postgres service.
+
+## Prop Firm Guard + Event Contracts
+- A configurable prop-firm decision gate now sits alongside the market engine. It checks signal score, R:R, data freshness/quality, derivative availability, flow alignment, spread, daily-loss headroom, drawdown headroom, open risk, position count, trade count and loss cooldown.
+- Defaults are illustrative. Set the PROP_* environment variables to match the exact rules of the evaluation/account you are using.
+- /api/propfirm returns the current gate for a symbol/timeframe.
+- /api/propfirm/event adds a fixed-risk UP/DOWN event-contract calculator that works from the premium/payout shown by the venue. It does not place orders.
+- Toobit Event Contracts use higher/lower settlement with capped stake risk and a displayed payout; Toobit also documents daily caps and open-position limits. XT has an Event Contract product with directional outcomes. Venue rules can change, so MarketPulse treats the exchange contract terms as inputs rather than hard-coding them.
+
+## Provider failover
+- Admin provider diagnostics now probe Binance and Bybit across multiple public hosts instead of treating one endpoint as the whole provider.
+- The UI can distinguish a provider outage from a single-host failure, while the core engine continues using its existing Binance -> Kraken and Kraken -> Bybit derivatives fallback paths.
+
+## Public-data research pipeline
+- research-data.js catalogs Binance Public Data, CCXT and Hummingbot as research/connector sources.
+- The research route can build a no-lookahead historical replay from public Binance candles and feed resolved replay examples into the existing adaptive learning model.
+- Research runs in a background job with one active job at a time, so training does not block live market requests.
+- Historical replay from candle data deliberately does not invent historical CVD/OI/liquidation values that were not present in the dataset.
+
+No claim is made that any signal is safe, certain or guaranteed to pass a prop-firm evaluation. The gate is designed to block trades when required evidence or account headroom is missing.
