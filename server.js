@@ -852,9 +852,10 @@ const server=http.createServer(async(req,res)=>{
       const symbol=String(body.symbol||"BTCUSDT").toUpperCase(),interval=String(body.interval||"1h");if(!SYMBOLS.includes(symbol)||!["15m","1h","4h","1d"].includes(interval))return send(res,400,{ok:false,error:"Unsupported training selection"});
       try{
         const candles=await fetchTrainingFuturesKlines(symbol,interval,Math.min(1500,Number(body.limit)||1500));
-        const rows=predictionEngine.buildTrainingRows(candles,interval);
+        const derivativesContext=await fetchTrainingDerivatives(symbol,interval,250);
+        const rows=predictionEngine.buildTrainingRows(candles,interval,derivativesContext);
         const model=predictionEngine.trainLogistic(rows,{epochs:220,lr:.05,l2:.02});
-        model.symbol=symbol;model.interval=interval;model.source="Binance USD-M public futures klines";
+        model.symbol=symbol;model.interval=interval;model.source="Binance USD-M public futures klines + Bybit public OI/funding";model.trainingData={priceFlowSource:"Binance USD-M",derivativesSource:derivativesContext.source,oiSamples:derivativesContext.oiSeries.length,fundingSamples:derivativesContext.fundingSeries.length};
         const champion=await getPredictionChampion(true);
         const cBrier=Number(champion?.validationMetrics?.brier);const cLoss=Number(champion?.validationMetrics?.logLoss);
         const v=model.validationMetrics;
