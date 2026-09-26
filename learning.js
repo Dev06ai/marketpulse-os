@@ -54,7 +54,7 @@ function ensureState(raw){
 function bucketKey(a){return [a.type||"UNKNOWN",a.side||"WAIT",a.regime||"UNKNOWN"].join("|")}
 function scoreKey(score){return String(clamp(Math.floor(Number(score||0)/10),0,9)*10)}
 function componentMax(name){
-  return ({Regime:16,"Trend strength":11,Momentum:11,Volume:9,Structure:9,"4H alignment":9,"15M alignment":7,"CVD pressure":10,"OI context":8,"Liquidation context":6})[name]||10;
+  return ({Regime:16,"Trend strength":11,Momentum:11,Volume:9,Structure:9,"4H alignment":9,"15M alignment":7,"CVD pressure":10,"OI context":8,"Liquidation context":6,"Order-book imbalance":7,"Taker flow":7})[name]||10;
 }
 function componentContextKey(pred,name){return [pred.regime||"UNKNOWN",pred.side||"WAIT",name].join("|")}
 function componentState(pred,comp){
