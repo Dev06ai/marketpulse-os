@@ -325,7 +325,7 @@ startBybitLiveFlow();
 const DERIV_CACHE=new Map(); const DERIV_TTL=15000;
 const KRAKEN_FUTURES_PAIRS={BTCUSDT:"PF_XBTUSD",ETHUSDT:"PF_ETHUSD",SOLUSDT:"PF_SOLUSD",BNBUSDT:"PF_BNBUSD",XRPUSDT:"PF_XRPUSD",DOGEUSDT:"PF_DOGEUSD",ADAUSDT:"PF_ADAUSD"};
 const BYBIT_HOSTS=["https://api.bybit.com","https://api.bytick.com"];
-function bybitInterval(interval){return ({'15m':'15min','1h':'1h','4h':'4h','1d':'1d'})[interval]||'1h'}
+function bybitInterval(interval){return ({'15m':'15min','30m':'30min','1h':'1h','4h':'4h','1d':'1d'})[interval]||'1h'}
 
 async function fetchJson(url,timeoutMs=4500){
   const controller=new AbortController();const t=setTimeout(()=>controller.abort(),timeoutMs);
@@ -1272,8 +1272,35 @@ const server=http.createServer(async(req,res)=>{
       const symbol=(u.searchParams.get('symbol')||'BTCUSDT').toUpperCase(),interval=u.searchParams.get('interval')||'1h';
       if(!SYMBOLS.includes(symbol))return send(res,400,{error:'Unsupported symbol'});
       try{
-        const data=await Promise.race([derivatives(symbol,interval),new Promise(resolve=>setTimeout(()=>resolve(null),6000))]).catch(()=>null);
-        return send(res,200,{ok:true,data:data||null});
+        const live=flowBucket(symbol);
+        const liveReady=Boolean(Number.isFinite(live.oi)||Number.isFinite(live.fundingRate)||live.cvdNotional>0||live.points.length>1||live.orderBook);
+        const tasks=[
+          Promise.resolve().then(()=>bybitDerivatives(symbol,interval)),
+          Promise.resolve().then(()=>derivatives(symbol,interval))
+        ];
+        const data=await Promise.any(tasks.map(p=>p.then(d=>{
+          if(!d||d.available===false)throw Error("Flow provider unavailable");
+          return d;
+        }))).catch(async()=>{
+          if(liveReady){
+            return {
+              available:true,provider:"Bybit live stream",oi:Number.isFinite(live.oi)?live.oi:null,
+              oiChangePct:null,cvdDelta:live.cvdNotional?live.cvd:null,cvdRatio:live.cvdNotional?live.cvd/live.cvdNotional:null,
+              cvdState:live.cvd>0?"BUYERS PRESSURE":live.cvd<0?"SELLERS PRESSURE":"MIXED",
+              positioning:Number.isFinite(live.fundingRate)?"LIVE FUNDING":"OI CHANGE NOT AVAILABLE",
+              fundingRate:Number.isFinite(live.fundingRate)?live.fundingRate:null,
+              liquidationTotal:live.liqLong+live.liqShort,
+              liquidationBias:live.liqLong+live.liqShort?(live.liqLong>live.liqShort?"LONG LIQS DOMINANT":"SHORT LIQS DOMINANT"):"NO LIQUIDATION ACTIVITY",
+              orderBook:live.orderBook,series:{
+                cvd:live.points.map(x=>x.cvdRatio??x.cvd).filter(Number.isFinite),
+                oi:live.points.map(x=>x.oi).filter(Number.isFinite),
+                liq:live.points.map(x=>x.liqTotal).filter(Number.isFinite)
+              },liveHistory:live.points.slice(-120),livePointCount:live.points.length,updatedAt:Date.now()
+            };
+          }
+          return null;
+        });
+        return send(res,200,{ok:true,data});
       }catch(e){return send(res,200,{ok:false,data:null,error:e.message})}
     }
     if(req.method==='GET'&&u.pathname==='/api/core-scan'){
