@@ -79,3 +79,10 @@ No claim is made that any signal is safe, certain or guaranteed to pass a prop-f
 
 - On startup, MarketPulse can run a non-blocking historical warm-up for BTC/ETH. It only starts when the persisted online model has fewer than 150 updates, so restarts do not repeatedly retrain the same replay keys. Override or disable with RESEARCH_WARMUP_* environment variables.
 - Historical replay now uses public futures candle buy/sell volume as a CVD proxy and Binance historical open-interest data where available. Liquidation history is not fabricated; live liquidation flow remains from the Bybit stream, with Kraken/other fallbacks used where applicable.
+
+## Cross-exchange data fabric
+- MarketPulse now cross-checks the engine price against independent public spot feeds from Kraken and Coinbase, with Binance used when reachable and the existing Bybit public WebSocket mark price treated as a supplemental derivatives cross-check.
+- A consensus-quality score and price-dispersion measurement are exposed through /api/data-fabric and included in the core payload.
+- Prop-firm and event-contract gates can block on weak independent consensus or excessive price dispersion.
+- Bybit's official public WebSocket provides linear-market ticker, trade and order-book streams; Kraken's public Futures Analytics API exposes open interest, CVD, liquidation volume, long/short information, funding, liquidity and related analytics. citeturn171906search0turn171906search2turn171906search3turn171906search4turn686664search0
+- Coinbase's public Exchange API exposes latest public trades, which MarketPulse uses as an independent spot-price cross-check rather than as a derivatives/OI source. citeturn546334search0
