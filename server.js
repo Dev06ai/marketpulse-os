@@ -843,6 +843,23 @@ const server=http.createServer(async(req,res)=>{
         return send(res,200,{ok:true,promotable,model,run});
       }catch(e){return send(res,400,{ok:false,error:String(e.message||e)})}
     }
+    if(req.method==='POST'&&u.pathname==='/api/admin/prediction/train-own'){
+      let raw="";for await(const chunk of req)raw+=chunk;let body={};try{body=JSON.parse(raw||"{}")}catch{return send(res,400,{ok:false,error:"Invalid JSON"})}
+      const symbol=body.symbol?String(body.symbol).toUpperCase():undefined,interval=body.interval?String(body.interval):undefined;
+      try{
+        const resolved=await storage.getResolvedLearningPredictions(symbol,interval,Math.min(3000,Number(body.limit)||1500));
+        const rows=resolved.map(r=>({label:String(r.outcome).toUpperCase()==="WIN"?1:String(r.outcome).toUpperCase()==="LOSS"?0:null,features:r.features?.modelFeatures})).filter(r=>r.label!==null&&r.features);
+        const model=predictionEngine.trainLogistic(rows,{epochs:240,lr:.045,l2:.02});
+        model.symbol=symbol||"ALL";model.interval=interval||"ALL";model.source="MarketPulse resolved outcomes";
+        const champion=await getPredictionChampion(true),cBrier=Number(champion?.validationMetrics?.brier),cLoss=Number(champion?.validationMetrics?.logLoss),v=model.validationMetrics;
+        const promotable=rows.length>=300&&Number.isFinite(v.brier)&&Number.isFinite(v.logLoss)&&(!champion||!Number.isFinite(cBrier)||(v.brier<=cBrier*.97&&v.logLoss<=cLoss*.985));
+        await storage.savePredictionModel("candidate",model);
+        if(promotable){await storage.savePredictionModel("champion",model);PREDICTION_MODEL_CACHE.model=model;PREDICTION_MODEL_CACHE.ts=Date.now()}
+        const run=await storage.recordPredictionRun({symbol:model.symbol,interval:model.interval,source:model.source,samples:rows.length,validation:{train:model.trainMetrics,validation:v,promotable},modelName:promotable?"champion":"candidate"});
+        await auditAdmin(req,promotable?"Promoted self-trained prediction model":"Trained self-trained candidate","prediction",null,{samples:rows.length,validation:v,promotable});
+        return send(res,200,{ok:true,promotable,model,run});
+      }catch(e){return send(res,400,{ok:false,error:String(e.message||e)})}
+    }
     if(req.method==='POST'&&u.pathname==='/api/admin/prediction/promote'){
       const candidate=await storage.getPredictionModel("candidate");if(!candidate)return send(res,404,{ok:false,error:"No candidate model available"});
       await storage.savePredictionModel("champion",candidate);PREDICTION_MODEL_CACHE.model=candidate;PREDICTION_MODEL_CACHE.ts=Date.now();await auditAdmin(req,"Promoted candidate prediction model","prediction");return send(res,200,{ok:true,model:candidate});
