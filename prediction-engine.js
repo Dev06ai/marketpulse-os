@@ -207,20 +207,22 @@ function applyModel(a,model,ctx={}){
     probability:p,
     featureQuality:{
       orderbook:Boolean(ctx.orderbook?.valid),
-      derivatives:Boolean(a.derivatives?.available),
-      liveFlow:Boolean(a.derivatives?.livePointCount)
+      derivatives:Boolean(a.derivatives?.available&&a.derivatives?.cvdState!=="UNAVAILABLE"),
+      liveFlow:Boolean(a.derivatives?.livePointCount),
+      complete:Boolean(ctx.orderbook?.valid&&a.derivatives?.available&&a.derivatives?.cvdState!=="UNAVAILABLE")
     },
     modelVersion:model?.version??null,
     validation:model?.validationMetrics||null,
+    walkForward:model?.walkForwardMetrics||null,
     edge:null,
     scoreAdjustment:0
   };
   if(p===null){a.predictionModel=out;return a}
   const directionProb=a.side==="LONG"?p:a.side==="SHORT"?1-p:.5;
-  const dataReady=out.featureQuality.derivatives||out.featureQuality.orderbook;
+  const dataReady=out.featureQuality.complete;
   out.probability=directionProb;
   out.edge=(directionProb-.5)*100;
-  if(!dataReady){out.scoreAdjustment=-2;out.note="Microstructure inputs incomplete; model influence reduced."}
+  if(!dataReady){out.scoreAdjustment=-5;out.note="Order-flow and order-book evidence is incomplete; model influence is heavily reduced and READY status is blocked."}
   else{
     out.scoreAdjustment=clamp((directionProb-.5)*24,-12,12);
     if(directionProb<.54)out.note="Model edge is weak; directional setup is being downgraded.";
@@ -228,6 +230,11 @@ function applyModel(a,model,ctx={}){
     else out.note="Model evidence is supportive but not decisive.";
   }
   a.score=clamp(Math.round(finite(a.score)+out.scoreAdjustment),0,92);
+  if(a.side!=="WAIT"&&out.enabled){
+    if(!dataReady&&a.status==="READY")a.status="WATCH";
+    if(dataReady&&directionProb<.60)a.status="WAITING";
+    else if(dataReady&&directionProb<.68&&a.status==="READY")a.status="WATCH";
+  }
   a.predictionModel=out;
   a.probabilityLabel=directionProb>=.78?"VERY HIGH MODEL SUPPORT":directionProb>=.68?"HIGH MODEL SUPPORT":directionProb>=.58?"MODERATE MODEL SUPPORT":"LOW MODEL SUPPORT";
   if(a.side!=="WAIT"&&a.status==="READY"&&directionProb<.58)a.status="WATCH";
