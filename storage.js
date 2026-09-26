@@ -348,11 +348,11 @@ async function getSignalDNA({symbol,interval,limit=500}={}){
   await init();const lim=Math.max(1,Math.min(Number(limit)||500,5000));
   if(mode==="postgres"){
     const params=[];let where=[];
-    if(symbol){params.push(symbol);where.push(`symbol=${params.length}`)}
-    if(interval){params.push(interval);where.push(`interval=${params.length}`)}
+    if(symbol){params.push(symbol);where.push(`symbol=$${params.length}`)}
+    if(interval){params.push(interval);where.push(`interval=$${params.length}`)}
     params.push(lim);
     const q=`SELECT signal_key AS "signalKey",symbol,interval,candle_ts AS "candleTs",status,side,setup_type AS type,regime,score,snapshot,outcome,created_at AS "createdAt"
-      FROM marketpulse_signal_dna ${where.length?"WHERE "+where.join(" AND "):""} ORDER BY candle_ts DESC LIMIT ${params.length}`;
+      FROM marketpulse_signal_dna ${where.length?"WHERE "+where.join(" AND "):""} ORDER BY candle_ts DESC LIMIT $${params.length}`;
     const r=await pool.query(q,params);return r.rows;
   }
   const all=readLocal(),rows=Array.isArray(all.__signal_dna__)?all.__signal_dna__:[];
@@ -362,8 +362,8 @@ async function clearSignalDNA({symbol,interval}={}){
   await init();
   if(mode==="postgres"){
     const params=[];let where=[];
-    if(symbol){params.push(symbol);where.push(`symbol=${params.length}`)}
-    if(interval){params.push(interval);where.push(`interval=${params.length}`)}
+    if(symbol){params.push(symbol);where.push(`symbol=$${params.length}`)}
+    if(interval){params.push(interval);where.push(`interval=$${params.length}`)}
     await pool.query(`DELETE FROM marketpulse_signal_dna ${where.length?"WHERE "+where.join(" AND "):""}`,params);return;
   }
   const all=readLocal();let rows=Array.isArray(all.__signal_dna__)?all.__signal_dna__:[];rows=rows.filter(x=>(symbol&&x.symbol!==symbol)||(interval&&x.interval!==interval));all.__signal_dna__=rows;writeLocal(all);
@@ -750,7 +750,7 @@ async function createSupportTicket(userId,data){
 }
 async function listSupportTickets(limit=100,status=null){
   await init();const n=Math.min(300,Math.max(1,Number(limit)||100));
-  if(mode==="postgres"){const args=[],where=[];if(status){args.push(status);where.push("t.status=$"+args.length)}args.push(n);const r=await pool.query(`SELECT t.id,t.user_id AS "userId",u.email, t.category,t.subject,t.message,t.status,t.admin_reply AS "adminReply",t.created_at AS "createdAt",t.updated_at AS "updatedAt",t.resolved_at AS "resolvedAt" FROM marketpulse_support_tickets t JOIN marketpulse_users u ON u.id=t.user_id ${where.length?"WHERE "+where.join(" AND "):""} ORDER BY t.updated_at DESC LIMIT ${args.length}`,args);return r.rows}
+  if(mode==="postgres"){const args=[],where=[];if(status){args.push(status);where.push("t.status=$"+args.length)}args.push(n);const r=await pool.query(`SELECT t.id,t.user_id AS "userId",u.email, t.category,t.subject,t.message,t.status,t.admin_reply AS "adminReply",t.created_at AS "createdAt",t.updated_at AS "updatedAt",t.resolved_at AS "resolvedAt" FROM marketpulse_support_tickets t JOIN marketpulse_users u ON u.id=t.user_id ${where.length?"WHERE "+where.join(" AND "):""} ORDER BY t.updated_at DESC LIMIT $${args.length}`,args);return r.rows}
   const all=readLocal();let rows=(all.__support__||[]).slice().reverse();if(status)rows=rows.filter(x=>x.status===status);const users=all.__users__||{};return rows.slice(0,n).map(x=>({...x,email:users[x.userId]?.email||"Unknown"}));
 }
 async function replySupportTicket(id,data,adminEmail){
