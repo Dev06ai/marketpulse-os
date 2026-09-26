@@ -223,6 +223,18 @@ body{font-size:14px}
 .journalActions{display:flex;gap:6px;margin-top:7px}
 .journalAction{border:1px solid rgba(255,255,255,.10);background:#0d0d11;color:#aebdce;border-radius:7px;padding:5px 8px;font-size:9px;cursor:pointer}
 .journalAction:hover{color:#fff;border-color:rgba(103,232,255,.22)}
+</style><style id="desktop-big-screen-style">
+.desktopOnly{display:none}
+.big-screen .wrap{width:min(1800px,calc(100% - 32px))}
+.big-screen .chartCanvas{height:560px}
+.big-screen .chartTools button{font-size:10px;padding:7px 9px}
+.big-screen .headerInner{min-height:84px}
+@media(min-width:901px) and (pointer:fine){
+  .desktopOnly{display:inline-flex}
+}
+@media(max-width:900px), (pointer:coarse){
+  .desktopOnly{display:none!important}
+}
 </style><style id="interactive-chart-style">
 .miniChart,.flowChart{cursor:crosshair;touch-action:none;user-select:none;border:1px solid rgba(167,243,208,.055);box-shadow:inset 0 0 22px rgba(103,232,255,.025)}
 .miniChart:hover,.flowChart:hover{border-color:rgba(103,232,255,.18);box-shadow:0 0 18px rgba(103,232,255,.08),inset 0 0 22px rgba(103,232,255,.035)}
@@ -356,7 +368,7 @@ body.admin-mode .nav button.adminNav,body.admin-mode .mobileMenu button.adminNav
   <nav class="nav" id="nav"><button class="active" data-view="overview">Command</button><button data-view="scanner">Markets</button><button data-view="signals">Setups</button><button data-view="flow">Flow</button><button data-view="lab">Backtest</button><button data-view="replay">Replay</button><button data-view="dna">DNA</button><button data-view="research">Research</button><button data-view="edge">Edge</button><button data-view="portfolio">Portfolio</button><button id="executionNav" class="adminNav" data-view="execution">Execution</button><button data-view="brain">Journal</button><button data-view="ai">Copilot</button><button data-view="alerts">Watchlist</button><button data-view="risk">Risk</button><button id="adminNav" class="adminNav" data-view="admin">Admin</button></nav>
   <button id="mobileMenuBtn" class="mobileMenuBtn" aria-label="Open MarketPulse menu" aria-expanded="false">☰</button>
   <div id="mobileMenu" class="mobileMenu" aria-hidden="true"><button data-view="overview">Command</button><button data-view="scanner">Markets</button><button data-view="signals">Setups</button><button data-view="flow">Flow</button><button data-view="lab">Backtest</button><button data-view="replay">Replay</button><button data-view="dna">DNA</button><button data-view="research">Research</button><button data-view="edge">Edge</button><button data-view="portfolio">Portfolio</button><button data-view="execution">Execution</button><button data-view="brain">Journal</button><button data-view="ai">Copilot</button><button data-view="alerts">Watchlist</button><button data-view="risk">Risk</button><button id="adminNavMobile" class="adminNav" data-view="admin">Admin</button></div>
-  <div class="headerTools"><button id="accountBtn" class="btn">Guest</button><span class="dataState"><i class="liveDot"></i><span id="dataState">Connecting</span></span><select id="symbol" class="select"></select><select id="interval" class="select"><option>15m</option><option selected>1h</option><option>4h</option><option>1d</option></select><button id="refresh" class="btn primary">Refresh</button></div>
+  <div class="headerTools"><button id="accountBtn" class="btn">Guest</button><span class="dataState"><i class="liveDot"></i><span id="dataState">Connecting</span></span><select id="symbol" class="select"></select><select id="interval" class="select"><option>15m</option><option selected>1h</option><option>4h</option><option>1d</option></select><button id="bigScreenBtn" class="btn desktopOnly" type="button" title="Enter full-screen Big Screen mode">⛶ Big screen</button><button id="refresh" class="btn primary">Refresh</button></div>
 </div></header>
 
 <main class="wrap">
@@ -380,7 +392,7 @@ body.admin-mode .nav button.adminNav,body.admin-mode .mobileMenu button.adminNav
       </div>
     </div>
 
-    <div class="section card"><div class="sectionHead"><div><div class="title">Price action</div><div class="sub">TradingView-style controls: drag to pan · wheel/pinch to zoom · move cursor for crosshair.</div></div><div class="chartTools"><button id="chartCandles" class="active" title="Candlestick chart">Candles</button><button id="chartLine" title="Closing-price line chart">Line</button><button id="chartAuto" title="Fit price scale automatically">Auto</button><button id="chartFit" title="Fit all visible candles">Fit</button><button id="panL" title="Pan left">←</button><button id="panR" title="Pan right">→</button><button id="zoomOut" title="Zoom out">−</button><button id="zoomReset" title="Reset zoom">1:1</button><button id="zoomIn" title="Zoom in">+</button><button id="chartSettings" title="Chart settings">⚙</button></div></div><div class="chartWrap"><canvas id="mainChart" class="chartCanvas"></canvas><div class="ohlc" id="ohlc">Move over chart</div></div><div class="levels"><div class="level"><div class="k">Entry zone</div><div class="v" id="entry">—</div></div><div class="level"><div class="k">Invalidation</div><div class="v" id="stop">—</div></div><div class="level"><div class="k">Target 1</div><div class="v" id="target">—</div></div><div class="level"><div class="k">R:R</div><div class="v" id="rr">—</div></div></div></div>
+    <div class="section card"><div class="sectionHead"><div><div class="title">Price action</div><div class="sub">TradingView-style controls: drag to pan · wheel/pinch to zoom · move cursor for crosshair.</div></div><div class="chartTools"><button id="chartCandles" class="active" title="Candlestick chart">Candles</button><button id="chartLine" title="Closing-price line chart">Line</button><button id="chartAuto" title="Fit price scale automatically">Auto</button><button id="chartFit" title="Fit all visible candles">Fit</button><button id="panL" title="Pan left">←</button><button id="panR" title="Pan right">→</button><button id="zoomOut" class="zoomBtn" title="Zoom out">− Zoom out</button><button id="zoomReset" title="Reset zoom">1:1</button><button id="zoomIn" class="zoomBtn" title="Zoom in">+ Zoom in</button><button id="chartSettings" title="Chart settings">⚙</button></div></div><div class="chartWrap"><canvas id="mainChart" class="chartCanvas"></canvas><div class="ohlc" id="ohlc">Move over chart</div></div><div class="levels"><div class="level"><div class="k">Entry zone</div><div class="v" id="entry">—</div></div><div class="level"><div class="k">Invalidation</div><div class="v" id="stop">—</div></div><div class="level"><div class="k">Target 1</div><div class="v" id="target">—</div></div><div class="level"><div class="k">R:R</div><div class="v" id="rr">—</div></div></div></div>
 
     <div class="section"><div class="sectionHead"><div><div class="title">Market Overview</div><div class="sub">Live market intelligence, long-term cycle context and quick trading tools.</div></div><span class="chip">Long-term context</span></div>
       <div class="overGrid">
@@ -1049,6 +1061,7 @@ function setView(name){
   document.querySelectorAll(".nav button,.mobileMenu button").forEach(function(b){b.classList.toggle("active",b.dataset.view===name)});
   var menu=$("mobileMenu"),btn=$("mobileMenuBtn");if(menu){menu.classList.remove("open");menu.setAttribute("aria-hidden","true")}if(btn)btn.setAttribute("aria-expanded","false");
   state.activeView=name;window.scrollTo(0,0);trackActivity("navigation","view",state.symbol,state.interval,{view:name});
+  if(name==="scanner"){loadScan(true)}
   if(name==="flow"){loadFlow()}
   if(name==="edge"){loadEdge()}
   if(name==="execution"&&state.account?.isAdmin){loadExecution()}
@@ -1989,8 +2002,25 @@ async function loadCycle(){
   }finally{state.cycleBusy=false}
 }
 
-async function loadScan(){
-  try{var j=await api("/api/core-scan?interval="+encodeURIComponent(state.interval),16000);state.scan=j.rows||[];renderScanner()}catch{$("scanRows").innerHTML='<div class="small">Scanner unavailable right now.</div>'}
+async function loadScan(force){
+  if(state.scanBusy&&!force)return;
+  state.scanBusy=true;
+  var attempt=Number(state.scanAttempts||0)+1;state.scanAttempts=attempt;
+  $("scanRows").innerHTML='<div class="small">Loading market scanner… · attempt '+attempt+'</div>';
+  try{
+    var j=await api("/api/core-scan?interval="+encodeURIComponent(state.interval),14000);
+    if(j&&Array.isArray(j.rows)){
+      state.scan=j.rows;state.scanAttempts=0;renderScanner();
+      $("scanRows").dataset.loaded="1";
+      return;
+    }
+    throw Error("Scanner returned no rows");
+  }catch(e){
+    $("scanRows").innerHTML='<div class="small">Scanner is warming up… retrying automatically.</div>';
+    if(attempt<5)setTimeout(function(){state.scanBusy=false;loadScan(true)},Math.min(9000,1200*attempt));
+  }finally{
+    state.scanBusy=false;
+  }
 }
 
 function deferTask(fn,delay){
@@ -2000,7 +2030,7 @@ function deferTask(fn,delay){
 function queueSecondaryBoot(){
   if(state.secondaryStarted)return;
   state.secondaryStarted=true;
-  deferTask(loadScan,120);
+  deferTask(function(){loadScan(false)},700);
   deferTask(loadCycle,350);
   deferTask(loadFlow,500);
   deferTask(loadEdge,900);
@@ -2052,6 +2082,37 @@ $("exArm").addEventListener("click",armExecution);
 $("exOrderRows").addEventListener("click",function(e){var b=e.target.closest("[data-ex-submit],[data-ex-cancel]");if(!b)return;if(b.dataset.exSubmit)submitExecution(b.dataset.exSubmit);else cancelExecution(b.dataset.exCancel)});
 $("exPositionRows").addEventListener("click",function(e){var b=e.target.closest("[data-ex-close]");if(b)closeSimulation(b.dataset.exClose)});
 $("refresh").addEventListener("click",loadCore);
+
+(function installBigScreen(){
+  var b=$("bigScreenBtn");if(!b||b.dataset.bound==="1")return;
+  b.dataset.bound="1";
+  function supportedDesktop(){
+    return window.matchMedia("(min-width:901px) and (pointer:fine)").matches;
+  }
+  function update(){
+    var full=Boolean(document.fullscreenElement);
+    document.body.classList.toggle("big-screen",full);
+    b.textContent=full?"⛶ Exit big screen":"⛶ Big screen";
+    b.title=full?"Exit full-screen Big Screen mode":"Enter full-screen Big Screen mode";
+  }
+  b.addEventListener("click",async function(){
+    if(!supportedDesktop())return;
+    try{
+      if(document.fullscreenElement){
+        await document.exitFullscreen();
+      }else{
+        await document.documentElement.requestFullscreen({navigationUI:"hide"});
+      }
+    }catch(e){
+      // Fallback to an app-wide expanded layout if fullscreen is denied.
+      document.body.classList.toggle("big-screen");
+      update();
+    }
+  });
+  document.addEventListener("fullscreenchange",update);
+  window.addEventListener("resize",update);
+  update();
+})();
 
 // HARD BOOT WATCHDOG: placed immediately after the manual Refresh handler so
 // later UI initialization errors cannot prevent the market core from starting.
@@ -2576,7 +2637,7 @@ setInterval(function(){
     if(!state.market&&!state.busy)scheduleInitialBoot(0);
   }
 },5000);
-setInterval(function(){if(document.visibilityState!=="visible")return; if(state.activeView==="execution")loadExecution(); if(state.activeView==="portfolio")loadPortfolio(); if(state.activeView==="edge")loadEdge(); if(state.activeView==="brain"){loadPhase7();loadPhase7Health()}},15000);
+setInterval(function(){if(document.visibilityState!=="visible")return; if(state.activeView==="scanner"&&(!state.scan||!state.scan.length))loadScan(true); if(state.activeView==="execution")loadExecution(); if(state.activeView==="portfolio")loadPortfolio(); if(state.activeView==="edge")loadEdge(); if(state.activeView==="brain"){loadPhase7();loadPhase7Health()}},15000);
 
 function mp7FmtR(v){var n=Number(v);return Number.isFinite(n)?(n>0?"+":"")+n.toFixed(2)+"R":"—"}
 function mp7FmtPct(v){var n=Number(v);return Number.isFinite(n)?n.toFixed(1)+"%":"—"}
