@@ -545,6 +545,10 @@ function staticFile(req,res){
 }
 
 const server=http.createServer(async(req,res)=>{
+  const started=Date.now();SERVER_METRICS.requests++;
+  const rawPath=String(req.url||"").split("?")[0];
+  SERVER_METRICS.routeCounts.set(rawPath,(SERVER_METRICS.routeCounts.get(rawPath)||0)+1);
+  res.on("finish",()=>{const latency=Date.now()-started;SERVER_METRICS.totalLatencyMs+=latency;if(res.statusCode>=500)SERVER_METRICS.errors++;if(res.statusCode>=500)SERVER_METRICS.lastErrors.unshift({path:rawPath,status:res.statusCode,latencyMs:latency,at:new Date().toISOString()});if(SERVER_METRICS.lastErrors.length>50)SERVER_METRICS.lastErrors.length=50});
   try{
     if(!rateRequest(req))return send(res,429,{ok:false,error:"Too many requests. Please slow down."});
     const u=new URL(req.url,'http://localhost');
