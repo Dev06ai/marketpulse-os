@@ -1,5 +1,6 @@
 const assert=require("assert");
-const {summarizeSources,alignDerivativeSnapshot}=require("../research-data");
+const {summarizeSources}=require("../data-fabric");
+const {alignDerivativeSnapshot}=require("../research-data");
 
 const confirmed=summarizeSources([
   {name:"Primary Engine",role:"engine-candle",status:"healthy",price:100000},
