@@ -977,7 +977,7 @@ function installCriticalChartUI(){
     b.dataset.criticalChartBound="1";b.addEventListener("click",function(e){e.preventDefault();e.stopPropagation();try{controls[id]()}catch(err){console.error("Chart control failed",id,err)}});
   });
   if(c.dataset.criticalChartBound!=="1"){
-    c.dataset.criticalChartBound="1";c.style.pointerEvents="auto";c.style.touchAction="none";
+    c.dataset.criticalChartBound="1";c.dataset.interactive="1";c.style.pointerEvents="auto";c.style.touchAction="none";
     var active=false,lastX=0,lastY=0,touches=new Map(),pinchStart=0,pinchVisible=96;
     function syncCross(e){var r=c.getBoundingClientRect();state.crossX=e.clientX-r.left;state.crossY=e.clientY-r.top;if(typeof queueChartDraw==="function")queueChartDraw();}
     c.addEventListener("pointerdown",function(e){if(e.pointerType==="mouse"&&e.button!==0)return;touches.set(e.pointerId,{x:e.clientX,y:e.clientY});try{c.setPointerCapture(e.pointerId)}catch{}if(touches.size===1){active=true;lastX=e.clientX;lastY=e.clientY;syncCross(e)}else if(touches.size===2){active=false;var a=[...touches.values()],dx=a[0].x-a[1].x,dy=a[0].y-a[1].y;pinchStart=Math.hypot(dx,dy);pinchVisible=state.chartVisible||96;}e.preventDefault()},{passive:false});
