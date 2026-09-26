@@ -755,7 +755,7 @@ const server=http.createServer(async(req,res)=>{
       let raw="";for await(const chunk of req)raw+=chunk;let body={};try{body=JSON.parse(raw||"{}")}catch{return send(res,400,{ok:false,error:"Invalid JSON"})}
       const current=await getAdminRuntime(true),next=Object.assign({},current,body);const saved=await storage.saveAdminConfig(next);setAdminRuntime(saved);await auditAdmin(req,"Changed emergency control state","emergency",null,{changed:Object.keys(body)});return send(res,200,{ok:true,config:saved});
     }
-    if(req.method==='GET'&&u.pathname==='/api/admin/providers')    if(req.method==='GET'&&u.pathname==='/api/account/memory'){
+    if(req.method==='GET'&&u.pathname==='/api/account/memory'){
       const user=await auth.userFromRequest(req);if(!user)return send(res,401,{ok:false,error:"Authentication required"});
       try{
         const memory=await storage.getAccountMemory(user.id);
