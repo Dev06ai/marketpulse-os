@@ -190,7 +190,7 @@ async function init(){
         feature TEXT NOT NULL,
         action TEXT NOT NULL DEFAULT 'view',
         symbol TEXT,
-        interval TEXT,
+        "interval" TEXT,
         metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       )`);
@@ -723,7 +723,7 @@ async function adminAnalytics(){
   const start=new Date();start.setHours(0,0,0,0);const day=start.getTime(),week=day-((start.getDay()+6)%7)*86400000,month=new Date(start.getFullYear(),start.getMonth(),1).getTime();
   const countFrom=ms=>users.filter(u=>new Date(u.createdAt).getTime()>=ms).length, active=ms=>users.filter(u=>u.lastSeenAt&&new Date(u.lastSeenAt).getTime()>=ms).length;
   const aggregate=k=>Object.entries(ev.filter(e=>new Date(e.createdAt).getTime()>=now-30*86400000).reduce((m,e)=>{const v=e[k]||"UNKNOWN";m[v]=(m[v]||0)+1;return m},{})).map(([key,count])=>({[k==="feature"?"feature":k]:key,count})).sort((a,b)=>b.count-a.count).slice(0,12);
-  return {totals:{allTime:users.length,today:countFrom(day),week:countFrom(week),month:countFrom(month),activeDay:active(now-86400000),activeWeek:active(now-7*86400000),activeMonth:active(now-30*86400000)},features:aggregate("feature"),symbols:aggregate("symbol"),intervals:aggregate("intervals")};
+  return {totals:{allTime:users.length,today:countFrom(day),week:countFrom(week),month:countFrom(month),activeDay:active(now-86400000),activeWeek:active(now-7*86400000),activeMonth:active(now-30*86400000)},features:aggregate("feature"),symbols:aggregate("symbol"),intervals:aggregate("interval")};
 }
 async function listBroadcasts(limit=100){
   await init();const n=Math.min(200,Math.max(1,Number(limit)||100));
