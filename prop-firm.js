@@ -14,6 +14,8 @@ const DEFAULT_CONFIG = Object.freeze({
   minConsensusQualityPct: 85,
   maxPriceDispersionBps: 80,
   requireIndependentConsensus: true,
+  eventMinSecondsToExpiry: 30,
+  eventMinStrikeDistanceBps: 1,
   maxCandleAgeMs: 120000,
   maxFlowAgeMs: 120000,
   maxSpreadBps: 20,
@@ -59,6 +61,8 @@ function normalizeConfig(input = {}) {
   out.minConsensusQualityPct = clamp(finite(out.minConsensusQualityPct, 85), 0, 100);
   out.maxPriceDispersionBps = Math.max(0.1, finite(out.maxPriceDispersionBps, 80));
   out.requireIndependentConsensus = Boolean(out.requireIndependentConsensus);
+  out.eventMinSecondsToExpiry = Math.max(1, finite(out.eventMinSecondsToExpiry, 30));
+  out.eventMinStrikeDistanceBps = Math.max(0, finite(out.eventMinStrikeDistanceBps, 1));
   out.maxCandleAgeMs = Math.max(1000, finite(out.maxCandleAgeMs, 120000));
   out.maxFlowAgeMs = Math.max(1000, finite(out.maxFlowAgeMs, 120000));
   out.maxSpreadBps = Math.max(0.1, finite(out.maxSpreadBps, 20));
@@ -209,6 +213,11 @@ function evaluateEventContract({
   payout = 0,
   fee = 0,
   maxContracts = null,
+  venue = "GENERIC",
+  strikePrice = null,
+  indexPrice = null,
+  expirationAt = null,
+  strictContractContext = false,
   config: rawConfig = {}
 } = {}) {
   const base = baseGates({analysis, derivatives, dataQuality, equity, dayStartEquity, peakEquity, openRiskPct, openPositions, consecutiveLosses, lastLossAt, tradesToday, config: rawConfig});
@@ -217,11 +226,21 @@ function evaluateEventContract({
   const premiumCash = finite(premium, null);
   const payoutCash = finite(payout, null);
   const feeCash = Math.max(0, finite(fee, 0));
+  const strike=finite(strikePrice,null);
+  const index=finite(indexPrice,null);
+  const expiry=finite(expirationAt,null);
+  const secondsToExpiry=expiry!==null?(expiry-Date.now())/1000:null;
+  const strikeDistanceBps=Number.isFinite(strike)&&strike>0&&Number.isFinite(index)?Math.abs(index-strike)/index*10000:null;
 
   if (!["UP", "DOWN"].includes(allowedSide)) base.reasons.push("EVENT_SIDE_REQUIRED");
   if (!(premiumCash > 0)) base.reasons.push("PREMIUM_REQUIRED");
   if (!(payoutCash > 0)) base.reasons.push("PAYOUT_REQUIRED");
   if (premiumCash !== null && payoutCash !== null && payoutCash <= premiumCash + feeCash) base.reasons.push("PAYOUT_NOT_ABOVE_STAKE");
+  if(strictContractContext && strike===null) base.reasons.push("STRIKE_REQUIRED");
+  if(strictContractContext && expiry===null) base.reasons.push("EXPIRY_REQUIRED");
+  if(secondsToExpiry!==null && secondsToExpiry<=0) base.reasons.push("CONTRACT_EXPIRED");
+  if(secondsToExpiry!==null && secondsToExpiry>0 && secondsToExpiry<base.config.eventMinSecondsToExpiry) base.reasons.push("EXPIRY_TOO_CLOSE");
+  if(strikeDistanceBps!==null && strikeDistanceBps<base.config.eventMinStrikeDistanceBps) base.reasons.push("STRIKE_TOO_CLOSE_TO_INDEX");
 
   const stakeRisk = premiumCash > 0 ? premiumCash + feeCash : 0;
   const winProfit = payoutCash > 0 ? Math.max(0, payoutCash - stakeRisk) : 0;
@@ -240,6 +259,13 @@ function evaluateEventContract({
     decision: base.reasons.length ? "BLOCKED" : (base.warnings.length ? "ELIGIBLE_WITH_WARNINGS" : "ELIGIBLE"),
     mode: "EVENT_UP_DOWN",
     eventSide: allowedSide,
+    venue:String(venue||"GENERIC").toUpperCase(),
+    strikePrice:strike,
+    indexPrice:index,
+    expirationAt:expiry,
+    secondsToExpiry,
+    strikeDistanceBps,
+    contractContextComplete:Boolean(strike!==null&&expiry!==null),
     premium: premiumCash,
     payout: payoutCash,
     fee: feeCash,
