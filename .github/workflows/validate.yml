@@ -25,6 +25,7 @@ jobs:
       - run: node tests/smoke.js
       - run: node tests/prop-firm.js
       - run: node tests/data-fabric.js
+      - run: node tests/phase7.js
       - name: Check browser script
         run: |
           python - <<'PY'
