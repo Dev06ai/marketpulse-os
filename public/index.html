@@ -656,7 +656,7 @@ body.admin-mode .nav button.adminNav,body.admin-mode .mobileMenu button.adminNav
   </section>
   <section id="view-scanner" class="view">
     <div class="sectionHead"><div><div class="title">Market Matrix</div><div class="sub">Fast scan across the supported assets.</div></div><div class="filters" id="scanFilters"><button class="on" data-filter="ALL">All</button><button data-filter="LONG">Long</button><button data-filter="SHORT">Short</button><button data-filter="WAIT">No trade</button></div></div>
-    <div class="scannerGrid"><div class="card"><div id="scanRows" class="scanRows"><div class="small">Loading scanner…</div></div></div><div class="card"><div class="title">Scanner notes</div><div class="sub" style="margin-top:7px">Scanner is intentionally rule-driven and conservative. A WAIT means alignment is insufficient for a directional setup.</div><div class="section mini"><div class="k">Auto refresh</div><div class="v">Every 45 seconds while the tab is visible.</div></div></div></div>
+    <div class="scannerGrid"><div class="card"><div id="scanRows" class="scanRows"><div class="small">Loading scanner…</div></div></div><div class="card"><div class="title">Scanner notes</div><div class="sub" style="margin-top:7px">Scanner shows raw market candidates only. CANDIDATE LONG/SHORT is not the final trade decision. Use the Dashboard Signal for the gated LONG / SHORT / NO TRADE decision.</div><div class="section mini"><div class="k">Auto refresh</div><div class="v">Every 45 seconds while the tab is visible.</div></div></div></div>
   </section>
 
   <section id="view-flow" class="view"><div class="sectionHead"><div><div class="title">Positioning &amp; Flow</div><div class="sub">Focused execution context for the selected asset.</div></div></div><div class="card"><div class="flowGrid"><div class="card flow"><div class="label">Open interest</div><div class="v" id="fOi">—</div><div class="s" id="fOiS">—</div></div><div class="card flow"><div class="label">CVD</div><div class="v" id="fCvd">—</div><div class="s" id="fCvdS">—</div></div><div class="card flow"><div class="label">Positioning</div><div class="v" id="fPos">—</div><div class="s" id="fFund">—</div></div><div class="card flow"><div class="label">Liquidation</div><div class="v" id="fLiq">—</div><div class="s" id="fLiqS">—</div></div></div><canvas id="flowChart2" class="flowChart"></canvas></div></section>
@@ -1135,6 +1135,8 @@ var state={
   filter:"ALL",
   cycle:null,
   busy:false,
+  finalDecisionSeq:0,
+  finalDecisionTs:0,
   chartVisible:96,
   chartOffset:0,
   chartYZoom:1,
@@ -1736,10 +1738,23 @@ function renderMarket(){
 
 function renderScanner(){
   var rows=state.scan||[],filtered=rows.filter(function(r){return state.filter==="ALL"||r.side===state.filter});
-  $("scanRows").innerHTML=filtered.map(function(r){var watched=state.watch.indexOf(r.symbol)>=0;return'<div class="scanRow"><button class="alertStar '+(watched?"on":"")+'" data-watch="'+r.symbol+'">'+(watched?"★":"☆")+'</button><b>'+r.label+'</b><span>'+fmt(r.price)+'</span><span class="score">'+fmt(r.score)+'</span><span class="'+(r.side==="LONG"?"up":r.side==="SHORT"?"down":"wait")+'">'+(r.side||"WAIT")+'</span><span>'+String(r.regime||"—").slice(0,11)+'</span></div>'}).join("")||'<div class="small">No rows available.</div>';
+  $("scanRows").innerHTML=filtered.map(function(r){
+    var watched=state.watch.indexOf(r.symbol)>=0;
+    var rawSide=String(r.side||"WAIT").toUpperCase();
+    var label=rawSide==="LONG"?"CANDIDATE LONG":rawSide==="SHORT"?"CANDIDATE SHORT":"WAIT";
+    return'<div class="scanRow"><button class="alertStar '+(watched?"on":"")+'" data-watch="'+r.symbol+'">'+(watched?"★":"☆")+'</button><b>'+r.label+'</b><span>'+fmt(r.price)+'</span><span class="score">'+fmt(r.score)+'</span><span class="'+(rawSide==="LONG"?"up":rawSide==="SHORT"?"down":"wait")+'">'+label+'</span><span>'+String(r.regime||"—").slice(0,11)+'</span></div>'
+  }).join("")||'<div class="small">No rows available.</div>';
   var best=rows.slice().sort(function(a,b){return(Number(b.score)||0)-(Number(a.score)||0)}).slice(0,5);
-  $("marketRows").innerHTML=best.map(function(r){var watched=state.watch.indexOf(r.symbol)>=0;return'<div class="marketRow" data-symbol="'+r.symbol+'"><b>'+r.label+'</b><span>'+String(r.regime||"—").slice(0,12)+'</span><span>'+fmt(r.score)+'</span><span class="'+(r.side==="LONG"?"up":r.side==="SHORT"?"down":"wait")+'">'+(r.side||"WAIT")+'</span></div>'}).join("")||'<div class="small">Scanner warming up…</div>';
-  $("tape").innerHTML=best.map(function(r){return'<div class="tapeCard"><b>'+r.label+'</b><span>'+fmt(r.price)+" · "+pct(r.change24h)+'</span><span>'+fmt(r.score)+"/100 · "+(r.side||"WAIT")+"</span></div>"}).join("");
+  $("marketRows").innerHTML=best.map(function(r){
+    var rawSide=String(r.side||"WAIT").toUpperCase();
+    var label=rawSide==="LONG"?"CANDIDATE LONG":rawSide==="SHORT"?"CANDIDATE SHORT":"WAIT";
+    return'<div class="marketRow" data-symbol="'+r.symbol+'"><b>'+r.label+'</b><span>'+String(r.regime||"—").slice(0,12)+'</span><span>'+fmt(r.score)+'</span><span class="'+(rawSide==="LONG"?"up":rawSide==="SHORT"?"down":"wait")+'">'+label+'</span></div>'
+  }).join("")||'<div class="small">Scanner warming up…</div>';
+  $("tape").innerHTML=best.map(function(r){
+    var rawSide=String(r.side||"WAIT").toUpperCase();
+    var label=rawSide==="LONG"?"CANDIDATE LONG":rawSide==="SHORT"?"CANDIDATE SHORT":"WAIT";
+    return'<div class="tapeCard"><b>'+r.label+'</b><span>'+fmt(r.price)+" · "+pct(r.change24h)+'</span><span>'+fmt(r.score)+"/100 · "+label+"</span></div>"
+  }).join("");
   document.querySelectorAll("[data-watch]").forEach(function(el){el.onclick=function(ev){ev.stopPropagation();toggleWatch(el.dataset.watch)}});
   document.querySelectorAll("[data-symbol]").forEach(function(el){el.onclick=function(){state.symbol=el.dataset.symbol;$("symbol").value=state.symbol;loadCore()}});
   renderAlerts();
@@ -2627,15 +2642,36 @@ async function renderFinalDecision(d){
   $("finalEngineMeta").textContent="Phase 9/10/11-13 · "+(d.stale?"STALE / DIRECTION SUPPRESSED · ":"LIVE · ")+(d.state||"WAITING")+" · data "+fmt(data.score)+"/100 · risk "+(pg.decision||"NOT EVALUATED")+" · live gate "+gs;
   var ds=document.querySelector(".decisionSection");if(ds){ds.classList.remove("signal-long","signal-short","signal-wait");ds.classList.add(side==="LONG"?"signal-long":side==="SHORT"?"signal-short":"signal-wait")}
 }
+function suppressFinalSignal(reason){
+  var d={
+    stale:true,
+    state:"NO_TRADE",
+    action:"WAIT",
+    liveSignalEligible:false,
+    market:{side:"WAIT",status:"WAITING",type:"NO TRADE",bias:"Neutral",directionalLean:"NEUTRAL",confluenceScore:0,confluenceLabel:"LOW CONFLUENCE"},
+    levels:{side:"WAIT",entryLow:null,entryHigh:null,entry:null,stop:null,tp1:null,tp2:null,rr:null},
+    evidence:{thesis:[reason||"Final decision unavailable. Directional output is suppressed until a fresh decision is available."],primaryScenario:"Wait for a confirmed directional setup.",invalidationScenario:"A fresh final decision must pass all safety gates.",components:[],mtfScore:50,flowScore:0},
+    data:{score:0},
+    propGate:{decision:"BLOCKED"},
+    deploymentGate:{state:"BLOCKED",reason:reason||"Final decision unavailable."},
+    signalStability:{state:"RELEASED",side:null,confirmations:0,required:2,misses:0}
+  };
+  state.finalDecision=d;
+  state.finalDecisionTs=Date.now();
+  renderFinalDecision(d);
+}
+
 async function loadFinalDecision(){
-  var symbol=state.symbol,interval=state.interval;
+  var symbol=state.symbol,interval=state.interval,seq=++state.finalDecisionSeq;
   try{
     var q="symbol="+encodeURIComponent(symbol)+"&interval="+encodeURIComponent(interval);
     var d=await api("/api/decision?"+q,9000);
-    if(symbol!==state.symbol||interval!==state.interval)return;
-    state.finalDecision=d;renderFinalDecision(d);
+    if(seq!==state.finalDecisionSeq||symbol!==state.symbol||interval!==state.interval)return;
+    state.finalDecision=d;state.finalDecisionTs=Date.now();renderFinalDecision(d);
   }catch(e){
-    var meta=$("finalEngineMeta");if(meta)meta.textContent="Phase 9/10 · warming / unavailable · existing market engine still active";
+    if(seq!==state.finalDecisionSeq||symbol!==state.symbol||interval!==state.interval)return;
+    suppressFinalSignal("Final decision refresh failed; directional output is intentionally suppressed until fresh data returns.");
+    var meta=$("finalEngineMeta");if(meta)meta.textContent="Phase 9/10/11-13 · FINAL DECISION UNAVAILABLE · "+(e.message||"refresh failed");
   }
 }
 
@@ -2652,12 +2688,16 @@ async function loadCore(){
     deferTask(loadDataFabric,800);
     deferTask(loadPropFirmGuard,1000);
     deferTask(loadCoreAnalytics,1800);
-    deferTask(loadFinalDecision,2200);
-    if(!state.secondaryStarted)queueSecondaryBoot();
-    else if(state.activeView==="overview"){deferTask(loadScan,120);deferTask(loadCycle,180);deferTask(loadCoreEnrichment,250);deferTask(loadCoreAnalytics,600);deferTask(loadFinalDecision,900)}
+    if(!state.secondaryStarted){
+      queueSecondaryBoot();
+      deferTask(loadFinalDecision,2200);
+    }else if(state.activeView==="overview"){
+      deferTask(loadScan,120);deferTask(loadCycle,180);deferTask(loadCoreEnrichment,250);deferTask(loadCoreAnalytics,600);deferTask(loadFinalDecision,900);
+    }
   }catch(e){
     state.bootRetry=Math.min((state.bootRetry||0)+1,5);
     setStatus("Market source is waking up — price feed stays active and will retry automatically…","warn");$("dataState").textContent="Retrying";
+    suppressFinalSignal("Market refresh failed; directional output is intentionally suppressed until fresh data returns.");
     var delay=Math.min(6500,Math.max(700,Math.pow(2,state.bootRetry-1)*700));
     state.bootRetryTimer=setTimeout(function(){state.bootRetryTimer=null;loadCore()},delay);
   }finally{state.busy=false}
