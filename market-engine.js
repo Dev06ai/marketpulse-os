@@ -58,7 +58,7 @@ function adx(c,p=14){
 function volumeZ(v,p=30){const m=sma(v,p),s=stdev(v,p),i=v.length-1;return Number.isFinite(m[i])&&s[i]?((v[i]-m[i])/s[i]):0}
 
 function normalizeOrderFlow(deriv){
-  const ob=deriv&&typeof deriv.orderBook==="object"?deriv.orderBook:{};
+  const ob=deriv?.orderBook&&typeof deriv.orderBook==="object"?deriv.orderBook:{};
   const imbalance=Number.isFinite(+ob.imbalance)?+ob.imbalance:null;
   const microBias=Number.isFinite(+ob.micropriceBias)?+ob.micropriceBias:null;
   const spreadBps=Number.isFinite(+ob.spreadBps)?+ob.spreadBps:null;
