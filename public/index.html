@@ -1259,7 +1259,7 @@ function renderMarket(){
   $("adaptiveChip").textContent=d.learning&&d.learning.state?("Adaptive: "+String(d.learning.state).toLowerCase()):"Adaptive: background learning";
   $("learnState").textContent=d.learning&&d.learning.state?d.learning.state:"COLLECTING";$("learnN").textContent=d.learning&&d.learning.resolved!=null?d.learning.resolved:0;$("learnWin").textContent=d.learning&&d.learning.winRate!=null?Number(d.learning.winRate).toFixed(1)+"%":"—";$("learnAdj").textContent=d.learning&&d.learning.lastAdjustment!=null?Number(d.learning.lastAdjustment).toFixed(1):"0.0";$("learnPersist").textContent=d.learning&&d.learning.durable?"Postgres cloud":(d.learning?"Local fallback":"—");$("learnNote").textContent=d.learning&&d.learning.state==="ADAPTIVE"?"Adaptive calibration active. Historical outcomes are influencing confluence.":"Collecting resolved outcomes before calibration.";
   state.validation={backtest:d.backtest,validation:d.validation,setupStats:d.setupStats,learning:d.learning};renderLab();renderBrainInsights();
-  recordSignal(a);drawMain();loadFlow();
+  recordSignal(a);drawMain();
 }
 
 function renderScanner(){
@@ -1845,6 +1845,22 @@ function renderMarketNoFlow(){
   $("oi").textContent=der.oi!=null?fmt(der.oi):"UNAVAILABLE";$("oiS").textContent=der.oiChangePct!=null?pct(der.oiChangePct)+" recent":"Current snapshot";$("cvd").textContent=der.cvdState||"UNAVAILABLE";$("cvdS").textContent=der.cvdDelta!=null?"Δ "+fmt(der.cvdDelta):"No CVD feed";$("pos").textContent=der.positioning||"UNAVAILABLE";$("fund").textContent=der.fundingRate!=null?"Funding "+(Number(der.fundingRate)*100).toFixed(4)+"%":"Funding unavailable";$("liq").textContent=der.liquidationBias&&der.liquidationBias!=="UNKNOWN"?der.liquidationBias:"UNAVAILABLE";$("liqS").textContent=der.liquidationTotal!=null?"Total "+fmt(der.liquidationTotal):"No liquidation feed";$("flowSource").textContent=der.provider?(String(der.provider).slice(0,30)+(der.livePointCount?" · LIVE":"")):(der.available?"LIVE":"UNAVAILABLE");
 }
 
+async function loadCoreAnalytics(){
+  try{
+    var q="symbol="+encodeURIComponent(state.symbol)+"&interval="+encodeURIComponent(state.interval);
+    var d=await api("/api/core-analytics?"+q,5000);
+    if(d.ready){
+      state.validation={backtest:d.backtest,validation:d.validation,setupStats:d.setupStats,learning:state.market?.learning||null};
+      renderLab();
+    }else{
+      setTimeout(function(){
+        api("/api/core-analytics?"+q,5000).then(function(x){
+          if(x.ready){state.validation={backtest:x.backtest,validation:x.validation,setupStats:x.setupStats,learning:state.market?.learning||null};renderLab()}
+        }).catch(function(){});
+      },2600);
+    }
+  }catch{}
+}
 async function loadCycle(){try{state.cycle=await api("/api/cycle?symbol="+encodeURIComponent(state.symbol),4500);renderCycle()}catch{}}
 
 async function loadScan(){
@@ -1874,8 +1890,9 @@ async function loadCore(){
     state.market=d;state.bootRetry=0;setStatus("Core market intelligence connected","ok");$("dataState").textContent="Live";renderMarket();
     deferTask(loadDataFabric,100);
     deferTask(loadPropFirmGuard,160);
+    deferTask(loadCoreAnalytics,1800);
     if(!state.secondaryStarted)queueSecondaryBoot();
-    else if(state.activeView==="overview"){deferTask(loadScan,80);deferTask(loadCycle,140)}
+    else if(state.activeView==="overview"){deferTask(loadScan,80);deferTask(loadCycle,140);deferTask(loadCoreAnalytics,500)}
   }catch(e){
     state.bootRetry=Math.min((state.bootRetry||0)+1,5);
     setStatus("Core market connection failed. Retrying shortly…","warn");$("dataState").textContent="Retry";
