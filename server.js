@@ -166,12 +166,19 @@ function queuePhase1113Validation(symbol,interval,candles){
   const key="P11-13|"+String(symbol)+"|"+String(interval),now=Date.now(),hit=PHASE1113_CACHE.get(key);
   if(hit&&now-hit.ts<PHASE1113_TTL)return hit.payload;
   if(PHASE1113_JOBS.has(key))return hit?.payload||null;
-  const sample=(candles||[]).slice(-900);
-  if(sample.length<260)return hit?.payload||null;
+  const fallback=(candles||[]).slice(-900);
+  if(fallback.length<260)return hit?.payload||null;
   PHASE1113_JOBS.add(key);
   setTimeout(async()=>{
     try{
-      const validation=phase1113.runWalkForward(sample,{symbol,interval,basePolicy:{minScore:78,minRR:1.5},step:2,maxSamples:350});
+      let source=fallback;
+      try{
+        const historical=await research.fetchBinanceKlines(symbol,interval,{maxBars:1800});
+        const closed=closedCandles(historical,interval,Date.now());
+        if(closed.length>=600)source=closed;
+      }catch{}
+      const sample=source.slice(-1500);
+      const validation=phase1113.runWalkForward(sample,{symbol,interval,basePolicy:{minScore:78,minRR:1.5},step:2,maxSamples:350,minTrades:80,minTestBars:300});
       PHASE1113_CACHE.set(key,{ts:Date.now(),payload:validation});
       try{
         const state=await storage.getLearningState();
@@ -222,7 +229,7 @@ async function buildDecisionSnapshot(symbol,interval,query){
       maxDrawdownPct:Number(getQ('maxDrawdownPct',process.env.PROP_MAX_DRAWDOWN_PCT||6)),
       riskPerTradePct:Number(getQ('riskPerTradePct',process.env.PROP_RISK_PER_TRADE_PCT||0.5)),
       maxOpenRiskPct:Number(getQ('maxOpenRiskPct',process.env.PROP_MAX_OPEN_RISK_PCT||1)),
-      minSignalScore:Number(getQ('minSignalScore',process.env.PROP_MIN_SIGNAL_SCORE||72)),
+      minSignalScore:Number(getQ('minSignalScore',process.env.PROP_MIN_SIGNAL_SCORE||78)),
       minRR:Number(getQ('minRR',process.env.PROP_MIN_RR||1.5)),
       minConsensusQualityPct:Number(getQ('minConsensusQualityPct',process.env.PROP_MIN_CONSENSUS_QUALITY_PCT||85)),
       maxPriceDispersionBps:Number(getQ('maxPriceDispersionBps',process.env.PROP_MAX_PRICE_DISPERSION_BPS||80)),
