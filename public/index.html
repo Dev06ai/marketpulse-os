@@ -1811,7 +1811,7 @@ async function loadAuth(){
     state.account=r.authenticated?r.user:null;
     state.adminConfigured=Boolean(r.adminConfigured);state.adminMfaEnabled=Boolean(r.mfaEnabled);
     renderAccount();
-    if(state.account)await syncMemory();
+    if(state.account){await syncMemory();loadUserTickets()}
   }catch{renderAccount()}
 }
 async function submitAccount(){
