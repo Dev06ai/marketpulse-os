@@ -343,7 +343,7 @@ const server=http.createServer(async(req,res)=>{
       try{return send(res,200,await callOpenAI(aiSystem(),userPrompt))}
       catch(e){
         const msg=String(e.message||"AI request failed");
-        if(e.message==="AI_COPILOT_NOT_CONFIGURED"||/credit|billing|quota|insufficient/i.test(msg)){
+        if(e.message==="AI_COPILOT_NOT_CONFIGURED"||/credit|billing|quota|insufficient|model.*not.*found|unsupported.*model/i.test(msg)){
           return send(res,200,{text:liteCopilot(mode,market,trade,q),model:"MarketPulse Lite",lite:true,ts:Date.now()});
         }
         return send(res,502,{error:msg});
