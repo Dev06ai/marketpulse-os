@@ -2643,6 +2643,7 @@ async function renderFinalDecision(d){
   var ds=document.querySelector(".decisionSection");if(ds){ds.classList.remove("signal-long","signal-short","signal-wait");ds.classList.add(side==="LONG"?"signal-long":side==="SHORT"?"signal-short":"signal-wait")}
 }
 function suppressFinalSignal(reason){
+  state.finalDecisionSeq++;
   var d={
     stale:true,
     state:"NO_TRADE",
