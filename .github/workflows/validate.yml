@@ -15,6 +15,8 @@ jobs:
       - run: node --check server.js
       - run: node --check market-engine.js
       - run: node --check market-structure.js
+      - run: node --check strategy-setups.js
+      - run: node --check market-structure.js
       - run: node validation-selftest.js
       - run: node --check storage.js
       - run: node --check learning.js
