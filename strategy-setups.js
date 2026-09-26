@@ -168,7 +168,7 @@ function detectStrategySetups(c,{interval="1h",higher8h=null}={}){
     score:candidates.length?Number(candidates[0].score):0,
     setup:candidates[0]||null,
     nakedPocs:[...dayNpocs.slice(-6),...weekNpocs.slice(-6)],
-    dLine,
+    dLine:dLine?{...dLine,higherRegime:String(higher8h?.regime||"UNKNOWN").toUpperCase()}:null,
     detected:{npocSfps:npocCandidates.length,dLine:Boolean(dLine)}
   };
 }
