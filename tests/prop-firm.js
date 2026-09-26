@@ -62,3 +62,11 @@ const expired=evaluateEventContract({
 });
 assert(expired.decision==="BLOCKED","expired contract blocked");
 assert(expired.reasons.includes("CONTRACT_EXPIRED"),"expiry gate");
+
+const noConsensus= evaluateStandard({
+  analysis,derivatives:deriv,
+  dataQuality:{qualityPct:100,candleAgeMs:1000},
+  equity:5000,dayStartEquity:5000,peakEquity:5000,config:cfg
+});
+assert(noConsensus.decision==="BLOCKED","missing consensus fails closed");
+assert(noConsensus.reasons.includes("MARKET_CONSENSUS_UNAVAILABLE"),"consensus availability gate");
