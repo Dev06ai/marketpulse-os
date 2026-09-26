@@ -78,10 +78,11 @@ async function login(email,password,key="login",mfaCode=""){
   const e=normalizeEmail(email),user=await storage.findUserByEmail(e);
   if(!user){
     try{hashPassword(String(password),{version:1,N:16384,r:8,p:1,pepper:false,salt:DUMMY_SALT})}catch{}
+    storage.recordSecurityEvent("warning","login_unknown_email",e,{source:"auth"}).catch(()=>{});
     throw new Error("INVALID_CREDENTIALS");
   }
-  if(user.bannedAt)throw new Error("ACCOUNT_BANNED");
-  if(user.restrictedUntil&&new Date(user.restrictedUntil).getTime()>Date.now())throw new Error("ACCOUNT_RESTRICTED");
+  if(user.bannedAt){storage.recordSecurityEvent("warning","banned_login_attempt",user.email).catch(()=>{});throw new Error("ACCOUNT_BANNED")}
+  if(user.restrictedUntil&&new Date(user.restrictedUntil).getTime()>Date.now()){storage.recordSecurityEvent("warning","restricted_login_attempt",user.email).catch(()=>{});throw new Error("ACCOUNT_RESTRICTED")};
   if(user.restrictedUntil){await storage.moderateUser(user.id,"restore")}
   if(user.lockedUntil&&new Date(user.lockedUntil).getTime()>Date.now())throw new Error("ACCOUNT_LOCKED");
   if(user.lockedUntil){await storage.resetLoginFailures(user.id)}
@@ -91,13 +92,15 @@ async function login(email,password,key="login",mfaCode=""){
   try{valid=crypto.timingSafeEqual(Buffer.from(hash,"hex"),Buffer.from(user.passwordHash,"hex"))}catch{valid=false}
   if(!valid){
     const lock=await storage.recordLoginFailure(user.id,7,15);
+    storage.recordSecurityEvent(lock?.lockedUntil?"warning":"info",lock?.lockedUntil?"account_locked":"login_failed",user.email,{failedLoginCount:lock?.failedLoginCount||0}).catch(()=>{});
     if(lock?.lockedUntil)throw new Error("ACCOUNT_LOCKED");
     throw new Error("INVALID_CREDENTIALS");
   }
   const admin=isAdminEmail(user.email);
   const mfaEnabled=admin&&totp.configured();
   if(admin&&mfaEnabled&&!totp.verifyTotp(process.env.MARKETPULSE_ADMIN_TOTP_SECRET,mfaCode,1)){
-    if(!mfaCode)throw new Error("ADMIN_MFA_REQUIRED");
+    if(!mfaCode){storage.recordSecurityEvent("warning","admin_mfa_required",user.email).catch(()=>{});throw new Error("ADMIN_MFA_REQUIRED")}
+    storage.recordSecurityEvent("alert","admin_mfa_failed",user.email).catch(()=>{});
     throw new Error("ADMIN_MFA_INVALID");
   }
   const newMetaNeeded=meta.version!==2 || meta.pepper!==Boolean(PASSWORD_PEPPER);
@@ -110,6 +113,7 @@ async function login(email,password,key="login",mfaCode=""){
   if(admin)await storage.revokeUserSessions(user.id);
   await storage.saveSession(hashToken(raw),user.id,expiresAt.toISOString(),mfaAt);
   await storage.touchUserLogin(user.id);
+  storage.recordSecurityEvent("info","login_success",user.email,{admin}).catch(()=>{});
   return {
     user:{id:user.id,email:user.email,createdAt:user.createdAt,lastLoginAt:new Date().toISOString(),isAdmin:admin,mfaEnabled},
     setCookie:cookie(raw,hours*3600)
