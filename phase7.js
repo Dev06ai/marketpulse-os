@@ -9,10 +9,10 @@ function bucketStats(rows){
   const items=new Map();
   for(const r of rows){
     const key=cleanText(r?._bucket??r?.key??r)||"UNKNOWN";
-    const x=items.get(key)||{key,total:0,wins:0,losses:0,flats:0,netR:0,grossWin:0,grossLoss:0};
+    const x=items.get(key)||{key,total:0,valid:0,wins:0,losses:0,flats:0,netR:0,grossWin:0,grossLoss:0};
     x.total++;
     const rr=num(r.r,null);
-    if(rr===null){items.set(key,x);continue}
+    if(rr===null){items.set(key,x);continue} x.valid++;
     if(rr>0){x.wins++;x.grossWin+=rr}else if(rr<0){x.losses++;x.grossLoss+=Math.abs(rr)}else x.flats++;
     x.netR+=rr;
     items.set(key,x);
@@ -20,7 +20,7 @@ function bucketStats(rows){
   return Array.from(items.values()).map(x=>Object.assign(x,{
     decided:x.wins+x.losses,
     winRate:x.wins+x.losses?x.wins/(x.wins+x.losses)*100:0,
-    avgR:x.total?x.netR/x.total:0,
+    avgR:x.valid?x.netR/x.valid:0,
     profitFactor:x.grossLoss?x.grossWin/x.grossLoss:null
   })).sort((a,b)=>b.total-a.total||b.netR-a.netR);
 }
