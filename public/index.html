@@ -1648,6 +1648,7 @@ function adminRenderCommandCenter(){
   adminRenderBroadcasts(o.broadcasts||[]);
   adminRenderTickets(o.tickets||[]);
   adminRenderSnapshots(o.snapshots||[]);
+  $("acActivityTable").innerHTML=(o.recentUsage||[]).slice(0,20).map(function(x){return'<tr><td>'+adminDate(x.createdAt)+'</td><td>'+safeHtml(x.email||"Guest")+'</td><td>'+safeHtml(x.feature||"—")+'</td><td>'+safeHtml(x.action||"—")+'</td><td>'+safeHtml(x.symbol||"—")+'</td><td>'+safeHtml(x.interval||"—")+'</td></tr>'}).join("")||'<tr><td colspan="6" class="small">No recent activity yet.</td></tr>';
 }
 function adminRenderProviders(){
   var p=state.adminProviders||[];$("acProviders").innerHTML=p.map(function(x){return'<div class="adminLine"><b>'+safeHtml(x.name)+'</b><span><span class="adminBadgeSmall '+adminStatusBadge(x.status)+'">'+safeHtml(String(x.status).toUpperCase())+'</span> '+(x.latencyMs!=null?fmt(x.latencyMs)+" ms":"")+'</span></div>'}).join("")||'<div class="small">No provider data.</div>';
@@ -2036,6 +2037,7 @@ function initAccountUI(){
   if($("acSaveConfig"))$("acSaveConfig").addEventListener("click",adminSaveConfig);
   if($("acBroadcastSend"))$("acBroadcastSend").addEventListener("click",adminPublishBroadcast);
   if($("acSupportRefresh"))$("acSupportRefresh").addEventListener("click",loadAdminCenter);
+  if($("acActivityRefresh"))$("acActivityRefresh").addEventListener("click",loadAdminCenter);
   if($("acCreateSnapshot"))$("acCreateSnapshot").addEventListener("click",adminCreateSnapshot);
   return true;
 }
