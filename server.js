@@ -7,6 +7,7 @@ const phase6=require('./phase6');
 const phase7=require('./phase7');
 const propFirm=require('./prop-firm');
 const research=require('./research-data');
+const dataFabric=require('./data-fabric');
 const auth=require('./auth');
 const WebSocket=require('ws');
 const PORT=Number(process.env.PORT||3000);
@@ -859,6 +860,7 @@ const server=http.createServer(async(req,res)=>{
       items.push(await probe("Kraken",[{host:"api.kraken.com",url:"https://api.kraken.com/0/public/SystemStatus"}],j=>j?.result?.status));
       const bybitHosts=(BYBIT_HOSTS||[]).map(host=>({host,url:host+"/v5/market/time"}));
       items.push(await probe("Bybit",bybitHosts,j=>j?.retCode===0));
+      items.push(await (async()=>{const t=Date.now();try{const s=await dataFabric.coinbaseSnapshot("BTCUSDT");return{name:"Coinbase Spot",status:"healthy",latencyMs:Date.now()-t,detail:"public trades reachable"}}catch(e){return{name:"Coinbase Spot",status:"error",latencyMs:Date.now()-t,detail:String(e.message||e)}}})());
       items.push({name:"OpenAI",status:OPENAI_API_KEY?"configured":"not_configured",latencyMs:null,detail:OPENAI_MODEL});
       const flow=LIVE_FLOW.get("BTCUSDT"),fresh=Boolean(flow?.lastTs&&Date.now()-flow.lastTs<120000);
       items.push({name:"Bybit Live Flow",status:fresh?"healthy":"stale",latencyMs:fresh?Date.now()-flow.lastTs:null,detail:fresh?"Live derivatives stream active":"No recent live flow event",lastEventAt:flow?.lastTs||null});
@@ -963,6 +965,10 @@ const server=http.createServer(async(req,res)=>{
         const higherPromise=interval==='4h'?Promise.resolve(null):Promise.race([klines(symbol,'4h'),new Promise(resolve=>setTimeout(()=>resolve(null),1800))]).catch(()=>null);
         const derivPromise=Promise.race([derivatives(symbol,interval),new Promise(resolve=>setTimeout(()=>resolve(null),1600))]).catch(()=>null);
         const [lower,higher,deriv]=await Promise.all([lowerPromise,higherPromise,derivPromise]);
+        const dataConsensus=await Promise.race([
+          dataFabric.assess(symbol,interval,{primaryPrice:candles?.[candles.length-1]?.c,primaryAgeMs:candles?.[candles.length-1]?.t?Date.now()-Number(candles[candles.length-1].t):null,primarySource:candles?.[0]?.source,liveFlow:flowBucket(symbol)}),
+          new Promise(resolve=>setTimeout(()=>resolve(null),1100))
+        ]).catch(()=>null);
         let analysis=analyze(candles,{interval,lower:lower&&lower.length>=220?analyze(lower,{interval:'15m'}):null,higher:higher&&higher.length>=220?analyze(higher,{interval:'4h'}):null,deriv});
         let learned=null;
         try{learned=await Promise.race([learning.process(symbol,interval,candles,analysis),new Promise(resolve=>setTimeout(()=>resolve(null),650))])}catch{}
@@ -986,7 +992,10 @@ const server=http.createServer(async(req,res)=>{
           derivatives:deriv,
           dataQuality:{
             candleAgeMs:candles.length?Math.max(0,Date.now()-Number(candles[candles.length-1].t)):null,
-            qualityPct: deriv?.available ? 100 : 80
+            qualityPct: deriv?.available ? 100 : 80,
+            consensusQualityPct:dataConsensus?.consensusQualityPct,
+            priceDispersionBps:dataConsensus?.priceDispersionBps,
+            providerCount:dataConsensus?.sourceCount
           },
           equity:propConfig.startingEquity,
           dayStartEquity:propConfig.startingEquity,
@@ -997,6 +1006,7 @@ const server=http.createServer(async(req,res)=>{
           ok:true,symbol,interval,candles,analysis,derivatives:deriv,learning:learningStatus,
           backtest:backtest(sample),validation:walkForwardBacktest(sample),setupStats,
           source:candles?.[0]?.source||'market data',
+          dataConsensus,
           phase2:PHASE2_VERSION,
           phase3:PHASE3_VERSION,
           phase4:PHASE4_VERSION,
@@ -1004,6 +1014,18 @@ const server=http.createServer(async(req,res)=>{
           updatedAt:Date.now()
         });
       }catch(e){return send(res,503,{ok:false,error:String(e.message||e),source:'Kraken spot'})}
+    }
+    if(req.method==='GET'&&u.pathname==='/api/data-fabric'){
+      const symbol=(u.searchParams.get('symbol')||'BTCUSDT').toUpperCase(),interval=u.searchParams.get('interval')||'1h';
+      if(!SYMBOLS.includes(symbol))return send(res,400,{ok:false,error:'Unsupported symbol'});
+      try{
+        const candles=await klines(symbol,interval);
+        const consensus=await Promise.race([
+          dataFabric.assess(symbol,interval,{primaryPrice:candles?.[candles.length-1]?.c,primaryAgeMs:candles?.[candles.length-1]?.t?Date.now()-Number(candles[candles.length-1].t):null,primarySource:candles?.[0]?.source,liveFlow:flowBucket(symbol)}),
+          new Promise(resolve=>setTimeout(()=>resolve(null),2500))
+        ]).catch(()=>null);
+        return send(res,200,{ok:Boolean(consensus),symbol,interval,consensus});
+      }catch(e){return send(res,503,{ok:false,error:String(e.message||e)})}
     }
     if(req.method==='GET'&&u.pathname==='/api/propfirm'){
       const symbol=(u.searchParams.get('symbol')||'BTCUSDT').toUpperCase(),interval=u.searchParams.get('interval')||'1h';
