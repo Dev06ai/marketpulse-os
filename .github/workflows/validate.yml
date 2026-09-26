@@ -43,6 +43,31 @@ jobs:
           PY
           node --check /tmp/browser.js
 
+      - name: Check single authoritative signal UI
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          html=Path("public/index.html").read_text()
+          start=html.index("function renderMarket(){")
+          end=html.index("\nfunction renderScanner(){",start)
+          market=html[start:end]
+          forbidden=[
+            'mCall).textContent',
+            'mBias).textContent',
+            'mScore).textContent',
+            'thesisTitle',
+            'thesisScore',
+            'entry").textContent',
+            'stop").textContent',
+            'target").textContent',
+            'rr").textContent'
+          ]
+          bad=[x for x in forbidden if x in market]
+          if bad: raise SystemExit("Raw renderMarket still writes authoritative signal fields: "+", ".join(bad))
+          if 'function renderFinalDecision(d)' not in html: raise SystemExit("Final decision renderer missing")
+          print("Single authoritative signal UI check OK")
+          PY
+
       - name: Check Phase 2 feature surface
         run: |
           python - <<'PY'
