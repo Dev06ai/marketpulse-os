@@ -501,22 +501,27 @@ function deviceId(){
   if(!id){id=(crypto&&crypto.randomUUID)?crypto.randomUUID():("mp-"+Date.now().toString(16)+"-"+Math.random().toString(16).slice(2));localStorage.setItem(k,id)}
   return id;
 }
+function mergeMemoryArrays(a,b,key){
+  var map=new Map();
+  (Array.isArray(a)?a:[]).concat(Array.isArray(b)?b:[]).forEach(function(x){var k=x&&x[key]!=null?String(x[key]):JSON.stringify(x);map.set(k,x)});
+  return Array.from(map.values()).sort(function(x,y){return Number(y.ts||y.createdAt||0)-Number(x.ts||x.createdAt||0)});
+}
 async function syncMemory(){
   var id=deviceId();
   try{
-    var remote=await api("/api/memory?device="+encodeURIComponent(id),5000);
+    var remote=await api("/api/memory?device="+encodeURIComponent(id),5000),p=remote&&remote.payload||{};
+    state.journal=mergeMemoryArrays(state.journal,p.journal,"ts").slice(0,100);
+    state.signals=mergeMemoryArrays(state.signals,p.signals,"ts").slice(0,100);
+    state.watch=Array.from(new Set((state.watch||[]).concat(Array.isArray(p.watch)?p.watch:[]))).slice(0,50);
+    localStorage.setItem("mp-stable-journal",JSON.stringify(state.journal));
+    localStorage.setItem("mp-stable-signals",JSON.stringify(state.signals));
+    localStorage.setItem("mp-watch",JSON.stringify(state.watch));
     var merged={journal:state.journal,signals:state.signals,watch:state.watch,alertState:{threshold:Number($("alertScore")?.value||75)},lastSignal:state.signals[0]||null,activeSignal:null,updatedAt:Date.now()};
-    if(remote&&remote.payload){
-      if(Array.isArray(remote.payload.journal)&&remote.payload.journal.length>state.journal.length)state.journal=remote.payload.journal;
-      if(Array.isArray(remote.payload.signals)&&remote.payload.signals.length>state.signals.length)state.signals=remote.payload.signals;
-      if(Array.isArray(remote.payload.watch)&&remote.payload.watch.length)state.watch=Array.from(new Set(state.watch.concat(remote.payload.watch))).slice(0,50);
-      merged.journal=state.journal;merged.signals=state.signals;merged.watch=state.watch;
-    }
     var saved=await fetch("/api/memory?device="+encodeURIComponent(id),{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({memory:merged})});
     var out=await saved.json();if(!saved.ok)throw Error(out.error||"Memory sync failed");
     $("bPersist").textContent=out.durable?"Postgres cloud":"Local fallback";
     $("memoryText").textContent=out.durable?"Memory synced to Postgres cloud.":"Memory synced locally. Add DATABASE_URL for durable cloud memory.";
-    renderJournal();renderSignals();
+    renderJournal();renderSignals();renderAlerts();
   }catch(e){$("memoryText").textContent="Memory sync unavailable: "+e.message}
 }
 $("askAi").addEventListener("click",askAI);$("sync").addEventListener("click",syncMemory);$("runSystemCheck").addEventListener("click",runSystemCheck);$("notifBtn").addEventListener("click",enableNotifications);$("alertScore").addEventListener("input",renderAlerts);$("chartSettings").addEventListener("click",openChartSettings);$("chartClose").addEventListener("click",closeChartSettings);$("chartCancel").addEventListener("click",closeChartSettings);$("chartApply").addEventListener("click",applyChartSettings);document.querySelectorAll("[data-preset]").forEach(function(b){b.addEventListener("click",function(){document.querySelectorAll("[data-preset]").forEach(function(x){x.classList.remove("active")});b.classList.add("active");$("bullColor").value=CHART_PRESETS[b.dataset.preset].bull;$("bearColor").value=CHART_PRESETS[b.dataset.preset].bear})});$("aiMarketMode").addEventListener("click",function(){state.aiMode="market";$("aiMarketMode").classList.add("on");$("aiTradeMode").classList.remove("on");$("tradeFields").classList.add("hidden")});$("aiTradeMode").addEventListener("click",function(){state.aiMode="trade";$("aiTradeMode").classList.add("on");$("aiMarketMode").classList.remove("on");$("tradeFields").classList.remove("hidden")});runSystemCheck();renderSignals();
