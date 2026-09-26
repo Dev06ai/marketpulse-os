@@ -696,34 +696,69 @@ async function recentUsageEvents(limit=80){
 async function adminAnalytics(){
   await init();
   if(mode==="postgres"){
-    const r=await pool.query(`WITH totals AS (
-      SELECT COUNT(*)::int all_time,
-      COUNT(*) FILTER (WHERE created_at>=CURRENT_DATE)::int today,
-      COUNT(*) FILTER (WHERE created_at>=date_trunc('week',NOW()))::int week,
-      COUNT(*) FILTER (WHERE created_at>=date_trunc('month',NOW()))::int month,
-      COUNT(*) FILTER (WHERE last_seen_at>=NOW()-INTERVAL '24 hours')::int active_day,
-      COUNT(*) FILTER (WHERE last_seen_at>=NOW()-INTERVAL '7 days')::int active_week,
-      COUNT(*) FILTER (WHERE last_seen_at>=NOW()-INTERVAL '30 days')::int active_month
-      FROM marketpulse_users
-    ), usage AS (
-      SELECT feature,COUNT(*)::int count FROM marketpulse_usage_events WHERE created_at>=NOW()-INTERVAL '30 days' GROUP BY feature ORDER BY count DESC LIMIT 12
-    ), symbols AS (
-      SELECT COALESCE(symbol,'UNKNOWN') symbol,COUNT(*)::int count FROM marketpulse_usage_events WHERE created_at>=NOW()-INTERVAL '30 days' AND symbol IS NOT NULL GROUP BY symbol ORDER BY count DESC LIMIT 10
-    ), intervals AS (
-      SELECT COALESCE(e."interval",'UNKNOWN') AS "interval",COUNT(*)::int count
-      FROM marketpulse_usage_events e
-      WHERE e.created_at>=NOW()-INTERVAL '30 days' AND e."interval" IS NOT NULL
-      GROUP BY e."interval"
-      ORDER BY count DESC LIMIT 10
-    )
-    SELECT row_to_json(totals) AS totals,(SELECT json_agg(usage) FROM usage) AS features,(SELECT json_agg(symbols) FROM symbols) AS symbols,(SELECT json_agg(intervals) FROM intervals)`);
-    const row=r.rows[0]||{};return {totals:row.totals||{},features:row.features||[],symbols:row.symbols||[],intervals:row.intervals||[]};
+    const r=await pool.query(`
+      WITH totals AS (
+        SELECT
+          COUNT(*)::int AS "allTime",
+          COUNT(*) FILTER (WHERE created_at>=CURRENT_DATE)::int AS "today",
+          COUNT(*) FILTER (WHERE created_at>=date_trunc('week',NOW()))::int AS "week",
+          COUNT(*) FILTER (WHERE created_at>=date_trunc('month',NOW()))::int AS "month",
+          COUNT(*) FILTER (WHERE last_seen_at>=NOW()-INTERVAL '24 hours')::int AS "activeDay",
+          COUNT(*) FILTER (WHERE last_seen_at>=NOW()-INTERVAL '7 days')::int AS "activeWeek",
+          COUNT(*) FILTER (WHERE last_seen_at>=NOW()-INTERVAL '30 days')::int AS "activeMonth"
+        FROM marketpulse_users
+      ),
+      feature_usage AS (
+        SELECT feature, COUNT(*)::int AS "count"
+        FROM marketpulse_usage_events
+        WHERE created_at>=NOW()-INTERVAL '30 days'
+        GROUP BY feature
+        ORDER BY COUNT(*) DESC
+        LIMIT 12
+      ),
+      symbol_usage AS (
+        SELECT COALESCE(symbol,'UNKNOWN') AS "symbol", COUNT(*)::int AS "count"
+        FROM marketpulse_usage_events
+        WHERE created_at>=NOW()-INTERVAL '30 days' AND symbol IS NOT NULL
+        GROUP BY symbol
+        ORDER BY COUNT(*) DESC
+        LIMIT 10
+      ),
+      interval_usage AS (
+        SELECT COALESCE(e."interval",'UNKNOWN') AS "interval", COUNT(*)::int AS "count"
+        FROM marketpulse_usage_events e
+        WHERE e.created_at>=NOW()-INTERVAL '30 days' AND e."interval" IS NOT NULL
+        GROUP BY e."interval"
+        ORDER BY COUNT(*) DESC
+        LIMIT 10
+      )
+      SELECT
+        (SELECT row_to_json(totals) FROM totals) AS "totals",
+        (SELECT COALESCE(json_agg(feature_usage), '[]'::json) FROM feature_usage) AS "features",
+        (SELECT COALESCE(json_agg(symbol_usage), '[]'::json) FROM symbol_usage) AS "symbols",
+        (SELECT COALESCE(json_agg(interval_usage), '[]'::json) FROM interval_usage) AS "intervals"
+    `);
+    const row=r.rows[0]||{};
+    return {totals:row.totals||{},features:row.features||[],symbols:row.symbols||[],intervals:row.intervals||[]};
   }
   const all=readLocal(),users=Object.values(all.__users__||{}),ev=all.__usage_events__||[],now=Date.now();
-  const start=new Date();start.setHours(0,0,0,0);const day=start.getTime(),week=day-((start.getDay()+6)%7)*86400000,month=new Date(start.getFullYear(),start.getMonth(),1).getTime();
-  const countFrom=ms=>users.filter(u=>new Date(u.createdAt).getTime()>=ms).length, active=ms=>users.filter(u=>u.lastSeenAt&&new Date(u.lastSeenAt).getTime()>=ms).length;
-  const aggregate=k=>Object.entries(ev.filter(e=>new Date(e.createdAt).getTime()>=now-30*86400000).reduce((m,e)=>{const v=e[k]||"UNKNOWN";m[v]=(m[v]||0)+1;return m},{})).map(([key,count])=>({[k==="feature"?"feature":k]:key,count})).sort((a,b)=>b.count-a.count).slice(0,12);
-  return {totals:{allTime:users.length,today:countFrom(day),week:countFrom(week),month:countFrom(month),activeDay:active(now-86400000),activeWeek:active(now-7*86400000),activeMonth:active(now-30*86400000)},features:aggregate("feature"),symbols:aggregate("symbol"),intervals:aggregate("interval")};
+  const start=new Date();start.setHours(0,0,0,0);
+  const day=start.getTime(),week=day-((start.getDay()+6)%7)*86400000,month=new Date(start.getFullYear(),start.getMonth(),1).getTime();
+  const countFrom=ms=>users.filter(u=>new Date(u.createdAt).getTime()>=ms).length;
+  const active=ms=>users.filter(u=>u.lastSeenAt&&new Date(u.lastSeenAt).getTime()>=ms).length;
+  const aggregate=k=>Object.entries(
+    ev.filter(e=>new Date(e.createdAt).getTime()>=now-30*86400000)
+      .reduce((m,e)=>{const v=e[k]||"UNKNOWN";m[v]=(m[v]||0)+1;return m}, {})
+  ).map(([key,count])=>({[k]:key,count})).sort((a,b)=>b.count-a.count).slice(0,12);
+  return {
+    totals:{
+      allTime:users.length,today:countFrom(day),week:countFrom(week),month:countFrom(month),
+      activeDay:active(now-86400000),activeWeek:active(now-7*86400000),activeMonth:active(now-30*86400000)
+    },
+    features:aggregate("feature"),
+    symbols:aggregate("symbol"),
+    intervals:aggregate("interval")
+  };
 }
 async function listBroadcasts(limit=100){
   await init();const n=Math.min(200,Math.max(1,Number(limit)||100));
