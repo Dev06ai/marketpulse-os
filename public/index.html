@@ -1695,7 +1695,12 @@ function adminRenderCommandCenter(){
   $("acActivityTable").innerHTML=(o.recentUsage||[]).slice(0,20).map(function(x){return'<tr><td>'+adminDate(x.createdAt)+'</td><td>'+safeHtml(x.email||"Guest")+'</td><td>'+safeHtml(x.feature||"—")+'</td><td>'+safeHtml(x.action||"—")+'</td><td>'+safeHtml(x.symbol||"—")+'</td><td>'+safeHtml(x.interval||"—")+'</td></tr>'}).join("")||'<tr><td colspan="6" class="small">No recent activity yet.</td></tr>';
 }
 function adminRenderProviders(){
-  var p=state.adminProviders||[];$("acProviders").innerHTML=p.map(function(x){return'<div class="adminLine"><b>'+safeHtml(x.name)+'</b><span><span class="adminBadgeSmall '+adminStatusBadge(x.status)+'">'+safeHtml(String(x.status).toUpperCase())+'</span> '+(x.latencyMs!=null?fmt(x.latencyMs)+" ms":"")+'</span></div>'}).join("")||'<div class="small">No provider data.</div>';
+  var p=state.adminProviders||[];
+  $("acProviders").innerHTML=p.map(function(x){
+    var meta=(x.latencyMs!=null?fmt(x.latencyMs)+" ms":"");
+    var detail=x.detail?safeHtml(String(x.detail).slice(0,150)):"";
+    return'<div class="adminLine"><div><b>'+safeHtml(x.name)+'</b>'+(detail?'<div class="small">'+detail+'</div>':'')+'</div><span><span class="adminBadgeSmall '+adminStatusBadge(x.status)+'">'+safeHtml(String(x.status).toUpperCase())+'</span> '+meta+'</span></div>';
+  }).join("")||'<div class="small">No provider data.</div>';
 }
 function adminRenderFlags(flags){
   state.adminFlags=flags||{};
