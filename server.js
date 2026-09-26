@@ -23,6 +23,19 @@ const GLOBAL_RATE_WINDOW_MS=5*60*1000;
 const GLOBAL_RATE_LIMIT=300;
 const GLOBAL_RATE=new Map();
 const CSRF_COOKIE="mp_csrf";
+const SERVER_METRICS={startedAt:Date.now(),requests:0,errors:0,totalLatencyMs:0,routeCounts:new Map(),lastErrors:[]};
+let ADMIN_RUNTIME={loadedAt:0,config:null};
+async function getAdminRuntime(force=false){
+  if(!force&&ADMIN_RUNTIME.config&&Date.now()-ADMIN_RUNTIME.loadedAt<2000)return ADMIN_RUNTIME.config;
+  try{ADMIN_RUNTIME.config=await storage.getAdminConfig();ADMIN_RUNTIME.loadedAt=Date.now();return ADMIN_RUNTIME.config}catch{return ADMIN_RUNTIME.config||{mode:"normal",maintenanceMode:false,readOnlyMode:false,registrationsEnabled:true,aiEnabled:true,executionEnabled:true,marketDataEnabled:true,writesEnabled:true,maintenanceMessage:"MarketPulse is temporarily unavailable."}}
+}
+async function setAdminRuntime(payload){ADMIN_RUNTIME.config=payload;ADMIN_RUNTIME.loadedAt=Date.now();return payload}
+function featureEnabled(flags,key){return Boolean(flags?.[key]?.enabled!==false&&Number(flags?.[key]?.rolloutPct??100)>0)}
+async function auditAdmin(req,action,category,targetUserId,metadata){
+  try{const u=await auth.userFromRequest(req);if(u?.isAdmin)await storage.recordAdminAudit(u.email,action,category,targetUserId,metadata||{})}catch{}
+}
+async function securityEvent(severity,eventType,email,metadata){try{await storage.recordSecurityEvent(severity,eventType,email,metadata||{})}catch{}}
+
 function clientIp(req){return String(req.headers["x-forwarded-for"]||"").split(",")[0].trim()||String(req.socket?.remoteAddress||"unknown")}
 function rateRequest(req){
   const key=clientIp(req),now=Date.now(),x=GLOBAL_RATE.get(key);
@@ -40,7 +53,7 @@ function csrfCookie(){
   const secure=String(process.env.NODE_ENV||"").toLowerCase()==="production"?" Secure;":"";
   return CSRF_COOKIE+"="+crypto.randomBytes(32).toString("hex")+"; Path=/; SameSite=Strict; Max-Age=86400;"+secure;
 }
-const ADMIN_ONLY_PREFIXES=['/api/admin/users'];
+const ADMIN_ONLY_PREFIXES=['/api/admin'];
 const LIVE_VISITORS=new Map();
 function markLiveVisitor(device,registered){
   const id=String(device||"").slice(0,128);
@@ -532,6 +545,10 @@ function staticFile(req,res){
 }
 
 const server=http.createServer(async(req,res)=>{
+  const started=Date.now();SERVER_METRICS.requests++;
+  const rawPath=String(req.url||"").split("?")[0];
+  SERVER_METRICS.routeCounts.set(rawPath,(SERVER_METRICS.routeCounts.get(rawPath)||0)+1);
+  res.on("finish",()=>{const latency=Date.now()-started;SERVER_METRICS.totalLatencyMs+=latency;if(res.statusCode>=500)SERVER_METRICS.errors++;if(res.statusCode>=500)SERVER_METRICS.lastErrors.unshift({path:rawPath,status:res.statusCode,latencyMs:latency,at:new Date().toISOString()});if(SERVER_METRICS.lastErrors.length>50)SERVER_METRICS.lastErrors.length=50});
   try{
     if(!rateRequest(req))return send(res,429,{ok:false,error:"Too many requests. Please slow down."});
     const u=new URL(req.url,'http://localhost');
@@ -542,6 +559,17 @@ const server=http.createServer(async(req,res)=>{
       const guard=await auth.requireAdmin(req);
       if(!guard.ok)return send(res,guard.status,{ok:false,error:guard.error});
     }
+    const adminCfg=await getAdminRuntime();
+    const userForMode=await auth.userFromRequest(req);
+    const isAdminUser=Boolean(userForMode?.isAdmin);
+    const publicAllowed=new Set(['/api/config','/api/auth/me','/api/auth/login','/api/auth/register','/api/auth/logout','/api/auth/presence','/api/broadcasts/active','/api/telemetry/event','/health','/']);
+    if(adminCfg.maintenanceMode&&!isAdminUser&&u.pathname.startsWith('/api/')&&!publicAllowed.has(u.pathname))return send(res,503,{ok:false,error:"MAINTENANCE_MODE",maintenance:true,message:adminCfg.maintenanceMessage});
+    if(adminCfg.readOnlyMode&&!isAdminUser&&unsafe&&!['/api/auth/presence','/api/telemetry/event'].includes(u.pathname))return send(res,423,{ok:false,error:"READ_ONLY_MODE",readOnly:true,message:"MarketPulse is temporarily in read-only mode."});
+    if(adminCfg.registrationsEnabled===false&&u.pathname==='/api/auth/register'&& !isAdminUser)return send(res,403,{ok:false,error:"REGISTRATIONS_DISABLED"});
+    if(adminCfg.aiEnabled===false&&u.pathname==='/api/ai'&&!isAdminUser)return send(res,503,{ok:false,error:"AI_DISABLED"});
+    if(adminCfg.executionEnabled===false&&u.pathname.startsWith('/api/execution')&&!isAdminUser)return send(res,503,{ok:false,error:"EXECUTION_DISABLED"});
+    if(adminCfg.marketDataEnabled===false&&['/api/core','/api/live','/api/market','/api/scanner','/api/scanner-live','/api/core-scan','/api/core-flow','/api/cycle'].includes(u.pathname)&&!isAdminUser)return send(res,503,{ok:false,error:"MARKET_DATA_DISABLED"});
+    if(adminCfg.writesEnabled===false&&unsafe&&!isAdminUser&&!u.pathname.startsWith('/api/auth/')&&!['/api/telemetry/event'].includes(u.pathname))return send(res,423,{ok:false,error:"WRITES_DISABLED"});
     if(req.method==='GET'&&u.pathname==='/health')return send(res,200,{ok:true,service:'marketpulse-os',time:Date.now()});
     if(req.method==='GET'&&u.pathname==='/api/memory'){
       const device=String(u.searchParams.get('device')||req.headers['x-marketpulse-device']||'');
@@ -650,8 +678,82 @@ const server=http.createServer(async(req,res)=>{
         if(!guard.ok)return send(res,guard.status,{ok:false,error:guard.error});
         if(userId===guard.user.id)return send(res,400,{ok:false,error:"The owner account cannot be moderated."});
         await storage.moderateUser(userId,body.action,body.durationMinutes,body.reason);
+        await auditAdmin(req,(String(body.action)==="ban"?"Banned user":String(body.action)==="restrict"?"Restricted user":"Restored user"),"users",userId,{durationMinutes:body.durationMinutes||null,reason:String(body.reason||"").slice(0,200)});
+        await securityEvent("warning","admin_user_moderation",(await auth.userFromRequest(req))?.email,{action:body.action,targetUserId:userId});
         return send(res,200,{ok:true});
       }catch(e){return send(res,400,{ok:false,error:String(e.message||e)})}
+    }
+    if(req.method==='GET'&&u.pathname==='/api/broadcasts/active'){
+      try{const viewer=await auth.userFromRequest(req),rows=await storage.getActiveBroadcasts();return send(res,200,{ok:true,broadcasts:rows.filter(x=>x.audience==="all"||(x.audience==="registered"&&viewer))})}catch(e){return send(res,503,{ok:false,error:e.message})}
+    }
+    if(req.method==='POST'&&u.pathname==='/api/telemetry/event'){
+      let raw="";for await(const chunk of req)raw+=chunk;let body={};try{body=JSON.parse(raw||"{}")}catch{return send(res,400,{ok:false,error:"Invalid JSON"})}
+      const user=await auth.userFromRequest(req);try{await storage.recordUsageEvent(user?.id||null,body.feature||"unknown",body.action||"view",body.symbol||null,body.interval||null,body.metadata||{});return send(res,200,{ok:true})}catch(e){return send(res,200,{ok:false})}
+    }
+    if(req.method==='POST'&&u.pathname==='/api/support/tickets'){
+      const user=await auth.userFromRequest(req);if(!user)return send(res,401,{ok:false,error:"Authentication required"});
+      let raw="";for await(const chunk of req)raw+=chunk;let body={};try{body=JSON.parse(raw||"{}")}catch{return send(res,400,{ok:false,error:"Invalid JSON"})}
+      try{const ticket=await storage.createSupportTicket(user.id,body);await storage.recordUsageEvent(user.id,"support","ticket_created");return send(res,201,{ok:true,ticket})}catch(e){return send(res,400,{ok:false,error:e.message})}
+    }
+    if(req.method==='GET'&&u.pathname==='/api/support/tickets'){
+      const user=await auth.userFromRequest(req);if(!user)return send(res,401,{ok:false,error:"Authentication required"});
+      try{return send(res,200,{ok:true,tickets:(await storage.listSupportTickets(100)).filter(x=>x.userId===user.id)})}catch(e){return send(res,503,{ok:false,error:e.message})}
+    }
+    if(req.method==='GET'&&u.pathname==='/api/admin/overview'){
+      const [health,stats,analytics,flags,config,audit,security,tickets,broadcasts,snapshots,recentUsage]=await Promise.all([
+        storage.health(),storage.userStats(),storage.adminAnalytics(),storage.getFeatureFlags(),getAdminRuntime(true),storage.listAdminAudit(20),storage.listSecurityEvents(20),storage.listSupportTickets(20),storage.listBroadcasts(20),storage.listAdminSnapshots(20),storage.recentUsageEvents(40)
+      ]);
+      const perf={uptimeSec:Math.floor((Date.now()-SERVER_METRICS.startedAt)/1000),requests:SERVER_METRICS.requests,errors:SERVER_METRICS.errors,avgLatencyMs:SERVER_METRICS.requests?Math.round(SERVER_METRICS.totalLatencyMs/SERVER_METRICS.requests):0,memoryMb:Math.round(process.memoryUsage().rss/1048576),heapUsedMb:Math.round(process.memoryUsage().heapUsed/1048576),cpu:process.cpuUsage(),lastErrors:SERVER_METRICS.lastErrors.slice(0,12),topRoutes:Array.from(SERVER_METRICS.routeCounts.entries()).sort((a,b)=>b[1]-a[1]).slice(0,10).map(([route,count])=>({route,count}))};
+      const learningState=await Promise.race([learning.status(),new Promise(resolve=>setTimeout(()=>resolve({state:"unknown"}),1200))]).catch(()=>({state:"unknown"}));const phase7Check=(()=>{try{return phase7.selfTest()}catch{return{ok:false}}})();
+      return send(res,200,{ok:true,health,stats:{...stats,...liveVisitorStats()},analytics,flags,config,audit,security,tickets,broadcasts,snapshots,recentUsage,learning:learningState,phase7:phase7Check,performance:perf});
+    }
+    if(req.method==='GET'&&u.pathname==='/api/admin/providers'){
+      const test=async(name,fn)=>{const t=Date.now();try{const value=await fn();return{name,status:"healthy",latencyMs:Date.now()-t,detail:value||null}}catch(e){return{name,status:"error",latencyMs:Date.now()-t,detail:String(e.message||e)}}};
+      const items=[];
+      const db=await storage.health();items.push({name:"PostgreSQL",status:db.connected?"healthy":"degraded",latencyMs:null,detail:db.source});
+      items.push(await test("Binance",async()=>{const j=await fetchJson("https://api.binance.com/api/v3/ping",2500);return j?"reachable":null}));
+      items.push(await test("Kraken",async()=>{const j=await fetchJson("https://api.kraken.com/0/public/SystemStatus",2500);return j?.result?.status||"reachable"}));
+      items.push(await test("Bybit",async()=>{const j=await fetchJson("https://api.bybit.com/v5/market/time",2500);return j?.retCode===0?"reachable":"unavailable"}));
+      items.push({name:"OpenAI",status:OPENAI_API_KEY?"configured":"not_configured",latencyMs:null,detail:OPENAI_MODEL});
+      const flow=LIVE_FLOW.get("BTCUSDT"),fresh=Boolean(flow?.lastTs&&Date.now()-flow.lastTs<120000);items.push({name:"Bybit Live Flow",status:fresh?"healthy":"stale",latencyMs:fresh?Date.now()-flow.lastTs:null,detail:fresh?"Live derivatives stream active":"No recent live flow event"});
+      return send(res,200,{ok:true,providers:items});
+    }
+    if(req.method==='GET'&&u.pathname==='/api/admin/audit')return send(res,200,{ok:true,rows:await storage.listAdminAudit(300)});
+    if(req.method==='GET'&&u.pathname==='/api/admin/security')return send(res,200,{ok:true,rows:await storage.listSecurityEvents(300)});
+    if(req.method==='GET'&&u.pathname==='/api/admin/analytics')return send(res,200,{ok:true,data:await storage.adminAnalytics()});
+    if(req.method==='GET'&&u.pathname==='/api/admin/flags')return send(res,200,{ok:true,flags:await storage.getFeatureFlags()});
+    if(req.method==='POST'&&u.pathname==='/api/admin/flags'){
+      let raw="";for await(const chunk of req)raw+=chunk;let body={};try{body=JSON.parse(raw||"{}")}catch{return send(res,400,{ok:false,error:"Invalid JSON"})}
+      const user=await auth.userFromRequest(req);try{const row=await storage.saveFeatureFlag(body.key,body, user.email);await auditAdmin(req,"Updated feature flag "+row.key,"feature_flags",null,{enabled:row.enabled,rolloutPct:row.rolloutPct});return send(res,200,{ok:true,flag:row})}catch(e){return send(res,400,{ok:false,error:e.message})}
+    }
+    if(req.method==='GET'&&u.pathname==='/api/admin/config')return send(res,200,{ok:true,config:await getAdminRuntime(true)});
+    if(req.method==='POST'&&u.pathname==='/api/admin/config'){
+      let raw="";for await(const chunk of req)raw+=chunk;let body={};try{body=JSON.parse(raw||"{}")}catch{return send(res,400,{ok:false,error:"Invalid JSON"})}
+      const current=await getAdminRuntime(true),next=Object.assign({},current,body);const saved=await storage.saveAdminConfig(next);setAdminRuntime(saved);await auditAdmin(req,"Updated Admin runtime controls","configuration",null,{changed:Object.keys(body)});return send(res,200,{ok:true,config:saved});
+    }
+    if(req.method==='GET'&&u.pathname==='/api/admin/broadcasts')return send(res,200,{ok:true,rows:await storage.listBroadcasts(100)});
+    if(req.method==='POST'&&u.pathname==='/api/admin/broadcasts'){
+      let raw="";for await(const chunk of req)raw+=chunk;let body={};try{body=JSON.parse(raw||"{}")}catch{return send(res,400,{ok:false,error:"Invalid JSON"})}
+      const user=await auth.userFromRequest(req);try{const row=await storage.createBroadcast(body,user.email);await auditAdmin(req,"Created broadcast","communications",null,{broadcastId:row.id,title:row.title});return send(res,201,{ok:true,row})}catch(e){return send(res,400,{ok:false,error:e.message})}
+    }
+    if(req.method==='POST'&&u.pathname.startsWith('/api/admin/broadcasts/')&&u.pathname.endsWith('/toggle')){
+      const id=u.pathname.slice('/api/admin/broadcasts/'.length,-'/toggle'.length),active=String(u.searchParams.get("active"))!=="false";await storage.setBroadcastActive(id,active);await auditAdmin(req,(active?"Activated":"Deactivated")+" broadcast","communications",null,{broadcastId:id,active});return send(res,200,{ok:true});
+    }
+    if(req.method==='GET'&&u.pathname==='/api/admin/support')return send(res,200,{ok:true,rows:await storage.listSupportTickets(300)});
+    if(req.method==='POST'&&u.pathname.startsWith('/api/admin/support/')&&u.pathname.endsWith('/reply')){
+      const id=u.pathname.slice('/api/admin/support/'.length,-'/reply'.length);let raw="";for await(const chunk of req)raw+=chunk;let body={};try{body=JSON.parse(raw||"{}")}catch{return send(res,400,{ok:false,error:"Invalid JSON"})}
+      const out=await storage.replySupportTicket(id,body,auth.isAdminEmail((await auth.userFromRequest(req))?.email));await auditAdmin(req,"Replied to support ticket","support",null,{ticketId:id,status:body.status});return send(res,200,out);
+    }
+    if(req.method==='GET'&&u.pathname==='/api/admin/snapshots')return send(res,200,{ok:true,rows:await storage.listAdminSnapshots(100)});
+    if(req.method==='POST'&&u.pathname==='/api/admin/snapshots'){
+      const user=await auth.userFromRequest(req),payload={adminConfig:await getAdminRuntime(true),featureFlags:await storage.getFeatureFlags()};const row=await storage.saveAdminSnapshot("Operational configuration snapshot",payload,user.email);await auditAdmin(req,"Created configuration snapshot","recovery",null,{snapshotId:row.id});return send(res,201,{ok:true,row,payload});
+    }
+    if(req.method==='POST'&&u.pathname.startsWith('/api/admin/snapshots/')&&u.pathname.endsWith('/restore')){
+      const id=u.pathname.slice('/api/admin/snapshots/'.length,-'/restore'.length),snap=await storage.getAdminSnapshot(id);if(!snap)return send(res,404,{ok:false,error:"Snapshot not found"});await storage.restoreAdminConfig(snap);const saved=await storage.getAdminConfig();setAdminRuntime(saved);await auditAdmin(req,"Restored configuration snapshot","recovery",null,{snapshotId:id});return send(res,200,{ok:true,config:saved});
+    }
+    if(req.method==='POST'&&u.pathname==='/api/admin/emergency'){
+      let raw="";for await(const chunk of req)raw+=chunk;let body={};try{body=JSON.parse(raw||"{}")}catch{return send(res,400,{ok:false,error:"Invalid JSON"})}
+      const current=await getAdminRuntime(true),next=Object.assign({},current,body);const saved=await storage.saveAdminConfig(next);setAdminRuntime(saved);await auditAdmin(req,"Changed emergency control state","emergency",null,{changed:Object.keys(body)});return send(res,200,{ok:true,config:saved});
     }
     if(req.method==='GET'&&u.pathname==='/api/account/memory'){
       const user=await auth.userFromRequest(req);if(!user)return send(res,401,{ok:false,error:"Authentication required"});
@@ -667,7 +769,7 @@ const server=http.createServer(async(req,res)=>{
       try{return send(res,200,{ok:true,memory:await storage.saveAccountMemory(user.id,body.memory||{})})}catch(e){return send(res,400,{ok:false,error:e.message})}
     }
 
-    if(req.method==='GET'&&u.pathname==='/api/config')return send(res,200,{symbols:SYMBOLS,labels,intervals:['15m','1h','4h','1d'],memory:storage.status(),learning:{state:'LOADING'},phase4:PHASE4_VERSION,phase5:PHASE5_VERSION,phase6:PHASE6_VERSION,phase7:PHASE7_VERSION});if(req.method==='POST'&&u.pathname==='/api/ai'){
+    if(req.method==='GET'&&u.pathname==='/api/config'){const flags=await storage.getFeatureFlags();return send(res,200,{symbols:SYMBOLS,labels,intervals:['15m','1h','4h','1d'],memory:storage.status(),learning:{state:'LOADING'},phase4:PHASE4_VERSION,phase5:PHASE5_VERSION,phase6:PHASE6_VERSION,phase7:PHASE7_VERSION,adminMode:adminCfg.mode||"normal",maintenance:adminCfg.maintenanceMode,readOnly:adminCfg.readOnlyMode,maintenanceMessage:adminCfg.maintenanceMessage,flags});}if(req.method==='POST'&&u.pathname==='/api/ai'){
       if(!aiAllowed(req)) return send(res,429,{error:"Slow down for a few seconds."});
       let raw=""; for await(const chunk of req) raw+=chunk; let body={}; try{body=JSON.parse(raw||"{}")}catch{return send(res,400,{error:"Invalid JSON"})}
       const mode=body.mode==="trade"?"trade":"market";
@@ -904,7 +1006,7 @@ const server=http.createServer(async(req,res)=>{
         if(!checks.derivatives)derivativesError="No derivatives provider returned usable data";
       }catch(e){derivativesError=String(e.message||e)}
       try{const st=phase7.selfTest();checks.phase7=Boolean(st&&st.ok)}catch(e){checks.phase7=false}
-      return send(res,200,{ok:checks.server&&checks.marketEngine&&checks.learning&&checks.memory&&checks.marketData&&checks.execution&&checks.phase7,checks,marketError,derivativesError,phase2:PHASE2_VERSION,phase3:PHASE3_VERSION,phase4:PHASE4_VERSION,phase5:PHASE5_VERSION,phase6:PHASE6_VERSION,phase7:PHASE7_VERSION,routes:{core:true,coreScan:true,coreFlow:true,cycle:true,ai:true,memory:true,learning:true,replay:true,dna:true,research:true,edge:true,edgeHealth:true,edgeConfig:true,edgeJournal:true,execution:true,executionConfig:true,executionArm:true,executionKill:true,executionReconcile:true,portfolio:true,portfolioConfig:true,phase7Analytics:true,phase7Health:true},timestamp:Date.now()});
+      const result={ok:checks.server&&checks.marketEngine&&checks.learning&&checks.memory&&checks.marketData&&checks.execution&&checks.phase7,checks,marketError,derivativesError,phase2:PHASE2_VERSION,phase3:PHASE3_VERSION,phase4:PHASE4_VERSION,phase5:PHASE5_VERSION,phase6:PHASE6_VERSION,phase7:PHASE7_VERSION,routes:{core:true,coreScan:true,coreFlow:true,cycle:true,ai:true,memory:true,learning:true,replay:true,dna:true,research:true,edge:true,edgeHealth:true,edgeConfig:true,edgeJournal:true,execution:true,executionConfig:true,executionArm:true,executionKill:true,executionReconcile:true,portfolio:true,portfolioConfig:true,phase7Analytics:true,phase7Health:true},timestamp:Date.now()};await auditAdmin(req,"Ran full system check","system",null,{ok:result.ok,checks});return send(res,200,result);
     }
     if(req.method==='GET'&&u.pathname==='/api/live'){
       const symbol=(u.searchParams.get('symbol')||'BTCUSDT').toUpperCase(),interval=u.searchParams.get('interval')||'1h';

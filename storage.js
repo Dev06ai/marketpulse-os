@@ -22,6 +22,29 @@ function sanitizeMemory(m){
   };
 }
 function readLocal(){try{if(!fs.existsSync(FALLBACK_FILE))return {};return JSON.parse(fs.readFileSync(FALLBACK_FILE,"utf8"))||{}}catch{return {}}}
+function defaultAdminConfig(){
+  return {
+    mode:"normal",
+    maintenanceMode:false,
+    readOnlyMode:false,
+    registrationsEnabled:true,
+    aiEnabled:true,
+    executionEnabled:true,
+    marketDataEnabled:true,
+    writesEnabled:true,
+    maintenanceMessage:"MarketPulse is temporarily undergoing maintenance. Please check back shortly.",
+    updatedAt:Date.now()
+  };
+}
+function defaultFeatureFlags(){
+  return {
+    broadcasts_enabled:{enabled:true,rolloutPct:100,description:"User-facing admin announcements."},
+    support_enabled:{enabled:true,rolloutPct:100,description:"Support and feedback workflow."},
+    copilot_enabled:{enabled:true,rolloutPct:100,description:"AI Copilot access."},
+    research_enabled:{enabled:true,rolloutPct:100,description:"Research workspace."},
+    replay_enabled:{enabled:true,rolloutPct:100,description:"Historical replay workspace."}
+  };
+}
 function writeLocal(data){try{fs.mkdirSync(path.dirname(FALLBACK_FILE),{recursive:true});fs.writeFileSync(FALLBACK_FILE,JSON.stringify(data))}catch{}}
 
 async function init(){
@@ -129,6 +152,81 @@ async function init(){
       await pool.query('ALTER TABLE marketpulse_sessions ADD COLUMN IF NOT EXISTS last_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW()');
       await pool.query('CREATE INDEX IF NOT EXISTS idx_marketpulse_sessions_active ON marketpulse_sessions(last_seen_at,expires_at)');
       await pool.query('CREATE INDEX IF NOT EXISTS idx_marketpulse_sessions_user ON marketpulse_sessions(user_id)');
+      await pool.query(`CREATE TABLE IF NOT EXISTS marketpulse_admin_config (
+        id INTEGER PRIMARY KEY DEFAULT 1,
+        payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )`);
+      await pool.query(`CREATE TABLE IF NOT EXISTS marketpulse_feature_flags (
+        key TEXT PRIMARY KEY,
+        enabled BOOLEAN NOT NULL DEFAULT TRUE,
+        rollout_pct NUMERIC NOT NULL DEFAULT 100,
+        description TEXT NOT NULL DEFAULT '',
+        updated_by TEXT,
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )`);
+      await pool.query(`CREATE TABLE IF NOT EXISTS marketpulse_admin_audit (
+        id BIGSERIAL PRIMARY KEY,
+        admin_email TEXT NOT NULL,
+        action TEXT NOT NULL,
+        category TEXT NOT NULL DEFAULT 'admin',
+        target_user_id UUID,
+        metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )`);
+      await pool.query('CREATE INDEX IF NOT EXISTS idx_admin_audit_time ON marketpulse_admin_audit(created_at DESC)');
+      await pool.query(`CREATE TABLE IF NOT EXISTS marketpulse_security_events (
+        id BIGSERIAL PRIMARY KEY,
+        severity TEXT NOT NULL DEFAULT 'info',
+        event_type TEXT NOT NULL,
+        email TEXT,
+        metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )`);
+      await pool.query('CREATE INDEX IF NOT EXISTS idx_security_events_time ON marketpulse_security_events(created_at DESC)');
+      await pool.query(`CREATE TABLE IF NOT EXISTS marketpulse_usage_events (
+        id BIGSERIAL PRIMARY KEY,
+        user_id UUID,
+        feature TEXT NOT NULL,
+        action TEXT NOT NULL DEFAULT 'view',
+        symbol TEXT,
+        interval TEXT,
+        metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )`);
+      await pool.query('CREATE INDEX IF NOT EXISTS idx_usage_events_feature_time ON marketpulse_usage_events(feature,created_at DESC)');
+      await pool.query('CREATE INDEX IF NOT EXISTS idx_usage_events_user_time ON marketpulse_usage_events(user_id,created_at DESC)');
+      await pool.query(`CREATE TABLE IF NOT EXISTS marketpulse_broadcasts (
+        id BIGSERIAL PRIMARY KEY,
+        title TEXT NOT NULL,
+        body TEXT NOT NULL,
+        audience TEXT NOT NULL DEFAULT 'all',
+        active BOOLEAN NOT NULL DEFAULT TRUE,
+        expires_at TIMESTAMPTZ,
+        created_by TEXT NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )`);
+      await pool.query('CREATE INDEX IF NOT EXISTS idx_broadcasts_active ON marketpulse_broadcasts(active,created_at DESC)');
+      await pool.query(`CREATE TABLE IF NOT EXISTS marketpulse_support_tickets (
+        id BIGSERIAL PRIMARY KEY,
+        user_id UUID NOT NULL REFERENCES marketpulse_users(id) ON DELETE CASCADE,
+        category TEXT NOT NULL DEFAULT 'question',
+        subject TEXT NOT NULL,
+        message TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'open',
+        admin_reply TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        resolved_at TIMESTAMPTZ
+      )`);
+      await pool.query('CREATE INDEX IF NOT EXISTS idx_support_time ON marketpulse_support_tickets(status,updated_at DESC)');
+      await pool.query(`CREATE TABLE IF NOT EXISTS marketpulse_admin_snapshots (
+        id BIGSERIAL PRIMARY KEY,
+        label TEXT NOT NULL,
+        payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+        created_by TEXT NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )`);
       await pool.query(`CREATE TABLE IF NOT EXISTS marketpulse_account_memory (
         user_id UUID PRIMARY KEY REFERENCES marketpulse_users(id) ON DELETE CASCADE,
         payload JSONB NOT NULL DEFAULT '{}'::jsonb,
@@ -534,4 +632,147 @@ async function health(){
   return {ok:true,mode:"local",configured:Boolean(DB_URL&&Pool),durable:false,connected:false,source:"Local fallback"};
 }
 function status(){return {mode,configured:Boolean(DB_URL&&Pool),durable:mode==="postgres"}}
-module.exports={init,health,get,save,clear,getLearningState,saveLearningState,recordLearningPrediction,getOpenLearningPredictions,resolveLearningPrediction,saveSignalDNA,getSignalDNA,clearSignalDNA,getPhase4State,savePhase4State,getExecutionState,saveExecutionState,getPhase6State,savePhase6State,createUser,findUserByEmail,getUserById,touchUserLogin,recordLoginFailure,resetLoginFailures,savePassword,saveSession,getSession,touchSessionActivity,revokeUserSessions,deleteSession,listUsers,userStats,moderateUser,getAccountMemory,saveAccountMemory,status};
+async function getAdminConfig(){
+  await init();
+  if(mode==="postgres"){
+    const r=await pool.query("SELECT payload,updated_at FROM marketpulse_admin_config WHERE id=1");
+    return r.rows[0]?(r.rows[0].payload||{}):defaultAdminConfig();
+  }
+  const all=readLocal();return all.__admin_config__?.payload||defaultAdminConfig();
+}
+async function saveAdminConfig(payload){
+  await init();const next=Object.assign(defaultAdminConfig(),payload||{}, {updatedAt:Date.now()});
+  if(mode==="postgres"){await pool.query(`INSERT INTO marketpulse_admin_config(id,payload,updated_at) VALUES(1,$1,NOW()) ON CONFLICT(id) DO UPDATE SET payload=EXCLUDED.payload,updated_at=NOW()`,[next]);return next}
+  const all=readLocal();all.__admin_config__={payload:next,updatedAt:new Date().toISOString()};writeLocal(all);return next;
+}
+async function getFeatureFlags(){
+  await init();
+  if(mode==="postgres"){
+    const r=await pool.query('SELECT key,enabled,"rollout_pct" AS "rolloutPct",description,"updated_by" AS "updatedBy",updated_at AS "updatedAt" FROM marketpulse_feature_flags ORDER BY key');
+    const out=defaultFeatureFlags();for(const row of r.rows)out[row.key]=row;return out;
+  }
+  const all=readLocal(),out=defaultFeatureFlags();Object.assign(out,all.__feature_flags__||{});return out;
+}
+async function saveFeatureFlag(key,value,adminEmail){
+  await init();const k=String(key||"").trim().slice(0,80);if(!/^[a-z0-9_.-]+$/i.test(k))throw new Error("Invalid feature flag key");
+  const row={enabled:Boolean(value?.enabled),rolloutPct:Math.max(0,Math.min(100,Number(value?.rolloutPct??100))),description:String(value?.description||"").slice(0,300),updatedBy:String(adminEmail||"").slice(0,200),updatedAt:new Date().toISOString()};
+  if(mode==="postgres"){await pool.query(`INSERT INTO marketpulse_feature_flags(key,enabled,rollout_pct,description,updated_by,updated_at) VALUES($1,$2,$3,$4,$5,NOW()) ON CONFLICT(key) DO UPDATE SET enabled=EXCLUDED.enabled,rollout_pct=EXCLUDED.rollout_pct,description=EXCLUDED.description,updated_by=EXCLUDED.updated_by,updated_at=NOW()`,[k,row.enabled,row.rolloutPct,row.description,row.updatedBy]);return {key,...row}}
+  const all=readLocal();all.__feature_flags__=all.__feature_flags__||{};all.__feature_flags__[k]={key,...row};writeLocal(all);return {key,...row};
+}
+async function recordAdminAudit(adminEmail,action,category="admin",targetUserId=null,metadata={}){
+  await init();
+  const safe={...metadata};delete safe.password;delete safe.passwordHash;delete safe.passwordSalt;delete safe.totp;delete safe.secret;
+  if(mode==="postgres"){await pool.query("INSERT INTO marketpulse_admin_audit(admin_email,action,category,target_user_id,metadata) VALUES($1,$2,$3,$4,$5)",[String(adminEmail||"").slice(0,200),String(action||"").slice(0,200),String(category||"admin").slice(0,80),targetUserId||null,safe]);return}
+  const all=readLocal();all.__admin_audit__=Array.isArray(all.__admin_audit__)?all.__admin_audit__:[];all.__admin_audit__.push({id:Date.now()+"-"+Math.random().toString(16).slice(2),adminEmail,action,category,targetUserId,metadata:safe,createdAt:new Date().toISOString()});all.__admin_audit__=all.__admin_audit__.slice(-2000);writeLocal(all);
+}
+async function listAdminAudit(limit=200){
+  await init();const n=Math.min(500,Math.max(1,Number(limit)||200));
+  if(mode==="postgres"){const r=await pool.query(`SELECT id,admin_email AS "adminEmail",action,category,target_user_id AS "targetUserId",metadata,created_at AS "createdAt" FROM marketpulse_admin_audit ORDER BY created_at DESC LIMIT $1`,[n]);return r.rows}
+  const all=readLocal();return (all.__admin_audit__||[]).slice(-n).reverse();
+}
+async function recordSecurityEvent(severity,eventType,email,metadata={}){
+  await init();const safe={...metadata};delete safe.password;delete safe.passwordHash;delete safe.passwordSalt;delete safe.totp;delete safe.secret;
+  if(mode==="postgres"){await pool.query("INSERT INTO marketpulse_security_events(severity,event_type,email,metadata) VALUES($1,$2,$3,$4)",[String(severity||"info"),String(eventType||"event"),email?String(email).slice(0,200):null,safe]);return}
+  const all=readLocal();all.__security_events__=Array.isArray(all.__security_events__)?all.__security_events__:[];all.__security_events__.push({severity,eventType,email,metadata:safe,createdAt:new Date().toISOString()});all.__security_events__=all.__security_events__.slice(-2000);writeLocal(all);
+}
+async function listSecurityEvents(limit=200){
+  await init();const n=Math.min(500,Math.max(1,Number(limit)||200));
+  if(mode==="postgres"){const r=await pool.query(`SELECT id,severity,event_type AS "eventType",email,metadata,created_at AS "createdAt" FROM marketpulse_security_events ORDER BY created_at DESC LIMIT $1`,[n]);return r.rows}
+  const all=readLocal();return (all.__security_events__||[]).slice(-n).reverse();
+}
+async function recordUsageEvent(userId,feature,action="view",symbol=null,interval=null,metadata={}){
+  await init();const row={userId:userId||null,feature:String(feature||"unknown").slice(0,100),action:String(action||"view").slice(0,100),symbol:symbol?String(symbol).slice(0,32):null,interval:interval?String(interval).slice(0,16):null,metadata:metadata||{},createdAt:new Date().toISOString()};
+  if(mode==="postgres"){await pool.query("INSERT INTO marketpulse_usage_events(user_id,feature,action,symbol,interval,metadata) VALUES($1,$2,$3,$4,$5,$6)",[row.userId,row.feature,row.action,row.symbol,row.interval,row.metadata]);return}
+  const all=readLocal();all.__usage_events__=Array.isArray(all.__usage_events__)?all.__usage_events__:[];all.__usage_events__.push(row);all.__usage_events__=all.__usage_events__.slice(-5000);writeLocal(all);
+}
+async function recentUsageEvents(limit=80){
+  await init();const n=Math.min(200,Math.max(1,Number(limit)||80));
+  if(mode==="postgres"){
+    const r=await pool.query(`SELECT e.id,e.feature,e.action,e.symbol,e.interval,e.created_at AS "createdAt",u.email FROM marketpulse_usage_events e LEFT JOIN marketpulse_users u ON u.id=e.user_id ORDER BY e.created_at DESC LIMIT $1`,[n]);return r.rows;
+  }
+  const all=readLocal(),users=all.__users__||{},rows=(all.__usage_events__||[]).slice(-n).reverse();
+  return rows.map(x=>({...x,email:x.userId?(users[x.userId]?.email||null):null}));
+}
+async function adminAnalytics(){
+  await init();
+  if(mode==="postgres"){
+    const r=await pool.query(`WITH totals AS (
+      SELECT COUNT(*)::int all_time,
+      COUNT(*) FILTER (WHERE created_at>=CURRENT_DATE)::int today,
+      COUNT(*) FILTER (WHERE created_at>=date_trunc('week',NOW()))::int week,
+      COUNT(*) FILTER (WHERE created_at>=date_trunc('month',NOW()))::int month,
+      COUNT(*) FILTER (WHERE last_seen_at>=NOW()-INTERVAL '24 hours')::int active_day,
+      COUNT(*) FILTER (WHERE last_seen_at>=NOW()-INTERVAL '7 days')::int active_week,
+      COUNT(*) FILTER (WHERE last_seen_at>=NOW()-INTERVAL '30 days')::int active_month
+      FROM marketpulse_users
+    ), usage AS (
+      SELECT feature,COUNT(*)::int count FROM marketpulse_usage_events WHERE created_at>=NOW()-INTERVAL '30 days' GROUP BY feature ORDER BY count DESC LIMIT 12
+    ), symbols AS (
+      SELECT COALESCE(symbol,'UNKNOWN') symbol,COUNT(*)::int count FROM marketpulse_usage_events WHERE created_at>=NOW()-INTERVAL '30 days' AND symbol IS NOT NULL GROUP BY symbol ORDER BY count DESC LIMIT 10
+    ), intervals AS (
+      SELECT COALESCE(interval,'UNKNOWN') interval,COUNT(*)::int count FROM marketpulse_usage_events WHERE created_at>=NOW()-INTERVAL '30 days' AND interval IS NOT NULL GROUP BY interval ORDER BY count DESC LIMIT 10
+    )
+    SELECT row_to_json(totals) AS totals,(SELECT json_agg(usage) FROM usage) AS features,(SELECT json_agg(symbols) FROM symbols) AS symbols,(SELECT json_agg(intervals) FROM intervals)`);
+    const row=r.rows[0]||{};return {totals:row.totals||{},features:row.features||[],symbols:row.symbols||[],intervals:row.intervals||[]};
+  }
+  const all=readLocal(),users=Object.values(all.__users__||{}),ev=all.__usage_events__||[],now=Date.now();
+  const start=new Date();start.setHours(0,0,0,0);const day=start.getTime(),week=day-((start.getDay()+6)%7)*86400000,month=new Date(start.getFullYear(),start.getMonth(),1).getTime();
+  const countFrom=ms=>users.filter(u=>new Date(u.createdAt).getTime()>=ms).length, active=ms=>users.filter(u=>u.lastSeenAt&&new Date(u.lastSeenAt).getTime()>=ms).length;
+  const aggregate=k=>Object.entries(ev.filter(e=>new Date(e.createdAt).getTime()>=now-30*86400000).reduce((m,e)=>{const v=e[k]||"UNKNOWN";m[v]=(m[v]||0)+1;return m},{})).map(([key,count])=>({[k==="feature"?"feature":k]:key,count})).sort((a,b)=>b.count-a.count).slice(0,12);
+  return {totals:{allTime:users.length,today:countFrom(day),week:countFrom(week),month:countFrom(month),activeDay:active(now-86400000),activeWeek:active(now-7*86400000),activeMonth:active(now-30*86400000)},features:aggregate("feature"),symbols:aggregate("symbol"),intervals:aggregate("intervals")};
+}
+async function listBroadcasts(limit=100){
+  await init();const n=Math.min(200,Math.max(1,Number(limit)||100));
+  if(mode==="postgres"){const r=await pool.query(`SELECT id,title,body,audience,active,expires_at AS "expiresAt",created_by AS "createdBy",created_at AS "createdAt" FROM marketpulse_broadcasts ORDER BY created_at DESC LIMIT $1`,[n]);return r.rows}
+  const all=readLocal();return (all.__broadcasts__||[]).slice(-n).reverse();
+}
+async function createBroadcast(data,adminEmail){
+  await init();const d=data||{},row={title:String(d.title||"").slice(0,140),body:String(d.body||"").slice(0,2000),audience:String(d.audience||"all").slice(0,30),active:d.active!==false,expiresAt:d.expiresAt||null,createdBy:String(adminEmail||"").slice(0,200),createdAt:new Date().toISOString()};
+  if(!row.title||!row.body)throw new Error("Broadcast title and body are required");
+  if(mode==="postgres"){const r=await pool.query("INSERT INTO marketpulse_broadcasts(title,body,audience,active,expires_at,created_by) VALUES($1,$2,$3,$4,$5,$6) RETURNING id,title,body,audience,active,expires_at AS \"expiresAt\",created_by AS \"createdBy\",created_at AS \"createdAt\"",[row.title,row.body,row.audience,row.active,row.expiresAt,row.createdBy]);return r.rows[0]}
+  const all=readLocal();all.__broadcasts__=Array.isArray(all.__broadcasts__)?all.__broadcasts__:[];row.id=Date.now();all.__broadcasts__.push(row);writeLocal(all);return row;
+}
+async function setBroadcastActive(id,active){
+  await init();
+  if(mode==="postgres"){await pool.query("UPDATE marketpulse_broadcasts SET active=$2 WHERE id=$1",[id,Boolean(active)]);return}
+  const all=readLocal(),b=(all.__broadcasts__||[]).find(x=>String(x.id)===String(id));if(b){b.active=Boolean(active);writeLocal(all)}
+}
+async function getActiveBroadcasts(){
+  await init();
+  if(mode==="postgres"){const r=await pool.query(`SELECT id,title,body,audience,expires_at AS "expiresAt",created_at AS "createdAt" FROM marketpulse_broadcasts WHERE active=true AND (expires_at IS NULL OR expires_at>NOW()) ORDER BY created_at DESC LIMIT 8`);return r.rows}
+  const now=Date.now(),all=readLocal();return (all.__broadcasts__||[]).filter(x=>x.active&&(!x.expiresAt||new Date(x.expiresAt).getTime()>now)).slice(-8).reverse();
+}
+async function createSupportTicket(userId,data){
+  await init();const d=data||{},row={userId,category:String(d.category||"question").slice(0,40),subject:String(d.subject||"").slice(0,160),message:String(d.message||"").slice(0,4000)};
+  if(!row.subject||!row.message)throw new Error("Subject and message are required");
+  if(mode==="postgres"){const r=await pool.query(`INSERT INTO marketpulse_support_tickets(user_id,category,subject,message) VALUES($1,$2,$3,$4) RETURNING id,user_id AS "userId",category,subject,message,status,admin_reply AS "adminReply",created_at AS "createdAt",updated_at AS "updatedAt",resolved_at AS "resolvedAt"`,[row.userId,row.category,row.subject,row.message]);return r.rows[0]}
+  const all=readLocal();all.__support__=Array.isArray(all.__support__)?all.__support__:[];const out={id:Date.now(),...row,status:"open",adminReply:null,createdAt:new Date().toISOString(),updatedAt:new Date().toISOString(),resolvedAt:null};all.__support__.push(out);writeLocal(all);return out;
+}
+async function listSupportTickets(limit=100,status=null){
+  await init();const n=Math.min(300,Math.max(1,Number(limit)||100));
+  if(mode==="postgres"){const args=[],where=[];if(status){args.push(status);where.push("t.status=$"+args.length)}args.push(n);const r=await pool.query(`SELECT t.id,t.user_id AS "userId",u.email, t.category,t.subject,t.message,t.status,t.admin_reply AS "adminReply",t.created_at AS "createdAt",t.updated_at AS "updatedAt",t.resolved_at AS "resolvedAt" FROM marketpulse_support_tickets t JOIN marketpulse_users u ON u.id=t.user_id ${where.length?"WHERE "+where.join(" AND "):""} ORDER BY t.updated_at DESC LIMIT ${args.length}`,args);return r.rows}
+  const all=readLocal();let rows=(all.__support__||[]).slice().reverse();if(status)rows=rows.filter(x=>x.status===status);const users=all.__users__||{};return rows.slice(0,n).map(x=>({...x,email:users[x.userId]?.email||"Unknown"}));
+}
+async function replySupportTicket(id,data,adminEmail){
+  await init();const reply=String(data?.reply||"").slice(0,4000),status=String(data?.status||"resolved").slice(0,30);if(!reply&&status!=="resolved")throw new Error("Reply is required");
+  if(mode==="postgres"){const r=await pool.query(`UPDATE marketpulse_support_tickets SET admin_reply=CASE WHEN $2='' THEN admin_reply ELSE $2 END,status=$3,updated_at=NOW(),resolved_at=CASE WHEN $3='resolved' THEN NOW() ELSE resolved_at END WHERE id=$1 RETURNING id`,[id,reply,status]);if(!r.rowCount)throw new Error("Ticket not found");return {ok:true}}
+  const all=readLocal(),t=(all.__support__||[]).find(x=>String(x.id)===String(id));if(!t)throw new Error("Ticket not found");if(reply)t.adminReply=reply;t.status=status;t.updatedAt=new Date().toISOString();if(status==="resolved")t.resolvedAt=new Date().toISOString();writeLocal(all);return{ok:true};
+}
+async function saveAdminSnapshot(label,payload,adminEmail){
+  await init();const safe=payload&&typeof payload==="object"?payload:{};if(mode==="postgres"){const r=await pool.query("INSERT INTO marketpulse_admin_snapshots(label,payload,created_by) VALUES($1,$2,$3) RETURNING id,label,created_by AS \"createdBy\",created_at AS \"createdAt\",payload",[String(label||"Snapshot").slice(0,120),safe,String(adminEmail||"").slice(0,200)]);return r.rows[0]}const all=readLocal();all.__admin_snapshots__=Array.isArray(all.__admin_snapshots__)?all.__admin_snapshots__:[];const row={id:Date.now(),label:String(label||"Snapshot"),payload:safe,createdBy:adminEmail,createdAt:new Date().toISOString()};all.__admin_snapshots__.push(row);writeLocal(all);return row;
+}
+async function listAdminSnapshots(limit=50){
+  await init();const n=Math.min(100,Math.max(1,Number(limit)||50));if(mode==="postgres"){const r=await pool.query(`SELECT id,label,created_by AS "createdBy",created_at AS "createdAt" FROM marketpulse_admin_snapshots ORDER BY created_at DESC LIMIT $1`,[n]);return r.rows}
+  const all=readLocal();return (all.__admin_snapshots__||[]).slice(-n).reverse().map(x=>({id:x.id,label:x.label,createdBy:x.createdBy,createdAt:x.createdAt}));
+}
+async function getAdminSnapshot(id){
+  await init();if(mode==="postgres"){const r=await pool.query("SELECT id,label,payload,created_by AS \"createdBy\",created_at AS \"createdAt\" FROM marketpulse_admin_snapshots WHERE id=$1",[id]);return r.rows[0]||null}
+  const all=readLocal();return (all.__admin_snapshots__||[]).find(x=>String(x.id)===String(id))||null;
+}
+async function restoreAdminConfig(snapshot){
+  const payload=snapshot?.payload||{};if(payload.adminConfig)await saveAdminConfig(payload.adminConfig);
+  if(payload.featureFlags)for(const [k,v] of Object.entries(payload.featureFlags))await saveFeatureFlag(k,v,payload.createdBy||"restore");
+  return true;
+}
+
+module.exports={init,health,get,save,clear,getLearningState,saveLearningState,recordLearningPrediction,getOpenLearningPredictions,resolveLearningPrediction,saveSignalDNA,getSignalDNA,clearSignalDNA,getPhase4State,savePhase4State,getExecutionState,saveExecutionState,getPhase6State,savePhase6State,createUser,findUserByEmail,getUserById,touchUserLogin,recordLoginFailure,resetLoginFailures,savePassword,saveSession,getSession,touchSessionActivity,revokeUserSessions,deleteSession,listUsers,userStats,moderateUser,getAccountMemory,saveAccountMemory,status,getAdminConfig,saveAdminConfig,getFeatureFlags,saveFeatureFlag,recordAdminAudit,listAdminAudit,recordSecurityEvent,listSecurityEvents,recordUsageEvent,adminAnalytics,listBroadcasts,createBroadcast,setBroadcastActive,getActiveBroadcasts,createSupportTicket,recentUsageEvents,listSupportTickets,replySupportTicket,saveAdminSnapshot,listAdminSnapshots,getAdminSnapshot,restoreAdminConfig};

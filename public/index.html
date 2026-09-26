@@ -246,6 +246,33 @@ body.admin-mode .nav button.adminNav,body.admin-mode .mobileMenu button.adminNav
 .userAction.safe{border-color:rgba(134,239,172,.16);color:#a7f3d0}
 @media(max-width:900px){.adminUsersGrid{grid-template-columns:repeat(3,1fr)}}
 @media(max-width:600px){.adminUsersGrid{grid-template-columns:repeat(2,1fr)}}
+</style><style id="admin-command-center-style">
+.adminCommandKpis{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-top:10px}
+.adminCommandKpi{padding:12px;border:1px solid rgba(255,255,255,.08);border-radius:12px;background:linear-gradient(180deg,rgba(18,18,23,.92),rgba(8,8,11,.92))}
+.adminCommandKpi .k{font-size:8px;color:#8292a6;text-transform:uppercase;letter-spacing:.09em}
+.adminCommandKpi .v{font-size:22px;font-weight:950;margin-top:5px}
+.adminCommandKpi.live .v{color:#86efac;text-shadow:0 0 14px rgba(134,239,172,.22)}
+.adminCommandGrid{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:10px}
+.adminCommandGrid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:9px;margin-top:10px}
+.adminPanelSmall{min-height:165px}
+.adminList{display:grid;gap:5px;margin-top:8px;max-height:240px;overflow:auto}
+.adminLine{display:flex;justify-content:space-between;gap:8px;align-items:center;padding:7px 8px;border:1px solid rgba(255,255,255,.06);border-radius:8px;background:rgba(255,255,255,.014)}
+.adminLine b{font-size:9px}.adminLine span{font-size:8px;color:#8797a9}
+.adminBadgeSmall{display:inline-flex;align-items:center;border-radius:999px;padding:4px 7px;font-size:8px;font-weight:900;letter-spacing:.05em}
+.adminBadgeSmall.ok{color:#a7f3d0;background:rgba(74,222,128,.08);border:1px solid rgba(74,222,128,.16)}
+.adminBadgeSmall.warn{color:#fde68a;background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.14)}
+.adminBadgeSmall.bad{color:#fda4af;background:rgba(248,113,113,.08);border:1px solid rgba(248,113,113,.14)}
+.adminTableWrap{overflow:auto;border:1px solid rgba(255,255,255,.07);border-radius:10px}
+.adminCompactTable{width:100%;border-collapse:collapse;min-width:650px}.adminCompactTable th,.adminCompactTable td{padding:7px 8px;border-bottom:1px solid rgba(255,255,255,.05);font-size:8px;text-align:left;vertical-align:top}.adminCompactTable th{color:#8394aa;text-transform:uppercase;letter-spacing:.07em}.adminCompactTable tr:last-child td{border-bottom:0}
+.adminFlagRow{display:grid;grid-template-columns:1.2fr 70px 76px 1fr 72px;gap:7px;align-items:center;padding:7px 0;border-bottom:1px solid rgba(255,255,255,.05)}
+.adminFlagRow:last-child{border-bottom:0}.adminFlagRow input,.adminFlagRow select{background:#111116;border:1px solid rgba(255,255,255,.08);color:#e8edf4;border-radius:7px;padding:6px;font-size:8px}.adminFlagRow .flagName{font-size:9px;font-weight:850}.adminFlagRow .flagDesc{font-size:8px;color:#7f90a6}
+.adminToggle{width:38px;height:20px;border-radius:999px;border:1px solid rgba(255,255,255,.09);background:#151519;position:relative;cursor:pointer}.adminToggle:after{content:"";position:absolute;width:14px;height:14px;top:2px;left:2px;border-radius:50%;background:#6b7280;transition:.18s}.adminToggle.on{background:rgba(167,243,208,.15);border-color:rgba(167,243,208,.28)}.adminToggle.on:after{left:20px;background:#a7f3d0;box-shadow:0 0 10px rgba(167,243,208,.35)}
+.adminSwitchGrid{display:grid;grid-template-columns:1fr 1fr;gap:7px}.adminSwitchRow{display:flex;align-items:center;justify-content:space-between;gap:9px;padding:8px;border:1px solid rgba(255,255,255,.06);border-radius:9px;background:rgba(255,255,255,.014)}.adminSwitchRow b{font-size:8px}.adminSwitchRow span{font-size:7px;color:#75859a;margin-top:2px;display:block}
+.adminComposer textarea,.adminComposer input,.adminComposer select{width:100%;background:#111116;border:1px solid rgba(255,255,255,.08);color:#e8edf4;border-radius:8px;padding:8px;font-size:9px}.adminComposer{display:grid;gap:7px}.adminComposer textarea{min-height:82px;resize:vertical}
+.adminToolbar{display:flex;gap:6px;align-items:center;justify-content:space-between;flex-wrap:wrap}.adminToolbarActions{display:flex;gap:6px;flex-wrap:wrap}
+@media(max-width:1000px){.adminCommandKpis{grid-template-columns:repeat(3,1fr)}.adminCommandGrid3{grid-template-columns:1fr 1fr}}
+@media(max-width:700px){.adminCommandKpis{grid-template-columns:1fr 1fr}.adminCommandGrid,.adminCommandGrid3{grid-template-columns:1fr}.adminSwitchGrid{grid-template-columns:1fr}.adminFlagRow{grid-template-columns:1fr 60px 70px}.adminFlagRow .flagDesc{grid-column:1/-1}}
+.broadcastBar{display:none;margin:10px 0;padding:10px 12px;border:1px solid rgba(192,132,252,.20);border-radius:10px;background:linear-gradient(90deg,rgba(192,132,252,.08),rgba(96,165,250,.05));box-shadow:0 0 30px rgba(192,132,252,.05)}.broadcastBar.show{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}.broadcastBar b{font-size:10px}.broadcastBar p{margin:3px 0 0;font-size:9px;color:#a5b3c4;line-height:1.5}.broadcastClose{border:1px solid rgba(255,255,255,.08);background:#0e0e12;color:#8998aa;border-radius:6px;padding:4px 7px;cursor:pointer}
 </style></head>
 <body>
 <header class="header"><div class="headerInner">
@@ -257,7 +284,7 @@ body.admin-mode .nav button.adminNav,body.admin-mode .mobileMenu button.adminNav
 </div></header>
 
 <main class="wrap">
-  <div id="statusBar" class="statusBar">Starting MarketPulse…</div>
+  <div id="statusBar" class="statusBar">Starting MarketPulse…</div><div id="broadcastBar" class="broadcastBar" aria-live="polite"><div><b id="broadcastTitle">MarketPulse Notice</b><p id="broadcastBody"></p></div><button id="broadcastClose" class="broadcastClose" aria-label="Close">×</button></div>
   <section id="view-overview" class="view active">
     <div class="hero">
       <div class="metric"><div class="label">Price</div><div class="value" id="mPrice">—</div><div class="subv" id="mChange">—</div></div>
@@ -592,7 +619,105 @@ body.admin-mode .nav button.adminNav,body.admin-mode .mobileMenu button.adminNav
     </div>
     <div class="section card" style="margin-top:10px"><div class="title">Protected checks</div><div class="healthGrid" id="adminHealthGrid"></div><div class="sub" id="adminHealthText" style="margin-top:7px">Owner-only system diagnostics.</div></div>
   </div>
-  <div class="card adminPanel">
+    <div class="adminCommandKpis">
+    <div class="adminCommandKpi live"><div class="k">Live visitors</div><div class="v" id="acLiveVisitors">—</div></div>
+    <div class="adminCommandKpi"><div class="k">Active today</div><div class="v" id="acActiveDay">—</div></div>
+    <div class="adminCommandKpi"><div class="k">Active 7 days</div><div class="v" id="acActiveWeek">—</div></div>
+    <div class="adminCommandKpi"><div class="k">New this month</div><div class="v" id="acNewMonth">—</div></div>
+    <div class="adminCommandKpi"><div class="k">Security alerts</div><div class="v" id="acSecurityAlerts">—</div></div>
+  </div>
+
+  <div class="adminCommandGrid3">
+    <div class="card adminPanelSmall">
+      <div class="sectionHead"><div><div class="title">Performance</div><div class="sub">Live application telemetry.</div></div><button id="adminRefreshCenter" class="btn">Refresh</button></div>
+      <div class="adminList" id="acPerformance"></div>
+    </div>
+    <div class="card adminPanelSmall">
+      <div class="title">Data providers</div><div class="sub">Connectivity and latency.</div>
+      <div class="adminList" id="acProviders"><div class="small">Checking providers…</div></div>
+    </div>
+    <div class="card adminPanelSmall">
+      <div class="title">Learning / validation</div><div class="sub">Adaptive engine state and recent sample quality.</div>
+      <div class="adminList" id="acLearning"></div>
+    </div>
+  </div>
+
+  <div class="card adminPanelSmall" style="margin-top:10px">
+    <div class="sectionHead"><div><div class="title">Recent live activity</div><div class="sub">Product actions seen recently; personal data is minimized.</div></div><button id="acActivityRefresh" class="btn">Refresh</button></div>
+    <div class="adminTableWrap"><table class="adminCompactTable"><thead><tr><th>Time</th><th>User</th><th>Feature</th><th>Action</th><th>Asset</th><th>TF</th></tr></thead><tbody id="acActivityTable"></tbody></table></div>
+  </div>
+
+  <div class="adminCommandGrid">
+    <div class="card adminPanelSmall">
+      <div class="sectionHead"><div><div class="title">Usage analytics</div><div class="sub">Last 30 days.</div></div></div>
+      <div class="grid3">
+        <div><div class="label">Top features</div><div class="adminList" id="acFeatures"></div></div>
+        <div><div class="label">Top assets</div><div class="adminList" id="acSymbols"></div></div>
+        <div><div class="label">Timeframes</div><div class="adminList" id="acIntervals"></div></div>
+      </div>
+    </div>
+    <div class="card adminPanelSmall">
+      <div class="sectionHead"><div><div class="title">Security center</div><div class="sub">Authentication and protection events.</div></div><span id="acSecurityBadge" class="adminBadgeSmall ok">HEALTHY</span></div>
+      <div class="adminTableWrap"><table class="adminCompactTable"><thead><tr><th>Time</th><th>Event</th><th>Severity</th><th>Account</th></tr></thead><tbody id="acSecurityTable"></tbody></table></div>
+    </div>
+  </div>
+
+  <div class="adminCommandGrid">
+    <div class="card adminPanelSmall">
+      <div class="sectionHead"><div><div class="title">Feature flags</div><div class="sub">Control rollout without a code deploy.</div></div><button id="acSaveFlags" class="btn primary">Save flags</button></div>
+      <div id="acFlags"></div>
+    </div>
+    <div class="card adminPanelSmall">
+      <div class="sectionHead"><div><div class="title">Emergency controls</div><div class="sub">Use during incidents or planned maintenance.</div></div><button id="acSaveEmergency" class="btn primary">Apply</button></div>
+      <div class="adminSwitchGrid">
+        <div class="adminSwitchRow"><div><b>Maintenance mode</b><span>Block normal user API access.</span></div><button class="adminToggle" id="acMaintenance"></button></div>
+        <div class="adminSwitchRow"><div><b>Read-only mode</b><span>Allow viewing while blocking writes.</span></div><button class="adminToggle" id="acReadOnly"></button></div>
+        <div class="adminSwitchRow"><div><b>New registrations</b><span>Emergency registration gate.</span></div><button class="adminToggle on" id="acRegistrations"></button></div>
+        <div class="adminSwitchRow"><div><b>AI Copilot</b><span>Disable AI requests if needed.</span></div><button class="adminToggle on" id="acAI"></button></div>
+        <div class="adminSwitchRow"><div><b>Execution</b><span>Kill application-side execution routing.</span></div><button class="adminToggle on" id="acExecution"></button></div>
+        <div class="adminSwitchRow"><div><b>Market data</b><span>Stop user-facing live data endpoints.</span></div><button class="adminToggle on" id="acMarketData"></button></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="adminCommandGrid">
+    <div class="card adminPanelSmall">
+      <div class="sectionHead"><div><div class="title">Broadcasts</div><div class="sub">Send notices to users.</div></div></div>
+      <div class="adminComposer">
+        <input id="acBroadcastTitle" placeholder="Notice title">
+        <textarea id="acBroadcastBody" placeholder="Message to users…"></textarea>
+        <div class="grid3"><select id="acBroadcastAudience"><option value="all">All users</option><option value="registered">Registered users</option></select><input id="acBroadcastExpiry" type="datetime-local"><button id="acBroadcastSend" class="btn primary">Publish</button></div>
+      </div>
+      <div class="adminList" id="acBroadcasts"></div>
+    </div>
+    <div class="card adminPanelSmall">
+      <div class="sectionHead"><div><div class="title">Support inbox</div><div class="sub">User questions, bugs and suggestions.</div></div><button id="acSupportRefresh" class="btn">Refresh</button></div>
+      <div class="adminTableWrap"><table class="adminCompactTable"><thead><tr><th>User</th><th>Subject</th><th>Status</th><th>Updated</th><th>Action</th></tr></thead><tbody id="acSupportTable"></tbody></table></div>
+    </div>
+  </div>
+
+  <div class="adminCommandGrid">
+    <div class="card adminPanelSmall">
+      <div class="sectionHead"><div><div class="title">Admin audit log</div><div class="sub">Every protected admin action is recorded.</div></div></div>
+      <div class="adminTableWrap"><table class="adminCompactTable"><thead><tr><th>Time</th><th>Action</th><th>Category</th><th>Metadata</th></tr></thead><tbody id="acAuditTable"></tbody></table></div>
+    </div>
+    <div class="card adminPanelSmall">
+      <div class="sectionHead"><div><div class="title">Backup &amp; recovery</div><div class="sub">Operational configuration snapshots; secrets are excluded.</div></div><button id="acCreateSnapshot" class="btn primary">Create snapshot</button></div>
+      <div class="adminList" id="acSnapshots"></div>
+    </div>
+  </div>
+
+  <div class="card adminPanelSmall" style="margin-top:10px">
+    <div class="sectionHead"><div><div class="title">Owner configuration</div><div class="sub">Runtime controls and incident messaging.</div></div><button id="acSaveConfig" class="btn primary">Save configuration</button></div>
+    <div class="inputs">
+      <input id="acMaintenanceMessage" placeholder="Maintenance message">
+      <select id="acMode"><option value="normal">Normal</option><option value="read_only">Read-only</option><option value="maintenance">Maintenance</option></select>
+      <div class="mini"><div class="mini k">OWNER SESSION</div><div class="mini v">Configured securely in Render · default 8 hours</div></div>
+      <div class="mini"><div class="mini k">USER SESSION</div><div class="mini v">Configured in Render · default 30 days</div></div>
+    </div>
+  </div>
+
+<div class="card adminPanel">
     <div class="sectionHead">
       <div><div class="title">User &amp; Access Management</div><div class="sub">Owner-only account activity and moderation. No passwords, IP addresses or unnecessary personal data are exposed.</div></div>
       <button id="adminUsersRefresh" class="btn">Refresh users</button>
@@ -665,7 +790,17 @@ var state={
   adminMfaEnabled:false,
   adminMfaRequired:false,
   adminUsers:[],
-  adminUserStats:null
+  adminUserStats:null,
+  adminOverview:null,
+  adminProviders:[],
+  adminFlags:{},
+  adminConfig:{},
+  adminTickets:[],
+  adminBroadcasts:[],
+  adminAudit:[],
+  adminSecurity:[],
+  adminSnapshots:[],
+  flags:{}
 };
 
 function $(id){return document.getElementById(id)}
@@ -685,12 +820,51 @@ function api(url,timeout){
   })
 }
 
+async function loadPublicConfig(){
+  try{
+    var d=await api("/api/config",5000);state.flags=d.flags||{};
+    if(d.maintenance){setStatus(d.maintenanceMessage||"MarketPulse is temporarily unavailable.","warn")}
+    else if(d.readOnly){setStatus("MarketPulse is in read-only mode. Viewing remains available.","warn")}
+    applyFeatureFlags();loadPublicBroadcasts();
+  }catch{}
+}
+function flagOn(key){
+  var f=state.flags?.[key];if(!f||f.enabled===false)return false;
+  var pct=Math.max(0,Math.min(100,Number(f.rolloutPct??100)));if(pct>=100)return true;if(pct<=0)return false;
+  var id=deviceId(),hash=0;for(var i=0;i<id.length;i++)hash=((hash<<5)-hash+id.charCodeAt(i))|0;
+  return (Math.abs(hash)%100)<pct;
+}
+function applyFeatureFlags(){
+  var map={copilot_enabled:"copilot",research_enabled:"research",replay_enabled:"replay"};
+  Object.keys(map).forEach(function(k){var b=document.querySelector('[data-view="'+map[k]+'"]');if(b)b.style.display=flagOn(k)?"":"none"});
+  var support=$("supportUserPanel");if(support)support.style.display=flagOn("support_enabled")?"":"none";
+  var bc=$("broadcastBar");if(bc&&!flagOn("broadcasts_enabled"))bc.classList.remove("show");
+}
+async function loadPublicBroadcasts(){
+  if(state.flags.broadcasts_enabled?.enabled===false)return;
+  try{var d=await api("/api/broadcasts/active",5000),rows=d.broadcasts||[];if(!rows.length){$("broadcastBar").classList.remove("show");return}var b=rows[0];$("broadcastTitle").textContent=b.title;$("broadcastBody").textContent=b.body;$("broadcastBar").classList.add("show")}catch{}
+}
+async function trackActivity(feature,action,symbol,interval,metadata){
+  try{fetch("/api/telemetry/event",{method:"POST",headers:{"Content-Type":"application/json","x-marketpulse-device":deviceId()},body:JSON.stringify({feature,action,symbol:symbol||null,interval:interval||null,metadata:metadata||{}})}).catch(()=>{})}catch{}
+}
+function renderUserTickets(rows){
+  var el=$("supportUserTickets");if(!el)return;
+  el.innerHTML=(rows||[]).slice(0,6).map(function(x){return'<div class="adminLine"><div><b>'+safeHtml(x.subject)+'</b><div class="small">'+safeHtml(x.status)+' · '+adminDate(x.updatedAt)+'</div></div><span>'+safeHtml(String(x.adminReply||"Awaiting reply").slice(0,70))+'</span></div>'}).join("")||'<div class="small">No tickets yet.</div>';
+}
+async function loadUserTickets(){
+  if(!state.account)return;
+  try{var d=await api("/api/support/tickets",5000);renderUserTickets(d.tickets||[])}catch{}
+}
+async function submitUserTicket(){
+  var subject=$("supportSubject").value.trim(),message=$("supportMessage").value.trim();if(!subject||!message){$("supportUserStatus").textContent="Subject and message are required.";return}
+  try{await apiPost("/api/support/tickets",{category:$("supportCategory").value,subject,message});$("supportUserStatus").textContent="Sent. We'll respond in your account.";$("supportSubject").value="";$("supportMessage").value="";loadUserTickets()}catch(e){$("supportUserStatus").textContent=e.message}
+}
 function setView(name){
   if((name==="admin"||name==="execution")&&!state.account?.isAdmin){name="overview"}
   document.querySelectorAll(".view").forEach(function(v){v.classList.toggle("active",v.id==="view-"+name)});
   document.querySelectorAll(".nav button,.mobileMenu button").forEach(function(b){b.classList.toggle("active",b.dataset.view===name)});
   var menu=$("mobileMenu"),btn=$("mobileMenuBtn");if(menu){menu.classList.remove("open");menu.setAttribute("aria-hidden","true")}if(btn)btn.setAttribute("aria-expanded","false");
-  state.activeView=name;window.scrollTo(0,0);
+  state.activeView=name;window.scrollTo(0,0);trackActivity("navigation","view",state.symbol,state.interval,{view:name});
   if(name==="flow"){loadFlow()}
   if(name==="edge"){loadEdge()}
   if(name==="execution"&&state.account?.isAdmin){loadExecution()}
@@ -1450,6 +1624,95 @@ var accountMode="login";
 function setAccountMode(mode){
   accountMode=mode;$("accountLoginMode").classList.toggle("on",mode==="login");$("accountRegisterMode").classList.toggle("on",mode==="register");$("accountSubmit").textContent=mode==="login"?"Sign in":"Create account";$("accountPassword").autocomplete=mode==="login"?"current-password":"new-password";$("accountError").textContent="";state.adminMfaRequired=false;renderAccount();
 }
+function adminSetToggle(id,on){var b=$(id);if(!b)return;b.classList.toggle("on",Boolean(on))}
+function adminListHtml(items){
+  return (items||[]).slice(0,8).map(function(x){return'<div class="adminLine"><b>'+safeHtml(String(x.key??x.feature??x.symbol??x.interval??x.route??"—"))+'</b><span>'+fmt(x.count??x.value??"—")+'</span></div>'}).join("")||'<div class="small">No data yet.</div>';
+}
+function adminStatusBadge(status){
+  status=String(status||"").toLowerCase();return status==="healthy"||status==="configured"||status==="live"?"ok":status==="stale"||status==="degraded"||status==="warning"?"warn":"bad";
+}
+function adminRenderCommandCenter(){
+  var o=state.adminOverview;if(!o)return;
+  var st=o.stats||{},an=o.analytics||{},p=o.performance||{},learning=o.learning||{};
+  $("acLiveVisitors").textContent=Number(st.liveVisitors||0);$("acActiveDay").textContent=Number(an.totals?.activeDay||0);$("acActiveWeek").textContent=Number(an.totals?.activeWeek||0);$("acNewMonth").textContent=Number(an.totals?.month||0);
+  var alerts=(o.security||[]).filter(function(x){return ["alert","warning"].includes(String(x.severity).toLowerCase())}).length;$("acSecurityAlerts").textContent=alerts;
+  $("acPerformance").innerHTML=[
+    ["Uptime",Math.floor(Number(p.uptimeSec||0)/3600)+"h "+Math.floor(Number(p.uptimeSec||0)%3600/60)+"m"],
+    ["Requests",fmt(p.requests)],["Errors",fmt(p.errors)],["Avg latency",fmt(p.avgLatencyMs)+" ms"],["Memory",fmt(p.memoryMb)+" MB"],["Heap",fmt(p.heapUsedMb)+" MB"]
+  ].map(function(x){return'<div class="adminLine"><b>'+x[0]+'</b><span>'+x[1]+'</span></div>'}).join("");
+  $("acLearning").innerHTML=[
+    ["State",learning.state||learning.phase||"unknown"],["Resolved",learning.resolved??"—"],["Phase 7",o.phase7?.ok?"PASS":"CHECK"],["Durable",learning.durable?"YES":"NO"]
+  ].map(function(x){return'<div class="adminLine"><b>'+x[0]+'</b><span>'+safeHtml(String(x[1]))+'</span></div>'}).join("");
+  $("acFeatures").innerHTML=adminListHtml((an.features||[]).map(function(x){return{feature:x.feature,key:x.feature,count:x.count}}));
+  $("acSymbols").innerHTML=adminListHtml((an.symbols||[]).map(function(x){return{symbol:x.symbol,key:x.symbol,count:x.count}}));
+  $("acIntervals").innerHTML=adminListHtml((an.intervals||[]).map(function(x){return{interval:x.interval,key:x.interval,count:x.count}}));
+  var sec=o.security||[];$("acSecurityTable").innerHTML=sec.length?sec.slice(0,12).map(function(x){return'<tr><td>'+adminDate(x.createdAt)+'</td><td>'+safeHtml(x.eventType)+'</td><td><span class="adminBadgeSmall '+adminStatusBadge(x.severity)+'">'+safeHtml(String(x.severity).toUpperCase())+'</span></td><td>'+safeHtml(x.email||"—")+'</td></tr>'}).join(""):'<tr><td colspan="4" class="small">No security events.</td></tr>';
+  $("acSecurityBadge").textContent=alerts?"REVIEW":"HEALTHY";$("acSecurityBadge").className="adminBadgeSmall "+(alerts?"warn":"ok");
+  $("acAuditTable").innerHTML=(o.audit||[]).slice(0,16).map(function(x){return'<tr><td>'+adminDate(x.createdAt)+'</td><td>'+safeHtml(x.action)+'</td><td>'+safeHtml(x.category)+'</td><td>'+safeHtml(JSON.stringify(x.metadata||{}).slice(0,120))+'</td></tr>'}).join("")||'<tr><td colspan="4" class="small">No admin activity yet.</td></tr>';
+  adminRenderFlags(o.flags||{});
+  adminRenderEmergency(o.config||{});
+  adminRenderBroadcasts(o.broadcasts||[]);
+  adminRenderTickets(o.tickets||[]);
+  adminRenderSnapshots(o.snapshots||[]);
+  $("acActivityTable").innerHTML=(o.recentUsage||[]).slice(0,20).map(function(x){return'<tr><td>'+adminDate(x.createdAt)+'</td><td>'+safeHtml(x.email||"Guest")+'</td><td>'+safeHtml(x.feature||"—")+'</td><td>'+safeHtml(x.action||"—")+'</td><td>'+safeHtml(x.symbol||"—")+'</td><td>'+safeHtml(x.interval||"—")+'</td></tr>'}).join("")||'<tr><td colspan="6" class="small">No recent activity yet.</td></tr>';
+}
+function adminRenderProviders(){
+  var p=state.adminProviders||[];$("acProviders").innerHTML=p.map(function(x){return'<div class="adminLine"><b>'+safeHtml(x.name)+'</b><span><span class="adminBadgeSmall '+adminStatusBadge(x.status)+'">'+safeHtml(String(x.status).toUpperCase())+'</span> '+(x.latencyMs!=null?fmt(x.latencyMs)+" ms":"")+'</span></div>'}).join("")||'<div class="small">No provider data.</div>';
+}
+function adminRenderFlags(flags){
+  state.adminFlags=flags||{};
+  $("acFlags").innerHTML=Object.entries(flags||{}).map(function(entry){var k=entry[0],v=entry[1]||{};return'<div class="adminFlagRow"><div><div class="flagName">'+safeHtml(k)+'</div><div class="flagDesc">'+safeHtml(v.description||"")+'</div></div><button class="adminToggle '+(v.enabled!==false?"on":"")+'" data-flag-toggle="'+safeHtml(k)+'"></button><input data-flag-rollout="'+safeHtml(k)+'" type="number" min="0" max="100" value="'+Number(v.rolloutPct??100)+'"><span class="small">'+safeHtml(v.updatedBy||"default")+'</span><button class="btn" data-flag-save="'+safeHtml(k)+'">Save</button></div>'}).join("");
+  $("acFlags").querySelectorAll("[data-flag-toggle]").forEach(function(b){b.addEventListener("click",function(){b.classList.toggle("on")})});
+  $("acFlags").querySelectorAll("[data-flag-save]").forEach(function(b){b.addEventListener("click",function(){var k=b.dataset.flagSave,t=b.parentElement.querySelector("[data-flag-toggle]"),r=b.parentElement.querySelector("[data-flag-rollout]");adminSaveFlag(k,t.classList.contains("on"),r.value)})});
+}
+function adminRenderEmergency(c){
+  adminSetToggle("acMaintenance",c.maintenanceMode);adminSetToggle("acReadOnly",c.readOnlyMode);adminSetToggle("acRegistrations",c.registrationsEnabled!==false);adminSetToggle("acAI",c.aiEnabled!==false);adminSetToggle("acExecution",c.executionEnabled!==false);adminSetToggle("acMarketData",c.marketDataEnabled!==false);
+  $("acMaintenanceMessage").value=c.maintenanceMessage||"";$("acMode").value=c.mode||"normal";
+}
+function adminRenderBroadcasts(rows){
+  state.adminBroadcasts=rows||[];$("acBroadcasts").innerHTML=(rows||[]).slice(0,8).map(function(x){return'<div class="adminLine"><div><b>'+safeHtml(x.title)+'</b><div class="small">'+safeHtml(x.body).slice(0,100)+'</div></div><button class="btn" data-broadcast-toggle="'+x.id+'" data-broadcast-active="'+(x.active?"true":"false")+'">'+(x.active?"Deactivate":"Activate")+'</button></div>'}).join("")||'<div class="small">No broadcasts.</div>';
+  $("acBroadcasts").querySelectorAll("[data-broadcast-toggle]").forEach(function(b){b.addEventListener("click",function(){adminToggleBroadcast(b.dataset.broadcastToggle,b.dataset.broadcastActive!=="true")})});
+}
+function adminRenderTickets(rows){
+  state.adminTickets=rows||[];$("acSupportTable").innerHTML=(rows||[]).slice(0,25).map(function(x){return'<tr><td>'+safeHtml(x.email||"—")+'</td><td>'+safeHtml(x.subject)+'</td><td>'+safeHtml(x.status)+'</td><td>'+adminDate(x.updatedAt)+'</td><td><button class="btn" data-ticket="'+x.id+'">Reply</button></td></tr>'}).join("")||'<tr><td colspan="5" class="small">No support tickets.</td></tr>';
+  $("acSupportTable").querySelectorAll("[data-ticket]").forEach(function(b){b.addEventListener("click",function(){adminReplyTicket(b.dataset.ticket)})});
+}
+function adminRenderSnapshots(rows){
+  state.adminSnapshots=rows||[];$("acSnapshots").innerHTML=(rows||[]).slice(0,8).map(function(x){return'<div class="adminLine"><div><b>'+safeHtml(x.label)+'</b><div class="small">'+adminDate(x.createdAt)+'</div></div><button class="btn" data-snapshot="'+x.id+'">Restore</button></div>'}).join("")||'<div class="small">No snapshots yet.</div>';
+  $("acSnapshots").querySelectorAll("[data-snapshot]").forEach(function(b){b.addEventListener("click",function(){adminRestoreSnapshot(b.dataset.snapshot)})});
+}
+async function loadAdminProviders(){
+  try{var d=await api("/api/admin/providers",9000);state.adminProviders=d.providers||[];adminRenderProviders()}catch(e){$("acProviders").innerHTML='<div class="small">Provider check failed: '+safeHtml(e.message)+'</div>'}
+}
+async function loadAdminCenter(){
+  if(!state.account?.isAdmin)return;
+  try{var d=await api("/api/admin/overview",12000);state.adminOverview=d;adminRenderCommandCenter();await loadAdminProviders()}catch(e){setStatus("Admin Command Center failed: "+e.message,"warn")}
+}
+async function adminSaveFlag(key,enabled,rolloutPct){
+  try{await apiPost("/api/admin/flags",{key,enabled,rolloutPct:Number(rolloutPct||100),description:state.adminFlags[key]?.description||""});await loadAdminCenter()}catch(e){alert(e.message)}
+}
+async function adminApplyEmergency(){
+  var payload={maintenanceMode:$("acMaintenance").classList.contains("on"),readOnlyMode:$("acReadOnly").classList.contains("on"),registrationsEnabled:$("acRegistrations").classList.contains("on"),aiEnabled:$("acAI").classList.contains("on"),executionEnabled:$("acExecution").classList.contains("on"),marketDataEnabled:$("acMarketData").classList.contains("on"),writesEnabled:!$("acReadOnly").classList.contains("on")};
+  try{await apiPost("/api/admin/emergency",payload);await loadAdminCenter()}catch(e){alert(e.message)}
+}
+async function adminSaveConfig(){
+  try{var current=state.adminOverview?.config||{};var payload=Object.assign({},current,{maintenanceMessage:$("acMaintenanceMessage").value,mode:$("acMode").value,updatedAt:Date.now()});await apiPost("/api/admin/config",payload);await loadAdminCenter()}catch(e){alert(e.message)}
+}
+async function adminPublishBroadcast(){
+  try{await apiPost("/api/admin/broadcasts",{title:$("acBroadcastTitle").value,body:$("acBroadcastBody").value,audience:$("acBroadcastAudience").value,expiresAt:$("acBroadcastExpiry").value?new Date($("acBroadcastExpiry").value).toISOString():null});$("acBroadcastTitle").value="";$("acBroadcastBody").value="";await loadAdminCenter()}catch(e){alert(e.message)}
+}
+async function adminToggleBroadcast(id,active){try{await fetch("/api/admin/broadcasts/"+encodeURIComponent(id)+"/toggle?active="+active,{method:"POST",headers:{"Content-Type":"application/json"}});await loadAdminCenter()}catch(e){alert(e.message)}}
+async function adminReplyTicket(id){
+  var reply=prompt("Reply to this user. Leave blank to resolve without a reply:","");if(reply===null)return;
+  var status=reply.trim()?"resolved":"resolved";
+  try{await apiPost("/api/admin/support/"+encodeURIComponent(id)+"/reply",{reply,status});await loadAdminCenter()}catch(e){alert(e.message)}
+}
+async function adminCreateSnapshot(){try{await apiPost("/api/admin/snapshots",{});await loadAdminCenter()}catch(e){alert(e.message)}}
+async function adminRestoreSnapshot(id){if(!confirm("Restore this operational configuration snapshot?"))return;try{await apiPost("/api/admin/snapshots/"+encodeURIComponent(id)+"/restore",{});await loadAdminCenter()}catch(e){alert(e.message)}}
+async function apiPost(url,body){
+  var r=await fetch(url,{method:"POST",headers:{"Content-Type":"application/json","x-marketpulse-device":deviceId()},body:JSON.stringify(body||{})});
+  var text=await r.text(),j={};try{j=JSON.parse(text)}catch{}if(!r.ok)throw Error(j.error||"Request failed");return j;
+}
 async function loadAdminConsole(){
   if(!state.account?.isAdmin)return;
   if($("adminIdentity"))$("adminIdentity").textContent=state.account.email;
@@ -1459,7 +1722,7 @@ async function loadAdminConsole(){
     var r=await api("/api/admin/storage-health",7000);
     if($("adminStorage"))$("adminStorage").textContent=r.connected?"Postgres":"Local fallback";if($("adminStorageDetail"))$("adminStorageDetail").textContent=r.connected?"Live database connection verified":"Running on local fallback storage";
   }catch(e){if($("adminStorage"))$("adminStorage").textContent="Unavailable";if($("adminStorageDetail"))$("adminStorageDetail").textContent=e.message||"Storage health check failed"}
-  loadAdminUsers();
+  loadAdminUsers();loadAdminCenter();
 }
 function adminDate(v){
   if(!v)return "—";
@@ -1554,7 +1817,7 @@ async function loadAuth(){
     state.account=r.authenticated?r.user:null;
     state.adminConfigured=Boolean(r.adminConfigured);state.adminMfaEnabled=Boolean(r.mfaEnabled);
     renderAccount();
-    if(state.account)await syncMemory();
+    if(state.account){await syncMemory();loadUserTickets()}
   }catch{renderAccount()}
 }
 async function submitAccount(){
@@ -1575,13 +1838,13 @@ async function submitAccount(){
     }
     state.account=j.user;state.adminMfaEnabled=Boolean(j.user&&j.user.mfaEnabled);state.pendingAnonymousMemory=anonymous;state.adminMfaRequired=false;renderAccount();await syncMemory({migrateAnonymous:true,save:true});
     $("accountError").textContent="";$("accountPassword").value="";if($("accountMfa"))$("accountMfa").value="";closeAccount();
-    $("memoryText").textContent=state.account.isAdmin?"Owner security is active.":"Account sync active.";
+    $("memoryText").textContent=state.account.isAdmin?"Owner security is active.":"Account sync active.";loadUserTickets();
   }catch(e){$("accountError").textContent=e.message}
 }
 async function logoutAccount(){
   try{
     await fetch("/api/auth/logout",{method:"POST"});
-    state.account=null;state.pendingAnonymousMemory=null;state.adminMfaRequired=false;
+    state.account=null;state.pendingAnonymousMemory=null;state.adminMfaRequired=false;state.adminTickets=[];
     state.journal=[];state.signals=[];state.watch=[];
     localStorage.removeItem("mp-stable-journal");localStorage.removeItem("mp-stable-signals");localStorage.removeItem("mp-watch");
     renderAccount();await syncMemory();$("memoryText").textContent="Signed out. Anonymous device memory restored; account data remains isolated.";
@@ -1763,15 +2026,25 @@ function initAccountUI(){
   accountLogout.addEventListener("click",logoutAccount);
   accountModal.addEventListener("click",function(e){if(e.target===this)closeAccount()});
   renderAccount();
-  loadAuth();
+  loadAuth();loadPublicConfig();
   setInterval(sendPresence,30000);
   var adminRun=$("adminRunCheck"),adminExec=$("adminOpenExecution");
   if($("adminUsersRefresh"))$("adminUsersRefresh").addEventListener("click",loadAdminUsers);
   if($("adminUsersSearch"))$("adminUsersSearch").addEventListener("input",adminRenderUsers);
   sendPresence();
 
+  if($("supportSend"))$("supportSend").addEventListener("click",submitUserTicket);
+  if($("broadcastClose"))$("broadcastClose").addEventListener("click",function(){$("broadcastBar").classList.remove("show")});
   if(adminRun)adminRun.addEventListener("click",runAdminSystemCheck);
   if(adminExec)adminExec.addEventListener("click",function(){setView("execution")});
+  if($("adminRefreshCenter"))$("adminRefreshCenter").addEventListener("click",loadAdminCenter);
+  if($("acSaveFlags"))$("acSaveFlags").addEventListener("click",loadAdminCenter);
+  if($("acSaveEmergency"))$("acSaveEmergency").addEventListener("click",adminApplyEmergency);
+  if($("acSaveConfig"))$("acSaveConfig").addEventListener("click",adminSaveConfig);
+  if($("acBroadcastSend"))$("acBroadcastSend").addEventListener("click",adminPublishBroadcast);
+  if($("acSupportRefresh"))$("acSupportRefresh").addEventListener("click",loadAdminCenter);
+  if($("acActivityRefresh"))$("acActivityRefresh").addEventListener("click",loadAdminCenter);
+  if($("acCreateSnapshot"))$("acCreateSnapshot").addEventListener("click",adminCreateSnapshot);
   return true;
 }
 if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",initAccountUI,{once:true});else initAccountUI();
@@ -1795,6 +2068,19 @@ setInterval(function(){if(document.visibilityState==="visible")loadPhase7()},600
     </div>
     <div id="accountUser" class="hidden">
       <div class="card" style="margin-top:12px"><div class="label">SIGNED IN</div><div class="value" id="accountEmailText" style="font-size:16px">—</div><div class="sub" style="margin-top:5px">Your account-backed workspace is active.</div></div>
+      <div id="supportUserPanel" class="card" style="margin-top:10px">
+        <div class="label">SUPPORT &amp; FEEDBACK</div>
+        <div class="sub">Report a bug, ask a question or send a suggestion.</div>
+        <div class="inputs one" style="margin-top:8px">
+          <select id="supportCategory"><option value="question">Question</option><option value="bug">Bug report</option><option value="suggestion">Suggestion</option><option value="report">Report</option></select>
+          <input id="supportSubject" placeholder="Subject">
+          <textarea id="supportMessage" placeholder="Describe what you need help with…"></textarea>
+        </div>
+        <button id="supportSend" class="btn primary" style="margin-top:8px">Send to MarketPulse</button>
+        <div id="supportUserStatus" class="small" style="margin-top:7px"></div>
+        <div class="small" style="margin-top:9px">Your recent tickets</div>
+        <div id="supportUserTickets" class="adminList"></div>
+      </div>
       <button id="accountLogout" class="btn" style="margin-top:8px">Sign out</button>
     </div>
   </div>
