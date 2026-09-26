@@ -596,7 +596,7 @@ const server=http.createServer(async(req,res)=>{
         return send(res,200,{ok:true,user:logged.user});
       }catch(e){
         const map={
-          EMAIL_EXISTS:["An account with this email already exists.",400],
+          EMAIL_EXISTS:["Unable to create an account with those details.",400],
           INVALID_CREDENTIALS:["Email or password is incorrect.",400],
           ACCOUNT_LOCKED:[e.message,423],
           AUTH_RATE_LIMIT:["Too many attempts. Please wait and try again.",429],
