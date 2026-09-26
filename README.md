@@ -18,3 +18,10 @@ Run locally with Node 20+:
 npm start
 
 Then open http://localhost:3000
+
+
+## Phase 7
+- Personal trader analytics from the journal: win rate, expectancy, profit factor, average win/loss, net R, drawdown and streaks.
+- Breakdowns by asset, side, regime, setup, hour and weekday.
+- Journal data-quality checks and CSV export from the dashboard.
+- Phase 7 analytics and health endpoints integrated into the system check.
