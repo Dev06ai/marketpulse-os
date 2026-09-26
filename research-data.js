@@ -56,6 +56,24 @@ async function fetchJson(url, timeoutMs = 6000) {
   }
 }
 
+async function fetchKrakenKlines(symbol, interval = "1h", options = {}) {
+  if (!new Set(["15m","1h","4h","1d"]).has(interval)) throw new Error("Unsupported Kraken interval");
+  const map={BTCUSDT:"XBTUSD",ETHUSDT:"ETHUSD",SOLUSDT:"SOLUSD",BNBUSDT:"BNBUSD",XRPUSDT:"XRPUSD",DOGEUSDT:"DOGEUSD",ADAUSDT:"ADAUSD"};
+  const pair=map[String(symbol).toUpperCase()];
+  if(!pair)throw new Error("Unsupported Kraken symbol");
+  const limit=Math.max(1,Math.min(720,Number(options.maxBars||720)));
+  const mins={15m:15,1h:60,4h:240,1d:1440}[interval];
+  const u=new URL("https://api.kraken.com/0/public/OHLC");
+  u.searchParams.set("pair",pair);u.searchParams.set("interval",String(mins));
+  const body=await fetchJson(u,6000);
+  if(body?.error?.length)throw new Error(body.error.join(", "));
+  const key=Object.keys(body.result||{}).find(k=>k!=="last");
+  if(!key)throw new Error("Kraken returned no OHLC data");
+  return (body.result[key]||[]).slice(-limit).map(x=>({
+    t:Number(x[0])*1000,o:Number(x[1]),h:Number(x[2]),l:Number(x[3]),c:Number(x[4]),v:Number(x[6]),source:"kraken-public-rest"
+  }));
+}
+
 async function fetchBinanceKlines(symbol, interval = "1h", options = {}) {
   if (!validInterval(interval)) throw new Error("Unsupported interval");
   const limit = Math.max(1, Math.min(1000, Number(options.limit || 1000)));
@@ -224,7 +242,14 @@ function replayOutcome(candles, index, side, horizonBars = 12, stop, target, rr)
 
 async function buildReplayRecords({symbol, interval="1h", bars=5000, analyze, minScore=55, horizonBars=12, onProgress=null} = {}) {
   if (typeof analyze !== "function") throw new Error("analyze function is required");
-  const candles = await fetchBinanceKlines(symbol, interval, {maxBars: bars});
+  let candles = [];
+  let spotSource = "binance-public-rest";
+  try {
+    candles = await fetchBinanceKlines(symbol, interval, {maxBars: bars});
+  } catch {
+    candles = await fetchKrakenKlines(symbol, interval, {maxBars: bars});
+    spotSource = "kraken-public-rest";
+  }
   let futures = [];
   try { futures = await fetchBinanceFuturesKlines(symbol, interval, {maxBars: candles.length}); } catch {}
   let oiRows = [];
@@ -266,7 +291,7 @@ async function buildReplayRecords({symbol, interval="1h", bars=5000, analyze, mi
     }
     if ((i-start) % 50 === 0) await new Promise(resolve => setImmediate(resolve));
   }
-  return {symbol, interval, bars: candles.length, records, generatedAt: Date.now(), source:"Binance public historical klines"};
+  return {symbol, interval, bars: candles.length, records, generatedAt: Date.now(), source:spotSource+" + historical futures flow where available"};
 }
 
-module.exports = {VERSION, CATALOG, fetchBinanceKlines, fetchBinanceFuturesKlines, fetchBinanceOpenInterestHist, buildReplayRecords};
+module.exports = {VERSION, CATALOG, fetchBinanceKlines, fetchKrakenKlines, fetchBinanceFuturesKlines, fetchBinanceOpenInterestHist, buildReplayRecords};
