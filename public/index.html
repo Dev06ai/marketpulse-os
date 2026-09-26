@@ -112,6 +112,12 @@ button,input,select,textarea{font:inherit}.wrap{width:min(1440px,calc(100% - 26p
 .gateCard.gate-warning .gateExplain{color:#fde68a;background:rgba(120,53,15,.20);border-color:rgba(251,191,36,.20)}
 .gateReason{margin-top:5px;font-size:10px;color:#a8abb5}
 .gateHint{font-size:10px;color:#8a8d98;margin-top:5px}
+</style><style id="execution-beginner-style">
+.executionBeginner{grid-column:1/-1;border-color:rgba(103,232,255,.16);background:linear-gradient(180deg,rgba(103,232,255,.045),rgba(14,14,17,.96))}
+.executionSteps{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;margin-top:9px}
+.executionSteps span{padding:8px;border-radius:9px;border:1px solid rgba(255,255,255,.06);background:#111116;text-align:center;font-size:10px;color:#bec1cb}
+.executionActions button:disabled{opacity:.38;cursor:not-allowed;filter:saturate(.5)}
+@media(max-width:700px){.executionSteps{grid-template-columns:1fr 1fr}}
 </style><style id="signal-state-style">
 #callMetric,#callMetric .value,.decisionStateCard,.signalQualityCard{transition:color .25s ease,border-color .25s ease,box-shadow .25s ease,background .25s ease}
 .decisionSection{--signal-accent:#a78bfa;--signal-soft:rgba(167,139,250,.10);--signal-border:rgba(167,139,250,.28)}
@@ -598,6 +604,12 @@ body.admin-mode .nav button.adminNav,body.admin-mode .mobileMenu button.adminNav
     </div>
 
     <div class="section executionGrid">
+      <div class="executionPanel executionBeginner">
+        <div class="sectionHead"><div><div class="title">How Execution Control works</div><div class="sub">This page does not create trade signals. It safely handles an approved intent.</div></div><span class="executionBadge executionOk">SAFETY FIRST</span></div>
+        <div class="executionSteps"><span>1. Prepare intent</span><span>2. Validate risk</span><span>3. Simulate / testnet</span><span>4. Reconcile</span></div>
+        <div class="executionNote">For beginners: stay in <b>SIMULATION</b>. It never sends exchange orders. <b>TESTNET</b> is only for Bybit's test environment and requires server-side credentials, explicit arming and a successful reconciliation.</div>
+      </div>
+
       <div class="executionPanel">
         <div class="sectionHead"><div><div class="title">Control center</div><div class="sub">The server holds credentials. This browser never receives exchange secrets.</div></div><span class="executionBadge" id="exCredential">NO TESTNET KEYS</span></div>
         <div class="executionActions">
@@ -1362,26 +1374,31 @@ function renderExecution(data){
   state.execution=data||null;if(!data)return;
   var c=data.control||{},cfg=data.config||{},m=data.metrics||{},h=data.health||{};
   $("exMode").textContent=data.mode||"SIMULATION";
-  $("exModeMeta").textContent=data.mode==="TESTNET"?"Bybit testnet":"Local simulated execution";
-  $("exGate").textContent=c.killSwitch?"BLOCKED":(c.armed||data.mode==="SIMULATION"?"ARMED":"BLOCKED");
-  $("exGateMeta").textContent=c.killSwitch?"Kill switch active":(data.mode==="SIMULATION"?"Simulation available":"Explicit testnet arm active");
+  $("exModeMeta").textContent=data.mode==="TESTNET"?"Bybit testnet":"Local simulation — no exchange order is sent";
+  var executionReady=!c.killSwitch&&(data.mode==="SIMULATION"||c.armed&&Boolean(c.reconciliation?.ok));
+  $("exGate").textContent=c.killSwitch?"BLOCKED":(data.mode==="SIMULATION"?"READY":(executionReady?"ARMED":"BLOCKED"));
+  $("exGateMeta").textContent=c.killSwitch?"Kill switch active — new orders are blocked":(data.mode==="SIMULATION"?"Safe local simulation":(c.armed&&c.reconciliation?.ok?"Testnet is armed and reconciled":"Arm + reconcile required before testnet orders"));
   $("exRecon").textContent=c.reconciliation?.ok?"PASS":"BLOCKED";
-  $("exReconMeta").textContent=c.reconciliation?.detail||"Reconciliation required";
+  $("exReconMeta").textContent=data.mode==="SIMULATION"?"No exchange reconciliation needed":(c.reconciliation?.detail||"Reconciliation required");
   $("exDailyLoss").textContent=(Number(m.dailyLossPct)||0).toFixed(2)+"%";
   $("exRiskMeta").textContent="Open risk "+(Number(m.openRiskPct)||0).toFixed(2)+"% · "+fmt(m.activePositions||0)+" active";
-  $("exCredential").textContent=h.credentialsConfigured?"TESTNET KEYS READY":"NO TESTNET KEYS";
-  $("exCredential").className="executionBadge "+(h.credentialsConfigured?"executionOk":"executionWarn");
+  $("exCredential").textContent=data.mode==="SIMULATION"?"NOT NEEDED (SIM)":(h.credentialsConfigured?"TESTNET KEYS READY":"NO TESTNET KEYS");
+  $("exCredential").className="executionBadge "+(data.mode==="SIMULATION"||h.credentialsConfigured?"executionOk":"executionWarn");
+  $("exSubmit").textContent=data.mode==="SIMULATION"?"Simulate latest intent":"Submit latest intent";
+  $("exArm").disabled=data.mode!=="TESTNET";
+  $("exReconcileBtn").disabled=data.mode==="SIMULATION";
+  $("exSubmit").disabled=!executionReady;
   $("exModeSelect").value=data.mode||"SIMULATION";
   $("exAccount").value=cfg.account??100000;$("exRiskPct").value=cfg.riskPct??1;$("exMaxOpenRisk").value=cfg.maxOpenRiskPct??2.5;$("exMaxDailyLoss").value=cfg.maxDailyLossPct??3;$("exMaxPositions").value=cfg.maxPositions??3;$("exMaxSymbol").value=cfg.maxSymbolExposurePct??2;$("exOrderRate").value=cfg.maxOrdersPerMinute??10;$("exSlippage").value=cfg.maxSlippageBps??20;
   $("exControlNote").textContent=data.mode==="TESTNET"
-    ?(h.credentialsConfigured?"Testnet configured. Submit remains blocked until reconciliation passes after an explicit arm.":"Add BYBIT_API_KEY and BYBIT_API_SECRET as server-side Render environment variables; never paste them into chat or the browser.")
-    :"Simulation is local and never sends exchange orders.";
+    ?(h.credentialsConfigured?"Testnet configured. A setup must be armed and reconciled before submission.":"Add BYBIT_API_KEY and BYBIT_API_SECRET as server-side Render environment variables; never paste them into chat or the browser.")
+    :"Simulation mode is fully local. It is the safe place to test the complete intent → risk check → fill → close lifecycle.";
   var health=[
     ["Adapter",h.adapter||"Bybit Testnet adapter", "executionOk"],
-    ["Credentials",h.credentialsConfigured?"Configured":"Not configured",h.credentialsConfigured?"executionOk":"executionWarn"],
-    ["Private WebSocket",h.privateWsConnected?"Connected":"Disconnected",h.privateWsConnected?"executionOk":"executionWarn"],
+    ["Credentials",data.mode==="SIMULATION"?"Not needed in Simulation":(h.credentialsConfigured?"Configured":"Not configured"),data.mode==="SIMULATION"||h.credentialsConfigured?"executionOk":"executionWarn"],
+    ["Private WebSocket",data.mode==="SIMULATION"?"Not needed":(h.privateWsConnected?"Connected":"Disconnected"),data.mode==="SIMULATION"||h.privateWsConnected?"executionOk":"executionWarn"],
     ["Reconciliation",c.reconciliation?.ok?"PASS":"BLOCKED",c.reconciliation?.ok?"executionOk":"executionBad"],
-    ["Live mode","Disabled in Phase 5","executionWarn"],
+    ["Live routing","Disabled — testnet only","executionWarn"],
     ["Last error",h.lastError||"None",h.lastError?"executionBad":"executionOk"]
   ];
   $("exHealthRows").innerHTML=health.map(function(x){return'<div class="executionRow"><span>'+escapeHtmlExec(x[0])+'</span><b class="'+x[2]+'">'+escapeHtmlExec(x[1])+'</b><span></span></div>'}).join("");
