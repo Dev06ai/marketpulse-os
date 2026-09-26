@@ -110,6 +110,73 @@ button,input,select,textarea{font:inherit}.wrap{width:min(1440px,calc(100% - 26p
 .decisionSection.signal-long .bar i,.decisionSection.signal-short .bar i,.decisionSection.signal-wait .bar i{background:linear-gradient(90deg,var(--signal-accent),color-mix(in srgb,var(--signal-accent) 45%,#fff));box-shadow:0 0 10px color-mix(in srgb,var(--signal-accent) 28%,transparent)}
 .flowUnavailable{padding:48px 12px;text-align:center;color:#71839a;font-size:10px}
 @media(prefers-reduced-motion:reduce){#callMetric,#callMetric .value,.decisionStateCard,.signalQualityCard{transition:none}}
+</style><style id="desktop-readability-performance">
+:root{
+  --headline:#eaf9ff;
+  --headline-accent:#67e8ff;
+  --important:#d8c3ff;
+}
+body{font-size:14px}
+.title{font-size:18px;color:var(--headline);text-shadow:0 0 18px rgba(103,232,255,.08)}
+.sectionHead .title{color:var(--headline)}
+.label{font-size:10px;color:#9fb2c7;letter-spacing:.015em}
+.sub,.subv{font-size:10px;color:#9aa9bb}
+.small{font-size:10px!important;color:#a0adbd}
+.chip{font-size:9px}
+.value{font-size:22px;color:#dff8ff;text-shadow:0 0 16px rgba(103,232,255,.10)}
+.metric .label{color:#9dc4d6}
+.metric .subv{color:#96a7bb}
+.metric#callMetric .value{text-shadow:0 0 20px rgba(192,132,252,.16)}
+.sectionHead .sub{color:#94a9bd}
+.mini .k,.level .k,.statCard .k,.insight .k{font-size:9px;color:#8fa9bb}
+.mini .v,.level .v{font-size:11px}
+.flow .v{font-size:13px}.flow .s{font-size:9px}
+.marketRow b,.marketRow span,.tapeCard b,.tapeCard span,.scanRow b,.scanRow span{font-size:9px}
+.signalRow,.dnaRow,.replayFrame,.journalRow,.alertItem{font-size:10px}
+.setupTable{font-size:10px}.setupTable th,.setupTable td{padding:8px}
+.healthItem b{font-size:10px}
+.researchStat .v,.labMetric .v{font-size:16px}
+.brainStats .statCard .v{font-size:15px}
+.aiGrid textarea,.aiOut{font-size:11px;line-height:1.6}
+.btn,.select{font-size:11px;padding:9px 11px}
+.nav button{font-size:11px;padding:10px 11px;color:#9bb0c4}
+.dataState{font-size:10px}.statusBar{font-size:10px}
+.importantValue{color:var(--headline-accent);text-shadow:0 0 18px rgba(103,232,255,.18)}
+#callMetric .label,#mCall{font-weight:950}
+#callMetric .value{font-size:24px}
+#signal-state-style{display:block}
+@media(min-width:1101px){
+  .headerInner{min-height:78px}
+  .brandK{font-size:9px}.brandSub{font-size:10px}.brandName{font-size:24px}
+  .nav{gap:5px}.nav button{font-size:11px;padding:10px 12px}
+  .card{padding:14px}.metric{padding:13px}
+  .sub{font-size:10.5px}.small{font-size:10.5px!important}
+  .label{font-size:10.5px}.title{font-size:19px}
+  .thesis{font-size:13px}.rowLine .small{font-size:10px!important}
+  .rowLine b{font-size:10px!important}
+  .chip{font-size:9.5px}
+}
+@media(max-width:700px){
+  body{font-size:13px}.title{font-size:16px}.value{font-size:20px}
+  .label,.sub,.subv{font-size:9px}.small{font-size:9px!important}
+}
+.signal-long #callMetric .value{color:#4ade80!important}
+.signal-short #callMetric .value{color:#f87171!important}
+.signal-wait #callMetric .value{color:#c084fc!important}
+.signal-long #mBias{color:#86efac!important}.signal-short #mBias{color:#fda4af!important}.signal-wait #mBias{color:#d8b4fe!important}
+.decisionSection.signal-long,.decisionSection.signal-short,.decisionSection.signal-wait{transition:border-color .2s,box-shadow .2s}
+.decisionSection.signal-long .decisionStateCard,.decisionSection.signal-long .signalQualityCard{border-color:rgba(74,222,128,.38)!important;box-shadow:0 0 0 1px rgba(74,222,128,.08),0 0 26px rgba(74,222,128,.14),inset 0 1px 0 rgba(255,255,255,.04),var(--shadow)!important}
+.decisionSection.signal-short .decisionStateCard,.decisionSection.signal-short .signalQualityCard{border-color:rgba(248,113,113,.38)!important;box-shadow:0 0 0 1px rgba(248,113,113,.08),0 0 26px rgba(248,113,113,.14),inset 0 1px 0 rgba(255,255,255,.04),var(--shadow)!important}
+.decisionSection.signal-wait .decisionStateCard,.decisionSection.signal-wait .signalQualityCard{border-color:rgba(192,132,252,.42)!important;box-shadow:0 0 0 1px rgba(192,132,252,.09),0 0 26px rgba(192,132,252,.16),inset 0 1px 0 rgba(255,255,255,.04),var(--shadow)!important}
+.signal-long .signalQualityCard .value{color:#4ade80!important;text-shadow:0 0 18px rgba(74,222,128,.30)}
+.signal-short .signalQualityCard .value{color:#f87171!important;text-shadow:0 0 18px rgba(248,113,113,.30)}
+.signal-wait .signalQualityCard .value{color:#c084fc!important;text-shadow:0 0 18px rgba(192,132,252,.34)}
+.signal-long .bar i{background:linear-gradient(90deg,#4ade80,#86efac)!important;box-shadow:0 0 10px rgba(74,222,128,.28)}
+.signal-short .bar i{background:linear-gradient(90deg,#f87171,#fda4af)!important;box-shadow:0 0 10px rgba(248,113,113,.28)}
+.signal-wait .bar i{background:linear-gradient(90deg,#c084fc,#e9d5ff)!important;box-shadow:0 0 10px rgba(192,132,252,.28)}
+#callMetric.signal-long{border-color:rgba(74,222,128,.45)!important;background:linear-gradient(180deg,rgba(74,222,128,.12),rgba(8,8,11,.94))!important;box-shadow:0 0 30px rgba(74,222,128,.18),var(--shadow)!important}
+#callMetric.signal-short{border-color:rgba(248,113,113,.45)!important;background:linear-gradient(180deg,rgba(248,113,113,.12),rgba(8,8,11,.94))!important;box-shadow:0 0 30px rgba(248,113,113,.18),var(--shadow)!important}
+#callMetric.signal-wait{border-color:rgba(192,132,252,.48)!important;background:linear-gradient(180deg,rgba(192,132,252,.13),rgba(8,8,11,.94))!important;box-shadow:0 0 30px rgba(192,132,252,.20),var(--shadow)!important}
 </style></head>
 <body>
 <header class="header"><div class="headerInner">
@@ -474,7 +541,9 @@ var state={
   journal:JSON.parse(localStorage.getItem("mp-stable-journal")||"[]"),
   edge:null,
   execution:null,
-  portfolio:null
+  portfolio:null,
+  secondaryStarted:false,
+  activeView:"overview"
 };
 
 function $(id){return document.getElementById(id)}
@@ -498,11 +567,14 @@ function setView(name){
   document.querySelectorAll(".view").forEach(function(v){v.classList.toggle("active",v.id==="view-"+name)});
   document.querySelectorAll(".nav button,.mobileMenu button").forEach(function(b){b.classList.toggle("active",b.dataset.view===name)});
   var menu=$("mobileMenu"),btn=$("mobileMenuBtn");if(menu){menu.classList.remove("open");menu.setAttribute("aria-hidden","true")}if(btn)btn.setAttribute("aria-expanded","false");
-  window.scrollTo(0,0);
-  if(name==="flow"&&state.market){
-    renderFlowView(state.market.derivatives||{available:false});
-    drawFlowData(state.market.derivatives||null);
-  }
+  state.activeView=name;window.scrollTo(0,0);
+  if(name==="flow"){loadFlow()}
+  if(name==="edge"){loadEdge()}
+  if(name==="execution"){loadExecution()}
+  if(name==="portfolio"){loadPortfolio()}
+  if(name==="lab"){deferTask(runSystemCheck,60)}
+  if(name==="brain"){deferTask(function(){loadPhase7();loadPhase7Health()},40)}
+  if(name==="overview"&&state.market){queueChartDraw()}
 }
 document.querySelectorAll("[data-view]").forEach(function(b){
   b.addEventListener("click",function(){setView(b.dataset.view)})
@@ -625,9 +697,12 @@ function renderCycle(){
 function renderMarket(){
   var d=state.market,a=d&&d.analysis;if(!d||!a)return;
   var signalState=a.side==="LONG"?"signal-long":a.side==="SHORT"?"signal-short":"signal-wait";
-  var decision=document.querySelector(".decisionSection");
-  if(decision){decision.classList.remove("signal-long","signal-short","signal-wait");decision.classList.add(signalState)}
-  $("callMetric").classList.remove("signal-long","signal-short","signal-wait");$("callMetric").classList.add(signalState);
+  var accent=a.side==="LONG"?"#4ade80":a.side==="SHORT"?"#f87171":"#c084fc";
+  var glow=a.side==="LONG"?"rgba(74,222,128,.18)":a.side==="SHORT"?"rgba(248,113,113,.18)":"rgba(192,132,252,.20)";
+  var decision=document.querySelector(".decisionSection"),callMetric=$("callMetric");
+  if(decision){decision.classList.remove("signal-long","signal-short","signal-wait");decision.classList.add(signalState);decision.style.setProperty("--signal-accent",accent);decision.style.setProperty("--signal-glow",glow)}
+  callMetric.classList.remove("signal-long","signal-short","signal-wait");callMetric.classList.add(signalState);
+  $("mCall").style.color=accent;$("mCall").style.textShadow="0 0 20px "+glow;$("quality").style.color=accent;$("quality").style.textShadow="0 0 18px "+glow;$("mBias").style.color=accent;
   $("mPrice").textContent=fmt(a.price);$("mChange").textContent=pct(a.change24h)+" / 24h";
   $("mRegime").textContent=a.regime||"—";$("mMood").textContent="Mood: "+(a.mood||"—");
   $("mCall").textContent=a.side==="LONG"?"LONG":a.side==="SHORT"?"SHORT":"NO TRADE";$("mBias").textContent=a.side==="LONG"?"Bullish setup":a.side==="SHORT"?"Bearish setup":"Neutral / waiting";
@@ -1068,13 +1143,27 @@ async function loadScan(){
   try{var j=await api("/api/core-scan?interval="+encodeURIComponent(state.interval),16000);state.scan=j.rows||[];renderScanner()}catch{$("scanRows").innerHTML='<div class="small">Scanner unavailable right now.</div>'}
 }
 
+function deferTask(fn,delay){
+  var run=function(){try{fn()}catch(e){}};
+  if("requestIdleCallback"in window){requestIdleCallback(run,{timeout:Math.max(250,delay+500)})}else{setTimeout(run,delay)}
+}
+function queueSecondaryBoot(){
+  if(state.secondaryStarted)return;
+  state.secondaryStarted=true;
+  deferTask(loadScan,120);
+  deferTask(loadCycle,220);
+  deferTask(loadFlow,320);
+  deferTask(loadEdge,700);
+  deferTask(syncMemory,900);
+}
+
 async function loadCore(){
   if(state.busy)return;
   state.busy=true;setStatus("Loading core market intelligence…");$("dataState").textContent="Connecting";$("symbol").value=state.symbol;
   try{
     var d=await api("/api/core?symbol="+encodeURIComponent(state.symbol)+"&interval="+encodeURIComponent(state.interval),9000);
     state.market=d;setStatus("Core market intelligence connected","ok");$("dataState").textContent="Live";renderMarket();
-    loadEdge();loadExecution();loadPortfolio();loadScan();loadCycle();
+    queueSecondaryBoot();
   }catch(e){
     setStatus("Core market connection failed. The interface is running; retrying automatically.","warn");$("dataState").textContent="Retry";
     $("thesis").textContent="The interface is responsive, but the live market source did not respond. Retrying automatically.";
@@ -1149,7 +1238,7 @@ async function syncMemory(){
 syncPhase3Symbols();
 $("loadReplay").addEventListener("click",loadReplay);$("toggleReplay").addEventListener("click",toggleReplay);$("replayCursor").addEventListener("input",function(){replayState.cursor=+this.value;renderReplayFrame()});
 $("refreshDNA").addEventListener("click",refreshDNA);$("loadDNA").addEventListener("click",loadDNA);$("runResearch").addEventListener("click",runResearch);
-$("askAi").addEventListener("click",askAI);$("sync").addEventListener("click",syncMemory);$("runSystemCheck").addEventListener("click",runSystemCheck);$("notifBtn").addEventListener("click",enableNotifications);$("alertScore").addEventListener("input",renderAlerts);$("chartSettings").addEventListener("click",openChartSettings);$("chartClose").addEventListener("click",closeChartSettings);$("chartCancel").addEventListener("click",closeChartSettings);$("chartApply").addEventListener("click",applyChartSettings);document.querySelectorAll("[data-preset]").forEach(function(b){b.addEventListener("click",function(){document.querySelectorAll("[data-preset]").forEach(function(x){x.classList.remove("active")});b.classList.add("active");$("bullColor").value=CHART_PRESETS[b.dataset.preset].bull;$("bearColor").value=CHART_PRESETS[b.dataset.preset].bear})});$("aiMarketMode").addEventListener("click",function(){state.aiMode="market";$("aiMarketMode").classList.add("on");$("aiTradeMode").classList.remove("on");$("tradeFields").classList.add("hidden")});$("aiTradeMode").addEventListener("click",function(){state.aiMode="trade";$("aiTradeMode").classList.add("on");$("aiMarketMode").classList.remove("on");$("tradeFields").classList.remove("hidden")});runSystemCheck();renderSignals();loadExecution();setInterval(loadExecution,10000);setInterval(loadPortfolio,15000);
+$("askAi").addEventListener("click",askAI);$("sync").addEventListener("click",syncMemory);$("runSystemCheck").addEventListener("click",runSystemCheck);$("notifBtn").addEventListener("click",enableNotifications);$("alertScore").addEventListener("input",renderAlerts);$("chartSettings").addEventListener("click",openChartSettings);$("chartClose").addEventListener("click",closeChartSettings);$("chartCancel").addEventListener("click",closeChartSettings);$("chartApply").addEventListener("click",applyChartSettings);document.querySelectorAll("[data-preset]").forEach(function(b){b.addEventListener("click",function(){document.querySelectorAll("[data-preset]").forEach(function(x){x.classList.remove("active")});b.classList.add("active");$("bullColor").value=CHART_PRESETS[b.dataset.preset].bull;$("bearColor").value=CHART_PRESETS[b.dataset.preset].bear})});$("aiMarketMode").addEventListener("click",function(){state.aiMode="market";$("aiMarketMode").classList.add("on");$("aiTradeMode").classList.remove("on");$("tradeFields").classList.add("hidden")});$("aiTradeMode").addEventListener("click",function(){state.aiMode="trade";$("aiTradeMode").classList.add("on");$("aiMarketMode").classList.remove("on");$("tradeFields").classList.remove("hidden")});renderSignals();
 
 ["panYUp","panL","panR","panYDown","zoomOut","zoomIn","zoomReset"].forEach(function(id){
   $(id).addEventListener("click",function(){
@@ -1180,8 +1269,9 @@ window.addEventListener("resize",function(){if(state.market){drawMain();renderCy
 
 populateSymbols();$("interval").value=state.interval;renderJournal();renderBrainInsights();renderAlerts();calc();
 setStatus("MarketPulse ready. Connecting to live market data…");
-loadCore();loadEdge();syncMemory();
+requestAnimationFrame(function(){loadCore()});
 setInterval(function(){if(document.visibilityState==="visible")loadCore()},45000);
+setInterval(function(){if(document.visibilityState!=="visible")return; if(state.activeView==="execution")loadExecution(); if(state.activeView==="portfolio")loadPortfolio(); if(state.activeView==="edge")loadEdge(); if(state.activeView==="brain"){loadPhase7();loadPhase7Health()}},15000);
 
 function mp7FmtR(v){var n=Number(v);return Number.isFinite(n)?(n>0?"+":"")+n.toFixed(2)+"R":"—"}
 function mp7FmtPct(v){var n=Number(v);return Number.isFinite(n)?n.toFixed(1)+"%":"—"}
@@ -1223,7 +1313,7 @@ function renderPhase7(){
 }
 async function loadPhase7(){
   try{
-    $("mp7HealthText").textContent="Refreshing analytics…";
+    $("mp7HealthText").textContent="Loading journal analytics…";
     var d=await api("/api/analytics?device="+encodeURIComponent(deviceId()),7000);
     state.phase7=d.analytics;renderPhase7();
   }catch(e){
