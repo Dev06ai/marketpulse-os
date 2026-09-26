@@ -53,3 +53,7 @@ For the strongest owner protection, configure these Render secrets:
 
 ## Owner user & access management
 The owner-only Admin Console includes registration counts for today, this week, this month and all time; live visitor and live registered-user counts based on a short-lived 2-minute heartbeat; a registered-user directory with join/login/activity timestamps; and server-enforced moderation actions for temporary restriction, restoration and permanent ban. Moderation revokes active sessions. User views intentionally exclude passwords, IP addresses and other unnecessary personal data.
+
+
+## Admin Command Center
+Version 2.5 adds an owner-only command center with private analytics, live activity, security events, server performance telemetry, market-data provider health, feature flags with deterministic rollout percentages, emergency controls, maintenance/read-only modes, broadcasts, support inbox, audit logs, adaptive-learning monitoring, and operational configuration snapshots. Admin-only APIs remain server-enforced behind the existing Owner MFA boundary. Support views intentionally exclude passwords, IP addresses and unnecessary personal data. Operational snapshots cover MarketPulse configuration/flags and do not contain credentials or password hashes; provider-level database backups remain the responsibility of the managed Postgres service.
