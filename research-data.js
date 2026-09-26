@@ -368,12 +368,12 @@ async function buildReplayRecords({symbol, interval="1h", bars=5000, analyze, mi
     const currentFut=futMap.get(candles[i].t);
     let previousOi=null;
     for(let j=i-1;j>=0&&j>i-10;j--){
-      const prev=oiMap.get(candles[j].t);
+      const prev=latestAtOrBefore(oiSeries,candles[j].t,24*60*60*1000);
       if(prev&&Number.isFinite(Number(prev.oi))){previousOi=Number(prev.oi);break;}
     }
     const deriv=alignDerivativeSnapshot(
       currentFut,
-      latestAtOrBefore(oiSeries,candles[i].t),
+      latestAtOrBefore(oiSeries,candles[i].t,24*60*60*1000),
       previousOi,
       {
         taker:latestAtOrBefore(takerSeries,candles[i].t,24*60*60*1000),
