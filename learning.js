@@ -211,7 +211,7 @@ async function observe(symbol,interval,candleTs,a){
     features:{
       score:Number(a.score)||0,regime:a.regime,side:a.side,type:a.type,status:a.status,
       rsi:a.rsi,adx:a.adx,atrPct:a.atrPct,volumeZ:a.volumeZ,structure:a.structure,
-      mtf:a.mtf,components:a.components,derivatives:a.derivatives
+      mtf:a.mtf,components:a.components,derivatives:a.derivatives,modelFeatures:predictionEngine.buildFeatures(a,{orderbook:a.microstructure||{}})
     }
   });
 }
