@@ -31,5 +31,14 @@ const event=evaluateEventContract({
 assert(event.mode==="EVENT_UP_DOWN","event mode");
 assert(event.maxContracts===2,"event risk sizing");
 assert(event.maxLoss===20,"event max loss");
+assert(event.maxProfit===40,"event max profit");
+
+const conflict=evaluateEventContract({
+  analysis,derivatives:deriv,dataQuality:{qualityPct:100,candleAgeMs:1000},
+  equity:5000,dayStartEquity:5000,peakEquity:5000,
+  side:"DOWN",premium:10,payout:30,fee:0,config:cfg
+});
+assert(conflict.decision==="BLOCKED","event direction conflict");
+assert(conflict.reasons.includes("EVENT_DIRECTION_CONFLICTS_WITH_SIGNAL"),"event direction gate");
 
 console.log("Prop Firm Guard smoke checks passed:",{standard:good.decision,event:event.decision,maxContracts:event.maxContracts});
