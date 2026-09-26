@@ -34,3 +34,7 @@ Then open http://localhost:3000
 - Journal trade edit/delete controls and cross-device account sync.
 - Auth rate limiting and hardened JSON response headers.
 - Product version: 2.1.0.
+
+
+## Owner / Admin access
+Set the Render/server environment variable `MARKETPULSE_ADMIN_EMAIL` to the single email address that should have owner/admin access. Admin access is enforced server-side; hiding the UI is not the security boundary. Trader accounts do not receive system diagnostics, execution controls, internal health endpoints, or protected maintenance actions. ChatGPT continues to manage the codebase through the connected repository tooling rather than using a privileged website account.

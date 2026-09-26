@@ -191,13 +191,25 @@ body{font-size:14px}
 .flowLegend .lg.mint{background:#22d3ee;box-shadow:0 0 8px rgba(34,211,238,.45)}
 .flowLegend .lg.lav{background:#a78bfa;box-shadow:0 0 8px rgba(167,139,250,.45)}
 .flowLegend .lg.ember{background:#fb7185;box-shadow:0 0 8px rgba(251,113,133,.45)}
+</style><style id="owner-admin-style">
+.adminOnly,.adminOnlyControl{display:none!important}
+body.admin-mode .adminOnly{display:block!important}body.admin-mode .adminOnlyControl{display:inline-flex!important}
+.nav button.adminNav,.mobileMenu button.adminNav{display:none}
+body.admin-mode .nav button.adminNav,body.admin-mode .mobileMenu button.adminNav{display:block;color:#d8c3ff;border-color:rgba(192,132,252,.25);background:rgba(192,132,252,.06)}
+.adminPanel{border-color:rgba(192,132,252,.22);box-shadow:0 0 0 1px rgba(192,132,252,.05),0 0 36px rgba(192,132,252,.08),var(--shadow)}
+.adminBadge{display:inline-flex;align-items:center;gap:6px;border:1px solid rgba(192,132,252,.28);background:rgba(192,132,252,.07);color:#e9d5ff;border-radius:999px;padding:6px 9px;font-size:9px;font-weight:900;letter-spacing:.06em}
+.adminGrid{display:grid;grid-template-columns:repeat(3,1fr);gap:9px}
+.adminMetric{padding:12px;border:1px solid rgba(255,255,255,.07);border-radius:11px;background:#0d0d12}
+.adminMetric .v{font-size:18px;font-weight:900;margin-top:4px}
+.adminMetric .s{font-size:9px;color:#8999ad;margin-top:3px}
+@media(max-width:700px){.adminGrid{grid-template-columns:1fr}}
 </style></head>
 <body>
 <header class="header"><div class="headerInner">
   <div class="logo"><div class="mark" aria-label="MarketPulse logo"></div><div><div class="brandK">CRYPTO MARKET INTELLIGENCE</div><div class="brandName">MarketPulse</div><div class="brandSub">Less noise. More signal. Better decisions.</div></div></div>
-  <nav class="nav" id="nav"><button class="active" data-view="overview">Command</button><button data-view="scanner">Markets</button><button data-view="signals">Setups</button><button data-view="flow">Flow</button><button data-view="lab">Backtest</button><button data-view="replay">Replay</button><button data-view="dna">DNA</button><button data-view="research">Research</button><button data-view="edge">Edge</button><button data-view="portfolio">Portfolio</button><button data-view="execution">Execution</button><button data-view="brain">Journal</button><button data-view="ai">Copilot</button><button data-view="alerts">Watchlist</button><button data-view="risk">Risk</button></nav>
+  <nav class="nav" id="nav"><button class="active" data-view="overview">Command</button><button data-view="scanner">Markets</button><button data-view="signals">Setups</button><button data-view="flow">Flow</button><button data-view="lab">Backtest</button><button data-view="replay">Replay</button><button data-view="dna">DNA</button><button data-view="research">Research</button><button data-view="edge">Edge</button><button data-view="portfolio">Portfolio</button><button id="executionNav" class="adminNav" data-view="execution">Execution</button><button data-view="brain">Journal</button><button data-view="ai">Copilot</button><button data-view="alerts">Watchlist</button><button data-view="risk">Risk</button><button id="adminNav" class="adminNav" data-view="admin">Admin</button></nav>
   <button id="mobileMenuBtn" class="mobileMenuBtn" aria-label="Open MarketPulse menu" aria-expanded="false">☰</button>
-  <div id="mobileMenu" class="mobileMenu" aria-hidden="true"><button data-view="overview">Command</button><button data-view="scanner">Markets</button><button data-view="signals">Setups</button><button data-view="flow">Flow</button><button data-view="lab">Backtest</button><button data-view="replay">Replay</button><button data-view="dna">DNA</button><button data-view="research">Research</button><button data-view="edge">Edge</button><button data-view="portfolio">Portfolio</button><button data-view="execution">Execution</button><button data-view="brain">Journal</button><button data-view="ai">Copilot</button><button data-view="alerts">Watchlist</button><button data-view="risk">Risk</button></div>
+  <div id="mobileMenu" class="mobileMenu" aria-hidden="true"><button data-view="overview">Command</button><button data-view="scanner">Markets</button><button data-view="signals">Setups</button><button data-view="flow">Flow</button><button data-view="lab">Backtest</button><button data-view="replay">Replay</button><button data-view="dna">DNA</button><button data-view="research">Research</button><button data-view="edge">Edge</button><button data-view="portfolio">Portfolio</button><button data-view="execution">Execution</button><button data-view="brain">Journal</button><button data-view="ai">Copilot</button><button data-view="alerts">Watchlist</button><button data-view="risk">Risk</button><button id="adminNavMobile" class="adminNav" data-view="admin">Admin</button></div>
   <div class="headerTools"><button id="accountBtn" class="btn">Guest</button><span class="dataState"><i class="liveDot"></i><span id="dataState">Connecting</span></span><select id="symbol" class="select"></select><select id="interval" class="select"><option>15m</option><option selected>1h</option><option>4h</option><option>1d</option></select><button id="refresh" class="btn primary">Refresh</button></div>
 </div></header>
 
@@ -284,10 +296,10 @@ body{font-size:14px}
   <section id="view-flow" class="view"><div class="sectionHead"><div><div class="title">Positioning &amp; Flow</div><div class="sub">Focused execution context for the selected asset.</div></div></div><div class="card"><div class="flowGrid"><div class="card flow"><div class="label">Open interest</div><div class="v" id="fOi">—</div><div class="s" id="fOiS">—</div></div><div class="card flow"><div class="label">CVD</div><div class="v" id="fCvd">—</div><div class="s" id="fCvdS">—</div></div><div class="card flow"><div class="label">Positioning</div><div class="v" id="fPos">—</div><div class="s" id="fFund">—</div></div><div class="card flow"><div class="label">Liquidation</div><div class="v" id="fLiq">—</div><div class="s" id="fLiqS">—</div></div></div><canvas id="flowChart2" class="flowChart"></canvas></div></section>
 
   <section id="view-signals" class="view"><div class="sectionHead"><div><div class="title">Active Setups</div><div class="sub">Formation, updates, READY states and invalidation history.</div></div></div><div class="card"><div class="grid4"><div class="mini"><div class="k">Events</div><div class="v" id="sigN">0</div></div><div class="mini"><div class="k">Ready</div><div class="v" id="sigR">0</div></div><div class="mini"><div class="k">Invalidated</div><div class="v" id="sigI">0</div></div><div class="mini"><div class="k">Latest</div><div class="v" id="sigL">—</div></div></div><div id="signalRows" class="signalRows" style="margin-top:8px"></div></div></section>
-  <section id="view-lab" class="view"><div class="sectionHead"><div><div class="title">Backtest &amp; Validation</div><div class="sub">Historical backtest, walk-forward validation, setup stats and live system health.</div></div><button id="runSystemCheck" class="btn">Run system check</button></div><div class="card"><div class="labGrid"><div class="labMetric"><div class="label">Historical sample</div><div class="v" id="labSample">—</div></div><div class="labMetric"><div class="label">Historical hit rate</div><div class="v" id="labHistRate">—</div></div><div class="labMetric"><div class="label">Historical Net R</div><div class="v" id="labHistR">—</div></div><div class="labMetric"><div class="label">Profit factor</div><div class="v" id="labPF">—</div></div></div><div class="labGrid" style="margin-top:7px"><div class="labMetric"><div class="label">Validation sample</div><div class="v" id="labValSample">—</div></div><div class="labMetric"><div class="label">Out-of-sample hit rate</div><div class="v" id="labValRate">—</div></div><div class="labMetric"><div class="label">Validation Net R</div><div class="v" id="labValR">—</div></div><div class="labMetric"><div class="label">Coverage</div><div class="v" id="labCoverage">—</div></div></div></div><div class="section card"><div class="title">Adaptive component evidence</div><div class="sub" style="margin-bottom:7px">Components only influence calibration after the minimum sample thresholds are met.</div><div style="overflow:auto"><table class="setupTable"><thead><tr><th>Component</th><th>Strong N</th><th>Weak N</th><th>Strong hit</th><th>Weak hit</th><th>Eligible</th></tr></thead><tbody id="componentRows"></tbody></table></div><div class="sub" id="calibrationNote" style="margin-top:7px">No adaptive calibration yet.</div></div>
+  <section id="view-lab" class="view"><div class="sectionHead"><div><div class="title">Backtest &amp; Validation</div><div class="sub">Historical backtest, walk-forward validation and setup statistics.</div></div><button id="runSystemCheck" class="btn adminOnlyControl">Run system check</button></div><div class="card"><div class="labGrid"><div class="labMetric"><div class="label">Historical sample</div><div class="v" id="labSample">—</div></div><div class="labMetric"><div class="label">Historical hit rate</div><div class="v" id="labHistRate">—</div></div><div class="labMetric"><div class="label">Historical Net R</div><div class="v" id="labHistR">—</div></div><div class="labMetric"><div class="label">Profit factor</div><div class="v" id="labPF">—</div></div></div><div class="labGrid" style="margin-top:7px"><div class="labMetric"><div class="label">Validation sample</div><div class="v" id="labValSample">—</div></div><div class="labMetric"><div class="label">Out-of-sample hit rate</div><div class="v" id="labValRate">—</div></div><div class="labMetric"><div class="label">Validation Net R</div><div class="v" id="labValR">—</div></div><div class="labMetric"><div class="label">Coverage</div><div class="v" id="labCoverage">—</div></div></div></div><div class="section card"><div class="title">Adaptive component evidence</div><div class="sub" style="margin-bottom:7px">Components only influence calibration after the minimum sample thresholds are met.</div><div style="overflow:auto"><table class="setupTable"><thead><tr><th>Component</th><th>Strong N</th><th>Weak N</th><th>Strong hit</th><th>Weak hit</th><th>Eligible</th></tr></thead><tbody id="componentRows"></tbody></table></div><div class="sub" id="calibrationNote" style="margin-top:7px">No adaptive calibration yet.</div></div>
   <div class="section card"><div class="title">Recent calibration history</div><div class="sub" style="margin-bottom:7px">Auditable score adjustments generated only after resolved evidence.</div><div id="calibrationRows" class="signalRows"></div></div>
 
-  <div class="section card"><div class="title">Setup validation</div><div class="sub" style="margin-bottom:7px">Per-setup historical evidence from the current dataset.</div><div style="overflow:auto"><table class="setupTable"><thead><tr><th>Setup</th><th>Trades</th><th>Win rate</th><th>Net R</th><th>Expectancy</th></tr></thead><tbody id="setupRows"></tbody></table></div></div><div class="section card"><div class="title">System health</div><div class="healthGrid" id="healthGrid"></div><div class="sub" id="healthText" style="margin-top:7px">Run the check to validate live data, learning and persistence.</div></div></section>
+  <div class="section card"><div class="title">Setup validation</div><div class="sub" style="margin-bottom:7px">Per-setup historical evidence from the current dataset.</div><div style="overflow:auto"><table class="setupTable"><thead><tr><th>Setup</th><th>Trades</th><th>Win rate</th><th>Net R</th><th>Expectancy</th></tr></thead><tbody id="setupRows"></tbody></table></div></div><div id="systemHealthAdmin" class="section card adminOnly"><div class="title">System health</div><div class="healthGrid" id="healthGrid"></div><div class="sub" id="healthText" style="margin-top:7px">Run the check to validate live data, learning and persistence.</div></div></section>
 
   <section id="view-alerts" class="view"><div class="sectionHead"><div><div class="title">Smart Alerts</div><div class="sub">Browser alerts for assets you are actively watching.</div></div><button id="notifBtn" class="btn">Enable notifications</button></div><div class="card"><div class="grid2"><div><div class="label">Setup threshold</div><div class="inputs one"><input id="alertScore" type="number" min="50" max="95" value="75"></div><div class="watchNote">A watched asset can alert when its current confluence reaches the threshold.</div></div><div><div class="label">Alert status</div><div class="result" id="notifState">Notifications not enabled</div><div class="watchNote">Alerts are browser-local and do not execute trades.</div></div></div></div><div class="section card"><div class="sectionHead"><div><div class="title">Watchlist</div><div class="sub">Click a star in Scanner or Intel to watch an asset.</div></div><span class="chip" id="watchCount">0 assets</span></div><div id="alertList" class="alertList"></div></div></section>
 
@@ -523,7 +535,27 @@ body{font-size:14px}
     <div class="section portfolioPanel"><div class="sectionHead"><div><div class="title">Portfolio events</div><div class="sub">Changes to portfolio guard state and saved configuration.</div></div></div><div id="pfEvents"></div></div>
   </section>
 
-  <section id="view-risk" class="view"><div class="sectionHead"><div><div class="title">Risk Lab</div><div class="sub">Position size should follow the invalidation.</div></div></div><div class="card"><div class="inputs"><input id="ra" type="number" value="5000" placeholder="Account"><input id="rrisk" type="number" value="1" step=".05" placeholder="Risk %"><input id="rentry" type="number" value="84000" placeholder="Entry"><input id="rstop" type="number" value="82000" placeholder="Stop"></div><div class="result" id="riskOut">—</div></div></section>
+  <section id="view-admin" class="view">
+  <div class="sectionHead">
+    <div><div class="title">Admin Console</div><div class="sub">Owner-only controls, diagnostics and system health. These controls are not part of the trader workspace.</div></div>
+    <span class="adminBadge">OWNER / ADMIN</span>
+  </div>
+  <div class="card adminPanel">
+    <div class="sectionHead"><div><div class="title">System control</div><div class="sub">Run internal checks and review protected infrastructure state.</div></div><button id="adminRunCheck" class="btn primary">Run full system check</button></div>
+    <div class="adminGrid">
+      <div class="adminMetric"><div class="label">Admin identity</div><div class="v" id="adminIdentity">—</div><div class="s" id="adminConfigState">—</div></div>
+      <div class="adminMetric"><div class="label">Backend storage</div><div class="v" id="adminStorage">—</div><div class="s">Internal persistence state</div></div>
+      <div class="adminMetric"><div class="label">Core system</div><div class="v" id="adminCoreState">READY</div><div class="s" id="adminHealthSummary">Run a check to inspect services</div></div>
+    </div>
+    <div class="section card" style="margin-top:10px"><div class="title">Protected checks</div><div class="healthGrid" id="adminHealthGrid"></div><div class="sub" id="adminHealthText" style="margin-top:7px">Owner-only system diagnostics.</div></div>
+  </div>
+  <div class="grid2">
+    <div class="card adminPanel"><div class="title">Execution controls</div><div class="sub">Testnet/simulation execution controls are available only to the owner.</div><button id="adminOpenExecution" class="btn" style="margin-top:9px">Open Execution Control</button></div>
+    <div class="card adminPanel"><div class="title">Admin boundary</div><div class="sub">Trader accounts cannot access protected admin endpoints even if they manually call the API.</div><div class="chip c" style="margin-top:9px">SERVER ENFORCED</div></div>
+  </div>
+</section>
+
+<section id="view-risk" class="view"><div class="sectionHead"><div><div class="title">Risk Lab</div><div class="sub">Position size should follow the invalidation.</div></div></div><div class="card"><div class="inputs"><input id="ra" type="number" value="5000" placeholder="Account"><input id="rrisk" type="number" value="1" step=".05" placeholder="Risk %"><input id="rentry" type="number" value="84000" placeholder="Entry"><input id="rstop" type="number" value="82000" placeholder="Stop"></div><div class="result" id="riskOut">—</div></div></section>
 
   <div id="chartModal" class="modal" aria-hidden="true"><div class="modalCard"><div class="modalTop"><h3>Chart settings</h3><button id="chartClose" class="modalClose">×</button></div><div class="sub" style="margin-top:6px">Choose a visual preset or customize the candle colors. Settings persist in this browser.</div><div class="presetGrid" id="presetGrid"><button class="preset" data-preset="aurora"><div class="preview" style="background:#07131a;--pc1:#9BE7C4;--pc2:#FFB38A"><i></i><i></i><i></i><i></i></div><b>Aurora</b><small>Mint / ember</small></button><button class="preset" data-preset="lavender"><div class="preview" style="background:#0e1018;--pc1:#E5D0FF;--pc2:#FFB8D8"><i></i><i></i><i></i><i></i></div><b>Lavender</b><small>Soft / premium</small></button><button class="preset" data-preset="forest"><div class="preview" style="background:#08120f;--pc1:#A8E6CF;--pc2:#F8C6A0"><i></i><i></i><i></i><i></i></div><b>Forest</b><small>Mint / coral</small></button><button class="preset" data-preset="classic"><div class="preview" style="background:#090909;--pc1:#22c55e;--pc2:#ef4444"><i></i><i></i><i></i><i></i></div><b>Classic</b><small>Green / red</small></button><button class="preset" data-preset="mono"><div class="preview" style="background:#090909;--pc1:#f1f5f9;--pc2:#64748b"><i></i><i></i><i></i><i></i></div><b>Mono</b><small>White / slate</small></button></div><div class="colorGrid"><div class="colorItem"><span>Bull candle</span><input id="bullColor" type="color"></div><div class="colorItem"><span>Bear candle</span><input id="bearColor" type="color"></div><div class="colorItem"><span>Show volume</span><input id="showVolume" type="checkbox" checked></div><div class="colorItem"><span>Show EMA</span><input id="showEma" type="checkbox" checked></div></div><div class="axisNote">The chart keeps the right-side price scale, current-price marker, volume context and EMA optional.</div><div class="modalFoot"><button id="chartCancel" class="btn">Cancel</button><button id="chartApply" class="btn primary">Apply</button></div></div></div>
 
@@ -560,7 +592,8 @@ var state={
   bootRetry:0,
   bootRetryTimer:null,
   activeView:"overview",
-  account:null
+  account:null,
+  adminConfigured:false
 };
 
 function $(id){return document.getElementById(id)}
@@ -581,16 +614,18 @@ function api(url,timeout){
 }
 
 function setView(name){
+  if((name==="admin"||name==="execution")&&!state.account?.isAdmin){name="overview"}
   document.querySelectorAll(".view").forEach(function(v){v.classList.toggle("active",v.id==="view-"+name)});
   document.querySelectorAll(".nav button,.mobileMenu button").forEach(function(b){b.classList.toggle("active",b.dataset.view===name)});
   var menu=$("mobileMenu"),btn=$("mobileMenuBtn");if(menu){menu.classList.remove("open");menu.setAttribute("aria-hidden","true")}if(btn)btn.setAttribute("aria-expanded","false");
   state.activeView=name;window.scrollTo(0,0);
   if(name==="flow"){loadFlow()}
   if(name==="edge"){loadEdge()}
-  if(name==="execution"){loadExecution()}
+  if(name==="execution"&&state.account?.isAdmin){loadExecution()}
   if(name==="portfolio"){loadPortfolio()}
-  if(name==="lab"){deferTask(runSystemCheck,60)}
+  if(name==="lab"&&state.account?.isAdmin){deferTask(runSystemCheck,60)}
   if(name==="brain"){deferTask(function(){loadPhase7();loadPhase7Health()},40)}
+  if(name==="admin"&&state.account?.isAdmin){deferTask(loadAdminConsole,20)}
   if(name==="overview"&&state.market){queueChartDraw()}
 }
 document.querySelectorAll("[data-view]").forEach(function(b){
@@ -1323,11 +1358,16 @@ function mergeMemoryArrays(a,b,key){
 function renderAccount(){
   var btn=$("accountBtn"),guest=$("accountGuest"),user=$("accountUser"),sub=$("accountSub"),email=$("accountEmailText");
   if(!btn||!guest||!user||!sub)return;
-  btn.textContent=state.account?String(state.account.email).split("@")[0]:"Guest";
+  var admin=Boolean(state.account&&state.account.isAdmin);
+  document.body.classList.toggle("admin-mode",admin);
+  btn.textContent=admin?"Owner":(state.account?String(state.account.email).split("@")[0]:"Guest");
   guest.classList.toggle("hidden",Boolean(state.account));
   user.classList.toggle("hidden",!state.account);
-  sub.textContent=state.account?"Account-backed workspace active.":"Optional account for synced journal, watchlists and preferences.";
+  sub.textContent=admin?"Owner account · admin controls unlocked":state.account?"Account-backed workspace active.":"Optional account for synced journal, watchlists and preferences.";
   if(state.account&&email)email.textContent=state.account.email;
+  var ex=$("executionNav");if(ex)ex.classList.toggle("adminNav",!admin);
+  if(ex)ex.style.display=admin?"block":"none";
+  var an=$("adminNav"),am=$("adminNavMobile");if(an)an.style.display=admin?"block":"none";if(am)am.style.display=admin?"block":"none";
 }
 function openAccount(){renderAccount();$("accountModal").classList.add("open");$("accountModal").setAttribute("aria-hidden","false")}
 function closeAccount(){ $("accountModal").classList.remove("open");$("accountModal").setAttribute("aria-hidden","true");$("accountError").textContent=""}
@@ -1335,10 +1375,36 @@ var accountMode="login";
 function setAccountMode(mode){
   accountMode=mode;$("accountLoginMode").classList.toggle("on",mode==="login");$("accountRegisterMode").classList.toggle("on",mode==="register");$("accountSubmit").textContent=mode==="login"?"Sign in":"Create account";$("accountPassword").autocomplete=mode==="login"?"current-password":"new-password";$("accountError").textContent="";
 }
+async function loadAdminConsole(){
+  if(!state.account?.isAdmin)return;
+  if($("adminIdentity"))$("adminIdentity").textContent=state.account.email;
+  if($("adminConfigState"))$("adminConfigState").textContent=state.adminConfigured?"Admin email configured":"Admin env not configured";
+  try{
+    var r=await api("/api/memory/status",5000);
+    if($("adminStorage"))$("adminStorage").textContent=r.durable?"Postgres":"Local fallback";
+  }catch{$("adminStorage").textContent="Unavailable"}
+}
+async function runAdminSystemCheck(){
+  if(!state.account?.isAdmin)return;
+  $("adminHealthText").textContent="Running protected system checks…";
+  try{
+    var d=await api("/api/system-check",10000),checks=d.checks||{};
+    var names=["server","marketEngine","learning","memory","marketData","derivatives","oi","cvd","liquidations","execution","portfolio","phase7"];
+    $("adminHealthGrid").innerHTML=names.map(function(n){return'<div class="healthItem"><span class="healthDot '+(checks[n]?"ok":"bad")+'"></span><b>'+n+"</b></div>"}).join("");
+    $("adminHealthSummary").textContent=d.ok?"All protected checks passed":"Attention required";
+    $("adminCoreState").textContent=d.ok?"HEALTHY":"CHECK";
+    $("adminHealthText").textContent=(d.ok?"Protected system checks passed. ":"Protected system checks found issues. ")+(d.marketError||d.derivativesError||"");
+  }catch(e){
+    $("adminCoreState").textContent="ERROR";
+    $("adminHealthSummary").textContent="Check unavailable";
+    $("adminHealthText").textContent=e.message;
+  }
+}
 async function loadAuth(){
   try{
     var r=await api("/api/auth/me",4000);
     state.account=r.authenticated?r.user:null;
+    state.adminConfigured=Boolean(r.adminConfigured);
     renderAccount();
     if(state.account)await syncMemory();
   }catch{renderAccount()}
@@ -1418,7 +1484,7 @@ async function syncMemory(){
 syncPhase3Symbols();
 $("loadReplay").addEventListener("click",loadReplay);$("toggleReplay").addEventListener("click",toggleReplay);$("replayCursor").addEventListener("input",function(){replayState.cursor=+this.value;renderReplayFrame()});
 $("refreshDNA").addEventListener("click",refreshDNA);$("loadDNA").addEventListener("click",loadDNA);$("runResearch").addEventListener("click",runResearch);
-$("askAi").addEventListener("click",askAI);$("sync").addEventListener("click",syncMemory);$("runSystemCheck").addEventListener("click",runSystemCheck);$("notifBtn").addEventListener("click",enableNotifications);$("alertScore").addEventListener("input",renderAlerts);$("chartSettings").addEventListener("click",openChartSettings);$("chartClose").addEventListener("click",closeChartSettings);$("chartCancel").addEventListener("click",closeChartSettings);$("chartApply").addEventListener("click",applyChartSettings);document.querySelectorAll("[data-preset]").forEach(function(b){b.addEventListener("click",function(){document.querySelectorAll("[data-preset]").forEach(function(x){x.classList.remove("active")});b.classList.add("active");$("bullColor").value=CHART_PRESETS[b.dataset.preset].bull;$("bearColor").value=CHART_PRESETS[b.dataset.preset].bear})});$("aiMarketMode").addEventListener("click",function(){state.aiMode="market";$("aiMarketMode").classList.add("on");$("aiTradeMode").classList.remove("on");$("tradeFields").classList.add("hidden")});$("aiTradeMode").addEventListener("click",function(){state.aiMode="trade";$("aiTradeMode").classList.add("on");$("aiMarketMode").classList.remove("on");$("tradeFields").classList.remove("hidden")});renderSignals();
+$("askAi").addEventListener("click",askAI);$("sync").addEventListener("click",syncMemory);$("runSystemCheck").addEventListener("click",function(){if(state.account?.isAdmin)runSystemCheck()});$("notifBtn").addEventListener("click",enableNotifications);$("alertScore").addEventListener("input",renderAlerts);$("chartSettings").addEventListener("click",openChartSettings);$("chartClose").addEventListener("click",closeChartSettings);$("chartCancel").addEventListener("click",closeChartSettings);$("chartApply").addEventListener("click",applyChartSettings);document.querySelectorAll("[data-preset]").forEach(function(b){b.addEventListener("click",function(){document.querySelectorAll("[data-preset]").forEach(function(x){x.classList.remove("active")});b.classList.add("active");$("bullColor").value=CHART_PRESETS[b.dataset.preset].bull;$("bearColor").value=CHART_PRESETS[b.dataset.preset].bear})});$("aiMarketMode").addEventListener("click",function(){state.aiMode="market";$("aiMarketMode").classList.add("on");$("aiTradeMode").classList.remove("on");$("tradeFields").classList.add("hidden")});$("aiTradeMode").addEventListener("click",function(){state.aiMode="trade";$("aiTradeMode").classList.add("on");$("aiMarketMode").classList.remove("on");$("tradeFields").classList.remove("hidden")});renderSignals();
 
 ["panYUp","panL","panR","panYDown","zoomOut","zoomIn","zoomReset"].forEach(function(id){
   $(id).addEventListener("click",function(){
@@ -1501,6 +1567,11 @@ async function loadPhase7(){
   }
 }
 async function loadPhase7Health(){
+  if(!state.account?.isAdmin){
+    if($("mp7HealthDot"))$("mp7HealthDot").className="mp7-dot ok";
+    if($("mp7HealthText"))$("mp7HealthText").textContent="Personal analytics active · system diagnostics are owner-only";
+    return;
+  }
   try{
     var d=await api("/api/phase7/health?device="+encodeURIComponent(deviceId()),9000);
     var ok=Boolean(d.ok),h=d.health||{},q=d.analyticsQuality||{};
@@ -1536,6 +1607,9 @@ function initAccountUI(){
   accountModal.addEventListener("click",function(e){if(e.target===this)closeAccount()});
   renderAccount();
   loadAuth();
+  var adminRun=$("adminRunCheck"),adminExec=$("adminOpenExecution");
+  if(adminRun)adminRun.addEventListener("click",runAdminSystemCheck);
+  if(adminExec)adminExec.addEventListener("click",function(){setView("execution")});
   return true;
 }
 if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",initAccountUI,{once:true});else initAccountUI();

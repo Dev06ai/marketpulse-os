@@ -19,6 +19,27 @@ const OPENAI_API_KEY=process.env.OPENAI_API_KEY||"";
 const OPENAI_MODEL=process.env.OPENAI_MODEL||"gpt-5.6-luna";
 const AI_LIMIT_MS=8000; const AI_CALLS=new Map();
 const DATA_TIMEOUT_MS=7000;
+const ADMIN_ONLY_PATHS=new Set([
+  '/api/memory/status',
+  '/api/phase7/health',
+  '/api/learning/status',
+  '/api/edge/health',
+  '/api/edge/events',
+  '/api/execution',
+  '/api/execution/config',
+  '/api/execution/arm',
+  '/api/execution/kill',
+  '/api/execution/reconcile',
+  '/api/execution/prepare',
+  '/api/execution/intent',
+  '/api/execution/submit',
+  '/api/execution/cancel',
+  '/api/execution/close-sim',
+  '/api/portfolio/config',
+  '/api/portfolio/health',
+  '/api/system-check',
+  '/api/dna/clear'
+]);
 function timeoutSignal(ms){return typeof AbortSignal!=="undefined"&&AbortSignal.timeout?AbortSignal.timeout(ms):undefined;}
 function requestDevice(req){return String(req.headers["x-marketpulse-device"]||"00000000-0000-0000-0000-000000000000").slice(0,128)}
 
@@ -436,6 +457,10 @@ function staticFile(req,res){
 const server=http.createServer(async(req,res)=>{
   try{
     const u=new URL(req.url,'http://localhost');
+    if(ADMIN_ONLY_PATHS.has(u.pathname)){
+      const guard=await auth.requireAdmin(req);
+      if(!guard.ok)return send(res,guard.status,{ok:false,error:guard.error});
+    }
     if(req.method==='GET'&&u.pathname==='/health')return send(res,200,{ok:true,service:'marketpulse-os',time:Date.now()});
     if(req.method==='GET'&&u.pathname==='/api/memory'){
       const device=String(u.searchParams.get('device')||req.headers['x-marketpulse-device']||'');
@@ -481,7 +506,7 @@ const server=http.createServer(async(req,res)=>{
     if(req.method==='GET'&&u.pathname==='/api/auth/me'){
       try{
         const user=await auth.userFromRequest(req);
-        return send(res,200,{ok:true,authenticated:Boolean(user),user:user?{id:user.id,email:user.email,expiresAt:user.expiresAt}:null});
+        return send(res,200,{ok:true,authenticated:Boolean(user),user:user?{id:user.id,email:user.email,expiresAt:user.expiresAt,isAdmin:Boolean(user.isAdmin)}:null,adminConfigured:auth.adminConfigured});
       }catch(e){return send(res,500,{ok:false,error:e.message})}
     }
     if(req.method==='POST'&&(u.pathname==='/api/auth/register'||u.pathname==='/api/auth/login')){

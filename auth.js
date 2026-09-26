@@ -3,6 +3,7 @@ const storage=require("./storage");
 
 const SESSION_DAYS=30;
 const COOKIE="mp_session";
+const ADMIN_EMAIL=String(process.env.MARKETPULSE_ADMIN_EMAIL||"").trim().toLowerCase();
 const RATE_WINDOW_MS=15*60*1000;
 const RATE_LIMIT=12;
 const rate=new Map();
@@ -72,18 +73,25 @@ async function login(email,password,key="login"){
   const raw=token(),expiresAt=new Date(Date.now()+SESSION_DAYS*86400000);
   await storage.saveSession(hashToken(raw),user.id,expiresAt.toISOString());
   await storage.touchUserLogin(user.id);
-  return {user:{id:user.id,email:user.email,createdAt:user.createdAt,lastLoginAt:expiresAt.toISOString()},setCookie:cookie(raw)};
+  return {user:{id:user.id,email:user.email,createdAt:user.createdAt,lastLoginAt:expiresAt.toISOString(),isAdmin:isAdminEmail(user.email)},setCookie:cookie(raw)};
 }
+function isAdminEmail(email){return Boolean(ADMIN_EMAIL&&normalizeEmail(email)===ADMIN_EMAIL)}
 async function userFromRequest(req){
   const raw=parseCookies(req.headers.cookie||"")[COOKIE];
   if(!raw)return null;
   const session=await storage.getSession(hashToken(raw));
   if(!session)return null;
-  return {id:session.userId,email:session.email,expiresAt:session.expiresAt};
+  return {id:session.userId,email:session.email,expiresAt:session.expiresAt,isAdmin:isAdminEmail(session.email)};
+}
+async function requireAdmin(req){
+  const user=await userFromRequest(req);
+  if(!user)return {ok:false,status:401,error:"Authentication required",user:null};
+  if(!user.isAdmin)return {ok:false,status:403,error:"Admin access required",user};
+  return {ok:true,status:200,user};
 }
 async function logout(req){
   const raw=parseCookies(req.headers.cookie||"")[COOKIE];
   if(raw)await storage.deleteSession(hashToken(raw));
   return {setCookie:clearCookie()};
 }
-module.exports={register,login,userFromRequest,logout,validEmail,passwordRules,CookieName:COOKIE};
+module.exports={register,login,userFromRequest,requireAdmin,isAdminEmail,validEmail,passwordRules,CookieName:COOKIE,adminConfigured:Boolean(ADMIN_EMAIL)};
