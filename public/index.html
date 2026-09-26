@@ -53,6 +53,18 @@ button,input,select,textarea{font:inherit}.wrap{width:min(1440px,calc(100% - 26p
 .portfolioGrid{display:grid;grid-template-columns:1.15fr .85fr;gap:10px}.portfolioMetricGrid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}.portfolioMetric,.portfolioPanel{background:#0f0f13;border:1px solid rgba(255,255,255,.07);border-radius:14px;padding:12px}.portfolioMetric .v{font-size:19px;font-weight:900;margin-top:5px}.portfolioMetric .subv{font-size:11px;color:#858792;margin-top:3px}.portfolioBars{display:grid;gap:7px}.portfolioBarRow{display:grid;grid-template-columns:70px 1fr 60px;gap:8px;align-items:center;font-size:11px}.portfolioBar{height:7px;background:#1a1a1f;border-radius:99px;overflow:hidden}.portfolioBar i{display:block;height:100%;background:linear-gradient(90deg,#67e8ff,#b78cff)}.portfolioTable{width:100%;border-collapse:collapse;font-size:11px}.portfolioTable th,.portfolioTable td{padding:7px 6px;border-bottom:1px solid rgba(255,255,255,.06);text-align:left}.portfolioTable th{color:#8e909b;font-weight:600}.portfolioPill{display:inline-flex;align-items:center;border:1px solid rgba(255,255,255,.08);border-radius:999px;padding:4px 8px;font-size:10px;color:#bfc1ca}.portfolioOk{color:#9BE7C4}.portfolioWarn{color:#FFCF99}.portfolioBad{color:#FF9B9B}.portfolioHeat{display:grid;grid-template-columns:repeat(7,1fr);gap:5px}.portfolioCell{padding:8px 5px;border:1px solid rgba(255,255,255,.06);border-radius:9px;text-align:center;background:#101014}.portfolioCell b{display:block;font-size:11px}.portfolioCell span{display:block;font-size:9px;color:#858792;margin-top:3px}.portfolioCorr{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}.portfolioCorrCell{height:32px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:8px;border:1px solid rgba(255,255,255,.045)}.portfolioStress{display:grid;grid-template-columns:1fr 1fr;gap:8px}.portfolioStressCard{padding:10px;border:1px solid rgba(255,255,255,.07);border-radius:10px;background:#101014}.portfolioStressCard .v{font-size:17px;font-weight:900;margin-top:4px}.portfolioEvent{display:grid;grid-template-columns:90px 1fr;gap:8px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,.06)}.portfolioEvent:last-child{border-bottom:0}.portfolioSmall{font-size:11px;color:#858792}.portfolioActions{display:flex;gap:7px;flex-wrap:wrap;align-items:end}.portfolioActions label{display:grid;gap:5px;font-size:11px;color:#92939e}.portfolioActions input{min-width:110px}.portfolioNote{margin-top:8px;color:#9597a2;font-size:12px;line-height:1.5}@media(max-width:860px){.portfolioGrid{grid-template-columns:1fr}.portfolioMetricGrid{grid-template-columns:1fr 1fr}.portfolioHeat,.portfolioCorr{grid-template-columns:repeat(4,1fr)}}@media(max-width:560px){.portfolioMetricGrid{grid-template-columns:1fr}.portfolioHeat,.portfolioCorr{grid-template-columns:repeat(2,1fr)}.portfolioActions{align-items:stretch}.portfolioActions label,.portfolioActions input{width:100%}}
 
 </style>
+<style id="beginner-friendly-style">
+.beginnerGuideBtn{border-color:rgba(103,232,255,.22)!important;color:#bdefff!important}
+.termHint{display:inline-grid;place-items:center;width:13px;height:13px;margin-left:3px;border:1px solid rgba(103,232,255,.22);border-radius:50%;font-size:8px;color:#8fdff2;vertical-align:1px;cursor:help}
+.beginnerStrip{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:11px 12px;margin:10px 0;border:1px solid rgba(103,232,255,.12);border-radius:11px;background:linear-gradient(90deg,rgba(103,232,255,.045),rgba(192,132,252,.035));color:#aab8c8;font-size:10px}
+.beginnerStrip strong{color:#e7f9ff}.beginnerStrip .btn{padding:6px 9px;font-size:9px}
+.beginnerModal{position:fixed;inset:0;z-index:140;display:none;place-items:center;padding:18px;background:rgba(1,4,8,.76);backdrop-filter:blur(16px)}
+.beginnerModal.open{display:grid}.beginnerCard{width:min(780px,100%);max-height:88vh;overflow:auto;padding:18px;border:1px solid rgba(103,232,255,.16);border-radius:18px;background:linear-gradient(180deg,#071421,#06080c);box-shadow:0 30px 90px rgba(0,0,0,.52)}
+.beginnerHead{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}.beginnerHead h3{margin:0;font-size:19px}.beginnerHead p{margin:5px 0 0;color:#91a1b4;font-size:11px;line-height:1.5}.beginnerClose{border:0;background:transparent;color:#94a5b8;font-size:24px;cursor:pointer}
+.beginnerSteps{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:14px}.beginnerStep{padding:11px;border:1px solid rgba(255,255,255,.07);border-radius:11px;background:#0d1117}.beginnerStep b{display:block;font-size:11px;color:#eaf8ff}.beginnerStep span{display:block;margin-top:5px;color:#93a4b8;font-size:9px;line-height:1.5}
+.beginnerGlossary{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px}.beginnerTerm{padding:10px;border:1px solid rgba(255,255,255,.06);border-radius:10px;background:rgba(255,255,255,.02)}.beginnerTerm b{font-size:10px;color:#dff7ff}.beginnerTerm span{display:block;margin-top:4px;color:#91a2b4;font-size:9px;line-height:1.5}
+@media(max-width:700px){.beginnerStrip{align-items:flex-start;flex-direction:column}.beginnerSteps,.beginnerGlossary{grid-template-columns:1fr}.beginnerCard{padding:14px}}
+</style>
 
 <style id="mp7-style">
 #mp7-panel{margin:24px 0 40px;border:1px solid rgba(255,255,255,.09);border-radius:18px;background:linear-gradient(180deg,rgba(255,255,255,.028),rgba(255,255,255,.014));box-shadow:0 12px 30px rgba(0,0,0,.18);overflow:hidden}
@@ -500,39 +512,39 @@ body.admin-mode .nav button.adminNav,body.admin-mode .mobileMenu button.adminNav
 <body>
 <header class="header"><div class="headerInner">
   <div class="logo"><div class="mark" aria-label="MarketPulse logo"></div><div><div class="brandK">CRYPTO MARKET INTELLIGENCE</div><div class="brandName">MarketPulse</div><div class="brandSub">Less noise. More signal. Better decisions.</div></div></div>
-  <nav class="nav" id="nav"><button class="active" data-view="overview">Command</button><button data-view="scanner">Markets</button><button data-view="signals">Setups</button><button data-view="flow">Flow</button><button data-view="lab">Backtest</button><button data-view="replay">Replay</button><button data-view="dna">DNA</button><button data-view="research">Research</button><button data-view="edge">Edge</button><button data-view="portfolio">Portfolio</button><button id="executionNav" class="adminNav" data-view="execution">Execution</button><button data-view="brain">Journal</button><button data-view="ai">Copilot</button><button data-view="alerts">Watchlist</button><button data-view="risk">Risk</button><button id="adminNav" class="adminNav" data-view="admin">Admin</button></nav>
+  <nav class="nav" id="nav"><button class="active" data-view="overview" title="Main dashboard and current market picture">Dashboard</button><button data-view="scanner" title="Compare many coins">Market scanner</button><button data-view="signals" title="Review possible setups">Setups</button><button data-view="flow" title="Futures flow and positioning">Market flow</button><button data-view="lab" title="Test a strategy on past data">Backtest</button><button data-view="replay" title="Replay past market conditions">Replay</button><button data-view="dna" title="Review recurring setup patterns">Pattern DNA</button><button data-view="research" title="Explore historical research">Research</button><button data-view="edge" title="Review strategy statistics">Edge</button><button data-view="portfolio" title="Portfolio risk and exposure">Portfolio</button><button id="executionNav" class="adminNav" data-view="execution" title="Advanced execution tools">Execution</button><button data-view="brain" title="Trading journal">Journal</button><button data-view="ai" title="MarketPulse copilot">Copilot</button><button data-view="alerts" title="Watchlist conditions">Watchlist</button><button data-view="risk" title="Risk controls">Risk</button><button id="adminNav" class="adminNav" data-view="admin" title="Administrator controls">Admin</button></nav>
   <button id="mobileMenuBtn" class="mobileMenuBtn" aria-label="Open MarketPulse menu" aria-expanded="false">☰</button>
-  <div id="mobileMenu" class="mobileMenu" aria-hidden="true"><button data-view="overview">Command</button><button data-view="scanner">Markets</button><button data-view="signals">Setups</button><button data-view="flow">Flow</button><button data-view="lab">Backtest</button><button data-view="replay">Replay</button><button data-view="dna">DNA</button><button data-view="research">Research</button><button data-view="edge">Edge</button><button data-view="portfolio">Portfolio</button><button data-view="execution">Execution</button><button data-view="brain">Journal</button><button data-view="ai">Copilot</button><button data-view="alerts">Watchlist</button><button data-view="risk">Risk</button><button id="adminNavMobile" class="adminNav" data-view="admin">Admin</button></div>
-  <div class="headerTools"><button id="accountBtn" class="btn">Guest</button><span class="dataState"><i class="liveDot"></i><span id="dataState">Connecting</span></span><select id="symbol" class="select"></select><select id="interval" class="select"><option>15m</option><option selected>1h</option><option>4h</option><option>1d</option></select><button id="refresh" class="btn primary">Refresh</button></div>
+  <div id="mobileMenu" class="mobileMenu" aria-hidden="true"><button data-view="overview">Dashboard</button><button data-view="scanner">Market scanner</button><button data-view="signals">Setups</button><button data-view="flow">Market flow</button><button data-view="lab">Backtest</button><button data-view="replay">Replay</button><button data-view="dna">Pattern DNA</button><button data-view="research">Research</button><button data-view="edge">Edge</button><button data-view="portfolio">Portfolio</button><button data-view="execution">Execution</button><button data-view="brain">Journal</button><button data-view="ai">Copilot</button><button data-view="alerts">Watchlist</button><button data-view="risk">Risk</button><button id="adminNavMobile" class="adminNav" data-view="admin">Admin</button></div>
+  <div class="headerTools"><button id="beginnerGuideBtn" class="btn beginnerGuideBtn" title="Open the beginner guide">Guide</button><button id="accountBtn" class="btn">Guest</button><span class="dataState"><i class="liveDot"></i><span id="dataState">Connecting</span></span><select id="symbol" class="select"></select><select id="interval" class="select"><option>15m</option><option selected>1h</option><option>4h</option><option>1d</option></select><button id="refresh" class="btn primary">Refresh</button></div>
 </div></header>
 
 <main class="wrap">
-  <div id="statusBar" class="statusBar">Starting MarketPulse…</div><div id="broadcastBar" class="broadcastBar" aria-live="polite"><div><b id="broadcastTitle">MarketPulse Notice</b><p id="broadcastBody"></p></div><button id="broadcastClose" class="broadcastClose" aria-label="Close">×</button></div>
+  <div id="statusBar" class="statusBar">Starting MarketPulse…</div><div class="beginnerStrip"><div><strong>New here?</strong> Start with the Signal, then check the chart, market flow, and risk check. <span style="color:#8191a7">You do not need to understand every metric.</span></div><button id="beginnerGuideInline" class="btn" type="button">How it works</button></div><div id="broadcastBar" class="broadcastBar" aria-live="polite"><div><b id="broadcastTitle">MarketPulse Notice</b><p id="broadcastBody"></p></div><button id="broadcastClose" class="broadcastClose" aria-label="Close">×</button></div>
   <section id="view-overview" class="view active">
     <div class="hero">
       <div class="metric"><div class="label">Price</div><div class="value" id="mPrice">—</div><div class="subv" id="mChange">—</div></div>
       <div class="metric"><div class="label">Market mode</div><div class="value" id="mRegime">—</div><div class="subv" id="mMood">—</div></div>
-      <div class="metric" id="callMetric"><div class="label">Call</div><div class="value" id="mCall">—</div><div class="subv" id="mBias">—</div></div>
-      <div class="metric"><div class="label">Confluence</div><div class="value" style="color:var(--cyan)" id="mScore">—</div><div class="subv">alignment / 100</div></div>
-      <div class="metric"><div class="label">RSI / ADX</div><div class="value" id="mMom">—</div><div class="subv" id="mStructure">—</div></div>
+      <div class="metric" id="callMetric"><div class="label">Signal</div><div class="value" id="mCall">—</div><div class="subv" id="mBias">—</div></div>
+      <div class="metric"><div class="label">Confidence score</div><div class="value" style="color:var(--cyan)" id="mScore">—</div><div class="subv">how strongly the signals agree</div></div>
+      <div class="metric"><div class="label">Momentum / trend</div><div class="value" id="mMom">—</div><div class="subv" id="mStructure">—</div></div>
     </div>
 
     <div class="section decisionSection">
-      <div class="sectionHead"><div><div class="title">Decision Center</div><div class="sub">Your current trade state stays above the long-term context.</div></div><span class="chip" id="adaptiveChip">Adaptive: collecting</span></div>
+      <div class="sectionHead"><div><div class="title">Decision Center</div><div class="sub">A simple summary of what the market is doing and what would change the view.</div></div><span class="chip" id="adaptiveChip">Adaptive: collecting</span></div>
       <div class="grid2">
             <div class="section grid2">
       <div class="card decisionStateCard"><div class="sectionHead"><div><div class="title" id="thesisTitle">Loading market context…</div><div class="sub" id="thesisState">—</div></div><div class="value" id="thesisScore">—</div></div><div id="thesis" class="thesis">Waiting for the live model.</div><div class="chips" id="thesisChips"></div><div class="scenario"><div class="mini"><div class="k">Primary scenario</div><div class="v" id="primary">—</div></div><div class="mini"><div class="k">What would break it</div><div class="v" id="alternate">—</div></div></div></div>
-      <div class="card signalQualityCard"><div class="sectionHead"><div><div class="title">Signal quality</div><div class="sub">Transparent confluence components.</div></div><span class="value" id="quality">—</span></div><div id="components" class="list"></div></div>
+      <div class="card signalQualityCard"><div class="sectionHead"><div><div class="title">Why the signal looks this way</div><div class="sub">See which parts of the market are helping or weakening the setup.</div></div><span class="value" id="quality">—</span></div><div id="components" class="list"></div></div>
     </div>
       </div>
     </div>
 
-    <div id="priceActionSection" class="section card"><div class="sectionHead"><div><div class="title">Price action</div><div class="sub">Exchange-style HD candles · 50 EMA · drag to pan · wheel/pinch to zoom · move cursor for time, OHLC and price.</div></div><div class="chartHeaderTools"><div class="chartTimeframes" id="chartTimeframes"><button class="chartTf" data-chart-tf="15m">15m</button><button class="chartTf" data-chart-tf="30m">30m</button><button class="chartTf active" data-chart-tf="1h">1h</button><button class="chartTf" data-chart-tf="4h">4h</button><button class="chartTf" data-chart-tf="1d">1D</button></div><div class="chartTools"><button id="chartCandles" class="active" title="Candlestick chart">Candles</button><button id="chartLine" title="Closing-price line chart">Line</button><button id="chartAuto" title="Fit price scale automatically">Auto</button><button id="chartFit" title="Fit all visible candles">Fit</button><button id="panL" title="Pan left">←</button><button id="panR" title="Pan right">→</button><button id="zoomOut" class="zoomBtn" title="Zoom out">− Zoom out</button><button id="zoomReset" title="Reset zoom">1:1</button><button id="zoomIn" class="zoomBtn" title="Zoom in">+ Zoom in</button><button id="chartFullscreen" class="chartFocusBtn" title="Expand price action chart">⛶ Expand</button><button id="chartSettings" title="Chart settings">⚙</button></div></div></div><div class="chartWrap"><canvas id="mainChart" class="chartCanvas"></canvas><div class="ohlc" id="ohlc">Move over chart</div></div><div class="levels"><div class="level"><div class="k">Entry zone</div><div class="v" id="entry">—</div></div><div class="level"><div class="k">Invalidation</div><div class="v" id="stop">—</div></div><div class="level"><div class="k">Target 1</div><div class="v" id="target">—</div></div><div class="level"><div class="k">R:R</div><div class="v" id="rr">—</div></div></div></div>
+    <div id="priceActionSection" class="section card"><div class="sectionHead"><div><div class="title">Price action</div><div class="sub">Exchange-style HD candles · 50 EMA · drag to pan · wheel/pinch to zoom · move cursor for time, OHLC and price.</div></div><div class="chartHeaderTools"><div class="chartTimeframes" id="chartTimeframes"><button class="chartTf" data-chart-tf="15m">15m</button><button class="chartTf" data-chart-tf="30m">30m</button><button class="chartTf active" data-chart-tf="1h">1h</button><button class="chartTf" data-chart-tf="4h">4h</button><button class="chartTf" data-chart-tf="1d">1D</button></div><div class="chartTools"><button id="chartCandles" class="active" title="Candlestick chart">Candles</button><button id="chartLine" title="Closing-price line chart">Line</button><button id="chartAuto" title="Fit price scale automatically">Auto</button><button id="chartFit" title="Fit all visible candles">Fit</button><button id="panL" title="Move toward older candles">←</button><button id="panR" title="Move toward newer candles">→</button><button id="zoomOut" class="zoomBtn" title="Zoom out">− Zoom out</button><button id="zoomReset" title="Reset chart zoom">1:1</button><button id="zoomIn" class="zoomBtn" title="Zoom in">+ Zoom in</button><button id="chartFullscreen" class="chartFocusBtn" title="Expand only the Price Action chart">⛶ Expand</button><button id="chartSettings" title="Chart settings">⚙</button></div></div></div><div class="chartWrap"><canvas id="mainChart" class="chartCanvas"></canvas><div class="ohlc" id="ohlc">Move over chart</div></div><div class="levels"><div class="level"><div class="k">Entry zone</div><div class="v" id="entry">—</div></div><div class="level"><div class="k">Invalidation</div><div class="v" id="stop">—</div></div><div class="level"><div class="k">Target 1</div><div class="v" id="target">—</div></div><div class="level"><div class="k">R:R</div><div class="v" id="rr">—</div></div></div></div>
 
-    <div class="section"><div class="sectionHead"><div><div class="title">Market Overview</div><div class="sub">Live market intelligence, long-term cycle context and quick trading tools.</div></div><span class="chip">Long-term context</span></div>
+    <div class="section"><div class="sectionHead"><div><div class="title">Market Overview</div><div class="sub">Long-term context plus a simple view of what is happening now.</div></div><span class="chip">Long-term context</span></div>
       <div class="overGrid">
         <div class="card"><div class="sectionHead"><div><b>Cycle phase</b><div class="sub" id="cycleText">Waiting for cycle history</div></div><span class="chip c">LIVE</span></div><canvas id="cycleChart" class="miniChart"></canvas><div class="cycleMetric" style="margin-top:7px;font-size:10px"><b id="cycleScore">—</b><span id="cycleDetail" style="color:var(--muted)">—</span></div></div>
-        <div class="card"><div class="sectionHead"><div><b>Drawdown</b><div class="sub">Visible high-water mark</div></div><span class="chip">RISK</span></div><canvas id="ddChart" class="miniChart"></canvas><div class="cycleMetric" style="margin-top:7px;font-size:10px"><b id="ddValue">—</b><span id="ddDetail" style="color:var(--muted)">—</span></div></div>
+        <div class="card"><div class="sectionHead"><div><b>Drawdown</b><div class="sub">How far price is below the recent high.</div></div><span class="chip">RISK</span></div><canvas id="ddChart" class="miniChart"></canvas><div class="cycleMetric" style="margin-top:7px;font-size:10px"><b id="ddValue">—</b><span id="ddDetail" style="color:var(--muted)">—</span></div></div>
         <div class="card"><div class="sectionHead"><div><b>Live market screen</b><div class="sub">Best current alignments</div></div><span class="chip">LIVE</span></div><div id="marketRows" class="marketRows"><div class="small">Waiting for scanner…</div></div></div>
       </div>
     </div>
@@ -540,18 +552,18 @@ body.admin-mode .nav button.adminNav,body.admin-mode .mobileMenu button.adminNav
 
     <div class="section grid2">
       <div class="card">
-        <div class="sectionHead"><div><div class="title">Positioning &amp; Flow</div><div class="sub">OI, CVD, funding and liquidation pressure — normalized for readable comparison.</div></div><span class="chip c" id="flowSource">LIVE</span></div>
+        <div class="sectionHead"><div><div class="title">Market Flow</div><div class="sub">See futures positioning, buy/sell pressure, funding, and forced exits.</div></div><span class="chip c" id="flowSource">LIVE</span></div>
         <div class="flowGrid">
-          <div class="card flow"><div class="label">Open interest</div><div class="v" id="oi">—</div><div class="s" id="oiS">—</div></div>
-          <div class="card flow"><div class="label">CVD</div><div class="v" id="cvd">—</div><div class="s" id="cvdS">—</div></div>
-          <div class="card flow"><div class="label">Positioning</div><div class="v" id="pos">—</div><div class="s" id="fund">—</div></div>
-          <div class="card flow"><div class="label">Liquidations</div><div class="v" id="liq">—</div><div class="s" id="liqS">—</div></div>
+          <div class="card flow"><div class="label">Open interest <span class="termHint" title="How much futures position value is currently open.">?</span></div><div class="v" id="oi">—</div><div class="s" id="oiS">—</div></div>
+          <div class="card flow"><div class="label">Buy / sell pressure <span class="termHint" title="CVD estimates whether aggressive buyers or sellers are dominating.">?</span></div><div class="v" id="cvd">—</div><div class="s" id="cvdS">—</div></div>
+          <div class="card flow"><div class="label">Futures positioning <span class="termHint" title="A simple view of whether open interest is rising, falling, or flat.">?</span></div><div class="v" id="pos">—</div><div class="s" id="fund">—</div></div>
+          <div class="card flow"><div class="label">Forced exits <span class="termHint" title="Positions closed because required margin is no longer available.">?</span></div><div class="v" id="liq">—</div><div class="s" id="liqS">—</div></div>
         </div>
         <div class="flowLegend"><span><i class="lg mint"></i>CVD</span><span><i class="lg lav"></i>OI</span><span><i class="lg ember"></i>Liquidations</span><span class="small">100 = first visible point</span></div>
         <canvas id="flowChart" class="flowChart" height="190"></canvas>
       </div>
       <div class="card">
-        <div class="sectionHead"><div><div class="title">Adaptive intelligence</div><div class="sub">Historical outcomes calibrate the live model conservatively. Nothing changes from a single win or loss.</div></div><span class="chip" id="learnState">COLLECTING</span></div>
+        <div class="sectionHead"><div><div class="title">Learning from past setups</div><div class="sub">Past resolved setups help the model adjust gradually instead of reacting to one result.</div></div><span class="chip" id="learnState">COLLECTING</span></div>
         <div class="grid2" style="grid-template-columns:1fr 1fr">
           <div class="mini"><div class="k">Resolved examples</div><div class="v" id="learnN">0</div></div>
           <div class="mini"><div class="k">Hit rate</div><div class="v" id="learnWin">—</div></div>
@@ -564,23 +576,23 @@ body.admin-mode .nav button.adminNav,body.admin-mode .mobileMenu button.adminNav
     <div class="section card"><div class="sectionHead"><div><div class="title">Live Market Screens</div><div class="sub">The scanner stays available while the overview remains your command center.</div></div><button class="btn" data-view="scanner">Open Scanner</button></div><div class="tape" id="tape"></div></div>
 
     <div class="section card">
-      <div class="sectionHead"><div><div class="title">Cross-Exchange Confirmation</div><div class="sub">Independent spot feeds are checked before the prop/event risk gate can clear a setup.</div></div><button id="dcfRefresh" class="btn">Refresh</button></div>
+      <div class="sectionHead"><div><div class="title">Exchange agreement check</div><div class="sub">Checks whether multiple exchanges are showing roughly the same price before the safety gate can clear a setup.</div></div><button id="dcfRefresh" class="btn">Refresh</button></div>
       <div class="grid3">
         <div class="mini"><div class="k">State</div><div class="v" id="dcfState">WAITING</div></div>
-        <div class="mini"><div class="k">Consensus quality</div><div class="v" id="dcfQuality">—</div></div>
-        <div class="mini"><div class="k">Price dispersion</div><div class="v" id="dcfDispersion">—</div></div>
+        <div class="mini"><div class="k">Exchange agreement</div><div class="v" id="dcfQuality">—</div></div>
+        <div class="mini"><div class="k">Price difference</div><div class="v" id="dcfDispersion">—</div></div>
       </div>
       <div class="watchNote" id="dcfSources">No independent feed snapshot yet.</div>
     </div>
 
     <div class="section grid2">
       <div class="card gateCard" id="pfgCard">
-        <div class="sectionHead"><div><div class="title">Prop Firm Guard</div><div class="sub">Green = trade checks passed · Amber = caution · Red = blocked. Set these to your evaluation rules.</div></div><span class="chip" id="pfgGateChip">WAITING</span></div>
+        <div class="sectionHead"><div><div class="title">Prop firm risk check</div><div class="sub">Enter your account rules once. MarketPulse checks whether the current setup fits those limits.</div></div><span class="chip" id="pfgGateChip">WAITING</span></div>
         <div class="inputs">
-          <label class="small">Evaluation size<input id="pfgEvalAccount" type="number" value="0" min="1"></label>
+          <label class="small">Account size<input id="pfgEvalAccount" type="number" value="0" min="1"></label>
           <label class="small">Current equity<input id="pfgEquity" type="number" value="0" min="1"></label>
-          <label class="small">Max loss today %<input id="pfgDailyLoss" type="number" value="0" step=".1"></label>
-          <label class="small">Max account loss %<input id="pfgMaxDD" type="number" value="0" step=".1"></label>
+          <label class="small">Daily loss limit %<input id="pfgDailyLoss" type="number" value="0" step=".1"></label>
+          <label class="small">Total loss limit %<input id="pfgMaxDD" type="number" value="0" step=".1"></label>
           <label class="small">Risk per trade %<input id="pfgRiskTrade" type="number" value="0" step=".05"></label>
           <label class="small">Minimum signal strength<input id="pfgScore" type="number" value="0" min="0" max="100"></label>
           <label class="small">Minimum reward / risk<input id="pfgRR" type="number" value="0" step=".1"></label>
@@ -592,15 +604,15 @@ body.admin-mode .nav button.adminNav,body.admin-mode .mobileMenu button.adminNav
         <div class="watchNote" id="pfgReasons" style="margin-top:6px">No gate result yet.</div><div class="gateHint">Tip: you do not need to understand every technical metric. A green result means the safety rules are satisfied; red means do not treat the setup as approved.</div>
       </div>
       <div class="card gateCard" id="ecgCard">
-        <div class="sectionHead"><div><div class="title">Event Contract Guard</div><div class="sub">Beginner mode: enter exactly what the venue shows. Green = all checks pass · Red = blocked.</div></div><span class="chip" id="ecgGateChip">WAITING</span></div>
+        <div class="sectionHead"><div><div class="title">Event contract safety check</div><div class="sub">Copy the contract details from the venue. This checks the rules; it does not place an order.</div></div><span class="chip" id="ecgGateChip">WAITING</span></div>
         <div class="inputs">
           <label class="small">Platform<select id="ecgVenue"><option>GENERIC</option><option>TOOBIT</option><option>XT</option></select></label>
-          <label class="small">Contract direction<select id="ecgSide"><option>UP</option><option>DOWN</option></select></label>
-          <label class="small">Cost if wrong<input id="ecgPremium" type="number" value="10" min="0" step=".01"></label>
-          <label class="small">Total payout if correct<input id="ecgPayout" type="number" value="20" min="0" step=".01"></label>
+          <label class="small">Direction<select id="ecgSide"><option>UP</option><option>DOWN</option></select></label>
+          <label class="small">Loss if wrong<input id="ecgPremium" type="number" value="10" min="0" step=".01"></label>
+          <label class="small">Payout if correct<input id="ecgPayout" type="number" value="20" min="0" step=".01"></label>
           <label class="small">Strike price<input title="The price level the contract settles against." id="ecgStrike" type="number" value="" min="0" step=".01" placeholder="Enter venue strike"></label>
-          <label class="small">Minutes until expiry<input id="ecgExpiryMin" type="number" value="5" min="0.5" step=".5"></label>
-          <label class="small">Fee / cost<input id="ecgFee" type="number" value="0" min="0" step=".01"></label>
+          <label class="small">Minutes to expiry<input id="ecgExpiryMin" type="number" value="5" min="0.5" step=".5"></label>
+          <label class="small">Fees<input id="ecgFee" type="number" value="0" min="0" step=".01"></label>
         </div>
         <button id="ecgRefresh" class="btn primary" style="margin-top:8px">Check this contract</button>
         <div class="gatePrimary"><span class="gateIcon"></span><b>Decision:</b><span id="ecgDecisionText">Waiting for data</span></div>
@@ -611,7 +623,7 @@ body.admin-mode .nav button.adminNav,body.admin-mode .mobileMenu button.adminNav
     </div>
 
     <div class="section card">
-      <div class="sectionHead"><div><div class="title">Quick Calculators</div><div class="sub">Fast position, risk/reward and P&amp;L planning without leaving Intel.</div></div><span class="chip">LIVE INPUTS</span></div>
+      <div class="sectionHead"><div><div class="title">Quick calculators</div><div class="sub">Enter a few numbers and MarketPulse does the math for you.</div></div><span class="chip">LIVE INPUTS</span></div>
       <div class="calcGrid">
         <div class="calcBox"><div class="label">Position size</div><div class="inputs">
           <label class="small">Account<input id="ca" type="number" value="5000"></label><label class="small">Risk %<input id="cr" type="number" value="1" step=".05"></label>
@@ -1035,6 +1047,20 @@ body.admin-mode .nav button.adminNav,body.admin-mode .mobileMenu button.adminNav
 
   <div class="foot">MarketPulse is educational decision-support software. It does not place orders, manage funds, or guarantee outcomes. Adaptive learning calibrates from resolved historical examples; it is not a promise of future performance.</div>
 </main>
+<script nonce="__CSP_NONCE__">
+(function(){
+  function openGuide(){var m=document.getElementById("beginnerGuideModal");if(!m)return;m.classList.add("open");m.setAttribute("aria-hidden","false")}
+  function closeGuide(){var m=document.getElementById("beginnerGuideModal");if(!m)return;m.classList.remove("open");m.setAttribute("aria-hidden","true")}
+  document.addEventListener("click",function(e){
+    var t=e.target;
+    if(t.closest&&t.closest("#beginnerGuideBtn")){e.preventDefault();openGuide()}
+    if(t.closest&&t.closest("#beginnerGuideInline")){e.preventDefault();openGuide()}
+    if(t.closest&&t.closest("#beginnerGuideClose")){e.preventDefault();closeGuide()}
+    if(t.id==="beginnerGuideModal")closeGuide();
+  });
+  document.addEventListener("keydown",function(e){if(e.key==="Escape")closeGuide()});
+})();
+</script>
 <script nonce="__CSP_NONCE__">
 (function(){
 "use strict";
@@ -3154,6 +3180,23 @@ setInterval(function(){if(document.visibilityState==="visible")loadPhase7()},600
         <div id="supportUserTickets" class="adminList"></div>
       </div>
       <button id="accountLogout" class="btn" style="margin-top:8px">Sign out</button>
+    </div>
+  </div>
+</div><div id="beginnerGuideModal" class="beginnerModal" aria-hidden="true">
+  <div class="beginnerCard" role="dialog" aria-modal="true" aria-labelledby="beginnerGuideTitle">
+    <div class="beginnerHead"><div><h3 id="beginnerGuideTitle">MarketPulse — Beginner Guide</h3><p>Use the dashboard in this order. Advanced metrics are there for extra context; you do not need to memorize them.</p></div><button id="beginnerGuideClose" class="beginnerClose" aria-label="Close guide">×</button></div>
+    <div class="beginnerSteps">
+      <div class="beginnerStep"><b>1 · Start with the Signal</b><span>The top cards show price, market mode, the current signal and a confidence score. “No trade” means the signals are not aligned enough.</span></div>
+      <div class="beginnerStep"><b>2 · Check the chart</b><span>Choose 15m, 30m, 1h, 4h or 1D. Move over candles to see time and OHLC. Use the 50 EMA and volume for extra context.</span></div>
+      <div class="beginnerStep"><b>3 · Check safety</b><span>Market Flow shows futures positioning. The prop-firm and event checks turn your own rules into simple pass, caution or blocked results.</span></div>
+    </div>
+    <div class="beginnerGlossary">
+      <div class="beginnerTerm"><b>Open interest (OI)</b><span>How much futures position value is still open.</span></div>
+      <div class="beginnerTerm"><b>Buy / sell pressure (CVD)</b><span>A view of whether aggressive market buying or selling is dominating.</span></div>
+      <div class="beginnerTerm"><b>Funding</b><span>A periodic payment between long and short futures traders.</span></div>
+      <div class="beginnerTerm"><b>Liquidations</b><span>Forced closing of positions when required margin is no longer available.</span></div>
+      <div class="beginnerTerm"><b>Drawdown</b><span>How far the current price is below a recent high.</span></div>
+      <div class="beginnerTerm"><b>Risk / reward</b><span>How much potential gain there is relative to the amount you plan to risk.</span></div>
     </div>
   </div>
 </div></body>
