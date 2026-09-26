@@ -249,6 +249,24 @@ async function derivatives(symbol,interval){
     }
   }
   recordFlowPoint(symbol);
+  if(live.cvdNotional>0){
+    data.cvdDelta=live.cvd;
+    data.cvdRatio=live.cvdNotional?live.cvd/live.cvdNotional:null;
+    data.cvdState=live.cvd>0?"BUYERS PRESSURE":live.cvd<0?"SELLERS PRESSURE":"BALANCED";
+  }
+  if(Number.isFinite(live.oi))data.oi=live.oi;
+  if(Number.isFinite(live.fundingRate))data.fundingRate=live.fundingRate;
+  if(Number.isFinite(live.markPrice))data.markPrice=live.markPrice;
+  if(live.liqLong||live.liqShort){
+    data.longLiquidations=live.liqLong;data.shortLiquidations=live.liqShort;
+    data.liquidationTotal=live.liqLong+live.liqShort;
+    data.liquidationBias=live.liqLong>live.liqShort?"LONG LIQS DOMINANT":"SHORT LIQS DOMINANT";
+  }
+  data.series=data.series||{};
+  if(!Array.isArray(data.series.cvd)||data.series.cvd.length<2)data.series.cvd=live.points.map(x=>x.cvdRatio??x.cvd).filter(Number.isFinite);
+  if(!Array.isArray(data.series.oi)||data.series.oi.length<2)data.series.oi=live.points.map(x=>x.oi).filter(Number.isFinite);
+  if(!Array.isArray(data.series.liq)||data.series.liq.length<2)data.series.liq=live.points.map(x=>x.liqTotal).filter(Number.isFinite);
+  data.provider=(data.provider||"Derivatives")+" · live flow";
   data.liveHistory=live.points.slice(-120);
   data.livePointCount=live.points.length;
   DERIV_CACHE.set(key,{ts:Date.now(),data});return data;
@@ -481,11 +499,11 @@ const server=http.createServer(async(req,res)=>{
       const symbol=(u.searchParams.get('symbol')||'BTCUSDT').toUpperCase(),interval=u.searchParams.get('interval')||'1h';
       if(!SYMBOLS.includes(symbol))return send(res,400,{error:'Unsupported symbol'});
       try{
-        const candles=await getKraken(symbol,interval);
+        const candles=await klines(symbol,interval);
         if(!candles||candles.length<220)throw Error('Kraken returned insufficient candles');
-        const lowerPromise=interval==='15m'?Promise.resolve(null):Promise.race([getKraken(symbol,'15m'),new Promise(resolve=>setTimeout(()=>resolve(null),1400))]).catch(()=>null);
-        const higherPromise=interval==='4h'?Promise.resolve(null):Promise.race([getKraken(symbol,'4h'),new Promise(resolve=>setTimeout(()=>resolve(null),1400))]).catch(()=>null);
-        const derivPromise=Promise.race([derivatives(symbol,interval),new Promise(resolve=>setTimeout(()=>resolve(null),900))]).catch(()=>null);
+        const lowerPromise=interval==='15m'?Promise.resolve(null):Promise.race([klines(symbol,'15m'),new Promise(resolve=>setTimeout(()=>resolve(null),1800))]).catch(()=>null);
+        const higherPromise=interval==='4h'?Promise.resolve(null):Promise.race([klines(symbol,'4h'),new Promise(resolve=>setTimeout(()=>resolve(null),1800))]).catch(()=>null);
+        const derivPromise=Promise.race([derivatives(symbol,interval),new Promise(resolve=>setTimeout(()=>resolve(null),2600))]).catch(()=>null);
         const [lower,higher,deriv]=await Promise.all([lowerPromise,higherPromise,derivPromise]);
         let analysis=analyze(candles,{interval,lower:lower&&lower.length>=220?analyze(lower,{interval:'15m'}):null,higher:higher&&higher.length>=220?analyze(higher,{interval:'4h'}):null,deriv});
         let learned=null;
@@ -511,7 +529,7 @@ const server=http.createServer(async(req,res)=>{
       const symbol=(u.searchParams.get('symbol')||'BTCUSDT').toUpperCase(),interval=u.searchParams.get('interval')||'1h';
       if(!SYMBOLS.includes(symbol))return send(res,400,{error:'Unsupported symbol'});
       try{
-        const data=await Promise.race([derivatives(symbol,interval),new Promise(resolve=>setTimeout(()=>resolve(null),2500))]).catch(()=>null);
+        const data=await Promise.race([derivatives(symbol,interval),new Promise(resolve=>setTimeout(()=>resolve(null),6000))]).catch(()=>null);
         return send(res,200,{ok:true,data:data||null});
       }catch(e){return send(res,200,{ok:false,data:null,error:e.message})}
     }
@@ -520,16 +538,15 @@ const server=http.createServer(async(req,res)=>{
       if(hit&&Date.now()-hit.ts<SCAN_TTL)return send(res,200,hit.payload);
       const rows=await Promise.all(SYMBOLS.map(async symbol=>{
         try{
-          const candles=await getKraken(symbol,interval);if(!candles||candles.length<220)throw Error('Insufficient candles');
-          const higher=interval==='4h'?null:await Promise.race([getKraken(symbol,'4h'),new Promise(resolve=>setTimeout(()=>resolve(null),1200))]).catch(()=>null);
-          const lower=interval==='15m'?null:await Promise.race([getKraken(symbol,'15m'),new Promise(resolve=>setTimeout(()=>resolve(null),1200))]).catch(()=>null);
-          const deriv=await Promise.race([derivatives(symbol,interval),new Promise(resolve=>setTimeout(()=>resolve(null),700))]).catch(()=>null);
-          let analysis=analyze(candles,{interval,lower:lower&&lower.length>=220?analyze(lower,{interval:'15m'}):null,higher:higher&&higher.length>=220?analyze(higher,{interval:'4h'}):null,deriv});
+          const candles=await klines(symbol,interval);if(!candles||candles.length<220)throw Error('Insufficient candles');
+          const higher=interval==='4h'?null:await Promise.race([klines(symbol,'4h'),new Promise(resolve=>setTimeout(()=>resolve(null),1500))]).catch(()=>null);
+          const lower=interval==='15m'?null:await Promise.race([klines(symbol,'15m'),new Promise(resolve=>setTimeout(()=>resolve(null),1500))]).catch(()=>null);
+          let analysis=analyze(candles,{interval,lower:lower&&lower.length>=220?analyze(lower,{interval:'15m'}):null,higher:higher&&higher.length>=220?analyze(higher,{interval:'4h'}):null,deriv:null});
           try{const learned=await Promise.race([learning.process(symbol,interval,candles,analysis),new Promise(resolve=>setTimeout(()=>resolve(null),250))]);if(learned?.analysis)analysis=learned.analysis}catch{}
-          return{symbol,label:labels[symbol]||symbol,price:analysis.price,change24h:analysis.change24h,regime:analysis.regime,side:analysis.side,type:analysis.type,status:analysis.status,score:analysis.score,bias:analysis.bias,probabilityLabel:analysis.probabilityLabel,structure:analysis.structure,derivatives:analysis.derivatives};
+          return{symbol,label:labels[symbol]||symbol,price:analysis.price,change24h:analysis.change24h,regime:analysis.regime,side:analysis.side,type:analysis.type,status:analysis.status,score:analysis.score,bias:analysis.bias,probabilityLabel:analysis.probabilityLabel,structure:analysis.structure,derivatives:null};
         }catch(e){return{symbol,label:labels[symbol]||symbol,status:'WAITING',side:'WAIT',score:0,error:e.message}}
       }));
-      const payload={ok:true,interval,rows,updatedAt:Date.now(),cacheTtlMs:SCAN_TTL};SCAN_CACHE.set(interval,{ts:Date.now(),payload});return send(res,200,payload);
+      const payload={ok:true,interval,rows,updatedAt:Date.now(),cacheTtlMs:SCAN_TTL,mode:"fast-cached-scan"};SCAN_CACHE.set(interval,{ts:Date.now(),payload});return send(res,200,payload);
     }
 
 
