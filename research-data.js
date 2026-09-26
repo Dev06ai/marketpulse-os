@@ -272,13 +272,16 @@ async function fetchBinanceFundingRateHist(symbol, options = {}) {
   return unique.slice(-maxBars);
 }
 
-function latestAtOrBefore(map, ts, maxAgeMs = Infinity) {
-  let best=null,bestT=-Infinity;
-  for(const [t,row] of map) {
-    const n=Number(t);
-    if(n<=ts&&n>bestT){bestT=n;best=row}
+function latestAtOrBefore(series, ts, maxAgeMs = Infinity) {
+  if(!Array.isArray(series)||!series.length)return null;
+  let lo=0,hi=series.length-1,best=-1;
+  while(lo<=hi){
+    const mid=(lo+hi)>>1,n=Number(series[mid]?.t);
+    if(n<=ts){best=mid;lo=mid+1}else hi=mid-1;
   }
-  return best && ts-bestT<=maxAgeMs ? best : null;
+  if(best<0)return null;
+  const row=series[best],age=ts-Number(row.t);
+  return age>=0&&age<=maxAgeMs?row:null;
 }
 
 function alignDerivativeSnapshot(candle, oiRow, previousOi, extras = {}) {
@@ -353,10 +356,10 @@ async function buildReplayRecords({symbol, interval="1h", bars=5000, analyze, mi
   let fundingRows = [];
   try { fundingRows = await fetchBinanceFundingRateHist(symbol, {maxBars: Math.min(candles.length, 5000)}); } catch {}
   const futMap = new Map(futures.map(x=>[x.t,x]));
-  const oiMap = new Map(oiRows.map(x=>[x.t,x]));
-  const takerMap = new Map(takerRows.map(x=>[x.t,x]));
-  const longShortMap = new Map(longShortRows.map(x=>[x.t,x]));
-  const fundingMap = new Map(fundingRows.map(x=>[x.t,x]));
+  const oiSeries = oiRows.slice().sort((a,b)=>a.t-b.t);
+  const takerSeries = takerRows.slice().sort((a,b)=>a.t-b.t);
+  const longShortSeries = longShortRows.slice().sort((a,b)=>a.t-b.t);
+  const fundingSeries = fundingRows.slice().sort((a,b)=>a.t-b.t);
   const records = [];
   const start = 220;
   const total = Math.max(0, candles.length - horizonBars - start - 1);
@@ -370,12 +373,12 @@ async function buildReplayRecords({symbol, interval="1h", bars=5000, analyze, mi
     }
     const deriv=alignDerivativeSnapshot(
       currentFut,
-      latestAtOrBefore(oiMap,candles[i].t),
+      latestAtOrBefore(oiSeries,candles[i].t),
       previousOi,
       {
-        taker:latestAtOrBefore(takerMap,candles[i].t,24*60*60*1000),
-        longShort:latestAtOrBefore(longShortMap,candles[i].t,24*60*60*1000),
-        funding:latestAtOrBefore(fundingMap,candles[i].t,24*60*60*1000)
+        taker:latestAtOrBefore(takerSeries,candles[i].t,24*60*60*1000),
+        longShort:latestAtOrBefore(longShortSeries,candles[i].t,24*60*60*1000),
+        funding:latestAtOrBefore(fundingSeries,candles[i].t,24*60*60*1000)
       }
     );
     const a = analyze(window, {interval, deriv});
