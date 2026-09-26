@@ -108,6 +108,19 @@ jobs:
           PY
 
 
+      - name: Check final decision state sanitization
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          server=Path("server.js").read_text()
+          html=Path("public/index.html").read_text()
+          required_server=["function sanitizeFinalDecision","candidateEvidence","liveSignalEligible:false",'type:"NO TRADE"']
+          required_html=['var side=d.liveSignalEligible===true&&d.state==="READY"']
+          missing=[x for x in required_server if x not in server]+[x for x in required_html if x not in html]
+          if missing: raise SystemExit("Missing final decision sanitization: "+", ".join(missing))
+          print("Final decision state sanitization surface OK")
+          PY
+
       - name: Check prop and research feature surface
         run: |
           python - <<'PY'
