@@ -60,7 +60,7 @@ function analyseScoreBuckets(rows){
   return buckets.map(b=>{
     const x=rows.filter(r=>Number(r.score)>=b.min&&Number(r.score)<=b.max&&r.outcome!=="SKIP");
     const s=summarise(x,{opportunities:x.length,testBars:x.length});
-    return {bucket:b.name,trades:s.trades,winRate:s.winRate,expectancyR:s.expectancyR,profitFactor:s.profitFactor,netR:s.netR};
+    return {bucket:b.name,min:b.min,max:b.max,trades:s.trades,winRate:s.winRate,expectancyR:s.expectancyR,profitFactor:s.profitFactor,netR:s.netR};
   });
 }
 
@@ -68,7 +68,7 @@ function validatedThreshold(summary,buckets,baseScore){
   const minTrades=25;
   const eligible=(buckets||[])
     .filter(b=>Number(b.trades)>=minTrades&&Number(b.winRate)>=52&&Number(b.expectancyR)>0&&
-      (b.profitFactor===null||Number(b.profitFactor)>=1.05)&&Number(b.bucket?.replace("+","")||0)>=baseScore);
+      (b.profitFactor===null||Number(b.profitFactor)>=1.05)&&Number(b.min||0)>=baseScore);
   if(!eligible.length)return null;
   return eligible.sort((a,b)=>Number(a.bucket.replace("+",""))-Number(b.bucket.replace("+","")))[0];
 }
@@ -215,7 +215,7 @@ function selfTest(){
     })
   };
   const v=runWalkForward(candles,{
-    symbol:"BTCUSDT",interval:"1h",step:8,maxSamples:60,minTrades:5,minTestBars:100,
+    symbol:"BTCUSDT",interval:"1h",step:8,maxSamples:60,minTrades:80,minTestBars:100,
     analyze:fakeAnalyze,phase910:fakePhase
   });
   const historicalGate=applyDeploymentGate({
@@ -224,6 +224,7 @@ function selfTest(){
   },v,{basePolicy:{minScore:72,minRR:1.5}});
   const strongValidation={
     summary:{trades:80,winRate:56,expectancyR:.14,profitFactor:1.2,maxDrawdownR:6,sufficient:true},
+    buckets:[{bucket:"80-83",min:80,max:83,trades:30,winRate:56,expectancyR:.14,profitFactor:1.2,netR:4.2}],
     adaptive:null
   };
   strongValidation.adaptive=adaptivePolicy(strongValidation,{minScore:72,minRR:1.5});
