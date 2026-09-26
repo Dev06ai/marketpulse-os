@@ -148,12 +148,12 @@ function orderBlockRejection(c,zones,atr,i){
     if(!near)continue;
     const m=wickMetrics(x);
     if(z.side==="SHORT"){
-      const reject=x.c<z.high && x.c<=z.openClose?true:x.c<z.high&&m.closePos<.55;
+      const reject=x.h>=z.low-a*.12&&x.c<=(z.low+z.high)/2;
       if(reject&&m.upper>=a*.18){
         out.push({...z,score:clamp(z.score+10+(m.upperRatio>=.35?5:0),0,95),warnCounterTrend:true,reason:"Price returned into a bearish order-block zone and printed rejection."});
       }
     }else{
-      const reject=x.c>z.low && x.c>=z.openClose?true:x.c>z.low&&m.closePos>.45;
+      const reject=x.l<=z.high+a*.12&&x.c>=(z.low+z.high)/2;
       if(reject&&m.lower>=a*.18){
         out.push({...z,score:clamp(z.score+10+(m.lowerRatio>=.35?5:0),0,95),warnCounterTrend:true,reason:"Price returned into a bullish order-block zone and printed rejection."});
       }
@@ -165,7 +165,7 @@ function orderBlockRejection(c,zones,atr,i){
 function annotateOrderBlocks(zones,c){
   return zones.map(z=>{
     const source=c[z.createdIndex];
-    return {...z,openClose:source?Math.min(source.o,source.c):null,sourceOpen:source?.o??null,sourceClose:source?.c??null};
+    return {...z,sourceOpen:source?.o??null,sourceClose:source?.c??null};
   });
 }
 
