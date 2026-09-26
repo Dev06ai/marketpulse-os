@@ -56,6 +56,7 @@ async function save(deviceId,state){
 function barsFor(interval){return HORIZON_BARS[interval]||12}
 function intervalMs(interval){return ({"15m":15,"1h":60,"4h":240,"1d":1440}[interval]||60)*60000}
 function band(score){const s=finite(score,0);return s<40?"0-39":s<55?"40-54":s<70?"55-69":s<80?"70-79":"80-100"}
+function strategyProfile(a){if(a?.regime==="HIGH VOLATILITY")return "VOLATILITY CAUTION";if(String(a?.type||"").includes("BREAKOUT"))return "BREAKOUT";if(a?.regime==="RANGE")return "RANGE REVERSION";if(a?.side==="LONG"||a?.side==="SHORT")return "TREND CONTINUATION";return "NO ACTIVE PROFILE"}
 function eventId(type,signalId,ts){return [type,signalId,ts].join("|")}
 function pushEvent(state,type,message,signalId,meta={}){
   const ts=Date.now(),id=eventId(type,signalId||"system",ts);
@@ -147,9 +148,10 @@ function closePaper(state,signal,position,status,resultR,reason,exitPrice,ts){
   const posIndex=state.paper.open.findIndex(x=>x.id===position.id);
   if(posIndex<0)return;
   const qty=finite(position.qty,0)||0,entry=finite(position.entry,0)||0,exit=finite(exitPrice,entry)||entry;
-  const pnl=signal.side==="LONG"?(exit-entry)*qty:(entry-exit)*qty;
+  let pnl=signal.side==="LONG"?(exit-entry)*qty:(entry-exit)*qty;
+  if(status==="AMBIGUOUS")pnl=0;
   const riskCash=finite(position.riskCash,0)||0;
-  const normalizedR=Number.isFinite(resultR)?resultR:(riskCash?pnl/riskCash:0);
+  const normalizedR=status==="TIMEOUT"?(riskCash?pnl/riskCash:0):(Number.isFinite(resultR)?resultR:(riskCash?pnl/riskCash:0));
   state.paper.realizedPnl+=pnl;
   state.paper.realizedR+=normalizedR;
   state.paper.open.splice(posIndex,1);
@@ -179,6 +181,12 @@ function advanceSignal(state,signal,candle,ts){
   const lo=Number(candle.l),hi=Number(candle.h);
   if(!Number.isFinite(lo)||!Number.isFinite(hi))return;
   if(signal.lifecycle==="WATCHING"||signal.lifecycle==="ARMED"){
+    const maxMs=barsFor(signal.interval)*intervalMs(signal.interval);
+    if(ts-Number(signal.candleTs)>=maxMs){
+      signal.lifecycle="CLOSED";signal.outcome="NOT_TRIGGERED";signal.resultR=0;signal.closedAt=ts;signal.updatedAt=ts;
+      pushEvent(state,"SIGNAL_EXPIRED",signal.symbol+" "+signal.side+" expired before entry trigger",signal.id);
+      return;
+    }
     const hitEntry=lo<=signal.entryHigh&&hi>=signal.entryLow;
     if(hitEntry){
       signal.entry=finite(signal.entry,(signal.entryLow+signal.entryHigh)/2);
@@ -218,7 +226,7 @@ function addSignal(state,symbol,interval,analysis,candle,evidence){
   const signal={
     id,symbol,interval,candleTs,createdAt:Date.now(),type:analysis.type,side:analysis.side,regime:analysis.regime,status:analysis.status,score:finite(analysis.score,0),
     price:finite(analysis.price),entryLow:entryLow??entry,entryHigh:entryHigh??entry,entry,stop:finite(analysis.stop),target:finite(analysis.tp1),tp2:finite(analysis.tp2),
-    rr:finite(analysis.rr),lifecycle:analysis.status==="READY"?"ARMED":"WATCHING",reasons:(analysis.reasons||[]).slice(0,6),
+    rr:finite(analysis.rr),profile:strategyProfile(analysis),lifecycle:analysis.status==="READY"?"ARMED":"WATCHING",reasons:(analysis.reasons||[]).slice(0,6),
     evidence,evidenceTop:evidence?.top||[],risk:null,outcome:null,resultR:null,updatedAt:Date.now()
   };
   state.signals.push(signal);state.signals=state.signals.slice(-MAX_SIGNALS);
@@ -243,6 +251,7 @@ function strategyHealth(state){
     sample:s.trades,recentSample:rs.trades,winRate:s.winRate,netR:s.netR,avgR:s.avgR,drawdownR:(finite(state.paper.maxDrawdown,0)||0)/(Math.max(1,finite(state.paper.startingEquity,1))),recentNetR:rs.netR,
     evidenceDivergence:div.length?div.reduce((a,b)=>a+b,0)/div.length:null,
     state:trades.length<12?"INSUFFICIENT LIVE SAMPLE":rs.netR<0&&trades.length>=12?"UNDER REVIEW":"TRACKING",
+    drawdownPct:finite(state.paper.startingEquity,1)?(finite(state.paper.maxDrawdown,0)/Math.max(1,finite(state.paper.startingEquity,1))*100):0,
     note:trades.length<12?"Collecting live paper outcomes before treating recent behaviour as stable.":"Live paper results are descriptive of the stored sample and are not a forecast."
   };
 }
