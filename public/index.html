@@ -98,6 +98,20 @@ button,input,select,textarea{font:inherit}.wrap{width:min(1440px,calc(100% - 26p
   .nav button[data-view="lab"],.nav button[data-view="edge"],.nav button[data-view="brain"]{margin-left:3px}
 }
 #mp7-panel{margin-top:12px}
+</style><style id="guard-chart-style">
+.chartTools button.active{color:#fff;border-color:rgba(103,232,255,.35);background:rgba(103,232,255,.08);box-shadow:0 0 14px rgba(103,232,255,.08)}
+.chartTools button[data-active="true"]{color:#fff;border-color:rgba(103,232,255,.35);background:rgba(103,232,255,.08)}
+.chartWrap{user-select:none;overscroll-behavior:contain}
+.gateCard{position:relative;overflow:hidden;transition:border-color .25s ease,background .25s ease,box-shadow .25s ease}
+.gateCard.gate-blocked{border-color:rgba(248,113,113,.55)!important;background:linear-gradient(180deg,rgba(248,113,113,.10),rgba(8,8,11,.96));box-shadow:0 0 0 1px rgba(248,113,113,.10),0 0 32px rgba(248,113,113,.10)}
+.gateCard.gate-passed{border-color:rgba(74,222,128,.55)!important;background:linear-gradient(180deg,rgba(74,222,128,.09),rgba(8,8,11,.96));box-shadow:0 0 0 1px rgba(74,222,128,.09),0 0 32px rgba(74,222,128,.08)}
+.gateCard.gate-warning{border-color:rgba(251,191,36,.52)!important;background:linear-gradient(180deg,rgba(251,191,36,.09),rgba(8,8,11,.96));box-shadow:0 0 0 1px rgba(251,191,36,.08),0 0 30px rgba(251,191,36,.06)}
+.gateCard .gateExplain{margin-top:8px;padding:10px 11px;border-radius:10px;font-size:11px;line-height:1.5;border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.025)}
+.gateCard.gate-blocked .gateExplain{color:#fecaca;background:rgba(127,29,29,.22);border-color:rgba(248,113,113,.20)}
+.gateCard.gate-passed .gateExplain{color:#bbf7d0;background:rgba(20,83,45,.20);border-color:rgba(74,222,128,.20)}
+.gateCard.gate-warning .gateExplain{color:#fde68a;background:rgba(120,53,15,.20);border-color:rgba(251,191,36,.20)}
+.gateReason{margin-top:5px;font-size:10px;color:#a8abb5}
+.gateHint{font-size:10px;color:#8a8d98;margin-top:5px}
 </style><style id="signal-state-style">
 #callMetric,#callMetric .value,.decisionStateCard,.signalQualityCard{transition:color .25s ease,border-color .25s ease,box-shadow .25s ease,background .25s ease}
 .decisionSection{--signal-accent:#a78bfa;--signal-soft:rgba(167,139,250,.10);--signal-border:rgba(167,139,250,.28)}
@@ -342,7 +356,7 @@ body.admin-mode .nav button.adminNav,body.admin-mode .mobileMenu button.adminNav
       </div>
     </div>
 
-    <div class="section card"><div class="sectionHead"><div><div class="title">Price action</div><div class="sub">Drag to pan · scroll to zoom · ↑ ↓ adjust vertical view.</div></div><div class="chartTools"><button id="panYUp">↑</button><button id="panL">←</button><button id="panR">→</button><button id="panYDown">↓</button><button id="zoomOut">−</button><button id="zoomReset">1:1</button><button id="zoomIn">+</button><button id="chartSettings">⚙</button></div></div><div class="chartWrap"><canvas id="mainChart" class="chartCanvas"></canvas><div class="ohlc" id="ohlc">Move over chart</div></div><div class="levels"><div class="level"><div class="k">Entry zone</div><div class="v" id="entry">—</div></div><div class="level"><div class="k">Invalidation</div><div class="v" id="stop">—</div></div><div class="level"><div class="k">Target 1</div><div class="v" id="target">—</div></div><div class="level"><div class="k">R:R</div><div class="v" id="rr">—</div></div></div></div>
+    <div class="section card"><div class="sectionHead"><div><div class="title">Price action</div><div class="sub">TradingView-style controls: drag to pan · wheel/pinch to zoom · move cursor for crosshair.</div></div><div class="chartTools"><button id="chartCandles" class="active" title="Candlestick chart">Candles</button><button id="chartLine" title="Closing-price line chart">Line</button><button id="chartAuto" title="Fit price scale automatically">Auto</button><button id="chartFit" title="Fit all visible candles">Fit</button><button id="panL" title="Pan left">←</button><button id="panR" title="Pan right">→</button><button id="zoomOut" title="Zoom out">−</button><button id="zoomReset" title="Reset zoom">1:1</button><button id="zoomIn" title="Zoom in">+</button><button id="chartSettings" title="Chart settings">⚙</button></div></div><div class="chartWrap"><canvas id="mainChart" class="chartCanvas"></canvas><div class="ohlc" id="ohlc">Move over chart</div></div><div class="levels"><div class="level"><div class="k">Entry zone</div><div class="v" id="entry">—</div></div><div class="level"><div class="k">Invalidation</div><div class="v" id="stop">—</div></div><div class="level"><div class="k">Target 1</div><div class="v" id="target">—</div></div><div class="level"><div class="k">R:R</div><div class="v" id="rr">—</div></div></div></div>
 
     <div class="section"><div class="sectionHead"><div><div class="title">Market Overview</div><div class="sub">Live market intelligence, long-term cycle context and quick trading tools.</div></div><span class="chip">Long-term context</span></div>
       <div class="overGrid">
@@ -389,8 +403,8 @@ body.admin-mode .nav button.adminNav,body.admin-mode .mobileMenu button.adminNav
     </div>
 
     <div class="section grid2">
-      <div class="card">
-        <div class="sectionHead"><div><div class="title">Prop Firm Guard</div><div class="sub">Evidence + account-headroom gate. Configure this to the exact rules of your evaluation.</div></div><span class="chip" id="pfgGateChip">WAITING</span></div>
+      <div class="card gateCard" id="pfgCard">
+        <div class="sectionHead"><div><div class="title">Prop Firm Guard</div><div class="sub">Green = trade checks passed · Amber = caution · Red = blocked. Set these to your evaluation rules.</div></div><span class="chip" id="pfgGateChip">WAITING</span></div>
         <div class="inputs">
           <label class="small">Account<input id="pfgEvalAccount" type="number" value="5000" min="1"></label>
           <label class="small">Equity<input id="pfgEquity" type="number" value="5000" min="1"></label>
@@ -401,11 +415,11 @@ body.admin-mode .nav button.adminNav,body.admin-mode .mobileMenu button.adminNav
           <label class="small">Min R:R<input id="pfgRR" type="number" value="1.5" step=".1"></label>
         </div>
         <button id="pfgRefresh" class="btn primary" style="margin-top:8px">Evaluate current setup</button>
-        <div class="result" id="pfgResult" style="margin-top:8px">Waiting for market data.</div>
-        <div class="watchNote" id="pfgReasons" style="margin-top:6px">No gate result yet.</div>
+        <div class="result" id="pfgResult" style="margin-top:8px">Waiting for market data.</div><div class="gateExplain" id="pfgExplain">The guard checks signal quality, market confirmation and account safety before it allows a setup.</div>
+        <div class="watchNote" id="pfgReasons" style="margin-top:6px">No gate result yet.</div><div class="gateHint">Tip: you do not need to understand every technical metric. A green result means the safety rules are satisfied; red means do not treat the setup as approved.</div>
       </div>
-      <div class="card">
-        <div class="sectionHead"><div><div class="title">Event Contract Guard</div><div class="sub">For fixed-risk Higher/Lower or UP/DOWN products. Uses the venue's displayed premium and payout.</div></div><span class="chip" id="ecgGateChip">WAITING</span></div>
+      <div class="card gateCard" id="ecgCard">
+        <div class="sectionHead"><div><div class="title">Event Contract Guard</div><div class="sub">Beginner mode: enter exactly what the venue shows. Green = all checks pass · Red = blocked.</div></div><span class="chip" id="ecgGateChip">WAITING</span></div>
         <div class="inputs">
           <label class="small">Venue<select id="ecgVenue"><option>GENERIC</option><option>TOOBIT</option><option>XT</option></select></label>
           <label class="small">Direction<select id="ecgSide"><option>UP</option><option>DOWN</option></select></label>
@@ -416,8 +430,8 @@ body.admin-mode .nav button.adminNav,body.admin-mode .mobileMenu button.adminNav
           <label class="small">Fee<input id="ecgFee" type="number" value="0" min="0" step=".01"></label>
         </div>
         <button id="ecgRefresh" class="btn primary" style="margin-top:8px">Evaluate event contract</button>
-        <div class="result" id="ecgResult" style="margin-top:8px">Enter the contract terms shown by the venue.</div>
-        <div class="watchNote" id="ecgReasons" style="margin-top:6px">The gate never places an order.</div>
+        <div class="result" id="ecgResult" style="margin-top:8px">Enter the contract terms shown by the venue.</div><div class="gateExplain" id="ecgExplain">This does not predict the market by itself. It checks whether the contract terms and MarketPulse evidence make the trade permissible.</div>
+        <div class="watchNote" id="ecgReasons" style="margin-top:6px">The gate never places an order.</div><div class="gateHint">Beginner rule: if this box is red, skip the contract rather than trying to force a trade.</div>
       </div>
     </div>
 
@@ -854,6 +868,9 @@ var state={
   chartYZoom:1,
   chartYShift:0,
   crossX:null,
+  crossY:null,
+  chartType:"candles",
+  chartAutoScale:true,
   aiMode:"market",
   validation:null,
   watch:JSON.parse(localStorage.getItem("mp-watch")||"[]"),
@@ -993,56 +1010,104 @@ function drawMain(){
   var c=$("mainChart");if(!c)return;
   var out=setupCanvas(c,390),ctx=out.ctx,W=out.W,H=out.H,dataAll=state.market.candles||[];
   if(!dataAll.length)return;
-  var visible=Math.max(36,Math.min(180,state.chartVisible||96));
-  var offset=Math.max(0,Math.min(Math.max(0,dataAll.length-visible),state.chartOffset||0));
+  var visible=Math.max(36,Math.min(220,Math.round(state.chartVisible||96)));
+  if(visible>dataAll.length)visible=dataAll.length;
+  var maxOffset=Math.max(0,dataAll.length-visible);
+  var offset=Math.max(0,Math.min(maxOffset,Math.round(state.chartOffset||0)));
   var end=Math.max(visible,dataAll.length-offset),start=Math.max(0,end-visible),data=dataAll.slice(start,end);
-  var vals=data.flatMap(function(x){return[Number(x.h),Number(x.l)]});
+  var vals=data.flatMap(function(x){return[Number(x.h),Number(x.l)]}).filter(Number.isFinite);
   var dataHi=Math.max.apply(null,vals),dataLo=Math.min.apply(null,vals),dataRange=(dataHi-dataLo)||1;
-  var yZoom=Math.max(.35,Math.min(3.2,state.chartYZoom||1)),range=dataRange/yZoom,center=(dataHi+dataLo)/2-(state.chartYShift||0)*dataRange,hi=center+range/2,lo=center-range/2;
-  var left=12,right=68,top=14,bottom=24,pw=W-left-right,ph=H-top-bottom,xstep=pw/Math.max(1,data.length-1);
+  var theme=chartTheme();
+  var model=state.market.analysis||{};
+  var includeLevels=[model.entryLow,model.entryHigh,model.stop,model.tp1].map(Number).filter(Number.isFinite);
+  if(state.chartAutoScale && includeLevels.length){dataHi=Math.max(dataHi,Math.max.apply(null,includeLevels));dataLo=Math.min(dataLo,Math.min.apply(null,includeLevels));dataRange=(dataHi-dataLo)||1}
+  var yZoom=Math.max(.35,Math.min(3.2,state.chartYZoom||1)),range=dataRange/yZoom,center=(dataHi+dataLo)/2-(state.chartYShift||0)*dataRange;
+  if(state.chartAutoScale){range=dataRange;center=(dataHi+dataLo)/2}
+  var hi=center+range/2,lo=center-range/2;
+  var left=14,right=74,top=12,bottom=28,pw=Math.max(120,W-left-right),ph=Math.max(80,H-top-bottom),xstep=pw/Math.max(1,data.length-1);
   function scale(v){return top+(hi-v)/range*ph}
-
-  var theme=chartTheme();ctx.fillStyle=theme.bg;ctx.fillRect(0,0,W,H);
-  ctx.strokeStyle=theme.grid;ctx.lineWidth=1;ctx.font="9px system-ui";ctx.fillStyle=theme.axis;
-  for(var gy=0;gy<6;gy++){var y=top+gy*ph/5;ctx.beginPath();ctx.moveTo(left,y);ctx.lineTo(left+pw,y);ctx.stroke();ctx.fillText(fmt(hi-range*gy/5),left+pw+8,y+3)}
-  for(var gx=1;gx<5;gx++){var xg=left+gx*pw/5;ctx.beginPath();ctx.moveTo(xg,top);ctx.lineTo(xg,top+ph);ctx.stroke()}
-
-  var volMax=Math.max.apply(null,data.map(function(x){return Number(x.v)||0}))||1;
-  for(var i=0;i<data.length;i++){
-    var x=left+i*xstep,o=scale(data[i].o),h=scale(data[i].h),l=scale(data[i].l),cl=scale(data[i].c),bull=data[i].c>=data[i].o,col=bull?theme.bull:theme.bear;
-    ctx.strokeStyle=col;ctx.lineWidth=Math.max(1,Math.min(1.8,xstep*.12));ctx.beginPath();ctx.moveTo(x,h);ctx.lineTo(x,l);ctx.stroke();
-    var bw=Math.max(2,Math.min(9,xstep*.62));ctx.fillStyle=col;ctx.fillRect(x-bw/2,Math.min(o,cl),bw,Math.max(1.2,Math.abs(cl-o)));
-    if(chartSettings.showVolume!==false){var vh=26*((Number(data[i].v)||0)/volMax);ctx.globalAlpha=.20;ctx.fillStyle=col;ctx.fillRect(x-bw/2,H-28-vh,bw,vh);ctx.globalAlpha=1;}
+  function colorRgba(hex,a){
+    var m=String(hex||"").match(/^#([0-9a-f]{6})$/i);if(!m)return "rgba(255,255,255,"+a+")";
+    var n=parseInt(m[1],16),r=(n>>16)&255,g=(n>>8)&255,b=n&255;return "rgba("+r+","+g+","+b+","+a+")";
   }
-  ctx.fillStyle="rgba(255,255,255,.28)";ctx.font="8px system-ui";ctx.fillText("VOL",left+4,H-8);
+  ctx.fillStyle=theme.bg;ctx.fillRect(0,0,W,H);
 
+  // Grid + price axis
+  ctx.strokeStyle=theme.grid;ctx.lineWidth=1;ctx.font="9px system-ui";ctx.fillStyle=theme.axis;ctx.textAlign="left";
+  for(var gy=0;gy<=6;gy++){
+    var yy=top+gy*ph/6,val=hi-range*gy/6;
+    ctx.beginPath();ctx.moveTo(left,yy);ctx.lineTo(left+pw,yy);ctx.stroke();
+    ctx.fillText(fmt(val),left+pw+8,yy+3);
+  }
+  for(var gx=0;gx<6;gx++){
+    var xg=left+gx*pw/5;
+    ctx.beginPath();ctx.moveTo(xg,top);ctx.lineTo(xg,top+ph);ctx.stroke();
+  }
+
+  // Candles / line
+  var volMax=Math.max.apply(null,data.map(function(x){return Number(x.v)||0}))||1;
+  var showVolume=chartSettings.showVolume!==false;
+  var candleMode=state.chartType!=="line";
+  var closes=[];
+  for(var i=0;i<data.length;i++){
+    var row=data[i],x=left+i*xstep,o=scale(Number(row.o)),h=scale(Number(row.h)),l=scale(Number(row.l)),cl=scale(Number(row.c)),bull=Number(row.c)>=Number(row.o),col=bull?theme.bull:theme.bear;
+    closes.push(Number(row.c));
+    if(candleMode){
+      ctx.strokeStyle=col;ctx.lineWidth=Math.max(1,Math.min(1.8,xstep*.16));ctx.beginPath();ctx.moveTo(x,h);ctx.lineTo(x,l);ctx.stroke();
+      var bw=Math.max(2,Math.min(10,xstep*.66));ctx.fillStyle=col;ctx.fillRect(x-bw/2,Math.min(o,cl),bw,Math.max(1.4,Math.abs(cl-o)));
+    }
+    if(showVolume){
+      var vh=24*((Number(row.v)||0)/volMax);ctx.globalAlpha=.18;ctx.fillStyle=col;ctx.fillRect(x-Math.max(1,xstep*.30),H-26-vh,Math.max(2,xstep*.60),vh);ctx.globalAlpha=1;
+    }
+  }
+  if(!candleMode){
+    var pts=closes.map(function(v,i){return[left+i*xstep,scale(v)]});
+    ctx.save();ctx.globalAlpha=.12;ctx.strokeStyle=theme.ema;ctx.lineWidth=8;ctx.lineCap="round";line(ctx,pts);ctx.restore();
+    ctx.save();ctx.strokeStyle=theme.ema;ctx.lineWidth=2.2;ctx.lineCap="round";ctx.lineJoin="round";line(ctx,pts);ctx.restore();
+  }
+  ctx.fillStyle="rgba(255,255,255,.30)";ctx.font="8px system-ui";ctx.textAlign="left";ctx.fillText("VOL",left+4,H-8);
+
+  // EMA
   var k=2/21,ema=dataAll[0].c,emaPts=[];
   for(i=0;i<dataAll.length;i++){ema=i?dataAll[i].c*k+ema*(1-k):dataAll[i].c;if(i>=start&&i<end)emaPts.push([left+(i-start)*xstep,scale(ema)])}
-  if(chartSettings.showEma!==false){
-    ctx.save();ctx.strokeStyle="rgba(255,255,255,.08)";ctx.lineWidth=6;line(ctx,emaPts);ctx.restore();
-    ctx.strokeStyle=theme.ema;ctx.lineWidth=2.2;ctx.lineCap="round";line(ctx,emaPts);
-  }
+  if(chartSettings.showEma!==false){ctx.save();ctx.globalAlpha=.12;ctx.strokeStyle=theme.ema;ctx.lineWidth=6;line(ctx,emaPts);ctx.restore();ctx.strokeStyle=theme.ema;ctx.lineWidth=2;ctx.lineCap="round";line(ctx,emaPts)}
 
-  var current=dataAll[dataAll.length-1].c,cy=scale(current);
-  var model=state.market&&state.market.analysis;
+  // Entry / stop / target levels
   if(model){
     [{name:"ENTRY",value:model.entryLow,color:theme.ema},{name:"STOP",value:model.stop,color:theme.bear},{name:"TP1",value:model.tp1,color:theme.bull}].forEach(function(z){
-      if(!Number.isFinite(Number(z.value)))return;
-      var yy=scale(Number(z.value));if(yy<top||yy>top+ph)return;
-      ctx.save();ctx.setLineDash([5,5]);ctx.strokeStyle=z.color;ctx.globalAlpha=.55;ctx.beginPath();ctx.moveTo(left,yy);ctx.lineTo(left+pw,yy);ctx.stroke();ctx.restore();
-      ctx.fillStyle=z.color;ctx.font="700 8px system-ui";ctx.textAlign="left";ctx.fillText(z.name,left+5,yy-4);
+      var level=Number(z.value);if(!Number.isFinite(level)||level<lo||level>hi)return;
+      var yy=scale(level);ctx.save();ctx.setLineDash([6,5]);ctx.strokeStyle=z.color;ctx.globalAlpha=.60;ctx.beginPath();ctx.moveTo(left,yy);ctx.lineTo(left+pw,yy);ctx.stroke();ctx.restore();
+      ctx.fillStyle=z.color;ctx.font="800 8px system-ui";ctx.textAlign="left";ctx.fillText(z.name,left+5,yy-5);
     });
   }
-  ctx.setLineDash([4,4]);ctx.strokeStyle="rgba(255,255,255,.25)";ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(left,cy);ctx.lineTo(left+pw,cy);ctx.stroke();ctx.setLineDash([]);
 
-  var label=fmt(current);ctx.fillStyle=theme.bull;ctx.beginPath();ctx.roundRect(left+pw+5,cy-11,58,22,6);ctx.fill();ctx.fillStyle="#06121b";ctx.font="800 9px system-ui";ctx.textAlign="center";ctx.fillText(label,left+pw+34,cy+3);
+  var current=Number(dataAll[dataAll.length-1].c),cy=scale(current);
+  if(cy>=top&&cy<=top+ph){
+    ctx.setLineDash([4,4]);ctx.strokeStyle="rgba(255,255,255,.28)";ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(left,cy);ctx.lineTo(left+pw,cy);ctx.stroke();ctx.setLineDash([]);
+    ctx.fillStyle=theme.bull;ctx.beginPath();ctx.roundRect(left+pw+4,cy-10,64,20,6);ctx.fill();ctx.fillStyle="#06121b";ctx.font="800 9px system-ui";ctx.textAlign="center";ctx.fillText(fmt(current),left+pw+36,cy+3);
+  }
+
+  // Time axis
+  ctx.fillStyle=theme.axis;ctx.font="8px system-ui";ctx.textAlign="center";
+  var labelStep=Math.max(1,Math.floor(data.length/5));
+  for(i=0;i<data.length;i+=labelStep){
+    var tx=left+i*xstep,ts=Number(data[i].t),label=Number.isFinite(ts)?new Date(ts).toLocaleTimeString([],{"hour":"2-digit","minute":"2-digit"}):String(i+1);
+    ctx.fillText(label,tx,H-8);
+  }
+
+  // Crosshair
   if(state.crossX!=null){
-    var idx=Math.max(0,Math.min(data.length-1,Math.round((state.crossX-left)/xstep))),rx=left+idx*xstep,row=data[idx];
-    ctx.setLineDash([3,3]);ctx.strokeStyle="rgba(255,255,255,.2)";ctx.beginPath();ctx.moveTo(rx,top);ctx.lineTo(rx,top+ph);ctx.stroke();ctx.setLineDash([]);
-    $("ohlc").textContent="O "+fmt(row.o)+" · H "+fmt(row.h)+" · L "+fmt(row.l)+" · C "+fmt(row.c);
+    var rx=Math.max(left,Math.min(left+pw,state.crossX)),idx=Math.max(0,Math.min(data.length-1,Math.round((rx-left)/xstep))),row=data[idx];
+    var ry=state.crossY==null?scale(Number(row.c)):Math.max(top,Math.min(top+ph,state.crossY));
+    ctx.save();ctx.setLineDash([4,4]);ctx.strokeStyle="rgba(255,255,255,.32)";ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(rx,top);ctx.lineTo(rx,top+ph);ctx.stroke();ctx.beginPath();ctx.moveTo(left,ry);ctx.lineTo(left+pw,ry);ctx.stroke();ctx.restore();
+    var hoverPrice=hi-(ry-top)/ph*range;
+    ctx.fillStyle="rgba(6,9,14,.96)";ctx.strokeStyle="rgba(255,255,255,.16)";ctx.beginPath();ctx.roundRect(left+pw+4,ry-10,64,20,6);ctx.fill();ctx.stroke();
+    ctx.fillStyle="#dcecff";ctx.font="800 8px system-ui";ctx.textAlign="center";ctx.fillText(fmt(hoverPrice),left+pw+36,ry+3);
+    $("ohlc").textContent="Time "+(Number.isFinite(Number(row.t))?new Date(Number(row.t)).toLocaleString():idx)+" · O "+fmt(row.o)+" · H "+fmt(row.h)+" · L "+fmt(row.l)+" · C "+fmt(row.c)+" · V "+fmt(row.v);
+  }else{
+    $("ohlc").textContent="Move over chart";
   }
 }
-
 function drawSimpleSeries(id,sets,height){
   var c=$(id);if(!c||!sets||!sets.length)return;
   var out=setupCanvas(c,height||150),ctx=out.ctx,W=out.W,H=out.H;
@@ -2036,29 +2101,51 @@ $("askAi").addEventListener("click",askAI);$("sync").addEventListener("click",sy
 ["panYUp","panL","panR","panYDown","zoomOut","zoomIn","zoomReset"].forEach(function(id){
   $(id).addEventListener("click",function(){
     var total=state.market&&state.market.candles?state.market.candles.length:0;
-    if(id==="zoomReset"){state.chartVisible=96;state.chartOffset=0;state.chartYZoom=1;state.chartYShift=0}
+    if(id==="zoomReset"){state.chartVisible=96;state.chartOffset=0;state.chartYZoom=1;state.chartYShift=0;state.chartAutoScale=true}
     if(id==="zoomIn")state.chartVisible=Math.max(36,(state.chartVisible||96)-20)
-    if(id==="zoomOut")state.chartVisible=Math.min(180,(state.chartVisible||96)+20)
-    if(id==="panYUp")state.chartYShift=Math.min(1.5,(state.chartYShift||0)+.14)
-    if(id==="panYDown")state.chartYShift=Math.max(-1.5,(state.chartYShift||0)-.14)
+    if(id==="zoomOut")state.chartVisible=Math.min(220,(state.chartVisible||96)+20)
+    if(id==="panYUp"){state.chartAutoScale=false;state.chartYShift=Math.min(1.5,(state.chartYShift||0)+.14)}
+    if(id==="panYDown"){state.chartAutoScale=false;state.chartYShift=Math.max(-1.5,(state.chartYShift||0)-.14)}
     if(id==="panL")state.chartOffset=Math.min(Math.max(0,total-state.chartVisible),(state.chartOffset||0)+15)
     if(id==="panR")state.chartOffset=Math.max(0,(state.chartOffset||0)-15)
-    drawMain()
+    queueChartDraw()
   })
 });
+$("chartCandles").addEventListener("click",function(){state.chartType="candles";this.classList.add("active");$("chartLine").classList.remove("active");queueChartDraw()});
+$("chartLine").addEventListener("click",function(){state.chartType="line";this.classList.add("active");$("chartCandles").classList.remove("active");queueChartDraw()});
+$("chartAuto").addEventListener("click",function(){state.chartAutoScale=true;state.chartYShift=0;this.classList.add("active");$("chartFit").classList.remove("active");queueChartDraw()});
+$("chartFit").addEventListener("click",function(){state.chartAutoScale=true;state.chartYZoom=1;state.chartYShift=0;this.classList.add("active");$("chartAuto").classList.remove("active");queueChartDraw()});
 
-var chart=$("mainChart");
-chart.addEventListener("pointermove",function(e){if(!state.market)return;var r=chart.getBoundingClientRect();state.crossX=e.clientX-r.left;queueChartDraw()});
-chart.addEventListener("pointerleave",function(){state.crossX=null;if(state.market)drawMain()});
-chart.addEventListener("wheel",function(e){if(!state.market)return;e.preventDefault();state.chartVisible=Math.max(36,Math.min(180,(state.chartVisible||96)*(e.deltaY>0?1.15:.87)));drawMain()},{passive:false});
-var chartFrame=0;
+var chart=$("mainChart"),chartFrame=0;
 function queueChartDraw(){if(chartFrame)return;chartFrame=requestAnimationFrame(function(){chartFrame=0;if(state.market)drawMain()})}
 var drag={on:false,x:0,y:0};
+chart.addEventListener("pointermove",function(e){
+  if(!state.market)return;
+  var r=chart.getBoundingClientRect(),x=e.clientX-r.left,y=e.clientY-r.top;
+  state.crossX=x;state.crossY=y;
+  if(drag.on){
+    var dx=e.clientX-drag.x,dy=e.clientY-drag.y;drag.x=e.clientX;drag.y=e.clientY;
+    if(Math.abs(dx)>1){var step=-dx/(Math.max(1,chart.clientWidth)/Math.max(36,state.chartVisible));var total=state.market.candles.length;state.chartOffset=Math.max(0,Math.min(Math.max(0,total-state.chartVisible),(state.chartOffset||0)+step))}
+    if(Math.abs(dy)>1){state.chartAutoScale=false;state.chartYShift=Math.max(-1.5,Math.min(1.5,(state.chartYShift||0)+dy/Math.max(1,chart.clientHeight)*1.2));$("chartAuto").classList.remove("active")}
+  }
+  queueChartDraw();
+});
+chart.addEventListener("pointerleave",function(){state.crossX=null;state.crossY=null;if(state.market)queueChartDraw()});
+chart.addEventListener("wheel",function(e){
+  if(!state.market)return;e.preventDefault();
+  var r=chart.getBoundingClientRect(),rel=Math.max(0,Math.min(1,(e.clientX-r.left)/Math.max(1,r.width)));
+  var total=state.market.candles.length,oldVisible=Math.max(36,Math.min(220,state.chartVisible||96)),oldMax=Math.max(0,total-oldVisible),oldOffset=Math.max(0,Math.min(oldMax,state.chartOffset||0));
+  var cursorIndex=oldOffset+rel*(oldVisible-1);
+  var nextVisible=Math.max(36,Math.min(220,oldVisible*(e.deltaY>0?1.12:.89)));
+  var nextMax=Math.max(0,total-nextVisible);
+  state.chartVisible=nextVisible;
+  state.chartOffset=Math.max(0,Math.min(nextMax,cursorIndex-rel*(nextVisible-1)));
+  queueChartDraw();
+},{passive:false});
+chart.addEventListener("dblclick",function(){state.chartVisible=96;state.chartOffset=0;state.chartYZoom=1;state.chartYShift=0;state.chartAutoScale=true;queueChartDraw()});
 chart.addEventListener("pointerdown",function(e){drag.on=true;drag.x=e.clientX;drag.y=e.clientY;try{chart.setPointerCapture(e.pointerId)}catch{}});
-chart.addEventListener("pointermove",function(e){if(!drag.on||!state.market)return;var dx=e.clientX-drag.x,dy=e.clientY-drag.y;drag.x=e.clientX;drag.y=e.clientY;if(Math.abs(dx)>2){var step=Math.max(1,Math.round(-dx/(chart.clientWidth/Math.max(1,state.chartVisible))*1.4));var total=state.market.candles.length;state.chartOffset=Math.max(0,Math.min(Math.max(0,total-state.chartVisible),state.chartOffset+step))}if(Math.abs(dy)>2){state.chartYShift=Math.max(-1.5,Math.min(1.5,(state.chartYShift||0)+dy/Math.max(1,chart.clientHeight)*1.2))}queueChartDraw()});
 ["pointerup","pointercancel"].forEach(function(ev){chart.addEventListener(ev,function(){drag.on=false})});
-
-window.addEventListener("resize",function(){if(state.market){drawMain();renderCycle()}});
+window.addEventListener("resize",function(){if(state.market){queueChartDraw();renderCycle()}});
 
 populateSymbols();$("interval").value=state.interval;renderJournal();renderBrainInsights();renderAlerts();calc();
 setStatus("MarketPulse ready. Connecting to live market data…");
