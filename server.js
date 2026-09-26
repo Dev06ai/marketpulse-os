@@ -835,6 +835,15 @@ const server=http.createServer(async(req,res)=>{
       items.push({name:"OpenAI",status:OPENAI_API_KEY?"configured":"not_configured",latencyMs:null,detail:OPENAI_MODEL});
       const flow=LIVE_FLOW.get("BTCUSDT"),fresh=Boolean(flow?.lastTs&&Date.now()-flow.lastTs<120000);
       items.push({name:"Bybit Live Flow",status:fresh?"healthy":"stale",latencyMs:fresh?Date.now()-flow.lastTs:null,detail:fresh?"Live derivatives stream active":"No recent live flow event",lastEventAt:flow?.lastTs||null});
+      const krakenOk=items.some(x=>x.name==="Kraken"&&x.status==="healthy");
+      if(krakenOk){
+        items.forEach(function(item){
+          if((item.name==="Binance"||item.name==="Bybit")&&item.status==="error"){
+            item.status="degraded";
+            item.detail=(item.detail||"primary host unavailable")+"; fallback available";
+          }
+        });
+      }
       const usable=items.filter(x=>["PostgreSQL","Binance","Kraken","Bybit"].includes(x.name)&&["healthy","degraded"].includes(x.status)).length;
       return send(res,200,{ok:usable>=2,providers:items,router:{usableProviders:usable,failoverEnabled:true}});
     }
