@@ -100,21 +100,34 @@ async function init(){
         password_salt TEXT NOT NULL,
         failed_login_count INTEGER NOT NULL DEFAULT 0,
         locked_until TIMESTAMPTZ,
+        banned_at TIMESTAMPTZ,
+        banned_reason TEXT,
+        restricted_until TIMESTAMPTZ,
+        restriction_reason TEXT,
+        last_seen_at TIMESTAMPTZ,
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         last_login_at TIMESTAMPTZ,
         password_updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       )`);
       await pool.query('ALTER TABLE marketpulse_users ADD COLUMN IF NOT EXISTS failed_login_count INTEGER NOT NULL DEFAULT 0');
       await pool.query('ALTER TABLE marketpulse_users ADD COLUMN IF NOT EXISTS locked_until TIMESTAMPTZ');
+      await pool.query('ALTER TABLE marketpulse_users ADD COLUMN IF NOT EXISTS banned_at TIMESTAMPTZ');
+      await pool.query('ALTER TABLE marketpulse_users ADD COLUMN IF NOT EXISTS banned_reason TEXT');
+      await pool.query('ALTER TABLE marketpulse_users ADD COLUMN IF NOT EXISTS restricted_until TIMESTAMPTZ');
+      await pool.query('ALTER TABLE marketpulse_users ADD COLUMN IF NOT EXISTS restriction_reason TEXT');
+      await pool.query('ALTER TABLE marketpulse_users ADD COLUMN IF NOT EXISTS last_seen_at TIMESTAMPTZ');
       await pool.query('ALTER TABLE marketpulse_users ADD COLUMN IF NOT EXISTS password_updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()');
       await pool.query(`CREATE TABLE IF NOT EXISTS marketpulse_sessions (
         token_hash TEXT PRIMARY KEY,
         user_id UUID NOT NULL REFERENCES marketpulse_users(id) ON DELETE CASCADE,
         expires_at TIMESTAMPTZ NOT NULL,
+        last_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         admin_mfa_at TIMESTAMPTZ
       )`);
       await pool.query('ALTER TABLE marketpulse_sessions ADD COLUMN IF NOT EXISTS admin_mfa_at TIMESTAMPTZ');
+      await pool.query('ALTER TABLE marketpulse_sessions ADD COLUMN IF NOT EXISTS last_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW()');
+      await pool.query('CREATE INDEX IF NOT EXISTS idx_marketpulse_sessions_active ON marketpulse_sessions(last_seen_at,expires_at)');
       await pool.query('CREATE INDEX IF NOT EXISTS idx_marketpulse_sessions_user ON marketpulse_sessions(user_id)');
       await pool.query(`CREATE TABLE IF NOT EXISTS marketpulse_account_memory (
         user_id UUID PRIMARY KEY REFERENCES marketpulse_users(id) ON DELETE CASCADE,
@@ -340,7 +353,7 @@ async function createUser(user){
 async function findUserByEmail(email){
   await init();const e=String(email||"").toLowerCase();
   if(mode==="postgres"){
-    const r=await pool.query(`SELECT id,email,password_hash AS "passwordHash",password_salt AS "passwordSalt",failed_login_count AS "failedLoginCount",locked_until AS "lockedUntil",created_at AS "createdAt",last_login_at AS "lastLoginAt",password_updated_at AS "passwordUpdatedAt" FROM marketpulse_users WHERE lower(email)=lower($1)`,[e]);
+    const r=await pool.query(`SELECT id,email,password_hash AS "passwordHash",password_salt AS "passwordSalt",failed_login_count AS "failedLoginCount",locked_until AS "lockedUntil",banned_at AS "bannedAt",banned_reason AS "bannedReason",restricted_until AS "restrictedUntil",restriction_reason AS "restrictionReason",last_seen_at AS "lastSeenAt",created_at AS "createdAt",last_login_at AS "lastLoginAt",password_updated_at AS "passwordUpdatedAt" FROM marketpulse_users WHERE lower(email)=lower($1)`,[e]);
     return r.rows[0]||null;
   }
   const all=readLocal(),rows=Object.values(all.__users__||{});return rows.find(x=>String(x.email).toLowerCase()===e)||null;
@@ -384,9 +397,9 @@ async function touchUserLogin(id){
 async function saveSession(tokenHash,userId,expiresAt,adminMfaAt=null){
   await init();
   if(mode==="postgres"){
-    await pool.query(`INSERT INTO marketpulse_sessions(token_hash,user_id,expires_at,admin_mfa_at) VALUES($1,$2,$3,$4)`,[tokenHash,userId,expiresAt,adminMfaAt]);return
+    await pool.query(`INSERT INTO marketpulse_sessions(token_hash,user_id,expires_at,last_seen_at,admin_mfa_at) VALUES($1,$2,$3,NOW(),$4)`,[tokenHash,userId,expiresAt,adminMfaAt]);return
   }
-  const all=readLocal();all.__sessions__=all.__sessions__||{};all.__sessions__[tokenHash]={userId,expiresAt,adminMfaAt};writeLocal(all);
+  const all=readLocal();all.__sessions__=all.__sessions__||{};all.__sessions__[tokenHash]={userId,expiresAt,adminMfaAt,lastSeenAt:new Date().toISOString()};writeLocal(all);
   return
 }
 async function saveSessionLegacy(tokenHash,userId,expiresAt){
@@ -399,12 +412,12 @@ async function saveSessionLegacy(tokenHash,userId,expiresAt){
 async function getSession(tokenHash){
   await init();
   if(mode==="postgres"){
-    const r=await pool.query(`SELECT s.user_id AS "userId",s.expires_at AS "expiresAt",s.admin_mfa_at AS "adminMfaAt",u.email FROM marketpulse_sessions s JOIN marketpulse_users u ON u.id=s.user_id WHERE s.token_hash=$1 AND s.expires_at>NOW()`,[tokenHash]);
+    const r=await pool.query(`SELECT s.user_id AS "userId",s.expires_at AS "expiresAt",s.last_seen_at AS "lastSeenAt",s.admin_mfa_at AS "adminMfaAt",u.email,u.banned_at AS "bannedAt",u.banned_reason AS "bannedReason",u.restricted_until AS "restrictedUntil",u.restriction_reason AS "restrictionReason",u.last_seen_at AS "userLastSeenAt" FROM marketpulse_sessions s JOIN marketpulse_users u ON u.id=s.user_id WHERE s.token_hash=$1 AND s.expires_at>NOW()`,[tokenHash]);
     return r.rows[0]||null;
   }
   const all=readLocal(),x=all.__sessions__?.[tokenHash];if(!x)return null;
   if(new Date(x.expiresAt).getTime()<=Date.now()){delete all.__sessions__[tokenHash];writeLocal(all);return null}
-  const user=all.__users__?.[x.userId];return user?{userId:user.id,email:user.email,expiresAt:x.expiresAt,adminMfaAt:x.adminMfaAt||null}:null;
+  const user=all.__users__?.[x.userId];return user?{userId:user.id,email:user.email,expiresAt:x.expiresAt,lastSeenAt:x.lastSeenAt||null,adminMfaAt:x.adminMfaAt||null,bannedAt:user.bannedAt||null,bannedReason:user.bannedReason||null,restrictedUntil:user.restrictedUntil||null,restrictionReason:user.restrictionReason||null,userLastSeenAt:user.lastSeenAt||null}:null;
 }
 async function revokeUserSessions(id){
   await init();
@@ -415,6 +428,76 @@ async function deleteSession(tokenHash){
   await init();
   if(mode==="postgres"){await pool.query("DELETE FROM marketpulse_sessions WHERE token_hash=$1",[tokenHash]);return}
   const all=readLocal();if(all.__sessions__?.[tokenHash]){delete all.__sessions__[tokenHash];writeLocal(all)}
+}
+async function touchSessionActivity(tokenHash){
+  await init();
+  const now=new Date();
+  if(mode==="postgres"){
+    await pool.query("UPDATE marketpulse_sessions SET last_seen_at=NOW() WHERE token_hash=$1",[tokenHash]);
+    await pool.query("UPDATE marketpulse_users SET last_seen_at=NOW() WHERE id=(SELECT user_id FROM marketpulse_sessions WHERE token_hash=$1)",[tokenHash]);
+    return;
+  }
+  const all=readLocal(),x=all.__sessions__?.[tokenHash];if(!x)return;
+  x.lastSeenAt=now.toISOString();
+  const u=all.__users__?.[x.userId];if(u)u.lastSeenAt=now.toISOString();
+  writeLocal(all);
+}
+async function listUsers(limit=200){
+  await init();const capped=Math.min(500,Math.max(1,Number(limit)||200));
+  if(mode==="postgres"){
+    const r=await pool.query(`SELECT id,email,created_at AS "createdAt",last_login_at AS "lastLoginAt",last_seen_at AS "lastSeenAt",
+      banned_at AS "bannedAt",banned_reason AS "bannedReason",restricted_until AS "restrictedUntil",restriction_reason AS "restrictionReason",
+      failed_login_count AS "failedLoginCount"
+      FROM marketpulse_users ORDER BY created_at DESC LIMIT $1`,[capped]);
+    return r.rows;
+  }
+  const all=readLocal(),rows=Object.values(all.__users__||{}).map(u=>({id:u.id,email:u.email,createdAt:u.createdAt,lastLoginAt:u.lastLoginAt||null,lastSeenAt:u.lastSeenAt||null,bannedAt:u.bannedAt||null,bannedReason:u.bannedReason||null,restrictedUntil:u.restrictedUntil||null,restrictionReason:u.restrictionReason||null,failedLoginCount:Number(u.failedLoginCount||0)}));
+  return rows.sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt)).slice(0,capped);
+}
+async function userStats(){
+  await init();
+  if(mode==="postgres"){
+    const r=await pool.query(`SELECT
+      COUNT(*)::int AS "allTime",
+      COUNT(*) FILTER (WHERE created_at >= CURRENT_DATE)::int AS "today",
+      COUNT(*) FILTER (WHERE created_at >= date_trunc('week',NOW()))::int AS "week",
+      COUNT(*) FILTER (WHERE created_at >= date_trunc('month',NOW()))::int AS "month",
+      (SELECT COUNT(DISTINCT s.user_id)::int FROM marketpulse_sessions s JOIN marketpulse_users u ON u.id=s.user_id
+        WHERE s.expires_at>NOW() AND s.last_seen_at >= NOW()-INTERVAL '2 minutes'
+          AND u.banned_at IS NULL AND (u.restricted_until IS NULL OR u.restricted_until<=NOW())) AS "liveNow"
+      FROM marketpulse_users`);
+    return r.rows[0];
+  }
+  const all=readLocal(),users=Object.values(all.__users__||{}),now=Date.now();
+  const start=new Date();start.setHours(0,0,0,0);
+  const dayStart=start.getTime(),weekStart=dayStart-((start.getDay()+6)%7)*86400000,monthStart=new Date(start.getFullYear(),start.getMonth(),1).getTime();
+  const live=new Set();
+  Object.values(all.__sessions__||{}).forEach(s=>{if(new Date(s.expiresAt).getTime()>now&&new Date(s.lastSeenAt||0).getTime()>=now-120000)live.add(s.userId)});
+  return {allTime:users.length,today:users.filter(u=>new Date(u.createdAt).getTime()>=dayStart).length,week:users.filter(u=>new Date(u.createdAt).getTime()>=weekStart).length,month:users.filter(u=>new Date(u.createdAt).getTime()>=monthStart).length,liveNow:Array.from(live).filter(id=>{const u=all.__users__?.[id];return u&&!u.bannedAt&&(!u.restrictedUntil||new Date(u.restrictedUntil).getTime()<=now)}).length};
+}
+async function moderateUser(userId,action,durationMinutes,reason){
+  await init();
+  const id=String(userId||""),act=String(action||"").toLowerCase(),msg=String(reason||"").slice(0,300)||null;
+  if(mode==="postgres"){
+    if(act==="ban"){
+      await pool.query("UPDATE marketpulse_users SET banned_at=NOW(),banned_reason=$2,restricted_until=NULL,restriction_reason=NULL WHERE id=$1",[id,msg]);
+      await pool.query("DELETE FROM marketpulse_sessions WHERE user_id=$1",[id]);
+    }else if(act==="restrict"){
+      const mins=Math.max(5,Math.min(43200,Number(durationMinutes)||60));
+      await pool.query("UPDATE marketpulse_users SET restricted_until=NOW()+($2 || ' minutes')::interval,restriction_reason=$3,banned_at=NULL,banned_reason=NULL WHERE id=$1",[id,String(mins),msg]);
+      await pool.query("DELETE FROM marketpulse_sessions WHERE user_id=$1",[id]);
+    }else if(act==="unban"||act==="unrestrict"||act==="restore"){
+      await pool.query("UPDATE marketpulse_users SET banned_at=NULL,banned_reason=NULL,restricted_until=NULL,restriction_reason=NULL WHERE id=$1",[id]);
+    }else throw new Error("Unsupported moderation action");
+    return;
+  }
+  const all=readLocal(),u=all.__users__?.[id];if(!u)throw new Error("User not found");
+  if(act==="ban"){u.bannedAt=new Date().toISOString();u.bannedReason=msg;u.restrictedUntil=null;u.restrictionReason=null}
+  else if(act==="restrict"){const mins=Math.max(5,Math.min(43200,Number(durationMinutes)||60));u.restrictedUntil=new Date(Date.now()+mins*60000).toISOString();u.restrictionReason=msg;u.bannedAt=null;u.bannedReason=null}
+  else if(act==="unban"||act==="unrestrict"||act==="restore"){u.bannedAt=null;u.bannedReason=null;u.restrictedUntil=null;u.restrictionReason=null}
+  else throw new Error("Unsupported moderation action");
+  for(const [k,v] of Object.entries(all.__sessions__||{}))if(v.userId===id)delete all.__sessions__[k];
+  writeLocal(all);
 }
 async function getAccountMemory(userId){
   await init();
@@ -451,4 +534,4 @@ async function health(){
   return {ok:true,mode:"local",configured:Boolean(DB_URL&&Pool),durable:false,connected:false,source:"Local fallback"};
 }
 function status(){return {mode,configured:Boolean(DB_URL&&Pool),durable:mode==="postgres"}}
-module.exports={init,health,get,save,clear,getLearningState,saveLearningState,recordLearningPrediction,getOpenLearningPredictions,resolveLearningPrediction,saveSignalDNA,getSignalDNA,clearSignalDNA,getPhase4State,savePhase4State,getExecutionState,saveExecutionState,getPhase6State,savePhase6State,createUser,findUserByEmail,getUserById,touchUserLogin,recordLoginFailure,resetLoginFailures,savePassword,saveSession,getSession,revokeUserSessions,deleteSession,getAccountMemory,saveAccountMemory,status};
+module.exports={init,health,get,save,clear,getLearningState,saveLearningState,recordLearningPrediction,getOpenLearningPredictions,resolveLearningPrediction,saveSignalDNA,getSignalDNA,clearSignalDNA,getPhase4State,savePhase4State,getExecutionState,saveExecutionState,getPhase6State,savePhase6State,createUser,findUserByEmail,getUserById,touchUserLogin,recordLoginFailure,resetLoginFailures,savePassword,saveSession,getSession,touchSessionActivity,revokeUserSessions,deleteSession,listUsers,userStats,moderateUser,getAccountMemory,saveAccountMemory,status};

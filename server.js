@@ -40,6 +40,20 @@ function csrfCookie(){
   const secure=String(process.env.NODE_ENV||"").toLowerCase()==="production"?" Secure;":"";
   return CSRF_COOKIE+"="+crypto.randomBytes(32).toString("hex")+"; Path=/; SameSite=Strict; Max-Age=86400;"+secure;
 }
+const ADMIN_ONLY_PREFIXES=['/api/admin/users'];
+const LIVE_VISITORS=new Map();
+function markLiveVisitor(device,registered){
+  const id=String(device||"").slice(0,128);
+  if(!id)return;
+  LIVE_VISITORS.set(id,{lastSeen:Date.now(),registered:Boolean(registered)});
+}
+function liveVisitorStats(){
+  const cutoff=Date.now()-120000;
+  let visitors=0,registered=0;
+  for(const [id,row] of LIVE_VISITORS){if(row.lastSeen<cutoff){LIVE_VISITORS.delete(id);continue}visitors++;if(row.registered)registered++}
+  return {liveVisitors:visitors,liveRegistered:registered};
+}
+
 const ADMIN_ONLY_PATHS=new Set([
   '/api/memory/status',
   '/api/phase7/health',
@@ -524,7 +538,7 @@ const server=http.createServer(async(req,res)=>{
     const unsafe=req.method==='POST'||req.method==='PUT'||req.method==='PATCH'||req.method==='DELETE';
     if(unsafe&&!originAllowed(req))return send(res,403,{ok:false,error:"Cross-origin request blocked"});
     if(Number(req.headers["content-length"]||0)>262144)return send(res,413,{ok:false,error:"Request too large"});
-    if(ADMIN_ONLY_PATHS.has(u.pathname)){
+    if(ADMIN_ONLY_PATHS.has(u.pathname)||ADMIN_ONLY_PREFIXES.some(prefix=>u.pathname.startsWith(prefix))){
       const guard=await auth.requireAdmin(req);
       if(!guard.ok)return send(res,guard.status,{ok:false,error:guard.error});
     }
@@ -580,6 +594,12 @@ const server=http.createServer(async(req,res)=>{
         return send(res,200,{ok:true,authenticated:Boolean(user),user:user?{id:user.id,email:user.email,expiresAt:user.expiresAt,isAdmin:Boolean(user.isAdmin),adminMfaAt:user.adminMfaAt||null}:null,adminConfigured:auth.adminConfigured,mfaEnabled:auth.mfaEnabled,passwordPepperEnabled:auth.passwordPepperEnabled});
       }catch(e){return send(res,500,{ok:false,error:e.message})}
     }
+    if(req.method==='POST'&&u.pathname==='/api/auth/presence'){
+      const user=await auth.userFromRequest(req);
+      const device=String(req.headers["x-marketpulse-device"]||"").slice(0,128);
+      markLiveVisitor(device,Boolean(user));
+      return send(res,200,{ok:true,online:Boolean(user),live:liveVisitorStats()});
+    }
     if(req.method==='POST'&&(u.pathname==='/api/auth/register'||u.pathname==='/api/auth/login')){
       let raw="";for await(const chunk of req)raw+=chunk;
       let body={};try{body=JSON.parse(raw||"{}")}catch{return send(res,400,{ok:false,error:"Invalid JSON"})}
@@ -613,6 +633,25 @@ const server=http.createServer(async(req,res)=>{
     }
     if(req.method==='POST'&&u.pathname==='/api/auth/logout'){
       try{const x=await auth.logout(req);res.setHeader("Set-Cookie",x.setCookie);res.setHeader("Clear-Site-Data",'"cache"');return send(res,200,{ok:true})}catch(e){return send(res,500,{ok:false,error:e.message})}
+    }
+    if(req.method==='GET'&&u.pathname==='/api/admin/users'){
+      try{
+        const stats=await storage.userStats();
+        const users=await storage.listUsers(Math.min(500,Math.max(1,Number(u.searchParams.get('limit')||200))));
+        return send(res,200,{ok:true,stats:{...stats,...liveVisitorStats()},users});
+      }catch(e){return send(res,503,{ok:false,error:String(e.message||e)})}
+    }
+    if(req.method==='POST'&&u.pathname.startsWith('/api/admin/users/')&&u.pathname.endsWith('/action')){
+      const userId=u.pathname.slice('/api/admin/users/'.length,-'/action'.length);
+      let raw="";for await(const chunk of req)raw+=chunk;
+      let body={};try{body=JSON.parse(raw||"{}")}catch{return send(res,400,{ok:false,error:"Invalid JSON"})}
+      try{
+        const guard=await auth.requireAdmin(req);
+        if(!guard.ok)return send(res,guard.status,{ok:false,error:guard.error});
+        if(userId===guard.user.id)return send(res,400,{ok:false,error:"The owner account cannot be moderated."});
+        await storage.moderateUser(userId,body.action,body.durationMinutes,body.reason);
+        return send(res,200,{ok:true});
+      }catch(e){return send(res,400,{ok:false,error:String(e.message||e)})}
     }
     if(req.method==='GET'&&u.pathname==='/api/account/memory'){
       const user=await auth.userFromRequest(req);if(!user)return send(res,401,{ok:false,error:"Authentication required"});

@@ -80,6 +80,9 @@ async function login(email,password,key="login",mfaCode=""){
     try{hashPassword(String(password),{version:1,N:16384,r:8,p:1,pepper:false,salt:DUMMY_SALT})}catch{}
     throw new Error("INVALID_CREDENTIALS");
   }
+  if(user.bannedAt)throw new Error("ACCOUNT_BANNED");
+  if(user.restrictedUntil&&new Date(user.restrictedUntil).getTime()>Date.now())throw new Error("ACCOUNT_RESTRICTED");
+  if(user.restrictedUntil){await storage.moderateUser(user.id,"restore")}
   if(user.lockedUntil&&new Date(user.lockedUntil).getTime()>Date.now())throw new Error("ACCOUNT_LOCKED");
   if(user.lockedUntil){await storage.resetLoginFailures(user.id)}
   const meta=parseSalt(user.passwordSalt);
@@ -114,7 +117,10 @@ async function login(email,password,key="login",mfaCode=""){
 }
 async function userFromRequest(req){
   const raw=parseCookies(req.headers.cookie||"")[COOKIE];if(!raw)return null;
-  const session=await storage.getSession(hashToken(raw));if(!session)return null;
+  const tokenHash=hashToken(raw),session=await storage.getSession(tokenHash);if(!session)return null;
+  if(session.bannedAt||session.restrictedUntil&&new Date(session.restrictedUntil).getTime()>Date.now()){await storage.deleteSession(tokenHash);return null}
+  const lastSeen=session.lastSeenAt?new Date(session.lastSeenAt).getTime():0;
+  if(!lastSeen||Date.now()-lastSeen>30000)storage.touchSessionActivity(tokenHash).catch(()=>{});
   return {id:session.userId,email:session.email,expiresAt:session.expiresAt,isAdmin:isAdminEmail(session.email),adminMfaAt:session.adminMfaAt||null};
 }
 async function requireAdmin(req){
