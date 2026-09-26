@@ -29,6 +29,7 @@ const DEFAULT_CONFIG = Object.freeze({
 });
 
 function finite(x, fallback = null) {
+  if (x === null || x === undefined || x === "") return fallback;
   const n = Number(x);
   return Number.isFinite(n) ? n : fallback;
 }
