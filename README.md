@@ -57,3 +57,9 @@ The owner-only Admin Console includes registration counts for today, this week, 
 
 ## Admin Command Center
 Version 2.5 adds an owner-only command center with private analytics, live activity, security events, server performance telemetry, market-data provider health, feature flags with deterministic rollout percentages, emergency controls, maintenance/read-only modes, broadcasts, support inbox, audit logs, adaptive-learning monitoring, and operational configuration snapshots. Admin-only APIs remain server-enforced behind the existing Owner MFA boundary. Support views intentionally exclude passwords, IP addresses and unnecessary personal data. Operational snapshots cover MarketPulse configuration/flags and do not contain credentials or password hashes; provider-level database backups remain the responsibility of the managed Postgres service.
+
+
+## Prediction Engine (v2.6)
+MarketPulse now includes a separate calibrated setup-quality model alongside the transparent rule engine. The live path can incorporate public derivatives data (OI, funding, CVD/flow context), live Bybit orderbook microstructure, and liquidity/sweep structure. Historical training can use Binance USD-M public futures klines/taker-buy fields plus public Bybit OI/funding history. Candidate models are evaluated chronologically with walk-forward validation and are only promoted when they beat the current champion on the validation gate. Resolved MarketPulse signals are stored as training outcomes for later retraining; the system does not blindly rewrite the live model after every trade.
+
+The prediction model is a decision-support layer, not a guarantee of trading success. More data, clean labeling, realistic fees/slippage, and out-of-sample validation remain necessary before using it for any evaluation or live account.
