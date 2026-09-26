@@ -198,14 +198,101 @@ async function fetchBinanceOpenInterestHist(symbol, period = "1h", options = {})
   return unique.slice(-maxBars);
 }
 
-function alignDerivativeSnapshot(candle, oiMap, previousOi) {
+async function fetchBinanceFuturesMetricSeries(path, symbol, period = "1h", options = {}, mapRow = x => x) {
+  const limit = Math.max(1, Math.min(500, Number(options.limit || 500)));
+  const maxBars = Math.max(1, Math.min(5000, Number(options.maxBars || 5000)));
+  const bases = ["https://fapi.binance.com"];
+  let endTime = Number.isFinite(Number(options.endTime)) ? Number(options.endTime) : Date.now();
+  const all = []; let lastError = null;
+  while (all.length < maxBars) {
+    let rows = null;
+    for (const base of bases) {
+      try {
+        const u = new URL(base + path);
+        u.searchParams.set("symbol", String(symbol).toUpperCase());
+        u.searchParams.set("period", period);
+        u.searchParams.set("limit", String(Math.min(limit, maxBars - all.length)));
+        u.searchParams.set("endTime", String(endTime));
+        rows = await fetchJson(u, 6000);
+        break;
+      } catch (e) { lastError = e; }
+    }
+    if (!Array.isArray(rows) || !rows.length) break;
+    for (const row of rows) all.unshift(mapRow(row));
+    const oldest = Number(rows[0]?.timestamp);
+    if (!Number.isFinite(oldest) || rows.length < limit) break;
+    endTime = oldest - 1;
+  }
+  const unique=[];const seen=new Set();
+  for(const row of all.sort((a,b)=>a.t-b.t)){if(seen.has(row.t))continue;seen.add(row.t);unique.push(row)}
+  if(!unique.length && lastError) throw lastError;
+  return unique.slice(-maxBars);
+}
+
+async function fetchBinanceTakerRatioHist(symbol, period = "1h", options = {}) {
+  return fetchBinanceFuturesMetricSeries("/futures/data/takerlongshortRatio",symbol,period,options,x=>({
+    t:Number(x.timestamp), buySellRatio:Number(x.buySellRatio), buyVol:Number(x.buyVol), sellVol:Number(x.sellVol),
+    takerImbalance:Number.isFinite(Number(x.buyVol))&&Number.isFinite(Number(x.sellVol))&&Number(x.buyVol)+Number(x.sellVol)>0
+      ? (Number(x.buyVol)-Number(x.sellVol))/(Number(x.buyVol)+Number(x.sellVol)) : null,
+    source:"binance-futures-taker-ratio"
+  }));
+}
+
+async function fetchBinanceGlobalLongShortHist(symbol, period = "1h", options = {}) {
+  return fetchBinanceFuturesMetricSeries("/futures/data/globalLongShortAccountRatio",symbol,period,options,x=>({
+    t:Number(x.timestamp), longShortRatio:Number(x.longShortRatio),
+    longPercent:Number(x.longAccount), shortPercent:Number(x.shortAccount),
+    source:"binance-futures-global-long-short"
+  }));
+}
+
+async function fetchBinanceFundingRateHist(symbol, options = {}) {
+  const limit = Math.max(1, Math.min(1000, Number(options.limit || 1000)));
+  const maxBars = Math.max(1, Math.min(5000, Number(options.maxBars || 5000)));
+  let endTime = Number.isFinite(Number(options.endTime)) ? Number(options.endTime) : Date.now();
+  const all=[]; let lastError=null;
+  while(all.length<maxBars){
+    let rows=null;
+    try{
+      const u=new URL("https://fapi.binance.com/fapi/v1/fundingRate");
+      u.searchParams.set("symbol",String(symbol).toUpperCase());
+      u.searchParams.set("limit",String(Math.min(limit,maxBars-all.length)));
+      u.searchParams.set("endTime",String(endTime));
+      rows=await fetchJson(u,6000);
+    }catch(e){lastError=e}
+    if(!Array.isArray(rows)||!rows.length)break;
+    for(const x of rows)all.unshift({t:Number(x.fundingTime),fundingRate:Number(x.fundingRate),source:"binance-futures-funding"});
+    const oldest=Number(rows[0]?.fundingTime);
+    if(!Number.isFinite(oldest)||rows.length<limit)break;
+    endTime=oldest-1;
+  }
+  const unique=[];const seen=new Set();
+  for(const row of all.sort((a,b)=>a.t-b.t)){if(seen.has(row.t))continue;seen.add(row.t);unique.push(row)}
+  if(!unique.length&&lastError)throw lastError;
+  return unique.slice(-maxBars);
+}
+
+function latestAtOrBefore(map, ts, maxAgeMs = Infinity) {
+  let best=null,bestT=-Infinity;
+  for(const [t,row] of map) {
+    const n=Number(t);
+    if(n<=ts&&n>bestT){bestT=n;best=row}
+  }
+  return best && ts-bestT<=maxAgeMs ? best : null;
+}
+
+function alignDerivativeSnapshot(candle, oiRow, previousOi, extras = {}) {
   const cvd=Number(candle?.cvdDelta), ratio=Number(candle?.cvdRatio);
-  const oi=Number(oiMap?.oi);
+  const oi=Number(oiRow?.oi);
   const oiChange=Number.isFinite(oi)&&Number.isFinite(previousOi)&&previousOi>0 ? ((oi-previousOi)/previousOi)*100 : null;
+  const taker=Number(extras.taker?.takerImbalance);
+  const ls=extras.longShort||{};
+  const funding=Number(extras.funding?.fundingRate);
   const cvdState=Number.isFinite(ratio) ? (ratio>0.01?"BUYERS PRESSURE":ratio<-0.01?"SELLERS PRESSURE":"BALANCED") : "UNAVAILABLE";
-  const positioning=Number.isFinite(oiChange) ? (oiChange>1?"OI RISING":oiChange<-1?"OI FALLING":"OI FLAT") : "OI CHANGE NOT AVAILABLE";
+  let positioning=Number.isFinite(oiChange) ? (oiChange>1?"OI RISING":oiChange<-1?"OI FALLING":"OI FLAT") : "OI CHANGE NOT AVAILABLE";
+  if(Number.isFinite(Number(ls.longShortRatio))) positioning += " · L/S "+Number(ls.longShortRatio).toFixed(2);
   return {
-    available:Number.isFinite(cvd)||Number.isFinite(oi),
+    available:Number.isFinite(cvd)||Number.isFinite(oi)||Number.isFinite(taker)||Number.isFinite(Number(ls.longShortRatio)),
     provider:"Binance futures historical proxy",
     oi:Number.isFinite(oi)?oi:null,
     oiChangePct:Number.isFinite(oiChange)?oiChange:null,
@@ -213,7 +300,11 @@ function alignDerivativeSnapshot(candle, oiMap, previousOi) {
     cvdRatio:Number.isFinite(ratio)?ratio:null,
     cvdState,
     positioning,
-    takerImbalance:Number.isFinite(ratio)?ratio:null,
+    takerImbalance:Number.isFinite(taker)?taker:(Number.isFinite(ratio)?ratio:null),
+    fundingRate:Number.isFinite(funding)?funding:null,
+    longPercent:Number.isFinite(Number(ls.longPercent))?Number(ls.longPercent):null,
+    shortPercent:Number.isFinite(Number(ls.shortPercent))?Number(ls.shortPercent):null,
+    longShortRatio:Number.isFinite(Number(ls.longShortRatio))?Number(ls.longShortRatio):null,
     liquidationTotal:null,
     liquidationBias:"UNAVAILABLE",
     updatedAt:Number(candle?.t)||Date.now(),
@@ -255,8 +346,17 @@ async function buildReplayRecords({symbol, interval="1h", bars=5000, analyze, mi
   try { futures = await fetchBinanceFuturesKlines(symbol, interval, {maxBars: candles.length}); } catch {}
   let oiRows = [];
   try { oiRows = await fetchBinanceOpenInterestHist(symbol, interval, {maxBars: Math.min(candles.length, 5000)}); } catch {}
+  let takerRows = [];
+  try { takerRows = await fetchBinanceTakerRatioHist(symbol, interval, {maxBars: Math.min(candles.length, 5000)}); } catch {}
+  let longShortRows = [];
+  try { longShortRows = await fetchBinanceGlobalLongShortHist(symbol, interval, {maxBars: Math.min(candles.length, 5000)}); } catch {}
+  let fundingRows = [];
+  try { fundingRows = await fetchBinanceFundingRateHist(symbol, {maxBars: Math.min(candles.length, 5000)}); } catch {}
   const futMap = new Map(futures.map(x=>[x.t,x]));
   const oiMap = new Map(oiRows.map(x=>[x.t,x]));
+  const takerMap = new Map(takerRows.map(x=>[x.t,x]));
+  const longShortMap = new Map(longShortRows.map(x=>[x.t,x]));
+  const fundingMap = new Map(fundingRows.map(x=>[x.t,x]));
   const records = [];
   const start = 220;
   const total = Math.max(0, candles.length - horizonBars - start - 1);
@@ -268,7 +368,16 @@ async function buildReplayRecords({symbol, interval="1h", bars=5000, analyze, mi
       const prev=oiMap.get(candles[j].t);
       if(prev&&Number.isFinite(Number(prev.oi))){previousOi=Number(prev.oi);break;}
     }
-    const deriv=alignDerivativeSnapshot(currentFut,oiMap.get(candles[i].t),previousOi);
+    const deriv=alignDerivativeSnapshot(
+      currentFut,
+      latestAtOrBefore(oiMap,candles[i].t),
+      previousOi,
+      {
+        taker:latestAtOrBefore(takerMap,candles[i].t,24*60*60*1000),
+        longShort:latestAtOrBefore(longShortMap,candles[i].t,24*60*60*1000),
+        funding:latestAtOrBefore(fundingMap,candles[i].t,24*60*60*1000)
+      }
+    );
     const a = analyze(window, {interval, deriv});
     if (a && ["LONG","SHORT"].includes(a.side) && Number(a.score) >= minScore) {
       const outcome = replayOutcome(candles, i, a.side, horizonBars, Number(a.stop), Number(a.tp1), Number(a.rr));
@@ -295,4 +404,4 @@ async function buildReplayRecords({symbol, interval="1h", bars=5000, analyze, mi
   return {symbol, interval, bars: candles.length, records, generatedAt: Date.now(), source:spotSource+" + historical futures flow where available"};
 }
 
-module.exports = {VERSION, CATALOG, fetchBinanceKlines, fetchKrakenKlines, fetchBinanceFuturesKlines, fetchBinanceOpenInterestHist, buildReplayRecords};
+module.exports = {VERSION, CATALOG, fetchBinanceKlines, fetchKrakenKlines, fetchBinanceFuturesKlines, fetchBinanceOpenInterestHist, fetchBinanceTakerRatioHist, fetchBinanceGlobalLongShortHist, fetchBinanceFundingRateHist, alignDerivativeSnapshot, buildReplayRecords};
