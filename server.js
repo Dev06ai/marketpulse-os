@@ -435,7 +435,8 @@ function mergeFlowSnapshot(symbol,base){
   out.available=Boolean(out.available||live.wsConnected||Number.isFinite(live.oi)||Number.isFinite(live.fundingRate)||live.cvdNotional>0||live.orderBook||live.liqLong||live.liqShort||points.length);
   out.provider=out.provider||"Bybit linear futures";
   out.oi=Number.isFinite(live.oi)?live.oi:(Number.isFinite(out.oi)?out.oi:(Number.isFinite(last.oi)?last.oi:null));
-  out.oiChangePct=Number.isFinite(live.oi)&&Number.isFinite(Number(prev.oi))&&Number(prev.oi)!==0?((live.oi-Number(prev.oi))/Math.abs(Number(prev.oi)))*100:(Number.isFinite(out.oiChangePct)?out.oiChangePct:null);
+  const dt=Number(last.ts||0)-Number(prev.ts||0);
+  out.oiChangePct=Number.isFinite(out.oiChangePct)?out.oiChangePct:(Number.isFinite(live.oi)&&Number.isFinite(Number(prev.oi))&&Number(prev.oi)!==0&&dt>0&&dt<=120000?((live.oi-Number(prev.oi))/Math.abs(Number(prev.oi)))*100:null);
   out.cvdDelta=live.cvdNotional>0?live.cvd:(Number.isFinite(out.cvdDelta)?out.cvdDelta:(Number.isFinite(last.cvd)?last.cvd:null));
   out.cvdRatio=live.cvdNotional>0?live.cvd/live.cvdNotional:(Number.isFinite(out.cvdRatio)?out.cvdRatio:(Number.isFinite(last.cvdRatio)?last.cvdRatio:null));
   out.cvdState=Number.isFinite(out.cvdDelta)?(out.cvdDelta>0?"BUYERS PRESSURE":out.cvdDelta<0?"SELLERS PRESSURE":"BALANCED"):(out.cvdState||"WAITING");
@@ -446,7 +447,7 @@ function mergeFlowSnapshot(symbol,base){
   out.longLiquidations=Number.isFinite(live.liqLong)?live.liqLong:(Number.isFinite(out.longLiquidations)?out.longLiquidations:0);
   out.shortLiquidations=Number.isFinite(live.liqShort)?live.liqShort:(Number.isFinite(out.shortLiquidations)?out.shortLiquidations:0);
   out.liquidationTotal=out.longLiquidations+out.shortLiquidations;
-  out.liquidationBias=out.liquidationTotal>0?(out.longLiquidations>out.shortLiquidations?"LONG LIQS DOMINANT":out.shortLiquidations>out.longLiquidations?"SHORT LIQS DOMINANT":"LIQUIDATION ACTIVITY"):(out.liquidationBias||"NO LIQUIDATION ACTIVITY");
+  out.liquidationBias=out.liquidationTotal>0?(out.longLiquidations>out.shortLiquidations?"LONG LIQS DOMINANT":out.shortLiquidations>out.longLiquidations?"SHORT LIQS DOMINANT":"LIQUIDATION ACTIVITY"):"NO LIQUIDATION ACTIVITY";
   out.orderBook=live.orderBook||out.orderBook||null;
   out.liveHistory=points.slice(-180);
   out.livePointCount=points.length;
