@@ -430,13 +430,13 @@ body.admin-mode .nav button.adminNav,body.admin-mode .mobileMenu button.adminNav
       <div class="card gateCard" id="pfgCard">
         <div class="sectionHead"><div><div class="title">Prop Firm Guard</div><div class="sub">Green = trade checks passed · Amber = caution · Red = blocked. Set these to your evaluation rules.</div></div><span class="chip" id="pfgGateChip">WAITING</span></div>
         <div class="inputs">
-          <label class="small">Evaluation size<input id="pfgEvalAccount" type="number" value="5000" min="1"></label>
-          <label class="small">Current equity<input id="pfgEquity" type="number" value="5000" min="1"></label>
-          <label class="small">Max loss today %<input id="pfgDailyLoss" type="number" value="3" step=".1"></label>
-          <label class="small">Max account loss %<input id="pfgMaxDD" type="number" value="6" step=".1"></label>
-          <label class="small">Risk per trade %<input id="pfgRiskTrade" type="number" value=".5" step=".05"></label>
-          <label class="small">Minimum signal strength<input id="pfgScore" type="number" value="72" min="0" max="100"></label>
-          <label class="small">Minimum reward / risk<input id="pfgRR" type="number" value="1.5" step=".1"></label>
+          <label class="small">Evaluation size<input id="pfgEvalAccount" type="number" value="0" min="1"></label>
+          <label class="small">Current equity<input id="pfgEquity" type="number" value="0" min="1"></label>
+          <label class="small">Max loss today %<input id="pfgDailyLoss" type="number" value="0" step=".1"></label>
+          <label class="small">Max account loss %<input id="pfgMaxDD" type="number" value="0" step=".1"></label>
+          <label class="small">Risk per trade %<input id="pfgRiskTrade" type="number" value="0" step=".05"></label>
+          <label class="small">Minimum signal strength<input id="pfgScore" type="number" value="0" min="0" max="100"></label>
+          <label class="small">Minimum reward / risk<input id="pfgRR" type="number" value="0" step=".1"></label>
         </div>
         <button id="pfgRefresh" class="btn primary" style="margin-top:8px">Check this setup</button>
         <div class="gatePrimary"><span class="gateIcon"></span><b>Decision:</b><span id="pfgDecisionText">Waiting for data</span></div>
@@ -957,6 +957,37 @@ function scheduleAccountUIEarly(){
   else boot();
 }
 scheduleAccountUIEarly();
+
+function installCriticalChartUI(){
+  var c=document.getElementById("mainChart");
+  if(!c)return;
+  var controls={
+    chartCandles:function(){state.chartType="candles";document.getElementById("chartCandles")?.classList.add("active");document.getElementById("chartLine")?.classList.remove("active");if(typeof queueChartDraw==="function")queueChartDraw();else if(typeof drawMain==="function")drawMain()},
+    chartLine:function(){state.chartType="line";document.getElementById("chartLine")?.classList.add("active");document.getElementById("chartCandles")?.classList.remove("active");if(typeof queueChartDraw==="function")queueChartDraw();else if(typeof drawMain==="function")drawMain()},
+    chartAuto:function(){state.chartYZoom=1;state.chartYShift=0;if(typeof queueChartDraw==="function")queueChartDraw();else if(typeof drawMain==="function")drawMain()},
+    chartFit:function(){var total=state.market?.candles?.length||0;state.chartVisible=Math.min(96,total||96);state.chartOffset=0;state.chartYZoom=1;state.chartYShift=0;if(typeof queueChartDraw==="function")queueChartDraw();else if(typeof drawMain==="function")drawMain()},
+    panL:function(){var total=state.market?.candles?.length||0,v=Math.max(36,Math.min(220,Math.round(state.chartVisible||96)));state.chartOffset=Math.min(Math.max(0,total-v),(Number(state.chartOffset)||0)+Math.max(4,Math.round(v*.12)));if(typeof queueChartDraw==="function")queueChartDraw()},
+    panR:function(){var v=Math.max(36,Math.min(220,Math.round(state.chartVisible||96)));state.chartOffset=Math.max(0,(Number(state.chartOffset)||0)-Math.max(4,Math.round(v*.12)));if(typeof queueChartDraw==="function")queueChartDraw()},
+    zoomOut:function(){if(typeof zoomMainChart==="function")zoomMainChart(1.18);else{state.chartVisible=Math.min(220,state.market?.candles?.length||220,Math.round((state.chartVisible||96)*1.18));if(typeof queueChartDraw==="function")queueChartDraw()}},
+    zoomReset:function(){state.chartVisible=Math.min(96,state.market?.candles?.length||96);state.chartOffset=0;state.chartYZoom=1;state.chartYShift=0;if(typeof queueChartDraw==="function")queueChartDraw()},
+    zoomIn:function(){if(typeof zoomMainChart==="function")zoomMainChart(.85);else{state.chartVisible=Math.max(36,Math.round((state.chartVisible||96)*.85));if(typeof queueChartDraw==="function")queueChartDraw()}}
+  };
+  Object.keys(controls).forEach(function(id){
+    var b=document.getElementById(id);if(!b||b.dataset.criticalChartBound==="1")return;
+    b.dataset.criticalChartBound="1";b.addEventListener("click",function(e){e.preventDefault();e.stopPropagation();try{controls[id]()}catch(err){console.error("Chart control failed",id,err)}});
+  });
+  if(c.dataset.criticalChartBound!=="1"){
+    c.dataset.criticalChartBound="1";c.style.pointerEvents="auto";c.style.touchAction="none";
+    var active=false,lastX=0,lastY=0,touches=new Map(),pinchStart=0,pinchVisible=96;
+    function syncCross(e){var r=c.getBoundingClientRect();state.crossX=e.clientX-r.left;state.crossY=e.clientY-r.top;if(typeof queueChartDraw==="function")queueChartDraw();}
+    c.addEventListener("pointerdown",function(e){if(e.pointerType==="mouse"&&e.button!==0)return;touches.set(e.pointerId,{x:e.clientX,y:e.clientY});try{c.setPointerCapture(e.pointerId)}catch{}if(touches.size===1){active=true;lastX=e.clientX;lastY=e.clientY;syncCross(e)}else if(touches.size===2){active=false;var a=[...touches.values()],dx=a[0].x-a[1].x,dy=a[0].y-a[1].y;pinchStart=Math.hypot(dx,dy);pinchVisible=state.chartVisible||96;}e.preventDefault()},{passive:false});
+    c.addEventListener("pointermove",function(e){if(touches.has(e.pointerId))touches.set(e.pointerId,{x:e.clientX,y:e.clientY});syncCross(e);if(touches.size>=2){var a=[...touches.values()].slice(0,2),d=Math.hypot(a[0].x-a[1].x,a[0].y-a[1].y);if(pinchStart&&state.market){var total=state.market.candles.length,desired=Math.max(36,Math.min(220,total,Math.round(pinchVisible*Math.max(.55,Math.min(1.8,pinchStart/d)))));if(desired!==state.chartVisible){state.chartVisible=desired;state.chartOffset=Math.min(Math.max(0,total-desired),Number(state.chartOffset)||0);if(typeof queueChartDraw==="function")queueChartDraw();}}e.preventDefault();return}if(active&&state.market){var dx=e.clientX-lastX,dy=e.clientY-lastY;lastX=e.clientX;lastY=e.clientY;var total=state.market.candles.length,v=Math.min(total,Math.max(36,Math.round(state.chartVisible||96))),px=Math.max(1,c.clientWidth/Math.max(1,v));state.chartOffset=Math.max(0,Math.min(Math.max(0,total-v),(Number(state.chartOffset)||0)-dx/px));state.chartYShift=Math.max(-1.5,Math.min(1.5,(Number(state.chartYShift)||0)+dy/Math.max(1,c.clientHeight)*1.15));if(typeof queueChartDraw==="function")queueChartDraw();e.preventDefault();}},{passive:false});
+    function end(e){touches.delete(e.pointerId);try{c.releasePointerCapture(e.pointerId)}catch{}if(!touches.size){active=false;pinchStart=0;state.crossX=null;state.crossY=null;if(typeof queueChartDraw==="function")queueChartDraw()}else if(touches.size===1){var a=[...touches.entries()][0];active=true;lastX=a[1].x;lastY=a[1].y;}}
+    c.addEventListener("pointerup",end);c.addEventListener("pointercancel",end);
+    c.addEventListener("wheel",function(e){if(!state.market)return;e.preventDefault();if(typeof zoomMainChart==="function")zoomMainChart(e.deltaY>0?1.14:.88,e.clientX);else{state.chartVisible=Math.max(36,Math.min(220,state.market.candles.length,Math.round((state.chartVisible||96)*(e.deltaY>0?1.14:.88))));if(typeof queueChartDraw==="function")queueChartDraw();}},{passive:false});
+  }
+}
+installCriticalChartUI();
 function fmt(x){var n=Number(x);return Number.isFinite(n)?n.toLocaleString(undefined,{maximumFractionDigits:2}):"—"}
 function pct(x){var n=Number(x);return Number.isFinite(n)?(n>=0?"+":"")+n.toFixed(2)+"%":"—"}
 function setStatus(text,kind){var el=$("statusBar");if(!el)return;el.textContent=text;el.className="statusBar"+(kind?" "+kind:"")}
@@ -1756,14 +1787,28 @@ function setGateExplain(id,decision,reasons){
   el.dataset.reasons=(reasons||[]).join("|");
 }
 
+function resetPropFirmGuardInputs(){
+  ["pfgEvalAccount","pfgEquity","pfgDailyLoss","pfgMaxDD","pfgRiskTrade","pfgScore","pfgRR"].forEach(function(id){var el=$(id);if(el)el.value="0"});
+  applyGateVisual("pfgCard","pfgGateChip","WAITING");
+  setGateExplain("pfgExplain","WAITING",[]);
+  if($("pfgDecisionText"))$("pfgDecisionText").textContent="WAITING";
+  if($("pfgResult"))$("pfgResult").textContent="Enter evaluation rules, then check this setup.";
+  if($("pfgChecks"))$("pfgChecks").innerHTML="";
+  if($("pfgReasons"))$("pfgReasons").textContent="No gate result yet.";
+}
 async function loadPropFirmGuard(){
   if(!$("pfgResult"))return;
+  var fields=["pfgEvalAccount","pfgEquity","pfgDailyLoss","pfgMaxDD","pfgRiskTrade","pfgScore","pfgRR"].map(function(id){return Number($(id)?.value||0)});
+  if(fields[0]<=0||fields[1]<=0||fields[2]<=0||fields[3]<=0||fields[4]<=0||fields[5]<=0||fields[6]<=0){
+    resetPropFirmGuardInputs();
+    return;
+  }
   try{
     var q=new URLSearchParams({
       symbol:state.symbol,interval:state.interval,
-      accountSize:$("pfgEvalAccount").value||5000,equity:$("pfgEquity").value||5000,
-      dailyLossLimitPct:$("pfgDailyLoss").value||3,maxDrawdownPct:$("pfgMaxDD").value||6,
-      riskPerTradePct:$("pfgRiskTrade").value||.5,minSignalScore:$("pfgScore").value||72,minRR:$("pfgRR").value||1.5
+      accountSize:$("pfgEvalAccount").value,equity:$("pfgEquity").value,
+      dailyLossLimitPct:$("pfgDailyLoss").value,maxDrawdownPct:$("pfgMaxDD").value,
+      riskPerTradePct:$("pfgRiskTrade").value,minSignalScore:$("pfgScore").value,minRR:$("pfgRR").value
     });
     var d=await api("/api/propfirm?"+q.toString(),8500),g=d.gate||{};
     applyGateVisual("pfgCard","pfgGateChip",g.decision||"WAITING");
@@ -1932,7 +1977,17 @@ async function loadCoreAnalytics(){
     }
   }catch{}
 }
-async function loadCycle(){try{state.cycle=await api("/api/cycle?symbol="+encodeURIComponent(state.symbol),4500);renderCycle()}catch{}}
+async function loadCycle(){
+  if(state.cycleBusy)return;
+  state.cycleBusy=true;
+  try{
+    var d=await api("/api/cycle?symbol="+encodeURIComponent(state.symbol),12000);
+    if(d&&Array.isArray(d.candles)&&d.candles.length){state.cycle=d;renderCycle();state.cycleAttempts=0}
+  }catch(e){
+    state.cycleAttempts=Math.min(Number(state.cycleAttempts||0)+1,4);
+    if(!state.cycle&&state.cycleAttempts<4)setTimeout(function(){state.cycleBusy=false;loadCycle()},Math.min(12000,1800*state.cycleAttempts));
+  }finally{state.cycleBusy=false}
+}
 
 async function loadScan(){
   try{var j=await api("/api/core-scan?interval="+encodeURIComponent(state.interval),16000);state.scan=j.rows||[];renderScanner()}catch{$("scanRows").innerHTML='<div class="small">Scanner unavailable right now.</div>'}
@@ -1946,10 +2001,11 @@ function queueSecondaryBoot(){
   if(state.secondaryStarted)return;
   state.secondaryStarted=true;
   deferTask(loadScan,120);
-  deferTask(loadCycle,220);
-  deferTask(loadFlow,320);
-  deferTask(loadEdge,700);
-  deferTask(syncMemory,900);
+  deferTask(loadCycle,350);
+  deferTask(loadFlow,500);
+  deferTask(loadEdge,900);
+  deferTask(syncMemory,1200);
+  setTimeout(function(){if(!state.cycle)loadCycle()},5000);
 }
 
 async function loadCore(){
@@ -2481,9 +2537,10 @@ var chartFrame=0;
 function queueChartDraw(){if(chartFrame)return;chartFrame=requestAnimationFrame(function(){chartFrame=0;if(state.market)drawMain()})}
 
 window.addEventListener("resize",function(){if(state.market){queueChartDraw();renderCycle()}});
-$("chartCandles").addEventListener("click",function(){state.chartType="candles";$("chartCandles").classList.add("active");$("chartLine").classList.remove("active");queueChartDraw()});
-$("chartLine").addEventListener("click",function(){state.chartType="line";$("chartLine").classList.add("active");$("chartCandles").classList.remove("active");queueChartDraw()});
-$("chartFit").addEventListener("click",function(){state.chartYZoom=1;state.chartYShift=0;queueChartDraw()});
+if($("chartCandles").dataset.criticalChartBound!=="1")$("chartCandles").addEventListener("click",function(){state.chartType="candles";$("chartCandles").classList.add("active");$("chartLine").classList.remove("active");queueChartDraw()});
+if($("chartLine").dataset.criticalChartBound!=="1")$("chartLine").addEventListener("click",function(){state.chartType="line";$("chartLine").classList.add("active");$("chartCandles").classList.remove("active");queueChartDraw()});
+if($("chartFit").dataset.criticalChartBound!=="1")$("chartFit").addEventListener("click",function(){state.chartYZoom=1;state.chartYShift=0;queueChartDraw()});
+if($("chartAuto").dataset.criticalChartBound!=="1")$("chartAuto").addEventListener("click",function(){state.chartYZoom=1;state.chartYShift=0;queueChartDraw()});
 
 
 $("interval").value=state.interval;renderJournal();renderBrainInsights();renderAlerts();calc();
