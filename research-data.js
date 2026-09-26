@@ -99,38 +99,39 @@ async function fetchBinanceKlines(symbol, interval = "1h", options = {}) {
   return unique.slice(-maxBars);
 }
 
-function replayOutcome(candles, index, side, horizonBars = 12, targetR = 1, stopR = 1) {
+function replayOutcome(candles, index, side, horizonBars = 12, stop, target, rr) {
   const entry = Number(candles[index]?.c);
   if (!Number.isFinite(entry) || index >= candles.length - 1) return null;
   const look = candles.slice(index + 1, Math.min(candles.length, index + 1 + horizonBars));
-  if (!look.length) return null;
-  const risk = Math.max(entry * 0.001, (Number(candles[index]?.h) - Number(candles[index]?.l)) * 0.5);
+  if (!look.length || !Number.isFinite(stop) || !Number.isFinite(target)) return null;
+  const risk = Math.abs(entry - stop);
   if (!(risk > 0)) return null;
+  const reward = Math.abs(target - entry);
+  const realizedRR = Number.isFinite(rr) ? rr : reward / risk;
   const long = side === "LONG";
-  const stop = long ? entry - stopR * risk : entry + stopR * risk;
-  const target = long ? entry + targetR * risk : entry - targetR * risk;
   for (const x of look) {
     const hitStop = long ? x.l <= stop : x.h >= stop;
     const hitTarget = long ? x.h >= target : x.l <= target;
     if (hitStop && hitTarget) return {status:"AMBIGUOUS", r:0};
-    if (hitTarget) return {status:"TARGET_1", r:targetR};
-    if (hitStop) return {status:"STOP", r:-stopR};
+    if (hitTarget) return {status:"TARGET_1", r:realizedRR};
+    if (hitStop) return {status:"STOP", r:-1};
   }
   return {status:"TIMEOUT", r:0};
 }
 
-async function buildReplayRecords({symbol, interval="1h", bars=5000, analyze, minScore=55, horizonBars=12} = {}) {
+async function buildReplayRecords({symbol, interval="1h", bars=5000, analyze, minScore=55, horizonBars=12, onProgress=null} = {}) {
   if (typeof analyze !== "function") throw new Error("analyze function is required");
   const candles = await fetchBinanceKlines(symbol, interval, {maxBars: bars});
   const records = [];
-  const start = Math.max(220, 220);
+  const start = 220;
+  const total = Math.max(0, candles.length - horizonBars - start - 1);
   for (let i=start; i<candles.length-horizonBars-1; i++) {
     const window = candles.slice(0, i+1);
     const a = analyze(window, {interval});
-    if (!a || !["LONG","SHORT"].includes(a.side) || Number(a.score) < minScore) continue;
-    const outcome = replayOutcome(candles, i, a.side, horizonBars, 1, 1);
-    if (!outcome || outcome.status === "TIMEOUT" || outcome.status === "AMBIGUOUS") continue;
-    records.push({
+    if (a && ["LONG","SHORT"].includes(a.side) && Number(a.score) >= minScore) {
+      const outcome = replayOutcome(candles, i, a.side, horizonBars, Number(a.stop), Number(a.tp1), Number(a.rr));
+      if (outcome && outcome.status !== "TIMEOUT" && outcome.status !== "AMBIGUOUS") {
+        records.push({
       signalKey: [symbol, interval, candles[i].t, a.side, a.score].join("|"),
       symbol,
       interval,
@@ -140,8 +141,13 @@ async function buildReplayRecords({symbol, interval="1h", bars=5000, analyze, mi
       regime: a.regime,
       score: a.score,
       outcome,
-      snapshot: a
-    });
+        snapshot: a
+      });
+    }
+    if (typeof onProgress === "function" && ((i-start) % 50 === 0 || i === candles.length-horizonBars-2)) {
+      await onProgress({processed:i-start+1,total,records:records.length,pct:total?Math.round((i-start+1)/total*100):100});
+    }
+    if ((i-start) % 50 === 0) await new Promise(resolve => setImmediate(resolve));
   }
   return {symbol, interval, bars: candles.length, records, generatedAt: Date.now(), source:"Binance public historical klines"};
 }
