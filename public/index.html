@@ -203,8 +203,8 @@ button,input,select,textarea{font:inherit}.wrap{width:min(1440px,calc(100% - 26p
   <section id="view-brain" class="view"><div class="sectionHead"><div><div class="title">Trading Journal</div><div class="sub">Personal memory, journal evidence and execution patterns.</div></div><button id="sync" class="btn">Sync memory</button></div><div class="brainStats"><div class="statCard"><div class="k">Trades</div><div class="v" id="bN">0</div></div><div class="statCard"><div class="k">Net R</div><div class="v" id="bNet">0</div></div><div class="statCard"><div class="k">Win rate</div><div class="v" id="bWin">—</div></div><div class="statCard"><div class="k">Persistence</div><div class="v" id="bPersist">—</div></div></div><div class="brainInsights"><div class="insight"><div class="k">Best regime</div><div class="v" id="bBestRegime">—</div></div><div class="insight"><div class="k">Worst regime</div><div class="v" id="bWorstRegime">—</div></div><div class="insight"><div class="k">Best side</div><div class="v" id="bBestSide">—</div></div><div class="insight"><div class="k">READY context</div><div class="v" id="bReadyRate">—</div></div><div class="insight"><div class="k">Average R</div><div class="v" id="bAvgR">—</div></div></div><div class="section grid2"><div class="card"><div class="title">Trade Journal</div><div class="inputs"><select id="jAsset"><option>BTC</option><option>ETH</option><option>SOL</option><option>BNB</option><option>XRP</option><option>DOGE</option><option>ADA</option></select><select id="jSide"><option>Long</option><option>Short</option></select><input id="jEntry" type="number" placeholder="Entry"><input id="jStop" type="number" placeholder="Stop"><input id="jTarget" type="number" placeholder="Target"><input id="jR" type="number" step=".1" placeholder="Result R"><textarea id="jNote" placeholder="Lesson / notes"></textarea></div><button id="saveJournal" class="btn primary" style="margin-top:7px">Save trade</button><div id="journalRows" class="journalRows" style="margin-top:8px"></div></div><div class="card"><div class="title">Memory</div><div class="sub" id="memoryText" style="margin-top:7px">Local profile active until cloud memory is configured.</div><div class="watchNote">Cloud sync keeps journal and signal history available across refreshes when Postgres is configured.</div></div></div><section id="mp7-panel" aria-label="Phase 7 trader analytics">
   <div class="mp7-head">
     <div>
-      <div class="mp7-title">PHASE 7 · TRADER ANALYTICS &amp; QUALITY</div>
-      <div class="mp7-sub">Personal performance layer — descriptive analytics, data quality, and journal portability.</div>
+      <div class="mp7-title">TRADER ANALYTICS</div>
+      <div class="mp7-sub">Personal performance, data quality, and journal portability.</div>
     </div>
     <div class="mp7-actions">
       <button id="mp7Refresh" class="mp7-btn">Refresh</button>
@@ -281,7 +281,7 @@ button,input,select,textarea{font:inherit}.wrap{width:min(1440px,calc(100% - 26p
   </section>
 
   <section id="view-edge" class="view">
-    <div class="sectionHead"><div><div class="title">Live Edge</div><div class="sub">Phase 4 connects live signals, historical evidence, paper execution, risk controls and your trading journal.</div></div><div class="edgePill">PHASE 4 · NON-EXECUTING</div></div>
+    <div class="sectionHead"><div><div class="title">Live Edge</div><div class="sub">Phase 4 connects live signals, historical evidence, paper execution, risk controls and your trading journal.</div></div><div class="edgePill">LIVE DECISION SUPPORT</div></div>
     <div class="edgeMetricGrid">
       <div class="edgeMetric"><div class="label">Live signal</div><div class="v" id="edgeSignal">—</div><div class="subv" id="edgeSignalMeta">No active signal</div></div>
       <div class="edgeMetric"><div class="label">Historical sample</div><div class="v edgeMono" id="edgeEvidenceN">—</div><div class="subv" id="edgeEvidenceMeta">No matched DNA</div></div>
@@ -318,7 +318,7 @@ button,input,select,textarea{font:inherit}.wrap{width:min(1440px,calc(100% - 26p
   </section>
 
   <section id="view-execution" class="view">
-    <div class="sectionHead"><div><div class="title">Execution Control</div><div class="sub">Phase 5 turns approved plans into controlled simulation or Bybit testnet intents. Production/live order routing is deliberately locked.</div></div><div class="executionBadge executionLock">PHASE 5 · TESTNET GATED</div></div>
+    <div class="sectionHead"><div><div class="title">Execution Control</div><div class="sub">Phase 5 turns approved plans into controlled simulation or Bybit testnet intents. Production/live order routing is deliberately locked.</div></div><div class="executionBadge executionLock">TESTNET GATED</div></div>
 
     <div class="executionMetricGrid">
       <div class="executionMetric"><div class="label">Mode</div><div class="v" id="exMode">SIMULATION</div><div class="subv" id="exModeMeta">Local simulated execution</div></div>
@@ -378,7 +378,7 @@ button,input,select,textarea{font:inherit}.wrap{width:min(1440px,calc(100% - 26p
   </section>
 
   <section id="view-portfolio" class="view">
-    <div class="sectionHead"><div><div class="title">Portfolio Risk</div><div class="sub">Phase 6 maps concentration, aggregate risk, correlated clusters and stress impact across the whole trading book.</div></div><div class="portfolioPill">PHASE 6 · PORTFOLIO INTELLIGENCE</div></div>
+    <div class="sectionHead"><div><div class="title">Portfolio Risk</div><div class="sub">Phase 6 maps concentration, aggregate risk, correlated clusters and stress impact across the whole trading book.</div></div><div class="portfolioPill">PORTFOLIO INTELLIGENCE</div></div>
 
     <div class="portfolioMetricGrid">
       <div class="portfolioMetric"><div class="label">Portfolio risk</div><div class="v" id="pfRisk">0.00%</div><div class="subv" id="pfRiskMeta">Limit 4.00%</div></div>
@@ -1034,7 +1034,7 @@ async function loadCore(){
     loadEdge();loadExecution();loadPortfolio();loadScan();loadCycle();
   }catch(e){
     setStatus("Core market connection failed. The interface is running; retrying automatically.","warn");$("dataState").textContent="Retry";
-    $("thesis").textContent="The application is healthy, but the market data provider did not respond.";
+    $("thesis").textContent="The interface is responsive, but the live market source did not respond. Retrying automatically.";
   }finally{state.busy=false}
 }
 
