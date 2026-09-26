@@ -1,4 +1,5 @@
 const storage=require("./storage");
+const predictionEngine=require("./prediction-engine");
 
 const HORIZON_BARS={"15m":16,"1h":12,"4h":6,"1d":3};
 const PRIOR=6;
