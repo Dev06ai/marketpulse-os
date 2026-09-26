@@ -756,9 +756,9 @@ body.admin-mode .nav button.adminNav,body.admin-mode .mobileMenu button.adminNav
   </section>
 
   <section id="view-edge" class="view">
-    <div class="sectionHead"><div><div class="title">Live Edge</div><div class="sub">Phase 4 connects live signals, historical evidence, paper execution, risk controls and your trading journal.</div></div><div class="edgePill">LIVE DECISION SUPPORT</div></div>
+    <div class="sectionHead"><div><div class="title">Tracked Candidate Edge</div><div class="sub">Phase 4 tracks raw engine candidates for paper-learning and evidence. This is separate from the Dashboard final trade decision.</div></div><div class="edgePill">CANDIDATE ANALYTICS</div></div>
     <div class="edgeMetricGrid">
-      <div class="edgeMetric"><div class="label">Live signal</div><div class="v" id="edgeSignal">—</div><div class="subv" id="edgeSignalMeta">No active signal</div></div>
+      <div class="edgeMetric"><div class="label">Tracked candidate</div><div class="v" id="edgeSignal">—</div><div class="subv" id="edgeSignalMeta">No active candidate</div></div>
       <div class="edgeMetric"><div class="label">Historical sample</div><div class="v edgeMono" id="edgeEvidenceN">—</div><div class="subv" id="edgeEvidenceMeta">No matched DNA</div></div>
       <div class="edgeMetric"><div class="label">Paper net R</div><div class="v edgeMono" id="edgeNetR">0.00R</div><div class="subv" id="edgePaperMeta">0 paper trades</div></div>
       <div class="edgeMetric"><div class="label">Strategy status</div><div class="v" id="edgeHealthState">INSUFFICIENT</div><div class="subv" id="edgeHealthMeta">Collecting live evidence</div></div>
@@ -1804,8 +1804,8 @@ function safeHtml(v){
 function renderEdge(data){
   state.edge=data||null;if(!data)return;
   var sig=data.signal||null,q=data.quality||{},ev=data.evidence||{},paper=data.paper||{},health=data.health||{},risk=data.risk||{};
-  $("edgeSignal").textContent=sig?(sig.side+" · "+sig.lifecycle):"NO ACTIVE SIGNAL";
-  $("edgeSignalMeta").textContent=sig?(sig.symbol+" · "+sig.type+" · "+(sig.profile||"NO PROFILE")+" · "+fmt(sig.score)+"/100"):"The current market is waiting for a tracked directional setup.";
+  $("edgeSignal").textContent=sig?("CANDIDATE "+sig.side+" · "+sig.lifecycle):"NO ACTIVE CANDIDATE";
+  $("edgeSignalMeta").textContent=sig?(sig.symbol+" · "+sig.type+" · "+(sig.profile||"NO PROFILE")+" · "+fmt(sig.score)+"/100 · candidate only"):"The current market is waiting for a tracked candidate.";
   $("edgeEvidenceN").textContent=fmt(ev.sample||0);
   $("edgeEvidenceMeta").textContent=ev.available?(fmt(ev.resolved||0)+" resolved · "+fmt(ev.targets||0)+" targets · "+fmt(ev.stops||0)+" stops"):"No matched DNA yet";
   $("edgeNetR").textContent=(Number(paper.netR)||0).toFixed(2)+"R";
