@@ -123,7 +123,7 @@ button,input,select,textarea{font:inherit}.wrap{width:min(1440px,calc(100% - 26p
 .gateCard.gate-passed .gatePrimary .gateIcon{background:#4ade80;box-shadow:0 0 12px rgba(74,222,128,.55)}
 .gateCard.gate-warning .gatePrimary .gateIcon{background:#fbbf24;box-shadow:0 0 12px rgba(251,191,36,.45)}
 .chartWrap{cursor:crosshair}
-.chartCanvas{will-change:transform}
+.chartCanvas{will-change:transform;touch-action:none;user-select:none}
 .executionMetric.state-ok{border-color:rgba(74,222,128,.34);background:rgba(20,83,45,.14)}
 .executionMetric.state-blocked{border-color:rgba(248,113,113,.38);background:rgba(127,29,29,.14)}
 .executionMetric.state-warn{border-color:rgba(251,191,36,.30);background:rgba(120,53,15,.12)}
@@ -1083,11 +1083,22 @@ function drawMain(){
   ctx.textAlign="left";
 
   var volMax=Math.max.apply(null,data.map(function(x){return Number(x.v)||0}))||1;
-  for(var i=0;i<data.length;i++){
-    var x=left+i*xstep,o=scale(data[i].o),h=scale(data[i].h),l=scale(data[i].l),cl=scale(data[i].c),bull=data[i].c>=data[i].o,col=bull?theme.bull:theme.bear;
-    ctx.strokeStyle=col;ctx.lineWidth=Math.max(1,Math.min(1.8,xstep*.12));ctx.beginPath();ctx.moveTo(x,h);ctx.lineTo(x,l);ctx.stroke();
-    var bw=Math.max(2,Math.min(9,xstep*.62));ctx.fillStyle=col;ctx.fillRect(x-bw/2,Math.min(o,cl),bw,Math.max(1.2,Math.abs(cl-o)));
-    if(chartSettings.showVolume!==false){var vh=24*((Number(data[i].v)||0)/volMax);ctx.globalAlpha=.18;ctx.fillStyle=col;ctx.fillRect(x-bw/2,H-29-vh,bw,vh);ctx.globalAlpha=1;}
+  if(state.chartType==="line"){
+    var pts=data.map(function(row,idx){return[left+idx*xstep,scale(Number(row.c))]});
+    if(pts.length>1){ctx.strokeStyle=theme.ema;ctx.lineWidth=2.2;ctx.lineCap="round";ctx.lineJoin="round";line(ctx,pts)}
+    for(var li=0;li<data.length;li++){
+      if(li%Math.max(1,Math.round(data.length/24))===0||li===data.length-1){
+        var lx=left+li*xstep,lp=scale(data[li].c);ctx.fillStyle=theme.ema;ctx.beginPath();ctx.arc(lx,lp,2,0,Math.PI*2);ctx.fill();
+      }
+      if(chartSettings.showVolume!==false){var lv=24*((Number(data[li].v)||0)/volMax);ctx.globalAlpha=.16;ctx.fillStyle=data[li].c>=data[li].o?theme.bull:theme.bear;ctx.fillRect(left+li*xstep-1,H-29-lv,2,lv);ctx.globalAlpha=1;}
+    }
+  }else{
+    for(var i=0;i<data.length;i++){
+      var x=left+i*xstep,o=scale(data[i].o),h=scale(data[i].h),l=scale(data[i].l),cl=scale(data[i].c),bull=data[i].c>=data[i].o,col=bull?theme.bull:theme.bear;
+      ctx.strokeStyle=col;ctx.lineWidth=Math.max(1,Math.min(1.8,xstep*.12));ctx.beginPath();ctx.moveTo(x,h);ctx.lineTo(x,l);ctx.stroke();
+      var bw=Math.max(2,Math.min(9,xstep*.62));ctx.fillStyle=col;ctx.fillRect(x-bw/2,Math.min(o,cl),bw,Math.max(1.2,Math.abs(cl-o)));
+      if(chartSettings.showVolume!==false){var vh=24*((Number(data[i].v)||0)/volMax);ctx.globalAlpha=.18;ctx.fillStyle=col;ctx.fillRect(x-bw/2,H-29-vh,bw,vh);ctx.globalAlpha=1;}
+    }
   }
   ctx.fillStyle="rgba(255,255,255,.28)";ctx.font="8px system-ui";ctx.fillText("VOL",left+3,H-9);
 
@@ -2288,6 +2299,10 @@ var chartFrame=0;
 function queueChartDraw(){if(chartFrame)return;chartFrame=requestAnimationFrame(function(){chartFrame=0;if(state.market)drawMain()})}
 
 window.addEventListener("resize",function(){if(state.market){queueChartDraw();renderCycle()}});
+$("chartCandles").addEventListener("click",function(){state.chartType="candles";$("chartCandles").classList.add("active");$("chartLine").classList.remove("active");queueChartDraw()});
+$("chartLine").addEventListener("click",function(){state.chartType="line";$("chartLine").classList.add("active");$("chartCandles").classList.remove("active");queueChartDraw()});
+$("chartFit").addEventListener("click",function(){state.chartYZoom=1;state.chartYShift=0;queueChartDraw()});
+
 
 populateSymbols();$("interval").value=state.interval;renderJournal();renderBrainInsights();renderAlerts();calc();
 setStatus("MarketPulse ready. Connecting to live market data…");
