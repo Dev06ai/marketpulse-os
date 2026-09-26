@@ -11,6 +11,9 @@ const DEFAULT_CONFIG = Object.freeze({
   minSignalScore: 72,
   minRR: 1.5,
   minDataQualityPct: 85,
+  minConsensusQualityPct: 85,
+  maxPriceDispersionBps: 80,
+  requireIndependentConsensus: true,
   maxCandleAgeMs: 120000,
   maxFlowAgeMs: 120000,
   maxSpreadBps: 20,
@@ -53,6 +56,9 @@ function normalizeConfig(input = {}) {
   out.minSignalScore = clamp(finite(out.minSignalScore, 72), 0, 100);
   out.minRR = Math.max(0.1, finite(out.minRR, 1.5));
   out.minDataQualityPct = clamp(finite(out.minDataQualityPct, 85), 0, 100);
+  out.minConsensusQualityPct = clamp(finite(out.minConsensusQualityPct, 85), 0, 100);
+  out.maxPriceDispersionBps = Math.max(0.1, finite(out.maxPriceDispersionBps, 80));
+  out.requireIndependentConsensus = Boolean(out.requireIndependentConsensus);
   out.maxCandleAgeMs = Math.max(1000, finite(out.maxCandleAgeMs, 120000));
   out.maxFlowAgeMs = Math.max(1000, finite(out.maxFlowAgeMs, 120000));
   out.maxSpreadBps = Math.max(0.1, finite(out.maxSpreadBps, 20));
@@ -107,6 +113,9 @@ function baseGates({ analysis = {}, derivatives = null, dataQuality = {}, equity
   const maxDrawdownPct = peak > 0 ? maxDrawdownCash / peak * 100 : 100;
   const candleAgeMs = finite(dataQuality.candleAgeMs, null);
   const dataQualityPct = finite(dataQuality.qualityPct ?? dataQuality.score, 100);
+  const consensusQualityPct = finite(dataQuality.consensusQualityPct, null);
+  const priceDispersionBps = finite(dataQuality.priceDispersionBps, null);
+  const independentSourceCount = finite(dataQuality.independentSourceCount, null);
   const derivAvailable = Boolean(derivatives?.available);
   const flowAgeMs = finite(derivatives?.updatedAt ? Date.now() - Number(derivatives.updatedAt) : null, null);
   const spreadBps = finite(derivatives?.orderBook?.spreadBps, null);
@@ -118,6 +127,9 @@ function baseGates({ analysis = {}, derivatives = null, dataQuality = {}, equity
   if (rr < config.minRR) reasons.push("R_R_BELOW_THRESHOLD");
   if (config.requireDerivatives && !derivAvailable) reasons.push("DERIVATIVES_UNAVAILABLE");
   if (dataQualityPct < config.minDataQualityPct) reasons.push("DATA_QUALITY_BELOW_THRESHOLD");
+  if (config.requireIndependentConsensus && consensusQualityPct !== null && consensusQualityPct < config.minConsensusQualityPct) reasons.push("MARKET_CONSENSUS_WEAK");
+  if (priceDispersionBps !== null && priceDispersionBps > config.maxPriceDispersionBps) reasons.push("PRICE_FEEDS_CONFLICT");
+  if (config.requireIndependentConsensus && independentSourceCount !== null && independentSourceCount < 2) reasons.push("INSUFFICIENT_INDEPENDENT_PRICE_SOURCES");
   if (candleAgeMs !== null && candleAgeMs > config.maxCandleAgeMs) reasons.push("CANDLE_DATA_STALE");
   if (derivAvailable && flowAgeMs !== null && flowAgeMs > config.maxFlowAgeMs) reasons.push("FLOW_DATA_STALE");
   if (spreadBps !== null && spreadBps > config.maxSpreadBps) reasons.push("SPREAD_TOO_WIDE");
@@ -159,6 +171,9 @@ function baseGates({ analysis = {}, derivatives = null, dataQuality = {}, equity
     rr,
     flow,
     dataQualityPct,
+    consensusQualityPct,
+    priceDispersionBps,
+    independentSourceCount,
     candleAgeMs,
     flowAgeMs,
     spreadBps,
