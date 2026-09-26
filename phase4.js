@@ -183,7 +183,7 @@ function advanceSignal(state,signal,candle,ts){
     if(hitEntry){
       signal.entry=finite(signal.entry,(signal.entryLow+signal.entryHigh)/2);
       const r=maybeOpenPaper(state,signal,ts);
-      if(!r.opened)signal.lifecycle="TRIGGERED";
+      if(!r.opened){signal.lifecycle="CLOSED";signal.outcome="PAPER_BLOCKED";signal.resultR=0;signal.closedAt=ts;signal.updatedAt=ts;}
       signal.updatedAt=ts;
     }
   }
@@ -248,17 +248,21 @@ function strategyHealth(state){
 }
 async function updateLive(deviceId,symbol,interval,analysis,candles){
   const loaded=await load(deviceId),state=loaded.state,ts=Date.now(),candle=(candles||[])[(candles||[]).length-1];
-  if(candle&&analysis&&analysis.side!=="WAIT"&&["READY","WATCH"].includes(analysis.status)){
-    let sig=currentSignal(state,symbol,interval);
-    if(!sig) {
-      const evidence=await historicalEvidence(symbol,interval,analysis);
-      sig=addSignal(state,symbol,interval,analysis,candle,evidence);
-    } else {
-      sig.score=finite(analysis.score,sig.score);sig.status=analysis.status;sig.price=finite(analysis.price,sig.price);sig.updatedAt=ts;
-      sig.reasons=(analysis.reasons||sig.reasons||[]).slice(0,6);sig.rr=finite(analysis.rr,sig.rr);
-    }
-    if(sig)advanceSignal(state,sig,candle,ts);
+  let sig=currentSignal(state,symbol,interval);
+  if(sig&&candle)advanceSignal(state,sig,candle,ts);
+  if(sig&&["WATCHING","ARMED"].includes(sig.lifecycle)&&analysis?.side==="WAIT"){
+    sig.lifecycle="CLOSED";sig.outcome="INVALIDATED";sig.resultR=0;sig.closedAt=ts;sig.updatedAt=ts;
+    pushEvent(state,"SIGNAL_INVALIDATED",symbol+" "+sig.side+" invalidated before trigger",sig.id);
+    sig=null;
   }
+  if(!sig&&candle&&analysis&&analysis.side!=="WAIT"&&["READY","WATCH"].includes(analysis.status)){
+    const evidence=await historicalEvidence(symbol,interval,analysis);
+    sig=addSignal(state,symbol,interval,analysis,candle,evidence);
+  }else if(sig&&analysis&&sig.lifecycle!=="CLOSED"){
+    sig.score=finite(analysis.score,sig.score);sig.status=analysis.status;sig.price=finite(analysis.price,sig.price);sig.updatedAt=ts;
+    sig.reasons=(analysis.reasons||sig.reasons||[]).slice(0,6);
+  }
+  if(sig&&candle)advanceSignal(state,sig,candle,ts);
   state.paper.open.forEach(pos=>pos.updatedAt=ts);
   await save(loaded.id,state);
   return snapshotFromState(state,symbol,interval,analysis);
@@ -289,7 +293,8 @@ async function setConfig(deviceId,config){
   s.config=Object.assign({},s.config,config||{});
   s.paper.startingEquity=finite(s.paper.startingEquity,s.config.account);
   if(s.paper.startingEquity<=0)s.paper.startingEquity=s.config.account;
-  pushEvent(s,"RISK_CONFIG","Risk configuration updated",{id:"risk"});
+  if(!s.paper.trades.length&&!s.paper.open.length){s.paper.startingEquity=s.config.account;s.paper.realizedPnl=0;s.paper.realizedR=0;s.paper.peakEquity=s.config.account;s.paper.maxDrawdown=0;}
+  pushEvent(s,"RISK_CONFIG","Risk configuration updated","risk");
   await save(loaded.id,s);return snapshotFromState(s,null,null,null);
 }
 async function addJournal(deviceId,entry){
