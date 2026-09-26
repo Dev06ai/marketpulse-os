@@ -401,7 +401,7 @@ body.admin-mode .nav button.adminNav,body.admin-mode .mobileMenu button.adminNav
     </div>
     <div class="section edgeGrid">
       <div class="edgePanel"><div class="sectionHead"><div><div class="title">Risk engine</div><div class="sub">Paper positions only. No exchange orders are sent.</div></div><span class="edgePill" id="edgeRiskGate">NOT CHECKED</span></div>
-        <div class="edgeAction">
+        <div class="edgeAction adminOnly">
           <label>Account<input id="edgeAccount" type="number" min="0" step="100" value="100000"></label><label>Risk / trade %<input id="edgeRiskPct" type="number" min=".05" max="5" step=".05" value="1"></label><label>Minimum R:R<input id="edgeMinRR" type="number" min=".5" max="10" step=".1" value="1.5"></label><label>Max open risk %<input id="edgeMaxOpenRisk" type="number" min=".5" max="10" step=".1" value="2.5"></label><button id="saveEdgeConfig" class="btn primary">Save risk rules</button>
         </div><div class="edgeNote" id="edgeRiskDetail">No current plan.</div>
       </div>
