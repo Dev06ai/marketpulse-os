@@ -606,7 +606,7 @@ const server=http.createServer(async(req,res)=>{
       }
     }
     if(req.method==='POST'&&u.pathname==='/api/auth/logout'){
-      try{const x=await auth.logout(req);res.setHeader("Set-Cookie",x.setCookie);return send(res,200,{ok:true})}catch(e){return send(res,500,{ok:false,error:e.message})}
+      try{const x=await auth.logout(req);res.setHeader("Set-Cookie",x.setCookie);res.setHeader("Clear-Site-Data",'"cache"');return send(res,200,{ok:true})}catch(e){return send(res,500,{ok:false,error:e.message})}
     }
     if(req.method==='GET'&&u.pathname==='/api/account/memory'){
       const user=await auth.userFromRequest(req);if(!user)return send(res,401,{ok:false,error:"Authentication required"});
