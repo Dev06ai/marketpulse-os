@@ -8,7 +8,7 @@ const DEFAULT_CONFIG = Object.freeze({
   riskPerTradePct: 0.5,
   maxOpenRiskPct: 1,
   maxPositions: 2,
-  minSignalScore: 72,
+  minSignalScore: 78,
   minRR: 1.5,
   minDataQualityPct: 85,
   minConsensusQualityPct: 85,
@@ -56,7 +56,7 @@ function normalizeConfig(input = {}) {
   out.riskPerTradePct = clamp(finite(out.riskPerTradePct, 0.5), 0.01, 10);
   out.maxOpenRiskPct = clamp(finite(out.maxOpenRiskPct, 1), 0.01, 25);
   out.maxPositions = Math.max(1, Math.floor(finite(out.maxPositions, 2)));
-  out.minSignalScore = clamp(finite(out.minSignalScore, 72), 0, 100);
+  out.minSignalScore = clamp(finite(out.minSignalScore, 78), 0, 100);
   out.minRR = Math.max(0.1, finite(out.minRR, 1.5));
   out.minDataQualityPct = clamp(finite(out.minDataQualityPct, 85), 0, 100);
   out.minConsensusQualityPct = clamp(finite(out.minConsensusQualityPct, 85), 0, 100);
