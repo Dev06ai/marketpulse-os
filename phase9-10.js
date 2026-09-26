@@ -31,11 +31,15 @@ function strictSignalChecks(a,side,higher,lower,flowScore,dataScore,levels,deriv
   const ms=a?.marketStructure||{};
   const setupKind=String(ms.setup?.kind||"").toUpperCase();
   const setupScore=n(ms.setup?.score,0);
-  const levelReversal=(setupKind==="SFP"||setupKind==="ORDER_BLOCK")&&setupScore>=85;
-  const higherConflict=(side==="LONG"&&h!=="UPTREND")||(side==="SHORT"&&h!=="DOWNTREND");
-  if(requiresHigher&&higherConflict){
+  const levelReversal=(setupKind==="SFP"||setupKind==="NPOC"||setupKind==="ORDER_BLOCK")&&setupScore>=85;
+  const dline=setupKind==="D_LINE_BREAKOUT"&&setupScore>=88;
+  const higher8=String(ms?.dLine?.higherRegime||ms?.strategySetup?.higher8hRegime||"UNKNOWN").toUpperCase();
+  const higherConflict=(side==="LONG"&&h==="DOWNTREND")||(side==="SHORT"&&h==="UPTREND");
+  const higherMissing=(h==="UNKNOWN");
+  if(requiresHigher&&(higherConflict||higherMissing)){
     const controlledReversal=levelReversal&&flowScore>=75&&dataScore>=90;
-    if(!controlledReversal)reasons.push(h==="UNKNOWN"?"higher-timeframe trend unavailable":"higher-timeframe trend conflicts");
+    const controlledDline=dline&&higher8===(side==="LONG"?"UPTREND":"DOWNTREND")&&flowScore>=70&&dataScore>=85;
+    if(!controlledReversal&&!controlledDline)reasons.push(higherMissing?"higher-timeframe trend unavailable":"higher-timeframe trend conflicts");
   }
   if(side==="LONG"&&l==="DOWNTREND")reasons.push("15M trend conflicts");
   if(side==="SHORT"&&l==="UPTREND")reasons.push("15M trend conflicts");
@@ -94,6 +98,11 @@ function evaluate(x={}){
   ];
   const thesis=[];
   thesis.push(side==="LONG"?"Bullish setup under the current structure and momentum model.":side==="SHORT"?"Bearish setup under the current structure and momentum model.":"Neutral conditions: waiting for clearer structure.");
+  if(a?.marketStructure?.setup){
+    const s=a.marketStructure.setup;
+    const why=s.reason||"Strategy trigger detected.";
+    thesis.push("Strategy trigger: "+s.kind.replaceAll("_"," ")+" — "+why);
+  }
   if(x.higher?.regime)thesis.push("4H: "+x.higher.regime);
   if(x.lower?.regime)thesis.push("15M: "+x.lower.regime);
   if(x.derivatives?.cvdState)thesis.push("CVD: "+x.derivatives.cvdState);
