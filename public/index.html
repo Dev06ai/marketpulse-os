@@ -518,7 +518,7 @@ body.admin-mode .nav button.adminNav,body.admin-mode .mobileMenu button.adminNav
     <div class="section portfolioGrid">
       <div class="portfolioPanel"><div class="sectionHead"><div><div class="title">Correlation matrix</div><div class="sub">Latest return correlation across the tracked universe.</div></div></div><div id="pfCorrMatrix" class="portfolioCorr"></div></div>
       <div class="portfolioPanel"><div class="sectionHead"><div><div class="title">Portfolio limits</div><div class="sub">These limits are also consulted by Phase 5 execution.</div></div></div>
-        <div class="portfolioActions">
+        <div class="portfolioActions adminOnly">
           <label>Account<input id="pfAccount" type="number" min="0" step="100" value="100000"></label>
           <label>Max portfolio risk %<input id="pfMaxRisk" type="number" min=".5" max="20" step=".1" value="4"></label>
           <label>Max symbol exposure %<input id="pfMaxSymbol" type="number" min=".25" max="20" step=".25" value="2"></label>
