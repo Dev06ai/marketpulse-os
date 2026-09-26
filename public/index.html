@@ -378,6 +378,16 @@ body.admin-mode .nav button.adminNav,body.admin-mode .mobileMenu button.adminNav
     </div>
     <div class="section card"><div class="sectionHead"><div><div class="title">Live Market Screens</div><div class="sub">The scanner stays available while the overview remains your command center.</div></div><button class="btn" data-view="scanner">Open Scanner</button></div><div class="tape" id="tape"></div></div>
 
+    <div class="section card">
+      <div class="sectionHead"><div><div class="title">Cross-Exchange Confirmation</div><div class="sub">Independent spot feeds are checked before the prop/event risk gate can clear a setup.</div></div><button id="dcfRefresh" class="btn">Refresh</button></div>
+      <div class="grid3">
+        <div class="mini"><div class="k">State</div><div class="v" id="dcfState">WAITING</div></div>
+        <div class="mini"><div class="k">Consensus quality</div><div class="v" id="dcfQuality">—</div></div>
+        <div class="mini"><div class="k">Price dispersion</div><div class="v" id="dcfDispersion">—</div></div>
+      </div>
+      <div class="watchNote" id="dcfSources">No independent feed snapshot yet.</div>
+    </div>
+
     <div class="section grid2">
       <div class="card">
         <div class="sectionHead"><div><div class="title">Prop Firm Guard</div><div class="sub">Evidence + account-headroom gate. Configure this to the exact rules of your evaluation.</div></div><span class="chip" id="pfgGateChip">WAITING</span></div>
@@ -1507,6 +1517,19 @@ function checkAlerts(rows){
 }
 async function enableNotifications(){if(!("Notification"in window)){$("notifState").textContent="Browser notifications unavailable";return}var p=await Notification.requestPermission();$("notifState").textContent=p;$("notifBtn").textContent=p==="granted"?"Notifications enabled":"Enable notifications"}
 async function runSystemCheck(){ $("healthGrid").innerHTML='<div class="small">Running core checks…</div>';try{var d=await api("/api/system-check",8000),checks=d.checks||{};var names=["server","marketEngine","learning","memory","marketData","derivatives","oi","cvd","liquidations","execution","portfolio","phase7"];$("healthGrid").innerHTML=names.map(function(n){return'<div class="healthItem"><span class="healthDot '+(checks[n]?"ok":"bad")+'"></span><b>'+n+"</b></div>"}).join("");$("healthText").textContent=(d.ok?"Core market stack passed. ":"Core market stack needs attention. ")+(d.marketError||d.derivativesError||"")+" · Portfolio and Trader Analytics checks are included."; }catch(e){$("healthText").textContent="System check failed: "+e.message}}
+async function loadDataFabric(){
+  if(!$("dcfState"))return;
+  try{
+    var q=new URLSearchParams({symbol:state.symbol,interval:state.interval});
+    var d=await api("/api/data-fabric?"+q.toString(),5000),x=d.consensus||{};
+    $("dcfState").textContent=x.consensus||"NO DATA";
+    $("dcfQuality").textContent=x.consensusQualityPct!=null?Number(x.consensusQualityPct).toFixed(0)+"%":"—";
+    $("dcfDispersion").textContent=x.priceDispersionBps!=null?Number(x.priceDispersionBps).toFixed(1)+" bps":"—";
+    $("dcfSources").textContent=(x.independentSourceCount??0)+" independent source(s) · "+(x.healthySources??0)+" healthy feed(s) · "+(x.interpretation||"");
+  }catch(e){
+    $("dcfState").textContent="ERROR";$("dcfSources").textContent=e.message||"Cross-exchange check unavailable";
+  }
+}
 async function loadPropFirmGuard(){
   if(!$("pfgResult"))return;
   try{
@@ -1639,7 +1662,8 @@ async function loadCore(){
   try{
     var d=await api("/api/core?symbol="+encodeURIComponent(state.symbol)+"&interval="+encodeURIComponent(state.interval),9000);
     state.market=d;state.bootRetry=0;setStatus("Core market intelligence connected","ok");$("dataState").textContent="Live";renderMarket();
-    deferTask(loadPropFirmGuard,120);
+    deferTask(loadDataFabric,100);
+    deferTask(loadPropFirmGuard,160);
     if(!state.secondaryStarted)queueSecondaryBoot();
     else if(state.activeView==="overview"){deferTask(loadScan,80);deferTask(loadCycle,140)}
   }catch(e){
@@ -1672,6 +1696,7 @@ $("exArm").addEventListener("click",armExecution);
 $("exOrderRows").addEventListener("click",function(e){var b=e.target.closest("[data-ex-submit],[data-ex-cancel]");if(!b)return;if(b.dataset.exSubmit)submitExecution(b.dataset.exSubmit);else cancelExecution(b.dataset.exCancel)});
 $("exPositionRows").addEventListener("click",function(e){var b=e.target.closest("[data-ex-close]");if(b)closeSimulation(b.dataset.exClose)});
 $("refresh").addEventListener("click",loadCore);
+$("dcfRefresh").addEventListener("click",loadDataFabric);
 $("pfgRefresh").addEventListener("click",loadPropFirmGuard);
 $("ecgRefresh").addEventListener("click",loadEventGuard);
 $("symbol").addEventListener("change",function(){state.symbol=this.value;loadCore()});
