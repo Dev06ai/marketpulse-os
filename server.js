@@ -482,7 +482,8 @@ function replaySnapshot(a){
     ema20:a.ema20,ema50:a.ema50,ema200:a.ema200,
     entryLow:a.entryLow,entryHigh:a.entryHigh,stop:a.stop,tp1:a.tp1,tp2:a.tp2,rr:a.rr,
     probabilityLabel:a.probabilityLabel,reasons:(a.reasons||[]).slice(0,6),
-    historicalDerivativeContext:"UNAVAILABLE_IN_REPLAY"
+    derivatives:a.derivatives||null,
+    historicalDerivativeContext:a.derivatives?.available?"BINANCE_PUBLIC_FUTURES":"UNAVAILABLE_IN_REPLAY"
   };
 }
 
@@ -1078,8 +1079,10 @@ const server=http.createServer(async(req,res)=>{
             }catch{return[]}
           }));
           records=sets.flat();
+          try{await learning.trainFromReplay(records)}catch{}
+          try{await storage.saveSignalDNA(records)}catch{}
         }
-        return send(res,200,{ok:true,filters:{symbol:symbol||"ALL",interval:interval||"ALL"},summary:summarizeDNA(records),records:records.slice(0,limit),updatedAt:Date.now()});
+        return send(res,200,{ok:true,filters:{symbol:symbol||"ALL",interval:interval||"ALL"},summary:summarizeDNA(records),records:records.slice(0,limit),learning:await learning.status(),updatedAt:Date.now()});
       }catch(e){return send(res,503,{ok:false,error:e.message})}
     }
 
