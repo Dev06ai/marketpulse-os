@@ -1091,7 +1091,9 @@ const server=http.createServer(async(req,res)=>{
           maxOpenRiskPct:Number(u.searchParams.get('maxOpenRiskPct')||process.env.PROP_MAX_OPEN_RISK_PCT||1),
           minSignalScore:Number(u.searchParams.get('minSignalScore')||process.env.PROP_MIN_SIGNAL_SCORE||72),
           minRR:Number(u.searchParams.get('minRR')||process.env.PROP_MIN_RR||1.5),
-              blockMixedFlow:String(u.searchParams.get('blockMixedFlow')||process.env.PROP_BLOCK_MIXED_FLOW||"true")!=="false"
+          minConsensusQualityPct:Number(u.searchParams.get('minConsensusQualityPct')||process.env.PROP_MIN_CONSENSUS_QUALITY_PCT||85),
+          maxPriceDispersionBps:Number(u.searchParams.get('maxPriceDispersionBps')||process.env.PROP_MAX_PRICE_DISPERSION_BPS||80),
+          blockMixedFlow:String(u.searchParams.get('blockMixedFlow')||process.env.PROP_BLOCK_MIXED_FLOW||"true")!=="false"
         });
         const gate=propFirm.evaluateEventContract({
           analysis,derivatives:deriv,
