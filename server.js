@@ -588,7 +588,7 @@ const server=http.createServer(async(req,res)=>{
           });
         }
         const cfg=Object.assign({},p6.config,{account:ex.config?.account??p6.config.account});
-        const portfolio=phase6.buildPortfolio(cfg,ex.positions||[],ex.orders||[],Object.fromEntries(Object.entries(series).map(([s,v])=>[s,v.slice(-(lookback+1))])));
+        let portfolio=phase6.buildPortfolio(cfg,ex.positions||[],ex.orders||[],Object.fromEntries(Object.entries(series).map(([s,v])=>[s,v.slice(-(lookback+1))])));
         assets.forEach(x=>{x.exposurePct=portfolio.exposureBySymbol[x.symbol]||0;x.riskPct=portfolio.riskBySymbol[x.symbol]||0});
         portfolio=await phase6.savePortfolio(Object.assign(portfolio,{interval,lookback,assets}));
         return send(res,200,{ok:true,interval,lookback,config:cfg,assets,portfolio:portfolio.portfolio,events:portfolio.events,updatedAt:Date.now()});
