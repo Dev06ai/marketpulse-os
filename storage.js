@@ -15,6 +15,7 @@ function sanitizeMemory(m){
     signals:Array.isArray(x.signals)?x.signals.slice(-100):[],
     watch:Array.isArray(x.watch)?x.watch.slice(0,50):[],
     alertState:x.alertState&&typeof x.alertState==="object"?x.alertState:{},
+    preferences:x.preferences&&typeof x.preferences==="object"?x.preferences:{},
     lastSignal:x.lastSignal||null,
     activeSignal:x.activeSignal||null,
     updatedAt:Date.now()
@@ -73,7 +74,7 @@ async function init(){
         snapshot JSONB NOT NULL DEFAULT '{}'::jsonb,
         outcome JSONB NOT NULL DEFAULT '{}'::jsonb,
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-      `);
+      )`);
       await pool.query('CREATE INDEX IF NOT EXISTS idx_signal_dna_lookup ON marketpulse_signal_dna(symbol,interval,candle_ts DESC)');
       await pool.query('CREATE INDEX IF NOT EXISTS idx_signal_dna_regime ON marketpulse_signal_dna(regime,status)');
       await pool.query('CREATE INDEX IF NOT EXISTS idx_learning_open ON marketpulse_learning_predictions(symbol,interval,outcome) WHERE outcome IS NULL');
@@ -89,6 +90,26 @@ async function init(){
       )`);
       await pool.query(`CREATE TABLE IF NOT EXISTS marketpulse_execution (
         id INTEGER PRIMARY KEY DEFAULT 1,
+        payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )`);
+      await pool.query(`CREATE TABLE IF NOT EXISTS marketpulse_users (
+        id UUID PRIMARY KEY,
+        email TEXT NOT NULL UNIQUE,
+        password_hash TEXT NOT NULL,
+        password_salt TEXT NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        last_login_at TIMESTAMPTZ
+      )`);
+      await pool.query(`CREATE TABLE IF NOT EXISTS marketpulse_sessions (
+        token_hash TEXT PRIMARY KEY,
+        user_id UUID NOT NULL REFERENCES marketpulse_users(id) ON DELETE CASCADE,
+        expires_at TIMESTAMPTZ NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )`);
+      await pool.query('CREATE INDEX IF NOT EXISTS idx_marketpulse_sessions_user ON marketpulse_sessions(user_id)');
+      await pool.query(`CREATE TABLE IF NOT EXISTS marketpulse_account_memory (
+        user_id UUID PRIMARY KEY REFERENCES marketpulse_users(id) ON DELETE CASCADE,
         payload JSONB NOT NULL DEFAULT '{}'::jsonb,
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       )`);
@@ -291,5 +312,84 @@ async function saveExecutionState(state){
   return {storage:"local",updatedAt:all.__execution__.updatedAt,payload};
 }
 
+async function createUser(user){
+  await init();
+  const p=user||{};
+  if(mode==="postgres"){
+    const r=await pool.query(
+      `INSERT INTO marketpulse_users(id,email,password_hash,password_salt)
+       VALUES($1,$2,$3,$4) RETURNING id,email,created_at AS "createdAt",last_login_at AS "lastLoginAt"`,
+      [p.id,p.email,p.passwordHash,p.passwordSalt]
+    );
+    return r.rows[0];
+  }
+  const all=readLocal();all.__users__=all.__users__||{};
+  if(Object.values(all.__users__).some(x=>String(x.email).toLowerCase()===String(p.email).toLowerCase()))throw new Error("EMAIL_EXISTS");
+  const row={id:p.id,email:p.email,passwordHash:p.passwordHash,passwordSalt:p.passwordSalt,createdAt:new Date().toISOString(),lastLoginAt:null};
+  all.__users__[p.id]=row;writeLocal(all);
+  return {id:row.id,email:row.email,createdAt:row.createdAt,lastLoginAt:null};
+}
+async function findUserByEmail(email){
+  await init();const e=String(email||"").toLowerCase();
+  if(mode==="postgres"){
+    const r=await pool.query(`SELECT id,email,password_hash AS "passwordHash",password_salt AS "passwordSalt",created_at AS "createdAt",last_login_at AS "lastLoginAt" FROM marketpulse_users WHERE lower(email)=lower($1)`,[e]);
+    return r.rows[0]||null;
+  }
+  const all=readLocal(),rows=Object.values(all.__users__||{});return rows.find(x=>String(x.email).toLowerCase()===e)||null;
+}
+async function getUserById(id){
+  await init();
+  if(mode==="postgres"){
+    const r=await pool.query(`SELECT id,email,created_at AS "createdAt",last_login_at AS "lastLoginAt" FROM marketpulse_users WHERE id=$1`,[id]);
+    return r.rows[0]||null;
+  }
+  const all=readLocal(),x=all.__users__?.[id];return x?{id:x.id,email:x.email,createdAt:x.createdAt,lastLoginAt:x.lastLoginAt}:null;
+}
+async function touchUserLogin(id){
+  await init();
+  if(mode==="postgres"){await pool.query("UPDATE marketpulse_users SET last_login_at=NOW() WHERE id=$1",[id]);return}
+  const all=readLocal();if(all.__users__?.[id]){all.__users__[id].lastLoginAt=new Date().toISOString();writeLocal(all)}
+}
+async function saveSession(tokenHash,userId,expiresAt){
+  await init();
+  if(mode==="postgres"){
+    await pool.query(`INSERT INTO marketpulse_sessions(token_hash,user_id,expires_at) VALUES($1,$2,$3)`,[tokenHash,userId,expiresAt]);return
+  }
+  const all=readLocal();all.__sessions__=all.__sessions__||{};all.__sessions__[tokenHash]={userId,expiresAt};writeLocal(all);
+}
+async function getSession(tokenHash){
+  await init();
+  if(mode==="postgres"){
+    const r=await pool.query(`SELECT s.user_id AS "userId",s.expires_at AS "expiresAt",u.email FROM marketpulse_sessions s JOIN marketpulse_users u ON u.id=s.user_id WHERE s.token_hash=$1 AND s.expires_at>NOW()`,[tokenHash]);
+    return r.rows[0]||null;
+  }
+  const all=readLocal(),x=all.__sessions__?.[tokenHash];if(!x)return null;
+  if(new Date(x.expiresAt).getTime()<=Date.now()){delete all.__sessions__[tokenHash];writeLocal(all);return null}
+  const user=all.__users__?.[x.userId];return user?{userId:user.id,email:user.email,expiresAt:x.expiresAt}:null;
+}
+async function deleteSession(tokenHash){
+  await init();
+  if(mode==="postgres"){await pool.query("DELETE FROM marketpulse_sessions WHERE token_hash=$1",[tokenHash]);return}
+  const all=readLocal();if(all.__sessions__?.[tokenHash]){delete all.__sessions__[tokenHash];writeLocal(all)}
+}
+async function getAccountMemory(userId){
+  await init();
+  if(mode==="postgres"){
+    const r=await pool.query("SELECT payload,updated_at FROM marketpulse_account_memory WHERE user_id=$1",[userId]);
+    return r.rows[0]?{storage:"postgres",updatedAt:r.rows[0].updated_at,payload:r.rows[0].payload}:{storage:"postgres",updatedAt:null,payload:null};
+  }
+  const all=readLocal();return {storage:"local",updatedAt:all.__account_memory__?.[userId]?.updatedAt||null,payload:all.__account_memory__?.[userId]?.payload||null};
+}
+async function saveAccountMemory(userId,memory){
+  await init();const payload=sanitizeMemory(memory);
+  if(mode==="postgres"){
+    await pool.query(`INSERT INTO marketpulse_account_memory(user_id,payload,updated_at) VALUES($1,$2,NOW())
+      ON CONFLICT(user_id) DO UPDATE SET payload=EXCLUDED.payload,updated_at=NOW()`,[userId,payload]);
+    return {storage:"postgres",updatedAt:new Date().toISOString(),payload};
+  }
+  const all=readLocal();all.__account_memory__=all.__account_memory__||{};all.__account_memory__[userId]={payload,updatedAt:new Date().toISOString()};writeLocal(all);
+  return {storage:"local",updatedAt:all.__account_memory__[userId].updatedAt,payload};
+}
+
 function status(){return {mode,configured:Boolean(DB_URL&&Pool),durable:mode==="postgres"}}
-module.exports={init,get,save,clear,getLearningState,saveLearningState,recordLearningPrediction,getOpenLearningPredictions,resolveLearningPrediction,saveSignalDNA,getSignalDNA,clearSignalDNA,getPhase4State,savePhase4State,getExecutionState,saveExecutionState,getPhase6State,savePhase6State,status};
+module.exports={init,get,save,clear,getLearningState,saveLearningState,recordLearningPrediction,getOpenLearningPredictions,resolveLearningPrediction,saveSignalDNA,getSignalDNA,clearSignalDNA,getPhase4State,savePhase4State,getExecutionState,saveExecutionState,getPhase6State,savePhase6State,createUser,findUserByEmail,getUserById,touchUserLogin,saveSession,getSession,deleteSession,getAccountMemory,saveAccountMemory,status};

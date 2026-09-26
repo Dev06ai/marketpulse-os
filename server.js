@@ -5,6 +5,7 @@ const phase4=require('./phase4');
 const execution=require('./execution');
 const phase6=require('./phase6');
 const phase7=require('./phase7');
+const auth=require('./auth');
 const WebSocket=require('ws');
 const PORT=Number(process.env.PORT||3000);
 const SYMBOLS=(process.env.SYMBOLS||'BTCUSDT,ETHUSDT,SOLUSDT,BNBUSDT,XRPUSDT,DOGEUSDT,ADAUSDT').split(',').map(s=>s.trim()).filter(Boolean);
@@ -272,7 +273,7 @@ async function derivatives(symbol,interval){
   DERIV_CACHE.set(key,{ts:Date.now(),data});return data;
 }
 
-function send(res,code,p){res.writeHead(code,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','Access-Control-Allow-Origin':'*'});res.end(JSON.stringify(p))}
+function send(res,code,p){res.writeHead(code,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff','X-Frame-Options':'DENY','Referrer-Policy':'strict-origin-when-cross-origin'});res.end(JSON.stringify(p))}
 async function callOpenAI(systemPrompt,userPrompt){
   if(!OPENAI_API_KEY) throw new Error("AI_COPILOT_NOT_CONFIGURED");
   const now=Date.now();
@@ -421,7 +422,16 @@ function summarizeDNA(records){
   return {total:rows.length,resolved:resolved.length,triggered:triggered.length,targetHits:resolved.filter(x=>x.outcome?.status==="TARGET_1").length,stops:resolved.filter(x=>x.outcome?.status==="STOP").length,ambiguous:resolved.filter(x=>x.outcome?.status==="AMBIGUOUS").length,notTriggered:rows.filter(x=>x.outcome?.status==="NOT_TRIGGERED").length,netR:resolved.reduce((a,x)=>a+(Number(x.outcome?.resultR)||0),0),byRegime:by(r=>r.regime),bySide:by(r=>r.side),byType:by(r=>r.type),byStatus:by(r=>r.status),byScore:scoreBuckets};
 }
 
-function staticFile(req,res){const reqPath=req.url==='/'?'/index.html':req.url.split('?')[0],file=path.join(__dirname,'public',reqPath),root=path.join(__dirname,'public');if(!file.startsWith(root))return send(res,403,{error:'Forbidden'});fs.readFile(file,(e,d)=>{if(e)return send(res,404,{error:'Not found'});const ext=path.extname(file);res.writeHead(200,{'Content-Type':ext==='.html'?'text/html; charset=utf-8':ext==='.json'?'application/json; charset=utf-8':'text/plain; charset=utf-8'});res.end(d)})}
+function staticFile(req,res){
+  const reqPath=req.url==='/'?'/index.html':req.url.split('?')[0],root=path.resolve(__dirname,'public'),file=path.resolve(root,'.'+reqPath),relative=path.relative(root,file);
+  if(relative.startsWith('..')||path.isAbsolute(relative))return send(res,403,{error:'Forbidden'});
+  fs.readFile(file,(e,d)=>{
+    if(e)return send(res,404,{error:'Not found'});
+    const ext=path.extname(file),type=ext==='.html'?'text/html; charset=utf-8':ext==='.json'?'application/json; charset=utf-8':'text/plain; charset=utf-8';
+    res.writeHead(200,{'Content-Type':type,'Cache-Control':'no-store','X-Content-Type-Options':'nosniff','X-Frame-Options':'DENY','Referrer-Policy':'strict-origin-when-cross-origin'});
+    res.end(d);
+  });
+}
 
 const server=http.createServer(async(req,res)=>{
   try{
@@ -467,6 +477,51 @@ const server=http.createServer(async(req,res)=>{
     }
     
     if(req.method==='GET'&&u.pathname==='/api/learning/status')return send(res,200,await learning.status());
+
+    if(req.method==='GET'&&u.pathname==='/api/auth/me'){
+      try{
+        const user=await auth.userFromRequest(req);
+        return send(res,200,{ok:true,authenticated:Boolean(user),user:user?{id:user.id,email:user.email,expiresAt:user.expiresAt}:null});
+      }catch(e){return send(res,500,{ok:false,error:e.message})}
+    }
+    if(req.method==='POST'&&(u.pathname==='/api/auth/register'||u.pathname==='/api/auth/login')){
+      let raw="";for await(const chunk of req)raw+=chunk;
+      let body={};try{body=JSON.parse(raw||"{}")}catch{return send(res,400,{ok:false,error:"Invalid JSON"})}
+      try{
+        if(u.pathname==='/api/auth/register'){
+          const key="register:"+String(req.socket?.remoteAddress||"unknown")+":"+String(body.email||"").toLowerCase();
+          const user=await auth.register(body.email,body.password,key);
+          const loginKey="login:"+String(req.socket?.remoteAddress||"unknown")+":"+String(body.email||"").toLowerCase();
+          const logged=await auth.login(body.email,body.password,loginKey);
+          res.setHeader("Set-Cookie",logged.setCookie);
+          return send(res,201,{ok:true,user:logged.user});
+        }
+        const key="login:"+String(req.socket?.remoteAddress||"unknown")+":"+String(body.email||"").toLowerCase();
+        const logged=await auth.login(body.email,body.password,key);
+        res.setHeader("Set-Cookie",logged.setCookie);
+        return send(res,200,{ok:true,user:logged.user});
+      }catch(e){
+        const code=e.message==="AUTH_RATE_LIMIT"?429:e.message==="EMAIL_EXISTS"||e.message==="INVALID_CREDENTIALS"?400:422;
+        return send(res,code,{ok:false,error:e.message==="EMAIL_EXISTS"?"An account with this email already exists.":e.message==="INVALID_CREDENTIALS"?"Email or password is incorrect.":e.message==="AUTH_RATE_LIMIT"?"Too many attempts. Please wait and try again.":e.message});
+      }
+    }
+    if(req.method==='POST'&&u.pathname==='/api/auth/logout'){
+      try{const x=await auth.logout(req);res.setHeader("Set-Cookie",x.setCookie);return send(res,200,{ok:true})}catch(e){return send(res,500,{ok:false,error:e.message})}
+    }
+    if(req.method==='GET'&&u.pathname==='/api/account/memory'){
+      const user=await auth.userFromRequest(req);if(!user)return send(res,401,{ok:false,error:"Authentication required"});
+      try{
+        const memory=await storage.getAccountMemory(user.id);
+        return send(res,200,{ok:true,user:{id:user.id,email:user.email},memory});
+      }catch(e){return send(res,500,{ok:false,error:e.message})}
+    }
+    if(req.method==='POST'&&u.pathname==='/api/account/memory'){
+      const user=await auth.userFromRequest(req);if(!user)return send(res,401,{ok:false,error:"Authentication required"});
+      let raw="";for await(const chunk of req)raw+=chunk;
+      let body={};try{body=JSON.parse(raw||"{}")}catch{return send(res,400,{ok:false,error:"Invalid JSON"})}
+      try{return send(res,200,{ok:true,memory:await storage.saveAccountMemory(user.id,body.memory||{})})}catch(e){return send(res,400,{ok:false,error:e.message})}
+    }
+
     if(req.method==='GET'&&u.pathname==='/api/config')return send(res,200,{symbols:SYMBOLS,labels,intervals:['15m','1h','4h','1d'],memory:storage.status(),learning:{state:'LOADING'},phase4:PHASE4_VERSION,phase5:PHASE5_VERSION,phase6:PHASE6_VERSION,phase7:PHASE7_VERSION});if(req.method==='POST'&&u.pathname==='/api/ai'){
       if(!aiAllowed(req)) return send(res,429,{error:"Slow down for a few seconds."});
       let raw=""; for await(const chunk of req) raw+=chunk; let body={}; try{body=JSON.parse(raw||"{}")}catch{return send(res,400,{error:"Invalid JSON"})}

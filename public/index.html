@@ -177,6 +177,14 @@ body{font-size:14px}
 #callMetric.signal-long{border-color:rgba(74,222,128,.45)!important;background:linear-gradient(180deg,rgba(74,222,128,.12),rgba(8,8,11,.94))!important;box-shadow:0 0 30px rgba(74,222,128,.18),var(--shadow)!important}
 #callMetric.signal-short{border-color:rgba(248,113,113,.45)!important;background:linear-gradient(180deg,rgba(248,113,113,.12),rgba(8,8,11,.94))!important;box-shadow:0 0 30px rgba(248,113,113,.18),var(--shadow)!important}
 #callMetric.signal-wait{border-color:rgba(192,132,252,.48)!important;background:linear-gradient(180deg,rgba(192,132,252,.13),rgba(8,8,11,.94))!important;box-shadow:0 0 30px rgba(192,132,252,.20),var(--shadow)!important}
+</style><style id="phase8-style">
+#accountBtn{font-weight:800}
+.accountCard{width:min(520px,100%)}
+.accountCard h3{font-size:20px;margin:0;color:#eefbff}
+.accountCard .value{word-break:break-word}
+.journalActions{display:flex;gap:6px;margin-top:7px}
+.journalAction{border:1px solid rgba(255,255,255,.10);background:#0d0d11;color:#aebdce;border-radius:7px;padding:5px 8px;font-size:9px;cursor:pointer}
+.journalAction:hover{color:#fff;border-color:rgba(103,232,255,.22)}
 </style></head>
 <body>
 <header class="header"><div class="headerInner">
@@ -184,7 +192,7 @@ body{font-size:14px}
   <nav class="nav" id="nav"><button class="active" data-view="overview">Command</button><button data-view="scanner">Markets</button><button data-view="signals">Setups</button><button data-view="flow">Flow</button><button data-view="lab">Backtest</button><button data-view="replay">Replay</button><button data-view="dna">DNA</button><button data-view="research">Research</button><button data-view="edge">Edge</button><button data-view="portfolio">Portfolio</button><button data-view="execution">Execution</button><button data-view="brain">Journal</button><button data-view="ai">Copilot</button><button data-view="alerts">Watchlist</button><button data-view="risk">Risk</button></nav>
   <button id="mobileMenuBtn" class="mobileMenuBtn" aria-label="Open MarketPulse menu" aria-expanded="false">☰</button>
   <div id="mobileMenu" class="mobileMenu" aria-hidden="true"><button data-view="overview">Command</button><button data-view="scanner">Markets</button><button data-view="signals">Setups</button><button data-view="flow">Flow</button><button data-view="lab">Backtest</button><button data-view="replay">Replay</button><button data-view="dna">DNA</button><button data-view="research">Research</button><button data-view="edge">Edge</button><button data-view="portfolio">Portfolio</button><button data-view="execution">Execution</button><button data-view="brain">Journal</button><button data-view="ai">Copilot</button><button data-view="alerts">Watchlist</button><button data-view="risk">Risk</button></div>
-  <div class="headerTools"><span class="dataState"><i class="liveDot"></i><span id="dataState">Connecting</span></span><select id="symbol" class="select"></select><select id="interval" class="select"><option>15m</option><option selected>1h</option><option>4h</option><option>1d</option></select><button id="refresh" class="btn primary">Refresh</button></div>
+  <div class="headerTools"><button id="accountBtn" class="btn">Guest</button><span class="dataState"><i class="liveDot"></i><span id="dataState">Connecting</span></span><select id="symbol" class="select"></select><select id="interval" class="select"><option>15m</option><option selected>1h</option><option>4h</option><option>1d</option></select><button id="refresh" class="btn primary">Refresh</button></div>
 </div></header>
 
 <main class="wrap">
@@ -543,7 +551,8 @@ var state={
   execution:null,
   portfolio:null,
   secondaryStarted:false,
-  activeView:"overview"
+  activeView:"overview",
+  account:null
 };
 
 function $(id){return document.getElementById(id)}
@@ -757,8 +766,13 @@ function recordSignal(a){
 }
 function renderJournal(){
   var items=state.journal.slice().reverse().slice(0,8),n=state.journal.length,w=state.journal.filter(function(x){return Number(x.r)>0}).length,sum=state.journal.reduce(function(a,x){return a+(Number(x.r)||0)},0);
-  $("bN").textContent=n;$("bNet").textContent=sum.toFixed(2)+"R";$("bWin").textContent=n?(w/n*100).toFixed(0)+"%":"—";$("bPersist").textContent=$("bPersist").textContent==="—"?"Browser":$("bPersist").textContent;renderBrainInsights();
-  $("journalRows").innerHTML=items.map(function(x){return '<div class="journalRow"><div class="journalTop"><b>'+((x.asset||"BTC")+" · "+(x.side||"—"))+'</b><span>'+new Date(x.ts).toLocaleDateString()+'</span></div><div class="small">Entry '+fmt(x.entry)+' · Stop '+fmt(x.stop)+' · Target '+fmt(x.target)+' · '+fmt(x.r)+'R</div><div class="small">'+(x.note||'No notes')+'</div></div>'}).join("")||'<div class="small">No trades logged.</div>';
+  $("bN").textContent=n;$("bNet").textContent=sum.toFixed(2)+"R";$("bWin").textContent=n?(w/n*100).toFixed(0)+"%":"—";
+  $("bPersist").textContent=state.account?"Cloud account":($("bPersist").textContent==="—"?"Browser":$("bPersist").textContent);renderBrainInsights();
+  $("journalRows").innerHTML=items.map(function(x){
+    return '<div class="journalRow"><div class="journalTop"><b>'+safeHtml((x.asset||"BTC")+" · "+(x.side||"—"))+'</b><span>'+new Date(x.ts).toLocaleDateString()+'</span></div><div class="small">Entry '+fmt(x.entry)+' · Stop '+fmt(x.stop)+' · Target '+fmt(x.target)+' · '+fmt(x.r)+'R</div><div class="small">'+safeHtml(x.note||"No notes")+'</div><div class="journalActions"><button class="journalAction" data-journal-edit="'+x.ts+'">Edit</button><button class="journalAction" data-journal-delete="'+x.ts+'">Delete</button></div></div>'
+  }).join("")||'<div class="small">No trades logged.</div>';
+  document.querySelectorAll("[data-journal-delete]").forEach(function(b){b.onclick=function(){deleteJournal(Number(b.dataset.journalDelete))}});
+  document.querySelectorAll("[data-journal-edit]").forEach(function(b){b.onclick=function(){editJournal(Number(b.dataset.journalEdit))}});
 }
 
 
@@ -1196,7 +1210,14 @@ $("symbol").addEventListener("change",function(){state.symbol=this.value;loadCor
 $("interval").addEventListener("change",function(){state.interval=this.value;loadCore()});
 document.querySelectorAll("[data-filter]").forEach(function(b){b.addEventListener("click",function(){document.querySelectorAll("[data-filter]").forEach(function(x){x.classList.remove("on")});b.classList.add("on");state.filter=b.dataset.filter;renderScanner()})});
 document.querySelectorAll("input,select").forEach(function(el){el.addEventListener("input",calc);el.addEventListener("change",calc)});
-$("saveJournal").addEventListener("click",function(){var a=state.market&&state.market.analysis;state.journal.push({asset:$("jAsset").value,side:$("jSide").value,entry:+$("jEntry").value||0,stop:+$("jStop").value||0,target:+$("jTarget").value||0,r:+$("jR").value||0,note:$("jNote").value.trim(),regime:a&&a.regime||"—",status:a&&a.status||"—",score:a&&a.score||0,ts:Date.now()});state.journal=state.journal.slice(-100);localStorage.setItem("mp-stable-journal",JSON.stringify(state.journal));renderJournal();renderBrainInsights();syncMemory();saveServerJournal(state.journal[state.journal.length-1])});
+$("saveJournal").addEventListener("click",function(){
+  var a=state.market&&state.market.analysis,ts=state.editJournalTs||Date.now();
+  var row={asset:$("jAsset").value,side:$("jSide").value,entry:+$("jEntry").value||0,stop:+$("jStop").value||0,target:+$("jTarget").value||0,r:+$("jR").value||0,note:$("jNote").value.trim(),regime:a&&a.regime||"—",status:a&&a.status||"—",score:a&&a.score||0,ts:ts};
+  var idx=state.journal.findIndex(function(x){return Number(x.ts)===Number(ts)});
+  if(idx>=0)state.journal[idx]=row;else state.journal.push(row);
+  state.journal=state.journal.slice(-100);state.editJournalTs=null;$("saveJournal").textContent="Save trade";
+  localStorage.setItem("mp-stable-journal",JSON.stringify(state.journal));renderJournal();renderBrainInsights();syncMemory();saveServerJournal(row);
+});
 $("saveEdgeConfig").addEventListener("click",saveEdgeConfig);
 
 function deviceId(){
@@ -1218,21 +1239,91 @@ function mergeMemoryArrays(a,b,key){
   (Array.isArray(a)?a:[]).concat(Array.isArray(b)?b:[]).forEach(function(x){var k=x&&x[key]!=null?String(x[key]):JSON.stringify(x);map.set(k,x)});
   return Array.from(map.values()).sort(function(x,y){return Number(y.ts||y.createdAt||0)-Number(x.ts||x.createdAt||0)});
 }
+function renderAccount(){
+  $("accountBtn").textContent=state.account?String(state.account.email).split("@")[0]:"Guest";
+  $("accountGuest").classList.toggle("hidden",Boolean(state.account));
+  $("accountUser").classList.toggle("hidden",!state.account);
+  $("accountSub").textContent=state.account?"Account-backed workspace active.":"Optional account for synced journal, watchlists and preferences.";
+  if(state.account)$("accountEmailText").textContent=state.account.email;
+}
+function openAccount(){renderAccount();$("accountModal").classList.add("open");$("accountModal").setAttribute("aria-hidden","false")}
+function closeAccount(){ $("accountModal").classList.remove("open");$("accountModal").setAttribute("aria-hidden","true");$("accountError").textContent=""}
+var accountMode="login";
+function setAccountMode(mode){
+  accountMode=mode;$("accountLoginMode").classList.toggle("on",mode==="login");$("accountRegisterMode").classList.toggle("on",mode==="register");$("accountSubmit").textContent=mode==="login"?"Sign in":"Create account";$("accountPassword").autocomplete=mode==="login"?"current-password":"new-password";$("accountError").textContent="";
+}
+async function loadAuth(){
+  try{var r=await api("/api/auth/me",4000);state.account=r.authenticated?r.user:null;renderAccount();if(state.account)await syncMemory()}catch{renderAccount()}
+}
+async function submitAccount(){
+  var email=$("accountEmail").value.trim(),password=$("accountPassword").value;
+  $("accountError").textContent="Working…";
+  try{
+    var anonymous={journal:state.journal.slice(),signals:state.signals.slice(),watch:(state.watch||[]).slice()};
+    var r=await fetch(accountMode==="login"?"/api/auth/login":"/api/auth/register",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({email,password})});
+    var j=await r.json();if(!r.ok)throw Error(j.error||"Account request failed");
+    state.account=j.user;state.pendingAnonymousMemory=anonymous;renderAccount();await syncMemory({migrateAnonymous:true,save:true});
+    $("accountError").textContent="";$("accountPassword").value="";closeAccount();
+    $("memoryText").textContent="Account sync active. Your workspace is isolated to this account.";
+  }catch(e){$("accountError").textContent=e.message}
+}
+async function logoutAccount(){
+  try{
+    await fetch("/api/auth/logout",{method:"POST"});
+    state.account=null;state.pendingAnonymousMemory=null;
+    state.journal=[];state.signals=[];state.watch=[];
+    localStorage.removeItem("mp-stable-journal");localStorage.removeItem("mp-stable-signals");localStorage.removeItem("mp-watch");
+    renderAccount();await syncMemory();$("memoryText").textContent="Signed out. Anonymous device memory restored; account data remains isolated.";
+  }catch(e){$("accountError").textContent=e.message}
+}
+function editJournal(ts){
+  var row=state.journal.find(function(x){return Number(x.ts)===Number(ts)});if(!row)return;
+  $("jAsset").value=String(row.asset||"BTC").replace("USDT","");
+  $("jSide").value=(String(row.side||"Long").toLowerCase()==="short"?"Short":"Long");
+  $("jEntry").value=row.entry??"";$("jStop").value=row.stop??"";$("jTarget").value=row.target??"";$("jR").value=row.r??"";$("jNote").value=row.note||"";
+  state.editJournalTs=ts;$("saveJournal").textContent="Update trade";setView("brain");
+}
+function deleteJournal(ts){
+  if(!confirm("Delete this journal trade?"))return;
+  state.journal=state.journal.filter(function(x){return Number(x.ts)!==Number(ts)});
+  localStorage.setItem("mp-stable-journal",JSON.stringify(state.journal));renderJournal();syncMemory();
+}
 async function syncMemory(){
   var id=deviceId();
   try{
-    var remote=await api("/api/memory?device="+encodeURIComponent(id),5000),p=remote&&remote.payload||{};
+    var remote,userMem;
+    if(state.account){
+      remote=await api("/api/account/memory",5000);userMem=remote.memory&&remote.memory.payload||{};
+    }else{
+      remote=await api("/api/memory?device="+encodeURIComponent(id),5000);userMem=remote&&remote.payload||{};
+    }
+    var p=userMem||{};
+    if(state.account&&p.preferences&&typeof p.preferences==="object"){
+      var prefs=p.preferences;
+      if(SYMBOLS.includes(prefs.symbol))state.symbol=prefs.symbol;
+      if(["15m","1h","4h","1d"].includes(prefs.interval))state.interval=prefs.interval;
+      if(prefs.aiMode==="market"||prefs.aiMode==="trade")state.aiMode=prefs.aiMode;
+      if(prefs.chartSettings&&typeof prefs.chartSettings==="object"){
+        chartSettings=Object.assign({},chartSettings||{},prefs.chartSettings);
+        localStorage.setItem("mp-chart",JSON.stringify(chartSettings));
+      }
+    }
     state.journal=mergeMemoryArrays(state.journal,p.journal,"ts").slice(0,100);
     state.signals=mergeMemoryArrays(state.signals,p.signals,"ts").slice(0,100);
     state.watch=Array.from(new Set((state.watch||[]).concat(Array.isArray(p.watch)?p.watch:[]))).slice(0,50);
     localStorage.setItem("mp-stable-journal",JSON.stringify(state.journal));
     localStorage.setItem("mp-stable-signals",JSON.stringify(state.signals));
     localStorage.setItem("mp-watch",JSON.stringify(state.watch));
-    var merged={journal:state.journal,signals:state.signals,watch:state.watch,alertState:{threshold:Number($("alertScore")?.value||75)},lastSignal:state.signals[0]||null,activeSignal:null,updatedAt:Date.now()};
-    var saved=await fetch("/api/memory?device="+encodeURIComponent(id),{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({memory:merged})});
+    var merged={journal:state.journal,signals:state.signals,watch:state.watch,alertState:{threshold:Number($("alertScore")?.value||75)},preferences:{symbol:state.symbol,interval:state.interval,aiMode:state.aiMode,chartSettings:chartSettings||{}},lastSignal:state.signals[0]||null,activeSignal:null,updatedAt:Date.now()};
+    var saved;
+    if(state.account){
+      saved=await fetch("/api/account/memory",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({memory:merged})});
+    }else{
+      saved=await fetch("/api/memory?device="+encodeURIComponent(id),{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({memory:merged})});
+    }
     var out=await saved.json();if(!saved.ok)throw Error(out.error||"Memory sync failed");
-    $("bPersist").textContent=out.durable?"Postgres cloud":"Local fallback";
-    $("memoryText").textContent=out.durable?"Memory synced to Postgres cloud.":"Memory synced locally. Add DATABASE_URL for durable cloud memory.";
+    $("bPersist").textContent=state.account?"Cloud account":(out.durable?"Postgres cloud":"Local fallback");
+    $("memoryText").textContent=state.account?"Account cloud sync is active.":(out.durable?"Memory synced to Postgres cloud.":"Memory synced locally. Add DATABASE_URL for durable cloud memory.");
     renderJournal();renderSignals();renderAlerts();
   }catch(e){$("memoryText").textContent="Memory sync unavailable: "+e.message}
 }
@@ -1268,7 +1359,7 @@ chart.addEventListener("pointermove",function(e){if(!drag.on||!state.market)retu
 
 window.addEventListener("resize",function(){if(state.market){drawMain();renderCycle()}});
 
-populateSymbols();$("interval").value=state.interval;renderJournal();renderBrainInsights();renderAlerts();calc();
+populateSymbols();$("interval").value=state.interval;renderJournal();renderBrainInsights();renderAlerts();renderAccount();calc();loadAuth();
 setStatus("MarketPulse ready. Connecting to live market data…");
 requestAnimationFrame(function(){loadCore()});
 setInterval(function(){if(document.visibilityState==="visible")loadCore()},45000);
@@ -1343,13 +1434,30 @@ function exportPhase7Journal(){
   a.href=url;a.download="marketpulse-journal-"+new Date().toISOString().slice(0,10)+".csv";
   document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(url);
 }
-$("mp7Refresh").addEventListener("click",function(){loadPhase7();loadPhase7Health()});
-$("mp7Export").addEventListener("click",exportPhase7Journal);
+$("mp7Refresh").addEventListener("click",function(){loadPhase7();loadPhase7Health()}); $("accountBtn").addEventListener("click",openAccount);$("accountClose").addEventListener("click",closeAccount);$("accountLoginMode").addEventListener("click",function(){setAccountMode("login")});$("accountRegisterMode").addEventListener("click",function(){setAccountMode("register")});$("accountSubmit").addEventListener("click",submitAccount);$("accountLogout").addEventListener("click",logoutAccount);
+$("mp7Export").addEventListener("click",exportPhase7Journal);$("accountModal").addEventListener("click",function(e){if(e.target===this)closeAccount()});
 loadPhase7();loadPhase7Health();
 setInterval(function(){if(document.visibilityState==="visible")loadPhase7()},60000);
 
 })();
 </script>
 
-</body>
+<div id="accountModal" class="modal" aria-hidden="true">
+  <div class="modalCard accountCard">
+    <div class="modalTop"><div><h3 id="accountTitle">MarketPulse Account</h3><div class="small" id="accountSub">Optional account for synced journal, watchlists and preferences.</div></div><button class="modalClose" id="accountClose" aria-label="Close">×</button></div>
+    <div id="accountGuest">
+      <div class="aiModes" style="margin-top:12px"><button id="accountLoginMode" class="aiMode on">Sign in</button><button id="accountRegisterMode" class="aiMode">Create account</button></div>
+      <div class="inputs one">
+        <input id="accountEmail" type="email" autocomplete="email" placeholder="Email">
+        <input id="accountPassword" type="password" autocomplete="current-password" placeholder="Password">
+      </div>
+      <button id="accountSubmit" class="btn primary" style="margin-top:8px">Sign in</button>
+      <div id="accountError" class="small" style="margin-top:8px;color:#f87171"></div>
+    </div>
+    <div id="accountUser" class="hidden">
+      <div class="card" style="margin-top:12px"><div class="label">SIGNED IN</div><div class="value" id="accountEmailText" style="font-size:16px">—</div><div class="sub" style="margin-top:5px">Your account-backed workspace is active.</div></div>
+      <button id="accountLogout" class="btn" style="margin-top:8px">Sign out</button>
+    </div>
+  </div>
+</div></body>
 </html>
