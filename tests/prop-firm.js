@@ -63,6 +63,15 @@ const expired=evaluateEventContract({
 assert(expired.decision==="BLOCKED","expired contract blocked");
 assert(expired.reasons.includes("CONTRACT_EXPIRED"),"expiry gate");
 
+const missingStrike=evaluateEventContract({
+  analysis,derivatives:deriv,dataQuality:{qualityPct:100,consensusQualityPct:98,independentSourceCount:2,candleAgeMs:1000},
+  equity:5000,dayStartEquity:5000,peakEquity:5000,
+  side:"UP",premium:10,payout:30,fee:0,venue:"XT",
+  expirationAt:Date.now()+600000,strictContractContext:true,config:cfg
+});
+assert(missingStrike.decision==="BLOCKED","missing strike blocked");
+assert(missingStrike.reasons.includes("STRIKE_REQUIRED"),"strike required gate");
+
 const noConsensus= evaluateStandard({
   analysis,derivatives:deriv,
   dataQuality:{qualityPct:100,candleAgeMs:1000},
