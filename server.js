@@ -11,7 +11,7 @@ const SYMBOLS=(process.env.SYMBOLS||'BTCUSDT,ETHUSDT,SOLUSDT,BNBUSDT,XRPUSDT,DOG
 const KLINE_LIMIT=Number(process.env.KLINE_LIMIT||420);
 const labels={BTCUSDT:'BTC',ETHUSDT:'ETH',SOLUSDT:'SOL',BNBUSDT:'BNB',XRPUSDT:'XRP',DOGEUSDT:'DOGE',ADAUSDT:'ADA'};
 const KRAKEN_PAIRS={BTCUSDT:'XBTUSD',ETHUSDT:'ETHUSD',SOLUSDT:'SOLUSD',BNBUSDT:'BNBUSD',XRPUSDT:'XRPUSD',DOGEUSDT:'DOGEUSD',ADAUSDT:'ADAUSD'};
-const CACHE=new Map(); const TTL=25000;
+const CACHE=new Map(); const TTL=45000;
 const SCAN_CACHE=new Map(); const SCAN_TTL=20000;
 const PHASE2_VERSION=2; const PHASE3_VERSION=3; const PHASE4_VERSION=4; const PHASE5_VERSION=5; const PHASE6_VERSION=6; const PHASE7_VERSION=7;
 const OPENAI_API_KEY=process.env.OPENAI_API_KEY||"";
@@ -503,14 +503,14 @@ const server=http.createServer(async(req,res)=>{
         if(!candles||candles.length<220)throw Error('Kraken returned insufficient candles');
         const lowerPromise=interval==='15m'?Promise.resolve(null):Promise.race([klines(symbol,'15m'),new Promise(resolve=>setTimeout(()=>resolve(null),1800))]).catch(()=>null);
         const higherPromise=interval==='4h'?Promise.resolve(null):Promise.race([klines(symbol,'4h'),new Promise(resolve=>setTimeout(()=>resolve(null),1800))]).catch(()=>null);
-        const derivPromise=Promise.race([derivatives(symbol,interval),new Promise(resolve=>setTimeout(()=>resolve(null),2600))]).catch(()=>null);
+        const derivPromise=Promise.race([derivatives(symbol,interval),new Promise(resolve=>setTimeout(()=>resolve(null),1600))]).catch(()=>null);
         const [lower,higher,deriv]=await Promise.all([lowerPromise,higherPromise,derivPromise]);
         let analysis=analyze(candles,{interval,lower:lower&&lower.length>=220?analyze(lower,{interval:'15m'}):null,higher:higher&&higher.length>=220?analyze(higher,{interval:'4h'}):null,deriv});
         let learned=null;
         try{learned=await Promise.race([learning.process(symbol,interval,candles,analysis),new Promise(resolve=>setTimeout(()=>resolve(null),650))])}catch{}
         if(learned?.analysis)analysis=learned.analysis;
-        try{await Promise.race([phase4.updateLive(requestDevice(req),symbol,interval,analysis,candles),new Promise(resolve=>setTimeout(resolve,700))])}catch{}
-        const learningStatus=await Promise.race([learning.status(),new Promise(resolve=>setTimeout(()=>resolve({phase:2,state:'COLLECTING',durable:storage.status().durable,resolved:0}),500))]).catch(()=>({phase:2,state:'COLLECTING',durable:storage.status().durable,resolved:0}));
+        try{phase4.updateLive(requestDevice(req),symbol,interval,analysis,candles).catch(()=>{})}catch{}
+        const learningStatus=await Promise.race([learning.status(),new Promise(resolve=>setTimeout(()=>resolve({phase:2,state:'COLLECTING',durable:storage.status().durable,resolved:0}),200))]).catch(()=>({phase:2,state:'COLLECTING',durable:storage.status().durable,resolved:0}));
         const sample=candles.slice(-600);
         const setupStats=require("./market-engine").backtestBySetup(sample);
         return send(res,200,{
