@@ -1,5 +1,5 @@
 const assert=require("assert");
-const {summarizeSources}=require("../data-fabric");
+const {summarizeSources,alignDerivativeSnapshot}=require("../research-data");
 
 const confirmed=summarizeSources([
   {name:"Primary Engine",role:"engine-candle",status:"healthy",price:100000},
@@ -24,6 +24,22 @@ const conflict=summarizeSources([
 ]);
 assert(conflict.consensus==="CONFLICT","feed conflict");
 assert(conflict.consensusQualityPct<60,"conflict quality");
+
+const historical=alignDerivativeSnapshot(
+  {t:1000,cvdDelta:120,cvdRatio:.04},
+  {t:1000,oi:100000},
+  99000,
+  {
+    taker:{takerImbalance:.18},
+    longShort:{longShortRatio:1.25,longPercent:55.5,shortPercent:44.5},
+    funding:{fundingRate:.0001}
+  }
+);
+assert(historical.available,"historical derivative snapshot available");
+assert(historical.oiChangePct>0,"historical OI change");
+assert(historical.takerImbalance===.18,"historical taker flow");
+assert(historical.longShortRatio===1.25,"historical long/short ratio");
+assert(historical.fundingRate===.0001,"historical funding");
 
 console.log("Data Fabric smoke checks passed:",{
   confirmed:confirmed.consensus,
