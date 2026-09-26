@@ -168,14 +168,21 @@ function analyze(c,ctx={}){
   const strategyKind=String(ms?.kind||"").toUpperCase();
   const strategyReady=Boolean(ms&&["SFP","ORDER_BLOCK","BREAKOUT_RETEST","NPOC","D_LINE_BREAKOUT"].includes(strategyKind)&&Number(ms.score)>=80);
 
+  const strategyType=(m,dir)=>{
+    const k=String(m?.kind||"").toUpperCase();
+    if(k==="SFP")return String(m.timeframe||"KEY LEVEL")+" SFP "+dir;
+    if(k==="NPOC")return String(m.timeframe||"")+" NPOC SFP "+dir;
+    if(k==="BREAKOUT_RETEST")return String(m.timeframe||"KEY LEVEL")+" LEVEL RETEST "+dir;
+    if(k==="D_LINE_BREAKOUT")return "D-LINE "+dir;
+    if(k==="ORDER_BLOCK")return "ORDER BLOCK REJECTION "+dir;
+    return k+" "+dir;
+  };
   if(strategyReady&&ms.side==="LONG"){
-    side="LONG";bias="Bullish";
-    type=ms.kind==="SFP"?ms.timeframe+" SFP LONG":ms.kind==="BREAKOUT_RETEST"?ms.timeframe+" LEVEL RETEST LONG":"ORDER BLOCK REJECTION LONG";
-    reasons.push(ms.reason,"Market-structure trigger is confirmed on a key level.");
+    side="LONG";bias="Bullish";type=strategyType(ms,"LONG");
+    reasons.push(ms.reason,"Strategy trigger is confirmed by the market-structure layer.");
   }else if(strategyReady&&ms.side==="SHORT"){
-    side="SHORT";bias="Bearish";
-    type=ms.kind==="SFP"?ms.timeframe+" SFP SHORT":ms.kind==="BREAKOUT_RETEST"?ms.timeframe+" LEVEL RETEST SHORT":"ORDER BLOCK REJECTION SHORT";
-    reasons.push(ms.reason,"Market-structure trigger is confirmed on a key level.");
+    side="SHORT";bias="Bearish";type=strategyType(ms,"SHORT");
+    reasons.push(ms.reason,"Strategy trigger is confirmed by the market-structure layer.");
   }else if(breakoutLong){type="BREAKOUT LONG";side="LONG";bias="Bullish";reasons.push("Price has cleared the prior range high","Volume is expanding with the move","Momentum and trend strength confirm the break");}
   else if(breakoutShort){type="BREAKOUT SHORT";side="SHORT";bias="Bearish";reasons.push("Price has cleared the prior range low","Volume is expanding with the move","Momentum and trend strength confirm the break");}
   else if(trendLong){type="LONG SETUP";side="LONG";bias="Bullish";reasons.push("EMA structure is bullish","Price is interacting with the continuation zone","Momentum supports continuation");}
@@ -336,6 +343,7 @@ function analyze(c,ctx={}){
     price,change24h,ema20:E20[i],ema50:E50[i],ema200:E200[i],rsi:rsiNow,adx:adxNow,atrPct:atrNow/price*100,volumeZ:vz,
     regime,mood,momentum,volState,structure:st.state,type,side,bias,directionalLean,probabilityLabel,
     score,status,reasons,contributors,components,
+    strategyFamily:strategyReady?String(ms.kind||"UNKNOWN"):"NONE",
     marketStructure:{score:marketStructure.score,setup:marketStructure.setup,strategySetup:marketStructure.strategySetup||null,levels:marketStructure.levels,nakedPocs:marketStructure.nakedPocs||strategySetups.nakedPocs||[],dLine:marketStructure.dLine||strategySetups.dLine||null,previousDay:marketStructure.previousDay,previousWeek:marketStructure.previousWeek,nearestSupport:marketStructure.nearestSupport,nearestResistance:marketStructure.nearestResistance,detected:{...(marketStructure.detected||{}),strategy:strategySetups.detected},note:marketStructure.note},
     derivatives:{available:!!deriv,oi:currentOi,cvdState,positioning,oiChangePct,cvdDelta,cvdRatio:deriv?.cvdRatio??null,flowPriceChangePct,tradeCount:deriv?.tradeCount??0,fundingRate:deriv?.fundingRate??null,longPercent,shortPercent,longShortRatio,liquidationBias:liquidationBias&&liquidationBias!=="UNKNOWN"?liquidationBias:"NOT AVAILABLE",liquidationTotal,orderBookImbalance,micropriceBias,spreadBps,takerImbalance,depthNotional:flow.depth,provider:deriv?.provider??null,errors:deriv?.errors??[]},
     thesis:thesis.join(" "),thesisParts:thesis,
