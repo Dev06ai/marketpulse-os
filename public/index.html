@@ -1431,7 +1431,7 @@ async function submitAccount(){
     if(j.requiresMfa){
       accountMode="login";state.adminMfaRequired=true;$("accountLoginMode").classList.add("on");$("accountRegisterMode").classList.remove("on");$("accountSubmit").textContent="Sign in";renderAccount();$("accountError").textContent="Account created. Enter your authenticator code to finish owner sign-in.";return;
     }
-    state.account=j.user;state.pendingAnonymousMemory=anonymous;state.adminMfaRequired=false;renderAccount();await syncMemory({migrateAnonymous:true,save:true});
+    state.account=j.user;state.adminMfaEnabled=Boolean(j.user&&j.user.mfaEnabled);state.pendingAnonymousMemory=anonymous;state.adminMfaRequired=false;renderAccount();await syncMemory({migrateAnonymous:true,save:true});
     $("accountError").textContent="";$("accountPassword").value="";if($("accountMfa"))$("accountMfa").value="";closeAccount();
     $("memoryText").textContent=state.account.isAdmin?"Owner security is active.":"Account sync active.";
   }catch(e){$("accountError").textContent=e.message}
