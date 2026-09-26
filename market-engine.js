@@ -1,5 +1,6 @@
 const clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
 const last=v=>v[v.length-1];
+const {detectMarketStructure}=require("./market-structure");
 const finiteOr=(v,fallback)=>Number.isFinite(v)?v:fallback;
 
 function sma(v,p){const o=[];let s=0;for(let i=0;i<v.length;i++){s+=v[i];if(i>=p)s-=v[i-p];o.push(i+1>=p?s/p:NaN)}return o}
@@ -84,6 +85,7 @@ function analyze(c,ctx={}){
   const closes=c.map(x=>x.c),volumes=c.map(x=>x.v),i=c.length-1,price=closes[i];
   const E20=ema(closes,20),E50=ema(closes,50),E200=ema(closes,200),R=rsi(closes),A=atr(c),D=adx(c),vz=volumeZ(volumes);
   const atrNow=finiteOr(A[i],Math.max(price*.01,1)),adxNow=finiteOr(D[i],0),rsiNow=finiteOr(R[i],50),st=structure(c);
+  const marketStructure=detectMarketStructure(c,{interval:ctx.interval||"1h"});
 
   const look=c.slice(Math.max(0,i-30),i); // exclude the live candle from structural ranges
   const rangeHigh=Math.max(...look.map(x=>x.h)),rangeLow=Math.min(...look.map(x=>x.l));
@@ -149,8 +151,18 @@ function analyze(c,ctx={}){
   const trendShort=regime==="DOWNTREND"&&price<=E20[i]*1.015&&price>=E20[i]*.98&&rsiNow>=30&&rsiNow<=50;
   const rangeLong=regime==="RANGE"&&rsiNow<34&&rangePos<.32;
   const rangeShort=regime==="RANGE"&&rsiNow>66&&rangePos>.68;
+  const ms=marketStructure.setup;
+  const msReady=Boolean(ms&&Number(ms.score)>=74);
 
-  if(breakoutLong){type="BREAKOUT LONG";side="LONG";bias="Bullish";reasons.push("Price has cleared the prior range high","Volume is expanding with the move","Momentum and trend strength confirm the break");}
+  if(msReady&&ms.side==="LONG"){
+    side="LONG";bias="Bullish";
+    type=ms.kind==="SFP"?ms.timeframe+" SFP LONG":ms.kind==="BREAKOUT_RETEST"?ms.timeframe+" LEVEL RETEST LONG":"ORDER BLOCK REJECTION LONG";
+    reasons.push(ms.reason,"Market-structure trigger is confirmed on a key level.");
+  }else if(msReady&&ms.side==="SHORT"){
+    side="SHORT";bias="Bearish";
+    type=ms.kind==="SFP"?ms.timeframe+" SFP SHORT":ms.kind==="BREAKOUT_RETEST"?ms.timeframe+" LEVEL RETEST SHORT":"ORDER BLOCK REJECTION SHORT";
+    reasons.push(ms.reason,"Market-structure trigger is confirmed on a key level.");
+  }else if(breakoutLong){type="BREAKOUT LONG";side="LONG";bias="Bullish";reasons.push("Price has cleared the prior range high","Volume is expanding with the move","Momentum and trend strength confirm the break");}
   else if(breakoutShort){type="BREAKOUT SHORT";side="SHORT";bias="Bearish";reasons.push("Price has cleared the prior range low","Volume is expanding with the move","Momentum and trend strength confirm the break");}
   else if(trendLong){type="LONG SETUP";side="LONG";bias="Bullish";reasons.push("EMA structure is bullish","Price is interacting with the continuation zone","Momentum supports continuation");}
   else if(trendShort){type="SHORT SETUP";side="SHORT";bias="Bearish";reasons.push("EMA structure is bearish","Price is interacting with the continuation zone","Momentum supports continuation");}
@@ -165,6 +177,7 @@ function analyze(c,ctx={}){
     {name:"Momentum",value:(side==="LONG"&&rsiNow>=50&&rsiNow<=68)||(side==="SHORT"&&rsiNow>=32&&rsiNow<=50)?11:4},
     {name:"Volume",value:Math.abs(vz)>=1.2?9:Math.abs(vz)>=.5?6:2},
     {name:"Structure",value:(side==="LONG"&&st.state.includes("BULLISH"))||(side==="SHORT"&&st.state.includes("BEARISH"))?9:4},
+    {name:"Key level / price action",value:side!=="WAIT"&&ms?.side===side?clamp(Math.round(ms.score*.14),0,14):3},
     {name:"4H alignment",value:(side==="LONG"&&mtf4==="UPTREND")||(side==="SHORT"&&mtf4==="DOWNTREND")?9:(side==="WAIT"||mtf4==="UNKNOWN"?4:0)},
     {name:"15M alignment",value:(side==="LONG"&&mtf15==="UPTREND")||(side==="SHORT"&&mtf15==="DOWNTREND")?7:(side==="WAIT"||mtf15==="UNKNOWN"?3:0)},
     {name:"CVD pressure",value:side==="WAIT"||cvdState==="UNKNOWN"?3:
@@ -216,7 +229,26 @@ function analyze(c,ctx={}){
   let el=null,eh=null,stop=null,tp1=null,tp2=null,rr=null;
   if(side!=="WAIT"){
     const risk=1.15*atrNow;
-    if(side==="LONG"){el=price-.25*atrNow;eh=price+.10*atrNow;stop=Math.min(price-risk,rangeLow-.15*atrNow);tp1=price+1.15*atrNow;tp2=price+2.15*atrNow;}
+    if(msReady&&ms.side===side){
+      const buffer=Math.max(.18*atrNow,price*.00035);
+      el=side==="LONG"?price-.08*atrNow:price-.04*atrNow;
+      eh=side==="LONG"?price+.04*atrNow:price+.08*atrNow;
+      const structuralStop=side==="LONG"
+        ?(ms.kind==="SFP"||ms.kind==="ORDER_BLOCK"?ms.sweepPrice??ms.low:ms.levelPrice)-buffer
+        :(ms.kind==="SFP"||ms.kind==="ORDER_BLOCK"?ms.sweepPrice??ms.high:ms.levelPrice)+buffer;
+      stop=side==="LONG"?Math.min(price-risk,Number.isFinite(structuralStop)?structuralStop:price-risk):Math.max(price+risk,Number.isFinite(structuralStop)?structuralStop:price+risk);
+      const actualRisk=Math.abs(price-stop);
+      const nextLevel=side==="LONG"?marketStructure.nearestResistance:marketStructure.nearestSupport;
+      const minimumTarget=actualRisk*1.6;
+      const levelTarget=Number.isFinite(nextLevel)&&(side==="LONG"?nextLevel>price:nextLevel<price)?nextLevel:null;
+      if(side==="LONG"){
+        tp1=levelTarget&&levelTarget-price>=minimumTarget?levelTarget:price+minimumTarget;
+        tp2=price+Math.max(actualRisk*2.4,2.1*atrNow);
+      }else{
+        tp1=levelTarget&&price-levelTarget>=minimumTarget?levelTarget:price-minimumTarget;
+        tp2=price-Math.max(actualRisk*2.4,2.1*atrNow);
+      }
+    }else if(side==="LONG"){el=price-.25*atrNow;eh=price+.10*atrNow;stop=Math.min(price-risk,rangeLow-.15*atrNow);tp1=price+1.15*atrNow;tp2=price+2.15*atrNow;}
     else {el=price-.10*atrNow;eh=price+.25*atrNow;stop=Math.max(price+risk,rangeHigh+.15*atrNow);tp1=price-1.15*atrNow;tp2=price-2.15*atrNow;}
     rr=Math.abs(tp1-price)/Math.abs(price-stop);
   }
@@ -287,6 +319,7 @@ function analyze(c,ctx={}){
     price,change24h,ema20:E20[i],ema50:E50[i],ema200:E200[i],rsi:rsiNow,adx:adxNow,atrPct:atrNow/price*100,volumeZ:vz,
     regime,mood,momentum,volState,structure:st.state,type,side,bias,directionalLean,probabilityLabel,
     score,status,reasons,contributors,components,
+    marketStructure:{score:marketStructure.score,setup:marketStructure.setup,levels:marketStructure.levels,previousDay:marketStructure.previousDay,previousWeek:marketStructure.previousWeek,nearestSupport:marketStructure.nearestSupport,nearestResistance:marketStructure.nearestResistance,detected:marketStructure.detected,note:marketStructure.note},
     derivatives:{available:!!deriv,oi:currentOi,cvdState,positioning,oiChangePct,cvdDelta,cvdRatio:deriv?.cvdRatio??null,flowPriceChangePct,tradeCount:deriv?.tradeCount??0,fundingRate:deriv?.fundingRate??null,longPercent,shortPercent,longShortRatio,liquidationBias:liquidationBias&&liquidationBias!=="UNKNOWN"?liquidationBias:"NOT AVAILABLE",liquidationTotal,orderBookImbalance,micropriceBias,spreadBps,takerImbalance,depthNotional:flow.depth,provider:deriv?.provider??null,errors:deriv?.errors??[]},
     thesis:thesis.join(" "),thesisParts:thesis,
     primaryScenario,alternateScenario,
