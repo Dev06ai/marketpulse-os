@@ -716,7 +716,8 @@ async function askAI(){
   var q=$("aiQ").value.trim();if(!q)return;
   $("aiStatus").textContent="Thinking…";$("aiOut").textContent="";
   var trade={asset:$("tAsset").value.trim(),side:$("tSide").value.trim(),entry:+$("tEntry").value||null,stop:+$("tStop").value||null,target:+$("tTarget").value||null,size:+$("tSize").value||null,notes:$("tNotes").value.trim()};
-  var payload={mode:state.aiMode,question:q,market:state.market?state.market.analysis:{status:"WAITING",note:"No live market payload"},trade,traderProfile:{trades:state.journal.length,avgR:state.journal.length?state.journal.reduce(function(a,x){return a+(Number(x.r)||0)},0)/state.journal.length:0}};
+  var marketForAi=state.market?Object.assign({},state.market.analysis,{symbol:state.symbol,interval:state.interval}):{status:"WAITING",symbol:state.symbol,interval:state.interval,note:"No live market payload"};
+  var payload={mode:state.aiMode,question:q,market:marketForAi,trade,traderProfile:{trades:state.journal.length,avgR:state.journal.length?state.journal.reduce(function(a,x){return a+(Number(x.r)||0)},0)/state.journal.length:0}};
   try{var r=await fetch("/api/ai",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)}),j=await r.json();if(!r.ok)throw Error(j.error||"AI failed");$("aiOut").textContent=j.text||"No response";$("aiStatus").textContent="Copilot ready"}catch(e){$("aiOut").textContent=e.message;$("aiStatus").textContent="Copilot unavailable"}
 }
 
