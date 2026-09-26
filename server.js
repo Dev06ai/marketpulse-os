@@ -1511,20 +1511,23 @@ const server=http.createServer(async(req,res)=>{
     }
 
     if(req.method==='GET'&&u.pathname==='/api/system-check'){
-      const checks={server:true,marketEngine:true,learning:false,memory:false,marketData:false,derivatives:false,oi:false,cvd:false,liquidations:false,execution:true,portfolio:true,phase7:false};
+      const checks={server:true,marketEngine:true,learning:false,memory:false,marketData:false,derivatives:false,oi:false,cvd:false,liquidations:false,execution:false,portfolio:false,phase7:false,coreAnalytics:true};
       let marketError=null,derivativesError=null;
       try{checks.learning=Boolean(await learning.status())}catch(e){}
       try{checks.memory=Boolean(storage.status())}catch(e){}
-      try{const rows=await klines('BTCUSDT','1h');checks.marketData=Boolean(rows&&rows.length>=50)}catch(e){marketError=e.message}
+      let marketRows=null;
+      try{marketRows=await klines('BTCUSDT','1h');checks.marketData=Boolean(marketRows&&marketRows.length>=50)}catch(e){marketError=e.message}
       try{
         const d=await Promise.race([derivatives('BTCUSDT','15m'),new Promise(resolve=>setTimeout(()=>resolve(null),6500))]);
         checks.derivatives=Boolean(d&&d.available);checks.oi=Boolean(Number.isFinite(Number(d?.oi)));
         checks.cvd=Boolean(Number.isFinite(Number(d?.cvdDelta))||["BUYERS PRESSURE","SELLERS PRESSURE","BALANCED"].includes(d?.cvdState));
-        checks.liquidations=Boolean(Array.isArray(d?.series?.liq)?d.series.liq.length>0:Boolean(d&&d.liquidationTotal!=null));
+        checks.liquidations=Boolean(d&&(d.liveConnected||Number(d.livePointCount)>0||Array.isArray(d?.series?.liq)&&d.series.liq.length>1));
         if(!checks.derivatives)derivativesError="No derivatives provider returned usable data";
       }catch(e){derivativesError=String(e.message||e)}
+      try{checks.execution=Boolean(await execution.snapshot())}catch(e){checks.execution=false}
+      try{checks.portfolio=Boolean(await phase6.snapshot())}catch(e){checks.portfolio=false}
       try{const st=phase7.selfTest();checks.phase7=Boolean(st&&st.ok)}catch(e){checks.phase7=false}
-      const result={ok:checks.server&&checks.marketEngine&&checks.learning&&checks.memory&&checks.marketData&&checks.execution&&checks.phase7,checks,marketError,derivativesError,phase2:PHASE2_VERSION,phase3:PHASE3_VERSION,phase4:PHASE4_VERSION,phase5:PHASE5_VERSION,phase6:PHASE6_VERSION,phase7:PHASE7_VERSION,routes:{core:true,coreScan:true,coreFlow:true,cycle:true,ai:true,memory:true,learning:true,replay:true,dna:true,research:true,edge:true,edgeHealth:true,edgeConfig:true,edgeJournal:true,execution:true,executionConfig:true,executionArm:true,executionKill:true,executionReconcile:true,portfolio:true,portfolioConfig:true,phase7Analytics:true,phase7Health:true},timestamp:Date.now()};await auditAdmin(req,"Ran full system check","system",null,{ok:result.ok,checks});return send(res,200,result);
+      const result={ok:Object.values(checks).every(Boolean),checks,marketError,derivativesError,phase2:PHASE2_VERSION,phase3:PHASE3_VERSION,phase4:PHASE4_VERSION,phase5:PHASE5_VERSION,phase6:PHASE6_VERSION,phase7:PHASE7_VERSION,routes:{core:true,chart:true,coreAnalytics:true,coreScan:true,coreFlow:true,cycle:true,ai:true,memory:true,learning:true,replay:true,dna:true,research:true,edge:true,edgeHealth:true,edgeConfig:true,edgeJournal:true,execution:true,executionConfig:true,executionArm:true,executionKill:true,executionReconcile:true,portfolio:true,portfolioConfig:true,phase7Analytics:true,phase7Health:true},timestamp:Date.now()};await auditAdmin(req,"Ran full system check","system",null,{ok:result.ok,checks});return send(res,200,result);
     }
     if(req.method==='GET'&&u.pathname==='/api/live'){
       const symbol=(u.searchParams.get('symbol')||'BTCUSDT').toUpperCase(),interval=u.searchParams.get('interval')||'1h';
