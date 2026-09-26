@@ -40,7 +40,7 @@ function csrfCookie(){
   const secure=String(process.env.NODE_ENV||"").toLowerCase()==="production"?" Secure;":"";
   return CSRF_COOKIE+"="+crypto.randomBytes(32).toString("hex")+"; Path=/; SameSite=Strict; Max-Age=86400;"+secure;
 }
-const ADMIN_ONLY_PATHS=
+const ADMIN_ONLY_PATHS=new Set([
   '/api/memory/status',
   '/api/phase7/health',
   '/api/learning/status',
