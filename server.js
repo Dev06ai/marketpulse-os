@@ -1113,6 +1113,8 @@ const server=http.createServer(async(req,res)=>{
           minRR:Number(u.searchParams.get('minRR')||process.env.PROP_MIN_RR||1.5),
           minConsensusQualityPct:Number(u.searchParams.get('minConsensusQualityPct')||process.env.PROP_MIN_CONSENSUS_QUALITY_PCT||85),
           maxPriceDispersionBps:Number(u.searchParams.get('maxPriceDispersionBps')||process.env.PROP_MAX_PRICE_DISPERSION_BPS||80),
+          eventMinSecondsToExpiry:Number(u.searchParams.get('eventMinSecondsToExpiry')||process.env.PROP_EVENT_MIN_SECONDS_TO_EXPIRY||30),
+          eventMinStrikeDistanceBps:Number(u.searchParams.get('eventMinStrikeDistanceBps')||process.env.PROP_EVENT_MIN_STRIKE_DISTANCE_BPS||1),
           blockMixedFlow:String(u.searchParams.get('blockMixedFlow')||process.env.PROP_BLOCK_MIXED_FLOW||"true")!=="false"
         });
         const gate=propFirm.evaluateEventContract({
