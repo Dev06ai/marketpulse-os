@@ -42,3 +42,23 @@ assert(conflict.decision==="BLOCKED","event direction conflict");
 assert(conflict.reasons.includes("EVENT_DIRECTION_CONFLICTS_WITH_SIGNAL"),"event direction gate");
 
 console.log("Prop Firm Guard smoke checks passed:",{standard:good.decision,event:event.decision,maxContracts:event.maxContracts});
+
+const nearStrike=evaluateEventContract({
+  analysis,derivatives:deriv,dataQuality:{qualityPct:100,consensusQualityPct:98,independentSourceCount:2,candleAgeMs:1000},
+  equity:5000,dayStartEquity:5000,peakEquity:5000,
+  side:"UP",premium:10,payout:30,fee:0,venue:"TOOBIT",
+  strikePrice:100000,indexPrice:100000.5,expirationAt:Date.now()+600000,
+  strictContractContext:true,config:cfg
+});
+assert(nearStrike.decision==="BLOCKED","near-strike contract blocked");
+assert(nearStrike.reasons.includes("STRIKE_TOO_CLOSE_TO_INDEX"),"strike proximity gate");
+
+const expired=evaluateEventContract({
+  analysis,derivatives:deriv,dataQuality:{qualityPct:100,consensusQualityPct:98,independentSourceCount:2,candleAgeMs:1000},
+  equity:5000,dayStartEquity:5000,peakEquity:5000,
+  side:"UP",premium:10,payout:30,fee:0,venue:"XT",
+  strikePrice:99000,indexPrice:100000,expirationAt:Date.now()-1000,
+  strictContractContext:true,config:cfg
+});
+assert(expired.decision==="BLOCKED","expired contract blocked");
+assert(expired.reasons.includes("CONTRACT_EXPIRED"),"expiry gate");
