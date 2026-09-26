@@ -273,7 +273,7 @@ async function derivatives(symbol,interval){
   DERIV_CACHE.set(key,{ts:Date.now(),data});return data;
 }
 
-function send(res,code,p){res.writeHead(code,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','Access-Control-Allow-Origin':'*'});res.end(JSON.stringify(p))}
+function send(res,code,p){res.writeHead(code,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff','X-Frame-Options':'DENY','Referrer-Policy':'strict-origin-when-cross-origin'});res.end(JSON.stringify(p))}
 async function callOpenAI(systemPrompt,userPrompt){
   if(!OPENAI_API_KEY) throw new Error("AI_COPILOT_NOT_CONFIGURED");
   const now=Date.now();
@@ -480,8 +480,10 @@ const server=http.createServer(async(req,res)=>{
       let body={};try{body=JSON.parse(raw||"{}")}catch{return send(res,400,{ok:false,error:"Invalid JSON"})}
       try{
         if(u.pathname==='/api/auth/register'){
-          const user=await auth.register(body.email,body.password);
-          const logged=await auth.login(body.email,body.password);
+          const key="register:"+String(req.socket?.remoteAddress||"unknown")+":"+String(body.email||"").toLowerCase();
+          const user=await auth.register(body.email,body.password,key);
+          const key="login:"+String(req.socket?.remoteAddress||"unknown")+":"+String(body.email||"").toLowerCase();
+        const logged=await auth.login(body.email,body.password,key);
           res.setHeader("Set-Cookie",logged.setCookie);
           return send(res,201,{ok:true,user:logged.user});
         }
@@ -489,8 +491,8 @@ const server=http.createServer(async(req,res)=>{
         res.setHeader("Set-Cookie",logged.setCookie);
         return send(res,200,{ok:true,user:logged.user});
       }catch(e){
-        const code=e.message==="EMAIL_EXISTS"||e.message==="INVALID_CREDENTIALS"?400:422;
-        return send(res,code,{ok:false,error:e.message==="EMAIL_EXISTS"?"An account with this email already exists.":e.message==="INVALID_CREDENTIALS"?"Email or password is incorrect.":e.message});
+        const code=e.message==="AUTH_RATE_LIMIT"?429:e.message==="EMAIL_EXISTS"||e.message==="INVALID_CREDENTIALS"?400:422;
+        return send(res,code,{ok:false,error:e.message==="EMAIL_EXISTS"?"An account with this email already exists.":e.message==="INVALID_CREDENTIALS"?"Email or password is incorrect.":e.message==="AUTH_RATE_LIMIT"?"Too many attempts. Please wait and try again.":e.message});
       }
     }
     if(req.method==='POST'&&u.pathname==='/api/auth/logout'){
