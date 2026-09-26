@@ -380,31 +380,31 @@ body.admin-mode .nav button.adminNav,body.admin-mode .mobileMenu button.adminNav
 
     <div class="section grid2">
       <div class="card">
-        <div class="sectionHead"><div><div class="title">Prop Firm Guard</div><div class="sub">Evidence + account-headroom gate. Configure this to the exact rules of your evaluation.</div></div><span class="chip" id="pfGateChip">WAITING</span></div>
+        <div class="sectionHead"><div><div class="title">Prop Firm Guard</div><div class="sub">Evidence + account-headroom gate. Configure this to the exact rules of your evaluation.</div></div><span class="chip" id="pfgGateChip">WAITING</span></div>
         <div class="inputs">
-          <label class="small">Account<input id="pfAccount" type="number" value="5000" min="1"></label>
-          <label class="small">Equity<input id="pfEquity" type="number" value="5000" min="1"></label>
-          <label class="small">Daily loss %<input id="pfDailyLoss" type="number" value="3" step=".1"></label>
-          <label class="small">Max drawdown %<input id="pfMaxDD" type="number" value="6" step=".1"></label>
-          <label class="small">Risk / trade %<input id="pfRisk" type="number" value=".5" step=".05"></label>
-          <label class="small">Min score<input id="pfScore" type="number" value="72" min="0" max="100"></label>
-          <label class="small">Min R:R<input id="pfRR" type="number" value="1.5" step=".1"></label>
+          <label class="small">Account<input id="pfgAccount" type="number" value="5000" min="1"></label>
+          <label class="small">Equity<input id="pfgEquity" type="number" value="5000" min="1"></label>
+          <label class="small">Daily loss %<input id="pfgDailyLoss" type="number" value="3" step=".1"></label>
+          <label class="small">Max drawdown %<input id="pfgMaxDD" type="number" value="6" step=".1"></label>
+          <label class="small">Risk / trade %<input id="pfgRiskTrade" type="number" value=".5" step=".05"></label>
+          <label class="small">Min score<input id="pfgScore" type="number" value="72" min="0" max="100"></label>
+          <label class="small">Min R:R<input id="pfgRR" type="number" value="1.5" step=".1"></label>
         </div>
-        <button id="pfRefresh" class="btn primary" style="margin-top:8px">Evaluate current setup</button>
-        <div class="result" id="pfResult" style="margin-top:8px">Waiting for market data.</div>
-        <div class="watchNote" id="pfReasons" style="margin-top:6px">No gate result yet.</div>
+        <button id="pfgRefresh" class="btn primary" style="margin-top:8px">Evaluate current setup</button>
+        <div class="result" id="pfgResult" style="margin-top:8px">Waiting for market data.</div>
+        <div class="watchNote" id="pfgReasons" style="margin-top:6px">No gate result yet.</div>
       </div>
       <div class="card">
-        <div class="sectionHead"><div><div class="title">Event Contract Guard</div><div class="sub">For fixed-risk Higher/Lower or UP/DOWN products. Uses the venue's displayed premium and payout.</div></div><span class="chip" id="evGateChip">WAITING</span></div>
+        <div class="sectionHead"><div><div class="title">Event Contract Guard</div><div class="sub">For fixed-risk Higher/Lower or UP/DOWN products. Uses the venue's displayed premium and payout.</div></div><span class="chip" id="ecgGateChip">WAITING</span></div>
         <div class="inputs">
-          <label class="small">Direction<select id="evSide"><option>UP</option><option>DOWN</option></select></label>
-          <label class="small">Premium / stake<input id="evPremium" type="number" value="10" min="0" step=".01"></label>
-          <label class="small">Payout if correct<input id="evPayout" type="number" value="20" min="0" step=".01"></label>
-          <label class="small">Fee<input id="evFee" type="number" value="0" min="0" step=".01"></label>
+          <label class="small">Direction<select id="ecgSide"><option>UP</option><option>DOWN</option></select></label>
+          <label class="small">Premium / stake<input id="ecgPremium" type="number" value="10" min="0" step=".01"></label>
+          <label class="small">Payout if correct<input id="ecgPayout" type="number" value="20" min="0" step=".01"></label>
+          <label class="small">Fee<input id="ecgFee" type="number" value="0" min="0" step=".01"></label>
         </div>
-        <button id="evRefresh" class="btn primary" style="margin-top:8px">Evaluate event contract</button>
-        <div class="result" id="evResult" style="margin-top:8px">Enter the contract terms shown by the venue.</div>
-        <div class="watchNote" id="evReasons" style="margin-top:6px">The gate never places an order.</div>
+        <button id="ecgRefresh" class="btn primary" style="margin-top:8px">Evaluate event contract</button>
+        <div class="result" id="ecgResult" style="margin-top:8px">Enter the contract terms shown by the venue.</div>
+        <div class="watchNote" id="ecgReasons" style="margin-top:6px">The gate never places an order.</div>
       </div>
     </div>
 
@@ -624,7 +624,7 @@ body.admin-mode .nav button.adminNav,body.admin-mode .mobileMenu button.adminNav
     <div class="sectionHead"><div><div class="title">Portfolio Risk</div><div class="sub">Phase 6 maps concentration, aggregate risk, correlated clusters and stress impact across the whole trading book.</div></div><div class="portfolioPill">PORTFOLIO INTELLIGENCE</div></div>
 
     <div class="portfolioMetricGrid">
-      <div class="portfolioMetric"><div class="label">Portfolio risk</div><div class="v" id="pfRisk">0.00%</div><div class="subv" id="pfRiskMeta">Limit 4.00%</div></div>
+      <div class="portfolioMetric"><div class="label">Portfolio risk</div><div class="v" id="pfgRiskTrade">0.00%</div><div class="subv" id="pfRiskMeta">Limit 4.00%</div></div>
       <div class="portfolioMetric"><div class="label">Gross exposure</div><div class="v" id="pfExposure">0.00%</div><div class="subv" id="pfExposureMeta">Across tracked assets</div></div>
       <div class="portfolioMetric"><div class="label">Concentration</div><div class="v" id="pfConcentration">—</div><div class="subv" id="pfConcentrationMeta">Largest symbol exposure</div></div>
       <div class="portfolioMetric"><div class="label">Portfolio guard</div><div class="v" id="pfGuard">WITHIN LIMITS</div><div class="subv" id="pfGuardMeta">No portfolio-level warnings</div></div>
@@ -657,14 +657,14 @@ body.admin-mode .nav button.adminNav,body.admin-mode .mobileMenu button.adminNav
       <div class="portfolioPanel"><div class="sectionHead"><div><div class="title">Correlation matrix</div><div class="sub">Latest return correlation across the tracked universe.</div></div></div><div id="pfCorrMatrix" class="portfolioCorr"></div></div>
       <div class="portfolioPanel"><div class="sectionHead"><div><div class="title">Portfolio limits</div><div class="sub">These limits are also consulted by Phase 5 execution.</div></div></div>
         <div class="portfolioActions adminOnly">
-          <label>Account<input id="pfAccount" type="number" min="0" step="100" value="100000"></label>
+          <label>Account<input id="pfgAccount" type="number" min="0" step="100" value="100000"></label>
           <label>Max portfolio risk %<input id="pfMaxRisk" type="number" min=".5" max="20" step=".1" value="4"></label>
           <label>Max symbol exposure %<input id="pfMaxSymbol" type="number" min=".25" max="20" step=".25" value="2"></label>
           <label>Max correlated risk %<input id="pfMaxCluster" type="number" min=".5" max="20" step=".1" value="3"></label>
           <label>Correlation threshold<input id="pfCorrLimit" type="number" min=".6" max=".99" step=".01" value=".85"></label>
           <label>Stress move %<input id="pfStressMove" type="number" min="1" max="25" step="1" value="5"></label>
           <button id="pfSaveConfig" class="btn primary">Save portfolio rules</button>
-          <button id="pfRefresh" class="btn">Refresh portfolio</button>
+          <button id="pfgRefresh" class="btn">Refresh portfolio</button>
         </div>
         <div class="portfolioNote" id="pfConfigNote">Portfolio limits are server-side and persist independently of the browser.</div>
       </div>
@@ -1508,38 +1508,38 @@ function checkAlerts(rows){
 async function enableNotifications(){if(!("Notification"in window)){$("notifState").textContent="Browser notifications unavailable";return}var p=await Notification.requestPermission();$("notifState").textContent=p;$("notifBtn").textContent=p==="granted"?"Notifications enabled":"Enable notifications"}
 async function runSystemCheck(){ $("healthGrid").innerHTML='<div class="small">Running core checks…</div>';try{var d=await api("/api/system-check",8000),checks=d.checks||{};var names=["server","marketEngine","learning","memory","marketData","derivatives","oi","cvd","liquidations","execution","portfolio","phase7"];$("healthGrid").innerHTML=names.map(function(n){return'<div class="healthItem"><span class="healthDot '+(checks[n]?"ok":"bad")+'"></span><b>'+n+"</b></div>"}).join("");$("healthText").textContent=(d.ok?"Core market stack passed. ":"Core market stack needs attention. ")+(d.marketError||d.derivativesError||"")+" · Portfolio and Trader Analytics checks are included."; }catch(e){$("healthText").textContent="System check failed: "+e.message}}
 async function loadPropFirmGuard(){
-  if(!$("pfResult"))return;
+  if(!$("pfgResult"))return;
   try{
     var q=new URLSearchParams({
       symbol:state.symbol,interval:state.interval,
-      accountSize:$("pfAccount").value||5000,equity:$("pfEquity").value||5000,
-      dailyLossLimitPct:$("pfDailyLoss").value||3,maxDrawdownPct:$("pfMaxDD").value||6,
-      riskPerTradePct:$("pfRisk").value||.5,minSignalScore:$("pfScore").value||72,minRR:$("pfRR").value||1.5
+      accountSize:$("pfgAccount").value||5000,equity:$("pfgEquity").value||5000,
+      dailyLossLimitPct:$("pfgDailyLoss").value||3,maxDrawdownPct:$("pfgMaxDD").value||6,
+      riskPerTradePct:$("pfgRiskTrade").value||.5,minSignalScore:$("pfgScore").value||72,minRR:$("pfgRR").value||1.5
     });
     var d=await api("/api/propfirm?"+q.toString(),8500),g=d.gate||{};
-    $("pfGateChip").textContent=g.decision||"UNKNOWN";
-    $("pfResult").textContent=(g.signalSide||"WAIT")+" · score "+fmt(g.score)+" · R:R "+Number(g.rr||0).toFixed(2)+" · risk headroom "+fmt(g.riskHeadroomCash||0);
-    $("pfReasons").textContent=(g.reasons&&g.reasons.length?("BLOCK: "+g.reasons.join(" · ")):("Gate clear"+(g.warnings&&g.warnings.length?(" · Warnings: "+g.warnings.join(" · ")):"")));
+    $("pfgGateChip").textContent=g.decision||"UNKNOWN";
+    $("pfgResult").textContent=(g.signalSide||"WAIT")+" · score "+fmt(g.score)+" · R:R "+Number(g.rr||0).toFixed(2)+" · risk headroom "+fmt(g.riskHeadroomCash||0);
+    $("pfgReasons").textContent=(g.reasons&&g.reasons.length?("BLOCK: "+g.reasons.join(" · ")):("Gate clear"+(g.warnings&&g.warnings.length?(" · Warnings: "+g.warnings.join(" · ")):"")));
   }catch(e){
-    $("pfGateChip").textContent="ERROR";$("pfResult").textContent="Prop guard unavailable";$("pfReasons").textContent=e.message||"Request failed";
+    $("pfgGateChip").textContent="ERROR";$("pfgResult").textContent="Prop guard unavailable";$("pfgReasons").textContent=e.message||"Request failed";
   }
 }
 async function loadEventGuard(){
-  if(!$("evResult"))return;
+  if(!$("ecgResult"))return;
   try{
     var q=new URLSearchParams({
       symbol:state.symbol,interval:state.interval,
-      accountSize:$("pfAccount").value||5000,equity:$("pfEquity").value||5000,
-      dailyLossLimitPct:$("pfDailyLoss").value||3,maxDrawdownPct:$("pfMaxDD").value||6,
-      riskPerTradePct:$("pfRisk").value||.5,minSignalScore:$("pfScore").value||72,minRR:$("pfRR").value||1.5,
-      side:$("evSide").value,premium:$("evPremium").value,payout:$("evPayout").value,fee:$("evFee").value
+      accountSize:$("pfgAccount").value||5000,equity:$("pfgEquity").value||5000,
+      dailyLossLimitPct:$("pfgDailyLoss").value||3,maxDrawdownPct:$("pfgMaxDD").value||6,
+      riskPerTradePct:$("pfgRiskTrade").value||.5,minSignalScore:$("pfgScore").value||72,minRR:$("pfgRR").value||1.5,
+      side:$("ecgSide").value,premium:$("ecgPremium").value,payout:$("ecgPayout").value,fee:$("ecgFee").value
     });
     var d=await api("/api/propfirm/event?"+q.toString(),8500),g=d.gate||{};
-    $("evGateChip").textContent=g.decision||"UNKNOWN";
-    $("evResult").textContent=(g.eventSide||"WAIT")+" · max "+Number(g.maxContracts||0)+" contract(s) · max loss "+fmt(g.maxLoss||0)+" · max profit "+fmt(g.maxProfit||0)+" · payoff "+Number(g.payoffR||0).toFixed(2)+"R";
-    $("evReasons").textContent=(g.reasons&&g.reasons.length?("BLOCK: "+g.reasons.join(" · ")):("Gate clear"+(g.warnings&&g.warnings.length?(" · Warnings: "+g.warnings.join(" · ")):"")))+".";
+    $("ecgGateChip").textContent=g.decision||"UNKNOWN";
+    $("ecgResult").textContent=(g.eventSide||"WAIT")+" · max "+Number(g.maxContracts||0)+" contract(s) · max loss "+fmt(g.maxLoss||0)+" · max profit "+fmt(g.maxProfit||0)+" · payoff "+Number(g.payoffR||0).toFixed(2)+"R";
+    $("ecgReasons").textContent=(g.reasons&&g.reasons.length?("BLOCK: "+g.reasons.join(" · ")):("Gate clear"+(g.warnings&&g.warnings.length?(" · Warnings: "+g.warnings.join(" · ")):"")))+".";
   }catch(e){
-    $("evGateChip").textContent="ERROR";$("evResult").textContent="Event guard unavailable";$("evReasons").textContent=e.message||"Request failed";
+    $("ecgGateChip").textContent="ERROR";$("ecgResult").textContent="Event guard unavailable";$("ecgReasons").textContent=e.message||"Request failed";
   }
 }
 function calc(){
@@ -1662,7 +1662,7 @@ async function askAI(){
 
 
 $("pfSaveConfig").addEventListener("click",savePortfolioConfig);
-$("pfRefresh").addEventListener("click",loadPortfolio);
+$("pfgRefresh").addEventListener("click",loadPortfolio);
 $("exSaveConfig").addEventListener("click",saveExecutionConfig);
 $("exPrepare").addEventListener("click",prepareExecution);
 $("exSubmit").addEventListener("click",function(){submitExecution()});
@@ -1672,8 +1672,10 @@ $("exArm").addEventListener("click",armExecution);
 $("exOrderRows").addEventListener("click",function(e){var b=e.target.closest("[data-ex-submit],[data-ex-cancel]");if(!b)return;if(b.dataset.exSubmit)submitExecution(b.dataset.exSubmit);else cancelExecution(b.dataset.exCancel)});
 $("exPositionRows").addEventListener("click",function(e){var b=e.target.closest("[data-ex-close]");if(b)closeSimulation(b.dataset.exClose)});
 $("refresh").addEventListener("click",loadCore);
-$("pfRefresh").addEventListener("click",loadPropFirmGuard);
-$("evRefresh").addEventListener("click",loadEventGuard);
+$("pfgRefresh").addEventListener("click",loadPropFirmGuard);
+$("ecgRefresh").addEventListener("click",loadEventGuard);
+$("pfgRefresh").addEventListener("click",loadPropFirmGuard);
+$("ecgRefresh").addEventListener("click",loadEventGuard);
 $("symbol").addEventListener("change",function(){state.symbol=this.value;loadCore()});
 $("interval").addEventListener("change",function(){state.interval=this.value;loadCore()});
 document.querySelectorAll("[data-filter]").forEach(function(b){b.addEventListener("click",function(){document.querySelectorAll("[data-filter]").forEach(function(x){x.classList.remove("on")});b.classList.add("on");state.filter=b.dataset.filter;renderScanner()})});
