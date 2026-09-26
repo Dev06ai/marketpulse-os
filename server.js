@@ -1222,5 +1222,51 @@ const server=http.createServer(async(req,res)=>{
     return staticFile(req,res);
   }catch(e){return send(res,500,{error:e.message||'Server error'})}
 });
+let PREDICTION_AUTOTRAIN={running:false,lastRunAt:0,lastResolved:0};
+async function backgroundTrainOwnPrediction(){
+  if(PREDICTION_AUTOTRAIN.running||String(process.env.PREDICTION_AUTO_TRAIN||"true").toLowerCase()==="false")return;
+  PREDICTION_AUTOTRAIN.running=true;
+  try{
+    const st=await learning.status();
+    const resolved=Number(st?.resolved||0),now=Date.now(),hours=Number(process.env.PREDICTION_AUTO_TRAIN_HOURS||6);
+    if(resolved<300||now-PREDICTION_AUTOTRAIN.lastRunAt<hours*3600000||resolved-PREDICTION_AUTOTRAIN.lastResolved<50)return;
+    const resolvedRows=await storage.getResolvedLearningPredictions(undefined,"1h",1500);
+    const rows=resolvedRows.map(r=>({label:String(r.outcome).toUpperCase()==="WIN"?1:String(r.outcome).toUpperCase()==="LOSS"?0:null,features:r.features?.modelFeatures})).filter(r=>r.label!==null&&r.features);
+    if(rows.length<300)return;
+    const model=predictionEngine.trainLogistic(rows,{epochs:240,lr:.045,l2:.02});
+    model.symbol="ALL";model.interval="1h";model.source="MarketPulse resolved outcomes (automatic retrain)";
+    const champion=await getPredictionChampion(true),wf=model.walkForwardMetrics||{},cw=champion?.walkForwardMetrics||{};
+    const promotable=wf.allFoldsBeatBaseline===true&&Number.isFinite(wf.meanBrier)&&Number.isFinite(wf.meanLogLoss)&&(!champion||!Number.isFinite(Number(cw.meanBrier))||(wf.meanBrier<=Number(cw.meanBrier)*.97&&wf.meanLogLoss<=Number(cw.meanLogLoss)*.985));
+    await storage.savePredictionModel("candidate",model);
+    if(promotable){await storage.savePredictionModel("champion",model);PREDICTION_MODEL_CACHE.model=model;PREDICTION_MODEL_CACHE.ts=Date.now()}
+    await storage.recordPredictionRun({symbol:"ALL",interval:"1h",source:model.source,samples:rows.length,validation:{train:model.trainMetrics,validation:model.validationMetrics,walkForward:wf,promotable},modelName:promotable?"champion":"candidate"});
+    PREDICTION_AUTOTRAIN.lastRunAt=now;PREDICTION_AUTOTRAIN.lastResolved=resolved;
+  }catch(e){console.error("Prediction auto-train:",e.message)}finally{PREDICTION_AUTOTRAIN.running=false}
+}
+async function bootstrapPublicPrediction(){
+  if(String(process.env.PREDICTION_BOOTSTRAP||"true").toLowerCase()==="false")return;
+  try{
+    const champion=await getPredictionChampion(true);if(champion)return;
+    const candles=await fetchTrainingFuturesKlines("BTCUSDT","1h",1500);
+    const derivativesContext=await fetchTrainingDerivatives("BTCUSDT","1h",250);
+    const rows=predictionEngine.buildTrainingRows(candles,"1h",derivativesContext);
+    if(rows.length<500)return;
+    const model=predictionEngine.trainLogistic(rows,{epochs:220,lr:.05,l2:.02});
+    model.symbol="BTCUSDT";model.interval="1h";model.source="Binance USD-M public futures + Bybit public OI/funding (bootstrap)";
+    const wf=model.walkForwardMetrics||{};
+    if(wf.allFoldsBeatBaseline===true){
+      await storage.savePredictionModel("champion",model);PREDICTION_MODEL_CACHE.model=model;PREDICTION_MODEL_CACHE.ts=Date.now();
+      await storage.recordPredictionRun({symbol:"BTCUSDT",interval:"1h",source:model.source,samples:rows.length,validation:{train:model.trainMetrics,validation:model.validationMetrics,walkForward:wf,promotable:true},modelName:"champion"});
+    }else{
+      await storage.savePredictionModel("candidate",model);
+      await storage.recordPredictionRun({symbol:"BTCUSDT",interval:"1h",source:model.source,samples:rows.length,validation:{train:model.trainMetrics,validation:model.validationMetrics,walkForward:wf,promotable:false},modelName:"candidate"});
+    }
+  }catch(e){console.error("Prediction bootstrap:",e.message)}
+}
 storage.init().catch(()=>{});learning.init().catch(()=>{});
-server.listen(PORT,()=>console.log('MarketPulse OS listening on :'+PORT));
+server.listen(PORT,()=>{
+  console.log('MarketPulse OS listening on :'+PORT);
+  setTimeout(()=>bootstrapPublicPrediction().catch(()=>{}),15000);
+  setTimeout(()=>backgroundTrainOwnPrediction().catch(()=>{}),30000);
+  setInterval(()=>backgroundTrainOwnPrediction().catch(()=>{}),60*60*1000);
+});
