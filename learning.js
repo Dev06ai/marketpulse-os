@@ -24,7 +24,8 @@ function baseState(){
     lastResolvedAt:null,
     lastAdjustment:0,
     lastSetupAdjustment:0,
-    lastComponentAdjustment:0
+    lastComponentAdjustment:0,
+    calibrationHistory:[]
   };
 }
 function ensureState(raw){
@@ -32,6 +33,7 @@ function ensureState(raw){
   if(!s.buckets||typeof s.buckets!=="object")s.buckets={};
   if(!s.scoreBuckets||typeof s.scoreBuckets!=="object")s.scoreBuckets={};
   if(!s.componentStats||typeof s.componentStats!=="object")s.componentStats={};
+  if(!Array.isArray(s.calibrationHistory))s.calibrationHistory=[];
   s.version=STATE_VERSION;
   s.resolved=Number(s.resolved)||0;
   s.wins=Number(s.wins)||0;
