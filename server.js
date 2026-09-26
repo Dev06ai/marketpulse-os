@@ -187,10 +187,15 @@ async function buildDecisionSnapshot(symbol,interval,query){
   const key=symbol+"|"+interval,now=Date.now(),cached=DECISION_CACHE.get(key);
   if(cached&&now-cached.ts<DECISION_TTL)return Object.assign({cache:"fresh",cacheAgeMs:now-cached.ts},cached.payload);
   try{
-    const candles=await getFastKlines(symbol,interval);
-    if(!candles||candles.length<220)throw Error("Insufficient candles");
-    const lower=interval==="15m"?null:await Promise.race([klines(symbol,"15m"),new Promise(resolve=>setTimeout(()=>resolve(null),1500))]).catch(()=>null);
-    const higher=interval==="4h"?null:await Promise.race([klines(symbol,"4h"),new Promise(resolve=>setTimeout(()=>resolve(null),1500))]).catch(()=>null);
+    const rawCandles=await getFastKlines(symbol,interval);
+    const candles=closedCandles(rawCandles,interval,now);
+    if(!candles||candles.length<220)throw Error("Insufficient closed candles");
+    const lowerInterval=interval==="15m"?null:"15m";
+    const higherInterval=interval==="4h"?"1d":interval==="1d"?null:"4h";
+    const lowerRaw=lowerInterval?await Promise.race([klines(symbol,lowerInterval),new Promise(resolve=>setTimeout(()=>resolve(null),1500))]).catch(()=>null):null;
+    const higherRaw=higherInterval?await Promise.race([klines(symbol,higherInterval),new Promise(resolve=>setTimeout(()=>resolve(null),1500))]).catch(()=>null):null;
+    const lower=lowerRaw?closedCandles(lowerRaw,lowerInterval,now):null;
+    const higher=higherRaw?closedCandles(higherRaw,higherInterval,now):null;
     const deriv=await Promise.race([derivatives(symbol,interval),new Promise(resolve=>setTimeout(()=>resolve(null),2600))]).catch(()=>null);
     const consensus=await Promise.race([dataFabric.assess(symbol,interval,{
       primaryPrice:candles[candles.length-1]?.c,
@@ -198,8 +203,8 @@ async function buildDecisionSnapshot(symbol,interval,query){
       primarySource:candles?.[0]?.source,
       liveFlow:flowBucket(symbol)
     }),new Promise(resolve=>setTimeout(()=>resolve(null),1500))]).catch(()=>null);
-    const lowerAnalysis=lower&&lower.length>=220?analyze(lower,{interval:"15m"}):null;
-    const higherAnalysis=higher&&higher.length>=220?analyze(higher,{interval:"4h"}):null;
+    const lowerAnalysis=lower&&lower.length>=220&&lowerInterval?analyze(lower,{interval:lowerInterval}):null;
+    const higherAnalysis=higher&&higher.length>=220&&higherInterval?analyze(higher,{interval:higherInterval}):null;
     let analysis=analyze(candles,{interval,lower:lowerAnalysis,higher:higherAnalysis,deriv});
     let learned=null;
     try{
