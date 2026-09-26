@@ -18,6 +18,7 @@ jobs:
       - run: node --check learning.js
       - run: node --check phase4.js
       - run: node --check execution.js
+      - run: node --check phase6.js
       - run: node tests/smoke.js
       - name: Check browser script
         run: |
@@ -73,4 +74,23 @@ jobs:
           missing=[x for x in required_html if x not in html]+[x for x in required_server if x not in server]
           if missing: raise SystemExit("Missing Phase 5 feature surface: "+", ".join(missing))
           print("Phase 5 feature surface OK")
+          PY
+
+      - name: Check Phase 6 feature surface
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          html=Path("public/index.html").read_text()
+          server=Path("server.js").read_text()
+          required_html=[
+            'data-view="portfolio"','id="view-portfolio"','id="pfRisk"','id="pfExposure"',
+            'id="pfGuard"','id="pfAssetRows"','id="pfClusterRows"','id="pfCorrMatrix"',
+            'id="pfStress"','id="pfSaveConfig"','id="pfRefresh"'
+          ]
+          required_server=[
+            "/api/portfolio","/api/portfolio/config","/api/portfolio/health"
+          ]
+          missing=[x for x in required_html if x not in html]+[x for x in required_server if x not in server]
+          if missing: raise SystemExit("Missing Phase 6 feature surface: "+", ".join(missing))
+          print("Phase 6 feature surface OK")
           PY
