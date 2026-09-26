@@ -700,12 +700,27 @@ const server=http.createServer(async(req,res)=>{
       try{return send(res,200,{ok:true,tickets:(await storage.listSupportTickets(100)).filter(x=>x.userId===user.id)})}catch(e){return send(res,503,{ok:false,error:e.message})}
     }
     if(req.method==='GET'&&u.pathname==='/api/admin/overview'){
-      const [health,stats,analytics,flags,config,audit,security,tickets,broadcasts,snapshots,recentUsage]=await Promise.all([
-        storage.health(),storage.userStats(),storage.adminAnalytics(),storage.getFeatureFlags(),getAdminRuntime(true),storage.listAdminAudit(20),storage.listSecurityEvents(20),storage.listSupportTickets(20),storage.listBroadcasts(20),storage.listAdminSnapshots(20),storage.recentUsageEvents(40)
+      const safe=async(name,fn,fallback)=>{try{return {ok:true,value:await fn()}}catch(e){return {ok:false,error:String(e.message||e),value:fallback}}};
+      const [healthR,statsR,analyticsR,flagsR,configR,auditR,securityR,ticketsR,broadcastsR,snapshotsR,recentUsageR]=await Promise.all([
+        safe("health",()=>storage.health(),{ok:false,source:"unavailable"}),
+        safe("stats",()=>storage.userStats(),{allTime:0,today:0,week:0,month:0,liveNow:0}),
+        safe("analytics",()=>storage.adminAnalytics(),{totals:{},features:[],symbols:[],intervals:[]}),
+        safe("flags",()=>storage.getFeatureFlags(),{}),
+        safe("config",()=>getAdminRuntime(true),{mode:"normal"}),
+        safe("audit",()=>storage.listAdminAudit(20),[]),
+        safe("security",()=>storage.listSecurityEvents(20),[]),
+        safe("tickets",()=>storage.listSupportTickets(20),[]),
+        safe("broadcasts",()=>storage.listBroadcasts(20),[]),
+        safe("snapshots",()=>storage.listAdminSnapshots(20),[]),
+        safe("recentUsage",()=>storage.recentUsageEvents(40),[])
       ]);
       const perf={uptimeSec:Math.floor((Date.now()-SERVER_METRICS.startedAt)/1000),requests:SERVER_METRICS.requests,errors:SERVER_METRICS.errors,avgLatencyMs:SERVER_METRICS.requests?Math.round(SERVER_METRICS.totalLatencyMs/SERVER_METRICS.requests):0,memoryMb:Math.round(process.memoryUsage().rss/1048576),heapUsedMb:Math.round(process.memoryUsage().heapUsed/1048576),cpu:process.cpuUsage(),lastErrors:SERVER_METRICS.lastErrors.slice(0,12),topRoutes:Array.from(SERVER_METRICS.routeCounts.entries()).sort((a,b)=>b[1]-a[1]).slice(0,10).map(([route,count])=>({route,count}))};
-      const learningState=await Promise.race([learning.status(),new Promise(resolve=>setTimeout(()=>resolve({state:"unknown"}),1200))]).catch(()=>({state:"unknown"}));const phase7Check=(()=>{try{return phase7.selfTest()}catch{return{ok:false}}})();
-      return send(res,200,{ok:true,health,stats:{...stats,...liveVisitorStats()},analytics,flags,config,audit,security,tickets,broadcasts,snapshots,recentUsage,learning:learningState,phase7:phase7Check,performance:perf});
+      const learningState=await Promise.race([learning.status(),new Promise(resolve=>setTimeout(()=>resolve({state:"unknown"}),1200))]).catch(()=>({state:"unknown"}));
+      const phase7Check=(()=>{try{return phase7.selfTest()}catch{return{ok:false}}})();
+      const sections={health:healthR,stats:statsR,analytics:analyticsR,flags:flagsR,config:configR,audit:auditR,security:securityR,tickets:ticketsR,broadcasts:broadcastsR,snapshots:snapshotsR,recentUsage:recentUsageR};
+      const values=Object.fromEntries(Object.entries(sections).map(([k,v])=>[k,v.value]));
+      const errors=Object.fromEntries(Object.entries(sections).filter(([,v])=>!v.ok).map(([k,v])=>[k,v.error]));
+      return send(res,200,{ok:Object.keys(errors).length===0,partial:Object.keys(errors).length>0,errors,...values,stats:{...(values.stats||{}),...liveVisitorStats()},learning:learningState,phase7:phase7Check,performance:perf});
     }
     if(req.method==='GET'&&u.pathname==='/api/admin/providers'){
       const test=async(name,fn)=>{const t=Date.now();try{const value=await fn();return{name,status:"healthy",latencyMs:Date.now()-t,detail:value||null}}catch(e){return{name,status:"error",latencyMs:Date.now()-t,detail:String(e.message||e)}}};
