@@ -10,7 +10,7 @@ const analysis={side:"LONG",score:82,rr:2,regime:"UPTREND"};
 const deriv={available:true,updatedAt:Date.now(),cvdState:"BUYERS CONFIRM",positioning:"OI RISING",orderBook:{imbalance:.12,spreadBps:2}};
 const good=evaluateStandard({
   analysis,derivatives:deriv,
-  dataQuality:{qualityPct:100,candleAgeMs:1000},
+  dataQuality:{qualityPct:100,consensusQualityPct:98,independentSourceCount:2,priceDispersionBps:5,candleAgeMs:1000},
   equity:5000,dayStartEquity:5000,peakEquity:5000,config:cfg
 });
 assert(good.decision==="ELIGIBLE"||good.decision==="ELIGIBLE_WITH_WARNINGS","standard gate");
