@@ -6,7 +6,10 @@ const MIN_ADAPTIVE_SAMPLE=12;
 const MIN_COMPONENT_SAMPLE=20;
 const COMPONENT_ADJUSTMENT_CAP=1.25;
 const TOTAL_COMPONENT_ADJUSTMENT_CAP=4;
-const STATE_VERSION=1;
+const STATE_VERSION=2;
+const MODEL_MIN_UPDATES=30;
+const MODEL_LR=0.06;
+const MODEL_L2=0.0008;
 let state=null;
 let initPromise=null;
 
@@ -25,7 +28,8 @@ function baseState(){
     lastAdjustment:0,
     lastSetupAdjustment:0,
     lastComponentAdjustment:0,
-    calibrationHistory:[]
+    calibrationHistory:[],
+    model:{version:1,bias:0,weights:{},updates:0,logLoss:0,lastUpdateAt:null}
   };
 }
 function ensureState(raw){
@@ -34,6 +38,11 @@ function ensureState(raw){
   if(!s.scoreBuckets||typeof s.scoreBuckets!=="object")s.scoreBuckets={};
   if(!s.componentStats||typeof s.componentStats!=="object")s.componentStats={};
   if(!Array.isArray(s.calibrationHistory))s.calibrationHistory=[];
+  if(!s.model||typeof s.model!=="object")s.model={version:1,bias:0,weights:{},updates:0,logLoss:0,lastUpdateAt:null};
+  if(!s.model.weights||typeof s.model.weights!=="object")s.model.weights={};
+  s.model.bias=Number(s.model.bias)||0;
+  s.model.updates=Number(s.model.updates)||0;
+  s.model.logLoss=Number(s.model.logLoss)||0;
   s.version=STATE_VERSION;
   s.resolved=Number(s.resolved)||0;
   s.wins=Number(s.wins)||0;
@@ -50,6 +59,64 @@ function componentContextKey(pred,name){return [pred.regime||"UNKNOWN",pred.side
 function componentState(pred,comp){
   const max=componentMax(comp.name),value=Number(comp.value)||0;
   return value/max>=0.6?"strong":"weak";
+}
+function featureVector(pred){
+  const d=pred?.features?.derivatives||pred?.derivatives||{};
+  const mtf=pred?.features?.mtf||pred?.mtf||{};
+  const side=pred?.side==="LONG"?1:pred?.side==="SHORT"?-1:0;
+  const regime=String(pred?.regime||"");
+  const cvd=String(d.cvdState||"");
+  const positioning=String(d.positioning||"");
+  const liq=String(d.liquidationBias||"");
+  const rsi=Number(pred?.features?.rsi??pred?.rsi);
+  const adx=Number(pred?.features?.adx??pred?.adx);
+  const volumeZ=Number(pred?.features?.volumeZ??pred?.volumeZ);
+  const score=Number(pred?.score);
+  const rr=Number(pred?.rr);
+  const oi=Number(d.oiChangePct);
+  const ob=Number(d.orderBookImbalance);
+  const taker=Number(d.takerImbalance);
+  return {
+    bias:side,
+    score:Number.isFinite(score)?(score-50)/25:0,
+    adx:Number.isFinite(adx)?Math.min(adx,50)/25:0,
+    rsi:Number.isFinite(rsi)?(rsi-50)/25:0,
+    volume:Number.isFinite(volumeZ)?Math.max(-3,Math.min(3,volumeZ))/3:0,
+    rr:Number.isFinite(rr)?Math.min(rr,3)/3:0,
+    trend:(regime==="UPTREND"?1:regime==="DOWNTREND"?-1:0)*side,
+    mtf4:(mtf.higher==="UPTREND"?1:mtf.higher==="DOWNTREND"?-1:0)*side,
+    mtf15:(mtf.lower==="UPTREND"?1:mtf.lower==="DOWNTREND"?-1:0)*side,
+    cvd:(cvd.includes("BUYERS")||cvd==="BULLISH DIVERGENCE"?1:cvd.includes("SELLERS")||cvd==="BEARISH DIVERGENCE"?-1:0)*side,
+    oi:(positioning.includes("LONG PARTICIPATION")||positioning.includes("SHORT COVERING")?1:positioning.includes("SHORT PARTICIPATION")||positioning.includes("LONG LIQUIDATION")?-1:0)*side,
+    liquidation:(liq==="SHORT LIQS DOMINANT"?1:liq==="LONG LIQS DOMINANT"?-1:0)*side,
+    orderbook:Number.isFinite(ob)?Math.max(-1,Math.min(1,ob))*side:0,
+    taker:Number.isFinite(taker)?Math.max(-1,Math.min(1,taker))*side:0
+  };
+}
+function sigmoid(z){return 1/(1+Math.exp(-Math.max(-20,Math.min(20,z))))}
+function modelPredict(pred){
+  const m=state.model||{},x=featureVector(pred);
+  let z=Number(m.bias)||0;
+  for(const [k,v] of Object.entries(x))z+=(Number(m.weights?.[k])||0)*v;
+  return {probability:sigmoid(z),features:x};
+}
+function updateOnlineModel(pred,outcome){
+  if(outcome!=="WIN"&&outcome!=="LOSS")return;
+  const y=outcome==="WIN"?1:0;
+  const {probability,features}=modelPredict(pred);
+  const m=state.model;
+  const n=Number(m.updates)||0;
+  const lr=MODEL_LR/Math.sqrt(1+n/100);
+  const error=y-probability;
+  m.bias=clamp((Number(m.bias)||0)+lr*error,-3,3);
+  for(const [k,x] of Object.entries(features)){
+    const old=Number(m.weights[k])||0;
+    m.weights[k]=clamp(old+lr*(error*x-MODEL_L2*old),-2.5,2.5);
+  }
+  const p=clamp(probability,0.001,0.999);
+  m.logLoss+=-(y*Math.log(p)+(1-y)*Math.log(1-p));
+  m.updates=n+1;
+  m.lastUpdateAt=Date.now();
 }
 function updateComponentAggregate(pred,outcome){
   const comps=Array.isArray(pred?.features?.components)?pred.features.components:[];
@@ -138,6 +205,7 @@ async function resolve(symbol,interval,candles){
     await storage.resolveLearningPrediction(p.fingerprint,o.outcome,o.resultR);
     if(o.outcome!=="TIMEOUT"){
       updateAggregate(p,o.outcome,o.resultR);
+      updateOnlineModel(p,o.outcome);
       changed=true;
     }
   }
@@ -147,6 +215,8 @@ async function resolve(symbol,interval,candles){
 function recalibrate(a){
   const baseScore=Number(a.score)||0;
   const key=bucketKey(a);
+  const model=modelPredict(a);
+  const modelReady=Number(state?.model?.updates||0)>=MODEL_MIN_UPDATES;
   const b=state?.buckets?.[key];
   let setupAdjustment=0;
   let smoothedWinRate=0.5;
@@ -158,7 +228,11 @@ function recalibrate(a){
   const rawComponentAdjustment=componentSignals.reduce(function(sum,x){return sum+(Number(x.adjustment)||0)},0);
   const componentAdjustment=clamp(rawComponentAdjustment,-TOTAL_COMPONENT_ADJUSTMENT_CAP,TOTAL_COMPONENT_ADJUSTMENT_CAP);
   const totalAdjustment=setupAdjustment+componentAdjustment;
-  const score=clamp(Math.round(baseScore+totalAdjustment),0,92);
+  let score=clamp(Math.round(baseScore+totalAdjustment),0,92);
+  if(modelReady){
+    const modelScore=50+(model.probability-0.5)*100;
+    score=clamp(Math.round(score*0.55+modelScore*0.45),0,92);
+  }
   state.lastAdjustment=totalAdjustment;
   state.lastSetupAdjustment=setupAdjustment;
   state.lastComponentAdjustment=componentAdjustment;
@@ -186,6 +260,9 @@ function recalibrate(a){
     setupAdjustment,
     componentAdjustment,
     adjustment:totalAdjustment,
+    modelReady,
+    modelProbability:modelReady?model.probability:null,
+    modelUpdates:Number(state?.model?.updates)||0,
     eligible,
     componentSignals,
     note:eligible?"Historical outcome calibration is influencing the confluence score.":"Collecting resolved signals before changing the live model."
@@ -193,6 +270,13 @@ function recalibrate(a){
   if(Math.abs(totalAdjustment)>=1){
     a.contributors=a.contributors||[];
     a.contributors.push("adaptive historical calibration "+(totalAdjustment>0?"+":"")+totalAdjustment.toFixed(1));
+  }
+  if(modelReady){
+    a.contributors=a.contributors||[];
+    a.contributors.push("online outcome model calibration");
+    a.thesisParts=a.thesisParts||[];
+    a.thesisParts.push("The online model has enough resolved outcomes to calibrate the rule-based confluence score.");
+    a.thesis=a.thesisParts.join(" ");
   }
   return a;
 }
@@ -255,6 +339,7 @@ async function status(){
     componentMinSamples:MIN_COMPONENT_SAMPLE,
     componentProfiles:Object.keys(state.componentStats||{}).length,
     componentSummary:componentSummary(),
+    model:{ready:Number(state.model?.updates||0)>=MODEL_MIN_UPDATES,updates:Number(state.model?.updates)||0,logLoss:Number(state.model?.logLoss)||0,averageLogLoss:Number(state.model?.updates)?Number(state.model.logLoss)/Number(state.model.updates):null,weights:state.model?.weights||{},lastUpdateAt:state.model?.lastUpdateAt||null},
     calibrationHistory:(state.calibrationHistory||[]).slice(-12),
     lastResolvedAt:state.lastResolvedAt,
     durable:storage.status().durable,
