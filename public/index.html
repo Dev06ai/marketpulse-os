@@ -1873,13 +1873,9 @@ async function loadCoreEnrichment(){
     var d=await api("/api/core-enrichment?"+q,6000);
     if(!d.ok)return;
     if(state.market&&state.market.symbol===d.symbol&&state.market.interval===d.interval){
+      if(d.analysis)state.market.analysis=d.analysis;
       state.market.derivatives=d.derivatives||state.market.derivatives;
-      state.market.analysis=Object.assign({},state.market.analysis,{
-        mtf:Object.assign({},state.market.analysis?.mtf||{},{
-          higher:d.higher?.side||state.market.analysis?.mtf?.higher||null,
-          lower:d.lower?.side||state.market.analysis?.mtf?.lower||null
-        })
-      });
+      if(d.learning)state.market.learning=d.learning;
       renderMarket();
     }
   }catch{}
