@@ -392,7 +392,42 @@ button,input,select,textarea{font:inherit}.wrap{width:min(1440px,calc(100% - 26p
   <div id="chartModal" class="modal" aria-hidden="true"><div class="modalCard"><div class="modalTop"><h3>Chart settings</h3><button id="chartClose" class="modalClose">×</button></div><div class="sub" style="margin-top:6px">Choose a visual preset or customize the candle colors. Settings persist in this browser.</div><div class="presetGrid" id="presetGrid"><button class="preset" data-preset="aurora"><div class="preview" style="background:#07131a;--pc1:#9BE7C4;--pc2:#FFB38A"><i></i><i></i><i></i><i></i></div><b>Aurora</b><small>Mint / ember</small></button><button class="preset" data-preset="lavender"><div class="preview" style="background:#0e1018;--pc1:#E5D0FF;--pc2:#FFB8D8"><i></i><i></i><i></i><i></i></div><b>Lavender</b><small>Soft / premium</small></button><button class="preset" data-preset="forest"><div class="preview" style="background:#08120f;--pc1:#A8E6CF;--pc2:#F8C6A0"><i></i><i></i><i></i><i></i></div><b>Forest</b><small>Mint / coral</small></button><button class="preset" data-preset="classic"><div class="preview" style="background:#090909;--pc1:#22c55e;--pc2:#ef4444"><i></i><i></i><i></i><i></i></div><b>Classic</b><small>Green / red</small></button><button class="preset" data-preset="mono"><div class="preview" style="background:#090909;--pc1:#f1f5f9;--pc2:#64748b"><i></i><i></i><i></i><i></i></div><b>Mono</b><small>White / slate</small></button></div><div class="colorGrid"><div class="colorItem"><span>Bull candle</span><input id="bullColor" type="color"></div><div class="colorItem"><span>Bear candle</span><input id="bearColor" type="color"></div><div class="colorItem"><span>Show volume</span><input id="showVolume" type="checkbox" checked></div><div class="colorItem"><span>Show EMA</span><input id="showEma" type="checkbox" checked></div></div><div class="axisNote">The chart keeps the right-side price scale, current-price marker, volume context and EMA optional.</div><div class="modalFoot"><button id="chartCancel" class="btn">Cancel</button><button id="chartApply" class="btn primary">Apply</button></div></div></div>
 
   <div class="foot">MarketPulse is educational decision-support software. It does not place orders, manage funds, or guarantee outcomes. Adaptive learning calibrates from resolved historical examples; it is not a promise of future performance.</div>
-</main>
+<section id="mp7-panel" aria-label="Phase 7 trader analytics">
+  <div class="mp7-head">
+    <div>
+      <div class="mp7-title">PHASE 7 · TRADER ANALYTICS &amp; QUALITY</div>
+      <div class="mp7-sub">Personal performance layer — descriptive analytics, data quality, and journal portability.</div>
+    </div>
+    <div class="mp7-actions">
+      <button id="mp7Refresh" class="mp7-btn">Refresh</button>
+      <button id="mp7Export" class="mp7-btn">Export Journal CSV</button>
+    </div>
+  </div>
+  <div class="mp7-body">
+    <div class="mp7-health"><span id="mp7HealthDot" class="mp7-dot"></span><span id="mp7HealthText">Running Phase 7 health check…</span></div>
+    <div id="mp7Kpis" class="mp7-grid"></div>
+    <div class="mp7-cols mp7-section">
+      <div class="mp7-card">
+        <div class="mp7-section-title">CURRENT INSIGHTS</div>
+        <div id="mp7Insights" class="mp7-insights"></div>
+      </div>
+      <div class="mp7-card">
+        <div class="mp7-section-title">DATA QUALITY</div>
+        <div id="mp7Quality" class="mp7-quality"></div>
+      </div>
+    </div>
+    <div class="mp7-cols mp7-section">
+      <div class="mp7-card">
+        <div class="mp7-section-title">BY ASSET</div>
+        <div id="mp7AssetTable" class="mp7-empty">No journal data yet.</div>
+      </div>
+      <div class="mp7-card">
+        <div class="mp7-section-title">BY SETUP</div>
+        <div id="mp7SetupTable" class="mp7-empty">No journal data yet.</div>
+      </div>
+    </div>
+  </div>
+</section></main>
 <script>
 (function(){
 "use strict";
@@ -1164,40 +1199,5 @@ setInterval(function(){if(document.visibilityState==="visible")loadPhase7()},600
 })();
 </script>
 
-<section id="mp7-panel" aria-label="Phase 7 trader analytics">
-  <div class="mp7-head">
-    <div>
-      <div class="mp7-title">PHASE 7 · TRADER ANALYTICS &amp; QUALITY</div>
-      <div class="mp7-sub">Personal performance layer — descriptive analytics, data quality, and journal portability.</div>
-    </div>
-    <div class="mp7-actions">
-      <button id="mp7Refresh" class="mp7-btn">Refresh</button>
-      <button id="mp7Export" class="mp7-btn">Export Journal CSV</button>
-    </div>
-  </div>
-  <div class="mp7-body">
-    <div class="mp7-health"><span id="mp7HealthDot" class="mp7-dot"></span><span id="mp7HealthText">Running Phase 7 health check…</span></div>
-    <div id="mp7Kpis" class="mp7-grid"></div>
-    <div class="mp7-cols mp7-section">
-      <div class="mp7-card">
-        <div class="mp7-section-title">CURRENT INSIGHTS</div>
-        <div id="mp7Insights" class="mp7-insights"></div>
-      </div>
-      <div class="mp7-card">
-        <div class="mp7-section-title">DATA QUALITY</div>
-        <div id="mp7Quality" class="mp7-quality"></div>
-      </div>
-    </div>
-    <div class="mp7-cols mp7-section">
-      <div class="mp7-card">
-        <div class="mp7-section-title">BY ASSET</div>
-        <div id="mp7AssetTable" class="mp7-empty">No journal data yet.</div>
-      </div>
-      <div class="mp7-card">
-        <div class="mp7-section-title">BY SETUP</div>
-        <div id="mp7SetupTable" class="mp7-empty">No journal data yet.</div>
-      </div>
-    </div>
-  </div>
-</section></body>
+</body>
 </html>
