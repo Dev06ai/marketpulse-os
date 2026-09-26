@@ -705,7 +705,7 @@ async function loadCore(){
   try{
     var d=await api("/api/core?symbol="+encodeURIComponent(state.symbol)+"&interval="+encodeURIComponent(state.interval),9000);
     state.market=d;setStatus("Core market intelligence connected","ok");$("dataState").textContent="Live";renderMarket();
-    loadScan();loadCycle();
+    loadEdge();loadScan();loadCycle();
   }catch(e){
     setStatus("Core market connection failed. The interface is running; retrying automatically.","warn");$("dataState").textContent="Retry";
     $("thesis").textContent="The application is healthy, but the market data provider did not respond.";
@@ -725,7 +725,8 @@ $("symbol").addEventListener("change",function(){state.symbol=this.value;loadCor
 $("interval").addEventListener("change",function(){state.interval=this.value;loadCore()});
 document.querySelectorAll("[data-filter]").forEach(function(b){b.addEventListener("click",function(){document.querySelectorAll("[data-filter]").forEach(function(x){x.classList.remove("on")});b.classList.add("on");state.filter=b.dataset.filter;renderScanner()})});
 document.querySelectorAll("input,select").forEach(function(el){el.addEventListener("input",calc);el.addEventListener("change",calc)});
-$("saveJournal").addEventListener("click",function(){var a=state.market&&state.market.analysis;state.journal.push({asset:$("jAsset").value,side:$("jSide").value,entry:+$("jEntry").value||0,stop:+$("jStop").value||0,target:+$("jTarget").value||0,r:+$("jR").value||0,note:$("jNote").value.trim(),regime:a&&a.regime||"—",status:a&&a.status||"—",score:a&&a.score||0,ts:Date.now()});state.journal=state.journal.slice(-100);localStorage.setItem("mp-stable-journal",JSON.stringify(state.journal));renderJournal();renderBrainInsights();syncMemory()});
+$("saveJournal").addEventListener("click",function(){var a=state.market&&state.market.analysis;state.journal.push({asset:$("jAsset").value,side:$("jSide").value,entry:+$("jEntry").value||0,stop:+$("jStop").value||0,target:+$("jTarget").value||0,r:+$("jR").value||0,note:$("jNote").value.trim(),regime:a&&a.regime||"—",status:a&&a.status||"—",score:a&&a.score||0,ts:Date.now()});state.journal=state.journal.slice(-100);localStorage.setItem("mp-stable-journal",JSON.stringify(state.journal));renderJournal();renderBrainInsights();syncMemory();saveServerJournal(state.journal[state.journal.length-1])});
+$("saveEdgeConfig").addEventListener("click",saveEdgeConfig);
 
 function deviceId(){
   var k="mp-device-id",id=localStorage.getItem(k);
@@ -789,7 +790,7 @@ window.addEventListener("resize",function(){if(state.market){drawMain();renderCy
 
 populateSymbols();$("interval").value=state.interval;renderJournal();renderBrainInsights();renderAlerts();calc();
 setStatus("MarketPulse ready. Connecting to live market data…");
-loadCore();syncMemory();
+loadCore();loadEdge();syncMemory();
 setInterval(function(){if(document.visibilityState==="visible")loadCore()},45000);
 })();
 </script>
