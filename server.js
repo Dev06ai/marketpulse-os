@@ -1,6 +1,7 @@
 const http=require('http'),fs=require('fs'),path=require('path'),{analyze,backtest,backtestBySetup,walkForwardBacktest}=require('./market-engine');
 const storage=require('./storage');
 const learning=require('./learning');
+const phase4=require('./phase4');
 const WebSocket=require('ws');
 const PORT=Number(process.env.PORT||3000);
 const SYMBOLS=(process.env.SYMBOLS||'BTCUSDT,ETHUSDT,SOLUSDT,BNBUSDT,XRPUSDT,DOGEUSDT,ADAUSDT').split(',').map(s=>s.trim()).filter(Boolean);
@@ -9,12 +10,13 @@ const labels={BTCUSDT:'BTC',ETHUSDT:'ETH',SOLUSDT:'SOL',BNBUSDT:'BNB',XRPUSDT:'X
 const KRAKEN_PAIRS={BTCUSDT:'XBTUSD',ETHUSDT:'ETHUSD',SOLUSDT:'SOLUSD',BNBUSDT:'BNBUSD',XRPUSDT:'XRPUSD',DOGEUSDT:'DOGEUSD',ADAUSDT:'ADAUSD'};
 const CACHE=new Map(); const TTL=25000;
 const SCAN_CACHE=new Map(); const SCAN_TTL=20000;
-const PHASE2_VERSION=2; const PHASE3_VERSION=3;
+const PHASE2_VERSION=2; const PHASE3_VERSION=3; const PHASE4_VERSION=4;
 const OPENAI_API_KEY=process.env.OPENAI_API_KEY||"";
 const OPENAI_MODEL=process.env.OPENAI_MODEL||"gpt-5.6-luna";
 const AI_LIMIT_MS=8000; const AI_CALLS=new Map();
 const DATA_TIMEOUT_MS=7000;
 function timeoutSignal(ms){return typeof AbortSignal!=="undefined"&&AbortSignal.timeout?AbortSignal.timeout(ms):undefined;}
+function requestDevice(req){return String(req.headers["x-marketpulse-device"]||"00000000-0000-0000-0000-000000000000").slice(0,128)}
 
 function mins(interval){return ({'15m':15,'1h':60,'4h':240,'1d':1440})[interval]||60}
 async function getBinance(symbol,interval){
@@ -418,16 +420,24 @@ const server=http.createServer(async(req,res)=>{
     }
     if(req.method==='GET'&&u.pathname==='/api/memory/status')return send(res,200,storage.status());
     if(req.method==='GET'&&u.pathname==='/api/learning/status')return send(res,200,await learning.status());
-    if(req.method==='GET'&&u.pathname==='/api/config')return send(res,200,{symbols:SYMBOLS,labels,intervals:['15m','1h','4h','1d'],memory:storage.status(),learning:{state:'LOADING'}});if(req.method==='POST'&&u.pathname==='/api/ai'){
+    if(req.method==='GET'&&u.pathname==='/api/config')return send(res,200,{symbols:SYMBOLS,labels,intervals:['15m','1h','4h','1d'],memory:storage.status(),learning:{state:'LOADING'},phase4:PHASE4_VERSION});if(req.method==='POST'&&u.pathname==='/api/ai'){
       if(!aiAllowed(req)) return send(res,429,{error:"Slow down for a few seconds."});
       let raw=""; for await(const chunk of req) raw+=chunk; let body={}; try{body=JSON.parse(raw||"{}")}catch{return send(res,400,{error:"Invalid JSON"})}
       const mode=body.mode==="trade"?"trade":"market";
       const q=String(body.question||"").slice(0,1800);
       const market=body.market||{}; const trade=body.trade||{}; const traderProfile=body.traderProfile||{};
+      let edgeContext={};try{edgeContext=await phase4.snapshot(requestDevice(req),market.symbol||"BTCUSDT",market.interval||"1h",market)||{}}catch{}
       const profileText="PERSONAL TRADER PROFILE (descriptive, small-sample aware):\n"+JSON.stringify(traderProfile);
+      const edgeText="PHASE 4 LIVE EDGE CONTEXT:\n"+JSON.stringify({
+        signal:edgeContext.signal||null,
+        evidence:edgeContext.evidence||null,
+        risk:edgeContext.risk||null,
+        paper:edgeContext.paper?{trades:edgeContext.paper.trades,winRate:edgeContext.paper.winRate,netR:edgeContext.paper.netR,realizedPnl:edgeContext.paper.realizedPnl,openRiskPct:edgeContext.paper.openRiskPct}:null,
+        health:edgeContext.health||null
+      });
       const userPrompt=mode==="trade"
-        ? ("Review this trade plan/trade.\nMARKET CONTEXT:\n"+JSON.stringify(market)+"\nTRADE:\n"+JSON.stringify(trade)+"\n"+profileText+"\nUSER QUESTION:\n"+q)
-        : ("Explain the current market context.\nMARKET:\n"+JSON.stringify(market)+"\n"+profileText+"\nUSER QUESTION:\n"+q);
+        ? ("Review this trade plan/trade.\nMARKET CONTEXT:\n"+JSON.stringify(market)+"\nTRADE:\n"+JSON.stringify(trade)+"\n"+profileText+"\n"+edgeText+"\nUSER QUESTION:\n"+q)
+        : ("Explain the current market context.\nMARKET:\n"+JSON.stringify(market)+"\n"+profileText+"\n"+edgeText+"\nUSER QUESTION:\n"+q);
       try{return send(res,200,await callOpenAI(aiSystem(),userPrompt))}
       catch(e){
         const msg=String(e.message||"AI request failed");
@@ -452,6 +462,7 @@ const server=http.createServer(async(req,res)=>{
         let learned=null;
         try{learned=await Promise.race([learning.process(symbol,interval,candles,analysis),new Promise(resolve=>setTimeout(()=>resolve(null),650))])}catch{}
         if(learned?.analysis)analysis=learned.analysis;
+        try{await Promise.race([phase4.updateLive(requestDevice(req),symbol,interval,analysis,candles),new Promise(resolve=>setTimeout(resolve,700))])}catch{}
         const learningStatus=await Promise.race([learning.status(),new Promise(resolve=>setTimeout(()=>resolve({phase:2,state:'COLLECTING',durable:storage.status().durable,resolved:0}),500))]).catch(()=>({phase:2,state:'COLLECTING',durable:storage.status().durable,resolved:0}));
         const sample=candles.slice(-600);
         const setupStats=require("./market-engine").backtestBySetup(sample);
@@ -461,6 +472,7 @@ const server=http.createServer(async(req,res)=>{
           source:'Kraken spot',
           phase2:PHASE2_VERSION,
           phase3:PHASE3_VERSION,
+          phase4:PHASE4_VERSION,
           dataQuality:{candleCount:candles.length,candleAgeMs:candles.length?Math.max(0,Date.now()-Number(candles[candles.length-1].t)):null,derivativesAvailable:Boolean(deriv?.available),derivativesCompleteness:deriv?.completeness||null},
           updatedAt:Date.now()
         });
@@ -489,6 +501,26 @@ const server=http.createServer(async(req,res)=>{
         }catch(e){return{symbol,label:labels[symbol]||symbol,status:'WAITING',side:'WAIT',score:0,error:e.message}}
       }));
       const payload={ok:true,interval,rows,updatedAt:Date.now(),cacheTtlMs:SCAN_TTL};SCAN_CACHE.set(interval,{ts:Date.now(),payload});return send(res,200,payload);
+    }
+
+
+    if(req.method==='GET'&&u.pathname==='/api/edge'){
+      const symbol=(u.searchParams.get('symbol')||'BTCUSDT').toUpperCase(),interval=u.searchParams.get('interval')||'1h';
+      try{return send(res,200,await phase4.snapshot(requestDevice(req),symbol,interval,null))}catch(e){return send(res,503,{ok:false,error:e.message})}
+    }
+    if(req.method==='GET'&&u.pathname==='/api/edge/health'){
+      try{const x=await phase4.snapshot(requestDevice(req),null,null,null);return send(res,200,{ok:true,health:x.health,paper:x.paper,personalEdge:x.personalEdge,updatedAt:x.updatedAt})}catch(e){return send(res,503,{ok:false,error:e.message})}
+    }
+    if(req.method==='POST'&&u.pathname==='/api/edge/config'){
+      let raw="";for await(const chunk of req)raw+=chunk;let body={};try{body=JSON.parse(raw||"{}")}catch{return send(res,400,{error:"Invalid JSON"})}
+      try{return send(res,200,await phase4.setConfig(requestDevice(req),{account:body.account,riskPct:body.riskPct,minRR:body.minRR,maxOpenRiskPct:body.maxOpenRiskPct}))}catch(e){return send(res,400,{error:e.message})}
+    }
+    if(req.method==='POST'&&u.pathname==='/api/edge/journal'){
+      let raw="";for await(const chunk of req)raw+=chunk;let body={};try{body=JSON.parse(raw||"{}")}catch{return send(res,400,{error:"Invalid JSON"})}
+      try{const row=await phase4.addJournal(requestDevice(req),body.entry||body);return send(res,200,{ok:true,row})}catch(e){return send(res,400,{error:e.message})}
+    }
+    if(req.method==='GET'&&u.pathname==='/api/edge/events'){
+      try{const x=await phase4.snapshot(requestDevice(req),null,null,null);return send(res,200,{ok:true,events:x.events||[],updatedAt:x.updatedAt})}catch(e){return send(res,503,{ok:false,error:e.message})}
     }
 
     if(req.method==='GET'&&u.pathname==='/api/replay'){
@@ -544,7 +576,7 @@ const server=http.createServer(async(req,res)=>{
         checks.liquidations=Boolean(Array.isArray(d?.series?.liq)?d.series.liq.length>0:Boolean(d&&d.liquidationTotal!=null));
         if(!checks.derivatives)derivativesError="No derivatives provider returned usable data";
       }catch(e){derivativesError=String(e.message||e)}
-      return send(res,200,{ok:checks.server&&checks.marketEngine&&checks.learning&&checks.memory&&checks.marketData,checks,marketError,derivativesError,phase2:PHASE2_VERSION,phase3:PHASE3_VERSION,routes:{core:true,coreScan:true,coreFlow:true,cycle:true,ai:true,memory:true,learning:true,replay:true,dna:true,research:true},timestamp:Date.now()});
+      return send(res,200,{ok:checks.server&&checks.marketEngine&&checks.learning&&checks.memory&&checks.marketData,checks,marketError,derivativesError,phase2:PHASE2_VERSION,phase3:PHASE3_VERSION,phase4:PHASE4_VERSION,routes:{core:true,coreScan:true,coreFlow:true,cycle:true,ai:true,memory:true,learning:true,replay:true,dna:true,research:true,edge:true,edgeHealth:true,edgeConfig:true,edgeJournal:true},timestamp:Date.now()});
     }
     if(req.method==='GET'&&u.pathname==='/api/live'){
       const symbol=(u.searchParams.get('symbol')||'BTCUSDT').toUpperCase(),interval=u.searchParams.get('interval')||'1h';
