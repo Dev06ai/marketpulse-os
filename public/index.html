@@ -2640,8 +2640,9 @@ async function loadCore(){
     deferTask(loadDataFabric,800);
     deferTask(loadPropFirmGuard,1000);
     deferTask(loadCoreAnalytics,1800);
+    deferTask(loadFinalDecision,2200);
     if(!state.secondaryStarted)queueSecondaryBoot();
-    else if(state.activeView==="overview"){deferTask(loadScan,120);deferTask(loadCycle,180);deferTask(loadCoreEnrichment,250);deferTask(loadCoreAnalytics,600)}
+    else if(state.activeView==="overview"){deferTask(loadScan,120);deferTask(loadCycle,180);deferTask(loadCoreEnrichment,250);deferTask(loadCoreAnalytics,600);deferTask(loadFinalDecision,900)}
   }catch(e){
     state.bootRetry=Math.min((state.bootRetry||0)+1,5);
     setStatus("Market source is waking up — price feed stays active and will retry automatically…","warn");$("dataState").textContent="Retrying";
