@@ -192,11 +192,15 @@ class BybitTestnetAdapter{
     return this.privateRequest("POST","/v5/order/cancel",{category:"linear",symbol,orderId:externalOrderId});
   }
   async openOrders(symbol){
-    const r=await this.privateRequest("GET","/v5/order/realtime",{category:"linear",symbol,openOnly:0,limit:50});
+    const params={category:"linear",openOnly:0,limit:50};
+    if(symbol)params.symbol=symbol;
+    const r=await this.privateRequest("GET","/v5/order/realtime",params);
     return Array.isArray(r.list)?r.list:[];
   }
   async positions(symbol){
-    const r=await this.privateRequest("GET","/v5/position/list",{category:"linear",symbol});
+    const params={category:"linear"};
+    if(symbol)params.symbol=symbol;
+    const r=await this.privateRequest("GET","/v5/position/list",params);
     return Array.isArray(r.list)?r.list:[];
   }
 }
@@ -248,6 +252,9 @@ async function marketGate(plan,state){
   if(entry===null||stop===null||target===null||riskDistance<=0)return {allowed:false,reason:"INVALID LEVELS"};
   if(rr<1.5)return {allowed:false,reason:"R:R BELOW 1.50"};
   if(!Number.isFinite(qty)||qty<=0)return {allowed:false,reason:"INVALID POSITION SIZE"};
+  const tradeRiskCash=Math.abs(entry-stop)*qty;
+  const tradeRiskPct=tradeRiskCash/Math.max(1,state.config.account)*100;
+  if(tradeRiskCash>riskCash+1e-9)return {allowed:false,reason:"PER-TRADE RISK EXCEEDED",riskCash,tradeRiskCash,tradeRiskPct,allowedQty:riskDistance>0?riskCash/riskDistance:null};
   if(state.config.mode==="TESTNET"&&!adapter.configured())return {allowed:false,reason:"TESTNET API CREDENTIALS NOT CONFIGURED"};
   if(state.control.killSwitch)return {allowed:false,reason:"KILL SWITCH ACTIVE"};
   if(state.config.mode==="TESTNET"&&!state.control.armed)return {allowed:false,reason:"TESTNET EXECUTION NOT ARMED"};
@@ -274,12 +281,14 @@ async function marketGate(plan,state){
       }
       const portfolioGate=await phase6.executionGate({symbol,side:p.side,entry:price,stop:Number(formatPrice(stop,tick)),target:Number(formatPrice(target,tick)),qty,riskCash},state);
       if(!portfolioGate.allowed)return Object.assign({allowed:false},portfolioGate);
-      return {allowed:true,reason:"PASS",entry:price,stop:Number(formatPrice(stop,tick)),target:Number(formatPrice(target,tick)),qty,riskCash,rr,markPrice:mark,driftBps:mark?Math.abs(price-mark)/mark*10000:null,instrument:inst,portfolio:portfolioGate};
+      const finalRiskCash=Math.abs(Number(formatPrice(entry,tick))-Number(formatPrice(stop,tick)))*qty;
+      if(finalRiskCash>riskCash+1e-9)return {allowed:false,reason:"PER-TRADE RISK EXCEEDED AFTER EXCHANGE ROUNDING",riskCash,tradeRiskCash:finalRiskCash,tradeRiskPct:finalRiskCash/Math.max(1,state.config.account)*100,allowedQty:riskDistance>0?riskCash/riskDistance:null};
+      return {allowed:true,reason:"PASS",entry:price,stop:Number(formatPrice(stop,tick)),target:Number(formatPrice(target,tick)),qty,riskCash,tradeRiskCash:finalRiskCash,tradeRiskPct:finalRiskCash/Math.max(1,state.config.account)*100,rr,markPrice:mark,driftBps:mark?Math.abs(price-mark)/mark*10000:null,instrument:inst,portfolio:portfolioGate};
     }catch(e){return {allowed:false,reason:"MARKET VALIDATION FAILED: "+e.message}}
   }
   const portfolioGate=await phase6.executionGate({symbol,side:p.side,entry,stop,target,qty,riskCash,intentId:p.id},state);
   if(!portfolioGate.allowed)return Object.assign({allowed:false},portfolioGate);
-  return {allowed:true,reason:"PASS",entry,stop,target,qty,riskCash,rr,markPrice:null,driftBps:null,portfolio:portfolioGate};
+  return {allowed:true,reason:"PASS",entry,stop,target,qty,riskCash,tradeRiskCash:Math.abs(entry-stop)*qty,tradeRiskPct:Math.abs(entry-stop)*qty/Math.max(1,state.config.account)*100,rr,markPrice:null,driftBps:null,portfolio:portfolioGate};
 }
 
 function findOrder(state,id){
@@ -489,12 +498,10 @@ async function reconcile(){
   }
   if(!adapter.configured())throw new Error("Bybit testnet credentials not configured");
   const symbols=Array.from(new Set(activeOrders(state).concat(activePositions(state)).map(x=>x.symbol).filter(Boolean)));
-  const externalOrders=[];
-  for(const sym of symbols)externalOrders.push(...await adapter.openOrders(sym));
+  const externalOrders=await adapter.openOrders();
   const localOpen=activeOrders(state).filter(x=>x.externalOrderId);
   const openMismatch=localOpen.some(x=>!externalOrders.some(e=>e.orderId===x.externalOrderId)) || externalOrders.some(e=>!localOpen.some(x=>x.externalOrderId===e.orderId));
-  const externalPositions=[];
-  for(const sym of symbols)externalPositions.push(...await adapter.positions(sym));
+  const externalPositions=await adapter.positions();
   const extPosMap=new Map(externalPositions.map(p=>[String(p.symbol)+":"+String(p.positionIdx??0),Math.abs(finite(p.size,0)||0)]));
   const localPosMap=new Map(activePositions(state).map(p=>[String(p.symbol)+":"+String(p.positionIdx??0),Math.abs(finite(p.qty,0)||0)]));
   let positionMismatch=false;
