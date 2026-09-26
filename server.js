@@ -482,12 +482,13 @@ const server=http.createServer(async(req,res)=>{
         if(u.pathname==='/api/auth/register'){
           const key="register:"+String(req.socket?.remoteAddress||"unknown")+":"+String(body.email||"").toLowerCase();
           const user=await auth.register(body.email,body.password,key);
-          const key="login:"+String(req.socket?.remoteAddress||"unknown")+":"+String(body.email||"").toLowerCase();
-        const logged=await auth.login(body.email,body.password,key);
+          const loginKey="login:"+String(req.socket?.remoteAddress||"unknown")+":"+String(body.email||"").toLowerCase();
+          const logged=await auth.login(body.email,body.password,loginKey);
           res.setHeader("Set-Cookie",logged.setCookie);
           return send(res,201,{ok:true,user:logged.user});
         }
-        const logged=await auth.login(body.email,body.password);
+        const key="login:"+String(req.socket?.remoteAddress||"unknown")+":"+String(body.email||"").toLowerCase();
+        const logged=await auth.login(body.email,body.password,key);
         res.setHeader("Set-Cookie",logged.setCookie);
         return send(res,200,{ok:true,user:logged.user});
       }catch(e){
