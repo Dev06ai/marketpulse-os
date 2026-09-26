@@ -775,7 +775,7 @@ function renderCycle(){
   $("cycleText").textContent=phase+" · long-term cycle proxy";$("cycleScore").textContent=Math.round(s)+"/100";$("cycleDetail").textContent="Daily history · "+c.length+" bars";
   $("ddValue").textContent=pct((close[close.length-1]/Math.max.apply(null,close)-1)*100);$("ddDetail").textContent="Current vs visible high";
   $("cycleChart").__values=score;$("ddChart").__values=dd;$("cycleChart").__kind="Cycle score";$("ddChart").__kind="Drawdown";
-  cycleChart=state.cycleChart;drawSimpleSeries("cycleChart",[{name:"Cycle",values:score,color:"#22D3EE"}],150);drawSimpleSeries("ddChart",[{name:"High-water",values:dd,color:"#F472B6"}],150);bindMiniHover("cycleChart","cycleDetail");bindMiniHover("ddChart","ddDetail");
+  drawSimpleSeries("cycleChart",[{name:"Cycle",values:score,color:"#22D3EE"}],150);drawSimpleSeries("ddChart",[{name:"High-water",values:dd,color:"#F472B6"}],150);bindMiniHover("cycleChart","cycleDetail");bindMiniHover("ddChart","ddDetail");
 }
 
 function renderMarket(){
