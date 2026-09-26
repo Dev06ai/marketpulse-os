@@ -1123,6 +1123,11 @@ const server=http.createServer(async(req,res)=>{
           premium:Number(u.searchParams.get('premium')),
           payout:Number(u.searchParams.get('payout')),
           fee:Number(u.searchParams.get('fee')||0),
+          venue:String(u.searchParams.get('venue')||"GENERIC").toUpperCase(),
+          strikePrice:Number(u.searchParams.get('strikePrice')),
+          indexPrice:Number(u.searchParams.get('indexPrice')||consensus?.medianPrice),
+          expirationAt:Number(u.searchParams.get('expirationAt')),
+          strictContractContext:String(u.searchParams.get('strictContractContext')||"false")!=="false",
           config
         });
         return send(res,200,{ok:true,symbol,interval,analysis,derivatives:deriv,consensus,gate,updatedAt:Date.now()});
