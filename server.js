@@ -1065,6 +1065,18 @@ const server=http.createServer(async(req,res)=>{
         return send(res,200,payload);
       }catch(e){return send(res,503,{ok:false,error:String(e.message||e),source:'market data'})}
     }
+    if(req.method==='GET'&&u.pathname==='/api/core-analytics'){
+      const symbol=(u.searchParams.get('symbol')||'BTCUSDT').toUpperCase(),interval=u.searchParams.get('interval')||'1h';
+      if(!SYMBOLS.includes(symbol))return send(res,400,{ok:false,error:'Unsupported symbol'});
+      const key=String(symbol)+"|"+String(interval),hit=CORE_ANALYTICS_CACHE.get(key);
+      if(hit)return send(res,200,{ok:true,symbol,interval,...hit.payload,updatedAt:hit.ts,ready:true});
+      try{
+        const candles=await klines(symbol,interval);
+        if(!candles||candles.length<240)return send(res,200,{ok:true,symbol,interval,ready:false,backtest:null,validation:null,setupStats:null});
+        const analytics=queueCoreAnalytics(symbol,interval,candles);
+        return send(res,200,{ok:true,symbol,interval,ready:Boolean(analytics),...(analytics||{backtest:null,validation:null,setupStats:null}),ready:Boolean(analytics)});
+      }catch(e){return send(res,200,{ok:false,ready:false,error:String(e.message||e)})}
+    }
     if(req.method==='GET'&&u.pathname==='/api/data-fabric'){
       const symbol=(u.searchParams.get('symbol')||'BTCUSDT').toUpperCase(),interval=u.searchParams.get('interval')||'1h';
       if(!SYMBOLS.includes(symbol))return send(res,400,{ok:false,error:'Unsupported symbol'});
