@@ -76,3 +76,6 @@ Version 2.5 adds an owner-only command center with private analytics, live activ
 - Historical replay from candle data deliberately does not invent historical CVD/OI/liquidation values that were not present in the dataset.
 
 No claim is made that any signal is safe, certain or guaranteed to pass a prop-firm evaluation. The gate is designed to block trades when required evidence or account headroom is missing.
+
+- On startup, MarketPulse can run a non-blocking historical warm-up for BTC/ETH. It only starts when the persisted online model has fewer than 150 updates, so restarts do not repeatedly retrain the same replay keys. Override or disable with RESEARCH_WARMUP_* environment variables.
+- Historical replay now uses public futures candle buy/sell volume as a CVD proxy and Binance historical open-interest data where available. Liquidation history is not fabricated; live liquidation flow remains from the Bybit stream, with Kraken/other fallbacks used where applicable.
