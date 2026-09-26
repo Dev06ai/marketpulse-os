@@ -2602,18 +2602,25 @@ function queueSecondaryBoot(){
 
 async function renderFinalDecision(d){
   if(!d)return;
-  var m=d.market||{},ev=d.evidence||{},lv=d.levels||{},data=d.data||{},pg=d.propGate||{},v=d.phase11_13||{},gate=d.deploymentGate||{};
-  var side=m.side==="LONG"?"LONG":m.side==="SHORT"?"SHORT":"WAIT";
+  var m=d.market||{},ev=d.evidence||{},lv=d.levels||{},data=d.data||{},pg=d.propGate||{},v=d.phase11_13||{},gate=d.deploymentGate||{},stability=d.signalStability||{};
+  // The UI must never present a directional trade unless the server explicitly confirms it.
+  var side=d.liveSignalEligible===true&&d.state==="READY"&&(d.action==="LONG"||d.action==="SHORT")
+    ?String(d.action).toUpperCase():"WAIT";
   var accent=side==="LONG"?"#4ade80":side==="SHORT"?"#f87171":"#c084fc";
   var glow=side==="LONG"?"rgba(74,222,128,.18)":side==="SHORT"?"rgba(248,113,133,.18)":"rgba(192,132,252,.20)";
   $("mCall").textContent=side==="WAIT"?"NO TRADE":side;
   $("mCall").style.color=accent;$("mCall").style.textShadow="0 0 20px "+glow;
   $("mBias").textContent=side==="LONG"?"Bullish setup":side==="SHORT"?"Bearish setup":"Neutral / waiting";$("mBias").style.color=accent;
   $("mScore").textContent=fmt(m.confluenceScore);
-  $("thesisTitle").textContent=m.status==="WAITING"?"No trade":(m.type||"Market context");
-  $("thesisState").textContent=(d.state||"WAITING")+" · "+(m.confluenceLabel||"");
+  $("thesisTitle").textContent=side==="WAIT"
+    ?(stability.state==="CONFIRMING"?"CONFIRMING SETUP":(gate.state==="BLOCKED"?"NO TRADE":"NO TRADE"))
+    :(m.type||"Market context");
+  $("thesisState").textContent=(stability.state==="CONFIRMING"?"CONFIRMING · ":"")+(d.state||"WAITING")+" · "+(m.confluenceLabel||"");
   $("thesisScore").textContent=fmt(m.confluenceScore)+"/100";
-  $("thesis").textContent=Array.isArray(ev.thesis)?ev.thesis.join(" "):"Decision engine context available.";
+  var thesisText=Array.isArray(ev.thesis)?ev.thesis.join(" "):"Decision engine context available.";
+  if(stability.state==="CONFIRMING")thesisText+=" Signal confirmation: "+Number(stability.confirmations||0)+"/"+Number(stability.required||2)+" consecutive live checks.";
+  if(d.stale)thesisText+=" Live decision refresh failed; directional output is intentionally suppressed until fresh data returns.";
+  $("thesis").textContent=thesisText;
   $("primary").textContent=ev.primaryScenario||"—";$("alternate").textContent=ev.invalidationScenario||"—";
   $("thesisChips").innerHTML=[["HTF",ev.mtfScore!=null?fmt(ev.mtfScore)+"/100":null],["Flow",ev.flowScore!=null?fmt(ev.flowScore)+"/100":null],["Data",data.score!=null?fmt(data.score)+"/100":null],["Risk",pg.decision||"NOT EVALUATED"]].map(function(x){return'<span class="chip c">'+x[0]+": "+(x[1]||"—")+"</span>"}).join("");
   $("quality").textContent=fmt(m.confluenceScore)+"/100";$("quality").style.color=accent;
@@ -2628,7 +2635,7 @@ async function renderFinalDecision(d){
   if($("deploymentReason"))$("deploymentReason").textContent=gate.reason||"Signals remain decision-support only until the validation and live-data gates pass.";
   if($("validationChip"))$("validationChip").textContent=gs;
   $("adaptiveChip").textContent="Adaptive: "+(p.mode||"collecting");
-  $("finalEngineMeta").textContent="Phase 9/10/11-13 · "+(d.stale?"STALE LAST-GOOD · ":"LIVE · ")+(d.state||"WAITING")+" · data "+fmt(data.score)+"/100 · risk "+(pg.decision||"NOT EVALUATED")+" · live gate "+gs;
+  $("finalEngineMeta").textContent="Phase 9/10/11-13 · "+(d.stale?"STALE / DIRECTION SUPPRESSED · ":"LIVE · ")+(d.state||"WAITING")+" · data "+fmt(data.score)+"/100 · risk "+(pg.decision||"NOT EVALUATED")+" · live gate "+gs;
   var ds=document.querySelector(".decisionSection");if(ds){ds.classList.remove("signal-long","signal-short","signal-wait");ds.classList.add(side==="LONG"?"signal-long":side==="SHORT"?"signal-short":"signal-wait")}
 }
 async function loadFinalDecision(){

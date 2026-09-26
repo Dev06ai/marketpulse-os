@@ -25,6 +25,98 @@ const CORE_ANALYTICS_TTL=120000;
 const PHASE2_VERSION=2; const PHASE3_VERSION=3; const PHASE4_VERSION=4; const PHASE5_VERSION=5; const PHASE6_VERSION=6; const PHASE7_VERSION=7; const PHASE7_DATA_VERSION=2;
 const PHASE9_VERSION=9; const PHASE10_VERSION=10; const PHASE11_VERSION=11; const PHASE12_VERSION=12; const PHASE13_VERSION=13;
 const DECISION_CACHE=new Map(); const DECISION_TTL=4000; const DECISION_LAST_GOOD=new Map();
+const SIGNAL_STABILITY=new Map();
+const SIGNAL_CONFIRMATIONS_REQUIRED=2;
+const SIGNAL_RELEASE_MISSES=2;
+
+function signalStabilityKey(symbol,interval){return String(symbol)+"|"+String(interval)}
+function hardSignalBlock(decision){
+  const state=String(decision?.state||"").toUpperCase();
+  const gate=String(decision?.deploymentGate?.state||"").toUpperCase();
+  const reason=String(decision?.reason||"").toLowerCase();
+  return Boolean(
+    decision?.stale ||
+    state==="DATA_BLOCKED" ||
+    state==="RISK_BLOCKED" ||
+    gate==="BLOCKED" ||
+    reason.includes("data quality") ||
+    reason.includes("risk gate") ||
+    reason.includes("stale") ||
+    reason.includes("higher-timeframe trend conflicts") ||
+    reason.includes("15m trend conflicts") ||
+    reason.includes("cvd divergence") ||
+    reason.includes("r:r below") ||
+    reason.includes("derivatives unavailable") ||
+    reason.includes("insufficient derivatives completeness")
+  );
+}
+function applySignalStability(decision,symbol,interval){
+  const d=decision||{}, key=signalStabilityKey(symbol,interval), now=Date.now();
+  const candidate=["LONG","SHORT"].includes(String(d?.action||"").toUpperCase()) ? String(d.action).toUpperCase() : null;
+  const eligible=Boolean(d?.liveSignalEligible&&candidate);
+  const row=SIGNAL_STABILITY.get(key)||{side:null,confirmations:0,misses:0,confirmed:false,lastTs:0};
+
+  if(eligible){
+    if(row.side===candidate){
+      row.confirmations=Math.min(SIGNAL_CONFIRMATIONS_REQUIRED,row.confirmations+1);
+    }else{
+      row.side=candidate; row.confirmations=1; row.misses=0; row.confirmed=false;
+    }
+    row.lastTs=now;
+    if(row.confirmations>=SIGNAL_CONFIRMATIONS_REQUIRED)row.confirmed=true;
+    SIGNAL_STABILITY.set(key,row);
+
+    if(row.confirmed){
+      return {...d,signalStability:{state:"CONFIRMED",side:candidate,confirmations:row.confirmations,required:SIGNAL_CONFIRMATIONS_REQUIRED,misses:0},
+        rawAction:d.rawAction||candidate};
+    }
+
+    const confirmingReason="Directional setup detected, but it must persist across "+SIGNAL_CONFIRMATIONS_REQUIRED+" live refreshes before becoming a confirmed signal.";
+    return {
+      ...d,
+      rawAction:d.rawAction||candidate,
+      action:"WAIT",
+      state:"NO_TRADE",
+      liveSignalEligible:false,
+      market:{...(d.market||{}),side:"WAIT",status:"WAITING",type:"CONFIRMING SETUP",bias:"Neutral",directionalLean:"NEUTRAL"},
+      levels:{...(d.levels||{}),entryLow:null,entryHigh:null,entry:null,stop:null,tp1:null,tp2:null,rr:null},
+      deploymentGate:{...(d.deploymentGate||{}),state:"CONFIRMING",reason:confirmingReason},
+      operational:{...(d.operational||{}),liveUse:"PAPER_ONLY"},
+      signalStability:{state:"CONFIRMING",side:candidate,confirmations:row.confirmations,required:SIGNAL_CONFIRMATIONS_REQUIRED,misses:0}
+    };
+  }
+
+  if(!row.confirmed){
+    SIGNAL_STABILITY.delete(key);
+    return {...d,signalStability:{state:"NONE",side:null,confirmations:0,required:SIGNAL_CONFIRMATIONS_REQUIRED,misses:0}};
+  }
+
+  if(hardSignalBlock(d)){
+    SIGNAL_STABILITY.delete(key);
+    return {...d,action:"WAIT",state:"NO_TRADE",liveSignalEligible:false,
+      market:{...(d.market||{}),side:"WAIT",status:"WAITING",type:"NO TRADE",bias:"Neutral",directionalLean:"NEUTRAL"},
+      levels:{...(d.levels||{}),entryLow:null,entryHigh:null,entry:null,stop:null,tp1:null,tp2:null,rr:null},
+      deploymentGate:{...(d.deploymentGate||{}),state:"BLOCKED"},
+      signalStability:{state:"RELEASED",side:row.side,confirmations:row.confirmations,required:SIGNAL_CONFIRMATIONS_REQUIRED,misses:SIGNAL_RELEASE_MISSES}};
+  }
+
+  if(row.side===String(d?.rawAction||"").toUpperCase() || row.side===String(d?.market?.side||"").toUpperCase()){
+    row.misses+=1; row.lastTs=now;
+    if(row.misses<SIGNAL_RELEASE_MISSES){
+      SIGNAL_STABILITY.set(key,row);
+      return {...d,action:row.side,state:"READY",liveSignalEligible:true,
+        market:{...(d.market||{}),side:row.side},
+        signalStability:{state:"HOLDING",side:row.side,confirmations:row.confirmations,required:SIGNAL_CONFIRMATIONS_REQUIRED,misses:row.misses,releaseAfter:SIGNAL_RELEASE_MISSES}};
+    }
+  }
+
+  SIGNAL_STABILITY.delete(key);
+  return {...d,action:"WAIT",state:"NO_TRADE",liveSignalEligible:false,
+    market:{...(d.market||{}),side:"WAIT",status:"WAITING",type:"NO TRADE",bias:"Neutral",directionalLean:"NEUTRAL"},
+    levels:{...(d.levels||{}),entryLow:null,entryHigh:null,entry:null,stop:null,tp1:null,tp2:null,rr:null},
+    deploymentGate:{...(d.deploymentGate||{}),state:"PAPER_ONLY"},
+    signalStability:{state:"RELEASED",side:row.side,confirmations:row.confirmations,required:SIGNAL_CONFIRMATIONS_REQUIRED,misses:SIGNAL_RELEASE_MISSES}};
+}
 const PHASE1113_CACHE=new Map(); const PHASE1113_JOBS=new Set(); const PHASE1113_TTL=10*60*1000;
 const OPENAI_API_KEY=process.env.OPENAI_API_KEY||"";
 const OPENAI_MODEL=process.env.OPENAI_MODEL||"gpt-5.6-luna";
@@ -264,8 +356,9 @@ async function buildDecisionSnapshot(symbol,interval,query){
       liveFlow:flow,validation:analytics?.validation||null,propGate:gate
     });
     const gatedDecision=phase1113.applyDeploymentGate(decision,validation1113,{basePolicy:{minScore:config.minSignalScore,minRR:config.minRR}});
+    const stableDecision=applySignalStability(gatedDecision,symbol,interval);
     const payload={
-      ok:true,...gatedDecision,analysis,derivatives:flow,consensus,
+      ok:true,...stableDecision,analysis,derivatives:flow,consensus,
       learning:learned?await learning.status().catch(()=>null):null,
       backtest:analytics?.backtest||null,validation:analytics?.validation||null,setupStats:analytics?.setupStats||null,
       phase11_13:validation1113,phase11:PHASE11_VERSION,phase12:PHASE12_VERSION,phase13:PHASE13_VERSION,
@@ -276,7 +369,21 @@ async function buildDecisionSnapshot(symbol,interval,query){
     return Object.assign({cache:"fresh",cacheAgeMs:0},payload);
   }catch(e){
     const last=DECISION_LAST_GOOD.get(key);
-    if(last)return Object.assign({cache:"stale",stale:true,cacheAgeMs:Math.max(0,now-last.ts),degraded:String(e.message||e)},last.payload);
+    if(last){
+      const safeStale={
+        ...last.payload,
+        stale:true,
+        action:"WAIT",
+        state:"NO_TRADE",
+        liveSignalEligible:false,
+        market:{...(last.payload.market||{}),side:"WAIT",status:"WAITING",type:"STALE DATA / NO TRADE",bias:"Neutral",directionalLean:"NEUTRAL"},
+        levels:{...(last.payload.levels||{}),entryLow:null,entryHigh:null,entry:null,stop:null,tp1:null,tp2:null,rr:null},
+        deploymentGate:{...(last.payload.deploymentGate||{}),state:"BLOCKED",reason:"Decision refresh failed; stale directional data is not eligible for a live signal."},
+        operational:{...(last.payload.operational||{}),liveUse:"PAPER_ONLY"},
+        signalStability:{state:"RELEASED",reason:"stale_decision"}
+      };
+      return Object.assign({cache:"stale",stale:true,cacheAgeMs:Math.max(0,now-last.ts),degraded:String(e.message||e)},safeStale);
+    }
     throw e;
   }
 }
