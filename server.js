@@ -835,7 +835,8 @@ const server=http.createServer(async(req,res)=>{
         const champion=await getPredictionChampion(true);
         const cBrier=Number(champion?.validationMetrics?.brier);const cLoss=Number(champion?.validationMetrics?.logLoss);
         const v=model.validationMetrics;
-        const promotable=rows.length>=500&&Number.isFinite(v.brier)&&Number.isFinite(v.logLoss)&&(!champion||!Number.isFinite(cBrier)||(v.brier<=cBrier*.98&&v.logLoss<=cLoss*.99));
+        const wf=model.walkForwardMetrics||{};const championWf=champion?.walkForwardMetrics||{};
+        const promotable=rows.length>=500&&wf.allFoldsBeatBaseline===true&&Number.isFinite(wf.meanBrier)&&Number.isFinite(wf.meanLogLoss)&&(!champion||!Number.isFinite(Number(championWf.meanBrier))||(wf.meanBrier<=Number(championWf.meanBrier)*.98&&wf.meanLogLoss<=Number(championWf.meanLogLoss)*.99));
         await storage.savePredictionModel("candidate",model);
         if(promotable){await storage.savePredictionModel("champion",model);PREDICTION_MODEL_CACHE.model=model;PREDICTION_MODEL_CACHE.ts=Date.now()}
         const run=await storage.recordPredictionRun({symbol,interval,source:model.source,samples:rows.length,validation:{train:model.trainMetrics,validation:v,promotable},modelName:promotable?"champion":"candidate"});
@@ -852,7 +853,8 @@ const server=http.createServer(async(req,res)=>{
         const model=predictionEngine.trainLogistic(rows,{epochs:240,lr:.045,l2:.02});
         model.symbol=symbol||"ALL";model.interval=interval||"ALL";model.source="MarketPulse resolved outcomes";
         const champion=await getPredictionChampion(true),cBrier=Number(champion?.validationMetrics?.brier),cLoss=Number(champion?.validationMetrics?.logLoss),v=model.validationMetrics;
-        const promotable=rows.length>=300&&Number.isFinite(v.brier)&&Number.isFinite(v.logLoss)&&(!champion||!Number.isFinite(cBrier)||(v.brier<=cBrier*.97&&v.logLoss<=cLoss*.985));
+        const wf=model.walkForwardMetrics||{};const championWf=champion?.walkForwardMetrics||{};
+        const promotable=rows.length>=300&&wf.allFoldsBeatBaseline===true&&Number.isFinite(wf.meanBrier)&&Number.isFinite(wf.meanLogLoss)&&(!champion||!Number.isFinite(Number(championWf.meanBrier))||(wf.meanBrier<=Number(championWf.meanBrier)*.97&&wf.meanLogLoss<=Number(championWf.meanLogLoss)*.985));
         await storage.savePredictionModel("candidate",model);
         if(promotable){await storage.savePredictionModel("champion",model);PREDICTION_MODEL_CACHE.model=model;PREDICTION_MODEL_CACHE.ts=Date.now()}
         const run=await storage.recordPredictionRun({symbol:model.symbol,interval:model.interval,source:model.source,samples:rows.length,validation:{train:model.trainMetrics,validation:v,promotable},modelName:promotable?"champion":"candidate"});
