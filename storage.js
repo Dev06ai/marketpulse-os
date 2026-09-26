@@ -682,13 +682,13 @@ async function listSecurityEvents(limit=200){
 }
 async function recordUsageEvent(userId,feature,action="view",symbol=null,interval=null,metadata={}){
   await init();const row={userId:userId||null,feature:String(feature||"unknown").slice(0,100),action:String(action||"view").slice(0,100),symbol:symbol?String(symbol).slice(0,32):null,interval:interval?String(interval).slice(0,16):null,metadata:metadata||{},createdAt:new Date().toISOString()};
-  if(mode==="postgres"){await pool.query("INSERT INTO marketpulse_usage_events(user_id,feature,action,symbol,interval,metadata) VALUES($1,$2,$3,$4,$5,$6)",[row.userId,row.feature,row.action,row.symbol,row.interval,row.metadata]);return}
+  if(mode==="postgres"){await pool.query("INSERT INTO marketpulse_usage_events(user_id,feature,action,symbol,"interval",metadata) VALUES($1,$2,$3,$4,$5,$6)",[row.userId,row.feature,row.action,row.symbol,row.interval,row.metadata]);return}
   const all=readLocal();all.__usage_events__=Array.isArray(all.__usage_events__)?all.__usage_events__:[];all.__usage_events__.push(row);all.__usage_events__=all.__usage_events__.slice(-5000);writeLocal(all);
 }
 async function recentUsageEvents(limit=80){
   await init();const n=Math.min(200,Math.max(1,Number(limit)||80));
   if(mode==="postgres"){
-    const r=await pool.query(`SELECT e.id,e.feature,e.action,e.symbol,e.interval,e.created_at AS "createdAt",u.email FROM marketpulse_usage_events e LEFT JOIN marketpulse_users u ON u.id=e.user_id ORDER BY e.created_at DESC LIMIT $1`,[n]);return r.rows;
+    const r=await pool.query(`SELECT e.id,e.feature,e.action,e.symbol,e."interval",e.created_at AS "createdAt",u.email FROM marketpulse_usage_events e LEFT JOIN marketpulse_users u ON u.id=e.user_id ORDER BY e.created_at DESC LIMIT $1`,[n]);return r.rows;
   }
   const all=readLocal(),users=all.__users__||{},rows=(all.__usage_events__||[]).slice(-n).reverse();
   return rows.map(x=>({...x,email:x.userId?(users[x.userId]?.email||null):null}));
@@ -710,7 +710,11 @@ async function adminAnalytics(){
     ), symbols AS (
       SELECT COALESCE(symbol,'UNKNOWN') symbol,COUNT(*)::int count FROM marketpulse_usage_events WHERE created_at>=NOW()-INTERVAL '30 days' AND symbol IS NOT NULL GROUP BY symbol ORDER BY count DESC LIMIT 10
     ), intervals AS (
-      SELECT COALESCE(interval,'UNKNOWN') interval,COUNT(*)::int count FROM marketpulse_usage_events WHERE created_at>=NOW()-INTERVAL '30 days' AND interval IS NOT NULL GROUP BY interval ORDER BY count DESC LIMIT 10
+      SELECT COALESCE(e."interval",'UNKNOWN') AS "interval",COUNT(*)::int count
+      FROM marketpulse_usage_events e
+      WHERE e.created_at>=NOW()-INTERVAL '30 days' AND e."interval" IS NOT NULL
+      GROUP BY e."interval"
+      ORDER BY count DESC LIMIT 10
     )
     SELECT row_to_json(totals) AS totals,(SELECT json_agg(usage) FROM usage) AS features,(SELECT json_agg(symbols) FROM symbols) AS symbols,(SELECT json_agg(intervals) FROM intervals)`);
     const row=r.rows[0]||{};return {totals:row.totals||{},features:row.features||[],symbols:row.symbols||[],intervals:row.intervals||[]};
