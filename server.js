@@ -28,7 +28,7 @@ const DATA_TIMEOUT_MS=7000;
 const GLOBAL_RATE_WINDOW_MS=5*60*1000;
 const GLOBAL_RATE_LIMIT=300;
 const GLOBAL_RATE=new Map();
-const FAST_PUBLIC_PATHS=new Set(["/api/core","/api/fast-ticker","/api/core-enrichment","/api/core-analytics","/api/data-fabric","/api/config","/health","/"]);
+const FAST_PUBLIC_PATHS=new Set(["/api/core","/api/chart","/api/fast-ticker","/api/core-enrichment","/api/core-analytics","/api/data-fabric","/api/config","/health","/"]);
 const FAST_TICKER_CACHE=new Map();
 const CSRF_COOKIE="mp_csrf";
 const SERVER_METRICS={startedAt:Date.now(),requests:0,errors:0,totalLatencyMs:0,routeCounts:new Map(),lastErrors:[]};
@@ -154,7 +154,7 @@ function queueCoreAnalytics(symbol,interval,candles){
 function authKey(ip,email,type){return type+":"+String(ip||"unknown")+":"+String(email||"").toLowerCase()}
 function requestDevice(req){return String(req.headers["x-marketpulse-device"]||"00000000-0000-0000-0000-000000000000").slice(0,128)}
 
-function mins(interval){return ({'15m':15,'1h':60,'4h':240,'1d':1440})[interval]||60}
+function mins(interval){return ({'15m':15,'30m':30,'1h':60,'4h':240,'1d':1440})[interval]||60}
 async function getBinance(symbol,interval,timeoutMs=DATA_TIMEOUT_MS){
   const bases=['https://api.binance.com','https://api-gcp.binance.com','https://api1.binance.com'];
   const requests=bases.map(async base=>{const u=new URL(base+'/api/v3/klines');u.searchParams.set('symbol',symbol);u.searchParams.set('interval',interval);u.searchParams.set('limit',String(Math.min(KLINE_LIMIT,1000)));const r=await fetch(u,{signal:timeoutSignal(timeoutMs)});if(!r.ok)throw Error('HTTP '+r.status);const rows=await r.json();return rows.map(x=>({t:x[0],o:+x[1],h:+x[2],l:+x[3],c:+x[4],v:+x[5],source:'binance'}))});
@@ -168,7 +168,7 @@ async function getKraken(symbol,interval,timeoutMs=DATA_TIMEOUT_MS){
   return (body.result[key]||[]).slice(-Math.min(KLINE_LIMIT,720)).map(x=>({t:+x[0]*1000,o:+x[1],h:+x[2],l:+x[3],c:+x[4],v:+x[6],source:'kraken'}));
 }
 async function getBybitKlines(symbol,interval,timeoutMs=2200){
-  const bybitIntervalMap={"15m":"15","1h":"60","4h":"240","1d":"D"};
+  const bybitIntervalMap={"15m":"15","30m":"30","1h":"60","4h":"240","1d":"D"};
   const iv=bybitIntervalMap[interval]||"60";
   const hosts=["https://api.bybit.com","https://api.bytick.com"];
   let lastErr=null;
@@ -781,7 +781,7 @@ const server=http.createServer(async(req,res)=>{
     if(adminCfg.registrationsEnabled===false&&u.pathname==='/api/auth/register'&& !isAdminUser)return send(res,403,{ok:false,error:"REGISTRATIONS_DISABLED"});
     if(adminCfg.aiEnabled===false&&u.pathname==='/api/ai'&&!isAdminUser)return send(res,503,{ok:false,error:"AI_DISABLED"});
     if(adminCfg.executionEnabled===false&&u.pathname.startsWith('/api/execution')&&!isAdminUser)return send(res,503,{ok:false,error:"EXECUTION_DISABLED"});
-    if(adminCfg.marketDataEnabled===false&&['/api/core','/api/live','/api/market','/api/scanner','/api/scanner-live','/api/core-scan','/api/core-flow','/api/cycle'].includes(u.pathname)&&!isAdminUser)return send(res,503,{ok:false,error:"MARKET_DATA_DISABLED"});
+    if(adminCfg.marketDataEnabled===false&&['/api/core','/api/chart','/api/live','/api/market','/api/scanner','/api/scanner-live','/api/core-scan','/api/core-flow','/api/cycle'].includes(u.pathname)&&!isAdminUser)return send(res,503,{ok:false,error:"MARKET_DATA_DISABLED"});
     if(adminCfg.writesEnabled===false&&unsafe&&!isAdminUser&&!u.pathname.startsWith('/api/auth/')&&!['/api/telemetry/event'].includes(u.pathname))return send(res,423,{ok:false,error:"WRITES_DISABLED"});
     if(req.method==='GET'&&u.pathname==='/health')return send(res,200,{ok:true,service:'marketpulse-os',time:Date.now()});
     if(req.method==='GET'&&u.pathname==='/api/memory'){
@@ -1255,6 +1255,17 @@ const server=http.createServer(async(req,res)=>{
         }
       });
       return send(res,202,{ok:true,job:RESEARCH_JOB});
+    }
+
+    if(req.method==='GET'&&u.pathname==='/api/chart'){
+      const symbol=(u.searchParams.get('symbol')||'BTCUSDT').toUpperCase();
+      const interval=u.searchParams.get('interval')||'1h';
+      const allowed=['15m','30m','1h','4h','1d'];
+      if(!SYMBOLS.includes(symbol)||!allowed.includes(interval))return send(res,400,{error:'Unsupported chart symbol or interval'});
+      try{
+        const candles=await klines(symbol,interval);
+        return send(res,200,{ok:true,symbol,interval,candles:candles||[],updatedAt:Date.now(),source:candles?.[0]?.source||'market-feed'});
+      }catch(e){return send(res,503,{ok:false,error:e.message||'Chart data unavailable',symbol,interval})}
     }
 
     if(req.method==='GET'&&u.pathname==='/api/core-flow'){
