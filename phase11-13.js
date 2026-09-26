@@ -194,9 +194,21 @@ function applyDeploymentGate(decision,validation,opts={}){
   }else if(currentScore<policy.minScore){
     gateState="PAPER_ONLY";reason="The current confluence score is below the adaptive validation threshold.";
   }
+  const finalSide=signalEligible?(String(d?.market?.side||d?.action||"WAIT").toUpperCase()):"WAIT";
+  const finalAction=signalEligible&&["LONG","SHORT"].includes(finalSide)?finalSide:"WAIT";
+  const finalMarket=signalEligible
+    ?{...(d.market||{}),side:finalSide}
+    :{...(d.market||{}),side:"WAIT",status:"WAITING",type:"NO TRADE",bias:"Neutral",directionalLean:"NEUTRAL"};
+  const finalLevels=signalEligible
+    ?d.levels
+    :{...(d.levels||{}),entryLow:null,entryHigh:null,entry:null,stop:null,tp1:null,tp2:null,rr:null};
   return {
     ...d,
     rawAction:d.action,
+    action:finalAction,
+    state:signalEligible?"READY":"NO_TRADE",
+    market:finalMarket,
+    levels:finalLevels,
     liveSignalEligible:signalEligible,
     deploymentGate:{state:gateState,reason,validationEvidenceSufficient:Boolean(policy.evidenceSufficient),adaptiveMode:policy.mode,minScore:policy.minScore,minRR:policy.minRR},
     operational:{...(d.operational||{}),failSafe:true,executionEnabled:false,liveUse:gateState==="SIGNAL_ELIGIBLE"?"DECISION_SUPPORT_ONLY":"PAPER_ONLY"}
