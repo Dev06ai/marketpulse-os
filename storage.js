@@ -220,6 +220,21 @@ async function init(){
         resolved_at TIMESTAMPTZ
       )`);
       await pool.query('CREATE INDEX IF NOT EXISTS idx_support_time ON marketpulse_support_tickets(status,updated_at DESC)');
+      await pool.query(`CREATE TABLE IF NOT EXISTS marketpulse_prediction_models (
+        name TEXT PRIMARY KEY,
+        payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )`);
+      await pool.query(`CREATE TABLE IF NOT EXISTS marketpulse_prediction_runs (
+        id BIGSERIAL PRIMARY KEY,
+        symbol TEXT NOT NULL,
+        interval TEXT NOT NULL,
+        source TEXT NOT NULL,
+        samples INTEGER NOT NULL DEFAULT 0,
+        validation JSONB NOT NULL DEFAULT '{}'::jsonb,
+        model_name TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      `);
       await pool.query(`CREATE TABLE IF NOT EXISTS marketpulse_admin_snapshots (
         id BIGSERIAL PRIMARY KEY,
         label TEXT NOT NULL,
@@ -632,6 +647,29 @@ async function health(){
   return {ok:true,mode:"local",configured:Boolean(DB_URL&&Pool),durable:false,connected:false,source:"Local fallback"};
 }
 function status(){return {mode,configured:Boolean(DB_URL&&Pool),durable:mode==="postgres"}}
+async function getPredictionModel(name="champion"){
+  await init();
+  if(mode==="postgres"){
+    const r=await pool.query("SELECT payload,updated_at AS \"updatedAt\" FROM marketpulse_prediction_models WHERE name=$1",[name]);
+    return r.rows[0]?.payload||null;
+  }
+  const all=readLocal();return all.__prediction_models__?.[name]||null;
+}
+async function savePredictionModel(name,payload){
+  await init();const n=String(name||"candidate").slice(0,60);
+  if(mode==="postgres"){await pool.query(`INSERT INTO marketpulse_prediction_models(name,payload,updated_at) VALUES($1,$2,NOW()) ON CONFLICT(name) DO UPDATE SET payload=EXCLUDED.payload,updated_at=NOW()`,[n,payload||{}]);return payload}
+  const all=readLocal();all.__prediction_models__=all.__prediction_models__||{};all.__prediction_models__[n]=payload||{};writeLocal(all);return payload;
+}
+async function recordPredictionRun(run){
+  await init();const r={symbol:String(run?.symbol||"BTCUSDT"),interval:String(run?.interval||"1h"),source:String(run?.source||"binance-public").slice(0,120),samples:Number(run?.samples)||0,validation:run?.validation||{},modelName:run?.modelName||null,createdAt:new Date().toISOString()};
+  if(mode==="postgres"){const q=await pool.query(`INSERT INTO marketpulse_prediction_runs(symbol,interval,source,samples,validation,model_name) VALUES($1,$2,$3,$4,$5,$6) RETURNING id,created_at AS "createdAt"`,[r.symbol,r.interval,r.source,r.samples,r.validation,r.modelName]);return {...r,id:q.rows[0]?.id,createdAt:q.rows[0]?.createdAt||r.createdAt}}
+  const all=readLocal();all.__prediction_runs__=Array.isArray(all.__prediction_runs__)?all.__prediction_runs__:[];const row={id:Date.now(),...r};all.__prediction_runs__.push(row);all.__prediction_runs__=all.__prediction_runs__.slice(-200);writeLocal(all);return row;
+}
+async function listPredictionRuns(limit=50){
+  await init();const n=Math.min(100,Math.max(1,Number(limit)||50));
+  if(mode==="postgres"){const q=await pool.query(`SELECT id,symbol,interval,source,samples,validation,model_name AS "modelName",created_at AS "createdAt" FROM marketpulse_prediction_runs ORDER BY created_at DESC LIMIT $1`,[n]);return q.rows}
+  const all=readLocal();return (all.__prediction_runs__||[]).slice(-n).reverse();
+}
 async function getAdminConfig(){
   await init();
   if(mode==="postgres"){
@@ -814,4 +852,4 @@ async function restoreAdminConfig(snapshot){
   return true;
 }
 
-module.exports={init,health,get,save,clear,getLearningState,saveLearningState,recordLearningPrediction,getOpenLearningPredictions,resolveLearningPrediction,saveSignalDNA,getSignalDNA,clearSignalDNA,getPhase4State,savePhase4State,getExecutionState,saveExecutionState,getPhase6State,savePhase6State,createUser,findUserByEmail,getUserById,touchUserLogin,recordLoginFailure,resetLoginFailures,savePassword,saveSession,getSession,touchSessionActivity,revokeUserSessions,deleteSession,listUsers,userStats,moderateUser,getAccountMemory,saveAccountMemory,status,getAdminConfig,saveAdminConfig,getFeatureFlags,saveFeatureFlag,recordAdminAudit,listAdminAudit,recordSecurityEvent,listSecurityEvents,recordUsageEvent,adminAnalytics,listBroadcasts,createBroadcast,setBroadcastActive,getActiveBroadcasts,createSupportTicket,recentUsageEvents,listSupportTickets,replySupportTicket,saveAdminSnapshot,listAdminSnapshots,getAdminSnapshot,restoreAdminConfig};
+module.exports={init,health,get,save,clear,getLearningState,saveLearningState,recordLearningPrediction,getOpenLearningPredictions,resolveLearningPrediction,saveSignalDNA,getSignalDNA,clearSignalDNA,getPhase4State,savePhase4State,getExecutionState,saveExecutionState,getPhase6State,savePhase6State,createUser,findUserByEmail,getUserById,touchUserLogin,recordLoginFailure,resetLoginFailures,savePassword,saveSession,getSession,touchSessionActivity,revokeUserSessions,deleteSession,listUsers,userStats,moderateUser,getAccountMemory,saveAccountMemory,status,getAdminConfig,saveAdminConfig,getFeatureFlags,saveFeatureFlag,getPredictionModel,savePredictionModel,recordPredictionRun, listPredictionRuns,recordAdminAudit,listAdminAudit,recordSecurityEvent,listSecurityEvents,recordUsageEvent,adminAnalytics,listBroadcasts,createBroadcast,setBroadcastActive,getActiveBroadcasts,createSupportTicket,recentUsageEvents,listSupportTickets,replySupportTicket,saveAdminSnapshot,listAdminSnapshots,getAdminSnapshot,restoreAdminConfig};
