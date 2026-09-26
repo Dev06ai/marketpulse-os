@@ -3,6 +3,9 @@ const storage=require("./storage");
 
 const SESSION_DAYS=30;
 const COOKIE="mp_session";
+const RATE_WINDOW_MS=15*60*1000;
+const RATE_LIMIT=12;
+const rate=new Map();
 
 function normalizeEmail(email){
   return String(email||"").trim().toLowerCase();
@@ -43,7 +46,14 @@ function cookie(raw,maxAge=SESSION_DAYS*86400){
   return COOKIE+"="+encodeURIComponent(raw)+"; Path=/; HttpOnly; SameSite=Lax; Max-Age="+maxAge;
 }
 function clearCookie(){return cookie("",0)}
-async function register(email,password){
+function rateCheck(key){
+  const now=Date.now(),x=rate.get(key);
+  if(!x||now-x.started>RATE_WINDOW_MS){rate.set(key,{started:now,count:1});return}
+  if(x.count>=RATE_LIMIT)throw new Error("AUTH_RATE_LIMIT");
+  x.count++;
+}
+async function register(email,password,key="register"){
+  rateCheck(key);
   const e=normalizeEmail(email),err=passwordRules(password);
   if(!validEmail(e))throw new Error("Enter a valid email address.");
   if(err)throw new Error(err);
@@ -52,7 +62,8 @@ async function register(email,password){
   const user=await storage.createUser({id,email:e,passwordHash:p.hash,passwordSalt:p.salt});
   return user;
 }
-async function login(email,password){
+async function login(email,password,key="login"){
+  rateCheck(key);
   const e=normalizeEmail(email),user=await storage.findUserByEmail(e);
   if(!user)throw new Error("INVALID_CREDENTIALS");
   const hash=hashPassword(password,user.passwordSalt);
