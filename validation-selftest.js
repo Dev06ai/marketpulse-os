@@ -38,6 +38,11 @@ assert(retestStructure.setup?.side==="LONG","Bullish breakout-retest must map to
 const retestAnalysis=analyze(retestCandles,{interval:"1h"});
 assert(retestAnalysis.side==="LONG","Core engine did not expose the breakout-retest as a long setup.");
 
+// Regression: a live provider may legitimately return orderBook:null while other
+// derivatives data remains available. This must never crash the core analyzer.
+const nullOrderBookAnalysis=analyze(retestCandles,{interval:"1h",deriv:{available:true,orderBook:null,takerImbalance:null,cvdState:"UNKNOWN",liquidationBias:"UNKNOWN"}});
+assert(nullOrderBookAnalysis&&nullOrderBookAnalysis.derivatives,"Null order-book regression crashed the core analyzer.");
+
 
 
 function assert(condition,message){
