@@ -17,6 +17,9 @@ const labels={BTCUSDT:'BTC',ETHUSDT:'ETH',SOLUSDT:'SOL',BNBUSDT:'BNB',XRPUSDT:'X
 const KRAKEN_PAIRS={BTCUSDT:'XBTUSD',ETHUSDT:'ETHUSD',SOLUSDT:'SOLUSD',BNBUSDT:'BNBUSD',XRPUSDT:'XRPUSD',DOGEUSDT:'DOGEUSD',ADAUSDT:'ADAUSD'};
 const CACHE=new Map(); const TTL=45000;
 const SCAN_CACHE=new Map(); const SCAN_TTL=20000;
+const CORE_ANALYTICS_CACHE=new Map();
+const CORE_ANALYTICS_JOBS=new Set();
+const CORE_ANALYTICS_TTL=120000;
 const PHASE2_VERSION=2; const PHASE3_VERSION=3; const PHASE4_VERSION=4; const PHASE5_VERSION=5; const PHASE6_VERSION=6; const PHASE7_VERSION=7; const PHASE7_DATA_VERSION=2;
 const OPENAI_API_KEY=process.env.OPENAI_API_KEY||"";
 const OPENAI_MODEL=process.env.OPENAI_MODEL||"gpt-5.6-luna";
@@ -124,6 +127,28 @@ const ADMIN_ONLY_PATHS=new Set([
   '/api/research/train'
 ]);
 function timeoutSignal(ms){return typeof AbortSignal!=="undefined"&&AbortSignal.timeout?AbortSignal.timeout(ms):undefined;}
+function queueCoreAnalytics(symbol,interval,candles){
+  const key=String(symbol)+"|"+String(interval),hit=CORE_ANALYTICS_CACHE.get(key);
+  if(hit&&Date.now()-hit.ts<CORE_ANALYTICS_TTL)return hit.payload;
+  if(CORE_ANALYTICS_JOBS.has(key))return hit?.payload||null;
+  CORE_ANALYTICS_JOBS.add(key);
+  const sample=(candles||[]).slice(-600);
+  setTimeout(()=>{
+    (async()=>{
+      try{
+        if(sample.length<240)return;
+        const payload={
+          backtest:backtest(sample),
+          validation:walkForwardBacktest(sample),
+          setupStats:backtestBySetup(sample)
+        };
+        CORE_ANALYTICS_CACHE.set(key,{ts:Date.now(),payload});
+      }catch{}finally{CORE_ANALYTICS_JOBS.delete(key)}
+    })();
+  },1500);
+  return hit?.payload||null;
+}
+
 function authKey(ip,email,type){return type+":"+String(ip||"unknown")+":"+String(email||"").toLowerCase()}
 function requestDevice(req){return String(req.headers["x-marketpulse-device"]||"00000000-0000-0000-0000-000000000000").slice(0,128)}
 
@@ -991,60 +1016,54 @@ const server=http.createServer(async(req,res)=>{
       if(!SYMBOLS.includes(symbol))return send(res,400,{error:'Unsupported symbol'});
       try{
         const candles=await klines(symbol,interval);
-        if(!candles||candles.length<220)throw Error('Kraken returned insufficient candles');
-        const lowerPromise=interval==='15m'?Promise.resolve(null):Promise.race([klines(symbol,'15m'),new Promise(resolve=>setTimeout(()=>resolve(null),1800))]).catch(()=>null);
-        const higherPromise=interval==='4h'?Promise.resolve(null):Promise.race([klines(symbol,'4h'),new Promise(resolve=>setTimeout(()=>resolve(null),1800))]).catch(()=>null);
-        const derivPromise=Promise.race([derivatives(symbol,interval),new Promise(resolve=>setTimeout(()=>resolve(null),1600))]).catch(()=>null);
+        if(!candles||candles.length<220)throw Error('Insufficient candles');
+        const lowerPromise=interval==='15m'?Promise.resolve(null):Promise.race([klines(symbol,'15m'),new Promise(resolve=>setTimeout(()=>resolve(null),950))]).catch(()=>null);
+        const higherPromise=interval==='4h'?Promise.resolve(null):Promise.race([klines(symbol,'4h'),new Promise(resolve=>setTimeout(()=>resolve(null),950))]).catch(()=>null);
+        const derivPromise=Promise.race([derivatives(symbol,interval),new Promise(resolve=>setTimeout(()=>resolve(null),900))]).catch(()=>null);
         const [lower,higher,deriv]=await Promise.all([lowerPromise,higherPromise,derivPromise]);
-        const dataConsensus=await Promise.race([
-          dataFabric.assess(symbol,interval,{primaryPrice:candles?.[candles.length-1]?.c,primaryAgeMs:candles?.[candles.length-1]?.t?Date.now()-Number(candles[candles.length-1].t):null,primarySource:candles?.[0]?.source,liveFlow:flowBucket(symbol)}),
-          new Promise(resolve=>setTimeout(()=>resolve(null),1100))
-        ]).catch(()=>null);
-        let analysis=analyze(candles,{interval,lower:lower&&lower.length>=220?analyze(lower,{interval:'15m'}):null,higher:higher&&higher.length>=220?analyze(higher,{interval:'4h'}):null,deriv});
+        let analysis=analyze(candles,{
+          interval,
+          lower:lower&&lower.length>=220?analyze(lower,{interval:'15m'}):null,
+          higher:higher&&higher.length>=220?analyze(higher,{interval:'4h'}):null,
+          deriv
+        });
         let learned=null;
-        try{learned=await Promise.race([learning.process(symbol,interval,candles,analysis),new Promise(resolve=>setTimeout(()=>resolve(null),650))])}catch{}
+        try{
+          learned=await Promise.race([
+            learning.process(symbol,interval,candles,analysis),
+            new Promise(resolve=>setTimeout(()=>resolve(null),180))
+          ]);
+        }catch{}
         if(learned?.analysis)analysis=learned.analysis;
         try{phase4.updateLive(requestDevice(req),symbol,interval,analysis,candles).catch(()=>{})}catch{}
-        const learningStatus=await Promise.race([learning.status(),new Promise(resolve=>setTimeout(()=>resolve({phase:2,state:'COLLECTING',durable:storage.status().durable,resolved:0}),200))]).catch(()=>({phase:2,state:'COLLECTING',durable:storage.status().durable,resolved:0}));
-        const sample=candles.slice(-600);
-        const setupStats=require("./market-engine").backtestBySetup(sample);
-        const propConfig=propFirm.normalizeConfig({
-          accountSize: Number(u.searchParams.get("accountSize")||process.env.PROP_ACCOUNT_SIZE||5000),
-          startingEquity: Number(u.searchParams.get("startingEquity")||process.env.PROP_STARTING_EQUITY||5000),
-          dailyLossLimitPct: Number(u.searchParams.get("dailyLossLimitPct")||process.env.PROP_DAILY_LOSS_PCT||3),
-          maxDrawdownPct: Number(u.searchParams.get("maxDrawdownPct")||process.env.PROP_MAX_DRAWDOWN_PCT||6),
-          riskPerTradePct: Number(u.searchParams.get("riskPerTradePct")||process.env.PROP_RISK_PER_TRADE_PCT||0.5),
-          maxOpenRiskPct: Number(u.searchParams.get("maxOpenRiskPct")||process.env.PROP_MAX_OPEN_RISK_PCT||1),
-          minSignalScore: Number(u.searchParams.get("minSignalScore")||process.env.PROP_MIN_SIGNAL_SCORE||72),
-          minRR: Number(u.searchParams.get("minRR")||process.env.PROP_MIN_RR||1.5)
-        });
-        const propGuard=propFirm.evaluateStandard({
-          analysis,
-          derivatives:deriv,
-          dataQuality:{
-            candleAgeMs:candles.length?Math.max(0,Date.now()-Number(candles[candles.length-1].t)):null,
-            qualityPct: deriv?.available ? 100 : 80,
-            consensusQualityPct:dataConsensus?.consensusQualityPct,
-            priceDispersionBps:dataConsensus?.priceDispersionBps,
-            providerCount:dataConsensus?.sourceCount,independentSourceCount:dataConsensus?.independentSourceCount
-          },
-          equity:propConfig.startingEquity,
-          dayStartEquity:propConfig.startingEquity,
-          peakEquity:propConfig.startingEquity,
-          config:propConfig
-        });
-        return send(res,200,{
+
+        const learningStatus=await Promise.race([
+          learning.status(),
+          new Promise(resolve=>setTimeout(()=>resolve({phase:2,state:'COLLECTING',durable:storage.status().durable,resolved:0}),180))
+        ]).catch(()=>({phase:2,state:'COLLECTING',durable:storage.status().durable,resolved:0}));
+
+        const analytics=queueCoreAnalytics(symbol,interval,candles);
+        const payload={
           ok:true,symbol,interval,candles,analysis,derivatives:deriv,learning:learningStatus,
-          backtest:backtest(sample),validation:walkForwardBacktest(sample),setupStats,
+          backtest:analytics?.backtest||null,
+          validation:analytics?.validation||null,
+          setupStats:analytics?.setupStats||null,
           source:candles?.[0]?.source||'market data',
-          dataConsensus,
+          dataConsensus:null,
           phase2:PHASE2_VERSION,
           phase3:PHASE3_VERSION,
           phase4:PHASE4_VERSION,
-          dataQuality:{candleCount:candles.length,candleAgeMs:candles.length?Math.max(0,Date.now()-Number(candles[candles.length-1].t)):null,derivativesAvailable:Boolean(deriv?.available),derivativesCompleteness:deriv?.completeness||null},
-          updatedAt:Date.now()
-        });
-      }catch(e){return send(res,503,{ok:false,error:String(e.message||e),source:'Kraken spot'})}
+          dataQuality:{
+            candleCount:candles.length,
+            candleAgeMs:candles.length?Math.max(0,Date.now()-Number(candles[candles.length-1].t)):null,
+            derivativesAvailable:Boolean(deriv?.available),
+            derivativesCompleteness:deriv?.completeness||null
+          },
+          updatedAt:Date.now(),
+          performance:{fastPath:true,analyticsBackground:true}
+        };
+        return send(res,200,payload);
+      }catch(e){return send(res,503,{ok:false,error:String(e.message||e),source:'market data'})}
     }
     if(req.method==='GET'&&u.pathname==='/api/data-fabric'){
       const symbol=(u.searchParams.get('symbol')||'BTCUSDT').toUpperCase(),interval=u.searchParams.get('interval')||'1h';
