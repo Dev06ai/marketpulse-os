@@ -442,8 +442,10 @@ function mergeFlowSnapshot(symbol,base){
   out.cvdState=Number.isFinite(out.cvdDelta)?(out.cvdDelta>0?"BUYERS PRESSURE":out.cvdDelta<0?"SELLERS PRESSURE":"BALANCED"):(out.cvdState||"WAITING");
   out.fundingRate=Number.isFinite(live.fundingRate)?live.fundingRate:(Number.isFinite(out.fundingRate)?out.fundingRate:null);
   out.markPrice=Number.isFinite(live.markPrice)?live.markPrice:(Number.isFinite(out.markPrice)?out.markPrice:null);
-  if(!out.positioning&&Number.isFinite(out.oiChangePct))out.positioning=out.oiChangePct>1?"OI RISING":out.oiChangePct<-1?"OI FALLING":"OI FLAT";
-  out.positioning=out.positioning||"WAITING";
+  if(Number.isFinite(out.oiChangePct))out.positioning=out.oiChangePct>1?"OI RISING":out.oiChangePct<-1?"OI FALLING":"OI FLAT";
+  if(!out.positioning||out.positioning==="MIXED"||out.positioning==="OI CHANGE NOT AVAILABLE"||out.positioning==="OI UNAVAILABLE"){
+    out.positioning=Number.isFinite(out.oi)?"OI LIVE":"WAITING";
+  }
   out.longLiquidations=Number.isFinite(live.liqLong)?live.liqLong:(Number.isFinite(out.longLiquidations)?out.longLiquidations:0);
   out.shortLiquidations=Number.isFinite(live.liqShort)?live.liqShort:(Number.isFinite(out.shortLiquidations)?out.shortLiquidations:0);
   out.liquidationTotal=out.longLiquidations+out.shortLiquidations;
