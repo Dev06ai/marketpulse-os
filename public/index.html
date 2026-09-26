@@ -468,6 +468,78 @@ function renderJournal(){
 }
 
 
+
+function safeHtml(v){
+  return String(v==null?"":v).replace(/[&<>"']/g,function(c){
+    return c==="&"?"&amp;":c==="<"?"&lt;":c===">"?"&gt;":c==='"'?"&quot;":"&#39;";
+  });
+}
+function renderEdge(data){
+  state.edge=data||null;if(!data)return;
+  var sig=data.signal||null,q=data.quality||{},ev=data.evidence||{},paper=data.paper||{},health=data.health||{},risk=data.risk||{};
+  $("edgeSignal").textContent=sig?(sig.side+" · "+sig.lifecycle):"NO ACTIVE SIGNAL";
+  $("edgeSignalMeta").textContent=sig?(sig.symbol+" · "+sig.type+" · "+fmt(sig.score)+"/100"):"The current market is waiting for a tracked directional setup.";
+  $("edgeEvidenceN").textContent=fmt(ev.sample||0);
+  $("edgeEvidenceMeta").textContent=ev.available?(fmt(ev.resolved||0)+" resolved · "+fmt(ev.targets||0)+" targets · "+fmt(ev.stops||0)+" stops"):"No matched DNA yet";
+  $("edgeNetR").textContent=(Number(paper.netR)||0).toFixed(2)+"R";
+  $("edgePaperMeta").textContent=fmt(paper.trades||0)+" closed · "+fmt(paper.open?.length||0)+" open";
+  $("edgeHealthState").textContent=health.state||"INSUFFICIENT";
+  $("edgeHealthMeta").textContent=health.recentSample?("Recent 20: "+Number(health.recentNetR||0).toFixed(2)+"R"):"Collecting live evidence";
+  $("edgeScorePill").textContent="MARKET "+fmt(q.marketScore||0)+"/100";
+  $("edgeMatchPill").textContent=ev.available?("MATCH "+fmt(ev.matchScore||0)+"/100"):"NO MATCH";
+  $("edgeQualityRows").innerHTML=(q.components||[]).map(function(x){
+    return'<div class="edgeRow"><span>'+safeHtml(x.name)+'</span><div class="edgeBar"><i style="width:'+Math.round(x.pct||0)+'%"></i></div><span class="edgeMono">'+Math.round(x.pct||0)+'%</span></div>';
+  }).join("")||'<div class="edgeMuted">No components available.</div>';
+  $("edgeMatchN").textContent=fmt(ev.sample||0);$("edgeResolved").textContent=fmt(ev.resolved||0);$("edgeTargets").textContent=fmt(ev.targets||0);$("edgeStops").textContent=fmt(ev.stops||0);
+  $("edgeEvidenceNote").textContent=ev.available
+    ?("Matched sample: "+fmt(ev.sample)+". Triggered "+(ev.triggerRate==null?"—":(Number(ev.triggerRate)*100).toFixed(1)+"%")+"; target hits "+(ev.targetRate==null?"—":(Number(ev.targetRate)*100).toFixed(1)+"%")+" of resolved. Avg result "+(ev.avgR==null?"—":Number(ev.avgR).toFixed(2)+"R")+". Descriptive sample only.")
+    :"Historical evidence appears once Signal DNA has matching records. These are descriptive sample statistics.";
+  $("edgeAccount").value=risk.config?.account??100000;$("edgeRiskPct").value=risk.config?.riskPct??1;$("edgeMinRR").value=risk.config?.minRR??1.5;$("edgeMaxOpenRisk").value=risk.config?.maxOpenRiskPct??2.5;
+  var rc=risk.check||{};
+  $("edgeRiskGate").textContent=rc.allowed?"PASS":(sig?"BLOCKED":"NOT CHECKED");
+  $("edgeRiskDetail").textContent=sig?("Entry "+fmt(sig.entry)+" · Stop "+fmt(sig.stop)+" · TP1 "+fmt(sig.target)+" · R:R "+(sig.rr==null?"—":Number(sig.rr).toFixed(2)+"R")+" · Gate "+(rc.reason||"—")):"No current plan.";
+  $("edgeEquity").textContent=fmt(paper.equity);$("edgePnl").textContent=fmt(paper.realizedPnl);$("edgeWinRate").textContent=paper.trades?Number(paper.winRate).toFixed(1)+"%":"—";$("edgeOpenRisk").textContent=(Number(paper.openRiskPct)||0).toFixed(2)+"%";$("edgeOpenN").textContent=fmt(paper.open?.length||0);
+  $("edgeOpenRows").innerHTML=(paper.open||[]).map(function(x){
+    return'<tr><td>'+safeHtml(x.symbol)+'</td><td>'+safeHtml(x.side)+'</td><td>'+fmt(x.entry)+'</td><td>'+fmt(x.stop)+'</td><td>'+fmt(x.target)+'</td><td>'+fmt(x.riskPct)+'%</td></tr>';
+  }).join("")||'<tr><td colspan="6" class="edgeMuted">No open paper positions.</td></tr>';
+  $("edgeHealthN").textContent=fmt(health.sample||0);$("edgeRecentR").textContent=(Number(health.recentNetR)||0).toFixed(2)+"R";$("edgeAvgR").textContent=(Number(health.avgR)||0).toFixed(2)+"R";
+  $("edgeGap").textContent=health.evidenceDivergence==null?"—":(Number(health.evidenceDivergence)>=0?"+":"")+Number(health.evidenceDivergence).toFixed(2)+"R";$("edgeHealthNote").textContent=health.note||"";
+  $("edgeEvents").innerHTML=(data.events||[]).map(function(e){
+    return'<div class="edgeEvent"><span class="edgeTag">'+safeHtml(e.type)+'</span><div><b>'+safeHtml(e.message)+'</b><div class="edgeMuted">'+new Date(e.ts).toLocaleString()+'</div></div></div>';
+  }).join("")||'<div class="edgeMuted">No events yet.</div>';
+  $("edgeJournal").innerHTML=(data.journal||[]).slice(0,10).map(function(x){
+    return'<div class="edgeRow" style="grid-template-columns:88px 1fr 70px"><span class="edgeTag">'+safeHtml(x.source||"PAPER")+'</span><div><b>'+safeHtml((x.asset||"")+" · "+(x.side||"—"))+'</b><div class="edgeMuted">'+safeHtml(x.note||"No note")+'</div></div><span class="edgeMono">'+(Number(x.r)||0).toFixed(2)+'R</span></div>';
+  }).join("")||'<div class="edgeMuted">No journal entries yet.</div>';
+  var pe=data.personalEdge||{},rows=[];
+  [["Regime",pe.byRegime||[]],["Side",pe.bySide||[]],["Setup",pe.byType||[]]].forEach(function(g){
+    (g[1]||[]).slice(0,8).forEach(function(x){
+      rows.push('<tr><td>'+g[0]+'</td><td>'+safeHtml(x.key)+'</td><td>'+fmt(x.n)+'</td><td>'+Number(x.avgR||0).toFixed(2)+'R</td><td>'+Number(x.netR||0).toFixed(2)+'R</td></tr>');
+    });
+  });
+  $("edgePersonalRows").innerHTML=rows.join("")||'<tr><td colspan="5" class="edgeMuted">No stored journal data yet.</td></tr>';
+  var newest=(data.events||[])[0],lastKey=localStorage.getItem("mp-edge-last-event");
+  if(newest&&newest.id!==lastKey){
+    localStorage.setItem("mp-edge-last-event",newest.id);
+    if("Notification"in window&&Notification.permission==="granted"&&document.visibilityState==="visible")new Notification("MarketPulse Edge",{body:newest.message});
+  }
+}
+async function loadEdge(){
+  try{
+    var j=await api("/api/edge?symbol="+encodeURIComponent(state.symbol)+"&interval="+encodeURIComponent(state.interval),7000);
+    renderEdge(j);
+  }catch(e){}
+}
+async function saveEdgeConfig(){
+  var payload={account:+$("edgeAccount").value||0,riskPct:+$("edgeRiskPct").value||1,minRR:+$("edgeMinRR").value||1.5,maxOpenRiskPct:+$("edgeMaxOpenRisk").value||2.5};
+  try{
+    var r=await fetch("/api/edge/config",{method:"POST",headers:{"Content-Type":"application/json","x-marketpulse-device":deviceId()},body:JSON.stringify(payload)});
+    var j=await r.json();if(!r.ok)throw Error(j.error||"Risk config failed");renderEdge(j);
+  }catch(e){$("edgeRiskDetail").textContent="Risk save failed: "+e.message}
+}
+async function saveServerJournal(row){
+  try{await fetch("/api/edge/journal",{method:"POST",headers:{"Content-Type":"application/json","x-marketpulse-device":deviceId()},body:JSON.stringify({entry:row})})}catch(e){}
+}
+
 var replayState={dataset:null,cursor:0,timer:null,playing:false};
 
 function syncPhase3Symbols(){
