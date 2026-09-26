@@ -1066,22 +1066,10 @@ const server=http.createServer(async(req,res)=>{
       try{
         const candles=await getFastKlines(symbol,interval);
         if(!candles||candles.length<220)throw Error('Insufficient candles');
-        let analysis=analyze(candles,{interval,lower:null,higher:null,deriv:null});
-        try{
-          const learned=await Promise.race([
-            learning.process(symbol,interval,candles,analysis),
-            new Promise(resolve=>setTimeout(()=>resolve(null),120))
-          ]);
-          if(learned?.analysis)analysis=learned.analysis;
-        }catch{}
-        try{phase4.updateLive(requestDevice(req),symbol,interval,analysis,candles).catch(()=>{})}catch{}
-        const learningStatus=await Promise.race([
-          learning.status(),
-          new Promise(resolve=>setTimeout(()=>resolve({phase:2,state:'COLLECTING',durable:storage.status().durable,resolved:0}),120))
-        ]).catch(()=>({phase:2,state:'COLLECTING',durable:storage.status().durable,resolved:0}));
+        const analysis=analyze(candles,{interval,lower:null,higher:null,deriv:null});
         const analytics=queueCoreAnalytics(symbol,interval,candles);
         return send(res,200,{
-          ok:true,symbol,interval,candles,analysis,derivatives:null,learning:learningStatus,
+          ok:true,symbol,interval,candles,analysis,derivatives:null,learning:null,
           backtest:analytics?.backtest||null,validation:analytics?.validation||null,setupStats:analytics?.setupStats||null,
           source:candles?.[0]?.source||'market data',dataConsensus:null,
           phase2:PHASE2_VERSION,phase3:PHASE3_VERSION,phase4:PHASE4_VERSION,
@@ -1089,6 +1077,32 @@ const server=http.createServer(async(req,res)=>{
           updatedAt:Date.now(),performance:{fastPath:true,enrichmentBackground:true,analyticsBackground:true}
         });
       }catch(e){return send(res,503,{ok:false,error:String(e.message||e),source:'market data'})}
+    }
+    if(req.method==='GET'&&u.pathname==='/api/core-enrichment'){
+      const symbol=(u.searchParams.get('symbol')||'BTCUSDT').toUpperCase(),interval=u.searchParams.get('interval')||'1h';
+      if(!SYMBOLS.includes(symbol))return send(res,400,{ok:false,error:'Unsupported symbol'});
+      try{
+        const base=await getFastKlines(symbol,interval);
+        const [lower,higher,deriv]=await Promise.all([
+          interval==='15m'?Promise.resolve(null):Promise.race([klines(symbol,'15m'),new Promise(resolve=>setTimeout(()=>resolve(null),2200))]).catch(()=>null),
+          interval==='4h'?Promise.resolve(null):Promise.race([klines(symbol,'4h'),new Promise(resolve=>setTimeout(()=>resolve(null),2200))]).catch(()=>null),
+          Promise.race([derivatives(symbol,interval),new Promise(resolve=>setTimeout(()=>resolve(null),2200))]).catch(()=>null)
+        ]);
+        let analysis=analyze(base,{interval,
+          lower:lower&&lower.length>=220?analyze(lower,{interval:'15m'}):null,
+          higher:higher&&higher.length>=220?analyze(higher,{interval:'4h'}):null,
+          deriv
+        });
+        let learned=null;
+        try{learned=await learning.process(symbol,interval,base,analysis)}catch{}
+        try{phase4.updateLive(requestDevice(req),symbol,interval,learned?.analysis||analysis,base).catch(()=>{})}catch{}
+        return send(res,200,{ok:true,symbol,interval,
+          analysis:learned?.analysis||analysis,
+          lower:lower&&lower.length>=220?analyze(lower,{interval:'15m'}):null,
+          higher:higher&&higher.length>=220?analyze(higher,{interval:'4h'}):null,
+          derivatives:deriv,learning:learned?await learning.status().catch(()=>null):null,updatedAt:Date.now()
+        });
+      }catch(e){return send(res,503,{ok:false,error:String(e.message||e)})}
     }
     if(req.method==='GET'&&u.pathname==='/api/data-fabric'){
       const symbol=(u.searchParams.get('symbol')||'BTCUSDT').toUpperCase(),interval=u.searchParams.get('interval')||'1h';
