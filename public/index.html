@@ -473,7 +473,7 @@ async function refreshDNA(){
   $("dnaRows").innerHTML='<div class="small">Building historical signal DNA…</div>';
   try{
     var symbol=$("dnaSymbol").value,interval=$("dnaInterval").value||"1h",points=200,bars=interval==="1d"?1800:420;
-    var body=await fetch("/api/dna/refresh",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({symbol:symbol||state.symbol,interval,points,bars})}).then(function(r){return r.json().then(function(j){if(!r.ok)throw Error(j.error||"DNA build failed");return j})});
+    var body=await fetch("/api/dna/refresh",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({symbol:symbol||"ALL",interval,points,bars})}).then(function(r){return r.json().then(function(j){if(!r.ok)throw Error(j.error||"DNA build failed");return j})});
     renderDNA(body.records||[],body.summary||{});
   }catch(e){$("dnaRows").innerHTML='<div class="small">DNA build failed: '+e.message+'</div>'}
 }
