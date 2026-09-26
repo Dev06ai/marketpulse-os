@@ -785,7 +785,17 @@ var state={
   adminMfaEnabled:false,
   adminMfaRequired:false,
   adminUsers:[],
-  adminUserStats:null
+  adminUserStats:null,
+  adminOverview:null,
+  adminProviders:[],
+  adminFlags:{},
+  adminConfig:{},
+  adminTickets:[],
+  adminBroadcasts:[],
+  adminAudit:[],
+  adminSecurity:[],
+  adminSnapshots:[],
+  flags:{}
 };
 
 function $(id){return document.getElementById(id)}
@@ -1570,6 +1580,94 @@ var accountMode="login";
 function setAccountMode(mode){
   accountMode=mode;$("accountLoginMode").classList.toggle("on",mode==="login");$("accountRegisterMode").classList.toggle("on",mode==="register");$("accountSubmit").textContent=mode==="login"?"Sign in":"Create account";$("accountPassword").autocomplete=mode==="login"?"current-password":"new-password";$("accountError").textContent="";state.adminMfaRequired=false;renderAccount();
 }
+function adminSetToggle(id,on){var b=$(id);if(!b)return;b.classList.toggle("on",Boolean(on))}
+function adminListHtml(items){
+  return (items||[]).slice(0,8).map(function(x){return'<div class="adminLine"><b>'+safeHtml(String(x.key??x.feature??x.symbol??x.interval??x.route??"—"))+'</b><span>'+fmt(x.count??x.value??"—")+'</span></div>'}).join("")||'<div class="small">No data yet.</div>';
+}
+function adminStatusBadge(status){
+  status=String(status||"").toLowerCase();return status==="healthy"||status==="configured"||status==="live"?"ok":status==="stale"||status==="degraded"||status==="warning"?"warn":"bad";
+}
+function adminRenderCommandCenter(){
+  var o=state.adminOverview;if(!o)return;
+  var st=o.stats||{},an=o.analytics||{},p=o.performance||{},learning=o.learning||{};
+  $("acLiveVisitors").textContent=Number(st.liveVisitors||0);$("acActiveDay").textContent=Number(an.totals?.activeDay||0);$("acActiveWeek").textContent=Number(an.totals?.activeWeek||0);$("acNewMonth").textContent=Number(an.totals?.month||0);
+  var alerts=(o.security||[]).filter(function(x){return ["alert","warning"].includes(String(x.severity).toLowerCase())}).length;$("acSecurityAlerts").textContent=alerts;
+  $("acPerformance").innerHTML=[
+    ["Uptime",Math.floor(Number(p.uptimeSec||0)/3600)+"h "+Math.floor(Number(p.uptimeSec||0)%3600/60)+"m"],
+    ["Requests",fmt(p.requests)],["Errors",fmt(p.errors)],["Avg latency",fmt(p.avgLatencyMs)+" ms"],["Memory",fmt(p.memoryMb)+" MB"],["Heap",fmt(p.heapUsedMb)+" MB"]
+  ].map(function(x){return'<div class="adminLine"><b>'+x[0]+'</b><span>'+x[1]+'</span></div>'}).join("");
+  $("acLearning").innerHTML=[
+    ["State",learning.state||learning.phase||"unknown"],["Resolved",learning.resolved??"—"],["Phase 7",o.phase7?.ok?"PASS":"CHECK"],["Durable",learning.durable?"YES":"NO"]
+  ].map(function(x){return'<div class="adminLine"><b>'+x[0]+'</b><span>'+safeHtml(String(x[1]))+'</span></div>'}).join("");
+  $("acFeatures").innerHTML=adminListHtml((an.features||[]).map(function(x){return{feature:x.feature,key:x.feature,count:x.count}}));
+  $("acSymbols").innerHTML=adminListHtml((an.symbols||[]).map(function(x){return{symbol:x.symbol,key:x.symbol,count:x.count}}));
+  $("acIntervals").innerHTML=adminListHtml((an.intervals||[]).map(function(x){return{interval:x.interval,key:x.interval,count:x.count}}));
+  var sec=o.security||[];$("acSecurityTable").innerHTML=sec.length?sec.slice(0,12).map(function(x){return'<tr><td>'+adminDate(x.createdAt)+'</td><td>'+safeHtml(x.eventType)+'</td><td><span class="adminBadgeSmall '+adminStatusBadge(x.severity)+'">'+safeHtml(String(x.severity).toUpperCase())+'</span></td><td>'+safeHtml(x.email||"—")+'</td></tr>'}).join(""):'<tr><td colspan="4" class="small">No security events.</td></tr>';
+  $("acSecurityBadge").textContent=alerts?"REVIEW":"HEALTHY";$("acSecurityBadge").className="adminBadgeSmall "+(alerts?"warn":"ok");
+  $("acAuditTable").innerHTML=(o.audit||[]).slice(0,16).map(function(x){return'<tr><td>'+adminDate(x.createdAt)+'</td><td>'+safeHtml(x.action)+'</td><td>'+safeHtml(x.category)+'</td><td>'+safeHtml(JSON.stringify(x.metadata||{}).slice(0,120))+'</td></tr>'}).join("")||'<tr><td colspan="4" class="small">No admin activity yet.</td></tr>';
+  adminRenderFlags(o.flags||{});
+  adminRenderEmergency(o.config||{});
+  adminRenderBroadcasts(o.broadcasts||[]);
+  adminRenderTickets(o.tickets||[]);
+  adminRenderSnapshots(o.snapshots||[]);
+}
+function adminRenderProviders(){
+  var p=state.adminProviders||[];$("acProviders").innerHTML=p.map(function(x){return'<div class="adminLine"><b>'+safeHtml(x.name)+'</b><span><span class="adminBadgeSmall '+adminStatusBadge(x.status)+'">'+safeHtml(String(x.status).toUpperCase())+'</span> '+(x.latencyMs!=null?fmt(x.latencyMs)+" ms":"")+'</span></div>'}).join("")||'<div class="small">No provider data.</div>';
+}
+function adminRenderFlags(flags){
+  state.adminFlags=flags||{};
+  $("acFlags").innerHTML=Object.entries(flags||{}).map(function(entry){var k=entry[0],v=entry[1]||{};return'<div class="adminFlagRow"><div><div class="flagName">'+safeHtml(k)+'</div><div class="flagDesc">'+safeHtml(v.description||"")+'</div></div><button class="adminToggle '+(v.enabled!==false?"on":"")+'" data-flag-toggle="'+safeHtml(k)+'"></button><input data-flag-rollout="'+safeHtml(k)+'" type="number" min="0" max="100" value="'+Number(v.rolloutPct??100)+'"><span class="small">'+safeHtml(v.updatedBy||"default")+'</span><button class="btn" data-flag-save="'+safeHtml(k)+'">Save</button></div>'}).join("");
+  $("acFlags").querySelectorAll("[data-flag-toggle]").forEach(function(b){b.addEventListener("click",function(){b.classList.toggle("on")})});
+  $("acFlags").querySelectorAll("[data-flag-save]").forEach(function(b){b.addEventListener("click",function(){var k=b.dataset.flagSave,t=b.parentElement.querySelector("[data-flag-toggle]"),r=b.parentElement.querySelector("[data-flag-rollout]");adminSaveFlag(k,t.classList.contains("on"),r.value)})});
+}
+function adminRenderEmergency(c){
+  adminSetToggle("acMaintenance",c.maintenanceMode);adminSetToggle("acReadOnly",c.readOnlyMode);adminSetToggle("acRegistrations",c.registrationsEnabled!==false);adminSetToggle("acAI",c.aiEnabled!==false);adminSetToggle("acExecution",c.executionEnabled!==false);adminSetToggle("acMarketData",c.marketDataEnabled!==false);
+  $("acMaintenanceMessage").value=c.maintenanceMessage||"";$("acMode").value=c.mode||"normal";$("acSessionHours").value=Number(localStorage.getItem("mp-admin-session-hours")||8);$("acUserSessionDays").value=Number(localStorage.getItem("mp-user-session-days")||30);
+}
+function adminRenderBroadcasts(rows){
+  state.adminBroadcasts=rows||[];$("acBroadcasts").innerHTML=(rows||[]).slice(0,8).map(function(x){return'<div class="adminLine"><div><b>'+safeHtml(x.title)+'</b><div class="small">'+safeHtml(x.body).slice(0,100)+'</div></div><button class="btn" data-broadcast-toggle="'+x.id+'">'+(x.active?"Deactivate":"Activate")+'</button></div>'}).join("")||'<div class="small">No broadcasts.</div>';
+  $("acBroadcasts").querySelectorAll("[data-broadcast-toggle]").forEach(function(b){b.addEventListener("click",function(){adminToggleBroadcast(b.dataset.broadcastToggle,!b.textContent.includes("Activate"))})});
+}
+function adminRenderTickets(rows){
+  state.adminTickets=rows||[];$("acSupportTable").innerHTML=(rows||[]).slice(0,25).map(function(x){return'<tr><td>'+safeHtml(x.email||"—")+'</td><td>'+safeHtml(x.subject)+'</td><td>'+safeHtml(x.status)+'</td><td>'+adminDate(x.updatedAt)+'</td><td><button class="btn" data-ticket="'+x.id+'">Reply</button></td></tr>'}).join("")||'<tr><td colspan="5" class="small">No support tickets.</td></tr>';
+  $("acSupportTable").querySelectorAll("[data-ticket]").forEach(function(b){b.addEventListener("click",function(){adminReplyTicket(b.dataset.ticket)})});
+}
+function adminRenderSnapshots(rows){
+  state.adminSnapshots=rows||[];$("acSnapshots").innerHTML=(rows||[]).slice(0,8).map(function(x){return'<div class="adminLine"><div><b>'+safeHtml(x.label)+'</b><div class="small">'+adminDate(x.createdAt)+'</div></div><button class="btn" data-snapshot="'+x.id+'">Restore</button></div>'}).join("")||'<div class="small">No snapshots yet.</div>';
+  $("acSnapshots").querySelectorAll("[data-snapshot]").forEach(function(b){b.addEventListener("click",function(){adminRestoreSnapshot(b.dataset.snapshot)})});
+}
+async function loadAdminProviders(){
+  try{var d=await api("/api/admin/providers",9000);state.adminProviders=d.providers||[];adminRenderProviders()}catch(e){$("acProviders").innerHTML='<div class="small">Provider check failed: '+safeHtml(e.message)+'</div>'}
+}
+async function loadAdminCenter(){
+  if(!state.account?.isAdmin)return;
+  try{var d=await api("/api/admin/overview",12000);state.adminOverview=d;adminRenderCommandCenter();await loadAdminProviders()}catch(e){setStatus("Admin Command Center failed: "+e.message,"warn")}
+}
+async function adminSaveFlag(key,enabled,rolloutPct){
+  try{await apiPost("/api/admin/flags",{key,enabled,rolloutPct:Number(rolloutPct||100),description:state.adminFlags[key]?.description||""});await loadAdminCenter()}catch(e){alert(e.message)}
+}
+async function adminApplyEmergency(){
+  var payload={maintenanceMode:$("acMaintenance").classList.contains("on"),readOnlyMode:$("acReadOnly").classList.contains("on"),registrationsEnabled:$("acRegistrations").classList.contains("on"),aiEnabled:$("acAI").classList.contains("on"),executionEnabled:$("acExecution").classList.contains("on"),marketDataEnabled:$("acMarketData").classList.contains("on"),writesEnabled:!$("acReadOnly").classList.contains("on")};
+  try{await apiPost("/api/admin/emergency",payload);await loadAdminCenter()}catch(e){alert(e.message)}
+}
+async function adminSaveConfig(){
+  try{var current=state.adminOverview?.config||{};var payload=Object.assign({},current,{maintenanceMessage:$("acMaintenanceMessage").value,mode:$("acMode").value,updatedAt:Date.now()});await apiPost("/api/admin/config",payload);localStorage.setItem("mp-admin-session-hours",String($("acSessionHours").value||8));localStorage.setItem("mp-user-session-days",String($("acUserSessionDays").value||30));await loadAdminCenter()}catch(e){alert(e.message)}
+}
+async function adminPublishBroadcast(){
+  try{await apiPost("/api/admin/broadcasts",{title:$("acBroadcastTitle").value,body:$("acBroadcastBody").value,audience:$("acBroadcastAudience").value,expiresAt:$("acBroadcastExpiry").value?new Date($("acBroadcastExpiry").value).toISOString():null});$("acBroadcastTitle").value="";$("acBroadcastBody").value="";await loadAdminCenter()}catch(e){alert(e.message)}
+}
+async function adminToggleBroadcast(id,active){try{await fetch("/api/admin/broadcasts/"+encodeURIComponent(id)+"/toggle?active="+active,{method:"POST",headers:{"Content-Type":"application/json"}});await loadAdminCenter()}catch(e){alert(e.message)}}
+async function adminReplyTicket(id){
+  var reply=prompt("Reply to this user. Leave blank to resolve without a reply:","");if(reply===null)return;
+  var status=reply.trim()?"resolved":"resolved";
+  try{await apiPost("/api/admin/support/"+encodeURIComponent(id)+"/reply",{reply,status});await loadAdminCenter()}catch(e){alert(e.message)}
+}
+async function adminCreateSnapshot(){try{await apiPost("/api/admin/snapshots",{});await loadAdminCenter()}catch(e){alert(e.message)}}
+async function adminRestoreSnapshot(id){if(!confirm("Restore this operational configuration snapshot?"))return;try{await apiPost("/api/admin/snapshots/"+encodeURIComponent(id)+"/restore",{});await loadAdminCenter()}catch(e){alert(e.message)}}
+async function apiPost(url,body){
+  var r=await fetch(url,{method:"POST",headers:{"Content-Type":"application/json","x-marketpulse-device":deviceId()},body:JSON.stringify(body||{})});
+  var text=await r.text(),j={};try{j=JSON.parse(text)}catch{}if(!r.ok)throw Error(j.error||"Request failed");return j;
+}
 async function loadAdminConsole(){
   if(!state.account?.isAdmin)return;
   if($("adminIdentity"))$("adminIdentity").textContent=state.account.email;
@@ -1579,7 +1677,7 @@ async function loadAdminConsole(){
     var r=await api("/api/admin/storage-health",7000);
     if($("adminStorage"))$("adminStorage").textContent=r.connected?"Postgres":"Local fallback";if($("adminStorageDetail"))$("adminStorageDetail").textContent=r.connected?"Live database connection verified":"Running on local fallback storage";
   }catch(e){if($("adminStorage"))$("adminStorage").textContent="Unavailable";if($("adminStorageDetail"))$("adminStorageDetail").textContent=e.message||"Storage health check failed"}
-  loadAdminUsers();
+  loadAdminUsers();loadAdminCenter();
 }
 function adminDate(v){
   if(!v)return "—";
@@ -1892,6 +1990,13 @@ function initAccountUI(){
 
   if(adminRun)adminRun.addEventListener("click",runAdminSystemCheck);
   if(adminExec)adminExec.addEventListener("click",function(){setView("execution")});
+  if($("adminRefreshCenter"))$("adminRefreshCenter").addEventListener("click",loadAdminCenter);
+  if($("acSaveFlags"))$("acSaveFlags").addEventListener("click",loadAdminCenter);
+  if($("acSaveEmergency"))$("acSaveEmergency").addEventListener("click",adminApplyEmergency);
+  if($("acSaveConfig"))$("acSaveConfig").addEventListener("click",adminSaveConfig);
+  if($("acBroadcastSend"))$("acBroadcastSend").addEventListener("click",adminPublishBroadcast);
+  if($("acSupportRefresh"))$("acSupportRefresh").addEventListener("click",loadAdminCenter);
+  if($("acCreateSnapshot"))$("acCreateSnapshot").addEventListener("click",adminCreateSnapshot);
   return true;
 }
 if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",initAccountUI,{once:true});else initAccountUI();
