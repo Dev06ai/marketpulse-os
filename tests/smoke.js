@@ -23,7 +23,7 @@ const c=candles();
 const a=analyze(c,{interval:"1h"});
 assert(Number.isFinite(a.price),"price");
 assert(Number.isFinite(a.score),"score");
-assert(a.components.length===10,"10 confluence components");
+assert(a.components.length===12,"12 confluence components");
 assert(["READY","WATCH","WAITING"].includes(a.status),"status");
 assert(a.thesisParts.length>=1,"thesis");
 const b=backtest(c);
