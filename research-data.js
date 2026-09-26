@@ -142,7 +142,8 @@ async function buildReplayRecords({symbol, interval="1h", bars=5000, analyze, mi
       score: a.score,
       outcome,
         snapshot: a
-      });
+        });
+      }
     }
     if (typeof onProgress === "function" && ((i-start) % 50 === 0 || i === candles.length-horizonBars-2)) {
       await onProgress({processed:i-start+1,total,records:records.length,pct:total?Math.round((i-start+1)/total*100):100});
