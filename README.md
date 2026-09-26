@@ -63,3 +63,7 @@ Version 2.5 adds an owner-only command center with private analytics, live activ
 MarketPulse now includes a separate calibrated setup-quality model alongside the transparent rule engine. The live path can incorporate public derivatives data (OI, funding, CVD/flow context), live Bybit orderbook microstructure, and liquidity/sweep structure. Historical training can use Binance USD-M public futures klines/taker-buy fields plus public Bybit OI/funding history. Candidate models are evaluated chronologically with walk-forward validation and are only promoted when they beat the current champion on the validation gate. Resolved MarketPulse signals are stored as training outcomes for later retraining; the system does not blindly rewrite the live model after every trade.
 
 The prediction model is a decision-support layer, not a guarantee of trading success. More data, clean labeling, realistic fees/slippage, and out-of-sample validation remain necessary before using it for any evaluation or live account.
+
+
+### Prediction automation
+By default, the server performs a background public-data bootstrap when no champion model exists and then runs a conservative automatic retraining check once per hour; actual model retraining is gated by the configured PREDICTION_AUTO_TRAIN_HOURS interval and requires enough resolved 1h outcomes. Set PREDICTION_BOOTSTRAP=false or PREDICTION_AUTO_TRAIN=false in Render environment variables to disable either behavior. Automatic runs only replace the champion when the walk-forward validation gate is satisfied.
