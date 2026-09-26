@@ -141,6 +141,29 @@ async function fetchTrainingFuturesKlines(symbol,interval,limit=1500){
   const map=new Map();for(const x of out)map.set(x.t,x);return Array.from(map.values()).sort((a,b)=>a.t-b.t).slice(-max);
 }
 
+async function fetchTrainingDerivatives(symbol,interval,limit=250){
+  const bybitInt=bybitInterval(interval);
+  const oiSeries=[],fundingSeries=[];
+  try{
+    let cursor=null,page=0;
+    while(page<6&&oiSeries.length<limit){
+      const params={category:"linear",symbol,intervalTime:bybitInt,limit:200};if(cursor)params.cursor=cursor;
+      const r=await bybitGet('/v5/market/open-interest',params,5000);
+      const list=r.result?.list||[];
+      for(const x of list){const ts=Number(x.timestamp);const oi=Number(x.openInterest);if(Number.isFinite(ts)&&Number.isFinite(oi))oiSeries.push({ts,oi})}
+      cursor=r.result?.nextPageCursor||null;if(!cursor||!list.length)break;page++;
+    }
+  }catch{}
+  try{
+    const r=await bybitGet('/v5/market/funding/history',{category:"linear",symbol,limit:200},5000);
+    for(const x of (r.result?.list||[])){const ts=Number(x.fundingRateTimestamp),fundingRate=Number(x.fundingRate);if(Number.isFinite(ts)&&Number.isFinite(fundingRate))fundingSeries.push({ts,fundingRate})}
+  }catch{}
+  oiSeries.sort((a,b)=>a.ts-b.ts);fundingSeries.sort((a,b)=>a.ts-b.ts);
+  for(let i=0;i<oiSeries.length;i++){
+    const prev=oiSeries[i-1];oiSeries[i].oiChangePct=prev?.oi?((oiSeries[i].oi-prev.oi)/prev.oi)*100:null;
+  }
+  return {oiSeries,fundingSeries,source:"Bybit public linear futures market data"};
+}
 function requestDevice(req){return String(req.headers["x-marketpulse-device"]||"00000000-0000-0000-0000-000000000000").slice(0,128)}
 
 function mins(interval){return ({'15m':15,'1h':60,'4h':240,'1d':1440})[interval]||60}
