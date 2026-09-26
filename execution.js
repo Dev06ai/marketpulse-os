@@ -1,5 +1,5 @@
 const crypto=require("crypto");
-const WebSocket=require("ws");
+let WebSocket=null;try{WebSocket=require("ws")}catch{}
 const storage=require("./storage");
 
 const VERSION=1;
@@ -335,6 +335,7 @@ async function processWsMessage(state,msg){
 
 function connectPrivateWs(){
   if(wsState.started)return;
+  if(!WebSocket){wsState.lastError="ws dependency unavailable";wsState.started=false;return}
   wsState.started=true;
   const loop=()=>{
     if(!adapter.configured()){wsState.connected=false;wsState.lastError="BYBIT credentials not configured";wsState.started=false;return}
