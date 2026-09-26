@@ -26,7 +26,7 @@ const GLOBAL_RATE_LIMIT=300;
 const GLOBAL_RATE=new Map();
 const CSRF_COOKIE="mp_csrf";
 const SERVER_METRICS={startedAt:Date.now(),requests:0,errors:0,totalLatencyMs:0,routeCounts:new Map(),lastErrors:[]};
-let RESEARCH_JOB={running:false,startedAt:null,finishedAt:null,error:null,symbol:null,interval:null,bars:0,records:0,trained:0,skipped:0};
+let RESEARCH_JOB={running:false,startedAt:null,finishedAt:null,error:null,symbol:null,interval:null,bars:0,records:0,trained:0,skipped:0,progress:{processed:0,total:0,pct:0}};
 let ADMIN_RUNTIME={loadedAt:0,config:null};
 async function getAdminRuntime(force=false){
   if(!force&&ADMIN_RUNTIME.config&&Date.now()-ADMIN_RUNTIME.loadedAt<2000)return ADMIN_RUNTIME.config;
@@ -1052,11 +1052,12 @@ const server=http.createServer(async(req,res)=>{
       if(RESEARCH_JOB.running)return send(res,409,{ok:false,error:"RESEARCH_JOB_ALREADY_RUNNING",job:RESEARCH_JOB});
       const symbol=(u.searchParams.get('symbol')||'BTCUSDT').toUpperCase(),interval=u.searchParams.get('interval')||'1h';
       const bars=Math.max(300,Math.min(15000,Number(u.searchParams.get('bars')||5000)));
-      RESEARCH_JOB={running:true,startedAt:Date.now(),finishedAt:null,error:null,symbol,interval,bars,records:0,trained:0,skipped:0};
+      RESEARCH_JOB={running:true,startedAt:Date.now(),finishedAt:null,error:null,symbol,interval,bars,records:0,trained:0,skipped:0,progress:{processed:0,total:0,pct:0}};
       setImmediate(async()=>{
         try{
-          const built=await research.buildReplayRecords({symbol,interval,bars,analyze});
+          const built=await research.buildReplayRecords({symbol,interval,bars,analyze,onProgress:async function(progress){RESEARCH_JOB.progress=progress}});
           RESEARCH_JOB.records=built.records.length;
+          RESEARCH_JOB.progress={processed:built.bars,total:built.bars,pct:100};
           const trained=await learning.trainFromReplay(built.records);
           RESEARCH_JOB.trained=trained.trained;RESEARCH_JOB.skipped=trained.skipped;
           RESEARCH_JOB.running=false;RESEARCH_JOB.finishedAt=Date.now();
