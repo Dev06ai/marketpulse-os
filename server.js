@@ -867,7 +867,9 @@ const server=http.createServer(async(req,res)=>{
           const hit=await Promise.any(tasks);
           return {name,status:"healthy",latencyMs:Date.now()-started,detail:"reachable via "+hit.host,host:hit.host};
         }catch{
-          return {name,status:"error",latencyMs:Date.now()-started,detail:errors.slice(0,3).join(" | ")||"all endpoints failed"};
+          const detail=errors.slice(0,3).join(" | ")||"all endpoints failed";
+          const restricted=/HTTP (401|403|451)/i.test(detail);
+          return {name,status:restricted?"restricted":"error",latencyMs:Date.now()-started,detail:restricted?detail+"; network/geographic access restriction likely":detail};
         }
       };
       const items=[];
