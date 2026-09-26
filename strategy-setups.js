@@ -50,8 +50,8 @@ function profile(group,bins=32){
   return {poc:lo+(best+.5)*step,bins,low:lo,high:hi,totalVolume:vol.reduce((s,v)=>s+v,0)};
 }
 
-function wasTouched(c,fromIndex,price,tolerance){
-  for(let i=fromIndex;i<c.length;i++){
+function wasTouched(c,fromIndex,toIndex,price,tolerance){
+  for(let i=fromIndex;i<=toIndex&&i<c.length;i++){
     const x=c[i];
     if(x.l<=price+tolerance&&x.h>=price-tolerance)return true;
   }
@@ -65,7 +65,7 @@ function nakedPocs(c,keyFn,label,bins=32){
     const prof=profile(groups[g],bins);
     const nextStart=c.findIndex(x=>keyFn(x.t)===groups[g+1].key);
     if(nextStart<0)continue;
-    const touchedLater=wasTouched(c,nextStart,prof.poc,Math.max((groups[g].high-groups[g].low)/bins,1)*.35);
+    const touchedLater=wasTouched(c,nextStart,Math.max(nextStart,c.length-2),prof.poc,Math.max((groups[g].high-groups[g].low)/bins,1)*.35);
     if(!touchedLater){
       out.push({
         id:label+"_NPOC_"+String(groups[g].key),
