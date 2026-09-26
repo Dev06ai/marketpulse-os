@@ -193,7 +193,7 @@ body{font-size:14px}
 .flowLegend .lg.ember{background:#fb7185;box-shadow:0 0 8px rgba(251,113,133,.45)}
 </style><style id="owner-admin-style">
 .adminOnly,.adminOnlyControl{display:none!important}
-body.admin-mode .adminOnly{display:block!important}body.admin-mode .adminOnlyControl{display:inline-flex!important}
+body.admin-mode .adminOnly{display:block!important}body.admin-mode .edgeAction.adminOnly{display:flex!important}body.admin-mode .portfolioActions.adminOnly{display:flex!important}body.admin-mode .adminOnlyControl{display:inline-flex!important}
 .nav button.adminNav,.mobileMenu button.adminNav{display:none}
 body.admin-mode .nav button.adminNav,body.admin-mode .mobileMenu button.adminNav{display:block;color:#d8c3ff;border-color:rgba(192,132,252,.25);background:rgba(192,132,252,.06)}
 .adminPanel{border-color:rgba(192,132,252,.22);box-shadow:0 0 0 1px rgba(192,132,252,.05),0 0 36px rgba(192,132,252,.08),var(--shadow)}
@@ -401,7 +401,7 @@ body.admin-mode .nav button.adminNav,body.admin-mode .mobileMenu button.adminNav
     </div>
     <div class="section edgeGrid">
       <div class="edgePanel"><div class="sectionHead"><div><div class="title">Risk engine</div><div class="sub">Paper positions only. No exchange orders are sent.</div></div><span class="edgePill" id="edgeRiskGate">NOT CHECKED</span></div>
-        <div class="edgeAction">
+        <div class="edgeAction adminOnly">
           <label>Account<input id="edgeAccount" type="number" min="0" step="100" value="100000"></label><label>Risk / trade %<input id="edgeRiskPct" type="number" min=".05" max="5" step=".05" value="1"></label><label>Minimum R:R<input id="edgeMinRR" type="number" min=".5" max="10" step=".1" value="1.5"></label><label>Max open risk %<input id="edgeMaxOpenRisk" type="number" min=".5" max="10" step=".1" value="2.5"></label><button id="saveEdgeConfig" class="btn primary">Save risk rules</button>
         </div><div class="edgeNote" id="edgeRiskDetail">No current plan.</div>
       </div>
@@ -518,7 +518,7 @@ body.admin-mode .nav button.adminNav,body.admin-mode .mobileMenu button.adminNav
     <div class="section portfolioGrid">
       <div class="portfolioPanel"><div class="sectionHead"><div><div class="title">Correlation matrix</div><div class="sub">Latest return correlation across the tracked universe.</div></div></div><div id="pfCorrMatrix" class="portfolioCorr"></div></div>
       <div class="portfolioPanel"><div class="sectionHead"><div><div class="title">Portfolio limits</div><div class="sub">These limits are also consulted by Phase 5 execution.</div></div></div>
-        <div class="portfolioActions">
+        <div class="portfolioActions adminOnly">
           <label>Account<input id="pfAccount" type="number" min="0" step="100" value="100000"></label>
           <label>Max portfolio risk %<input id="pfMaxRisk" type="number" min=".5" max="20" step=".1" value="4"></label>
           <label>Max symbol exposure %<input id="pfMaxSymbol" type="number" min=".25" max="20" step=".25" value="2"></label>
@@ -551,7 +551,7 @@ body.admin-mode .nav button.adminNav,body.admin-mode .mobileMenu button.adminNav
   </div>
   <div class="grid2">
     <div class="card adminPanel"><div class="title">Execution controls</div><div class="sub">Testnet/simulation execution controls are available only to the owner.</div><button id="adminOpenExecution" class="btn" style="margin-top:9px">Open Execution Control</button></div>
-    <div class="card adminPanel"><div class="title">Admin boundary</div><div class="sub">Trader accounts cannot access protected admin endpoints even if they manually call the API.</div><div class="chip c" style="margin-top:9px">SERVER ENFORCED</div></div>
+    <div class="card adminPanel"><div class="title">Admin boundary</div><div class="sub">Trader accounts cannot access protected admin endpoints even if they manually call the API.</div><div class="chip c" style="margin-top:9px">SERVER ENFORCED</div><div class="small" id="adminSecurityStatus" style="margin-top:8px">Security posture: checking…</div></div>
   </div>
 </section>
 
@@ -561,7 +561,7 @@ body.admin-mode .nav button.adminNav,body.admin-mode .mobileMenu button.adminNav
 
   <div class="foot">MarketPulse is educational decision-support software. It does not place orders, manage funds, or guarantee outcomes. Adaptive learning calibrates from resolved historical examples; it is not a promise of future performance.</div>
 </main>
-<script>
+<script nonce="__CSP_NONCE__">
 (function(){
 "use strict";
 
@@ -593,7 +593,9 @@ var state={
   bootRetryTimer:null,
   activeView:"overview",
   account:null,
-  adminConfigured:false
+  adminConfigured:false,
+  adminMfaEnabled:false,
+  adminMfaRequired:false
 };
 
 function $(id){return document.getElementById(id)}
@@ -1365,6 +1367,9 @@ function renderAccount(){
   user.classList.toggle("hidden",!state.account);
   sub.textContent=admin?"Owner account · admin controls unlocked":state.account?"Account-backed workspace active.":"Optional account for synced journal, watchlists and preferences.";
   if(state.account&&email)email.textContent=state.account.email;
+  var mfa=$("accountMfa"),hint=$("accountMfaHint");
+  if(mfa)mfa.classList.toggle("hidden",!state.adminMfaRequired);
+  if(hint)hint.classList.toggle("hidden",!state.adminMfaRequired);
   var ex=$("executionNav");if(ex)ex.classList.toggle("adminNav",!admin);
   if(ex)ex.style.display=admin?"block":"none";
   var an=$("adminNav"),am=$("adminNavMobile");if(an)an.style.display=admin?"block":"none";if(am)am.style.display=admin?"block":"none";
@@ -1373,16 +1378,17 @@ function openAccount(){renderAccount();$("accountModal").classList.add("open");$
 function closeAccount(){ $("accountModal").classList.remove("open");$("accountModal").setAttribute("aria-hidden","true");$("accountError").textContent=""}
 var accountMode="login";
 function setAccountMode(mode){
-  accountMode=mode;$("accountLoginMode").classList.toggle("on",mode==="login");$("accountRegisterMode").classList.toggle("on",mode==="register");$("accountSubmit").textContent=mode==="login"?"Sign in":"Create account";$("accountPassword").autocomplete=mode==="login"?"current-password":"new-password";$("accountError").textContent="";
+  accountMode=mode;$("accountLoginMode").classList.toggle("on",mode==="login");$("accountRegisterMode").classList.toggle("on",mode==="register");$("accountSubmit").textContent=mode==="login"?"Sign in":"Create account";$("accountPassword").autocomplete=mode==="login"?"current-password":"new-password";$("accountError").textContent="";state.adminMfaRequired=false;renderAccount();
 }
 async function loadAdminConsole(){
   if(!state.account?.isAdmin)return;
   if($("adminIdentity"))$("adminIdentity").textContent=state.account.email;
-  if($("adminConfigState"))$("adminConfigState").textContent=state.adminConfigured?"Admin email configured":"Admin env not configured";
+  if($("adminSecurityStatus"))$("adminSecurityStatus").textContent=state.adminMfaEnabled?"Owner MFA: ACTIVE · hardened sessions":"Owner MFA: NOT CONFIGURED · add MARKETPULSE_ADMIN_TOTP_SECRET in Render";
+  if($("adminConfigState"))$("adminConfigState").textContent=state.adminConfigured?(state.adminMfaEnabled?"Admin email + MFA configured":"Admin email configured · MFA not enabled"):"Admin env not configured";
   try{
     var r=await api("/api/memory/status",5000);
     if($("adminStorage"))$("adminStorage").textContent=r.durable?"Postgres":"Local fallback";
-  }catch{$("adminStorage").textContent="Unavailable"}
+  }catch{if($("adminStorage"))$("adminStorage").textContent="Unavailable"}
 }
 async function runAdminSystemCheck(){
   if(!state.account?.isAdmin)return;
@@ -1404,27 +1410,36 @@ async function loadAuth(){
   try{
     var r=await api("/api/auth/me",4000);
     state.account=r.authenticated?r.user:null;
-    state.adminConfigured=Boolean(r.adminConfigured);
+    state.adminConfigured=Boolean(r.adminConfigured);state.adminMfaEnabled=Boolean(r.mfaEnabled);
     renderAccount();
     if(state.account)await syncMemory();
   }catch{renderAccount()}
 }
 async function submitAccount(){
-  var email=$("accountEmail").value.trim(),password=$("accountPassword").value;
+  var email=$("accountEmail").value.trim(),password=$("accountPassword").value,mfaCode=$("accountMfa")?.value.trim()||"";
   $("accountError").textContent="Working…";
   try{
     var anonymous={journal:state.journal.slice(),signals:state.signals.slice(),watch:(state.watch||[]).slice()};
-    var r=await fetch(accountMode==="login"?"/api/auth/login":"/api/auth/register",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({email,password})});
-    var j=await r.json();if(!r.ok)throw Error(j.error||"Account request failed");
-    state.account=j.user;state.pendingAnonymousMemory=anonymous;renderAccount();await syncMemory({migrateAnonymous:true,save:true});
-    $("accountError").textContent="";$("accountPassword").value="";closeAccount();
-    $("memoryText").textContent="Account sync active. Your workspace is isolated to this account.";
+    var r=await fetch(accountMode==="login"?"/api/auth/login":"/api/auth/register",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({email,password,mfaCode})});
+    var j=await r.json();
+    if(!r.ok){
+      if(j.mfaRequired||j.error==="Owner MFA code required."||j.error==="Owner MFA code is incorrect or expired."){
+        state.adminMfaRequired=true;renderAccount();$("accountMfa").focus();
+      }
+      throw Error(j.error||"Account request failed");
+    }
+    if(j.requiresMfa){
+      accountMode="login";state.adminMfaRequired=true;$("accountLoginMode").classList.add("on");$("accountRegisterMode").classList.remove("on");$("accountSubmit").textContent="Sign in";renderAccount();$("accountError").textContent="Account created. Enter your authenticator code to finish owner sign-in.";return;
+    }
+    state.account=j.user;state.adminMfaEnabled=Boolean(j.user&&j.user.mfaEnabled);state.pendingAnonymousMemory=anonymous;state.adminMfaRequired=false;renderAccount();await syncMemory({migrateAnonymous:true,save:true});
+    $("accountError").textContent="";$("accountPassword").value="";if($("accountMfa"))$("accountMfa").value="";closeAccount();
+    $("memoryText").textContent=state.account.isAdmin?"Owner security is active.":"Account sync active.";
   }catch(e){$("accountError").textContent=e.message}
 }
 async function logoutAccount(){
   try{
     await fetch("/api/auth/logout",{method:"POST"});
-    state.account=null;state.pendingAnonymousMemory=null;
+    state.account=null;state.pendingAnonymousMemory=null;state.adminMfaRequired=false;
     state.journal=[];state.signals=[];state.watch=[];
     localStorage.removeItem("mp-stable-journal");localStorage.removeItem("mp-stable-signals");localStorage.removeItem("mp-watch");
     renderAccount();await syncMemory();$("memoryText").textContent="Signed out. Anonymous device memory restored; account data remains isolated.";
@@ -1626,10 +1641,10 @@ setInterval(function(){if(document.visibilityState==="visible")loadPhase7()},600
       <div class="aiModes" style="margin-top:12px"><button id="accountLoginMode" class="aiMode on">Sign in</button><button id="accountRegisterMode" class="aiMode">Create account</button></div>
       <div class="inputs one">
         <input id="accountEmail" type="email" autocomplete="email" placeholder="Email">
-        <input id="accountPassword" type="password" autocomplete="current-password" placeholder="Password">
+        <input id="accountPassword" type="password" autocomplete="current-password" placeholder="Password"><input id="accountMfa" class="hidden" type="text" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="one-time-code" placeholder="6-digit authenticator code">
       </div>
       <button id="accountSubmit" class="btn primary" style="margin-top:8px">Sign in</button>
-      <div id="accountError" class="small" style="margin-top:8px;color:#f87171"></div>
+      <div id="accountMfaHint" class="small hidden" style="margin-top:7px;color:#c4b5fd">Owner accounts use an authenticator code for the protected admin layer.</div><div id="accountError" class="small" style="margin-top:8px;color:#f87171"></div>
     </div>
     <div id="accountUser" class="hidden">
       <div class="card" style="margin-top:12px"><div class="label">SIGNED IN</div><div class="value" id="accountEmailText" style="font-size:16px">—</div><div class="sub" style="margin-top:5px">Your account-backed workspace is active.</div></div>
