@@ -131,8 +131,10 @@ function baseGates({ analysis = {}, derivatives = null, dataQuality = {}, equity
   if (rr < config.minRR) reasons.push("R_R_BELOW_THRESHOLD");
   if (config.requireDerivatives && !derivAvailable) reasons.push("DERIVATIVES_UNAVAILABLE");
   if (dataQualityPct < config.minDataQualityPct) reasons.push("DATA_QUALITY_BELOW_THRESHOLD");
+  if (config.requireIndependentConsensus && consensusQualityPct === null) reasons.push("MARKET_CONSENSUS_UNAVAILABLE");
   if (config.requireIndependentConsensus && consensusQualityPct !== null && consensusQualityPct < config.minConsensusQualityPct) reasons.push("MARKET_CONSENSUS_WEAK");
   if (priceDispersionBps !== null && priceDispersionBps > config.maxPriceDispersionBps) reasons.push("PRICE_FEEDS_CONFLICT");
+  if (config.requireIndependentConsensus && independentSourceCount === null) reasons.push("CONSENSUS_SOURCE_COUNT_UNAVAILABLE");
   if (config.requireIndependentConsensus && independentSourceCount !== null && independentSourceCount < 2) reasons.push("INSUFFICIENT_INDEPENDENT_PRICE_SOURCES");
   if (candleAgeMs !== null && candleAgeMs > config.maxCandleAgeMs) reasons.push("CANDLE_DATA_STALE");
   if (derivAvailable && flowAgeMs !== null && flowAgeMs > config.maxFlowAgeMs) reasons.push("FLOW_DATA_STALE");
