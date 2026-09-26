@@ -62,7 +62,7 @@ jobs:
           server=Path("server.js").read_text()
           required_html=[
             'data-view="execution"','id="view-execution"','id="exMode"','id="exGate"',
-            'id="exReconcile"','id="exPrepare"','id="exSubmit"','id="exKill"','id="exArm"',
+            'id="exReconcileBtn"','id="exPrepare"','id="exSubmit"','id="exKill"','id="exArm"',
             'id="exOrderRows"','id="exPositionRows"','id="exHealthRows"'
           ]
           required_server=[
