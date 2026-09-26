@@ -1395,7 +1395,8 @@ function renderExecution(data){
     :"Simulation mode is fully local. It is the safe place to test the complete intent → risk check → fill → close lifecycle.";
   ["exMode","exGate","exRecon","exDailyLoss"].forEach(function(id){var el=$(id);if(!el||!el.parentElement)return;el.parentElement.classList.remove("state-ok","state-blocked","state-warn");var text=String(el.textContent||"");el.parentElement.classList.add(/PASS|READY|SAFE|0\.00%$/.test(text)?"state-ok":/BLOCKED|KILL|ERROR/.test(text)?"state-blocked":"state-warn")});
   $("exPrepare").disabled=data.mode!=="SIMULATION"&&(!c.armed||!c.reconciliation?.ok);
-  $("exSubmit").disabled=!orders.length||!orders.some(function(o){return ["INTENT","APPROVED"].indexOf(o.status)>=0})||Boolean(c.killSwitch);
+  var executableOrders=data.orders||[];
+  $("exSubmit").disabled=!executableOrders.length||!executableOrders.some(function(o){return ["INTENT","APPROVED"].indexOf(o.status)>=0})||Boolean(c.killSwitch);
   $("exReconcileBtn").disabled=data.mode!=="TESTNET";
   $("exArm").disabled=data.mode!=="TESTNET"||!h.credentialsConfigured||Boolean(c.armed);
   $("exKill").disabled=Boolean(c.killSwitch);
