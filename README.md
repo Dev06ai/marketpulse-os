@@ -38,3 +38,14 @@ Then open http://localhost:3000
 
 ## Owner / Admin access
 Set the Render/server environment variable `MARKETPULSE_ADMIN_EMAIL` to the single email address that should have owner/admin access. Admin access is enforced server-side; hiding the UI is not the security boundary. Trader accounts do not receive system diagnostics, execution controls, internal health endpoints, or protected maintenance actions. ChatGPT continues to manage the codebase through the connected repository tooling rather than using a privileged website account.
+
+
+## Security hardening
+MarketPulse 2.3 adds server-enforced security controls including strict session cookies, stronger scrypt password hashing, durable failed-login lockout, owner TOTP MFA, shorter owner sessions, owner session revocation on login, same-origin checks for state-changing requests, request-size and rate limits, CSP with per-response nonces, HSTS, restrictive Permissions Policy, cross-origin isolation headers, account enumeration reduction, and protected admin endpoints.
+
+For the strongest owner protection, configure these Render secrets:
+- `MARKETPULSE_ADMIN_EMAIL`: the single owner email.
+- `MARKETPULSE_ADMIN_TOTP_SECRET`: a Base32 TOTP secret stored privately and used by your authenticator app.
+- `MARKETPULSE_PASSWORD_PEPPER`: a long random secret kept only in the server environment. Existing legacy password hashes can be transparently upgraded after successful login when this is enabled.
+- `MARKETPULSE_ADMIN_SESSION_HOURS`: optional owner session lifetime; default is 8 hours.
+- `MARKETPULSE_SESSION_DAYS`: optional regular-user session lifetime; default is 30 days.
