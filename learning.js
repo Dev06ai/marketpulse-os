@@ -162,6 +162,12 @@ function recalibrate(a){
   state.lastAdjustment=totalAdjustment;
   state.lastSetupAdjustment=setupAdjustment;
   state.lastComponentAdjustment=componentAdjustment;
+  if(Math.abs(totalAdjustment)>=0.1){
+    state.calibrationHistory=(state.calibrationHistory||[]).concat([{
+      ts:Date.now(),bucket:key,scoreBefore:baseScore,scoreAfter:score,
+      setupAdjustment,componentAdjustment,totalAdjustment,sample:b?Number(b.n):0
+    }]).slice(-50);
+  }
   const eligible=Boolean(b&&Number(b.n)>=MIN_ADAPTIVE_SAMPLE);
   if(a.side!=="WAIT"&&eligible){
     if(score>=72&&a.rr>=1.5&&!(a.mtf?.higher==="DOWNTREND"&&a.side==="LONG")&&!(a.mtf?.higher==="UPTREND"&&a.side==="SHORT"))a.status="READY";
@@ -249,6 +255,7 @@ async function status(){
     componentMinSamples:MIN_COMPONENT_SAMPLE,
     componentProfiles:Object.keys(state.componentStats||{}).length,
     componentSummary:componentSummary(),
+    calibrationHistory:(state.calibrationHistory||[]).slice(-12),
     lastResolvedAt:state.lastResolvedAt,
     durable:storage.status().durable,
     lastAdjustment:Number(state.lastAdjustment)||0,
