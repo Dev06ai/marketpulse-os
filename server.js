@@ -128,6 +128,12 @@ const ADMIN_ONLY_PATHS=new Set([
   '/api/research/status',
   '/api/research/train'
 ]);
+function normalizeFundingRate(value){
+  const n=Number(value);
+  if(!Number.isFinite(n))return null;
+  if(Math.abs(n)>0.1)return n/100;
+  return n;
+}
 function timeoutSignal(ms){return typeof AbortSignal!=="undefined"&&AbortSignal.timeout?AbortSignal.timeout(ms):undefined;}
 function queueCoreAnalytics(symbol,interval,candles){
   const key=String(symbol)+"|"+String(interval),hit=CORE_ANALYTICS_CACHE.get(key);
@@ -240,7 +246,11 @@ function flowBucket(symbol){
   return v;
 }
 function recordFlowPoint(symbol){
-  const v=flowBucket(symbol);v.points.push({ts:Date.now(),liqLong:v.liqLong,liqShort:v.liqShort,liqTotal:v.liqLong+v.liqShort,cvd:v.cvd,cvdRatio:v.cvdNotional?v.cvd/v.cvdNotional:null,oi:v.oi,fundingRate:v.fundingRate,markPrice:v.markPrice,orderBook:v.orderBook});if(v.points.length>LIVE_FLOW_LIMIT)v.points.shift();
+  const v=flowBucket(symbol),now=Date.now();
+  if(v.lastPointAt&&now-v.lastPointAt<1500)return;
+  v.lastPointAt=now;
+  v.points.push({ts:now,liqLong:v.liqLong,liqShort:v.liqShort,liqTotal:v.liqLong+v.liqShort,cvd:v.cvd,cvdRatio:v.cvdNotional?v.cvd/v.cvdNotional:null,oi:v.oi,fundingRate:v.fundingRate,markPrice:v.markPrice,orderBook:v.orderBook});
+  if(v.points.length>LIVE_FLOW_LIMIT)v.points.shift();
 }
 function startBybitLiveFlow(){
   if(!LIVE_SYMBOLS.length)return;
@@ -287,7 +297,7 @@ function startBybitLiveFlow(){
         }else if(topic.startsWith("tickers.")){
           const x=data[0]||{};
           if(Number.isFinite(+x.openInterest))v.oi=+x.openInterest;
-          if(Number.isFinite(+x.fundingRate))v.fundingRate=+x.fundingRate;
+          if(Number.isFinite(+x.fundingRate))v.fundingRate=normalizeFundingRate(x.fundingRate);
           if(Number.isFinite(+x.markPrice))v.markPrice=+x.markPrice;
           v.lastTs=Number(msg.ts)||Date.now();
         }else if(topic.startsWith("orderbook.50.")){
@@ -422,7 +432,7 @@ async function bybitDerivatives(symbol,interval){
   const first=trades[0]?.price,lastT=trades[trades.length-1]?.price,priceChangePct=Number.isFinite(first)&&first?((lastT-first)/first)*100:null,cvdRatio=total?cvd/total:null;
   const live=flowBucket(symbol),liveCvd=live.cvdNotional?live.cvd:cvd,liveCvdRatio=live.cvdNotional?live.cvd/live.cvdNotional:cvdRatio,liqTotal=live.liqLong+live.liqShort,liqBias=liqTotal?(live.liqLong>live.liqShort?"LONG LIQS DOMINANT":"SHORT LIQS DOMINANT"):"UNAVAILABLE";
   const liveOrderBook=live.orderBook||orderBook;
-  const data={available:Boolean(ticker||oiPayload||tradePayload||bookPayload||live.cvdNotional||liqTotal),provider:"Bybit linear futures"+(live.cvdNotional||liqTotal?" · live stream":""),oi:Number.isFinite(currentOi)?currentOi:null,oiChangePct,cvdDelta:liveCvd,cvdRatio:liveCvdRatio,cvdState:"MIXED",positioning:"MIXED",tradeCount:trades.length,fundingRate:ticker&&Number.isFinite(+ticker.fundingRate)?+ticker.fundingRate:null,markPrice:ticker&&Number.isFinite(+ticker.markPrice)?+ticker.markPrice:null,tradePriceChangePct:priceChangePct,takerImbalance:liveCvdRatio,longLiquidations:live.liqLong,shortLiquidations:live.liqShort,liquidationTotal:liqTotal,liquidationBias:liqBias,orderBook:liveOrderBook,livePointCount:live.points.length,liveHistory:live.points.slice(-120),errors,updatedAt:Date.now()};
+  const data={available:Boolean(ticker||oiPayload||tradePayload||bookPayload||live.cvdNotional||liqTotal),provider:"Bybit linear futures"+(live.cvdNotional||liqTotal?" · live stream":""),oi:Number.isFinite(currentOi)?currentOi:null,oiChangePct,cvdDelta:liveCvd,cvdRatio:liveCvdRatio,cvdState:"MIXED",positioning:"MIXED",tradeCount:trades.length,fundingRate:ticker&&Number.isFinite(+ticker.fundingRate)?normalizeFundingRate(ticker.fundingRate):null,markPrice:ticker&&Number.isFinite(+ticker.markPrice)?+ticker.markPrice:null,tradePriceChangePct:priceChangePct,takerImbalance:liveCvdRatio,longLiquidations:live.liqLong,shortLiquidations:live.liqShort,liquidationTotal:liqTotal,liquidationBias:liqBias,orderBook:liveOrderBook,livePointCount:live.points.length,liveHistory:live.points.slice(-120),errors,updatedAt:Date.now()};
   if(priceChangePct!=null&&cvdRatio!=null){if(priceChangePct>0.15&&cvdRatio<-0.01)data.cvdState="BEARISH DIVERGENCE";else if(priceChangePct<-0.15&&cvdRatio>0.01)data.cvdState="BULLISH DIVERGENCE";else if(priceChangePct>0.15&&cvdRatio>0.01)data.cvdState="BUYERS CONFIRM";else if(priceChangePct<-0.15&&cvdRatio<-0.01)data.cvdState="SELLERS CONFIRM"}else if(trades.length===0)data.cvdState="UNAVAILABLE";
   if(priceChangePct!=null&&oiChangePct!=null){if(priceChangePct>0.15&&oiChangePct>1)data.positioning="PRICE + OI: LONG PARTICIPATION";else if(priceChangePct>0.15&&oiChangePct<-1)data.positioning="PRICE UP + OI DOWN: SHORT COVERING";else if(priceChangePct<-0.15&&oiChangePct>1)data.positioning="PRICE DOWN + OI UP: SHORT PARTICIPATION";else if(priceChangePct<-0.15&&oiChangePct<-1)data.positioning="PRICE DOWN + OI DOWN: LONG LIQUIDATION"}else if(!Number.isFinite(oiChangePct))data.positioning=Number.isFinite(currentOi)?"OI CHANGE NOT AVAILABLE":"OI UNAVAILABLE";
   return mergeFlowSnapshot(symbol,data);
@@ -816,7 +826,7 @@ const server=http.createServer(async(req,res)=>{
     if(adminCfg.registrationsEnabled===false&&u.pathname==='/api/auth/register'&& !isAdminUser)return send(res,403,{ok:false,error:"REGISTRATIONS_DISABLED"});
     if(adminCfg.aiEnabled===false&&u.pathname==='/api/ai'&&!isAdminUser)return send(res,503,{ok:false,error:"AI_DISABLED"});
     if(adminCfg.executionEnabled===false&&u.pathname.startsWith('/api/execution')&&!isAdminUser)return send(res,503,{ok:false,error:"EXECUTION_DISABLED"});
-    if(adminCfg.marketDataEnabled===false&&['/api/core','/api/chart','/api/live','/api/market','/api/scanner','/api/scanner-live','/api/core-scan','/api/core-flow','/api/cycle'].includes(u.pathname)&&!isAdminUser)return send(res,503,{ok:false,error:"MARKET_DATA_DISABLED"});
+    if(adminCfg.marketDataEnabled===false&&['/api/core','/api/chart','/api/live','/api/market','/api/scanner','/api/scanner-live','/api/core-scan','/api/core-flow','/api/cycle','/api/core-analytics'].includes(u.pathname)&&!isAdminUser)return send(res,503,{ok:false,error:"MARKET_DATA_DISABLED"});
     if(adminCfg.writesEnabled===false&&unsafe&&!isAdminUser&&!u.pathname.startsWith('/api/auth/')&&!['/api/telemetry/event'].includes(u.pathname))return send(res,423,{ok:false,error:"WRITES_DISABLED"});
     if(req.method==='GET'&&u.pathname==='/health')return send(res,200,{ok:true,service:'marketpulse-os',time:Date.now()});
     if(req.method==='GET'&&u.pathname==='/api/memory'){
@@ -1067,7 +1077,7 @@ const server=http.createServer(async(req,res)=>{
       try{return send(res,200,{ok:true,memory:await storage.saveAccountMemory(user.id,body.memory||{})})}catch(e){return send(res,400,{ok:false,error:e.message})}
     }
 
-    if(req.method==='GET'&&u.pathname==='/api/config'){const flags=await storage.getFeatureFlags();return send(res,200,{symbols:SYMBOLS,labels,intervals:['15m','1h','4h','1d'],memory:storage.status(),learning:{state:'LOADING'},phase4:PHASE4_VERSION,phase5:PHASE5_VERSION,phase6:PHASE6_VERSION,phase7:PHASE7_VERSION,adminMode:adminCfg.mode||"normal",maintenance:adminCfg.maintenanceMode,readOnly:adminCfg.readOnlyMode,maintenanceMessage:adminCfg.maintenanceMessage,flags});}if(req.method==='POST'&&u.pathname==='/api/ai'){
+    if(req.method==='GET'&&u.pathname==='/api/config'){const flags=await storage.getFeatureFlags();return send(res,200,{symbols:SYMBOLS,labels,intervals:['15m','30m','1h','4h','1d'],memory:storage.status(),learning:{state:'LOADING'},phase4:PHASE4_VERSION,phase5:PHASE5_VERSION,phase6:PHASE6_VERSION,phase7:PHASE7_VERSION,adminMode:adminCfg.mode||"normal",maintenance:adminCfg.maintenanceMode,readOnly:adminCfg.readOnlyMode,maintenanceMessage:adminCfg.maintenanceMessage,flags});}if(req.method==='POST'&&u.pathname==='/api/ai'){
       if(!aiAllowed(req)) return send(res,429,{error:"Slow down for a few seconds."});
       let raw=""; for await(const chunk of req) raw+=chunk; let body={}; try{body=JSON.parse(raw||"{}")}catch{return send(res,400,{error:"Invalid JSON"})}
       const mode=body.mode==="trade"?"trade":"market";
@@ -1163,6 +1173,19 @@ const server=http.createServer(async(req,res)=>{
         });
       }catch(e){return send(res,503,{ok:false,error:String(e.message||e)})}
     }
+    if(req.method==='GET'&&u.pathname==='/api/core-analytics'){
+      const symbol=(u.searchParams.get('symbol')||'BTCUSDT').toUpperCase(),interval=u.searchParams.get('interval')||'1h';
+      if(!SYMBOLS.includes(symbol))return send(res,400,{ok:false,error:'Unsupported symbol'});
+      if(!['15m','30m','1h','4h','1d'].includes(interval))return send(res,400,{ok:false,error:'Unsupported interval'});
+      try{
+        const key=symbol+'|'+interval,cached=CORE_ANALYTICS_CACHE.get(key);
+        if(cached&&Date.now()-cached.ts<CORE_ANALYTICS_TTL)return send(res,200,{ok:true,ready:true,symbol,interval,...cached.payload,updatedAt:cached.ts});
+        const candles=await getFastKlines(symbol,interval),payload=queueCoreAnalytics(symbol,interval,candles);
+        if(payload)return send(res,200,{ok:true,ready:true,symbol,interval,...payload,updatedAt:Date.now()});
+        return send(res,200,{ok:true,ready:false,symbol,interval,message:'Analytics are warming up.'});
+      }catch(e){return send(res,503,{ok:false,ready:false,error:String(e.message||e)})}
+    }
+
     if(req.method==='GET'&&u.pathname==='/api/data-fabric'){
       const symbol=(u.searchParams.get('symbol')||'BTCUSDT').toUpperCase(),interval=u.searchParams.get('interval')||'1h';
       if(!SYMBOLS.includes(symbol))return send(res,400,{ok:false,error:'Unsupported symbol'});
