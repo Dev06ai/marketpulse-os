@@ -43,7 +43,7 @@ function defaultState(){
     config:Object.assign({},DEFAULT_CONFIG),
     control:{
       armed:false,
-      killSwitch:true,
+      killSwitch:false,
       reconciliation:{ok:true,checkedAt:null,detail:"Simulation mode has no external reconciliation requirement."}
     },
     orders:[],
@@ -468,7 +468,7 @@ async function armTestnet(){
 async function setConfig(patch){
   const loaded=await load(),state=loaded.state,next=Object.assign({},state.config,patch||{});
   next.mode=MODE_VALUES.includes(next.mode)?next.mode:state.config.mode;
-  if(next.mode!=="TESTNET"){state.control.armed=false;state.control.killSwitch=true;state.control.reconciliation={ok:true,checkedAt:now(),detail:"Simulation mode."}}
+  if(next.mode!=="TESTNET"){state.control.armed=false;state.control.killSwitch=false;state.control.reconciliation={ok:true,checkedAt:now(),detail:"Simulation mode."}}
   state.config=Object.assign({},state.config,next);
   if(state.config.account>0&&state.metrics.startingEquity<=0)state.metrics.startingEquity=state.config.account;
   pushEvent(state,"CONFIG_UPDATED","Execution risk controls updated",{mode:state.config.mode});
