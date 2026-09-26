@@ -50,7 +50,43 @@ button,input,select,textarea{font:inherit}.wrap{width:min(1440px,calc(100% - 26p
 .portfolioGrid{display:grid;grid-template-columns:1.15fr .85fr;gap:10px}.portfolioMetricGrid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}.portfolioMetric,.portfolioPanel{background:#0f0f13;border:1px solid rgba(255,255,255,.07);border-radius:14px;padding:12px}.portfolioMetric .v{font-size:19px;font-weight:900;margin-top:5px}.portfolioMetric .subv{font-size:11px;color:#858792;margin-top:3px}.portfolioBars{display:grid;gap:7px}.portfolioBarRow{display:grid;grid-template-columns:70px 1fr 60px;gap:8px;align-items:center;font-size:11px}.portfolioBar{height:7px;background:#1a1a1f;border-radius:99px;overflow:hidden}.portfolioBar i{display:block;height:100%;background:linear-gradient(90deg,#67e8ff,#b78cff)}.portfolioTable{width:100%;border-collapse:collapse;font-size:11px}.portfolioTable th,.portfolioTable td{padding:7px 6px;border-bottom:1px solid rgba(255,255,255,.06);text-align:left}.portfolioTable th{color:#8e909b;font-weight:600}.portfolioPill{display:inline-flex;align-items:center;border:1px solid rgba(255,255,255,.08);border-radius:999px;padding:4px 8px;font-size:10px;color:#bfc1ca}.portfolioOk{color:#9BE7C4}.portfolioWarn{color:#FFCF99}.portfolioBad{color:#FF9B9B}.portfolioHeat{display:grid;grid-template-columns:repeat(7,1fr);gap:5px}.portfolioCell{padding:8px 5px;border:1px solid rgba(255,255,255,.06);border-radius:9px;text-align:center;background:#101014}.portfolioCell b{display:block;font-size:11px}.portfolioCell span{display:block;font-size:9px;color:#858792;margin-top:3px}.portfolioCorr{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}.portfolioCorrCell{height:32px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:8px;border:1px solid rgba(255,255,255,.045)}.portfolioStress{display:grid;grid-template-columns:1fr 1fr;gap:8px}.portfolioStressCard{padding:10px;border:1px solid rgba(255,255,255,.07);border-radius:10px;background:#101014}.portfolioStressCard .v{font-size:17px;font-weight:900;margin-top:4px}.portfolioEvent{display:grid;grid-template-columns:90px 1fr;gap:8px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,.06)}.portfolioEvent:last-child{border-bottom:0}.portfolioSmall{font-size:11px;color:#858792}.portfolioActions{display:flex;gap:7px;flex-wrap:wrap;align-items:end}.portfolioActions label{display:grid;gap:5px;font-size:11px;color:#92939e}.portfolioActions input{min-width:110px}.portfolioNote{margin-top:8px;color:#9597a2;font-size:12px;line-height:1.5}@media(max-width:860px){.portfolioGrid{grid-template-columns:1fr}.portfolioMetricGrid{grid-template-columns:1fr 1fr}.portfolioHeat,.portfolioCorr{grid-template-columns:repeat(4,1fr)}}@media(max-width:560px){.portfolioMetricGrid{grid-template-columns:1fr}.portfolioHeat,.portfolioCorr{grid-template-columns:repeat(2,1fr)}.portfolioActions{align-items:stretch}.portfolioActions label,.portfolioActions input{width:100%}}
 
 </style>
-</head>
+
+<style id="mp7-style">
+#mp7-panel{margin:24px 0 40px;border:1px solid rgba(255,255,255,.09);border-radius:18px;background:linear-gradient(180deg,rgba(255,255,255,.028),rgba(255,255,255,.014));box-shadow:0 12px 30px rgba(0,0,0,.18);overflow:hidden}
+#mp7-panel .mp7-head{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:18px 20px;border-bottom:1px solid rgba(255,255,255,.07)}
+#mp7-panel .mp7-title{font-size:15px;font-weight:800;letter-spacing:.04em}
+#mp7-panel .mp7-sub{margin-top:4px;color:#8290a4;font-size:12px}
+#mp7-panel .mp7-actions{display:flex;gap:8px;flex-wrap:wrap}
+#mp7-panel .mp7-btn{border:1px solid rgba(255,255,255,.1);background:#15171c;color:#e9edf5;border-radius:10px;padding:9px 12px;font-size:12px;cursor:pointer}
+#mp7-panel .mp7-btn:hover{background:#1b1e25}
+#mp7-panel .mp7-body{padding:18px 20px}
+#mp7-panel .mp7-health{display:flex;align-items:center;gap:8px;font-size:12px;color:#9aa7b9;margin-bottom:16px}
+#mp7-panel .mp7-dot{width:8px;height:8px;border-radius:999px;background:#64748b;box-shadow:0 0 0 3px rgba(100,116,139,.12)}
+#mp7-panel .mp7-dot.ok{background:#22c55e;box-shadow:0 0 0 3px rgba(34,197,94,.12)}
+#mp7-panel .mp7-dot.warn{background:#f59e0b;box-shadow:0 0 0 3px rgba(245,158,11,.12)}
+#mp7-panel .mp7-grid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px}
+#mp7-panel .mp7-kpi{padding:14px;border:1px solid rgba(255,255,255,.07);background:#101217;border-radius:13px;min-width:0}
+#mp7-panel .mp7-label{font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:#758297}
+#mp7-panel .mp7-value{font-size:19px;font-weight:800;margin-top:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#mp7-panel .mp7-muted{color:#8f9aaa}
+#mp7-panel .mp7-positive{color:#58d68d}
+#mp7-panel .mp7-negative{color:#ff7d8a}
+#mp7-panel .mp7-section{margin-top:18px}
+#mp7-panel .mp7-section-title{font-size:12px;font-weight:800;letter-spacing:.04em;margin-bottom:10px}
+#mp7-panel .mp7-cols{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+#mp7-panel .mp7-card{border:1px solid rgba(255,255,255,.07);background:#101217;border-radius:13px;padding:14px;min-width:0}
+#mp7-panel .mp7-insights{display:grid;gap:8px}
+#mp7-panel .mp7-insight{padding:10px 12px;border-left:3px solid #5b6b80;background:rgba(255,255,255,.025);border-radius:8px;color:#b6c0ce;font-size:12px;line-height:1.45}
+#mp7-panel table{width:100%;border-collapse:collapse;font-size:11px}
+#mp7-panel th,#mp7-panel td{padding:8px 5px;border-bottom:1px solid rgba(255,255,255,.05);text-align:left;white-space:nowrap}
+#mp7-panel th{color:#758297;font-weight:700}
+#mp7-panel td{color:#c9d1dc}
+#mp7-panel .mp7-empty{padding:18px 0;color:#778397;font-size:12px}
+#mp7-panel .mp7-quality{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+#mp7-panel .mp7-q{padding:10px;border:1px solid rgba(255,255,255,.06);border-radius:10px;background:#0d0f13;font-size:11px;color:#98a4b6}
+@media(max-width:1050px){#mp7-panel .mp7-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:700px){#mp7-panel .mp7-head{align-items:flex-start;flex-direction:column}#mp7-panel .mp7-grid{grid-template-columns:repeat(2,minmax(0,1fr))}#mp7-panel .mp7-cols{grid-template-columns:1fr}#mp7-panel .mp7-quality{grid-template-columns:repeat(2,minmax(0,1fr))}#mp7-panel .mp7-body{padding:14px}}
+</style></head>
 <body>
 <header class="header"><div class="headerInner">
   <div class="logo"><div class="mark" aria-label="MarketPulse logo"></div><div><div class="brandK">CRYPTO MARKET INTELLIGENCE</div><div class="brandName">MarketPulse</div><div class="brandSub">Less noise. More signal. Better decisions.</div></div></div>
@@ -1050,7 +1086,118 @@ populateSymbols();$("interval").value=state.interval;renderJournal();renderBrain
 setStatus("MarketPulse ready. Connecting to live market data…");
 loadCore();loadEdge();syncMemory();
 setInterval(function(){if(document.visibilityState==="visible")loadCore()},45000);
+
+function mp7FmtR(v){var n=Number(v);return Number.isFinite(n)?(n>0?"+":"")+n.toFixed(2)+"R":"—"}
+function mp7FmtPct(v){var n=Number(v);return Number.isFinite(n)?n.toFixed(1)+"%":"—"}
+function mp7Table(rows){
+  if(!rows||!rows.length)return '<div class="mp7-empty">No data yet.</div>';
+  return '<table><thead><tr><th>Group</th><th>Trades</th><th>Win</th><th>Net R</th><th>Avg R</th></tr></thead><tbody>'+
+    rows.slice(0,8).map(function(r){
+      return '<tr><td>'+String(r.key||"—")+'</td><td>'+Number(r.total||0)+'</td><td>'+mp7FmtPct(r.winRate)+'</td><td>'+mp7FmtR(r.netR)+'</td><td>'+mp7FmtR(r.avgR)+'</td></tr>'
+    }).join('')+'</tbody></table>';
+}
+function renderPhase7(){
+  var a=state.phase7;
+  if(!a)return;
+  var k=[
+    ["TRADES",a.totalTrades],
+    ["WIN RATE",mp7FmtPct(a.winRate)],
+    ["EXPECTANCY",mp7FmtR(a.expectancyR)],
+    ["PROFIT FACTOR",Number.isFinite(Number(a.profitFactor))?Number(a.profitFactor).toFixed(2):"—"],
+    ["MAX DRAWDOWN",mp7FmtR(-Math.abs(Number(a.maxDrawdownR||0)))],
+    ["NET RESULT",mp7FmtR(a.netR)]
+  ];
+  $("mp7Kpis").innerHTML=k.map(function(x){
+    var v=String(x[1]),cls=(v.charAt(0)==="+"||x[0]==="WIN RATE"&&Number(a.winRate)>=50)?"mp7-positive":(v.charAt(0)==="-"?"mp7-negative":"");
+    return '<div class="mp7-kpi"><div class="mp7-label">'+x[0]+'</div><div class="mp7-value '+cls+'">'+v+'</div></div>'
+  }).join('');
+  $("mp7Insights").innerHTML=(a.insights||[]).map(function(x){return '<div class="mp7-insight">'+String(x)+'</div>'}).join('')||'<div class="mp7-empty">Add completed journal trades to unlock insights.</div>';
+  var q=a.quality||{};
+  var qRows=[
+    ["Quality score",mp7FmtPct(q.score)],
+    ["Valid R",String(a.validR||0)],
+    ["Missing R",String(a.invalidR||0)],
+    ["Missing asset",String(q.missingAsset||0)],
+    ["Missing side",String(q.missingSide||0)],
+    ["Missing time",String(q.missingTimestamp||0)]
+  ];
+  $("mp7Quality").innerHTML=qRows.map(function(x){return '<div class="mp7-q"><b>'+x[1]+'</b><div>'+x[0]+'</div></div>'}).join('');
+  $("mp7AssetTable").innerHTML=mp7Table(a.byAsset);
+  $("mp7SetupTable").innerHTML=mp7Table(a.bySetup);
+}
+async function loadPhase7(){
+  try{
+    $("mp7HealthText").textContent="Refreshing analytics…";
+    var d=await api("/api/analytics?device="+encodeURIComponent(deviceId()),7000);
+    state.phase7=d.analytics;renderPhase7();
+  }catch(e){
+    $("mp7HealthText").textContent="Analytics unavailable: "+e.message;
+  }
+}
+async function loadPhase7Health(){
+  try{
+    var d=await api("/api/phase7/health?device="+encodeURIComponent(deviceId()),9000);
+    var ok=Boolean(d.ok),h=d.health||{},q=d.analyticsQuality||{};
+    $("mp7HealthDot").className="mp7-dot "+(ok?"ok":"warn");
+    $("mp7HealthText").textContent=(ok?"Phase 7 checks passed":"Phase 7 checks need attention")+" · storage "+String(d.storage||"unknown")+" · analytics quality "+mp7FmtPct(q.score);
+  }catch(e){
+    $("mp7HealthDot").className="mp7-dot warn";
+    $("mp7HealthText").textContent="Health check unavailable: "+e.message;
+  }
+}
+function exportPhase7Journal(){
+  var rows=state.journal||[];
+  if(!rows.length){$("mp7HealthText").textContent="Nothing to export yet.";return}
+  var keys=["ts","asset","side","entry","stop","target","r","regime","status","score","note"];
+  var esc=function(v){return '"'+String(v??"").replace(/"/g,'""')+'"'}
+  var csv=[keys.join(",")].concat(rows.map(function(r){return keys.map(function(k){return esc(r[k])}).join(",")})).join("\n");
+  var blob=new Blob([csv],{type:"text/csv;charset=utf-8"});
+  var url=URL.createObjectURL(blob),a=document.createElement("a");
+  a.href=url;a.download="marketpulse-journal-"+new Date().toISOString().slice(0,10)+".csv";
+  document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(url);
+}
+$("mp7Refresh").addEventListener("click",function(){loadPhase7();loadPhase7Health()});
+$("mp7Export").addEventListener("click",exportPhase7Journal);
+loadPhase7();loadPhase7Health();
+setInterval(function(){if(document.visibilityState==="visible")loadPhase7()},60000);
+
 })();
 </script>
-</body>
+
+<section id="mp7-panel" aria-label="Phase 7 trader analytics">
+  <div class="mp7-head">
+    <div>
+      <div class="mp7-title">PHASE 7 · TRADER ANALYTICS &amp; QUALITY</div>
+      <div class="mp7-sub">Personal performance layer — descriptive analytics, data quality, and journal portability.</div>
+    </div>
+    <div class="mp7-actions">
+      <button id="mp7Refresh" class="mp7-btn">Refresh</button>
+      <button id="mp7Export" class="mp7-btn">Export Journal CSV</button>
+    </div>
+  </div>
+  <div class="mp7-body">
+    <div class="mp7-health"><span id="mp7HealthDot" class="mp7-dot"></span><span id="mp7HealthText">Running Phase 7 health check…</span></div>
+    <div id="mp7Kpis" class="mp7-grid"></div>
+    <div class="mp7-cols mp7-section">
+      <div class="mp7-card">
+        <div class="mp7-section-title">CURRENT INSIGHTS</div>
+        <div id="mp7Insights" class="mp7-insights"></div>
+      </div>
+      <div class="mp7-card">
+        <div class="mp7-section-title">DATA QUALITY</div>
+        <div id="mp7Quality" class="mp7-quality"></div>
+      </div>
+    </div>
+    <div class="mp7-cols mp7-section">
+      <div class="mp7-card">
+        <div class="mp7-section-title">BY ASSET</div>
+        <div id="mp7AssetTable" class="mp7-empty">No journal data yet.</div>
+      </div>
+      <div class="mp7-card">
+        <div class="mp7-section-title">BY SETUP</div>
+        <div id="mp7SetupTable" class="mp7-empty">No journal data yet.</div>
+      </div>
+    </div>
+  </div>
+</section></body>
 </html>
