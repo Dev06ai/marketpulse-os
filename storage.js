@@ -685,6 +685,14 @@ async function recordUsageEvent(userId,feature,action="view",symbol=null,interva
   if(mode==="postgres"){await pool.query("INSERT INTO marketpulse_usage_events(user_id,feature,action,symbol,interval,metadata) VALUES($1,$2,$3,$4,$5,$6)",[row.userId,row.feature,row.action,row.symbol,row.interval,row.metadata]);return}
   const all=readLocal();all.__usage_events__=Array.isArray(all.__usage_events__)?all.__usage_events__:[];all.__usage_events__.push(row);all.__usage_events__=all.__usage_events__.slice(-5000);writeLocal(all);
 }
+async function recentUsageEvents(limit=80){
+  await init();const n=Math.min(200,Math.max(1,Number(limit)||80));
+  if(mode==="postgres"){
+    const r=await pool.query(`SELECT e.id,e.feature,e.action,e.symbol,e.interval,e.created_at AS "createdAt",u.email FROM marketpulse_usage_events e LEFT JOIN marketpulse_users u ON u.id=e.user_id ORDER BY e.created_at DESC LIMIT $1`,[n]);return r.rows;
+  }
+  const all=readLocal(),users=all.__users__||{},rows=(all.__usage_events__||[]).slice(-n).reverse();
+  return rows.map(x=>({...x,email:x.userId?(users[x.userId]?.email||null):null}));
+}
 async function adminAnalytics(){
   await init();
   if(mode==="postgres"){
@@ -767,4 +775,4 @@ async function restoreAdminConfig(snapshot){
   return true;
 }
 
-module.exports={init,health,get,save,clear,getLearningState,saveLearningState,recordLearningPrediction,getOpenLearningPredictions,resolveLearningPrediction,saveSignalDNA,getSignalDNA,clearSignalDNA,getPhase4State,savePhase4State,getExecutionState,saveExecutionState,getPhase6State,savePhase6State,createUser,findUserByEmail,getUserById,touchUserLogin,recordLoginFailure,resetLoginFailures,savePassword,saveSession,getSession,touchSessionActivity,revokeUserSessions,deleteSession,listUsers,userStats,moderateUser,getAccountMemory,saveAccountMemory,status,getAdminConfig,saveAdminConfig,getFeatureFlags,saveFeatureFlag,recordAdminAudit,listAdminAudit,recordSecurityEvent,listSecurityEvents,recordUsageEvent,adminAnalytics,listBroadcasts,createBroadcast,setBroadcastActive,getActiveBroadcasts,createSupportTicket,listSupportTickets,replySupportTicket,saveAdminSnapshot,listAdminSnapshots,getAdminSnapshot,restoreAdminConfig};
+module.exports={init,health,get,save,clear,getLearningState,saveLearningState,recordLearningPrediction,getOpenLearningPredictions,resolveLearningPrediction,saveSignalDNA,getSignalDNA,clearSignalDNA,getPhase4State,savePhase4State,getExecutionState,saveExecutionState,getPhase6State,savePhase6State,createUser,findUserByEmail,getUserById,touchUserLogin,recordLoginFailure,resetLoginFailures,savePassword,saveSession,getSession,touchSessionActivity,revokeUserSessions,deleteSession,listUsers,userStats,moderateUser,getAccountMemory,saveAccountMemory,status,getAdminConfig,saveAdminConfig,getFeatureFlags,saveFeatureFlag,recordAdminAudit,listAdminAudit,recordSecurityEvent,listSecurityEvents,recordUsageEvent,adminAnalytics,listBroadcasts,createBroadcast,setBroadcastActive,getActiveBroadcasts,createSupportTicket,recentUsageEvents,listSupportTickets,replySupportTicket,saveAdminSnapshot,listAdminSnapshots,getAdminSnapshot,restoreAdminConfig};
