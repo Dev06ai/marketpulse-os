@@ -5,6 +5,8 @@ const phase4=require('./phase4');
 const execution=require('./execution');
 const phase6=require('./phase6');
 const phase7=require('./phase7');
+const propFirm=require('./prop-firm');
+const research=require('./research-data');
 const auth=require('./auth');
 const WebSocket=require('ws');
 const PORT=Number(process.env.PORT||3000);
@@ -24,6 +26,7 @@ const GLOBAL_RATE_LIMIT=300;
 const GLOBAL_RATE=new Map();
 const CSRF_COOKIE="mp_csrf";
 const SERVER_METRICS={startedAt:Date.now(),requests:0,errors:0,totalLatencyMs:0,routeCounts:new Map(),lastErrors:[]};
+let RESEARCH_JOB={running:false,startedAt:null,finishedAt:null,error:null,symbol:null,interval:null,bars:0,records:0,trained:0,skipped:0};
 let ADMIN_RUNTIME={loadedAt:0,config:null};
 async function getAdminRuntime(force=false){
   if(!force&&ADMIN_RUNTIME.config&&Date.now()-ADMIN_RUNTIME.loadedAt<2000)return ADMIN_RUNTIME.config;
@@ -88,7 +91,9 @@ const ADMIN_ONLY_PATHS=new Set([
   '/api/portfolio/config',
   '/api/portfolio/health',
   '/api/system-check',
-  '/api/dna/clear'
+  '/api/dna/clear',
+  '/api/research/status',
+  '/api/research/train'
 ]);
 function timeoutSignal(ms){return typeof AbortSignal!=="undefined"&&AbortSignal.timeout?AbortSignal.timeout(ms):undefined;}
 function authKey(ip,email,type){return type+":"+String(ip||"unknown")+":"+String(email||"").toLowerCase()}
@@ -800,15 +805,38 @@ const server=http.createServer(async(req,res)=>{
       return send(res,200,{ok:Object.keys(errors).length===0,partial:Object.keys(errors).length>0,errors,...values,stats:{...(values.stats||{}),...liveVisitorStats()},learning:learningState,phase7:phase7Check,performance:perf});
     }
     if(req.method==='GET'&&u.pathname==='/api/admin/providers'){
-      const test=async(name,fn)=>{const t=Date.now();try{const value=await fn();return{name,status:"healthy",latencyMs:Date.now()-t,detail:value||null}}catch(e){return{name,status:"error",latencyMs:Date.now()-t,detail:String(e.message||e)}}};
+      const probe=async(name,urls,validate)=>{
+        const started=Date.now(),errors=[];
+        const tasks=urls.map(async(item)=>{
+          try{
+            const j=await fetchJson(item.url,2500);
+            if(validate&&!validate(j))throw new Error("unexpected response");
+            return {host:item.host};
+          }catch(e){
+            errors.push(item.host+": "+String(e.message||e).slice(0,120));
+            throw e;
+          }
+        });
+        try{
+          const hit=await Promise.any(tasks);
+          return {name,status:"healthy",latencyMs:Date.now()-started,detail:"reachable via "+hit.host,host:hit.host};
+        }catch{
+          return {name,status:"error",latencyMs:Date.now()-started,detail:errors.slice(0,3).join(" | ")||"all endpoints failed"};
+        }
+      };
       const items=[];
-      const db=await storage.health();items.push({name:"PostgreSQL",status:db.connected?"healthy":"degraded",latencyMs:null,detail:db.source});
-      items.push(await test("Binance",async()=>{const j=await fetchJson("https://api.binance.com/api/v3/ping",2500);return j?"reachable":null}));
-      items.push(await test("Kraken",async()=>{const j=await fetchJson("https://api.kraken.com/0/public/SystemStatus",2500);return j?.result?.status||"reachable"}));
-      items.push(await test("Bybit",async()=>{const j=await fetchJson("https://api.bybit.com/v5/market/time",2500);return j?.retCode===0?"reachable":"unavailable"}));
+      const db=await storage.health();
+      items.push({name:"PostgreSQL",status:db.connected?"healthy":"degraded",latencyMs:null,detail:db.source});
+      const binanceHosts=['https://api.binance.com','https://api-gcp.binance.com','https://api1.binance.com','https://api2.binance.com','https://api3.binance.com'];
+      items.push(await probe("Binance",binanceHosts.map(host=>({host,url:host+"/api/v3/klines?symbol=BTCUSDT&interval=1m&limit=1"})),j=>Array.isArray(j)&&j.length===1));
+      items.push(await probe("Kraken",[{host:"api.kraken.com",url:"https://api.kraken.com/0/public/SystemStatus"}],j=>j?.result?.status));
+      const bybitHosts=(BYBIT_HOSTS||[]).map(host=>({host,url:host+"/v5/market/time"}));
+      items.push(await probe("Bybit",bybitHosts,j=>j?.retCode===0));
       items.push({name:"OpenAI",status:OPENAI_API_KEY?"configured":"not_configured",latencyMs:null,detail:OPENAI_MODEL});
-      const flow=LIVE_FLOW.get("BTCUSDT"),fresh=Boolean(flow?.lastTs&&Date.now()-flow.lastTs<120000);items.push({name:"Bybit Live Flow",status:fresh?"healthy":"stale",latencyMs:fresh?Date.now()-flow.lastTs:null,detail:fresh?"Live derivatives stream active":"No recent live flow event"});
-      return send(res,200,{ok:true,providers:items});
+      const flow=LIVE_FLOW.get("BTCUSDT"),fresh=Boolean(flow?.lastTs&&Date.now()-flow.lastTs<120000);
+      items.push({name:"Bybit Live Flow",status:fresh?"healthy":"stale",latencyMs:fresh?Date.now()-flow.lastTs:null,detail:fresh?"Live derivatives stream active":"No recent live flow event",lastEventAt:flow?.lastTs||null});
+      const usable=items.filter(x=>["PostgreSQL","Binance","Kraken","Bybit"].includes(x.name)&&["healthy","degraded"].includes(x.status)).length;
+      return send(res,200,{ok:usable>=2,providers:items,router:{usableProviders:usable,failoverEnabled:true}});
     }
     if(req.method==='GET'&&u.pathname==='/api/admin/audit')return send(res,200,{ok:true,rows:await storage.listAdminAudit(300)});
     if(req.method==='GET'&&u.pathname==='/api/admin/security')return send(res,200,{ok:true,rows:await storage.listSecurityEvents(300)});
@@ -907,6 +935,28 @@ const server=http.createServer(async(req,res)=>{
         const learningStatus=await Promise.race([learning.status(),new Promise(resolve=>setTimeout(()=>resolve({phase:2,state:'COLLECTING',durable:storage.status().durable,resolved:0}),200))]).catch(()=>({phase:2,state:'COLLECTING',durable:storage.status().durable,resolved:0}));
         const sample=candles.slice(-600);
         const setupStats=require("./market-engine").backtestBySetup(sample);
+        const propConfig=propFirm.normalizeConfig({
+          accountSize: Number(u.searchParams.get("accountSize")||process.env.PROP_ACCOUNT_SIZE||5000),
+          startingEquity: Number(u.searchParams.get("startingEquity")||process.env.PROP_STARTING_EQUITY||5000),
+          dailyLossLimitPct: Number(u.searchParams.get("dailyLossLimitPct")||process.env.PROP_DAILY_LOSS_PCT||3),
+          maxDrawdownPct: Number(u.searchParams.get("maxDrawdownPct")||process.env.PROP_MAX_DRAWDOWN_PCT||6),
+          riskPerTradePct: Number(u.searchParams.get("riskPerTradePct")||process.env.PROP_RISK_PER_TRADE_PCT||0.5),
+          maxOpenRiskPct: Number(u.searchParams.get("maxOpenRiskPct")||process.env.PROP_MAX_OPEN_RISK_PCT||1),
+          minSignalScore: Number(u.searchParams.get("minSignalScore")||process.env.PROP_MIN_SIGNAL_SCORE||72),
+          minRR: Number(u.searchParams.get("minRR")||process.env.PROP_MIN_RR||1.5)
+        });
+        const propGuard=propFirm.evaluateStandard({
+          analysis,
+          derivatives:deriv,
+          dataQuality:{
+            candleAgeMs:candles.length?Math.max(0,Date.now()-Number(candles[candles.length-1].t)):null,
+            qualityPct: deriv?.available ? 100 : 80
+          },
+          equity:propConfig.startingEquity,
+          dayStartEquity:propConfig.startingEquity,
+          peakEquity:propConfig.startingEquity,
+          config:propConfig
+        });
         return send(res,200,{
           ok:true,symbol,interval,candles,analysis,derivatives:deriv,learning:learningStatus,
           backtest:backtest(sample),validation:walkForwardBacktest(sample),setupStats,
@@ -919,6 +969,95 @@ const server=http.createServer(async(req,res)=>{
         });
       }catch(e){return send(res,503,{ok:false,error:String(e.message||e),source:'Kraken spot'})}
     }
+    if(req.method==='GET'&&u.pathname==='/api/propfirm'){
+      const symbol=(u.searchParams.get('symbol')||'BTCUSDT').toUpperCase(),interval=u.searchParams.get('interval')||'1h';
+      if(!SYMBOLS.includes(symbol))return send(res,400,{ok:false,error:'Unsupported symbol'});
+      try{
+        const core=await Promise.race([
+          (async()=>{
+            const candles=await klines(symbol,interval);
+            if(!candles||candles.length<220)throw new Error("Insufficient candles");
+            const lower=interval==='15m'?null:await Promise.race([klines(symbol,'15m'),new Promise(resolve=>setTimeout(()=>resolve(null),1200))]).catch(()=>null);
+            const higher=interval==='4h'?null:await Promise.race([klines(symbol,'4h'),new Promise(resolve=>setTimeout(()=>resolve(null),1200))]).catch(()=>null);
+            const deriv=await Promise.race([derivatives(symbol,interval),new Promise(resolve=>setTimeout(()=>resolve(null),2500))]).catch(()=>null);
+            const analysis=analyze(candles,{interval,lower:lower&&lower.length>=220?analyze(lower,{interval:'15m'}):null,higher:higher&&higher.length>=220?analyze(higher,{interval:'4h'}):null,deriv});
+            const config=propFirm.normalizeConfig({
+              accountSize:Number(u.searchParams.get('accountSize')||process.env.PROP_ACCOUNT_SIZE||5000),
+              startingEquity:Number(u.searchParams.get('equity')||process.env.PROP_STARTING_EQUITY||5000),
+              dailyLossLimitPct:Number(u.searchParams.get('dailyLossLimitPct')||process.env.PROP_DAILY_LOSS_PCT||3),
+              maxDrawdownPct:Number(u.searchParams.get('maxDrawdownPct')||process.env.PROP_MAX_DRAWDOWN_PCT||6),
+              riskPerTradePct:Number(u.searchParams.get('riskPerTradePct')||process.env.PROP_RISK_PER_TRADE_PCT||0.5),
+              maxOpenRiskPct:Number(u.searchParams.get('maxOpenRiskPct')||process.env.PROP_MAX_OPEN_RISK_PCT||1),
+              minSignalScore:Number(u.searchParams.get('minSignalScore')||process.env.PROP_MIN_SIGNAL_SCORE||72),
+              minRR:Number(u.searchParams.get('minRR')||process.env.PROP_MIN_RR||1.5)
+            });
+            const gate=propFirm.evaluateStandard({
+              analysis,derivatives:deriv,
+              dataQuality:{candleAgeMs:candles.length?Math.max(0,Date.now()-Number(candles[candles.length-1].t)):null,qualityPct:deriv?.available?100:80},
+              equity:config.startingEquity,dayStartEquity:config.startingEquity,peakEquity:config.startingEquity,config
+            });
+            return {symbol,interval,analysis,derivatives:deriv,gate,updatedAt:Date.now()};
+          })(),
+          new Promise((_,reject)=>setTimeout(()=>reject(new Error("PROP_EVAL_TIMEOUT")),7000))
+        ]);
+        return send(res,200,{ok:true,...core});
+      }catch(e){return send(res,503,{ok:false,error:String(e.message||e)})}
+    }
+    if(req.method==='GET'&&u.pathname==='/api/propfirm/event'){
+      const symbol=(u.searchParams.get('symbol')||'BTCUSDT').toUpperCase(),interval=u.searchParams.get('interval')||'15m';
+      if(!SYMBOLS.includes(symbol))return send(res,400,{ok:false,error:'Unsupported symbol'});
+      try{
+        const candles=await klines(symbol,interval);
+        if(!candles||candles.length<220)throw new Error("Insufficient candles");
+        const lower=interval==='15m'?null:await Promise.race([klines(symbol,'15m'),new Promise(resolve=>setTimeout(()=>resolve(null),1000))]).catch(()=>null);
+        const higher=await Promise.race([klines(symbol,'4h'),new Promise(resolve=>setTimeout(()=>resolve(null),1000))]).catch(()=>null);
+        const deriv=await Promise.race([derivatives(symbol,interval),new Promise(resolve=>setTimeout(()=>resolve(null),2200))]).catch(()=>null);
+        const analysis=analyze(candles,{interval,lower:lower&&lower.length>=220?analyze(lower,{interval:'15m'}):null,higher:higher&&higher.length>=220?analyze(higher,{interval:'4h'}):null,deriv});
+        const config=propFirm.normalizeConfig({
+          accountSize:Number(u.searchParams.get('accountSize')||process.env.PROP_ACCOUNT_SIZE||5000),
+          startingEquity:Number(u.searchParams.get('equity')||process.env.PROP_STARTING_EQUITY||5000),
+          dailyLossLimitPct:Number(u.searchParams.get('dailyLossLimitPct')||process.env.PROP_DAILY_LOSS_PCT||3),
+          maxDrawdownPct:Number(u.searchParams.get('maxDrawdownPct')||process.env.PROP_MAX_DRAWDOWN_PCT||6),
+          riskPerTradePct:Number(u.searchParams.get('riskPerTradePct')||process.env.PROP_RISK_PER_TRADE_PCT||0.5),
+          maxOpenRiskPct:Number(u.searchParams.get('maxOpenRiskPct')||process.env.PROP_MAX_OPEN_RISK_PCT||1),
+          minSignalScore:Number(u.searchParams.get('minSignalScore')||process.env.PROP_MIN_SIGNAL_SCORE||72),
+          minRR:Number(u.searchParams.get('minRR')||process.env.PROP_MIN_RR||1.5)
+        });
+        const gate=propFirm.evaluateEventContract({
+          analysis,derivatives:deriv,
+          dataQuality:{candleAgeMs:candles.length?Math.max(0,Date.now()-Number(candles[candles.length-1].t)):null,qualityPct:deriv?.available?100:80},
+          equity:config.startingEquity,dayStartEquity:config.startingEquity,peakEquity:config.startingEquity,
+          side:String(u.searchParams.get('side')||"").toUpperCase(),
+          premium:Number(u.searchParams.get('premium')),
+          payout:Number(u.searchParams.get('payout')),
+          fee:Number(u.searchParams.get('fee')||0),
+          config
+        });
+        return send(res,200,{ok:true,symbol,interval,analysis,derivatives:deriv,gate,updatedAt:Date.now()});
+      }catch(e){return send(res,503,{ok:false,error:String(e.message||e)})}
+    }
+
+    if(req.method==='GET'&&u.pathname==='/api/research/catalog')return send(res,200,{ok:true,version:research.VERSION,sources:research.CATALOG,updatedAt:Date.now()});
+    if(req.method==='GET'&&u.pathname==='/api/research/status')return send(res,200,{ok:true,...RESEARCH_JOB});
+    if(req.method==='POST'&&u.pathname==='/api/research/train'){
+      if(RESEARCH_JOB.running)return send(res,409,{ok:false,error:"RESEARCH_JOB_ALREADY_RUNNING",job:RESEARCH_JOB});
+      const symbol=(u.searchParams.get('symbol')||'BTCUSDT').toUpperCase(),interval=u.searchParams.get('interval')||'1h';
+      const bars=Math.max(300,Math.min(15000,Number(u.searchParams.get('bars')||5000)));
+      RESEARCH_JOB={running:true,startedAt:Date.now(),finishedAt:null,error:null,symbol,interval,bars,records:0,trained:0,skipped:0};
+      setImmediate(async()=>{
+        try{
+          const built=await research.buildReplayRecords({symbol,interval,bars,analyze});
+          RESEARCH_JOB.records=built.records.length;
+          const trained=await learning.trainFromReplay(built.records);
+          RESEARCH_JOB.trained=trained.trained;RESEARCH_JOB.skipped=trained.skipped;
+          RESEARCH_JOB.running=false;RESEARCH_JOB.finishedAt=Date.now();
+        }catch(e){
+          RESEARCH_JOB.running=false;RESEARCH_JOB.finishedAt=Date.now();RESEARCH_JOB.error=String(e.message||e);
+        }
+      });
+      return send(res,202,{ok:true,job:RESEARCH_JOB});
+    }
+
     if(req.method==='GET'&&u.pathname==='/api/core-flow'){
       const symbol=(u.searchParams.get('symbol')||'BTCUSDT').toUpperCase(),interval=u.searchParams.get('interval')||'1h';
       if(!SYMBOLS.includes(symbol))return send(res,400,{error:'Unsupported symbol'});
