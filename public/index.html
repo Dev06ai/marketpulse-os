@@ -1303,8 +1303,8 @@ function drawMain(){
   var emaPeriod=50,k=2/(emaPeriod+1),ema=dataAll[0].c,emaPts=[];
   for(i=0;i<dataAll.length;i++){ema=i?dataAll[i].c*k+ema*(1-k):dataAll[i].c;if(i>=start&&i<end)emaPts.push([left+(i-start)*xstep,scale(ema)])}
   ctx.save();ctx.strokeStyle="rgba(255,255,255,.10)";ctx.lineWidth=6;ctx.lineCap="round";line(ctx,emaPts);ctx.restore();
-  ctx.strokeStyle="#f2ccff";ctx.lineWidth=2.2;ctx.lineCap="round";ctx.lineJoin="round";line(ctx,emaPts);
-  ctx.font="800 8px system-ui";ctx.fillStyle="#f2ccff";ctx.fillText("EMA 50",left+6,top+12);
+  ctx.strokeStyle="#F5C451";ctx.lineWidth=2.2;ctx.lineCap="round";ctx.lineJoin="round";line(ctx,emaPts);
+  ctx.font="800 8px system-ui";ctx.fillStyle="#F5C451";ctx.fillText("EMA 50",left+6,top+12);
 
   // Dedicated exchange-style volume panel.
   var volMax=0;
