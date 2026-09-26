@@ -175,13 +175,29 @@ function recordFlowPoint(symbol){
 }
 function startBybitLiveFlow(){
   if(!LIVE_SYMBOLS.length)return;
-  let stopped=false,ws=null,retry=1000,timer=null;
+  let stopped=false,ws=null,retry=1000,timer=null,heartbeat=null,hostIndex=0;
+  const hosts=String(process.env.BYBIT_WS_HOSTS||[
+    "wss://stream.bybit.com/v5/public/linear",
+    "wss://stream.bybit.tr/v5/public/linear",
+    "wss://stream.bybit.id/v5/public/linear",
+    "wss://stream.bybit.kz/v5/public/linear",
+    "wss://stream.bybitgeorgia.ge/v5/public/linear",
+    "wss://stream.manepa.jp/v5/public/linear"
+  ].join(",")).split(",").map(s=>s.trim()).filter(Boolean);
   const connect=()=>{
     if(stopped)return;
-    ws=new WebSocket("wss://stream.bybit.com/v5/public/linear");
+    const url=hosts[hostIndex%hosts.length]||hosts[0]; hostIndex++;
+    try{ws=new WebSocket(url)}catch{retry=Math.min(retry*2,30000);timer=setTimeout(connect,retry);return}
     ws.on("open",()=>{
       retry=1000;
+      const now=Date.now();
+      for(const sym of LIVE_SYMBOLS){
+        const v=flowBucket(sym);
+        v.wsConnected=true;v.wsHost=url;v.wsConnectedAt=now;v.wsReconnects=Number(v.wsReconnects||0)+1;
+      }
       ws.send(JSON.stringify({op:"subscribe",args:LIVE_SYMBOLS.flatMap(sym=>["allLiquidation."+sym,"publicTrade."+sym,"tickers."+sym,"orderbook.50."+sym])}));
+      clearInterval(heartbeat);
+      heartbeat=setInterval(()=>{try{ws&&ws.readyState===1&&ws.send(JSON.stringify({op:"ping",req_id:String(Date.now())}))}catch{}},20000);
     });
     ws.on("message",raw=>{
       try{
@@ -191,7 +207,6 @@ function startBybitLiveFlow(){
         if(topic.startsWith("allLiquidation.")){
           for(const x of data){
             const q=Number(x.v)*Number(x.p);if(!Number.isFinite(q)||q<=0)continue;
-            // Bybit: Buy liquidation means a long was liquidated; Sell means a short was liquidated.
             if(x.S==="Buy")v.liqLong+=q;else if(x.S==="Sell")v.liqShort+=q;
             v.lastTs=Number(x.T)||Date.now();
           }
@@ -207,7 +222,7 @@ function startBybitLiveFlow(){
           if(Number.isFinite(+x.markPrice))v.markPrice=+x.markPrice;
           v.lastTs=Number(msg.ts)||Date.now();
         }else if(topic.startsWith("orderbook.50.")){
-          const x=data[0]||{}, bids=Array.isArray(x.b)?x.b:[],asks=Array.isArray(x.a)?x.a:[];
+          const x=data[0]||{},bids=Array.isArray(x.b)?x.b:[],asks=Array.isArray(x.a)?x.a:[];
           const bidQty=bids.slice(0,10).reduce((n,r)=>n+(Number(r?.[1])||0),0);
           const askQty=asks.slice(0,10).reduce((n,r)=>n+(Number(r?.[1])||0),0);
           const bidDepth=bids.slice(0,10).reduce((n,r)=>n+(Number(r?.[0])||0)*(Number(r?.[1])||0),0);
@@ -219,19 +234,22 @@ function startBybitLiveFlow(){
             imbalance:(bidQty+askQty)>0?(bidQty-askQty)/(bidQty+askQty):null,
             micropriceBias:mid&&Number.isFinite(micro)?(micro-mid)/mid:null,
             spreadBps:mid&&Number.isFinite(ask)&&Number.isFinite(bid)?((ask-bid)/mid)*10000:null,
-            depthNotional:bidDepth+askDepth,
-            bidDepth,askDepth,ts:Date.now()
+            depthNotional:bidDepth+askDepth,bidDepth,askDepth,ts:Date.now()
           };
           v.lastTs=Number(msg.ts)||Date.now();
         }
         recordFlowPoint(symbol);
       }catch{}
     });
-    ws.on("close",()=>{if(!stopped){clearTimeout(timer);timer=setTimeout(connect,retry);retry=Math.min(retry*2,30000)}});
+    ws.on("close",()=>{
+      clearInterval(heartbeat);
+      LIVE_SYMBOLS.forEach(sym=>{const v=flowBucket(sym);v.wsConnected=false;v.wsLastDisconnectAt=Date.now()});
+      if(!stopped){clearTimeout(timer);timer=setTimeout(connect,retry);retry=Math.min(retry*2,30000)}
+    });
     ws.on("error",()=>{try{ws.close()}catch{}});
   };
   connect();
-  process.on("SIGTERM",()=>{stopped=true;try{ws?.close()}catch{}});
+  process.on("SIGTERM",()=>{stopped=true;clearTimeout(timer);clearInterval(heartbeat);try{ws?.close()}catch{}});
 }
 startBybitLiveFlow();
 
