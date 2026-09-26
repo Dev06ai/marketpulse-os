@@ -378,6 +378,36 @@ body.admin-mode .nav button.adminNav,body.admin-mode .mobileMenu button.adminNav
     </div>
     <div class="section card"><div class="sectionHead"><div><div class="title">Live Market Screens</div><div class="sub">The scanner stays available while the overview remains your command center.</div></div><button class="btn" data-view="scanner">Open Scanner</button></div><div class="tape" id="tape"></div></div>
 
+    <div class="section grid2">
+      <div class="card">
+        <div class="sectionHead"><div><div class="title">Prop Firm Guard</div><div class="sub">Evidence + account-headroom gate. Configure this to the exact rules of your evaluation.</div></div><span class="chip" id="pfGateChip">WAITING</span></div>
+        <div class="inputs">
+          <label class="small">Account<input id="pfAccount" type="number" value="5000" min="1"></label>
+          <label class="small">Equity<input id="pfEquity" type="number" value="5000" min="1"></label>
+          <label class="small">Daily loss %<input id="pfDailyLoss" type="number" value="3" step=".1"></label>
+          <label class="small">Max drawdown %<input id="pfMaxDD" type="number" value="6" step=".1"></label>
+          <label class="small">Risk / trade %<input id="pfRisk" type="number" value=".5" step=".05"></label>
+          <label class="small">Min score<input id="pfScore" type="number" value="72" min="0" max="100"></label>
+          <label class="small">Min R:R<input id="pfRR" type="number" value="1.5" step=".1"></label>
+        </div>
+        <button id="pfRefresh" class="btn primary" style="margin-top:8px">Evaluate current setup</button>
+        <div class="result" id="pfResult" style="margin-top:8px">Waiting for market data.</div>
+        <div class="watchNote" id="pfReasons" style="margin-top:6px">No gate result yet.</div>
+      </div>
+      <div class="card">
+        <div class="sectionHead"><div><div class="title">Event Contract Guard</div><div class="sub">For fixed-risk Higher/Lower or UP/DOWN products. Uses the venue's displayed premium and payout.</div></div><span class="chip" id="evGateChip">WAITING</span></div>
+        <div class="inputs">
+          <label class="small">Direction<select id="evSide"><option>UP</option><option>DOWN</option></select></label>
+          <label class="small">Premium / stake<input id="evPremium" type="number" value="10" min="0" step=".01"></label>
+          <label class="small">Payout if correct<input id="evPayout" type="number" value="20" min="0" step=".01"></label>
+          <label class="small">Fee<input id="evFee" type="number" value="0" min="0" step=".01"></label>
+        </div>
+        <button id="evRefresh" class="btn primary" style="margin-top:8px">Evaluate event contract</button>
+        <div class="result" id="evResult" style="margin-top:8px">Enter the contract terms shown by the venue.</div>
+        <div class="watchNote" id="evReasons" style="margin-top:6px">The gate never places an order.</div>
+      </div>
+    </div>
+
     <div class="section card">
       <div class="sectionHead"><div><div class="title">Quick Calculators</div><div class="sub">Fast position, risk/reward and P&amp;L planning without leaving Intel.</div></div><span class="chip">LIVE INPUTS</span></div>
       <div class="calcGrid">
@@ -1477,6 +1507,41 @@ function checkAlerts(rows){
 }
 async function enableNotifications(){if(!("Notification"in window)){$("notifState").textContent="Browser notifications unavailable";return}var p=await Notification.requestPermission();$("notifState").textContent=p;$("notifBtn").textContent=p==="granted"?"Notifications enabled":"Enable notifications"}
 async function runSystemCheck(){ $("healthGrid").innerHTML='<div class="small">Running core checks…</div>';try{var d=await api("/api/system-check",8000),checks=d.checks||{};var names=["server","marketEngine","learning","memory","marketData","derivatives","oi","cvd","liquidations","execution","portfolio","phase7"];$("healthGrid").innerHTML=names.map(function(n){return'<div class="healthItem"><span class="healthDot '+(checks[n]?"ok":"bad")+'"></span><b>'+n+"</b></div>"}).join("");$("healthText").textContent=(d.ok?"Core market stack passed. ":"Core market stack needs attention. ")+(d.marketError||d.derivativesError||"")+" · Portfolio and Trader Analytics checks are included."; }catch(e){$("healthText").textContent="System check failed: "+e.message}}
+async function loadPropFirmGuard(){
+  if(!$("pfResult"))return;
+  try{
+    var q=new URLSearchParams({
+      symbol:state.symbol,interval:state.interval,
+      accountSize:$("pfAccount").value||5000,equity:$("pfEquity").value||5000,
+      dailyLossLimitPct:$("pfDailyLoss").value||3,maxDrawdownPct:$("pfMaxDD").value||6,
+      riskPerTradePct:$("pfRisk").value||.5,minSignalScore:$("pfScore").value||72,minRR:$("pfRR").value||1.5
+    });
+    var d=await api("/api/propfirm?"+q.toString(),8500),g=d.gate||{};
+    $("pfGateChip").textContent=g.decision||"UNKNOWN";
+    $("pfResult").textContent=(g.signalSide||"WAIT")+" · score "+fmt(g.score)+" · R:R "+Number(g.rr||0).toFixed(2)+" · risk headroom "+fmt(g.riskHeadroomCash||0);
+    $("pfReasons").textContent=(g.reasons&&g.reasons.length?("BLOCK: "+g.reasons.join(" · ")):("Gate clear"+(g.warnings&&g.warnings.length?(" · Warnings: "+g.warnings.join(" · ")):"")));
+  }catch(e){
+    $("pfGateChip").textContent="ERROR";$("pfResult").textContent="Prop guard unavailable";$("pfReasons").textContent=e.message||"Request failed";
+  }
+}
+async function loadEventGuard(){
+  if(!$("evResult"))return;
+  try{
+    var q=new URLSearchParams({
+      symbol:state.symbol,interval:state.interval,
+      accountSize:$("pfAccount").value||5000,equity:$("pfEquity").value||5000,
+      dailyLossLimitPct:$("pfDailyLoss").value||3,maxDrawdownPct:$("pfMaxDD").value||6,
+      riskPerTradePct:$("pfRisk").value||.5,minSignalScore:$("pfScore").value||72,minRR:$("pfRR").value||1.5,
+      side:$("evSide").value,premium:$("evPremium").value,payout:$("evPayout").value,fee:$("evFee").value
+    });
+    var d=await api("/api/propfirm/event?"+q.toString(),8500),g=d.gate||{};
+    $("evGateChip").textContent=g.decision||"UNKNOWN";
+    $("evResult").textContent=(g.eventSide||"WAIT")+" · max "+Number(g.maxContracts||0)+" contract(s) · max loss "+fmt(g.maxLoss||0)+" · max profit "+fmt(g.maxProfit||0)+" · payoff "+Number(g.payoffR||0).toFixed(2)+"R";
+    $("evReasons").textContent=(g.reasons&&g.reasons.length?("BLOCK: "+g.reasons.join(" · ")):("Gate clear"+(g.warnings&&g.warnings.length?(" · Warnings: "+g.warnings.join(" · ")):"")))+".";
+  }catch(e){
+    $("evGateChip").textContent="ERROR";$("evResult").textContent="Event guard unavailable";$("evReasons").textContent=e.message||"Request failed";
+  }
+}
 function calc(){
   var a=+$("ca").value||0,r=(+$("cr").value||0)/100,e=+$("ce").value||0,s=+$("cs").value||0,b=a*r,d=Math.abs(e-s);$("sizeResult").textContent=d?"Risk "+fmt(b)+" · Position size "+fmt(b/d)+" units":"Enter valid stop";
   var re=+$("re").value||0,rs=+$("rs").value||0,rt=+$("rt").value||0,rd=Math.abs(re-rs),rw=Math.abs(rt-re),dir=$("rdirection").value;$("rrResult").textContent=rd?(rw/rd).toFixed(2)+"R · "+dir:"—";
@@ -1574,6 +1639,7 @@ async function loadCore(){
   try{
     var d=await api("/api/core?symbol="+encodeURIComponent(state.symbol)+"&interval="+encodeURIComponent(state.interval),9000);
     state.market=d;state.bootRetry=0;setStatus("Core market intelligence connected","ok");$("dataState").textContent="Live";renderMarket();
+    deferTask(loadPropFirmGuard,120);
     if(!state.secondaryStarted)queueSecondaryBoot();
     else if(state.activeView==="overview"){deferTask(loadScan,80);deferTask(loadCycle,140)}
   }catch(e){
@@ -1606,6 +1672,8 @@ $("exArm").addEventListener("click",armExecution);
 $("exOrderRows").addEventListener("click",function(e){var b=e.target.closest("[data-ex-submit],[data-ex-cancel]");if(!b)return;if(b.dataset.exSubmit)submitExecution(b.dataset.exSubmit);else cancelExecution(b.dataset.exCancel)});
 $("exPositionRows").addEventListener("click",function(e){var b=e.target.closest("[data-ex-close]");if(b)closeSimulation(b.dataset.exClose)});
 $("refresh").addEventListener("click",loadCore);
+$("pfRefresh").addEventListener("click",loadPropFirmGuard);
+$("evRefresh").addEventListener("click",loadEventGuard);
 $("symbol").addEventListener("change",function(){state.symbol=this.value;loadCore()});
 $("interval").addEventListener("change",function(){state.interval=this.value;loadCore()});
 document.querySelectorAll("[data-filter]").forEach(function(b){b.addEventListener("click",function(){document.querySelectorAll("[data-filter]").forEach(function(x){x.classList.remove("on")});b.classList.add("on");state.filter=b.dataset.filter;renderScanner()})});
