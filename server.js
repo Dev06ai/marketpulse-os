@@ -678,11 +678,13 @@ const server=http.createServer(async(req,res)=>{
         if(!guard.ok)return send(res,guard.status,{ok:false,error:guard.error});
         if(userId===guard.user.id)return send(res,400,{ok:false,error:"The owner account cannot be moderated."});
         await storage.moderateUser(userId,body.action,body.durationMinutes,body.reason);
+        await auditAdmin(req,(String(body.action)==="ban"?"Banned user":String(body.action)==="restrict"?"Restricted user":"Restored user"),"users",userId,{durationMinutes:body.durationMinutes||null,reason:String(body.reason||"").slice(0,200)});
+        await securityEvent("warning","admin_user_moderation",(await auth.userFromRequest(req))?.email,{action:body.action,targetUserId:userId});
         return send(res,200,{ok:true});
       }catch(e){return send(res,400,{ok:false,error:String(e.message||e)})}
     }
     if(req.method==='GET'&&u.pathname==='/api/broadcasts/active'){
-      try{return send(res,200,{ok:true,broadcasts:await storage.getActiveBroadcasts()})}catch(e){return send(res,503,{ok:false,error:e.message})}
+      try{const viewer=await auth.userFromRequest(req),rows=await storage.getActiveBroadcasts();return send(res,200,{ok:true,broadcasts:rows.filter(x=>x.audience==="all"||(x.audience==="registered"&&viewer))})}catch(e){return send(res,503,{ok:false,error:e.message})}
     }
     if(req.method==='POST'&&u.pathname==='/api/telemetry/event'){
       let raw="";for await(const chunk of req)raw+=chunk;let body={};try{body=JSON.parse(raw||"{}")}catch{return send(res,400,{ok:false,error:"Invalid JSON"})}
