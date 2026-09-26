@@ -246,6 +246,33 @@ body.admin-mode .nav button.adminNav,body.admin-mode .mobileMenu button.adminNav
 .userAction.safe{border-color:rgba(134,239,172,.16);color:#a7f3d0}
 @media(max-width:900px){.adminUsersGrid{grid-template-columns:repeat(3,1fr)}}
 @media(max-width:600px){.adminUsersGrid{grid-template-columns:repeat(2,1fr)}}
+</style><style id="admin-command-center-style">
+.adminCommandKpis{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-top:10px}
+.adminCommandKpi{padding:12px;border:1px solid rgba(255,255,255,.08);border-radius:12px;background:linear-gradient(180deg,rgba(18,18,23,.92),rgba(8,8,11,.92))}
+.adminCommandKpi .k{font-size:8px;color:#8292a6;text-transform:uppercase;letter-spacing:.09em}
+.adminCommandKpi .v{font-size:22px;font-weight:950;margin-top:5px}
+.adminCommandKpi.live .v{color:#86efac;text-shadow:0 0 14px rgba(134,239,172,.22)}
+.adminCommandGrid{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:10px}
+.adminCommandGrid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:9px;margin-top:10px}
+.adminPanelSmall{min-height:165px}
+.adminList{display:grid;gap:5px;margin-top:8px;max-height:240px;overflow:auto}
+.adminLine{display:flex;justify-content:space-between;gap:8px;align-items:center;padding:7px 8px;border:1px solid rgba(255,255,255,.06);border-radius:8px;background:rgba(255,255,255,.014)}
+.adminLine b{font-size:9px}.adminLine span{font-size:8px;color:#8797a9}
+.adminBadgeSmall{display:inline-flex;align-items:center;border-radius:999px;padding:4px 7px;font-size:8px;font-weight:900;letter-spacing:.05em}
+.adminBadgeSmall.ok{color:#a7f3d0;background:rgba(74,222,128,.08);border:1px solid rgba(74,222,128,.16)}
+.adminBadgeSmall.warn{color:#fde68a;background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.14)}
+.adminBadgeSmall.bad{color:#fda4af;background:rgba(248,113,113,.08);border:1px solid rgba(248,113,113,.14)}
+.adminTableWrap{overflow:auto;border:1px solid rgba(255,255,255,.07);border-radius:10px}
+.adminCompactTable{width:100%;border-collapse:collapse;min-width:650px}.adminCompactTable th,.adminCompactTable td{padding:7px 8px;border-bottom:1px solid rgba(255,255,255,.05);font-size:8px;text-align:left;vertical-align:top}.adminCompactTable th{color:#8394aa;text-transform:uppercase;letter-spacing:.07em}.adminCompactTable tr:last-child td{border-bottom:0}
+.adminFlagRow{display:grid;grid-template-columns:1.2fr 70px 76px 1fr 72px;gap:7px;align-items:center;padding:7px 0;border-bottom:1px solid rgba(255,255,255,.05)}
+.adminFlagRow:last-child{border-bottom:0}.adminFlagRow input,.adminFlagRow select{background:#111116;border:1px solid rgba(255,255,255,.08);color:#e8edf4;border-radius:7px;padding:6px;font-size:8px}.adminFlagRow .flagName{font-size:9px;font-weight:850}.adminFlagRow .flagDesc{font-size:8px;color:#7f90a6}
+.adminToggle{width:38px;height:20px;border-radius:999px;border:1px solid rgba(255,255,255,.09);background:#151519;position:relative;cursor:pointer}.adminToggle:after{content:"";position:absolute;width:14px;height:14px;top:2px;left:2px;border-radius:50%;background:#6b7280;transition:.18s}.adminToggle.on{background:rgba(167,243,208,.15);border-color:rgba(167,243,208,.28)}.adminToggle.on:after{left:20px;background:#a7f3d0;box-shadow:0 0 10px rgba(167,243,208,.35)}
+.adminSwitchGrid{display:grid;grid-template-columns:1fr 1fr;gap:7px}.adminSwitchRow{display:flex;align-items:center;justify-content:space-between;gap:9px;padding:8px;border:1px solid rgba(255,255,255,.06);border-radius:9px;background:rgba(255,255,255,.014)}.adminSwitchRow b{font-size:8px}.adminSwitchRow span{font-size:7px;color:#75859a;margin-top:2px;display:block}
+.adminComposer textarea,.adminComposer input,.adminComposer select{width:100%;background:#111116;border:1px solid rgba(255,255,255,.08);color:#e8edf4;border-radius:8px;padding:8px;font-size:9px}.adminComposer{display:grid;gap:7px}.adminComposer textarea{min-height:82px;resize:vertical}
+.adminToolbar{display:flex;gap:6px;align-items:center;justify-content:space-between;flex-wrap:wrap}.adminToolbarActions{display:flex;gap:6px;flex-wrap:wrap}
+@media(max-width:1000px){.adminCommandKpis{grid-template-columns:repeat(3,1fr)}.adminCommandGrid3{grid-template-columns:1fr 1fr}}
+@media(max-width:700px){.adminCommandKpis{grid-template-columns:1fr 1fr}.adminCommandGrid,.adminCommandGrid3{grid-template-columns:1fr}.adminSwitchGrid{grid-template-columns:1fr}.adminFlagRow{grid-template-columns:1fr 60px 70px}.adminFlagRow .flagDesc{grid-column:1/-1}}
+.broadcastBar{display:none;margin:10px 0;padding:10px 12px;border:1px solid rgba(192,132,252,.20);border-radius:10px;background:linear-gradient(90deg,rgba(192,132,252,.08),rgba(96,165,250,.05));box-shadow:0 0 30px rgba(192,132,252,.05)}.broadcastBar.show{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}.broadcastBar b{font-size:10px}.broadcastBar p{margin:3px 0 0;font-size:9px;color:#a5b3c4;line-height:1.5}.broadcastClose{border:1px solid rgba(255,255,255,.08);background:#0e0e12;color:#8998aa;border-radius:6px;padding:4px 7px;cursor:pointer}
 </style></head>
 <body>
 <header class="header"><div class="headerInner">
@@ -592,7 +619,100 @@ body.admin-mode .nav button.adminNav,body.admin-mode .mobileMenu button.adminNav
     </div>
     <div class="section card" style="margin-top:10px"><div class="title">Protected checks</div><div class="healthGrid" id="adminHealthGrid"></div><div class="sub" id="adminHealthText" style="margin-top:7px">Owner-only system diagnostics.</div></div>
   </div>
-  <div class="card adminPanel">
+    <div class="adminCommandKpis">
+    <div class="adminCommandKpi live"><div class="k">Live visitors</div><div class="v" id="acLiveVisitors">—</div></div>
+    <div class="adminCommandKpi"><div class="k">Active today</div><div class="v" id="acActiveDay">—</div></div>
+    <div class="adminCommandKpi"><div class="k">Active 7 days</div><div class="v" id="acActiveWeek">—</div></div>
+    <div class="adminCommandKpi"><div class="k">New this month</div><div class="v" id="acNewMonth">—</div></div>
+    <div class="adminCommandKpi"><div class="k">Security alerts</div><div class="v" id="acSecurityAlerts">—</div></div>
+  </div>
+
+  <div class="adminCommandGrid3">
+    <div class="card adminPanelSmall">
+      <div class="sectionHead"><div><div class="title">Performance</div><div class="sub">Live application telemetry.</div></div><button id="adminRefreshCenter" class="btn">Refresh</button></div>
+      <div class="adminList" id="acPerformance"></div>
+    </div>
+    <div class="card adminPanelSmall">
+      <div class="title">Data providers</div><div class="sub">Connectivity and latency.</div>
+      <div class="adminList" id="acProviders"><div class="small">Checking providers…</div></div>
+    </div>
+    <div class="card adminPanelSmall">
+      <div class="title">Learning / validation</div><div class="sub">Adaptive engine state and recent sample quality.</div>
+      <div class="adminList" id="acLearning"></div>
+    </div>
+  </div>
+
+  <div class="adminCommandGrid">
+    <div class="card adminPanelSmall">
+      <div class="sectionHead"><div><div class="title">Usage analytics</div><div class="sub">Last 30 days.</div></div></div>
+      <div class="grid3">
+        <div><div class="label">Top features</div><div class="adminList" id="acFeatures"></div></div>
+        <div><div class="label">Top assets</div><div class="adminList" id="acSymbols"></div></div>
+        <div><div class="label">Timeframes</div><div class="adminList" id="acIntervals"></div></div>
+      </div>
+    </div>
+    <div class="card adminPanelSmall">
+      <div class="sectionHead"><div><div class="title">Security center</div><div class="sub">Authentication and protection events.</div></div><span id="acSecurityBadge" class="adminBadgeSmall ok">HEALTHY</span></div>
+      <div class="adminTableWrap"><table class="adminCompactTable"><thead><tr><th>Time</th><th>Event</th><th>Severity</th><th>Account</th></tr></thead><tbody id="acSecurityTable"></tbody></table></div>
+    </div>
+  </div>
+
+  <div class="adminCommandGrid">
+    <div class="card adminPanelSmall">
+      <div class="sectionHead"><div><div class="title">Feature flags</div><div class="sub">Control rollout without a code deploy.</div></div><button id="acSaveFlags" class="btn primary">Save flags</button></div>
+      <div id="acFlags"></div>
+    </div>
+    <div class="card adminPanelSmall">
+      <div class="sectionHead"><div><div class="title">Emergency controls</div><div class="sub">Use during incidents or planned maintenance.</div></div><button id="acSaveEmergency" class="btn primary">Apply</button></div>
+      <div class="adminSwitchGrid">
+        <div class="adminSwitchRow"><div><b>Maintenance mode</b><span>Block normal user API access.</span></div><button class="adminToggle" id="acMaintenance"></button></div>
+        <div class="adminSwitchRow"><div><b>Read-only mode</b><span>Allow viewing while blocking writes.</span></div><button class="adminToggle" id="acReadOnly"></button></div>
+        <div class="adminSwitchRow"><div><b>New registrations</b><span>Emergency registration gate.</span></div><button class="adminToggle on" id="acRegistrations"></button></div>
+        <div class="adminSwitchRow"><div><b>AI Copilot</b><span>Disable AI requests if needed.</span></div><button class="adminToggle on" id="acAI"></button></div>
+        <div class="adminSwitchRow"><div><b>Execution</b><span>Kill application-side execution routing.</span></div><button class="adminToggle on" id="acExecution"></button></div>
+        <div class="adminSwitchRow"><div><b>Market data</b><span>Stop user-facing live data endpoints.</span></div><button class="adminToggle on" id="acMarketData"></button></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="adminCommandGrid">
+    <div class="card adminPanelSmall">
+      <div class="sectionHead"><div><div class="title">Broadcasts</div><div class="sub">Send notices to users.</div></div></div>
+      <div class="adminComposer">
+        <input id="acBroadcastTitle" placeholder="Notice title">
+        <textarea id="acBroadcastBody" placeholder="Message to users…"></textarea>
+        <div class="grid3"><select id="acBroadcastAudience"><option value="all">All users</option><option value="registered">Registered users</option></select><input id="acBroadcastExpiry" type="datetime-local"><button id="acBroadcastSend" class="btn primary">Publish</button></div>
+      </div>
+      <div class="adminList" id="acBroadcasts"></div>
+    </div>
+    <div class="card adminPanelSmall">
+      <div class="sectionHead"><div><div class="title">Support inbox</div><div class="sub">User questions, bugs and suggestions.</div></div><button id="acSupportRefresh" class="btn">Refresh</button></div>
+      <div class="adminTableWrap"><table class="adminCompactTable"><thead><tr><th>User</th><th>Subject</th><th>Status</th><th>Updated</th><th>Action</th></tr></thead><tbody id="acSupportTable"></tbody></table></div>
+    </div>
+  </div>
+
+  <div class="adminCommandGrid">
+    <div class="card adminPanelSmall">
+      <div class="sectionHead"><div><div class="title">Admin audit log</div><div class="sub">Every protected admin action is recorded.</div></div></div>
+      <div class="adminTableWrap"><table class="adminCompactTable"><thead><tr><th>Time</th><th>Action</th><th>Category</th><th>Metadata</th></tr></thead><tbody id="acAuditTable"></tbody></table></div>
+    </div>
+    <div class="card adminPanelSmall">
+      <div class="sectionHead"><div><div class="title">Backup &amp; recovery</div><div class="sub">Operational configuration snapshots; secrets are excluded.</div></div><button id="acCreateSnapshot" class="btn primary">Create snapshot</button></div>
+      <div class="adminList" id="acSnapshots"></div>
+    </div>
+  </div>
+
+  <div class="card adminPanelSmall" style="margin-top:10px">
+    <div class="sectionHead"><div><div class="title">Owner configuration</div><div class="sub">Runtime controls and incident messaging.</div></div><button id="acSaveConfig" class="btn primary">Save configuration</button></div>
+    <div class="inputs">
+      <input id="acMaintenanceMessage" placeholder="Maintenance message">
+      <select id="acMode"><option value="normal">Normal</option><option value="read_only">Read-only</option><option value="maintenance">Maintenance</option></select>
+      <input id="acSessionHours" type="number" min="1" max="24" placeholder="Owner session hours">
+      <input id="acUserSessionDays" type="number" min="1" max="90" placeholder="User session days">
+    </div>
+  </div>
+
+<div class="card adminPanel">
     <div class="sectionHead">
       <div><div class="title">User &amp; Access Management</div><div class="sub">Owner-only account activity and moderation. No passwords, IP addresses or unnecessary personal data are exposed.</div></div>
       <button id="adminUsersRefresh" class="btn">Refresh users</button>
