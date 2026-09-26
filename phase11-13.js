@@ -70,7 +70,7 @@ function validatedThreshold(summary,buckets,baseScore){
     .filter(b=>Number(b.trades)>=minTrades&&Number(b.winRate)>=52&&Number(b.expectancyR)>0&&
       (b.profitFactor===null||Number(b.profitFactor)>=1.05)&&Number(b.min||0)>=baseScore);
   if(!eligible.length)return null;
-  return eligible.sort((a,b)=>Number(a.bucket.replace("+",""))-Number(b.bucket.replace("+","")))[0];
+  return eligible.sort((a,b)=>Number(a.min||0)-Number(b.min||0))[0];
 }
 
 function adaptivePolicy(validation,base={}){
@@ -88,7 +88,7 @@ function adaptivePolicy(validation,base={}){
     if(s.winRate<52){minScore+=4;reasons.push("win_rate_below_52")}
     if(s.maxDrawdownR>10){minScore+=3;reasons.push("drawdown_pressure")}
   }
-  if(bucketGate)minScore=Math.max(minScore,Number(bucketGate.bucket.replace("+","")));
+  if(bucketGate)minScore=Math.max(minScore,Number(bucketGate.min||0));
   else reasons.push("no_score_bucket_meets_validation_thresholds");
   minScore=clamp(Math.round(minScore),baseScore,88);
   const eligibleEvidence=Boolean(
