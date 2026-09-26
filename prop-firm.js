@@ -19,6 +19,7 @@ const DEFAULT_CONFIG = Object.freeze({
   maxTradesPerDay: 8,
   requireDerivatives: true,
   requireFlowConfirmation: true,
+  blockMixedFlow: true,
   blockHighVolatility: true
 });
 
@@ -60,6 +61,7 @@ function normalizeConfig(input = {}) {
   out.maxTradesPerDay = Math.max(1, Math.floor(finite(out.maxTradesPerDay, 8)));
   out.requireDerivatives = Boolean(out.requireDerivatives);
   out.requireFlowConfirmation = Boolean(out.requireFlowConfirmation);
+  out.blockMixedFlow = Boolean(out.blockMixedFlow);
   out.blockHighVolatility = Boolean(out.blockHighVolatility);
   return out;
 }
@@ -133,7 +135,7 @@ function baseGates({ analysis = {}, derivatives = null, dataQuality = {}, equity
 
   const requestedSide = String(analysis.side || "").toUpperCase() === "LONG" ? "UP" : "DOWN";
   if (config.requireFlowConfirmation && derivAvailable) {
-    if (flow === "MIXED") warnings.push("FLOW_MIXED");
+    if (flow === "MIXED") { if (config.blockMixedFlow) reasons.push("FLOW_MIXED"); else warnings.push("FLOW_MIXED"); }
     else if (flow !== requestedSide) reasons.push("FLOW_CONFLICTS_WITH_DIRECTION");
   } else if (config.requireFlowConfirmation && !derivAvailable) {
     reasons.push("FLOW_CONFIRMATION_UNAVAILABLE");
@@ -213,6 +215,8 @@ function evaluateEventContract({
   let units = stakeRisk > 0 ? Math.floor(riskBudget / stakeRisk) : 0;
   if (maxContracts !== null) units = Math.min(units, Math.max(0, Math.floor(Number(maxContracts) || 0)));
 
+  const signalSide = base.signalSide;
+  if (["UP","DOWN"].includes(allowedSide) && signalSide && allowedSide !== signalSide) base.reasons.push("EVENT_DIRECTION_CONFLICTS_WITH_SIGNAL");
   if (rr < base.config.minRR) base.reasons.push("EVENT_PAYOFF_BELOW_RISK_REQUIREMENT");
   if (!units) base.reasons.push("NO_CONTRACTS_WITHIN_RISK_BUDGET");
 
