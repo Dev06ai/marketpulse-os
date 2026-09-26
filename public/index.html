@@ -692,9 +692,9 @@ body.admin-mode .nav button.adminNav,body.admin-mode .mobileMenu button.adminNav
     <div class="sectionHead"><div><div class="title">Prediction Engine</div><div class="sub">Calibrated setup-quality model. Champion models are promoted only after out-of-sample validation.</div></div><span class="adminBadgeSmall ok" id="acPredictionBadge">NO MODEL</span></div>
     <div class="predictionMetricGrid">
       <div class="predictionMetric"><div class="k">Champion samples</div><div class="v" id="acPredSamples">—</div></div>
-      <div class="predictionMetric"><div class="k">Validation Brier</div><div class="v" id="acPredBrier">—</div></div>
-      <div class="predictionMetric"><div class="k">Validation log loss</div><div class="v" id="acPredLoss">—</div></div>
-      <div class="predictionMetric"><div class="k">Validation accuracy</div><div class="v" id="acPredAcc">—</div></div>
+      <div class="predictionMetric"><div class="k">Walk-forward Brier</div><div class="v" id="acPredBrier">—</div></div>
+      <div class="predictionMetric"><div class="k">Walk-forward log loss</div><div class="v" id="acPredLoss">—</div></div>
+      <div class="predictionMetric"><div class="k">Walk-forward accuracy</div><div class="v" id="acPredAcc">—</div></div>
     </div>
     <div class="predictionRunRow" style="margin-top:9px">
       <select id="acPredSymbol"><option>BTCUSDT</option><option>ETHUSDT</option><option>SOLUSDT</option></select>
@@ -1751,9 +1751,9 @@ function renderPredictionAdmin(o){
   var badge=$("acPredictionBadge");if(!m){badge.textContent="NO MODEL";badge.className="adminBadgeSmall warn";$("acPredSamples").textContent="—";$("acPredBrier").textContent="—";$("acPredLoss").textContent="—";$("acPredAcc").textContent="—";return}
   badge.textContent="CHAMPION";badge.className="adminBadgeSmall ok";
   $("acPredSamples").textContent=fmt(m.samples||0);
-  $("acPredBrier").textContent=Number.isFinite(Number(m.validationMetrics?.brier))?Number(m.validationMetrics.brier).toFixed(4):"—";
-  $("acPredLoss").textContent=Number.isFinite(Number(m.validationMetrics?.logLoss))?Number(m.validationMetrics.logLoss).toFixed(4):"—";
-  $("acPredAcc").textContent=Number.isFinite(Number(m.validationMetrics?.accuracy))?Number(m.validationMetrics.accuracy).toFixed(1)+"%":"—";
+  $("acPredBrier").textContent=Number.isFinite(Number(m.walkForwardMetrics?.meanBrier))?Number(m.walkForwardMetrics.meanBrier).toFixed(4):"—";
+  $("acPredLoss").textContent=Number.isFinite(Number(m.walkForwardMetrics?.meanLogLoss))?Number(m.walkForwardMetrics.meanLogLoss).toFixed(4):"—";
+  $("acPredAcc").textContent=Number.isFinite(Number(m.walkForwardMetrics?.meanAccuracy))?Number(m.walkForwardMetrics.meanAccuracy).toFixed(1)+"%":"—";
 }
 async function loadPredictionAdmin(){
   try{var d=await api("/api/admin/prediction/status",7000);renderPredictionAdmin(d.model);return d}catch(e){$("acPredictionStatus").textContent="Prediction status unavailable: "+e.message;return null}
