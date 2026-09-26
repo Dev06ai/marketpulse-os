@@ -1029,6 +1029,33 @@ function drawFlowData(data){
   $("flowSource").textContent=data.available?"LIVE · snapshot":"UNAVAILABLE";
   drawBlankFlow();
 }
+function renderFlowView(data){
+  data=data||{};
+  $("fOi").textContent=data.oi!=null?fmt(data.oi):"UNAVAILABLE";
+  $("fOiS").textContent=data.oiChangePct!=null?pct(data.oiChangePct)+" recent":"Current snapshot";
+  $("fCvd").textContent=data.cvdState||"UNAVAILABLE";
+  $("fCvdS").textContent=data.cvdDelta!=null?"Δ "+fmt(data.cvdDelta):"No CVD feed";
+  $("fPos").textContent=data.positioning||"UNAVAILABLE";
+  $("fFund").textContent=data.fundingRate!=null?"Funding "+(Number(data.fundingRate)*100).toFixed(4)+"%":"Funding unavailable";
+  $("fLiq").textContent=data.liquidationBias&&data.liquidationBias!=="UNKNOWN"?data.liquidationBias:"UNAVAILABLE";
+  $("fLiqS").textContent=data.liquidationTotal!=null?"Total "+fmt(data.liquidationTotal):"No liquidation feed";
+}
+async function loadFlow(){
+  $("flowSource").textContent="CONNECTING";
+  try{
+    var j=await api("/api/core-flow?symbol="+encodeURIComponent(state.symbol)+"&interval="+encodeURIComponent(state.interval),8500);
+    if(j.data){
+      state.market=state.market||{};state.market.derivatives=j.data;
+      renderMarketNoFlow();renderFlowView(j.data);drawFlowData(j.data);
+      $("flowSource").textContent=j.data.available===false?"UNAVAILABLE":"LIVE";
+    }else{
+      renderFlowView({available:false});drawFlowData(null);$("flowSource").textContent="UNAVAILABLE";
+    }
+  }catch(e){
+    renderFlowView({available:false});drawFlowData(null);$("flowSource").textContent="RETRY";
+  }
+}
+
 function renderMarketNoFlow(){
   var d=state.market,der=d&&d.derivatives||{};if(!d)return;
   $("oi").textContent=der.oi!=null?fmt(der.oi):"UNAVAILABLE";$("oiS").textContent=der.oiChangePct!=null?pct(der.oiChangePct)+" recent":"Current snapshot";$("cvd").textContent=der.cvdState||"UNAVAILABLE";$("cvdS").textContent=der.cvdDelta!=null?"Δ "+fmt(der.cvdDelta):"No CVD feed";$("pos").textContent=der.positioning||"UNAVAILABLE";$("fund").textContent=der.fundingRate!=null?"Funding "+(Number(der.fundingRate)*100).toFixed(4)+"%":"Funding unavailable";$("liq").textContent=der.liquidationBias&&der.liquidationBias!=="UNKNOWN"?der.liquidationBias:"UNAVAILABLE";$("liqS").textContent=der.liquidationTotal!=null?"Total "+fmt(der.liquidationTotal):"No liquidation feed";$("flowSource").textContent=der.provider?(String(der.provider).slice(0,30)+(der.livePointCount?" · LIVE":"")):(der.available?"LIVE":"UNAVAILABLE");
