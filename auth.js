@@ -47,7 +47,8 @@ function parseCookies(header){
   const out={};String(header||"").split(";").forEach(part=>{const i=part.indexOf("=");if(i<0)return;const k=part.slice(0,i).trim(),v=part.slice(i+1).trim();if(k)out[k]=decodeURIComponent(v)});return out;
 }
 function cookie(raw,maxAge){
-  const secure=String(process.env.NODE_ENV||"").toLowerCase()==="production"?" Secure;":"";
+  const insecure=String(process.env.MARKETPULSE_ALLOW_INSECURE_HTTP||"").toLowerCase()==="true";
+  const secure=insecure?"":" Secure;";
   return COOKIE+"="+encodeURIComponent(raw)+"; Path=/; HttpOnly; SameSite=Strict; Max-Age="+Math.max(0,Math.floor(maxAge||0))+";"+secure;
 }
 function clearCookie(){return cookie("",0)}
