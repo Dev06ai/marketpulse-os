@@ -151,7 +151,7 @@ button,input,select,textarea{font:inherit}.wrap{width:min(1440px,calc(100% - 26p
 
   <section id="view-risk" class="view"><div class="sectionHead"><div><div class="title">Risk Lab</div><div class="sub">Position size should follow the invalidation.</div></div></div><div class="card"><div class="inputs"><input id="ra" type="number" value="5000" placeholder="Account"><input id="rrisk" type="number" value="1" step=".05" placeholder="Risk %"><input id="rentry" type="number" value="84000" placeholder="Entry"><input id="rstop" type="number" value="82000" placeholder="Stop"></div><div class="result" id="riskOut">—</div></div></section>
 
-  <div id="chartModal" class="modal" aria-hidden="true"><div class="modalCard"><div class="modalTop"><h3>Chart settings</h3><button id="chartClose" class="modalClose">×</button></div><div class="sub" style="margin-top:6px">Choose a visual preset or customize the candle colors. Settings persist in this browser.</div><div class="presetGrid" id="presetGrid"><button class="preset" data-preset="aurora"><div class="preview" style="background:#07131a;--pc1:#9BE7C4;--pc2:#FFB38A"><i></i><i></i><i></i><i></i></div><b>Aurora</b><small>Mint / ember</small></button><button class="preset" data-preset="lavender"><div class="preview" style="background:#0e1018;--pc1:#E5D0FF;--pc2:#FFB8D8"><i></i><i></i><i></i><i></i></div><b>Lavender</b><small>Soft / premium</small></button><button class="preset" data-preset="forest"><div class="preview" style="background:#08120f;--pc1:#A8E6CF;--pc2:#F8C6A0"><i></i><i></i><i></i><i></i></div><b>Forest</b><small>Mint / coral</small></button><button class="preset" data-preset="classic"><div class="preview" style="background:#090909;--pc1:#22c55e;--pc2:#ef4444"><i></i><i></i><i></i><i></i></div><b>Classic</b><small>Green / red</small></button><button class="preset" data-preset="mono"><div class="preview" style="background:#090909;--pc1:#f1f5f9;--pc2:#64748b"><i></i><i></i><i></i><i></i></div><b>Mono</b><small>White / slate</small></button></div><div class="colorGrid"><div class="colorItem"><span>Bull candle</span><input id="bullColor" type="color"></div><div class="colorItem"><span>Bear candle</span><input id="bearColor" type="color"></div></div><div class="axisNote">Right-side price scale and the current-price marker adapt automatically to the visible range.</div><div class="modalFoot"><button id="chartCancel" class="btn">Cancel</button><button id="chartApply" class="btn primary">Apply</button></div></div></div>
+  <div id="chartModal" class="modal" aria-hidden="true"><div class="modalCard"><div class="modalTop"><h3>Chart settings</h3><button id="chartClose" class="modalClose">×</button></div><div class="sub" style="margin-top:6px">Choose a visual preset or customize the candle colors. Settings persist in this browser.</div><div class="presetGrid" id="presetGrid"><button class="preset" data-preset="aurora"><div class="preview" style="background:#07131a;--pc1:#9BE7C4;--pc2:#FFB38A"><i></i><i></i><i></i><i></i></div><b>Aurora</b><small>Mint / ember</small></button><button class="preset" data-preset="lavender"><div class="preview" style="background:#0e1018;--pc1:#E5D0FF;--pc2:#FFB8D8"><i></i><i></i><i></i><i></i></div><b>Lavender</b><small>Soft / premium</small></button><button class="preset" data-preset="forest"><div class="preview" style="background:#08120f;--pc1:#A8E6CF;--pc2:#F8C6A0"><i></i><i></i><i></i><i></i></div><b>Forest</b><small>Mint / coral</small></button><button class="preset" data-preset="classic"><div class="preview" style="background:#090909;--pc1:#22c55e;--pc2:#ef4444"><i></i><i></i><i></i><i></i></div><b>Classic</b><small>Green / red</small></button><button class="preset" data-preset="mono"><div class="preview" style="background:#090909;--pc1:#f1f5f9;--pc2:#64748b"><i></i><i></i><i></i><i></i></div><b>Mono</b><small>White / slate</small></button></div><div class="colorGrid"><div class="colorItem"><span>Bull candle</span><input id="bullColor" type="color"></div><div class="colorItem"><span>Bear candle</span><input id="bearColor" type="color"></div><div class="colorItem"><span>Show volume</span><input id="showVolume" type="checkbox" checked></div><div class="colorItem"><span>Show EMA</span><input id="showEma" type="checkbox" checked></div></div><div class="axisNote">The chart keeps the right-side price scale, current-price marker, volume context and EMA optional.</div><div class="modalFoot"><button id="chartCancel" class="btn">Cancel</button><button id="chartApply" class="btn primary">Apply</button></div></div></div>
 
   <div class="foot">MarketPulse is educational decision-support software. It does not place orders, manage funds, or guarantee outcomes. Adaptive learning calibrates from resolved historical examples; it is not a promise of future performance.</div>
 </main>
@@ -217,11 +217,11 @@ function populateSymbols(){
 }
 
 const CHART_PRESETS={aurora:{bg:"#06131a",grid:"rgba(170,205,220,.10)",axis:"#a9bbc8",bull:"#9BE7C4",bear:"#FFB38A",ema:"#E5D0FF"},lavender:{bg:"#0d1018",grid:"rgba(205,196,235,.10)",axis:"#b8b1c7",bull:"#E5D0FF",bear:"#FFB8D8",ema:"#9CCBFF"},forest:{bg:"#07120f",grid:"rgba(160,210,190,.10)",axis:"#9fb8ad",bull:"#A8E6CF",bear:"#F8C6A0",ema:"#D8C3FF"},classic:{bg:"#080808",grid:"rgba(220,220,220,.10)",axis:"#c9c9c9",bull:"#22c55e",bear:"#ef4444",ema:"#f3f4f6"},mono:{bg:"#090909",grid:"rgba(230,235,245,.10)",axis:"#d8dee9",bull:"#f1f5f9",bear:"#64748b",ema:"#94a3b8"}};
-var chartSettings=JSON.parse(localStorage.getItem("mp-chart")||"null")||{preset:"aurora",bull:"#9BE7C4",bear:"#FFB38A"};
+var chartSettings=JSON.parse(localStorage.getItem("mp-chart")||"null")||{preset:"aurora",bull:"#9BE7C4",bear:"#FFB38A",showVolume:true,showEma:true};
 function chartTheme(){var p=CHART_PRESETS[chartSettings.preset]||CHART_PRESETS.aurora;return Object.assign({},p,{bull:chartSettings.bull||p.bull,bear:chartSettings.bear||p.bear})}
-function openChartSettings(){var t=chartTheme();$("bullColor").value=t.bull;$("bearColor").value=t.bear;document.querySelectorAll("[data-preset]").forEach(function(b){b.classList.toggle("active",b.dataset.preset===chartSettings.preset)});$("chartModal").classList.add("open");$("chartModal").setAttribute("aria-hidden","false")}
+function openChartSettings(){var t=chartTheme();$("bullColor").value=t.bull;$("bearColor").value=t.bear;$("showVolume").checked=chartSettings.showVolume!==false;$("showEma").checked=chartSettings.showEma!==false;document.querySelectorAll("[data-preset]").forEach(function(b){b.classList.toggle("active",b.dataset.preset===chartSettings.preset)});$("chartModal").classList.add("open");$("chartModal").setAttribute("aria-hidden","false")}
 function closeChartSettings(){$("chartModal").classList.remove("open");$("chartModal").setAttribute("aria-hidden","true")}
-function applyChartSettings(){var active=document.querySelector("[data-preset].active");chartSettings.preset=active?active.dataset.preset:"aurora";chartSettings.bull=$("bullColor").value;chartSettings.bear=$("bearColor").value;localStorage.setItem("mp-chart",JSON.stringify(chartSettings));closeChartSettings();if(state.market)drawMain()}
+function applyChartSettings(){var active=document.querySelector("[data-preset].active");chartSettings.preset=active?active.dataset.preset:"aurora";chartSettings.bull=$("bullColor").value;chartSettings.bear=$("bearColor").value;chartSettings.showVolume=$("showVolume").checked;chartSettings.showEma=$("showEma").checked;localStorage.setItem("mp-chart",JSON.stringify(chartSettings));closeChartSettings();if(state.market)drawMain()}
 function line(ctx,pts){
   if(!pts||pts.length<2)return;
   ctx.beginPath();
@@ -260,16 +260,27 @@ function drawMain(){
     var x=left+i*xstep,o=scale(data[i].o),h=scale(data[i].h),l=scale(data[i].l),cl=scale(data[i].c),bull=data[i].c>=data[i].o,col=bull?theme.bull:theme.bear;
     ctx.strokeStyle=col;ctx.lineWidth=Math.max(1,Math.min(1.8,xstep*.12));ctx.beginPath();ctx.moveTo(x,h);ctx.lineTo(x,l);ctx.stroke();
     var bw=Math.max(2,Math.min(9,xstep*.62));ctx.fillStyle=col;ctx.fillRect(x-bw/2,Math.min(o,cl),bw,Math.max(1.2,Math.abs(cl-o)));
-    var vh=26*((Number(data[i].v)||0)/volMax);ctx.globalAlpha=.20;ctx.fillStyle=col;ctx.fillRect(x-bw/2,H-28-vh,bw,vh);ctx.globalAlpha=1;
+    if(chartSettings.showVolume!==false){var vh=26*((Number(data[i].v)||0)/volMax);ctx.globalAlpha=.20;ctx.fillStyle=col;ctx.fillRect(x-bw/2,H-28-vh,bw,vh);ctx.globalAlpha=1;}
   }
   ctx.fillStyle="rgba(255,255,255,.28)";ctx.font="8px system-ui";ctx.fillText("VOL",left+4,H-8);
 
   var k=2/21,ema=dataAll[0].c,emaPts=[];
   for(i=0;i<dataAll.length;i++){ema=i?dataAll[i].c*k+ema*(1-k):dataAll[i].c;if(i>=start&&i<end)emaPts.push([left+(i-start)*xstep,scale(ema)])}
-  ctx.save();ctx.strokeStyle="rgba(103,232,255,.08)";ctx.lineWidth=6;line(ctx,emaPts);ctx.restore();
-  ctx.strokeStyle=theme.ema;ctx.lineWidth=2.2;ctx.lineCap="round";line(ctx,emaPts);
+  if(chartSettings.showEma!==false){
+    ctx.save();ctx.strokeStyle="rgba(255,255,255,.08)";ctx.lineWidth=6;line(ctx,emaPts);ctx.restore();
+    ctx.strokeStyle=theme.ema;ctx.lineWidth=2.2;ctx.lineCap="round";line(ctx,emaPts);
+  }
 
   var current=dataAll[dataAll.length-1].c,cy=scale(current);
+  var model=state.market&&state.market.analysis;
+  if(model){
+    [{name:"ENTRY",value:model.entryLow,color:theme.ema},{name:"STOP",value:model.stop,color:theme.bear},{name:"TP1",value:model.tp1,color:theme.bull}].forEach(function(z){
+      if(!Number.isFinite(Number(z.value)))return;
+      var yy=scale(Number(z.value));if(yy<top||yy>top+ph)return;
+      ctx.save();ctx.setLineDash([5,5]);ctx.strokeStyle=z.color;ctx.globalAlpha=.55;ctx.beginPath();ctx.moveTo(left,yy);ctx.lineTo(left+pw,yy);ctx.stroke();ctx.restore();
+      ctx.fillStyle=z.color;ctx.font="700 8px system-ui";ctx.textAlign="left";ctx.fillText(z.name,left+5,yy-4);
+    });
+  }
   ctx.setLineDash([4,4]);ctx.strokeStyle="rgba(255,255,255,.25)";ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(left,cy);ctx.lineTo(left+pw,cy);ctx.stroke();ctx.setLineDash([]);
 
   var label=fmt(current);ctx.fillStyle=theme.bull;ctx.beginPath();ctx.roundRect(left+pw+5,cy-11,58,22,6);ctx.fill();ctx.fillStyle="#06121b";ctx.font="800 9px system-ui";ctx.textAlign="center";ctx.fillText(label,left+pw+34,cy+3);
@@ -417,7 +428,7 @@ function normalizeFlow(values){
 }
 function drawBlankFlow(){
   var c=$("flowChart");if(!c)return;var o=setupCanvas(c,190),ctx=o.ctx,W=o.W,H=o.H;
-  ctx.fillStyle="#06101b";ctx.fillRect(0,0,W,H);ctx.strokeStyle="rgba(140,186,235,.06)";for(var g=1;g<5;g++){var y=g*H/5;ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke()}
+  ctx.fillStyle="#111114";ctx.fillRect(0,0,W,H);ctx.strokeStyle="rgba(255,255,255,.055)";for(var g=1;g<5;g++){var y=g*H/5;ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke()}
   ctx.fillStyle="#71839a";ctx.font="10px system-ui";ctx.fillText("Waiting for live OI / CVD / liquidation series…",14,H/2);
 }
 function drawFlowData(data){
@@ -482,7 +493,7 @@ $("refresh").addEventListener("click",loadCore);
 $("symbol").addEventListener("change",function(){state.symbol=this.value;loadCore()});
 $("interval").addEventListener("change",function(){state.interval=this.value;loadCore()});
 document.querySelectorAll("[data-filter]").forEach(function(b){b.addEventListener("click",function(){document.querySelectorAll("[data-filter]").forEach(function(x){x.classList.remove("on")});b.classList.add("on");state.filter=b.dataset.filter;renderScanner()})});
-document.querySelectorAll("input").forEach(function(el){el.addEventListener("input",calc)});
+document.querySelectorAll("input,select").forEach(function(el){el.addEventListener("input",calc);el.addEventListener("change",calc)});
 $("saveJournal").addEventListener("click",function(){var a=state.market&&state.market.analysis;state.journal.push({asset:$("jAsset").value,side:$("jSide").value,entry:+$("jEntry").value||0,stop:+$("jStop").value||0,target:+$("jTarget").value||0,r:+$("jR").value||0,note:$("jNote").value.trim(),regime:a&&a.regime||"—",status:a&&a.status||"—",score:a&&a.score||0,ts:Date.now()});state.journal=state.journal.slice(-100);localStorage.setItem("mp-stable-journal",JSON.stringify(state.journal));renderJournal();renderBrainInsights();syncMemory()});
 
 function deviceId(){
