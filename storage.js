@@ -435,5 +435,20 @@ async function saveAccountMemory(userId,memory){
   return {storage:"local",updatedAt:all.__account_memory__[userId].updatedAt,payload};
 }
 
+async function health(){
+  await init();
+  if(mode==="postgres"&&pool){
+    try{
+      await pool.query("SELECT 1");
+      return {ok:true,mode:"postgres",configured:true,durable:true,connected:true,source:"PostgreSQL"};
+    }catch(e){
+      mode="local";
+      try{await pool?.end()}catch{}
+      pool=null;
+      return {ok:false,mode:"local",configured:Boolean(DB_URL&&Pool),durable:false,connected:false,source:"Local fallback",error:String(e.message||e)};
+    }
+  }
+  return {ok:true,mode:"local",configured:Boolean(DB_URL&&Pool),durable:false,connected:false,source:"Local fallback"};
+}
 function status(){return {mode,configured:Boolean(DB_URL&&Pool),durable:mode==="postgres"}}
-module.exports={init,get,save,clear,getLearningState,saveLearningState,recordLearningPrediction,getOpenLearningPredictions,resolveLearningPrediction,saveSignalDNA,getSignalDNA,clearSignalDNA,getPhase4State,savePhase4State,getExecutionState,saveExecutionState,getPhase6State,savePhase6State,createUser,findUserByEmail,getUserById,touchUserLogin,recordLoginFailure,resetLoginFailures,savePassword,saveSession,getSession,revokeUserSessions,deleteSession,getAccountMemory,saveAccountMemory,status};
+module.exports={init,health,get,save,clear,getLearningState,saveLearningState,recordLearningPrediction,getOpenLearningPredictions,resolveLearningPrediction,saveSignalDNA,getSignalDNA,clearSignalDNA,getPhase4State,savePhase4State,getExecutionState,saveExecutionState,getPhase6State,savePhase6State,createUser,findUserByEmail,getUserById,touchUserLogin,recordLoginFailure,resetLoginFailures,savePassword,saveSession,getSession,revokeUserSessions,deleteSession,getAccountMemory,saveAccountMemory,status};
