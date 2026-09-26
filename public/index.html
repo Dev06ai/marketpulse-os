@@ -561,7 +561,7 @@ body.admin-mode .nav button.adminNav,body.admin-mode .mobileMenu button.adminNav
 
   <div class="foot">MarketPulse is educational decision-support software. It does not place orders, manage funds, or guarantee outcomes. Adaptive learning calibrates from resolved historical examples; it is not a promise of future performance.</div>
 </main>
-<script>
+<script nonce="__CSP_NONCE__">
 (function(){
 "use strict";
 
@@ -593,7 +593,9 @@ var state={
   bootRetryTimer:null,
   activeView:"overview",
   account:null,
-  adminConfigured:false
+  adminConfigured:false,
+  adminMfaEnabled:false,
+  adminMfaRequired:false
 };
 
 function $(id){return document.getElementById(id)}
@@ -1365,6 +1367,9 @@ function renderAccount(){
   user.classList.toggle("hidden",!state.account);
   sub.textContent=admin?"Owner account · admin controls unlocked":state.account?"Account-backed workspace active.":"Optional account for synced journal, watchlists and preferences.";
   if(state.account&&email)email.textContent=state.account.email;
+  var mfa=$("accountMfa"),hint=$("accountMfaHint");
+  if(mfa)mfa.classList.toggle("hidden",!state.adminMfaRequired);
+  if(hint)hint.classList.toggle("hidden",!state.adminMfaRequired);
   var ex=$("executionNav");if(ex)ex.classList.toggle("adminNav",!admin);
   if(ex)ex.style.display=admin?"block":"none";
   var an=$("adminNav"),am=$("adminNavMobile");if(an)an.style.display=admin?"block":"none";if(am)am.style.display=admin?"block":"none";
@@ -1373,7 +1378,7 @@ function openAccount(){renderAccount();$("accountModal").classList.add("open");$
 function closeAccount(){ $("accountModal").classList.remove("open");$("accountModal").setAttribute("aria-hidden","true");$("accountError").textContent=""}
 var accountMode="login";
 function setAccountMode(mode){
-  accountMode=mode;$("accountLoginMode").classList.toggle("on",mode==="login");$("accountRegisterMode").classList.toggle("on",mode==="register");$("accountSubmit").textContent=mode==="login"?"Sign in":"Create account";$("accountPassword").autocomplete=mode==="login"?"current-password":"new-password";$("accountError").textContent="";
+  accountMode=mode;$("accountLoginMode").classList.toggle("on",mode==="login");$("accountRegisterMode").classList.toggle("on",mode==="register");$("accountSubmit").textContent=mode==="login"?"Sign in":"Create account";$("accountPassword").autocomplete=mode==="login"?"current-password":"new-password";$("accountError").textContent="";state.adminMfaRequired=false;renderAccount();
 }
 async function loadAdminConsole(){
   if(!state.account?.isAdmin)return;
@@ -1404,21 +1409,30 @@ async function loadAuth(){
   try{
     var r=await api("/api/auth/me",4000);
     state.account=r.authenticated?r.user:null;
-    state.adminConfigured=Boolean(r.adminConfigured);
+    state.adminConfigured=Boolean(r.adminConfigured);state.adminMfaEnabled=Boolean(r.mfaEnabled);
     renderAccount();
     if(state.account)await syncMemory();
   }catch{renderAccount()}
 }
 async function submitAccount(){
-  var email=$("accountEmail").value.trim(),password=$("accountPassword").value;
+  var email=$("accountEmail").value.trim(),password=$("accountPassword").value,mfaCode=$("accountMfa")?.value.trim()||"";
   $("accountError").textContent="Working…";
   try{
     var anonymous={journal:state.journal.slice(),signals:state.signals.slice(),watch:(state.watch||[]).slice()};
-    var r=await fetch(accountMode==="login"?"/api/auth/login":"/api/auth/register",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({email,password})});
-    var j=await r.json();if(!r.ok)throw Error(j.error||"Account request failed");
+    var r=await fetch(accountMode==="login"?"/api/auth/login":"/api/auth/register",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({email,password,mfaCode})});
+    var j=await r.json();
+    if(!r.ok){
+      if(j.mfaRequired||j.error==="Owner MFA code required."||j.error==="Owner MFA code is incorrect or expired."){
+        state.adminMfaRequired=true;renderAccount();$("accountMfa").focus();
+      }
+      throw Error(j.error||"Account request failed");
+    }
+    if(j.requiresMfa){
+      accountMode="login";state.adminMfaRequired=true;$("accountLoginMode").classList.add("on");$("accountRegisterMode").classList.remove("on");$("accountSubmit").textContent="Sign in";renderAccount();$("accountError").textContent="Account created. Enter your authenticator code to finish owner sign-in.";return;
+    }
     state.account=j.user;state.pendingAnonymousMemory=anonymous;renderAccount();await syncMemory({migrateAnonymous:true,save:true});
-    $("accountError").textContent="";$("accountPassword").value="";closeAccount();
-    $("memoryText").textContent="Account sync active. Your workspace is isolated to this account.";
+    $("accountError").textContent="";$("accountPassword").value="";if($("accountMfa"))$("accountMfa").value="";closeAccount();
+    $("memoryText").textContent=state.account.isAdmin?"Owner security is active.":"Account sync active.";
   }catch(e){$("accountError").textContent=e.message}
 }
 async function logoutAccount(){
@@ -1626,10 +1640,10 @@ setInterval(function(){if(document.visibilityState==="visible")loadPhase7()},600
       <div class="aiModes" style="margin-top:12px"><button id="accountLoginMode" class="aiMode on">Sign in</button><button id="accountRegisterMode" class="aiMode">Create account</button></div>
       <div class="inputs one">
         <input id="accountEmail" type="email" autocomplete="email" placeholder="Email">
-        <input id="accountPassword" type="password" autocomplete="current-password" placeholder="Password">
+        <input id="accountPassword" type="password" autocomplete="current-password" placeholder="Password"><input id="accountMfa" class="hidden" type="text" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="one-time-code" placeholder="6-digit authenticator code">
       </div>
       <button id="accountSubmit" class="btn primary" style="margin-top:8px">Sign in</button>
-      <div id="accountError" class="small" style="margin-top:8px;color:#f87171"></div>
+      <div id="accountMfaHint" class="small hidden" style="margin-top:7px;color:#c4b5fd">Owner accounts use an authenticator code for the protected admin layer.</div><div id="accountError" class="small" style="margin-top:8px;color:#f87171"></div>
     </div>
     <div id="accountUser" class="hidden">
       <div class="card" style="margin-top:12px"><div class="label">SIGNED IN</div><div class="value" id="accountEmailText" style="font-size:16px">—</div><div class="sub" style="margin-top:5px">Your account-backed workspace is active.</div></div>
