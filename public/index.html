@@ -1030,7 +1030,7 @@ body.admin-mode .nav button.adminNav,body.admin-mode .mobileMenu button.adminNav
 
 <section id="view-risk" class="view"><div class="sectionHead"><div><div class="title">Risk Lab</div><div class="sub">Position size should follow the invalidation.</div></div></div><div class="card"><div class="inputs"><input id="ra" type="number" value="5000" placeholder="Account"><input id="rrisk" type="number" value="1" step=".05" placeholder="Risk %"><input id="rentry" type="number" value="84000" placeholder="Entry"><input id="rstop" type="number" value="82000" placeholder="Stop"></div><div class="result" id="riskOut">—</div></div></section>
 
-  <div id="chartModal" class="modal" aria-hidden="true"><div class="modalCard"><div class="modalTop"><h3>Chart settings</h3><button id="chartClose" class="modalClose">×</button></div><div class="sub" style="margin-top:6px">Choose a visual preset or customize the candle colors. Settings persist in this browser.</div><div class="presetGrid" id="presetGrid"><button class="preset" data-preset="aurora"><div class="preview" style="background:#07131a;--pc1:#9BE7C4;--pc2:#FFB38A"><i></i><i></i><i></i><i></i></div><b>Aurora</b><small>Mint / ember</small></button><button class="preset" data-preset="lavender"><div class="preview" style="background:#0e1018;--pc1:#E5D0FF;--pc2:#FFB8D8"><i></i><i></i><i></i><i></i></div><b>Lavender</b><small>Soft / premium</small></button><button class="preset" data-preset="forest"><div class="preview" style="background:#08120f;--pc1:#A8E6CF;--pc2:#F8C6A0"><i></i><i></i><i></i><i></i></div><b>Forest</b><small>Mint / coral</small></button><button class="preset" data-preset="classic"><div class="preview" style="background:#090909;--pc1:#22c55e;--pc2:#ef4444"><i></i><i></i><i></i><i></i></div><b>Classic</b><small>Green / red</small></button><button class="preset" data-preset="mono"><div class="preview" style="background:#090909;--pc1:#f1f5f9;--pc2:#64748b"><i></i><i></i><i></i><i></i></div><b>Mono</b><small>White / slate</small></button></div><div class="colorGrid"><div class="colorItem"><span>Bull candle</span><input id="bullColor" type="color"></div><div class="colorItem"><span>Bear candle</span><input id="bearColor" type="color"></div><div class="colorItem emaSettingRow"><span>50 EMA <small style="display:block;color:#7f90a6;font-size:8px;margin-top:2px">Fixed period · 50</small></span><div class="emaSettingControls"><input id="emaColor" type="color" title="50 EMA color"><label class="emaSwitch" for="showEma"><input id="showEma" type="checkbox" checked><span class="emaSwitchTrack"><span class="emaSwitchThumb"></span></span><span id="emaSwitchText" class="emaSwitchText">ON</span></label></div></div><div class="colorItem"><span>Volume</span><b style="font-size:10px;color:#67e8ff">Visible</b></div></div><div class="axisNote">Exchange-style candles with a fixed 50 EMA, crosshair time/date, and right-side price scale.</div><div class="modalFoot"><button id="chartCancel" class="btn">Cancel</button><button id="chartApply" class="btn primary">Apply</button></div></div></div>
+  <div id="chartModal" class="modal" aria-hidden="true"><div class="modalCard"><div class="modalTop"><h3>Chart settings</h3><button id="chartClose" class="modalClose">×</button></div><div class="sub" style="margin-top:6px">Choose a visual preset or customize the candle colors. Signed-in settings sync to your account; Guest settings stay on this device.</div><div class="presetGrid" id="presetGrid"><button class="preset" data-preset="aurora"><div class="preview" style="background:#07131a;--pc1:#9BE7C4;--pc2:#FFB38A"><i></i><i></i><i></i><i></i></div><b>Aurora</b><small>Mint / ember</small></button><button class="preset" data-preset="lavender"><div class="preview" style="background:#0e1018;--pc1:#E5D0FF;--pc2:#FFB8D8"><i></i><i></i><i></i><i></i></div><b>Lavender</b><small>Soft / premium</small></button><button class="preset" data-preset="forest"><div class="preview" style="background:#08120f;--pc1:#A8E6CF;--pc2:#F8C6A0"><i></i><i></i><i></i><i></i></div><b>Forest</b><small>Mint / coral</small></button><button class="preset" data-preset="classic"><div class="preview" style="background:#090909;--pc1:#22c55e;--pc2:#ef4444"><i></i><i></i><i></i><i></i></div><b>Classic</b><small>Green / red</small></button><button class="preset" data-preset="mono"><div class="preview" style="background:#090909;--pc1:#f1f5f9;--pc2:#64748b"><i></i><i></i><i></i><i></i></div><b>Mono</b><small>White / slate</small></button></div><div class="colorGrid"><div class="colorItem"><span>Bull candle</span><input id="bullColor" type="color"></div><div class="colorItem"><span>Bear candle</span><input id="bearColor" type="color"></div><div class="colorItem emaSettingRow"><span>50 EMA <small style="display:block;color:#7f90a6;font-size:8px;margin-top:2px">Fixed period · 50</small></span><div class="emaSettingControls"><input id="emaColor" type="color" title="50 EMA color"><label class="emaSwitch" for="showEma"><input id="showEma" type="checkbox" checked><span class="emaSwitchTrack"><span class="emaSwitchThumb"></span></span><span id="emaSwitchText" class="emaSwitchText">ON</span></label></div></div><div class="colorItem"><span>Volume</span><b style="font-size:10px;color:#67e8ff">Visible</b></div></div><div class="axisNote">Exchange-style candles with a fixed 50 EMA, crosshair time/date, and right-side price scale.</div><div class="modalFoot"><button id="chartCancel" class="btn">Cancel</button><button id="chartApply" class="btn primary">Apply</button></div></div></div>
 
   <div class="foot">MarketPulse is educational decision-support software. It does not place orders, manage funds, or guarantee outcomes. Adaptive learning calibrates from resolved historical examples; it is not a promise of future performance.</div>
 </main>
@@ -1219,12 +1219,57 @@ function populateSymbols(){
 populateSymbols();
 
 const CHART_PRESETS={aurora:{bg:"#06131a",grid:"rgba(170,205,220,.10)",axis:"#a9bbc8",bull:"#9BE7C4",bear:"#FFB38A",ema:"#E5D0FF"},lavender:{bg:"#0d1018",grid:"rgba(205,196,235,.10)",axis:"#b8b1c7",bull:"#E5D0FF",bear:"#FFB8D8",ema:"#9CCBFF"},forest:{bg:"#07120f",grid:"rgba(160,210,190,.10)",axis:"#9fb8ad",bull:"#A8E6CF",bear:"#F8C6A0",ema:"#D8C3FF"},classic:{bg:"#080808",grid:"rgba(220,220,220,.10)",axis:"#c9c9c9",bull:"#22c55e",bear:"#ef4444",ema:"#f3f4f6"},mono:{bg:"#090909",grid:"rgba(230,235,245,.10)",axis:"#d8dee9",bull:"#f1f5f9",bear:"#64748b",ema:"#94a3b8"}};
-var chartSettings=safeLocalJson("mp-chart",null)||{preset:"aurora",bull:"#9BE7C4",bear:"#FFB38A",showVolume:true,showEma:true,emaPeriod:50,emaColor:"#F5C451"};chartSettings.showVolume=true;chartSettings.showEma=chartSettings.showEma!==false;chartSettings.emaPeriod=50;chartSettings.emaColor=chartSettings.emaColor||"#F5C451";
+var DEFAULT_CHART_SETTINGS={preset:"aurora",bull:"#9BE7C4",bear:"#FFB38A",showVolume:true,showEma:true,emaPeriod:50,emaColor:"#F5C451"};
+function chartSettingsKey(){
+  try{
+    if(state&&state.account&&state.account.id)return "mp-chart-user-"+String(state.account.id);
+  }catch{}
+  var d="";
+  try{d=localStorage.getItem("mp-device-id")||""}catch{}
+  return d?"mp-chart-guest-"+d:"mp-chart-guest";
+}
+function normalizeChartSettings(v){
+  var x=Object.assign({},DEFAULT_CHART_SETTINGS,v||{});
+  x.preset=CHART_PRESETS[x.preset]?x.preset:"aurora";
+  x.showVolume=true;x.showEma=x.showEma!==false;x.emaPeriod=50;
+  x.emaColor=/^#[0-9a-f]{6}$/i.test(String(x.emaColor||""))?String(x.emaColor):DEFAULT_CHART_SETTINGS.emaColor;
+  return x;
+}
+var chartSettings=normalizeChartSettings(safeLocalJson(chartSettingsKey(),safeLocalJson("mp-chart",DEFAULT_CHART_SETTINGS)));
 function chartTheme(){var p=CHART_PRESETS[chartSettings.preset]||CHART_PRESETS.aurora;return Object.assign({},p,{bull:chartSettings.bull||p.bull,bear:chartSettings.bear||p.bear,ema:chartSettings.emaColor||p.ema})}
 function openChartSettings(){var t=chartTheme();$("bullColor").value=t.bull;$("bearColor").value=t.bear;$("emaColor").value=chartSettings.emaColor||t.ema;$("showEma").checked=chartSettings.showEma!==false;syncEmaToggleUI();document.querySelectorAll("[data-preset]").forEach(function(b){b.classList.toggle("active",b.dataset.preset===chartSettings.preset)});$("chartModal").classList.add("open");$("chartModal").setAttribute("aria-hidden","false")}
 function closeChartSettings(){$("chartModal").classList.remove("open");$("chartModal").setAttribute("aria-hidden","true")}
 function syncEmaToggleUI(){var on=$("showEma")&&$("showEma").checked;if($("emaSwitchText"))$("emaSwitchText").textContent=on?"ON":"OFF"}
-function applyChartSettings(){var active=document.querySelector("[data-preset].active");chartSettings.preset=active?active.dataset.preset:"aurora";chartSettings.bull=$("bullColor").value;chartSettings.bear=$("bearColor").value;chartSettings.showVolume=true;chartSettings.showEma=$("showEma").checked;chartSettings.emaPeriod=50;chartSettings.emaColor=$("emaColor").value;localStorage.setItem("mp-chart",JSON.stringify(chartSettings));syncEmaToggleUI();closeChartSettings();if(state.market)drawMain()}
+async function persistChartSettings(){
+  chartSettings=normalizeChartSettings(chartSettings);
+  try{localStorage.setItem(chartSettingsKey(),JSON.stringify(chartSettings));localStorage.removeItem("mp-chart")}catch{}
+  var memory={
+    journal:state.journal||[],signals:state.signals||[],watch:state.watch||[],
+    alertState:{threshold:Number($("alertScore")?.value||75)},
+    preferences:{symbol:state.symbol,interval:state.interval,aiMode:state.aiMode,chartSettings:chartSettings},
+    lastSignal:state.signals&&state.signals[0]||null,activeSignal:null,updatedAt:Date.now()
+  };
+  try{
+    var url=state.account?"/api/account/memory":"/api/memory?device="+encodeURIComponent(deviceId());
+    await fetch(url,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({memory:memory})});
+    $("bPersist").textContent=state.account?"Cloud account":"Device memory";
+  }catch(e){}
+}
+async function applyChartSettings(){
+  var active=document.querySelector("[data-preset].active");
+  chartSettings.preset=active?active.dataset.preset:"aurora";
+  chartSettings.bull=$("bullColor").value;
+  chartSettings.bear=$("bearColor").value;
+  chartSettings.showVolume=true;
+  chartSettings.showEma=$("showEma").checked;
+  chartSettings.emaPeriod=50;
+  chartSettings.emaColor=$("emaColor").value;
+  chartSettings=normalizeChartSettings(chartSettings);
+  syncEmaToggleUI();
+  closeChartSettings();
+  if(state.market)drawMain();
+  await persistChartSettings();
+}
 function line(ctx,pts){
   if(!pts||pts.length<2)return;
   ctx.beginPath();
@@ -2117,7 +2162,8 @@ function renderFlowView(data){
   var liq=data.liquidationTotal!=null?Number(data.liquidationTotal):(last.liqTotal!=null?Number(last.liqTotal):null);
   var oiChange=Number.isFinite(Number(data.oiChangePct))?Number(data.oiChangePct):(Number.isFinite(oi)&&Number.isFinite(Number(prev.oi))&&Number(prev.oi)!==0?((oi-Number(prev.oi))/Math.abs(Number(prev.oi)))*100:null);
   var cvdState=data.cvdState||(Number.isFinite(cvd)?(cvd>0?"BUYERS PRESSURE":cvd<0?"SELLERS PRESSURE":"BALANCED"):"WAITING");
-  var pos=data.positioning||(Number.isFinite(oiChange)?(oiChange>1?"OI RISING":oiChange<-1?"OI FALLING":"OI FLAT"):"WAITING");
+  var pos=data.positioning;
+  if(!pos||pos==="UNAVAILABLE"||pos==="OI UNAVAILABLE")pos=Number.isFinite(oiChange)?(oiChange>1?"OI RISING":oiChange<-1?"OI FALLING":"OI FLAT"):(Number.isFinite(oi)?"OI LIVE":"WAITING");
   var liqBias=data.liquidationBias&&data.liquidationBias!=="UNKNOWN"?data.liquidationBias:null;
   if(!liqBias&&Number.isFinite(liq)&&liq>0){var ll=Number(data.longLiquidations||last.liqLong||0),sl=Number(data.shortLiquidations||last.liqShort||0);liqBias=ll>sl?"LONG LIQS DOMINANT":sl>ll?"SHORT LIQS DOMINANT":"LIQUIDATION ACTIVITY"}
   $("fOi").textContent=Number.isFinite(oi)?fmt(oi):"WAITING";
@@ -2126,7 +2172,7 @@ function renderFlowView(data){
   $("fCvdS").textContent=Number.isFinite(cvd)?"Δ "+fmt(cvd):"Live flow warming";
   $("fPos").textContent=pos;
   $("fFund").textContent=data.fundingRate!=null?"Funding "+(Number(data.fundingRate)*100).toFixed(4)+"%":"Funding warming";
-  $("fLiq").textContent=liqBias||"WAITING";
+  $("fLiq").textContent=liqBias||("NO LIQUIDATION ACTIVITY");
   $("fLiqS").textContent=Number.isFinite(liq)?"Total "+fmt(liq):"Live liquidation stream warming";
 }
 async function loadFlow(force){
@@ -2166,7 +2212,7 @@ function renderMarketNoFlow(){
   $("oi").textContent=Number.isFinite(oi)?fmt(oi):"WAITING";$("oiS").textContent=Number.isFinite(Number(oiChange))?pct(Number(oiChange))+" recent":"Live snapshot";
   $("cvd").textContent=cvdState;$("cvdS").textContent=Number.isFinite(cvd)?"Δ "+fmt(cvd):"Live flow warming";
   $("pos").textContent=pos;$("fund").textContent=der.fundingRate!=null?"Funding "+(Number(der.fundingRate)*100).toFixed(4)+"%":"Funding warming";
-  $("liq").textContent=liqBias||"WAITING";$("liqS").textContent=Number.isFinite(liq)?"Total "+fmt(liq):"Live liquidation stream warming";
+  $("liq").textContent=liqBias||"NO LIQUIDATION ACTIVITY";$("liqS").textContent=Number.isFinite(liq)?"Total "+fmt(liq):"Live liquidation stream warming";
   $("flowSource").textContent=der.provider?(String(der.provider).slice(0,44)+(der.livePointCount?" · LIVE":"")):(der.available?"LIVE":"CONNECTING");
 }
 
@@ -2638,7 +2684,8 @@ async function logoutAccount(){
     state.account=null;state.pendingAnonymousMemory=null;state.adminMfaRequired=false;state.adminTickets=[];
     state.journal=[];state.signals=[];state.watch=[];
     localStorage.removeItem("mp-stable-journal");localStorage.removeItem("mp-stable-signals");localStorage.removeItem("mp-watch");
-    renderAccount();await syncMemory();$("memoryText").textContent="Signed out. Anonymous device memory restored; account data remains isolated.";
+    chartSettings=normalizeChartSettings(safeLocalJson(chartSettingsKey(),DEFAULT_CHART_SETTINGS));
+    renderAccount();await syncMemory();chartSettings=normalizeChartSettings(chartSettings);if(state.market)drawMain();$("memoryText").textContent="Signed out. Anonymous device memory restored; account data remains isolated.";
   }catch(e){$("accountError").textContent=e.message}
 }
 function editJournal(ts){
@@ -2663,14 +2710,18 @@ async function syncMemory(){
       remote=await api("/api/memory?device="+encodeURIComponent(id),5000);userMem=remote&&remote.payload||{};
     }
     var p=userMem||{};
-    if(state.account&&p.preferences&&typeof p.preferences==="object"){
+    if(p.preferences&&typeof p.preferences==="object"){
       var prefs=p.preferences;
-      if(SYMBOLS.includes(prefs.symbol))state.symbol=prefs.symbol;
-      if(["15m","1h","4h","1d"].includes(prefs.interval))state.interval=prefs.interval;
-      if(prefs.aiMode==="market"||prefs.aiMode==="trade")state.aiMode=prefs.aiMode;
+      if(state.account){
+        if(SYMBOLS.includes(prefs.symbol))state.symbol=prefs.symbol;
+        if(["15m","1h","4h","1d"].includes(prefs.interval))state.interval=prefs.interval;
+        if(prefs.aiMode==="market"||prefs.aiMode==="trade")state.aiMode=prefs.aiMode;
+      }
       if(prefs.chartSettings&&typeof prefs.chartSettings==="object"){
-        chartSettings=Object.assign({},chartSettings||{},prefs.chartSettings);
-        localStorage.setItem("mp-chart",JSON.stringify(chartSettings));
+        chartSettings=normalizeChartSettings(prefs.chartSettings);
+        localStorage.setItem(chartSettingsKey(),JSON.stringify(chartSettings));
+      }else{
+        chartSettings=normalizeChartSettings(chartSettings);
       }
     }
     state.journal=mergeMemoryArrays(state.journal,p.journal,"ts").slice(0,100);
@@ -2696,7 +2747,7 @@ syncPhase3Symbols();
 $("loadReplay").addEventListener("click",loadReplay);$("toggleReplay").addEventListener("click",toggleReplay);$("replayCursor").addEventListener("input",function(){replayState.cursor=+this.value;renderReplayFrame()});
 $("refreshDNA").addEventListener("click",refreshDNA);$("loadDNA").addEventListener("click",loadDNA);$("runResearch").addEventListener("click",runResearch);
 deferTask(loadResearchCatalog,900);
-$("askAi").addEventListener("click",askAI);$("sync").addEventListener("click",syncMemory);$("runSystemCheck").addEventListener("click",function(){if(state.account?.isAdmin)runSystemCheck()});$("notifBtn").addEventListener("click",enableNotifications);$("alertScore").addEventListener("input",renderAlerts);$("chartSettings").addEventListener("click",openChartSettings);$("chartClose").addEventListener("click",closeChartSettings);$("chartCancel").addEventListener("click",closeChartSettings);$("showEma").addEventListener("change",function(){syncEmaToggleUI();if(state.market){chartSettings.showEma=this.checked;drawMain()}});
+$("askAi").addEventListener("click",askAI);$("sync").addEventListener("click",syncMemory);$("runSystemCheck").addEventListener("click",function(){if(state.account?.isAdmin)runSystemCheck()});$("notifBtn").addEventListener("click",enableNotifications);$("alertScore").addEventListener("input",renderAlerts);$("chartSettings").addEventListener("click",openChartSettings);$("chartClose").addEventListener("click",closeChartSettings);$("chartCancel").addEventListener("click",closeChartSettings);$("showEma").addEventListener("change",function(){syncEmaToggleUI();chartSettings.showEma=this.checked;chartSettings=normalizeChartSettings(chartSettings);if(state.market)drawMain();persistChartSettings()});
 $("chartApply").addEventListener("click",applyChartSettings);document.querySelectorAll("[data-preset]").forEach(function(b){b.addEventListener("click",function(){document.querySelectorAll("[data-preset]").forEach(function(x){x.classList.remove("active")});b.classList.add("active");$("bullColor").value=CHART_PRESETS[b.dataset.preset].bull;$("bearColor").value=CHART_PRESETS[b.dataset.preset].bear})});$("aiMarketMode").addEventListener("click",function(){state.aiMode="market";$("aiMarketMode").classList.add("on");$("aiTradeMode").classList.remove("on");$("tradeFields").classList.add("hidden")});$("aiTradeMode").addEventListener("click",function(){state.aiMode="trade";$("aiTradeMode").classList.add("on");$("aiMarketMode").classList.remove("on");$("tradeFields").classList.remove("hidden")});renderSignals();
 
 ["panYUp","panL","panR","panYDown"].forEach(function(id){
