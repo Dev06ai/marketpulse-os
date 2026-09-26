@@ -18,7 +18,7 @@ function flowAlignment(side,d){
   if(Number.isFinite(n(d.oiChangePct)))s+=side==="LONG"?(d.oiChangePct>1?6:d.oiChangePct<-1?2:4):(d.oiChangePct<-1?6:d.oiChangePct>1?2:4);
   return clamp(s,0,100);
 }
-function strictSignalChecks(a,side,higher,lower,flowScore,dataScore,levels,derivatives){
+function strictSignalChecks(a,side,higher,lower,flowScore,dataScore,levels,derivatives,interval="1h"){
   const reasons=[];
   const h=String(higher?.regime||"UNKNOWN").toUpperCase();
   const l=String(lower?.regime||"UNKNOWN").toUpperCase();
@@ -27,8 +27,9 @@ function strictSignalChecks(a,side,higher,lower,flowScore,dataScore,levels,deriv
   if(dataScore<85)reasons.push("live data quality below 85");
   if(flowScore<65)reasons.push("order-flow confirmation below 65");
   if(a?.regime==="HIGH VOLATILITY")reasons.push("high-volatility regime");
-  if(side==="LONG"&&h!=="UPTREND")reasons.push(h==="UNKNOWN"?"4H trend unavailable":"4H trend conflicts");
-  if(side==="SHORT"&&h!=="DOWNTREND")reasons.push(h==="UNKNOWN"?"4H trend unavailable":"4H trend conflicts");
+  const requiresHigher=String(interval).toLowerCase()!=="1d";
+  if(requiresHigher&&side==="LONG"&&h!=="UPTREND")reasons.push(h==="UNKNOWN"?"higher-timeframe trend unavailable":"higher-timeframe trend conflicts");
+  if(requiresHigher&&side==="SHORT"&&h!=="DOWNTREND")reasons.push(h==="UNKNOWN"?"higher-timeframe trend unavailable":"higher-timeframe trend conflicts");
   if(side==="LONG"&&l==="DOWNTREND")reasons.push("15M trend conflicts");
   if(side==="SHORT"&&l==="UPTREND")reasons.push("15M trend conflicts");
   if(String(d.cvdState||"").toUpperCase().includes("DIVERGENCE"))reasons.push("CVD divergence");
@@ -72,7 +73,7 @@ function evaluate(x={}){
   const data=dataIntegrity(x),mtf=trendAlignment(side,x.higher,x.lower),flow=flowAlignment(side,x.derivatives);
   const qScore=clamp(Math.round(base*.60+mtf*.14+flow*.16+data.score*.10),0,100);
   const lv=levels(a);
-  const strict=strictSignalChecks(a,side,x.higher,x.lower,flow,data.score,lv,x.derivatives);
+  const strict=strictSignalChecks(a,side,x.higher,x.lower,flow,data.score,lv,x.derivatives,x.interval||"1h");
   const r=readiness(a,qScore,data.score,x.propGate,x.strictEvidence===false?{eligible:true,reasons:[]}:strict);
   const f=c=>Math.round(clamp(n(c,50),0,100));
   const components=[
