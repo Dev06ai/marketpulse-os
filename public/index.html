@@ -557,6 +557,8 @@ var state={
   execution:null,
   portfolio:null,
   secondaryStarted:false,
+  bootRetry:0,
+  bootRetryTimer:null,
   activeView:"overview",
   account:null
 };
@@ -1248,15 +1250,19 @@ function queueSecondaryBoot(){
 
 async function loadCore(){
   if(state.busy)return;
+  if(state.bootRetryTimer){clearTimeout(state.bootRetryTimer);state.bootRetryTimer=null}
   state.busy=true;setStatus("Loading core market intelligence…");$("dataState").textContent="Connecting";$("symbol").value=state.symbol;
   try{
     var d=await api("/api/core?symbol="+encodeURIComponent(state.symbol)+"&interval="+encodeURIComponent(state.interval),9000);
-    state.market=d;setStatus("Core market intelligence connected","ok");$("dataState").textContent="Live";renderMarket();
+    state.market=d;state.bootRetry=0;setStatus("Core market intelligence connected","ok");$("dataState").textContent="Live";renderMarket();
     if(!state.secondaryStarted)queueSecondaryBoot();
     else if(state.activeView==="overview"){deferTask(loadScan,80);deferTask(loadCycle,140)}
   }catch(e){
-    setStatus("Core market connection failed. The interface is running; retrying automatically.","warn");$("dataState").textContent="Retry";
-    $("thesis").textContent="The interface is responsive, but the live market source did not respond. Retrying automatically.";
+    state.bootRetry=Math.min((state.bootRetry||0)+1,5);
+    setStatus("Core market connection failed. Retrying shortly…","warn");$("dataState").textContent="Retry";
+    $("thesis").textContent="The interface is ready. Waiting for the live market source to respond…";
+    var delay=Math.min(8000,Math.max(800,Math.pow(2,state.bootRetry-1)*900));
+    state.bootRetryTimer=setTimeout(function(){state.bootRetryTimer=null;loadCore()},delay);
   }finally{state.busy=false}
 }
 
@@ -1315,11 +1321,13 @@ function mergeMemoryArrays(a,b,key){
   return Array.from(map.values()).sort(function(x,y){return Number(y.ts||y.createdAt||0)-Number(x.ts||x.createdAt||0)});
 }
 function renderAccount(){
-  $("accountBtn").textContent=state.account?String(state.account.email).split("@")[0]:"Guest";
-  $("accountGuest").classList.toggle("hidden",Boolean(state.account));
-  $("accountUser").classList.toggle("hidden",!state.account);
-  $("accountSub").textContent=state.account?"Account-backed workspace active.":"Optional account for synced journal, watchlists and preferences.";
-  if(state.account)$("accountEmailText").textContent=state.account.email;
+  var btn=$("accountBtn"),guest=$("accountGuest"),user=$("accountUser"),sub=$("accountSub"),email=$("accountEmailText");
+  if(!btn||!guest||!user||!sub)return;
+  btn.textContent=state.account?String(state.account.email).split("@")[0]:"Guest";
+  guest.classList.toggle("hidden",Boolean(state.account));
+  user.classList.toggle("hidden",!state.account);
+  sub.textContent=state.account?"Account-backed workspace active.":"Optional account for synced journal, watchlists and preferences.";
+  if(state.account&&email)email.textContent=state.account.email;
 }
 function openAccount(){renderAccount();$("accountModal").classList.add("open");$("accountModal").setAttribute("aria-hidden","false")}
 function closeAccount(){ $("accountModal").classList.remove("open");$("accountModal").setAttribute("aria-hidden","true");$("accountError").textContent=""}
@@ -1328,7 +1336,12 @@ function setAccountMode(mode){
   accountMode=mode;$("accountLoginMode").classList.toggle("on",mode==="login");$("accountRegisterMode").classList.toggle("on",mode==="register");$("accountSubmit").textContent=mode==="login"?"Sign in":"Create account";$("accountPassword").autocomplete=mode==="login"?"current-password":"new-password";$("accountError").textContent="";
 }
 async function loadAuth(){
-  try{var r=await api("/api/auth/me",4000);state.account=r.authenticated?r.user:null;renderAccount();if(state.account)await syncMemory()}catch{renderAccount()}
+  try{
+    var r=await api("/api/auth/me",4000);
+    state.account=r.authenticated?r.user:null;
+    renderAccount();
+    if(state.account)await syncMemory();
+  }catch{renderAccount()}
 }
 async function submitAccount(){
   var email=$("accountEmail").value.trim(),password=$("accountPassword").value;
@@ -1434,9 +1447,9 @@ chart.addEventListener("pointermove",function(e){if(!drag.on||!state.market)retu
 
 window.addEventListener("resize",function(){if(state.market){drawMain();renderCycle()}});
 
-populateSymbols();$("interval").value=state.interval;renderJournal();renderBrainInsights();renderAlerts();renderAccount();calc();loadAuth();
+populateSymbols();$("interval").value=state.interval;renderJournal();renderBrainInsights();renderAlerts();calc();
 setStatus("MarketPulse ready. Connecting to live market data…");
-requestAnimationFrame(function(){loadCore()});
+loadCore();
 setInterval(function(){if(document.visibilityState==="visible")loadCore()},45000);
 setInterval(function(){if(document.visibilityState!=="visible")return; if(state.activeView==="execution")loadExecution(); if(state.activeView==="portfolio")loadPortfolio(); if(state.activeView==="edge")loadEdge(); if(state.activeView==="brain"){loadPhase7();loadPhase7Health()}},15000);
 
@@ -1509,8 +1522,23 @@ function exportPhase7Journal(){
   a.href=url;a.download="marketpulse-journal-"+new Date().toISOString().slice(0,10)+".csv";
   document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(url);
 }
-$("mp7Refresh").addEventListener("click",function(){loadPhase7();loadPhase7Health()}); $("accountBtn").addEventListener("click",openAccount);$("accountClose").addEventListener("click",closeAccount);$("accountLoginMode").addEventListener("click",function(){setAccountMode("login")});$("accountRegisterMode").addEventListener("click",function(){setAccountMode("register")});$("accountSubmit").addEventListener("click",submitAccount);$("accountLogout").addEventListener("click",logoutAccount);
-$("mp7Export").addEventListener("click",exportPhase7Journal);$("accountModal").addEventListener("click",function(e){if(e.target===this)closeAccount()});
+$("mp7Refresh").addEventListener("click",function(){loadPhase7();loadPhase7Health()});
+$("mp7Export").addEventListener("click",exportPhase7Journal);
+function initAccountUI(){
+  var accountBtn=$("accountBtn"),accountClose=$("accountClose"),accountLoginMode=$("accountLoginMode"),accountRegisterMode=$("accountRegisterMode"),accountSubmit=$("accountSubmit"),accountLogout=$("accountLogout"),accountModal=$("accountModal");
+  if(!accountBtn||!accountClose||!accountLoginMode||!accountRegisterMode||!accountSubmit||!accountLogout||!accountModal)return false;
+  accountBtn.addEventListener("click",openAccount);
+  accountClose.addEventListener("click",closeAccount);
+  accountLoginMode.addEventListener("click",function(){setAccountMode("login")});
+  accountRegisterMode.addEventListener("click",function(){setAccountMode("register")});
+  accountSubmit.addEventListener("click",submitAccount);
+  accountLogout.addEventListener("click",logoutAccount);
+  accountModal.addEventListener("click",function(e){if(e.target===this)closeAccount()});
+  renderAccount();
+  loadAuth();
+  return true;
+}
+if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",initAccountUI,{once:true});else initAccountUI();
 loadPhase7();loadPhase7Health();
 setInterval(function(){if(document.visibilityState==="visible")loadPhase7()},60000);
 
