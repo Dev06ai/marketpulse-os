@@ -575,7 +575,11 @@ body.admin-mode .nav button.adminNav,body.admin-mode .mobileMenu button.adminNav
       <div class="card"><div class="title">By Setup</div><div class="tableScroll"><table class="miniTable"><thead><tr><th>Setup</th><th>N</th><th>Triggered</th><th>Targets</th><th>Stops</th><th>Avg R</th></tr></thead><tbody id="resType"></tbody></table></div></div>
       <div class="card"><div class="title">By Confluence band</div><div class="tableScroll"><table class="miniTable"><thead><tr><th>Score</th><th>N</th><th>Triggered</th><th>Targets</th><th>Stops</th><th>Avg R</th></tr></thead><tbody id="resScore"></tbody></table></div></div>
     </div>
-    <div class="section card"><div class="title">Research note</div><div class="phase3Note">Research statistics describe this stored sample only. Replay resolution treats a candle that hits both stop and target as ambiguous because intrabar ordering is unknown.</div></div>
+    <div class="section card">
+      <div class="title">Research &amp; data-source boundary</div>
+      <div class="phase3Note">Historical replay can enrich price structure with public futures open interest, taker-flow CVD proxies, funding and long/short positioning where the source provides it. Reliable historical order-book depth and liquidation-by-side series are not assumed when they are unavailable, so the model does not fabricate them. Replay statistics describe this stored sample only; a candle that hits both stop and target is treated as ambiguous because intrabar ordering is unknown.</div>
+      <div id="researchSources" class="watchNote" style="margin-top:7px">Loading public/open-source data catalog…</div>
+    </div>
   </section>
 
   <section id="view-edge" class="view">
@@ -1568,6 +1572,13 @@ async function loadDNA(){
 function researchRowsHtml(rows){
   return (rows||[]).map(function(x){return'<tr><td>'+x.key+'</td><td>'+fmt(x.total)+'</td><td>'+fmt(x.triggered)+'</td><td>'+fmt(x.target)+'</td><td>'+fmt(x.stop)+'</td><td>'+((Number(x.avgR)||0).toFixed(2))+'R</td></tr>'}).join("")||'<tr><td colspan="6">No evidence yet.</td></tr>';
 }
+async function loadResearchCatalog(){
+  if(!$("researchSources"))return;
+  try{
+    var j=await api("/api/research/catalog",7000),rows=j.sources||[];
+    $("researchSources").textContent=rows.map(function(x){return x.name+" · "+x.role}).join("  |  ");
+  }catch(e){$("researchSources").textContent="Public data catalog unavailable right now."}
+}
 async function runResearch(){
   $("resTotal").textContent="…";
   try{
@@ -2215,6 +2226,7 @@ async function syncMemory(){
 syncPhase3Symbols();
 $("loadReplay").addEventListener("click",loadReplay);$("toggleReplay").addEventListener("click",toggleReplay);$("replayCursor").addEventListener("input",function(){replayState.cursor=+this.value;renderReplayFrame()});
 $("refreshDNA").addEventListener("click",refreshDNA);$("loadDNA").addEventListener("click",loadDNA);$("runResearch").addEventListener("click",runResearch);
+deferTask(loadResearchCatalog,900);
 $("askAi").addEventListener("click",askAI);$("sync").addEventListener("click",syncMemory);$("runSystemCheck").addEventListener("click",function(){if(state.account?.isAdmin)runSystemCheck()});$("notifBtn").addEventListener("click",enableNotifications);$("alertScore").addEventListener("input",renderAlerts);$("chartSettings").addEventListener("click",openChartSettings);$("chartClose").addEventListener("click",closeChartSettings);$("chartCancel").addEventListener("click",closeChartSettings);$("chartApply").addEventListener("click",applyChartSettings);document.querySelectorAll("[data-preset]").forEach(function(b){b.addEventListener("click",function(){document.querySelectorAll("[data-preset]").forEach(function(x){x.classList.remove("active")});b.classList.add("active");$("bullColor").value=CHART_PRESETS[b.dataset.preset].bull;$("bearColor").value=CHART_PRESETS[b.dataset.preset].bear})});$("aiMarketMode").addEventListener("click",function(){state.aiMode="market";$("aiMarketMode").classList.add("on");$("aiTradeMode").classList.remove("on");$("tradeFields").classList.add("hidden")});$("aiTradeMode").addEventListener("click",function(){state.aiMode="trade";$("aiTradeMode").classList.add("on");$("aiMarketMode").classList.remove("on");$("tradeFields").classList.remove("hidden")});renderSignals();
 
 ["panYUp","panL","panR","panYDown","zoomOut","zoomIn","zoomReset"].forEach(function(id){
