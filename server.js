@@ -62,7 +62,8 @@ const ADMIN_ONLY_PATHS=new Set([
   '/api/dna/clear'
 ]);
 function timeoutSignal(ms){return typeof AbortSignal!=="undefined"&&AbortSignal.timeout?AbortSignal.timeout(ms):undefined;}
-function authKey(ip,email,type){return type+":"+String(ip||"unknown")+":"+String(email||"").toLowerCase()}\nfunction requestDevice(req){return String(req.headers["x-marketpulse-device"]||"00000000-0000-0000-0000-000000000000").slice(0,128)}
+function authKey(ip,email,type){return type+":"+String(ip||"unknown")+":"+String(email||"").toLowerCase()}
+function requestDevice(req){return String(req.headers["x-marketpulse-device"]||"00000000-0000-0000-0000-000000000000").slice(0,128)}
 
 function mins(interval){return ({'15m':15,'1h':60,'4h':240,'1d':1440})[interval]||60}
 async function getBinance(symbol,interval){
