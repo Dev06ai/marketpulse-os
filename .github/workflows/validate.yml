@@ -45,7 +45,7 @@ jobs:
           server=Path("server.js").read_text()
           required_html=[
             'id="chartSettings"','id="chartModal"','id="view-lab"','id="view-alerts"',
-            'id="aiTradeMode"','id="sync"','id="panYUp"','id="signalRows"',
+            'id="aiTradeMode"','id="sync"','id="chartCandles"','id="chartLine"','id="chartAuto"','id="signalRows"',
             'id="alertList"','id="setupRows"','id="componentRows"','id="calibrationRows"',
             'id="view-replay"','id="view-dna"','id="view-research"',
             'id="loadReplay"','id="replayCanvas"','id="refreshDNA"','id="dnaRows"',
