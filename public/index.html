@@ -582,6 +582,7 @@ body.admin-mode .nav button.adminNav,body.admin-mode .mobileMenu button.adminNav
       <button id="adminUsersRefresh" class="btn">Refresh users</button>
     </div>
     <div class="adminUsersGrid">
+      <div class="adminUserStat live"><div class="k">Live visitors</div><div class="v" id="adminVisitorsLive">—</div></div>
       <div class="adminUserStat live"><div class="k">Live registered</div><div class="v" id="adminUsersLive">—</div></div>
       <div class="adminUserStat"><div class="k">Registered today</div><div class="v" id="adminUsersToday">—</div></div>
       <div class="adminUserStat"><div class="k">This week</div><div class="v" id="adminUsersWeek">—</div></div>
@@ -1484,12 +1485,13 @@ async function loadAdminUsers(){
   try{
     var d=await api("/api/admin/users?limit=500",8000);
     state.adminUsers=Array.isArray(d.users)?d.users:[];state.adminUserStats=d.stats||{};
-    $("adminUsersLive").textContent=Number(d.stats?.liveNow||0);
+    $("adminVisitorsLive").textContent=Number(d.stats?.liveVisitors||0);
+    $("adminUsersLive").textContent=Number(d.stats?.liveRegistered||d.stats?.liveNow||0);
     $("adminUsersToday").textContent=Number(d.stats?.today||0);
     $("adminUsersWeek").textContent=Number(d.stats?.week||0);
     $("adminUsersMonth").textContent=Number(d.stats?.month||0);
     $("adminUsersAll").textContent=Number(d.stats?.allTime||0);
-    $("adminUsersMeta").textContent="Live registered users = activity seen within the last 2 minutes · "+state.adminUsers.length+" accounts shown";
+    $("adminUsersMeta").textContent="Live visitors = heartbeat seen within the last 2 minutes · live registered users are shown separately · "+state.adminUsers.length+" accounts shown";
     adminRenderUsers();
   }catch(e){
     $("adminUsersMeta").textContent="User management unavailable: "+e.message;
@@ -1528,8 +1530,7 @@ async function runAdminSystemCheck(){
   }
 }
 async function sendPresence(){
-  if(!state.account)return;
-  try{await fetch("/api/auth/presence",{method:"POST",headers:{"Content-Type":"application/json"}})}catch{}
+  try{await fetch("/api/auth/presence",{method:"POST",headers:{"Content-Type":"application/json","x-marketpulse-device":deviceId()}})}catch{}
 }
 async function loadAuth(){
   try{
@@ -1751,6 +1752,8 @@ function initAccountUI(){
   var adminRun=$("adminRunCheck"),adminExec=$("adminOpenExecution");
   if($("adminUsersRefresh"))$("adminUsersRefresh").addEventListener("click",loadAdminUsers);
   if($("adminUsersSearch"))$("adminUsersSearch").addEventListener("input",adminRenderUsers);
+  sendPresence();
+
   if(adminRun)adminRun.addEventListener("click",runAdminSystemCheck);
   if(adminExec)adminExec.addEventListener("click",function(){setView("execution")});
   return true;
