@@ -1857,7 +1857,7 @@ function renderMarketNoFlow(){
 async function loadFastTicker(){
   var symbol=state.symbol;
   try{
-    var d=await api("/api/fast-ticker?symbol="+encodeURIComponent(symbol),3500);
+    var d=await api("/api/fast-ticker?symbol="+encodeURIComponent(symbol),5000);
     if(symbol!==state.symbol)return;
     if(Number.isFinite(Number(d.price))){
       $("mPrice").textContent=fmt(d.price);
@@ -1930,7 +1930,7 @@ async function loadCore(){
   state.busy=true;setStatus("Loading BTC market data…");$("dataState").textContent="Connecting";$("symbol").value=state.symbol;
   const requestedSymbol=state.symbol,requestedInterval=state.interval;
   try{
-    var d=await api("/api/core?symbol="+encodeURIComponent(requestedSymbol)+"&interval="+encodeURIComponent(requestedInterval),5500);
+    var d=await api("/api/core?symbol="+encodeURIComponent(requestedSymbol)+"&interval="+encodeURIComponent(requestedInterval),6500);
     if(requestedSymbol!==state.symbol||requestedInterval!==state.interval)return;
     state.market=d;state.bootRetry=0;setStatus("Live market data connected","ok");$("dataState").textContent="Live";renderMarket();
     deferTask(loadCoreEnrichment,150);
@@ -2368,10 +2368,38 @@ $("chartFit").addEventListener("click",function(){state.chartYZoom=1;state.chart
 
 
 $("interval").value=state.interval;renderJournal();renderBrainInsights();renderAlerts();calc();
+
+var initialBootTimer=null,initialBootAttempts=0;
+function scheduleInitialBoot(delay){
+  if(state.market)return;
+  if(initialBootTimer)clearTimeout(initialBootTimer);
+  initialBootTimer=setTimeout(function(){
+    initialBootTimer=null;
+    if(state.market)return;
+    initialBootAttempts++;
+    loadFastTicker();
+    if(!state.busy)loadCore();
+    if(!state.market&&initialBootAttempts<10)scheduleInitialBoot(Math.min(3000,1100+initialBootAttempts*180));
+  },Math.max(0,delay||0));
+}
+
 setStatus("MarketPulse ready. Connecting to live market data…");
-loadFastTicker();
-loadCore();
-setInterval(function(){if(document.visibilityState==="visible"){loadFastTicker();if(!state.market&&!state.busy)loadCore()}},8000);
+scheduleInitialBoot(0);
+window.addEventListener("load",function(){
+  if(!state.market){scheduleInitialBoot(50)}
+},{once:true});
+window.addEventListener("pageshow",function(e){
+  if(e.persisted&&!state.market)scheduleInitialBoot(50);
+});
+document.addEventListener("visibilitychange",function(){
+  if(document.visibilityState==="visible"&&!state.market)scheduleInitialBoot(0);
+});
+setInterval(function(){
+  if(document.visibilityState==="visible"){
+    loadFastTicker();
+    if(!state.market&&!state.busy)scheduleInitialBoot(0);
+  }
+},5000);
 setInterval(function(){if(document.visibilityState!=="visible")return; if(state.activeView==="execution")loadExecution(); if(state.activeView==="portfolio")loadPortfolio(); if(state.activeView==="edge")loadEdge(); if(state.activeView==="brain"){loadPhase7();loadPhase7Health()}},15000);
 
 function mp7FmtR(v){var n=Number(v);return Number.isFinite(n)?(n>0?"+":"")+n.toFixed(2)+"R":"—"}
