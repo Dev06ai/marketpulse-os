@@ -746,7 +746,7 @@ const server=http.createServer(async(req,res)=>{
     }
     if(req.method==='GET'&&u.pathname==='/api/admin/snapshots')return send(res,200,{ok:true,rows:await storage.listAdminSnapshots(100)});
     if(req.method==='POST'&&u.pathname==='/api/admin/snapshots'){
-      const user=await auth.userFromRequest(req),payload={adminConfig:await getAdminRuntime(true),featureFlags:await storage.getFeatureFlags(),broadcasts:await storage.listBroadcasts(100)};const row=await storage.saveAdminSnapshot("Operational configuration snapshot",payload,user.email);await auditAdmin(req,"Created configuration snapshot","recovery",null,{snapshotId:row.id});return send(res,201,{ok:true,row,payload});
+      const user=await auth.userFromRequest(req),payload={adminConfig:await getAdminRuntime(true),featureFlags:await storage.getFeatureFlags()};const row=await storage.saveAdminSnapshot("Operational configuration snapshot",payload,user.email);await auditAdmin(req,"Created configuration snapshot","recovery",null,{snapshotId:row.id});return send(res,201,{ok:true,row,payload});
     }
     if(req.method==='POST'&&u.pathname.startsWith('/api/admin/snapshots/')&&u.pathname.endsWith('/restore')){
       const id=u.pathname.slice('/api/admin/snapshots/'.length,-'/restore'.length),snap=await storage.getAdminSnapshot(id);if(!snap)return send(res,404,{ok:false,error:"Snapshot not found"});await storage.restoreAdminConfig(snap);const saved=await storage.getAdminConfig();setAdminRuntime(saved);await auditAdmin(req,"Restored configuration snapshot","recovery",null,{snapshotId:id});return send(res,200,{ok:true,config:saved});
