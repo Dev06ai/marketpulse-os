@@ -43,7 +43,8 @@ function parseCookies(header){
   return out;
 }
 function cookie(raw,maxAge=SESSION_DAYS*86400){
-  return COOKIE+"="+encodeURIComponent(raw)+"; Path=/; HttpOnly; SameSite=Lax; Max-Age="+maxAge;
+  const secure=String(process.env.NODE_ENV||"").toLowerCase()==="production"?" Secure;":"";
+  return COOKIE+"="+encodeURIComponent(raw)+"; Path=/; HttpOnly; SameSite=Lax; Max-Age="+maxAge+";"+secure;
 }
 function clearCookie(){return cookie("",0)}
 function rateCheck(key){
