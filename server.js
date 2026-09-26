@@ -6,6 +6,7 @@ const execution=require('./execution');
 const phase6=require('./phase6');
 const phase7=require('./phase7');
 const phase910=require('./phase9-10');
+const phase1113=require('./phase11-13');
 const propFirm=require('./prop-firm');
 const research=require('./research-data');
 const dataFabric=require('./data-fabric');
@@ -22,8 +23,9 @@ const CORE_ANALYTICS_CACHE=new Map();
 const CORE_ANALYTICS_JOBS=new Set();
 const CORE_ANALYTICS_TTL=120000;
 const PHASE2_VERSION=2; const PHASE3_VERSION=3; const PHASE4_VERSION=4; const PHASE5_VERSION=5; const PHASE6_VERSION=6; const PHASE7_VERSION=7; const PHASE7_DATA_VERSION=2;
-const PHASE9_VERSION=9; const PHASE10_VERSION=10;
+const PHASE9_VERSION=9; const PHASE10_VERSION=10; const PHASE11_VERSION=11; const PHASE12_VERSION=12; const PHASE13_VERSION=13;
 const DECISION_CACHE=new Map(); const DECISION_TTL=4000; const DECISION_LAST_GOOD=new Map();
+const PHASE1113_CACHE=new Map(); const PHASE1113_JOBS=new Set(); const PHASE1113_TTL=10*60*1000;
 const OPENAI_API_KEY=process.env.OPENAI_API_KEY||"";
 const OPENAI_MODEL=process.env.OPENAI_MODEL||"gpt-5.6-luna";
 const AI_LIMIT_MS=8000; const AI_CALLS=new Map();
@@ -160,6 +162,27 @@ function queueCoreAnalytics(symbol,interval,candles){
   return hit?.payload||null;
 }
 
+function queuePhase1113Validation(symbol,interval,candles){
+  const key="P11-13|"+String(symbol)+"|"+String(interval),now=Date.now(),hit=PHASE1113_CACHE.get(key);
+  if(hit&&now-hit.ts<PHASE1113_TTL)return hit.payload;
+  if(PHASE1113_JOBS.has(key))return hit?.payload||null;
+  const sample=(candles||[]).slice(-900);
+  if(sample.length<260)return hit?.payload||null;
+  PHASE1113_JOBS.add(key);
+  setTimeout(async()=>{
+    try{
+      const validation=phase1113.runWalkForward(sample,{symbol,interval,basePolicy:{minScore:72,minRR:1.5},step:2,maxSamples:350});
+      PHASE1113_CACHE.set(key,{ts:Date.now(),payload:validation});
+      try{
+        const state=await storage.getLearningState();
+        const payload=state?.payload&&typeof state.payload==="object"?state.payload:{};
+        await storage.saveLearningState({...payload,phase11_13:{...validation,storedAt:Date.now()}});
+      }catch{}
+    }catch{}finally{PHASE1113_JOBS.delete(key)}
+  },100);
+  return hit?.payload||null;
+}
+
 async function buildDecisionSnapshot(symbol,interval,query){
   const key=symbol+"|"+interval,now=Date.now(),cached=DECISION_CACHE.get(key);
   if(cached&&now-cached.ts<DECISION_TTL)return Object.assign({cache:"fresh",cacheAgeMs:now-cached.ts},cached.payload);
@@ -185,18 +208,20 @@ async function buildDecisionSnapshot(symbol,interval,query){
     }catch{}
     const flow=mergeFlowSnapshot(symbol,deriv||{});
     const analytics=queueCoreAnalytics(symbol,interval,candles);
+    const validation1113=queuePhase1113Validation(symbol,interval,candles);
+    const getQ=(k,d)=>query&&typeof query.get==='function'?(query.get(k)??d):(query?.[k]??d);
     const config=propFirm.normalizeConfig({
-      accountSize:Number(query.accountSize||process.env.PROP_ACCOUNT_SIZE||5000),
-      startingEquity:Number(query.equity||process.env.PROP_STARTING_EQUITY||5000),
-      dailyLossLimitPct:Number(query.dailyLossLimitPct||process.env.PROP_DAILY_LOSS_PCT||3),
-      maxDrawdownPct:Number(query.maxDrawdownPct||process.env.PROP_MAX_DRAWDOWN_PCT||6),
-      riskPerTradePct:Number(query.riskPerTradePct||process.env.PROP_RISK_PER_TRADE_PCT||0.5),
-      maxOpenRiskPct:Number(query.maxOpenRiskPct||process.env.PROP_MAX_OPEN_RISK_PCT||1),
-      minSignalScore:Number(query.minSignalScore||process.env.PROP_MIN_SIGNAL_SCORE||72),
-      minRR:Number(query.minRR||process.env.PROP_MIN_RR||1.5),
-      minConsensusQualityPct:Number(query.minConsensusQualityPct||process.env.PROP_MIN_CONSENSUS_QUALITY_PCT||85),
-      maxPriceDispersionBps:Number(query.maxPriceDispersionBps||process.env.PROP_MAX_PRICE_DISPERSION_BPS||80),
-      blockMixedFlow:String(query.blockMixedFlow||process.env.PROP_BLOCK_MIXED_FLOW||"true")!=="false"
+      accountSize:Number(getQ('accountSize',process.env.PROP_ACCOUNT_SIZE||5000)),
+      startingEquity:Number(getQ('equity',process.env.PROP_STARTING_EQUITY||5000)),
+      dailyLossLimitPct:Number(getQ('dailyLossLimitPct',process.env.PROP_DAILY_LOSS_PCT||3)),
+      maxDrawdownPct:Number(getQ('maxDrawdownPct',process.env.PROP_MAX_DRAWDOWN_PCT||6)),
+      riskPerTradePct:Number(getQ('riskPerTradePct',process.env.PROP_RISK_PER_TRADE_PCT||0.5)),
+      maxOpenRiskPct:Number(getQ('maxOpenRiskPct',process.env.PROP_MAX_OPEN_RISK_PCT||1)),
+      minSignalScore:Number(getQ('minSignalScore',process.env.PROP_MIN_SIGNAL_SCORE||72)),
+      minRR:Number(getQ('minRR',process.env.PROP_MIN_RR||1.5)),
+      minConsensusQualityPct:Number(getQ('minConsensusQualityPct',process.env.PROP_MIN_CONSENSUS_QUALITY_PCT||85)),
+      maxPriceDispersionBps:Number(getQ('maxPriceDispersionBps',process.env.PROP_MAX_PRICE_DISPERSION_BPS||80)),
+      blockMixedFlow:String(getQ('blockMixedFlow',process.env.PROP_BLOCK_MIXED_FLOW||"true"))!=="false"
     });
     const gate=propFirm.evaluateStandard({
       analysis,derivatives:flow,
@@ -215,10 +240,12 @@ async function buildDecisionSnapshot(symbol,interval,query){
       dataQuality:{candleAgeMs:candles.length?Math.max(0,now-Number(candles[candles.length-1].t)):null},
       liveFlow:flow,validation:analytics?.validation||null,propGate:gate
     });
+    const gatedDecision=phase1113.applyDeploymentGate(decision,validation1113,{basePolicy:{minScore:config.minSignalScore,minRR:config.minRR}});
     const payload={
-      ok:true,...decision,analysis,derivatives:flow,consensus,
+      ok:true,...gatedDecision,analysis,derivatives:flow,consensus,
       learning:learned?await learning.status().catch(()=>null):null,
       backtest:analytics?.backtest||null,validation:analytics?.validation||null,setupStats:analytics?.setupStats||null,
+      phase11_13:validation1113,phase11:PHASE11_VERSION,phase12:PHASE12_VERSION,phase13:PHASE13_VERSION,
       updatedAt:now
     };
     DECISION_CACHE.set(key,{ts:now,payload});
@@ -1151,7 +1178,7 @@ const server=http.createServer(async(req,res)=>{
       try{return send(res,200,{ok:true,memory:await storage.saveAccountMemory(user.id,body.memory||{})})}catch(e){return send(res,400,{ok:false,error:e.message})}
     }
 
-    if(req.method==='GET'&&u.pathname==='/api/config'){const flags=await storage.getFeatureFlags();return send(res,200,{symbols:SYMBOLS,labels,intervals:['15m','30m','1h','4h','1d'],memory:storage.status(),learning:{state:'LOADING'},phase4:PHASE4_VERSION,phase5:PHASE5_VERSION,phase6:PHASE6_VERSION,phase7:PHASE7_VERSION,phase9:PHASE9_VERSION,phase10:PHASE10_VERSION,adminMode:adminCfg.mode||"normal",maintenance:adminCfg.maintenanceMode,readOnly:adminCfg.readOnlyMode,maintenanceMessage:adminCfg.maintenanceMessage,flags});}if(req.method==='POST'&&u.pathname==='/api/ai'){
+    if(req.method==='GET'&&u.pathname==='/api/config'){const flags=await storage.getFeatureFlags();return send(res,200,{symbols:SYMBOLS,labels,intervals:['15m','30m','1h','4h','1d'],memory:storage.status(),learning:{state:'LOADING'},phase4:PHASE4_VERSION,phase5:PHASE5_VERSION,phase6:PHASE6_VERSION,phase7:PHASE7_VERSION,phase9:PHASE9_VERSION,phase10:PHASE10_VERSION,phase11:PHASE11_VERSION,phase12:PHASE12_VERSION,phase13:PHASE13_VERSION,adminMode:adminCfg.mode||"normal",maintenance:adminCfg.maintenanceMode,readOnly:adminCfg.readOnlyMode,maintenanceMessage:adminCfg.maintenanceMessage,flags});}if(req.method==='POST'&&u.pathname==='/api/ai'){
       if(!aiAllowed(req)) return send(res,429,{error:"Slow down for a few seconds."});
       let raw=""; for await(const chunk of req) raw+=chunk; let body={}; try{body=JSON.parse(raw||"{}")}catch{return send(res,400,{error:"Invalid JSON"})}
       const mode=body.mode==="trade"?"trade":"market";
@@ -1271,6 +1298,19 @@ const server=http.createServer(async(req,res)=>{
       }catch(e){return send(res,503,{ok:false,ready:false,error:String(e.message||e)})}
     }
 
+    if(req.method==='GET'&&u.pathname==='/api/validation'){
+      const symbol=(u.searchParams.get('symbol')||'BTCUSDT').toUpperCase(),interval=u.searchParams.get('interval')||'1h';
+      if(!SYMBOLS.includes(symbol))return send(res,400,{ok:false,error:'Unsupported symbol'});
+      if(!['15m','30m','1h','4h','1d'].includes(interval))return send(res,400,{ok:false,error:'Unsupported interval'});
+      try{
+        const cached=PHASE1113_CACHE.get("P11-13|"+symbol+"|"+interval);
+        if(cached&&Date.now()-cached.ts<PHASE1113_TTL)return send(res,200,{ok:true,ready:true,symbol,interval,...cached.payload,updatedAt:cached.ts});
+        const candles=await getFastKlines(symbol,interval);
+        const validation=queuePhase1113Validation(symbol,interval,candles);
+        if(validation)return send(res,200,{ok:true,ready:true,symbol,interval,...validation,updatedAt:Date.now()});
+        return send(res,200,{ok:true,ready:false,symbol,interval,message:'Validation is warming up in the background.',phase11:PHASE11_VERSION,phase12:PHASE12_VERSION,phase13:PHASE13_VERSION});
+      }catch(e){return send(res,503,{ok:false,ready:false,error:String(e.message||e),phase11:PHASE11_VERSION,phase12:PHASE12_VERSION,phase13:PHASE13_VERSION})}
+    }
     if(req.method==='GET'&&u.pathname==='/api/data-fabric'){
       const symbol=(u.searchParams.get('symbol')||'BTCUSDT').toUpperCase(),interval=u.searchParams.get('interval')||'1h';
       if(!SYMBOLS.includes(symbol))return send(res,400,{ok:false,error:'Unsupported symbol'});
@@ -1596,7 +1636,7 @@ const server=http.createServer(async(req,res)=>{
     }
 
     if(req.method==='GET'&&u.pathname==='/api/system-check'){
-      const checks={server:true,marketEngine:true,learning:false,memory:false,marketData:false,derivatives:false,oi:false,cvd:false,liquidations:false,execution:false,portfolio:false,phase7:false,coreAnalytics:true,decisionEngine:false};
+      const checks={server:true,marketEngine:true,learning:false,memory:false,marketData:false,derivatives:false,oi:false,cvd:false,liquidations:false,execution:false,portfolio:false,phase7:false,coreAnalytics:true,decisionEngine:false,phase11_13:false};
       let marketError=null,derivativesError=null;
       try{checks.learning=Boolean(await learning.status())}catch(e){}
       try{checks.memory=Boolean(storage.status())}catch(e){}
@@ -1613,7 +1653,8 @@ const server=http.createServer(async(req,res)=>{
       try{checks.portfolio=Boolean(await phase6.snapshot())}catch(e){checks.portfolio=false}
       try{const st=phase7.selfTest();checks.phase7=Boolean(st&&st.ok)}catch(e){checks.phase7=false}
       try{const st=phase910.selfTest();checks.decisionEngine=Boolean(st&&st.ok)}catch(e){checks.decisionEngine=false}
-      const result={ok:Object.values(checks).every(Boolean),checks,marketError,derivativesError,phase2:PHASE2_VERSION,phase3:PHASE3_VERSION,phase4:PHASE4_VERSION,phase5:PHASE5_VERSION,phase6:PHASE6_VERSION,phase7:PHASE7_VERSION,routes:{core:true,chart:true,coreAnalytics:true,decision:true,coreScan:true,coreFlow:true,cycle:true,ai:true,memory:true,learning:true,replay:true,dna:true,research:true,edge:true,edgeHealth:true,edgeConfig:true,edgeJournal:true,execution:true,executionConfig:true,executionArm:true,executionKill:true,executionReconcile:true,portfolio:true,portfolioConfig:true,phase7Analytics:true,phase7Health:true},timestamp:Date.now()};await auditAdmin(req,"Ran full system check","system",null,{ok:result.ok,checks});return send(res,200,result);
+      try{const st=phase1113.selfTest();checks.phase11_13=Boolean(st&&st.ok)}catch(e){checks.phase11_13=false}
+      const result={ok:Object.values(checks).every(Boolean),checks,marketError,derivativesError,phase2:PHASE2_VERSION,phase3:PHASE3_VERSION,phase4:PHASE4_VERSION,phase5:PHASE5_VERSION,phase6:PHASE6_VERSION,phase7:PHASE7_VERSION,phase9:PHASE9_VERSION,phase10:PHASE10_VERSION,phase11:PHASE11_VERSION,phase12:PHASE12_VERSION,phase13:PHASE13_VERSION,routes:{core:true,chart:true,coreAnalytics:true,decision:true,validation:true,coreScan:true,coreFlow:true,cycle:true,ai:true,memory:true,learning:true,replay:true,dna:true,research:true,edge:true,edgeHealth:true,edgeConfig:true,edgeJournal:true,execution:true,executionConfig:true,executionArm:true,executionKill:true,executionReconcile:true,portfolio:true,portfolioConfig:true,phase7Analytics:true,phase7Health:true},timestamp:Date.now()};await auditAdmin(req,"Ran full system check","system",null,{ok:result.ok,checks});return send(res,200,result);
     }
     if(req.method==='GET'&&u.pathname==='/api/live'){
       const symbol=(u.searchParams.get('symbol')||'BTCUSDT').toUpperCase(),interval=u.searchParams.get('interval')||'1h';
