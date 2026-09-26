@@ -203,6 +203,33 @@ body.admin-mode .nav button.adminNav,body.admin-mode .mobileMenu button.adminNav
 .adminMetric .v{font-size:18px;font-weight:900;margin-top:4px}
 .adminMetric .s{font-size:9px;color:#8999ad;margin-top:3px}
 @media(max-width:700px){.adminGrid{grid-template-columns:1fr}}
+</style><style id="admin-user-style">
+.adminUsersGrid{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:10px}
+.adminUserStat{padding:13px;border:1px solid rgba(255,255,255,.07);border-radius:11px;background:linear-gradient(180deg,rgba(255,255,255,.035),rgba(0,0,0,.12))}
+.adminUserStat .k{font-size:9px;color:#8ea0b5;text-transform:uppercase;letter-spacing:.08em}
+.adminUserStat .v{font-size:22px;font-weight:950;margin-top:5px}
+.adminUserStat.live .v{color:#86efac;text-shadow:0 0 14px rgba(134,239,172,.25)}
+.adminUsersTools{display:flex;gap:8px;align-items:center;justify-content:space-between;margin-bottom:9px;flex-wrap:wrap}
+.adminUsersTools .search{flex:1;min-width:200px}
+.adminUserTableWrap{overflow:auto;border:1px solid rgba(255,255,255,.07);border-radius:12px}
+.adminUserTable{width:100%;border-collapse:collapse;min-width:840px}
+.adminUserTable th,.adminUserTable td{padding:9px 10px;border-bottom:1px solid rgba(255,255,255,.055);text-align:left;font-size:10px;vertical-align:middle}
+.adminUserTable th{font-size:9px;color:#8fa0b4;text-transform:uppercase;letter-spacing:.07em;background:rgba(255,255,255,.025);position:sticky;top:0}
+.adminUserTable tr:last-child td{border-bottom:0}
+.userEmail{font-weight:850;color:#f4f7fb}
+.userMuted{color:#8190a4}
+.userStatus{display:inline-flex;align-items:center;gap:5px;border-radius:999px;padding:4px 7px;font-size:8px;font-weight:900;letter-spacing:.05em}
+.userStatus.active{color:#a7f3d0;background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.16)}
+.userStatus.live{color:#86efac;background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.25)}
+.userStatus.restricted{color:#fde68a;background:rgba(234,179,8,.08);border:1px solid rgba(234,179,8,.16)}
+.userStatus.banned{color:#fda4af;background:rgba(244,63,94,.08);border:1px solid rgba(244,63,94,.18)}
+.userActions{display:flex;gap:5px;flex-wrap:wrap}
+.userAction{border:1px solid rgba(255,255,255,.09);background:#111116;color:#c5d0dc;border-radius:7px;padding:5px 7px;font-size:8px;font-weight:800;cursor:pointer}
+.userAction:hover{border-color:rgba(192,132,252,.28);color:#fff}
+.userAction.danger{border-color:rgba(248,113,113,.18);color:#fda4af}
+.userAction.safe{border-color:rgba(134,239,172,.16);color:#a7f3d0}
+@media(max-width:900px){.adminUsersGrid{grid-template-columns:repeat(3,1fr)}}
+@media(max-width:600px){.adminUsersGrid{grid-template-columns:repeat(2,1fr)}}
 </style></head>
 <body>
 <header class="header"><div class="headerInner">
@@ -549,6 +576,30 @@ body.admin-mode .nav button.adminNav,body.admin-mode .mobileMenu button.adminNav
     </div>
     <div class="section card" style="margin-top:10px"><div class="title">Protected checks</div><div class="healthGrid" id="adminHealthGrid"></div><div class="sub" id="adminHealthText" style="margin-top:7px">Owner-only system diagnostics.</div></div>
   </div>
+  <div class="card adminPanel">
+    <div class="sectionHead">
+      <div><div class="title">User &amp; Access Management</div><div class="sub">Owner-only account activity and moderation. No passwords, IP addresses or unnecessary personal data are exposed.</div></div>
+      <button id="adminUsersRefresh" class="btn">Refresh users</button>
+    </div>
+    <div class="adminUsersGrid">
+      <div class="adminUserStat live"><div class="k">Live registered</div><div class="v" id="adminUsersLive">—</div></div>
+      <div class="adminUserStat"><div class="k">Registered today</div><div class="v" id="adminUsersToday">—</div></div>
+      <div class="adminUserStat"><div class="k">This week</div><div class="v" id="adminUsersWeek">—</div></div>
+      <div class="adminUserStat"><div class="k">This month</div><div class="v" id="adminUsersMonth">—</div></div>
+      <div class="adminUserStat"><div class="k">All time</div><div class="v" id="adminUsersAll">—</div></div>
+    </div>
+    <div class="adminUsersTools">
+      <input id="adminUsersSearch" class="search" placeholder="Search registered users by email…">
+      <span class="small" id="adminUsersMeta">Live = activity seen within the last 2 minutes.</span>
+    </div>
+    <div class="adminUserTableWrap">
+      <table class="adminUserTable">
+        <thead><tr><th>User</th><th>Joined</th><th>Last login</th><th>Last active</th><th>Status</th><th>Actions</th></tr></thead>
+        <tbody id="adminUsersBody"><tr><td colspan="6" class="userMuted">Loading users…</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
   <div class="grid2">
     <div class="card adminPanel"><div class="title">Execution controls</div><div class="sub">Testnet/simulation execution controls are available only to the owner.</div><button id="adminOpenExecution" class="btn" style="margin-top:9px">Open Execution Control</button></div>
     <div class="card adminPanel"><div class="title">Admin boundary</div><div class="sub">Trader accounts cannot access protected admin endpoints even if they manually call the API.</div><div class="chip c" style="margin-top:9px">SERVER ENFORCED</div><div class="small" id="adminSecurityStatus" style="margin-top:8px">Security posture: checking…</div></div>
@@ -595,7 +646,9 @@ var state={
   account:null,
   adminConfigured:false,
   adminMfaEnabled:false,
-  adminMfaRequired:false
+  adminMfaRequired:false,
+  adminUsers:[],
+  adminUserStats:null
 };
 
 function $(id){return document.getElementById(id)}
@@ -627,7 +680,7 @@ function setView(name){
   if(name==="portfolio"){loadPortfolio()}
   if(name==="lab"&&state.account?.isAdmin){deferTask(runSystemCheck,60)}
   if(name==="brain"){deferTask(function(){loadPhase7();loadPhase7Health()},40)}
-  if(name==="admin"&&state.account?.isAdmin){deferTask(loadAdminConsole,20)}
+  if(name==="admin"&&state.account?.isAdmin){deferTask(loadAdminConsole,20);deferTask(loadAdminUsers,40)}
   if(name==="overview"&&state.market){queueChartDraw()}
 }
 document.querySelectorAll("[data-view]").forEach(function(b){
@@ -1388,7 +1441,75 @@ async function loadAdminConsole(){
   try{
     var r=await api("/api/admin/storage-health",7000);
     if($("adminStorage"))$("adminStorage").textContent=r.connected?"Postgres":"Local fallback";if($("adminStorageDetail"))$("adminStorageDetail").textContent=r.connected?"Live database connection verified":"Running on local fallback storage";
-  }catch{if($("adminStorage"))$("adminStorage").textContent="Unavailable";if($("adminStorageDetail"))$("adminStorageDetail").textContent=e.message||"Storage health check failed"}
+  }catch(e){if($("adminStorage"))$("adminStorage").textContent="Unavailable";if($("adminStorageDetail"))$("adminStorageDetail").textContent=e.message||"Storage health check failed"}
+  loadAdminUsers();
+}
+function adminDate(v){
+  if(!v)return "—";
+  var d=new Date(v);return Number.isFinite(d.getTime())?d.toLocaleString([],{dateStyle:"medium",timeStyle:"short"}):"—";
+}
+function adminUserStatus(u){
+  var now=Date.now();
+  if(u.bannedAt)return {key:"banned",label:"BANNED"};
+  if(u.restrictedUntil&&new Date(u.restrictedUntil).getTime()>now)return {key:"restricted",label:"RESTRICTED"};
+  var live=u.lastSeenAt&&now-new Date(u.lastSeenAt).getTime()<=120000;
+  return {key:live?"live":"active",label:live?"LIVE":"ACTIVE"};
+}
+function adminRenderUsers(){
+  var q=String($("adminUsersSearch")?.value||"").trim().toLowerCase();
+  var rows=(state.adminUsers||[]).filter(function(u){return !q||String(u.email||"").toLowerCase().includes(q)});
+  var body=$("adminUsersBody");if(!body)return;
+  if(!rows.length){body.innerHTML='<tr><td colspan="6" class="userMuted">No matching registered users.</td></tr>';return}
+  body.innerHTML=rows.map(function(u){
+    var st=adminUserStatus(u);
+    var safeEmail=safeHtml(String(u.email||""));
+    var reason=u.bannedReason||u.restrictionReason||"";
+    var action="";
+    if(st.key==="banned")action='<button class="userAction safe" data-user-action="restore" data-user-id="'+safeHtml(u.id)+'">Unban</button>';
+    else if(st.key==="restricted")action='<button class="userAction safe" data-user-action="restore" data-user-id="'+safeHtml(u.id)+'">Restore</button>';
+    else action='<button class="userAction" data-user-action="restrict" data-user-id="'+safeHtml(u.id)+'">Restrict</button><button class="userAction danger" data-user-action="ban" data-user-id="'+safeHtml(u.id)+'">Ban</button>';
+    return '<tr><td><div class="userEmail">'+safeEmail+'</div>'+(reason?'<div class="userMuted">'+safeHtml(reason)+'</div>':'')+'</td><td>'+adminDate(u.createdAt)+'</td><td>'+adminDate(u.lastLoginAt)+'</td><td>'+adminDate(u.lastSeenAt)+'</td><td><span class="userStatus '+st.key+'">'+st.label+'</span></td><td><div class="userActions">'+action+'</div></td></tr>';
+  }).join("");
+  body.querySelectorAll("[data-user-action]").forEach(function(btn){
+    btn.addEventListener("click",function(){
+      var act=btn.dataset.userAction,id=btn.dataset.userId;
+      if(act==="ban"&&!confirm("Permanently ban this user? Their active sessions will be revoked."))return;
+      if(act==="restrict"&&!confirm("Temporarily restrict this user? Their active sessions will be revoked."))return;
+      adminModerateUser(id,act);
+    });
+  });
+}
+async function loadAdminUsers(){
+  if(!state.account?.isAdmin)return;
+  try{
+    var d=await api("/api/admin/users?limit=500",8000);
+    state.adminUsers=Array.isArray(d.users)?d.users:[];state.adminUserStats=d.stats||{};
+    $("adminUsersLive").textContent=Number(d.stats?.liveNow||0);
+    $("adminUsersToday").textContent=Number(d.stats?.today||0);
+    $("adminUsersWeek").textContent=Number(d.stats?.week||0);
+    $("adminUsersMonth").textContent=Number(d.stats?.month||0);
+    $("adminUsersAll").textContent=Number(d.stats?.allTime||0);
+    $("adminUsersMeta").textContent="Live registered users = activity seen within the last 2 minutes · "+state.adminUsers.length+" accounts shown";
+    adminRenderUsers();
+  }catch(e){
+    $("adminUsersMeta").textContent="User management unavailable: "+e.message;
+    $("adminUsersBody").innerHTML='<tr><td colspan="6" class="userMuted">Could not load registered users.</td></tr>';
+  }
+}
+async function adminModerateUser(id,action){
+  var durationMinutes=null,reason="";
+  if(action==="restrict"){
+    var raw=prompt("Restriction duration in minutes (5–43200):","60");if(raw===null)return;
+    durationMinutes=Math.max(5,Math.min(43200,Number(raw)||60));
+    reason=prompt("Optional restriction reason:","Temporary policy restriction")||"Temporary policy restriction";
+  }else if(action==="ban"){
+    reason=prompt("Optional ban reason:","Policy violation")||"Policy violation";
+  }
+  try{
+    var r=await fetch("/api/admin/users/"+encodeURIComponent(id)+"/action",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action,durationMinutes,reason})});
+    var j=await r.json();if(!r.ok)throw Error(j.error||"Moderation action failed");
+    await loadAdminUsers();
+  }catch(e){alert("Moderation action failed: "+e.message)}
 }
 async function runAdminSystemCheck(){
   if(!state.account?.isAdmin)return;
@@ -1405,6 +1526,10 @@ async function runAdminSystemCheck(){
     $("adminHealthSummary").textContent="Check unavailable";
     $("adminHealthText").textContent=e.message;
   }
+}
+async function sendPresence(){
+  if(!state.account)return;
+  try{await fetch("/api/auth/presence",{method:"POST",headers:{"Content-Type":"application/json"}})}catch{}
 }
 async function loadAuth(){
   try{
@@ -1622,7 +1747,10 @@ function initAccountUI(){
   accountModal.addEventListener("click",function(e){if(e.target===this)closeAccount()});
   renderAccount();
   loadAuth();
+  setInterval(sendPresence,30000);
   var adminRun=$("adminRunCheck"),adminExec=$("adminOpenExecution");
+  if($("adminUsersRefresh"))$("adminUsersRefresh").addEventListener("click",loadAdminUsers);
+  if($("adminUsersSearch"))$("adminUsersSearch").addEventListener("input",adminRenderUsers);
   if(adminRun)adminRun.addEventListener("click",runAdminSystemCheck);
   if(adminExec)adminExec.addEventListener("click",function(){setView("execution")});
   return true;
