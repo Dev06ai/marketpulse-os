@@ -106,6 +106,7 @@ function evaluate(x={}){
 function selfTest(){
   const analysis={side:"LONG",status:"READY",score:80,price:100,entryLow:99,entryHigh:100,stop:97,tp1:105,tp2:108,components:[{name:"Structure",value:9}]};
   const r=evaluate({analysis,higher:{regime:"UPTREND"},lower:{regime:"UPTREND"},derivatives:{available:true,cvdState:"BUYERS CONFIRM",oiChangePct:2,orderBook:{imbalance:.15},takerImbalance:.1,liquidationBias:"SHORT LIQS DOMINANT"},consensus:{consensusQualityPct:95,priceDispersionBps:10},dataQuality:{candleAgeMs:1000},liveFlow:{liveConnected:true,livePointCount:10},propGate:{decision:"ELIGIBLE"}});
-  return {ok:r.state==="READY"&&r.evidence.flowScore>60&&r.levels.stop===97&&r.market.confluenceScore>=55,result:r};
+  const blocked=evaluate({analysis,higher:{regime:"DOWNTREND"},lower:{regime:"UPTREND"},derivatives:{available:true,cvdState:"BUYERS CONFIRM",oiChangePct:2,orderBook:{imbalance:.15},takerImbalance:.1,liquidationBias:"SHORT LIQS DOMINANT"},consensus:{consensusQualityPct:95,priceDispersionBps:10},dataQuality:{candleAgeMs:1000},liveFlow:{liveConnected:true,livePointCount:10},propGate:{decision:"ELIGIBLE"}});
+  return {ok:r.state==="READY"&&blocked.state==="NO_TRADE"&&blocked.action==="WAIT"&&r.evidence.flowScore>60&&r.levels.stop===97&&r.market.confluenceScore>=55,result:r,blocked};
 }
 module.exports={VERSION,evaluate,selfTest,dataIntegrity,trendAlignment,flowAlignment};
