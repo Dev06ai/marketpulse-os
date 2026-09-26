@@ -648,7 +648,7 @@ async function saveAdminConfig(payload){
 async function getFeatureFlags(){
   await init();
   if(mode==="postgres"){
-    const r=await pool.query("SELECT key,enabled,"rollout_pct" AS "rolloutPct",description,"updated_by" AS "updatedBy",updated_at AS "updatedAt" FROM marketpulse_feature_flags ORDER BY key");
+    const r=await pool.query('SELECT key,enabled,"rollout_pct" AS "rolloutPct",description,"updated_by" AS "updatedBy",updated_at AS "updatedAt" FROM marketpulse_feature_flags ORDER BY key');
     const out=defaultFeatureFlags();for(const row of r.rows)out[row.key]=row;return out;
   }
   const all=readLocal(),out=defaultFeatureFlags();Object.assign(out,all.__feature_flags__||{});return out;
