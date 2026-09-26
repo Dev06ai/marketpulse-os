@@ -60,6 +60,22 @@ async function init(){
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         resolved_at TIMESTAMPTZ
       )`);
+      await pool.query(`CREATE TABLE IF NOT EXISTS marketpulse_signal_dna (
+        signal_key TEXT PRIMARY KEY,
+        symbol TEXT NOT NULL,
+        interval TEXT NOT NULL,
+        candle_ts BIGINT NOT NULL,
+        status TEXT NOT NULL,
+        side TEXT,
+        setup_type TEXT,
+        regime TEXT,
+        score NUMERIC,
+        snapshot JSONB NOT NULL DEFAULT '{}'::jsonb,
+        outcome JSONB NOT NULL DEFAULT '{}'::jsonb,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      `);
+      await pool.query('CREATE INDEX IF NOT EXISTS idx_signal_dna_lookup ON marketpulse_signal_dna(symbol,interval,candle_ts DESC)');
+      await pool.query('CREATE INDEX IF NOT EXISTS idx_signal_dna_regime ON marketpulse_signal_dna(regime,status)');
       await pool.query('CREATE INDEX IF NOT EXISTS idx_learning_open ON marketpulse_learning_predictions(symbol,interval,outcome) WHERE outcome IS NULL');
       mode="postgres";
     }catch(err){
@@ -154,5 +170,48 @@ async function resolveLearningPrediction(fingerprint,outcome,resultR){
   for(const x of rows)if(x.fingerprint===fingerprint&&!x.outcome){x.outcome=outcome;x.resultR=resultR;x.resolvedAt=new Date().toISOString()}
   all.__learning_predictions__=rows.slice(-5000);writeLocal(all);
 }
+async function saveSignalDNA(records){
+  await init();const rows=Array.isArray(records)?records:[];
+  if(mode==="postgres"){
+    for(const p of rows){
+      if(!p?.signalKey)continue;
+      await pool.query(`INSERT INTO marketpulse_signal_dna
+        (signal_key,symbol,interval,candle_ts,status,side,setup_type,regime,score,snapshot,outcome)
+        VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+        ON CONFLICT(signal_key) DO UPDATE SET snapshot=EXCLUDED.snapshot,outcome=EXCLUDED.outcome,status=EXCLUDED.status,score=EXCLUDED.score`,
+        [p.signalKey,p.symbol,p.interval,Number(p.candleTs),p.status||"WAITING",p.side||null,p.type||null,p.regime||null,Number(p.score)||0,p.snapshot||{},p.outcome||{}]);
+    }
+    return {stored:rows.length,storage:"postgres"};
+  }
+  const all=readLocal(),existing=Array.isArray(all.__signal_dna__)?all.__signal_dna__:[];
+  const map=new Map(existing.map(x=>[x.signalKey,x]));
+  rows.forEach(x=>{if(x?.signalKey)map.set(x.signalKey,x)});
+  const merged=Array.from(map.values()).sort((a,b)=>Number(b.candleTs||0)-Number(a.candleTs||0)).slice(0,20000);
+  all.__signal_dna__=merged;writeLocal(all);return {stored:rows.length,storage:"local"};
+}
+async function getSignalDNA({symbol,interval,limit=500}={}){
+  await init();const lim=Math.max(1,Math.min(Number(limit)||500,5000));
+  if(mode==="postgres"){
+    const params=[];let where=[];
+    if(symbol){params.push(symbol);where.push(`symbol=${params.length}`)}
+    if(interval){params.push(interval);where.push(`interval=${params.length}`)}
+    params.push(lim);
+    const q=`SELECT signal_key AS "signalKey",symbol,interval,candle_ts AS "candleTs",status,side,setup_type AS type,regime,score,snapshot,outcome,created_at AS "createdAt"
+      FROM marketpulse_signal_dna ${where.length?"WHERE "+where.join(" AND "):""} ORDER BY candle_ts DESC LIMIT ${params.length}`;
+    const r=await pool.query(q,params);return r.rows;
+  }
+  const all=readLocal(),rows=Array.isArray(all.__signal_dna__)?all.__signal_dna__:[];
+  return rows.filter(x=>(!symbol||x.symbol===symbol)&&(!interval||x.interval===interval)).sort((a,b)=>Number(b.candleTs||0)-Number(a.candleTs||0)).slice(0,lim);
+}
+async function clearSignalDNA({symbol,interval}={}){
+  await init();
+  if(mode==="postgres"){
+    const params=[];let where=[];
+    if(symbol){params.push(symbol);where.push(`symbol=${params.length}`)}
+    if(interval){params.push(interval);where.push(`interval=${params.length}`)}
+    await pool.query(`DELETE FROM marketpulse_signal_dna ${where.length?"WHERE "+where.join(" AND "):""}`,params);return;
+  }
+  const all=readLocal();let rows=Array.isArray(all.__signal_dna__)?all.__signal_dna__:[];rows=rows.filter(x=>(symbol&&x.symbol!==symbol)||(interval&&x.interval!==interval));all.__signal_dna__=rows;writeLocal(all);
+}
 function status(){return {mode,configured:Boolean(DB_URL&&Pool),durable:mode==="postgres"}}
-module.exports={init,get,save,clear,getLearningState,saveLearningState,recordLearningPrediction,getOpenLearningPredictions,resolveLearningPrediction,status};
+module.exports={init,get,save,clear,getLearningState,saveLearningState,recordLearningPrediction,getOpenLearningPredictions,resolveLearningPrediction,saveSignalDNA,getSignalDNA,clearSignalDNA,status};
