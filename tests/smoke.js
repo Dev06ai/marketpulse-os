@@ -55,6 +55,8 @@ assert(pf6.grossRiskPct===1,"phase6 portfolio risk");
 assert(pf6.correlation.BTCUSDT.ETHUSDT>0.99,"phase6 correlation");
 const st6=phase6.stressTest(Object.assign({},p6.config,{stressMovePct:5}),[{symbol:"BTCUSDT",side:"LONG",entry:100,qty:10,riskCash:1000}],[]);
 assert(st6.rows.length===2&&st6.rows[0].pnl<0&&st6.rows[1].pnl>0,"phase6 stress lab");
+const cg6=phase6.correlationGate(p6.config,{BTCUSDT:2,ETHUSDT:1},"BTCUSDT",{correlation:{BTCUSDT:{BTCUSDT:1,ETHUSDT:.92},ETHUSDT:{BTCUSDT:.92,ETHUSDT:1}}});
+assert(cg6.available&&cg6.clusterRiskPct===3,"phase6 correlated risk gate");
 
 console.log("MarketPulse Phase 6 smoke checks passed:",{
   price:a.price,score:a.score,status:a.status,backtestTrades:b.trades,

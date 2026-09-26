@@ -149,6 +149,17 @@ function buildPortfolio(config,positions,orders,series){
     updatedAt:now()
   };
 }
+function correlationGate(config,riskBySymbol,symbol,lastPortfolio){
+  const threshold=finite(config.correlationBlockThreshold,.85);
+  const limit=finite(config.maxCorrelatedClusterRiskPct,3);
+  const symbols=Object.keys(riskBySymbol||{});
+  const matrix=lastPortfolio?.correlation||null;
+  if(!matrix||!Object.keys(matrix).length)return {available:false,clusterRiskPct:riskBySymbol[symbol]||0,clusterMembers:[symbol],limitPct:limit};
+  const groups=unionFind(symbols,matrix,threshold);
+  const members=groups.find(g=>g.includes(symbol))||[symbol];
+  const clusterRiskPct=members.reduce((sum,s)=>sum+(riskBySymbol[s]||0),0);
+  return {available:true,clusterRiskPct,clusterMembers:members,limitPct:limit,allowed:clusterRiskPct<=limit+1e-9};
+}
 function stressTest(config,positions,orders){
   const m=Number(config.stressMovePct)||5, rows=[];
   const add=(label,move)=>{
@@ -192,11 +203,13 @@ async function executionGate(plan,executionState){
   }]);
   const testOrders=existingOrders.filter(x=>!["CANCELLED","REJECTED","EXPIRED","CLOSED"].includes(x.status)&&String(x.id||"")!==String(plan.intentId||""));
   const pseudoSeries={};
-  const symbols=Array.from(new Set([...(existingPositions||[]).map(x=>x.symbol),...(existingOrders||[]).map(x=>x.symbol),String(plan.symbol||"").toUpperCase()].filter(Boolean)));
   const p=buildPortfolio(cfg,testPositions,testOrders,pseudoSeries);
   if(p.grossRiskPct>cfg.maxPortfolioRiskPct)return {allowed:false,reason:"PORTFOLIO RISK LIMIT",portfolioRiskPct:p.grossRiskPct,limitPct:cfg.maxPortfolioRiskPct};
   const sym=String(plan.symbol||"").toUpperCase(),symExp=p.exposureBySymbol[sym]||0;
   if(symExp>cfg.maxSymbolExposurePct)return {allowed:false,reason:"SYMBOL EXPOSURE LIMIT",symbol:sym,exposurePct:symExp,limitPct:cfg.maxSymbolExposurePct};
-  return {allowed:true,reason:"PASS",portfolioRiskPct:p.grossRiskPct,symbolExposurePct:symExp};
+  const savedAge=Number(s.lastPortfolio?.updatedAt||0)?now()-Number(s.lastPortfolio.updatedAt):Infinity;
+  const corr=savedAge<=15*60*1000?correlationGate(cfg,p.riskBySymbol,sym,s.lastPortfolio):{available:false,clusterRiskPct:p.riskBySymbol[sym]||0,clusterMembers:[sym],limitPct:cfg.maxCorrelatedClusterRiskPct};
+  if(corr.available&&corr.clusterRiskPct>corr.limitPct)return {allowed:false,reason:"CORRELATED CLUSTER RISK LIMIT",symbol:sym,clusterRiskPct:corr.clusterRiskPct,limitPct:corr.limitPct,clusterMembers:corr.clusterMembers,correlationSnapshotAgeMs:savedAge};
+  return {allowed:true,reason:"PASS",portfolioRiskPct:p.grossRiskPct,symbolExposurePct:symExp,clusterRiskPct:corr.clusterRiskPct,clusterMembers:corr.clusterMembers,correlationAvailable:corr.available,correlationSnapshotAgeMs:Number.isFinite(savedAge)?savedAge:null};
 }
-module.exports={version:VERSION,createState:defaultState,ensureState,load,save,snapshot,setConfig,buildPortfolio,stressTest,savePortfolio,executionGate};
+module.exports={version:VERSION,createState:defaultState,ensureState,load,save,snapshot,setConfig,buildPortfolio,stressTest,savePortfolio,executionGate,correlationGate};
