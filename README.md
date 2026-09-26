@@ -87,3 +87,11 @@ No claim is made that any signal is safe, certain or guaranteed to pass a prop-f
 - Prop-firm and event-contract gates can block on weak independent consensus or excessive price dispersion.
 - Bybit's official public WebSocket provides linear-market ticker, trade and order-book streams; Kraken's public Futures Analytics API exposes open interest, CVD, liquidation volume, long/short information, funding, liquidity and related analytics. citeturn171906search0turn171906search2turn171906search3turn171906search4turn686664search0
 - Coinbase's public Exchange API exposes latest public trades, which MarketPulse uses as an independent spot-price cross-check rather than as a derivatives/OI source. citeturn546334search0
+
+
+## Phase 9 + Phase 10
+The final decision layer adds a deterministic Decision Engine on top of the existing market stack. It combines the existing market analysis, multi-timeframe context, derivatives/order-flow context, data quality, validation context, and the configured prop-firm safety gate.
+
+The dashboard exposes the final state through `GET /api/decision`. Results are cached briefly, and the endpoint keeps the last known good decision available when a downstream provider temporarily fails. The engine is fail-safe and does not execute trades.
+
+Phase 9/10 status is also included in `/api/config` and the admin system check.
