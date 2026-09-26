@@ -28,8 +28,15 @@ function strictSignalChecks(a,side,higher,lower,flowScore,dataScore,levels,deriv
   if(flowScore<65)reasons.push("order-flow confirmation below 65");
   if(a?.regime==="HIGH VOLATILITY")reasons.push("high-volatility regime");
   const requiresHigher=String(interval).toLowerCase()!=="1d";
-  if(requiresHigher&&side==="LONG"&&h!=="UPTREND")reasons.push(h==="UNKNOWN"?"higher-timeframe trend unavailable":"higher-timeframe trend conflicts");
-  if(requiresHigher&&side==="SHORT"&&h!=="DOWNTREND")reasons.push(h==="UNKNOWN"?"higher-timeframe trend unavailable":"higher-timeframe trend conflicts");
+  const ms=a?.marketStructure||{};
+  const setupKind=String(ms.setup?.kind||"").toUpperCase();
+  const setupScore=n(ms.setup?.score,0);
+  const levelReversal=(setupKind==="SFP"||setupKind==="ORDER_BLOCK")&&setupScore>=85;
+  const higherConflict=(side==="LONG"&&h!=="UPTREND")||(side==="SHORT"&&h!=="DOWNTREND");
+  if(requiresHigher&&higherConflict){
+    const controlledReversal=levelReversal&&flowScore>=75&&dataScore>=90;
+    if(!controlledReversal)reasons.push(h==="UNKNOWN"?"higher-timeframe trend unavailable":"higher-timeframe trend conflicts");
+  }
   if(side==="LONG"&&l==="DOWNTREND")reasons.push("15M trend conflicts");
   if(side==="SHORT"&&l==="UPTREND")reasons.push("15M trend conflicts");
   if(String(d.cvdState||"").toUpperCase().includes("DIVERGENCE"))reasons.push("CVD divergence");
@@ -71,7 +78,8 @@ function readiness(a,confluence,dataScore,gate,strict={eligible:true,reasons:[]}
 function evaluate(x={}){
   const a=x.analysis||{},side=sideOf(a),base=clamp(Math.round(n(a.score,50)),0,100);
   const data=dataIntegrity(x),mtf=trendAlignment(side,x.higher,x.lower),flow=flowAlignment(side,x.derivatives);
-  const qScore=clamp(Math.round(base*.60+mtf*.14+flow*.16+data.score*.10),0,100);
+  const level=clamp(n(a?.marketStructure?.score,0),0,100);
+  const qScore=clamp(Math.round(base*.50+mtf*.13+flow*.15+data.score*.09+level*.13),0,100);
   const lv=levels(a);
   const strict=strictSignalChecks(a,side,x.higher,x.lower,flow,data.score,lv,x.derivatives,x.interval||"1h");
   const r=readiness(a,qScore,data.score,x.propGate,x.strictEvidence===false?{eligible:true,reasons:[]}:strict);
@@ -80,6 +88,7 @@ function evaluate(x={}){
     {name:"Core model",score:f(base),source:"structure + momentum + volume"},
     {name:"Higher timeframe",score:f(mtf),source:"4H / 15M alignment"},
     {name:"Order flow",score:f(flow),source:"CVD + book + taker"},
+    {name:"Key levels / price action",score:f(level),source:"daily/weekly levels + SFP + order-block + retest"},
     {name:"Data integrity",score:f(data.score),source:"freshness + consensus"},
     {name:"Risk gate",score:x.propGate?.decision==="ELIGIBLE"?100:x.propGate?.decision==="ELIGIBLE_WITH_WARNINGS"?75:x.propGate?.decision==="BLOCKED"?0:50,source:"prop-firm safety checks"}
   ];
@@ -89,6 +98,7 @@ function evaluate(x={}){
   if(x.lower?.regime)thesis.push("15M: "+x.lower.regime);
   if(x.derivatives?.cvdState)thesis.push("CVD: "+x.derivatives.cvdState);
   if(x.derivatives?.positioning)thesis.push("Positioning: "+x.derivatives.positioning);
+  if(a?.marketStructure?.setup)thesis.push(a.marketStructure.setup.reason+" Setup score: "+Math.round(a.marketStructure.setup.score)+"/100.");
   if(x.derivatives?.orderBook?.imbalance!=null)thesis.push("Order-book imbalance is "+(Number(x.derivatives.orderBook.imbalance)>0?"bid-side":"ask-side")+" leaning.");
   if(data.warnings.length)thesis.push("Data warnings: "+data.warnings.join(", ")+".");
   if(x.propGate?.decision==="BLOCKED")thesis.push("Risk gate: blocked.");
@@ -97,7 +107,7 @@ function evaluate(x={}){
     state:r.state,action:r.action,reason:r.reason,
     market:{side,score:base,confluenceScore:qScore,confluenceLabel:qScore>=80?"HIGH":qScore>=68?"MODERATE-HIGH":qScore>=55?"DEVELOPING":"LOW",price:n(a.price),change24h:n(a.change24h),regime:a.regime||"RANGE",mood:a.mood||"CALM",status:a.status||"WAITING",type:a.type||"NO TRADE",structure:a.structure||"UNKNOWN",momentum:a.momentum||"UNKNOWN",bias:a.directionalLean||a.bias||"NEUTRAL"},
     levels:lv,
-    evidence:{mtfScore:f(mtf),flowScore:f(flow),dataScore:f(data.score),components,warnings:data.warnings,strictGate:strict,thesis,primaryScenario:side==="LONG"?"Continuation higher while price holds invalidation and flow stays constructive.":side==="SHORT"?"Continuation lower while price stays beneath invalidation and flow remains constructive.":"Range / rotation until a confirmed boundary break.",invalidationScenario:side==="LONG"?"Loss of invalidation or major timeframe conflict.":side==="SHORT"?"Reclaim of invalidation or major timeframe conflict.":"A directional thesis needs a confirmed break with volume.",contributors:Array.isArray(a.contributors)?a.contributors.slice(0,12):[]},
+    evidence:{mtfScore:f(mtf),flowScore:f(flow),levelScore:f(level),dataScore:f(data.score),components,warnings:data.warnings,strictGate:strict,marketStructure:a?.marketStructure||null,thesis,primaryScenario:side==="LONG"?"Continuation higher while price holds invalidation and flow stays constructive.":side==="SHORT"?"Continuation lower while price stays beneath invalidation and flow remains constructive.":"Range / rotation until a confirmed boundary break.",invalidationScenario:side==="LONG"?"Loss of invalidation or major timeframe conflict.":side==="SHORT"?"Reclaim of invalidation or major timeframe conflict.":"A directional thesis needs a confirmed break with volume.",contributors:Array.isArray(a.contributors)?a.contributors.slice(0,12):[]},
     data:{score:data.score,candleAgeMs:n(x.dataQuality?.candleAgeMs),derivativesAvailable:Boolean(x.derivatives&&x.derivatives.available!==false),consensusQualityPct:n(x.consensus?.consensusQualityPct),priceDispersionBps:n(x.consensus?.priceDispersionBps),providerCount:n(x.consensus?.sourceCount),independentSourceCount:n(x.consensus?.independentSourceCount),liveConnected:Boolean(x.liveFlow?.liveConnected||x.liveFlow?.wsConnected),livePointCount:n(x.liveFlow?.livePointCount)},
     validation:{available:Boolean(x.validation),sample:n(x.validation?.sample??x.validation?.totalTrades),coverage:n(x.validation?.coverage),note:"Historical validation describes past samples; it is not a guarantee of future results."},
     propGate:x.propGate||{decision:"NOT_EVALUATED"},
