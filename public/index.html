@@ -894,6 +894,14 @@ body.admin-mode .nav button.adminNav,body.admin-mode .mobileMenu button.adminNav
 
 var SYMBOLS=["BTCUSDT","ETHUSDT","SOLUSDT","BNBUSDT","XRPUSDT","DOGEUSDT","ADAUSDT"];
 var LABELS={BTCUSDT:"BTC",ETHUSDT:"ETH",SOLUSDT:"SOL",BNBUSDT:"BNB",XRPUSDT:"XRP",DOGEUSDT:"DOGE",ADAUSDT:"ADA"};
+function safeLocalJson(key,fallback){
+  try{
+    var raw=localStorage.getItem(key);
+    if(raw===null||raw==="")return fallback;
+    var value=JSON.parse(raw);
+    return value==null?fallback:value;
+  }catch{return fallback}
+}
 var state={
   symbol:"BTCUSDT",
   interval:"1h",
@@ -912,9 +920,9 @@ var state={
   chartAutoScale:true,
   aiMode:"market",
   validation:null,
-  watch:JSON.parse(localStorage.getItem("mp-watch")||"[]"),
-  signals:JSON.parse(localStorage.getItem("mp-stable-signals")||"[]"),
-  journal:JSON.parse(localStorage.getItem("mp-stable-journal")||"[]"),
+  watch:safeLocalJson("mp-watch",[]),
+  signals:safeLocalJson("mp-stable-signals",[]),
+  journal:safeLocalJson("mp-stable-journal",[]),
   edge:null,
   execution:null,
   portfolio:null,
@@ -1026,7 +1034,7 @@ function populateSymbols(){
 populateSymbols();
 
 const CHART_PRESETS={aurora:{bg:"#06131a",grid:"rgba(170,205,220,.10)",axis:"#a9bbc8",bull:"#9BE7C4",bear:"#FFB38A",ema:"#E5D0FF"},lavender:{bg:"#0d1018",grid:"rgba(205,196,235,.10)",axis:"#b8b1c7",bull:"#E5D0FF",bear:"#FFB8D8",ema:"#9CCBFF"},forest:{bg:"#07120f",grid:"rgba(160,210,190,.10)",axis:"#9fb8ad",bull:"#A8E6CF",bear:"#F8C6A0",ema:"#D8C3FF"},classic:{bg:"#080808",grid:"rgba(220,220,220,.10)",axis:"#c9c9c9",bull:"#22c55e",bear:"#ef4444",ema:"#f3f4f6"},mono:{bg:"#090909",grid:"rgba(230,235,245,.10)",axis:"#d8dee9",bull:"#f1f5f9",bear:"#64748b",ema:"#94a3b8"}};
-var chartSettings=JSON.parse(localStorage.getItem("mp-chart")||"null")||{preset:"aurora",bull:"#9BE7C4",bear:"#FFB38A",showVolume:true,showEma:true};
+var chartSettings=safeLocalJson("mp-chart",null)||{preset:"aurora",bull:"#9BE7C4",bear:"#FFB38A",showVolume:true,showEma:true};
 function chartTheme(){var p=CHART_PRESETS[chartSettings.preset]||CHART_PRESETS.aurora;return Object.assign({},p,{bull:chartSettings.bull||p.bull,bear:chartSettings.bear||p.bear})}
 function openChartSettings(){var t=chartTheme();$("bullColor").value=t.bull;$("bearColor").value=t.bear;$("showVolume").checked=chartSettings.showVolume!==false;$("showEma").checked=chartSettings.showEma!==false;document.querySelectorAll("[data-preset]").forEach(function(b){b.classList.toggle("active",b.dataset.preset===chartSettings.preset)});$("chartModal").classList.add("open");$("chartModal").setAttribute("aria-hidden","false")}
 function closeChartSettings(){$("chartModal").classList.remove("open");$("chartModal").setAttribute("aria-hidden","true")}
