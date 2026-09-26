@@ -1236,6 +1236,9 @@ function normalizeChartSettings(v){
   return x;
 }
 var chartSettings=normalizeChartSettings(safeLocalJson(chartSettingsKey(),safeLocalJson("mp-chart",DEFAULT_CHART_SETTINGS)));
+function loadScopedChartSettings(){
+  chartSettings=normalizeChartSettings(safeLocalJson(chartSettingsKey(),DEFAULT_CHART_SETTINGS));
+}
 function chartTheme(){var p=CHART_PRESETS[chartSettings.preset]||CHART_PRESETS.aurora;return Object.assign({},p,{bull:chartSettings.bull||p.bull,bear:chartSettings.bear||p.bear,ema:chartSettings.emaColor||p.ema})}
 function openChartSettings(){var t=chartTheme();$("bullColor").value=t.bull;$("bearColor").value=t.bear;$("emaColor").value=chartSettings.emaColor||t.ema;$("showEma").checked=chartSettings.showEma!==false;syncEmaToggleUI();document.querySelectorAll("[data-preset]").forEach(function(b){b.classList.toggle("active",b.dataset.preset===chartSettings.preset)});$("chartModal").classList.add("open");$("chartModal").setAttribute("aria-hidden","false")}
 function closeChartSettings(){$("chartModal").classList.remove("open");$("chartModal").setAttribute("aria-hidden","true")}
@@ -2652,9 +2655,11 @@ async function loadAuth(){
   try{
     var r=await api("/api/auth/me",4000);
     state.account=r.authenticated?r.user:null;
+    loadScopedChartSettings();
     state.adminConfigured=Boolean(r.adminConfigured);state.adminMfaEnabled=Boolean(r.mfaEnabled);
     renderAccount();
     if(state.account){await syncMemory();loadUserTickets()}
+    else if(state.market)drawMain();
   }catch{renderAccount()}
 }
 async function submitAccount(){
@@ -2673,7 +2678,7 @@ async function submitAccount(){
     if(j.requiresMfa){
       accountMode="login";state.adminMfaRequired=true;$("accountLoginMode").classList.add("on");$("accountRegisterMode").classList.remove("on");$("accountSubmit").textContent="Sign in";renderAccount();$("accountError").textContent="Account created. Enter your authenticator code to finish owner sign-in.";return;
     }
-    state.account=j.user;state.adminMfaEnabled=Boolean(j.user&&j.user.mfaEnabled);state.pendingAnonymousMemory=anonymous;state.adminMfaRequired=false;renderAccount();await syncMemory({migrateAnonymous:true,save:true});
+    state.account=j.user;state.adminMfaEnabled=Boolean(j.user&&j.user.mfaEnabled);state.pendingAnonymousMemory=anonymous;state.adminMfaRequired=false;loadScopedChartSettings();renderAccount();await syncMemory({migrateAnonymous:true,save:true});
     $("accountError").textContent="";$("accountPassword").value="";if($("accountMfa"))$("accountMfa").value="";closeAccount();
     $("memoryText").textContent=state.account.isAdmin?"Owner security is active.":"Account sync active.";loadUserTickets();
   }catch(e){$("accountError").textContent=e.message}
@@ -2723,6 +2728,7 @@ async function syncMemory(){
       }else{
         chartSettings=normalizeChartSettings(chartSettings);
       }
+      if(state.market)drawMain();
     }
     state.journal=mergeMemoryArrays(state.journal,p.journal,"ts").slice(0,100);
     state.signals=mergeMemoryArrays(state.signals,p.signals,"ts").slice(0,100);
