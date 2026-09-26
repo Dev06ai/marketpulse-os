@@ -1025,7 +1025,8 @@ const server=http.createServer(async(req,res)=>{
               riskPerTradePct:Number(u.searchParams.get('riskPerTradePct')||process.env.PROP_RISK_PER_TRADE_PCT||0.5),
               maxOpenRiskPct:Number(u.searchParams.get('maxOpenRiskPct')||process.env.PROP_MAX_OPEN_RISK_PCT||1),
               minSignalScore:Number(u.searchParams.get('minSignalScore')||process.env.PROP_MIN_SIGNAL_SCORE||72),
-              minRR:Number(u.searchParams.get('minRR')||process.env.PROP_MIN_RR||1.5)
+              minRR:Number(u.searchParams.get('minRR')||process.env.PROP_MIN_RR||1.5),
+              blockMixedFlow:String(u.searchParams.get('blockMixedFlow')||process.env.PROP_BLOCK_MIXED_FLOW||"true")!=="false"
             });
             const gate=propFirm.evaluateStandard({
               analysis,derivatives:deriv,
@@ -1057,7 +1058,8 @@ const server=http.createServer(async(req,res)=>{
           riskPerTradePct:Number(u.searchParams.get('riskPerTradePct')||process.env.PROP_RISK_PER_TRADE_PCT||0.5),
           maxOpenRiskPct:Number(u.searchParams.get('maxOpenRiskPct')||process.env.PROP_MAX_OPEN_RISK_PCT||1),
           minSignalScore:Number(u.searchParams.get('minSignalScore')||process.env.PROP_MIN_SIGNAL_SCORE||72),
-          minRR:Number(u.searchParams.get('minRR')||process.env.PROP_MIN_RR||1.5)
+          minRR:Number(u.searchParams.get('minRR')||process.env.PROP_MIN_RR||1.5),
+              blockMixedFlow:String(u.searchParams.get('blockMixedFlow')||process.env.PROP_BLOCK_MIXED_FLOW||"true")!=="false"
         });
         const gate=propFirm.evaluateEventContract({
           analysis,derivatives:deriv,
