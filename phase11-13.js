@@ -64,34 +64,48 @@ function analyseScoreBuckets(rows){
   });
 }
 
+function validatedThreshold(summary,buckets,baseScore){
+  const minTrades=25;
+  const eligible=(buckets||[])
+    .filter(b=>Number(b.trades)>=minTrades&&Number(b.winRate)>=52&&Number(b.expectancyR)>0&&
+      (b.profitFactor===null||Number(b.profitFactor)>=1.05)&&Number(b.bucket?.replace("+","")||0)>=baseScore);
+  if(!eligible.length)return null;
+  return eligible.sort((a,b)=>Number(a.bucket.replace("+",""))-Number(b.bucket.replace("+","")))[0];
+}
+
 function adaptivePolicy(validation,base={}){
-  const baseScore=clamp(num(base.minScore,72),60,90);
-  const baseRR=Math.max(1.1,num(base.minRR,1.5));
+  const baseScore=clamp(num(base.minScore,78),70,90);
+  const baseRR=Math.max(1.5,num(base.minRR,1.5));
   const s=validation.summary||{};
   let minScore=baseScore;
   const reasons=[];
-  if(!s.sufficient){
-    reasons.push("insufficient_out_of_sample_evidence");
-  }else{
+  const bucketGate=validatedThreshold(s,validation.buckets,baseScore);
+  if(!s.sufficient)reasons.push("insufficient_out_of_sample_evidence");
+  if(s.sufficient){
     if(s.expectancyR<=0){minScore+=6;reasons.push("non_positive_expectancy")}
-    else if(s.expectancyR<0.08){minScore+=3;reasons.push("thin_expectancy")}
-    if(Number.isFinite(s.profitFactor)&&s.profitFactor<1.05){minScore+=5;reasons.push("weak_profit_factor")}
-    if(s.winRate<50){minScore+=4;reasons.push("sub_50_win_rate")}
-    if(s.maxDrawdownR>8){minScore+=3;reasons.push("drawdown_pressure")}
+    else if(s.expectancyR<0.05){minScore+=3;reasons.push("thin_expectancy")}
+    if(Number.isFinite(s.profitFactor)&&s.profitFactor<1.10){minScore+=4;reasons.push("weak_profit_factor")}
+    if(s.winRate<52){minScore+=4;reasons.push("win_rate_below_52")}
+    if(s.maxDrawdownR>10){minScore+=3;reasons.push("drawdown_pressure")}
   }
+  if(bucketGate)minScore=Math.max(minScore,Number(bucketGate.bucket.replace("+","")));
+  else reasons.push("no_score_bucket_meets_validation_thresholds");
   minScore=clamp(Math.round(minScore),baseScore,88);
   const eligibleEvidence=Boolean(
     s.sufficient&&
-    s.trades>=60&&
+    s.trades>=80&&
+    s.winRate>=52&&
     s.expectancyR>0.05&&
-    (s.profitFactor===null||s.profitFactor>=1.05)&&
-    s.maxDrawdownR<=10
+    (s.profitFactor===null||s.profitFactor>=1.10)&&
+    s.maxDrawdownR<=10&&
+    bucketGate
   );
   return {
     mode:eligibleEvidence?"CALIBRATED_SIGNAL":"PAPER_ONLY",
     minScore,minRR:baseRR,
     evidenceSufficient:Boolean(s.sufficient),
     signalGateReady:eligibleEvidence,
+    validatedBucket:bucketGate||null,
     changedFromBase:minScore!==baseScore,
     reasons
   };
@@ -119,7 +133,8 @@ function runWalkForward(candles,opts={}){
       consensus:{consensusQualityPct:90,priceDispersionBps:20,sourceCount:1,independentSourceCount:1},
       dataQuality:{candleAgeMs:1000},
       liveFlow:{liveConnected:false,livePointCount:0},
-      propGate:{decision:"ELIGIBLE"}
+      propGate:{decision:"ELIGIBLE"},
+      strictEvidence:false
     });
     const actionable=decision.state==="READY"&&["LONG","SHORT"].includes(decision.action)&&Number(decision.market?.confluenceScore)>=72;
     if(actionable)opportunities++;
@@ -168,7 +183,7 @@ function applyDeploymentGate(decision,validation,opts={}){
   const fresh=!d?.stale;
   const engineHealthy=d?.operational?.failSafe===true&&d?.operational?.executionEnabled===false;
   let signalEligible=false,gateState="PAPER_ONLY",reason="Historical validation evidence is not yet sufficient for live reliance.";
-  if(policy.signalGateReady&&fresh&&dataScore>=85&&riskOk&&engineHealthy&&currentScore>=policy.minScore){
+  if(policy.signalGateReady&&fresh&&dataScore>=85&&riskOk&&engineHealthy&&currentScore>=policy.minScore&&d.state==="READY"&&["LONG","SHORT"].includes(String(d.action||"").toUpperCase())){
     signalEligible=true;gateState="SIGNAL_ELIGIBLE";reason="Current signal passed the conservative data, risk and validation gates.";
   }else if(d?.state==="DATA_BLOCKED"||dataScore<70){
     gateState="BLOCKED";reason="Critical live data quality is too weak for a signal.";
