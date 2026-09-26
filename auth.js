@@ -73,7 +73,7 @@ async function login(email,password,key="login"){
   const raw=token(),expiresAt=new Date(Date.now()+SESSION_DAYS*86400000);
   await storage.saveSession(hashToken(raw),user.id,expiresAt.toISOString());
   await storage.touchUserLogin(user.id);
-  return {user:{id:user.id,email:user.email,createdAt:user.createdAt,lastLoginAt:expiresAt.toISOString()},setCookie:cookie(raw)};
+  return {user:{id:user.id,email:user.email,createdAt:user.createdAt,lastLoginAt:expiresAt.toISOString(),isAdmin:isAdminEmail(user.email)},setCookie:cookie(raw)};
 }
 function isAdminEmail(email){return Boolean(ADMIN_EMAIL&&normalizeEmail(email)===ADMIN_EMAIL)}
 async function userFromRequest(req){
