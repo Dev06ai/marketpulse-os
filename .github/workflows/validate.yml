@@ -115,5 +115,10 @@ jobs:
           ]
           missing=[x for x in required_html if x not in html]+[x for x in required_server if x not in server]
           if missing: raise SystemExit("Missing prop/research feature surface: "+", ".join(missing))
-          print("Prop/research feature surface OK")
+          ids=[]
+          import re
+          ids=re.findall(r'\bid="([^"]+)"', html)
+          dup=sorted({x for x in ids if ids.count(x)>1})
+          if dup: raise SystemExit("Duplicate HTML ids: "+", ".join(dup))
+          print("Prop/research feature surface OK; HTML ids unique")
           PY
