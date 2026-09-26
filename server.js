@@ -1,6 +1,7 @@
 const http=require('http'),fs=require('fs'),path=require('path'),crypto=require('crypto'),{analyze,backtest,backtestBySetup,walkForwardBacktest}=require('./market-engine');
 const storage=require('./storage');
 const learning=require('./learning');
+const predictionEngine=require('./prediction-engine');
 const phase4=require('./phase4');
 const execution=require('./execution');
 const phase6=require('./phase6');
@@ -92,6 +93,54 @@ const ADMIN_ONLY_PATHS=new Set([
 ]);
 function timeoutSignal(ms){return typeof AbortSignal!=="undefined"&&AbortSignal.timeout?AbortSignal.timeout(ms):undefined;}
 function authKey(ip,email,type){return type+":"+String(ip||"unknown")+":"+String(email||"").toLowerCase()}
+const PREDICTION_MODEL_CACHE={ts:0,model:null};
+async function getPredictionChampion(force=false){
+  if(!force&&PREDICTION_MODEL_CACHE.model&&Date.now()-PREDICTION_MODEL_CACHE.ts<15000)return PREDICTION_MODEL_CACHE.model;
+  try{PREDICTION_MODEL_CACHE.model=await storage.getPredictionModel("champion");PREDICTION_MODEL_CACHE.ts=Date.now()}catch{}
+  return PREDICTION_MODEL_CACHE.model;
+}
+const ORDERBOOK_CACHE=new Map(),ORDERBOOK_TTL=1500;
+function calcOrderbookFeatures(raw){
+  const b=(raw?.b||[]).map(x=>[Number(x[0]),Number(x[1])]).filter(x=>x.every(Number.isFinite));
+  const a=(raw?.a||[]).map(x=>[Number(x[0]),Number(x[1])]).filter(x=>x.every(Number.isFinite));
+  if(!b.length||!a.length)return {valid:false,reason:"empty_orderbook"};
+  const bid=b[0][0],ask=a[0][0],mid=(bid+ask)/2,spreadBps=mid?((ask-bid)/mid)*10000:0;
+  const sum=(arr,n)=>arr.slice(0,n).reduce((z,x)=>z+x[0]*x[1],0);
+  const bn10=sum(b,10),an10=sum(a,10),bn20=sum(b,20),an20=sum(a,20),bn50=sum(b,50),an50=sum(a,50);
+  const imbalance=(bn10-an10)/(bn10+an10||1),depthImbalance=(bn20-an20)/(bn20+an20||1);
+  const microDen=b[0][1]+a[0][1]||1,micro=(ask*b[0][1]+bid*a[0][1])/microDen;
+  const microDeltaBps=mid?((micro-mid)/mid)*10000:0;
+  const avgBid=bn20/(Math.min(20,b.length)||1),avgAsk=an20/(Math.min(20,a.length)||1);
+  const bidWall=Math.max(...b.slice(0,20).map(x=>x[0]*x[1]),0)/(bn20||1);
+  const askWall=Math.max(...a.slice(0,20).map(x=>x[0]*x[1]),0)/(an20||1);
+  return {
+    valid:true,ts:Number(raw.ts||raw.cts||Date.now()),ageMs:Date.now()-Number(raw.ts||raw.cts||Date.now()),
+    bestBid:bid,bestAsk:ask,mid,spreadBps,microPrice:micro,microDeltaBps,
+    bidNotional10:bn10,askNotional10:an10,bidNotional20:bn20,askNotional20:an20,bidNotional50:bn50,askNotional50:an50,
+    imbalance,depthImbalance,bidWallRatio:bidWall,askWallRatio:askWall,
+    liquiditySkew:avgBid+avgAsk?(avgBid-avgAsk)/(avgBid+avgAsk):0
+  };
+}
+async function bybitOrderbook(symbol){
+  const hit=ORDERBOOK_CACHE.get(symbol);if(hit&&Date.now()-hit.ts<ORDERBOOK_TTL)return hit.data;
+  try{
+    const r=await bybitGet('/v5/market/orderbook',{category:'linear',symbol,limit:50},2500);
+    const data=calcOrderbookFeatures(r.result||{});ORDERBOOK_CACHE.set(symbol,{ts:Date.now(),data});return data;
+  }catch(e){const data={valid:false,reason:String(e.message||e),updatedAt:Date.now()};ORDERBOOK_CACHE.set(symbol,{ts:Date.now(),data});return data}
+}
+async function fetchTrainingFuturesKlines(symbol,interval,limit=1500){
+  const max=Math.max(300,Math.min(1500,Number(limit)||1500));
+  const out=[];let end=Date.now();
+  while(out.length<max){
+    const u=new URL('https://fapi.binance.com/fapi/v1/klines');
+    u.searchParams.set('symbol',symbol);u.searchParams.set('interval',interval);u.searchParams.set('limit',String(Math.min(1500,max-out.length)));u.searchParams.set('endTime',String(end));
+    const j=await fetchJson(u.toString(),6000);if(!Array.isArray(j)||!j.length)break;
+    const rows=j.map(x=>({t:+x[0],o:+x[1],h:+x[2],l:+x[3],c:+x[4],v:+x[5],quoteVolume:+x[7],trades:+x[8],takerBuyQuote:+x[10],source:'binance-usdm-public'}));
+    out.unshift(...rows);end=Number(rows[0].t)-1;if(rows.length<Math.min(1500,max-out.length))break;
+  }
+  const map=new Map();for(const x of out)map.set(x.t,x);return Array.from(map.values()).sort((a,b)=>a.t-b.t).slice(-max);
+}
+
 function requestDevice(req){return String(req.headers["x-marketpulse-device"]||"00000000-0000-0000-0000-000000000000").slice(0,128)}
 
 function mins(interval){return ({'15m':15,'1h':60,'4h':240,'1d':1440})[interval]||60}
@@ -701,7 +750,7 @@ const server=http.createServer(async(req,res)=>{
     }
     if(req.method==='GET'&&u.pathname==='/api/admin/overview'){
       const safe=async(name,fn,fallback)=>{try{return {ok:true,value:await fn()}}catch(e){return {ok:false,error:String(e.message||e),value:fallback}}};
-      const [healthR,statsR,analyticsR,flagsR,configR,auditR,securityR,ticketsR,broadcastsR,snapshotsR,recentUsageR]=await Promise.all([
+      const [healthR,statsR,analyticsR,flagsR,configR,auditR,securityR,ticketsR,broadcastsR,snapshotsR,recentUsageR,modelR,runsR]=await Promise.all([
         safe("health",()=>storage.health(),{ok:false,source:"unavailable"}),
         safe("stats",()=>storage.userStats(),{allTime:0,today:0,week:0,month:0,liveNow:0}),
         safe("analytics",()=>storage.adminAnalytics(),{totals:{},features:[],symbols:[],intervals:[]}),
@@ -712,12 +761,14 @@ const server=http.createServer(async(req,res)=>{
         safe("tickets",()=>storage.listSupportTickets(20),[]),
         safe("broadcasts",()=>storage.listBroadcasts(20),[]),
         safe("snapshots",()=>storage.listAdminSnapshots(20),[]),
-        safe("recentUsage",()=>storage.recentUsageEvents(40),[])
+        safe("recentUsage",()=>storage.recentUsageEvents(40),[]),
+        safe("predictionModel",async()=>{const m=await getPredictionChampion();return m||null},null),
+        safe("predictionRuns",()=>storage.listPredictionRuns(20),[])
       ]);
       const perf={uptimeSec:Math.floor((Date.now()-SERVER_METRICS.startedAt)/1000),requests:SERVER_METRICS.requests,errors:SERVER_METRICS.errors,avgLatencyMs:SERVER_METRICS.requests?Math.round(SERVER_METRICS.totalLatencyMs/SERVER_METRICS.requests):0,memoryMb:Math.round(process.memoryUsage().rss/1048576),heapUsedMb:Math.round(process.memoryUsage().heapUsed/1048576),cpu:process.cpuUsage(),lastErrors:SERVER_METRICS.lastErrors.slice(0,12),topRoutes:Array.from(SERVER_METRICS.routeCounts.entries()).sort((a,b)=>b[1]-a[1]).slice(0,10).map(([route,count])=>({route,count}))};
       const learningState=await Promise.race([learning.status(),new Promise(resolve=>setTimeout(()=>resolve({state:"unknown"}),1200))]).catch(()=>({state:"unknown"}));
       const phase7Check=(()=>{try{return phase7.selfTest()}catch{return{ok:false}}})();
-      const sections={health:healthR,stats:statsR,analytics:analyticsR,flags:flagsR,config:configR,audit:auditR,security:securityR,tickets:ticketsR,broadcasts:broadcastsR,snapshots:snapshotsR,recentUsage:recentUsageR};
+      const sections={health:healthR,stats:statsR,analytics:analyticsR,flags:flagsR,config:configR,audit:auditR,security:securityR,tickets:ticketsR,broadcasts:broadcastsR,snapshots:snapshotsR,recentUsage:recentUsageR,predictionModel:modelR,predictionRuns:runsR};
       const values=Object.fromEntries(Object.entries(sections).map(([k,v])=>[k,v.value]));
       const errors=Object.fromEntries(Object.entries(sections).filter(([,v])=>!v.ok).map(([k,v])=>[k,v.error]));
       return send(res,200,{ok:Object.keys(errors).length===0,partial:Object.keys(errors).length>0,errors,...values,stats:{...(values.stats||{}),...liveVisitorStats()},learning:learningState,phase7:phase7Check,performance:perf});
@@ -769,6 +820,32 @@ const server=http.createServer(async(req,res)=>{
     if(req.method==='POST'&&u.pathname==='/api/admin/emergency'){
       let raw="";for await(const chunk of req)raw+=chunk;let body={};try{body=JSON.parse(raw||"{}")}catch{return send(res,400,{ok:false,error:"Invalid JSON"})}
       const current=await getAdminRuntime(true),next=Object.assign({},current,body);const saved=await storage.saveAdminConfig(next);setAdminRuntime(saved);await auditAdmin(req,"Changed emergency control state","emergency",null,{changed:Object.keys(body)});return send(res,200,{ok:true,config:saved});
+    }
+    if(req.method==='GET'&&u.pathname==='/api/admin/prediction/status'){
+      const model=await getPredictionChampion(true),runs=await storage.listPredictionRuns(20);return send(res,200,{ok:true,model,runs});
+    }
+    if(req.method==='POST'&&u.pathname==='/api/admin/prediction/train'){
+      let raw="";for await(const chunk of req)raw+=chunk;let body={};try{body=JSON.parse(raw||"{}")}catch{return send(res,400,{ok:false,error:"Invalid JSON"})}
+      const symbol=String(body.symbol||"BTCUSDT").toUpperCase(),interval=String(body.interval||"1h");if(!SYMBOLS.includes(symbol)||!["15m","1h","4h","1d"].includes(interval))return send(res,400,{ok:false,error:"Unsupported training selection"});
+      try{
+        const candles=await fetchTrainingFuturesKlines(symbol,interval,Math.min(1500,Number(body.limit)||1500));
+        const rows=predictionEngine.buildTrainingRows(candles,interval);
+        const model=predictionEngine.trainLogistic(rows,{epochs:220,lr:.05,l2:.02});
+        model.symbol=symbol;model.interval=interval;model.source="Binance USD-M public futures klines";
+        const champion=await getPredictionChampion(true);
+        const cBrier=Number(champion?.validationMetrics?.brier);const cLoss=Number(champion?.validationMetrics?.logLoss);
+        const v=model.validationMetrics;
+        const promotable=rows.length>=500&&Number.isFinite(v.brier)&&Number.isFinite(v.logLoss)&&(!champion||!Number.isFinite(cBrier)||(v.brier<=cBrier*.98&&v.logLoss<=cLoss*.99));
+        await storage.savePredictionModel("candidate",model);
+        if(promotable){await storage.savePredictionModel("champion",model);PREDICTION_MODEL_CACHE.model=model;PREDICTION_MODEL_CACHE.ts=Date.now()}
+        const run=await storage.recordPredictionRun({symbol,interval,source:model.source,samples:rows.length,validation:{train:model.trainMetrics,validation:v,promotable},modelName:promotable?"champion":"candidate"});
+        await auditAdmin(req,promotable?"Promoted improved prediction model":"Trained candidate prediction model","prediction",null,{symbol,interval,samples:rows.length,validation:v,promotable});
+        return send(res,200,{ok:true,promotable,model,run});
+      }catch(e){return send(res,400,{ok:false,error:String(e.message||e)})}
+    }
+    if(req.method==='POST'&&u.pathname==='/api/admin/prediction/promote'){
+      const candidate=await storage.getPredictionModel("candidate");if(!candidate)return send(res,404,{ok:false,error:"No candidate model available"});
+      await storage.savePredictionModel("champion",candidate);PREDICTION_MODEL_CACHE.model=candidate;PREDICTION_MODEL_CACHE.ts=Date.now();await auditAdmin(req,"Promoted candidate prediction model","prediction");return send(res,200,{ok:true,model:candidate});
     }
     if(req.method==='GET'&&u.pathname==='/api/account/memory'){
       const user=await auth.userFromRequest(req);if(!user)return send(res,401,{ok:false,error:"Authentication required"});
@@ -1033,7 +1110,11 @@ const server=http.createServer(async(req,res)=>{
         const higherPromise=interval==='4h'?Promise.resolve(null):Promise.race([klines(symbol,'4h'),new Promise(resolve=>setTimeout(()=>resolve(null),1500))]).catch(()=>null);
         const [lower,higher]=await Promise.all([lowerPromise,higherPromise]);
         const deriv=await Promise.race([derivatives(symbol,interval),new Promise(resolve=>setTimeout(()=>resolve(null),1000))]).catch(()=>null);
-        let analysis=analyze(candles,{interval,lower:lower&&lower.length>=220?analyze(lower,{interval:'15m'}):null,higher:higher&&higher.length>=220?analyze(higher,{interval:'4h'}):null,deriv});
+        const orderbook=await Promise.race([bybitOrderbook(symbol),new Promise(resolve=>setTimeout(()=>resolve({valid:false,reason:"timeout"}),700))]).catch(()=>({valid:false,reason:"error"}));
+        let analysis=analyze(candles,{interval,lower:lower&&lower.length>=220?analyze(lower,{interval:'15m'}):null,higher:higher&&higher.length>=220?analyze(higher,{interval:'4h'}):null,deriv,orderbook});
+        analysis.microstructure=orderbook;
+        const champion=await getPredictionChampion();
+        analysis=predictionEngine.applyModel(analysis,champion,{orderbook,takerFlow:null});
         try{const learned=await Promise.race([learning.process(symbol,interval,candles,analysis),new Promise(resolve=>setTimeout(()=>resolve(null),700))]);if(learned?.analysis)analysis=learned.analysis}catch{}
         return send(res,200,{ok:true,symbol,interval,candles,analysis,derivatives:deriv,learning:{phase:2,state:'COLLECTING',durable:storage.status().durable}});
       }catch(e){return send(res,503,{ok:false,error:String(e.message||e)})}
