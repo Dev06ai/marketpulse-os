@@ -635,15 +635,15 @@ body.admin-mode .nav button.adminNav,body.admin-mode .mobileMenu button.adminNav
       <div class="executionPanel">
         <div class="sectionHead"><div><div class="title">Control center</div><div class="sub">The server holds credentials. This browser never receives exchange secrets.</div></div><span class="executionBadge" id="exCredential">NO TESTNET KEYS</span></div>
         <div class="executionActions">
-          <label>Mode<select id="exModeSelect"><option value="SIMULATION">SIMULATION</option><option value="TESTNET">BYBIT TESTNET</option></select></label>
-          <label>Account<input id="exAccount" type="number" min="0" step="100" value="100000"></label>
-          <label>Risk / trade %<input id="exRiskPct" type="number" min=".05" max="5" step=".05" value="1"></label>
-          <label>Max open risk %<input id="exMaxOpenRisk" type="number" min=".5" max="10" step=".1" value="2.5"></label>
-          <label>Max daily loss %<input id="exMaxDailyLoss" type="number" min=".5" max="20" step=".1" value="3"></label>
-          <label>Max positions<input id="exMaxPositions" type="number" min="1" max="20" step="1" value="3"></label>
-          <label>Max symbol exposure %<input id="exMaxSymbol" type="number" min=".25" max="20" step=".25" value="2"></label>
-          <label>Orders / minute<input id="exOrderRate" type="number" min="1" max="60" step="1" value="10"></label>
-          <label>Max entry drift (bps)<input id="exSlippage" type="number" min="0" max="200" step="1" value="20"></label>
+          <label title="Choose Simulation for local practice. Testnet uses Bybit sandbox.">Run mode<select id="exModeSelect"><option value="SIMULATION">SIMULATION</option><option value="TESTNET">BYBIT TESTNET</option></select></label>
+          <label title="The account balance used for risk calculations.">Account size<input id="exAccount" type="number" min="0" step="100" value="100000"></label>
+          <label title="Maximum loss allowed for one trade as a percentage of the account.">Risk per trade %<input id="exRiskPct" type="number" min=".05" max="5" step=".05" value="1"></label>
+          <label title="Maximum combined risk across all open positions/intents.">Total open risk cap %<input id="exMaxOpenRisk" type="number" min=".5" max="10" step=".1" value="2.5"></label>
+          <label title="Execution blocks new trades after this daily loss threshold.">Daily loss stop %<input id="exMaxDailyLoss" type="number" min=".5" max="20" step=".1" value="3"></label>
+          <label title="Maximum number of simultaneous positions.">Open positions max<input id="exMaxPositions" type="number" min="1" max="20" step="1" value="3"></label>
+          <label title="Maximum notional exposure allowed in one symbol.">Per-symbol exposure cap %<input id="exMaxSymbol" type="number" min=".25" max="20" step=".25" value="2"></label>
+          <label title="Safety throttle against rapid repeated submissions.">Order rate cap / min<input id="exOrderRate" type="number" min="1" max="60" step="1" value="10"></label>
+          <label title="Maximum allowed difference between intended entry and current mark during testnet validation.">Max entry drift (bps)<input id="exSlippage" type="number" min="0" max="200" step="1" value="20"></label>
         </div>
         <div class="executionControl" style="margin-top:9px">
           <button id="exSaveConfig" class="btn primary">Save execution rules</button>
@@ -654,6 +654,7 @@ body.admin-mode .nav button.adminNav,body.admin-mode .mobileMenu button.adminNav
           <button id="exArm" class="btn">Arm testnet</button>
         </div>
         <div class="executionNote" id="exControlNote">Simulation is local. Switching to testnet requires server-side Bybit testnet keys, an explicit arm action, and a successful reconciliation.</div>
+        <div class="gateHint">Beginner rule: <b>SAFE TO SIMULATE</b> means nothing is sent to an exchange. <b>READY</b> means testnet checks are clear. <b>BLOCKED</b> means do not submit.</div>
       </div>
 
       <div class="executionPanel">
