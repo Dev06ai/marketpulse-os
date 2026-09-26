@@ -557,6 +557,8 @@ var state={
   execution:null,
   portfolio:null,
   secondaryStarted:false,
+  bootRetry:0,
+  bootRetryTimer:null,
   activeView:"overview",
   account:null
 };
@@ -1248,15 +1250,19 @@ function queueSecondaryBoot(){
 
 async function loadCore(){
   if(state.busy)return;
+  if(state.bootRetryTimer){clearTimeout(state.bootRetryTimer);state.bootRetryTimer=null}
   state.busy=true;setStatus("Loading core market intelligence…");$("dataState").textContent="Connecting";$("symbol").value=state.symbol;
   try{
     var d=await api("/api/core?symbol="+encodeURIComponent(state.symbol)+"&interval="+encodeURIComponent(state.interval),9000);
-    state.market=d;setStatus("Core market intelligence connected","ok");$("dataState").textContent="Live";renderMarket();
+    state.market=d;state.bootRetry=0;setStatus("Core market intelligence connected","ok");$("dataState").textContent="Live";renderMarket();
     if(!state.secondaryStarted)queueSecondaryBoot();
     else if(state.activeView==="overview"){deferTask(loadScan,80);deferTask(loadCycle,140)}
   }catch(e){
-    setStatus("Core market connection failed. The interface is running; retrying automatically.","warn");$("dataState").textContent="Retry";
-    $("thesis").textContent="The interface is responsive, but the live market source did not respond. Retrying automatically.";
+    state.bootRetry=Math.min((state.bootRetry||0)+1,5);
+    setStatus("Core market connection failed. Retrying shortly…","warn");$("dataState").textContent="Retry";
+    $("thesis").textContent="The interface is ready. Waiting for the live market source to respond…";
+    var delay=Math.min(8000,Math.max(800,Math.pow(2,state.bootRetry-1)*900));
+    state.bootRetryTimer=setTimeout(function(){state.bootRetryTimer=null;loadCore()},delay);
   }finally{state.busy=false}
 }
 
@@ -1443,7 +1449,7 @@ window.addEventListener("resize",function(){if(state.market){drawMain();renderCy
 
 populateSymbols();$("interval").value=state.interval;renderJournal();renderBrainInsights();renderAlerts();calc();
 setStatus("MarketPulse ready. Connecting to live market data…");
-requestAnimationFrame(function(){loadCore()});
+loadCore();
 setInterval(function(){if(document.visibilityState==="visible")loadCore()},45000);
 setInterval(function(){if(document.visibilityState!=="visible")return; if(state.activeView==="execution")loadExecution(); if(state.activeView==="portfolio")loadPortfolio(); if(state.activeView==="edge")loadEdge(); if(state.activeView==="brain"){loadPhase7();loadPhase7Health()}},15000);
 
