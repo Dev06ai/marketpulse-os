@@ -1117,18 +1117,24 @@ const server=http.createServer(async(req,res)=>{
           eventMinStrikeDistanceBps:Number(u.searchParams.get('eventMinStrikeDistanceBps')||process.env.PROP_EVENT_MIN_STRIKE_DISTANCE_BPS||1),
           blockMixedFlow:String(u.searchParams.get('blockMixedFlow')||process.env.PROP_BLOCK_MIXED_FLOW||"true")!=="false"
         });
+        const optionalNumber=(name,fallback=null)=>{
+          const raw=u.searchParams.get(name);
+          if(raw===null||String(raw).trim()==="")return fallback;
+          const n=Number(raw);
+          return Number.isFinite(n)?n:fallback;
+        };
         const gate=propFirm.evaluateEventContract({
           analysis,derivatives:deriv,
           dataQuality:{candleAgeMs:candles.length?Math.max(0,Date.now()-Number(candles[candles.length-1].t)):null,qualityPct:deriv?.available?100:80,consensusQualityPct:consensus?.consensusQualityPct,priceDispersionBps:consensus?.priceDispersionBps,providerCount:consensus?.sourceCount,independentSourceCount:consensus?.independentSourceCount},
           equity:config.startingEquity,dayStartEquity:config.startingEquity,peakEquity:config.startingEquity,
           side:String(u.searchParams.get('side')||"").toUpperCase(),
-          premium:Number(u.searchParams.get('premium')),
-          payout:Number(u.searchParams.get('payout')),
-          fee:Number(u.searchParams.get('fee')||0),
+          premium:optionalNumber('premium'),
+          payout:optionalNumber('payout',0),
+          fee:optionalNumber('fee',0),
           venue:String(u.searchParams.get('venue')||"GENERIC").toUpperCase(),
-          strikePrice:Number(u.searchParams.get('strikePrice')),
-          indexPrice:Number(u.searchParams.get('indexPrice')||consensus?.medianPrice),
-          expirationAt:Number(u.searchParams.get('expirationAt')),
+          strikePrice:optionalNumber('strikePrice'),
+          indexPrice:optionalNumber('indexPrice',consensus?.medianPrice),
+          expirationAt:optionalNumber('expirationAt'),
           strictContractContext:String(u.searchParams.get('strictContractContext')||"false")!=="false",
           config
         });
