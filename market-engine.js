@@ -4,6 +4,7 @@ const {detectMarketStructure}=require("./market-structure");
 const {detectStrategySetups}=require("./strategy-setups");
 const {buildReactionMap}=require("./reaction-map");
 const {buildAdvancedContext,advancedConfluence}=require("./advanced-price-action-pack");
+const {buildKnowledgeContext}=require("./mindpillar-knowledge");
 const {buildElliottContext,elliottConfluence}=require("./advanced-elliott-wave");
 const finiteOr=(v,fallback)=>Number.isFinite(v)?v:fallback;
 
@@ -150,6 +151,11 @@ function analyze(c,ctx={}){
       priceChangePct:flowPriceChangePct,
       liquidationBias
     }
+  });
+  const knowledgeContext=buildKnowledgeContext({
+    setupKind:String(marketStructure?.setup?.kind||strategyKind||""),
+    side,
+    interval:ctx.interval||"1h"
   });
   const elliottContext=buildElliottContext(c,{
     marketType:ctx.marketType||"PERPETUAL",
@@ -418,6 +424,7 @@ function analyze(c,ctx={}){
     marketStructure:{score:marketStructure.score,setup:marketStructure.setup,strategySetup:marketStructure.strategySetup||null,levels:marketStructure.levels,nakedPocs:marketStructure.nakedPocs||strategySetups.nakedPocs||[],dLine:marketStructure.dLine||strategySetups.dLine||null,advancedPriceAction:marketStructure.advancedPriceAction||advancedContext,elliottWave:marketStructure.elliottWave||elliottContext,previousDay:marketStructure.previousDay,previousWeek:marketStructure.previousWeek,nearestSupport:marketStructure.nearestSupport,nearestResistance:marketStructure.nearestResistance,detected:{...(marketStructure.detected||{}),strategy:strategySetups.detected},note:marketStructure.note},
     derivatives:{available:!!deriv,oi:currentOi,cvdState,positioning,oiChangePct,cvdDelta,cvdRatio:deriv?.cvdRatio??null,flowPriceChangePct,tradeCount:deriv?.tradeCount??0,fundingRate:deriv?.fundingRate??null,longPercent,shortPercent,longShortRatio,liquidationBias:liquidationBias&&liquidationBias!=="UNKNOWN"?liquidationBias:"NOT AVAILABLE",liquidationTotal,orderBookImbalance,micropriceBias,spreadBps,takerImbalance,depthNotional:flow.depth,provider:deriv?.provider??null,errors:deriv?.errors??[]},
     thesis:thesis.join(" "),thesisParts:thesis,
+    knowledgeContext,
     primaryScenario,alternateScenario,
     mtf:{lower:mtf15,higher:mtf4},stop,tp1,tp2,entryLow:el,entryHigh:eh,rr,
     rangeHigh,rangeLow,rangePosition:rangePos,priorHigh,priorLow,reactionMap,reactionConfirmed,advancedPriceAction:advancedContext,advancedConfluence:advancedPA,elliottWave:elliottContext,elliottConfluence:elliottPA,updatedAt:Date.now()
