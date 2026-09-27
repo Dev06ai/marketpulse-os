@@ -98,7 +98,7 @@ function strategyCandles(){
   for(let i=24;i<119;i++){
     out[i].o=107;out[i].c=107.2;out[i].h=108;out[i].l=106;out[i].v=1100;
   }
-  out[119]={t:start+119*hour,o:105.8,c:104.5,h:107.2,l:104.1,v:2800};
+  out[119]={t:start+119*hour,o:105.7,c:104.5,h:108,l:104.1,v:2800};
   return out;
 }
 
