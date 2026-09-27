@@ -68,6 +68,24 @@ jobs:
           print("Single authoritative signal UI check OK")
           PY
 
+      - name: Check clean overview charts
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          html=Path("public/index.html").read_text()
+          assert 'Long-term cycle score · subtle phase zones · hover for BTC context' in html
+          assert 'Distance below high-water · cleaner risk view · hover for BTC context.' in html
+          assert 'function drawOverviewSpecial(id,sets,height)' in html
+          # Old right-axis label clutter must not return.
+          start=html.index('function drawOverviewSpecial(id,sets,height)')
+          end=html.index('\nfunction bindMiniHover',start)
+          chart=html[start:end]
+          assert 'BTC PRICE' not in chart
+          assert 'DRAWDOWN FROM HIGH-WATER' in chart
+          assert 'CYCLE SCORE' in chart
+          print("Clean overview chart checks OK")
+          PY
+
       - name: Check smooth refresh rendering
         run: |
           python - <<'PY'
