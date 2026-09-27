@@ -21,6 +21,7 @@ jobs:
       - run: node --check advanced-price-action-pack.js
       - run: node --check advanced-elliott-wave.js
       - run: node --check phase11-13.js
+      - run: node --check phase14-signal-intelligence.js
       - run: node --check market-structure.js
       - run: node validation-selftest.js
       - run: node --check storage.js
@@ -41,6 +42,7 @@ jobs:
       - run: node tests/advanced-price-action.js
       - run: node tests/advanced-elliott-wave.js
       - run: node tests/analyst-scenario-pack.js
+      - run: node tests/phase14-signal-intelligence.js
       - run: node tests/mindpillar-knowledge.js
       - name: Check browser script
         run: |
