@@ -1643,8 +1643,12 @@ const server=http.createServer(async(req,res)=>{
           return{symbol,label:labels[symbol]||symbol,status:'WAITING',side:'WAIT',score:0,error:e.message};
         }
       };
-      const rows=await Promise.all(SYMBOLS.map(scanOne));
-      const payload={ok:true,interval,rows,updatedAt:Date.now(),cacheTtlMs:SCAN_TTL,mode:"fast-cached-scan-v2"};
+      const [marketMeta,rows]=await Promise.all([
+        getMarketMetadata(SYMBOLS),
+        Promise.all(SYMBOLS.map(scanOne))
+      ]);
+      rows.forEach(function(row){row.market=marketMeta[row.symbol]||null});
+      const payload={ok:true,interval,rows,marketSource:"coingecko",updatedAt:Date.now(),cacheTtlMs:SCAN_TTL,mode:"fast-cached-scan-v3"};
       SCAN_CACHE.set(interval,{ts:Date.now(),payload});return send(res,200,payload);
     }
 
