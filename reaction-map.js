@@ -215,7 +215,10 @@ function clusterLevels(levels,atrNow){
   return clusters.map((g,idx)=>{
     const low=Math.min(...g.items.map(x=>Number(x.low))),high=Math.max(...g.items.map(x=>Number(x.high)));
     const kinds=new Set(g.items.map(x=>x.kind).filter(Boolean));
-    const support=Number.isFinite(low)&&Number.isFinite(high)?(g.items.filter(x=>x.kind==="SUPPORT").length>=g.items.filter(x=>x.kind==="RESISTANCE").length):false;
+    const analystItem=g.items.find(x=>x.analyst);
+    const support=analystItem
+      ?analystItem.kind==="SUPPORT"
+      :(Number.isFinite(low)&&Number.isFinite(high)?(g.items.filter(x=>x.kind==="SUPPORT").length>=g.items.filter(x=>x.kind==="RESISTANCE").length):false);
     return {
       id:"REACTION_ZONE_"+idx,
       low,high,center:(low+high)/2,
