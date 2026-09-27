@@ -249,7 +249,7 @@ function selfTest(){
     analyze:fakeAnalyze,phase910:fakePhase
   });
   const historicalGate=applyDeploymentGate({
-    state:"READY",market:{confluenceScore:80},data:{score:92},propGate:{decision:"ELIGIBLE"},
+    state:"READY",action:"LONG",market:{confluenceScore:80,side:"LONG"},data:{score:92},propGate:{decision:"ELIGIBLE"},
     operational:{failSafe:true,executionEnabled:false}
   },v,{basePolicy:{minScore:72,minRR:1.5}});
   const strongValidation={
@@ -259,7 +259,7 @@ function selfTest(){
   };
   strongValidation.adaptive=adaptivePolicy(strongValidation,{minScore:72,minRR:1.5});
   const calibratedGate=applyDeploymentGate({
-    state:"READY",market:{confluenceScore:80},data:{score:92},propGate:{decision:"ELIGIBLE"},
+    state:"READY",action:"LONG",market:{confluenceScore:80,side:"LONG"},data:{score:92},propGate:{decision:"ELIGIBLE"},
     operational:{failSafe:true,executionEnabled:false}
   },strongValidation,{basePolicy:{minScore:72,minRR:1.5}});
   return {
