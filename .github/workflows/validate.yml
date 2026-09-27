@@ -410,7 +410,7 @@ jobs:
           html=Path("public/index.html").read_text()
           server=Path("server.js").read_text()
           required_html=[
-            'id="dcfState"','id="dcfRefresh"','id="researchCatalog"'
+            'id="dcfState"','id="dcfRefresh"','function loadResearchCatalog'
           ]
           required_server=[
             "/api/data-fabric","/api/research/catalog","/api/research/status","/api/research/train"
