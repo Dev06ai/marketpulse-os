@@ -1440,6 +1440,11 @@ function syncRoleVisibility(){
   document.querySelectorAll("[data-admin-only='true']").forEach(function(el){
     el.hidden=!admin;el.setAttribute("aria-hidden",String(!admin));
   });
+  if(!admin&&!canOpenView(state.activeView||"overview")){
+    state.activeView="overview";
+    setView("overview");
+    return;
+  }
   updateViewHelper(state.activeView||"overview");
 }
 function setView(name){
