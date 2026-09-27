@@ -148,6 +148,8 @@ button,input,select,textarea{font:inherit}.wrap{width:min(1440px,calc(100% - 26p
 }
 
 .quickCalculators .unitSettings{margin-top:10px;padding:10px;border:1px solid rgba(255,255,255,.065);border-radius:10px;background:#0b0c0f}.quickCalculators .unitSettingsTitle{font-size:9px;font-weight:900;letter-spacing:.08em;text-transform:uppercase;color:#788291;margin-bottom:9px}.quickCalculators .unitMode{position:relative;display:flex;align-items:flex-start;gap:9px;padding:8px 7px;border-radius:8px;cursor:pointer;color:#aeb6c2}.quickCalculators .unitMode:hover{background:rgba(255,255,255,.025)}.quickCalculators .unitMode input{position:absolute;opacity:0;pointer-events:none}.quickCalculators .unitRadio{width:14px;height:14px;margin-top:2px;border:1px solid #55606d;border-radius:50%;box-shadow:inset 0 0 0 3px #0b0c0f;flex:none}.quickCalculators .unitMode input:checked+.unitRadio{border-color:#a7f3d0;background:#a7f3d0}.quickCalculators .unitMode b{display:block;color:#e1e6ed;font-size:10px;font-weight:850}.quickCalculators .unitMode small{display:block;margin-top:3px;color:#697381;font-size:8px;line-height:1.35}.quickCalculators .unitChoices{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;padding:0 0 8px 23px}.quickCalculators .unitChoice{border:1px solid rgba(255,255,255,.07);background:#111217;color:#8f98a6;border-radius:8px;padding:8px 6px;font-size:9px;font-weight:850;cursor:pointer}.quickCalculators .unitChoice:hover{border-color:rgba(167,243,208,.22)}.quickCalculators .unitChoice:disabled{opacity:.42;cursor:not-allowed}.quickCalculators .unitChoice.active{border-color:rgba(103,232,255,.30);background:linear-gradient(100deg,rgba(103,232,255,.10),rgba(183,140,255,.08));color:#dceeff}.quickCalculators .contractSizeRow{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:end;padding:0 0 4px 23px}.quickCalculators .contractSizeRow>span{padding-bottom:10px;color:#677180;font-size:8px}.quickCalculators .contractSizeRow[hidden]{display:none}@media(max-width:700px){.quickCalculators .unitChoices{padding-left:21px}.quickCalculators .contractSizeRow{grid-template-columns:1fr;padding-left:21px}.quickCalculators .contractSizeRow>span{padding-bottom:0}}.quickCalculators .calcResult{transition:box-shadow .16s ease,border-color .16s ease,color .16s ease}.quickCalculators .calcResult.calc-profit{color:#75f0a7;border-color:rgba(92,240,163,.42);box-shadow:0 0 18px rgba(92,240,163,.10),inset 0 0 18px rgba(92,240,163,.035)}.quickCalculators .calcResult.calc-loss{color:#ff7897;border-color:rgba(255,88,124,.42);box-shadow:0 0 18px rgba(255,88,124,.12),inset 0 0 18px rgba(255,88,124,.035)}.quickCalculators .calcResult.calc-neutral{color:#aab2bf;border-color:rgba(255,255,255,.07);box-shadow:none}
+
+.quickCalculators .liqModeRow{display:grid;grid-template-columns:repeat(2,1fr);gap:6px;margin:8px 0}.quickCalculators .liqToggle{border:1px solid rgba(255,255,255,.07);background:#111217;color:#8f98a6;border-radius:8px;padding:9px 6px;font-size:9px;font-weight:850;cursor:pointer}.quickCalculators .liqToggle.active{border-color:rgba(103,232,255,.30);background:linear-gradient(100deg,rgba(103,232,255,.10),rgba(183,140,255,.08));color:#e5f7ff}.quickCalculators .calcResultsBlock{margin-top:11px;padding:11px 12px;border:1px solid rgba(255,255,255,.065);border-radius:10px;background:#0b0c0f}.quickCalculators .calcResultsTitle{margin-bottom:8px;font-size:10px;font-weight:900;color:#f0f2f5}.quickCalculators .calcResultRow{display:flex;justify-content:space-between;gap:12px;padding:8px 0;border-top:1px solid rgba(255,255,255,.045);color:#7f8997;font-size:9px}.quickCalculators .calcResultRow:first-of-type{border-top:0}.quickCalculators .calcResultRow b{color:#e9edf2;font-size:11px;font-weight:850}.quickCalculators .pnlValueRow.calc-profit b{color:#75f0a7;text-shadow:0 0 14px rgba(92,240,163,.18)}.quickCalculators .pnlValueRow.calc-loss b{color:#ff7897;text-shadow:0 0 14px rgba(255,88,124,.18)}.quickCalculators #liqResult{font-size:14px;font-weight:900;text-align:left}.quickCalculators .calcResult.calc-neutral{color:#aab2bf;border-color:rgba(255,255,255,.07);box-shadow:none}
 </style>
 <style id="beginner-friendly-style">
 .beginnerGuideBtn{border-color:rgba(103,232,255,.22)!important;color:#bdefff!important}
@@ -695,41 +697,80 @@ body.admin-mode .nav button.adminNav,body.admin-mode .mobileMenu button.adminNav
       <div class="watchNote" id="dcfSources">No independent feed snapshot yet.</div>
     </div>
     <div id="quickCalculators" class="section card quickCalculators">
-      <div class="sectionHead"><div><div class="title">Quick calculators</div><div class="sub">Exchange-style futures math for position size, risk/reward, and linear-perpetual P&amp;L.</div></div><span class="chip">CALCULATORS</span></div>
+      <div class="sectionHead"><div><div class="title">Quick calculators</div><div class="sub">Exchange-style futures math for position size, liquidation price, and linear-perpetual P&amp;L.</div></div><span class="chip">CALCULATORS</span></div>
       <div class="calcGrid">
-        <div class="calcBox"><div class="label">Position size</div><div class="inputs">
-          <label class="small">Account<input id="ca" type="number" value="0" min="0" step="any" autocomplete="off" placeholder="0"></label>
-          <label class="small">Risk %<input id="cr" type="number" value="0" min="0" step=".05" autocomplete="off" placeholder="0"></label>
-          <label class="small">Entry<input id="ce" type="number" value="0" min="0" step="any" autocomplete="off" placeholder="0"></label>
-          <label class="small">Stop<input id="cs" type="number" value="0" min="0" step="any" autocomplete="off" placeholder="0"></label>
-          <label class="small">Leverage<input id="cl" type="number" value="0" min="1" step="1" autocomplete="off" placeholder="1"></label>
-        </div><div class="result calcResult" id="sizeResult">—</div></div>
-        <div class="calcBox"><div class="label">Risk : Reward</div><div class="inputs">
-          <label class="small">Entry<input id="re" type="number" value="0" min="0" step="any" autocomplete="off" placeholder="0"></label>
-          <label class="small">Stop<input id="rs" type="number" value="0" min="0" step="any" autocomplete="off" placeholder="0"></label>
-          <label class="small">Target<input id="rt" type="number" value="0" min="0" step="any" autocomplete="off" placeholder="0"></label>
-          <label class="small">Direction<select id="rdirection" autocomplete="off"><option value="LONG">Long</option><option value="SHORT">Short</option></select></label>
-        </div><div class="result calcResult" id="rrResult">—</div></div>
-        <div class="calcBox"><div class="label">Perpetual P&amp;L</div><div class="inputs">
-          <label class="small">Entry<input id="pe" type="number" value="0" min="0" step="any" autocomplete="off" placeholder="0"></label>
-          <label class="small">Exit<input id="pt" type="number" value="0" min="0" step="any" autocomplete="off" placeholder="0"></label>
-          <label class="small" id="pOrderValueLabel">Quantity<input id="pq" type="number" value="0" min="0" step="any" autocomplete="off" placeholder="0"></label>
-          <label class="small">Leverage<input id="pl" type="number" value="0" min="1" step="1" autocomplete="off" placeholder="0"></label>
-          <label class="small">Direction<select id="pDirection" autocomplete="off"><option value="LONG">Long</option><option value="SHORT">Short</option></select></label>
-        </div>
-        <div class="unitSettings">
-          <div class="unitSettingsTitle">Unit settings</div>
-          <label class="unitMode"><input type="radio" name="pUnitMode" id="pUnitQuantity" value="QUANTITY" checked><span class="unitRadio"></span><span><b>Order by Quantity</b><small>Select the unit used for the order quantity.</small></span></label>
-          <div class="unitChoices" id="pUnitChoices">
-            <button type="button" class="unitChoice active" data-unit="BTC">BTC</button>
-            <button type="button" class="unitChoice" data-unit="USDT">USDT</button>
-            <button type="button" class="unitChoice" data-unit="CONT">Cont</button>
+        <div class="calcBox">
+          <div class="label">Position size</div>
+          <div class="inputs">
+            <label class="small">Account<input id="ca" type="number" value="0" min="0" step="any" autocomplete="off" placeholder="0"></label>
+            <label class="small">Risk %<input id="cr" type="number" value="0" min="0" step=".05" autocomplete="off" placeholder="0"></label>
+            <label class="small">Entry<input id="ce" type="number" value="0" min="0" step="any" autocomplete="off" placeholder="0"></label>
+            <label class="small">Stop<input id="cs" type="number" value="0" min="0" step="any" autocomplete="off" placeholder="0"></label>
+            <label class="small">Leverage<input id="cl" type="number" value="0" min="1" step="1" autocomplete="off" placeholder="1"></label>
           </div>
-          <label class="unitMode"><input type="radio" name="pUnitMode" id="pUnitCost" value="COST"><span class="unitRadio"></span><span><b>Order by Cost (USDT)</b><small>Interpret the value above as opening notional/cost.</small></span></label>
-          <div class="contractSizeRow" id="pContractSizeRow" hidden><label class="small">Contract value<input id="pc" type="number" value="1" min="0.000001" step="any" autocomplete="off"></label><span>USDT notional per contract.</span></div>
+          <div class="result calcResult" id="sizeResult">—</div>
         </div>
-        <div class="result calcResult" id="pnlResult">—</div>
-        <div class="watchNote">Linear USDT perpetual formula. P&amp;L = signed price move × base quantity. Fees, funding, slippage, and liquidation are not included.</div></div></div>
+
+        <div class="calcBox">
+          <div class="label">Liquidation Price</div>
+          <div class="liqModeRow">
+            <button type="button" class="liqToggle active" data-liqmode="ISOLATED">Isolated</button>
+            <button type="button" class="liqToggle" data-liqmode="CROSS">Cross</button>
+          </div>
+          <div class="liqModeRow">
+            <button type="button" class="liqToggle active" data-liqside="LONG">Long</button>
+            <button type="button" class="liqToggle" data-liqside="SHORT">Short</button>
+          </div>
+          <div class="inputs">
+            <label class="small">Leverage<input id="ll" type="number" value="0" min="1" step="1" autocomplete="off" placeholder="0"></label>
+            <label class="small">Quantity / Cost<input id="lq" type="number" value="0" min="0" step="any" autocomplete="off" placeholder="0"></label>
+            <label class="small">Entry price<input id="le" type="number" value="0" min="0" step="any" autocomplete="off" placeholder="0"></label>
+            <label class="small">Account balance<input id="lb" type="number" value="0" min="0" step="any" autocomplete="off" placeholder="0"></label>
+            <label class="small">Maintenance margin %<input id="lmmr" type="number" value="0.5" min="0" max="20" step=".01" autocomplete="off" placeholder="0.5"></label>
+            <label class="small">Unit
+              <select id="lunit" autocomplete="off">
+                <option value="USDT">USDT</option>
+                <option value="BTC">BTC</option>
+                <option value="CONT">Cont</option>
+              </select>
+            </label>
+          </div>
+          <div class="contractSizeRow" id="liqContractRow" hidden>
+            <label class="small">Contract value<input id="lc" type="number" value="1" min="0.000001" step="any" autocomplete="off"></label>
+            <span>USDT notional per contract.</span>
+          </div>
+          <div class="result calcResult" id="liqResult">—</div>
+          <div class="watchNote">Estimated liquidation for a linear USDT perpetual. Exact exchange liquidation can vary with maintenance tiers, fees and funding.</div>
+        </div>
+
+        <div class="calcBox">
+          <div class="label">Perpetual P&amp;L</div>
+          <div class="inputs">
+            <label class="small">Entry<input id="pe" type="number" value="0" min="0" step="any" autocomplete="off" placeholder="0"></label>
+            <label class="small">Exit<input id="pt" type="number" value="0" min="0" step="any" autocomplete="off" placeholder="0"></label>
+            <label class="small" id="pOrderValueLabel">Quantity<input id="pq" type="number" value="0" min="0" step="any" autocomplete="off" placeholder="0"></label>
+            <label class="small">Leverage<input id="pl" type="number" value="0" min="1" step="1" autocomplete="off" placeholder="0"></label>
+            <label class="small">Direction<select id="pDirection" autocomplete="off"><option value="LONG">Long</option><option value="SHORT">Short</option></select></label>
+          </div>
+          <div class="unitSettings">
+            <div class="unitSettingsTitle">Unit settings</div>
+            <label class="unitMode"><input type="radio" name="pUnitMode" id="pUnitQuantity" value="QUANTITY" checked><span class="unitRadio"></span><span><b>Order by Quantity</b><small>Select the unit used for the order quantity.</small></span></label>
+            <div class="unitChoices" id="pUnitChoices">
+              <button type="button" class="unitChoice active" data-unit="BTC">BTC</button>
+              <button type="button" class="unitChoice" data-unit="USDT">USDT</button>
+              <button type="button" class="unitChoice" data-unit="CONT">Cont</button>
+            </div>
+            <label class="unitMode"><input type="radio" name="pUnitMode" id="pUnitCost" value="COST"><span class="unitRadio"></span><span><b>Order by Cost (USDT)</b><small>Interpret the value above as opening notional/cost.</small></span></label>
+            <div class="contractSizeRow" id="pContractSizeRow" hidden><label class="small">Contract value<input id="pc" type="number" value="1" min="0.000001" step="any" autocomplete="off"></label><span>USDT notional per contract.</span></div>
+          </div>
+          <div class="calcResultsBlock">
+            <div class="calcResultsTitle">Results</div>
+            <div class="calcResultRow"><span>Margin</span><b id="pnlMarginResult">— USDT</b></div>
+            <div class="calcResultRow pnlValueRow"><span>P&amp;L</span><b id="pnlResultValue">— USDT</b></div>
+            <div class="calcResultRow"><span>ROI</span><b id="pnlRoiResult">—</b></div>
+          </div>
+          <div class="watchNote">Linear USDT perpetual formula. P&amp;L = signed price move × base quantity. Fees, funding, slippage, and liquidation are not included.</div>
+        </div>
       </div>
     </div>
   </section>
@@ -1228,6 +1269,9 @@ var state={
   chartPinned:false,
   pUnit:"BTC",
   pUnitMode:"QUANTITY",
+  liqMode:"ISOLATED",
+  liqSide:"LONG",
+  liqUnit:"USDT",
   chartCandles:null,
   chartAutoScale:true,
   aiMode:"market",
@@ -2274,16 +2318,19 @@ async function loadDataFabric(){
   }
 }
 function resetQuickCalculators(){
-  ["ca","cr","ce","cs","cl","re","rs","rt","pe","pt","pq","pl"].forEach(function(id){var el=$(id);if(el)el.value="0"});
-  if($("pc"))$("pc").value="1";
-  if($("rdirection"))$("rdirection").value="LONG";
+  ["ca","cr","ce","cs","cl","pe","pt","pq","pl","pc","ll","lq","le","lb","lmmr","lc"].forEach(function(id){var el=$(id);if(el)el.value=id==="lmmr"?"0.5":id==="pc"||id==="lc"?"1":"0"});
   if($("pDirection"))$("pDirection").value="LONG";
   if($("pUnitQuantity"))$("pUnitQuantity").checked=true;
   if($("pUnitCost"))$("pUnitCost").checked=false;
   state.pUnit="BTC";
   state.pUnitMode="QUANTITY";
+  state.liqMode="ISOLATED";
+  state.liqSide="LONG";
+  state.liqUnit="USDT";
   updatePUnitUI();
-  ["sizeResult","rrResult","pnlResult"].forEach(function(id){var el=$(id);if(!el)return;el.textContent="—";el.classList.remove("calc-profit","calc-loss","calc-neutral")});
+  updateLiqUI();
+  ["sizeResult","liqResult"].forEach(function(id){var el=$(id);if(el){el.textContent="—";el.classList.remove("calc-profit","calc-loss","calc-neutral")}});
+  ["pnlMarginResult","pnlResultValue","pnlRoiResult"].forEach(function(id){var el=$(id);if(el)el.textContent=id==="pnlMarginResult"||id==="pnlResultValue"?"— USDT":"—";});
 }
 function currentOrderNotional(entry){
   var raw=+$("pq").value||0,mode=state.pUnitMode||"QUANTITY",unit=state.pUnit||"BTC",contractValue=+$("pc").value||1;
@@ -2298,35 +2345,79 @@ function currentBaseQty(entry){
   return entry>0?notional/entry:0;
 }
 function updatePUnitUI(){
-  var mode=state.pUnitMode||"QUANTITY",unit=state.pUnit||"BTC";
-  var cost=mode==="COST",label=$("pOrderValueLabel");
+  var mode=state.pUnitMode||"QUANTITY",unit=state.pUnit||"BTC",cost=mode==="COST",label=$("pOrderValueLabel");
   if(label)label.firstChild.textContent=cost?"Cost (USDT)":"Quantity ("+(unit==="CONT"?"Cont":unit)+")";
-  var choices=document.querySelectorAll(".unitChoice");
-  choices.forEach(function(btn){btn.classList.toggle("active",!cost&&btn.dataset.unit===unit);btn.disabled=cost});
+  document.querySelectorAll(".unitChoice").forEach(function(btn){btn.classList.toggle("active",!cost&&btn.dataset.unit===unit);btn.disabled=cost});
   if($("pUnitQuantity"))$("pUnitQuantity").checked=!cost;
   if($("pUnitCost"))$("pUnitCost").checked=cost;
   var row=$("pContractSizeRow");if(row)row.hidden=cost||unit!=="CONT";
 }
+function currentLiqNotional(entry){
+  var raw=+$("lq").value||0,unit=$("lunit").value,contract=+$("lc").value||1;
+  if(raw<=0||entry<=0)return 0;
+  if(unit==="BTC")return raw*entry;
+  if(unit==="USDT")return raw;
+  return raw*Math.max(contract,0);
+}
+function currentLiqBaseQty(entry){
+  var notional=currentLiqNotional(entry);
+  return entry>0?notional/entry:0;
+}
+function updateLiqUI(){
+  var unit=$("lunit").value,row=$("liqContractRow");
+  if(row)row.hidden=unit!=="CONT";
+  document.querySelectorAll(".liqToggle[data-liqmode]").forEach(function(btn){btn.classList.toggle("active",btn.dataset.liqmode===state.liqMode)});
+  document.querySelectorAll(".liqToggle[data-liqside]").forEach(function(btn){btn.classList.toggle("active",btn.dataset.liqside===state.liqSide)});
+}
+function calcLiquidation(){
+  var entry=+$("le").value||0,lev=+$("ll").value||0,account=+$("lb").value||0,mmr=Math.max(0,(+$("lmmr").value||0))/100,qty=currentLiqBaseQty(entry),notional=entry*qty;
+  var liq=0,usedBalance=0;
+  if(entry>0&&lev>0&&qty>0){
+    var isolatedMargin=notional/lev;
+    usedBalance=state.liqMode==="CROSS"?account:isolatedMargin;
+    if(usedBalance>0){
+      if(state.liqSide==="LONG"){
+        liq=(qty*entry-usedBalance)/(qty*(1-mmr));
+      }else{
+        liq=(usedBalance+qty*entry)/(qty*(1+mmr));
+      }
+      if(Number.isFinite(liq)&&liq>0){
+        $("liqResult").textContent=fmt(liq)+" USDT";
+        $("liqResult").classList.remove("calc-profit","calc-loss","calc-neutral");
+        $("liqResult").classList.add("calc-neutral");
+        return;
+      }
+    }
+  }
+  $("liqResult").textContent="—";
+  $("liqResult").classList.remove("calc-profit","calc-loss","calc-neutral");
+  $("liqResult").classList.add("calc-neutral");
+}
 function calc(){
   var a=+$("ca").value||0,r=(+$("cr").value||0)/100,e=+$("ce").value||0,s=+$("cs").value||0,l=+$("cl").value||0,b=a*r,d=Math.abs(e-s),qty=d>0?b/d:0,notional=qty*e,margin=(qty>0&&l>0)?notional/l:0;
   $("sizeResult").textContent=(b>0&&qty>0)?("Risk "+fmt(b)+" · Qty "+fmt(qty)+" · Notional "+fmt(notional)+" · Margin "+fmt(margin)):"—";
-  var re=+$("re").value||0,rs=+$("rs").value||0,rt=+$("rt").value||0,dir=$("rdirection").value,riskUnit=dir==="SHORT"?(rs-re):(re-rs),rewardUnit=dir==="SHORT"?(re-rt):(rt-re),rr=(riskUnit>0&&rewardUnit>0)?rewardUnit/riskUnit:0;
-  $("rrResult").textContent=rr>0?(rr.toFixed(2)+"R · Risk "+fmt(riskUnit)+" · Reward "+fmt(rewardUnit)+" · "+dir):"—";
 
-  var pe=+$("pe").value||0,pt=+$("pt").value||0,pl=+$("pl").value||0,pdir=$("pDirection").value,baseQty=currentBaseQty(pe),pnl=pdir==="SHORT"?(pe-pt)*baseQty:(pt-pe)*baseQty,pnlMargin=(pe>0&&baseQty>0&&pl>0)?(pe*baseQty)/pl:0,roi=pnlMargin>0?(pnl/pnlMargin)*100:0,pnlEl=$("pnlResult");
-  pnlEl.classList.remove("calc-profit","calc-loss","calc-neutral");
+  var pe=+$("pe").value||0,pt=+$("pt").value||0,pl=+$("pl").value||0,pdir=$("pDirection").value,baseQty=currentBaseQty(pe),pnl=pdir==="SHORT"?(pe-pt)*baseQty:(pt-pe)*baseQty,pnlMargin=(pe>0&&baseQty>0&&pl>0)?(pe*baseQty)/pl:0,roi=pnlMargin>0?(pnl/pnlMargin)*100:0;
+  var pnlValue=$("pnlResultValue"),pnlMarginEl=$("pnlMarginResult"),pnlRoi=$("pnlRoiResult");
+  pnlValue.classList.remove("calc-profit","calc-loss","calc-neutral");
   if(pe>0&&pt>0&&baseQty>0&&pl>0){
-    var unitTxt=(state.pUnitMode==="COST"?"Cost "+fmt(+$("pq").value||0)+" USDT":("Qty "+fmt(+$("pq").value||0)+" "+(state.pUnit==="CONT"?"Cont":state.pUnit)));
-    pnlEl.textContent=(pnl>=0?"+":"")+fmt(pnl)+" P/L · "+unitTxt+" · Margin "+fmt(pnlMargin)+" · ROI "+(roi>=0?"+":"")+roi.toFixed(2)+"%";
-    pnlEl.classList.add(pnl>0?"calc-profit":pnl<0?"calc-loss":"calc-neutral");
-  }else{pnlEl.textContent="—";pnlEl.classList.add("calc-neutral")}
-  var ra=+$("ra").value||0,rrisk=(+$("rrisk").value||0)/100,rv=+$("rentry").value||0,rst=+$("rstop").value||0,bd=ra*rrisk,dist=Math.abs(rv-rst);
-  $("riskOut").textContent=dist?"Risk "+fmt(bd)+" · Position size "+fmt(bd/dist):"Enter valid levels";
+    pnlMarginEl.textContent=fmt(pnlMargin)+" USDT";
+    pnlValue.textContent=(pnl>=0?"+":"")+fmt(pnl)+" USDT";
+    pnlRoi.textContent=(roi>=0?"+":"")+roi.toFixed(2)+"%";
+    pnlValue.classList.add(pnl>0?"calc-profit":pnl<0?"calc-loss":"calc-neutral");
+  }else{
+    pnlMarginEl.textContent="— USDT";pnlValue.textContent="— USDT";pnlRoi.textContent="—";pnlValue.classList.add("calc-neutral");
+  }
+  calcLiquidation();
 }
 function setupCalculatorInputs(){
-  ["ca","cr","ce","cs","cl","re","rs","rt","pe","pt","pq","pl","rdirection","pDirection","pc","ra","rrisk","rentry","rstop"].forEach(function(id){var el=$(id);if(!el)return;el.addEventListener("input",calc);el.addEventListener("change",calc)});
+  ["ca","cr","ce","cs","cl","pe","pt","pq","pl","pc","le","ll","lq","lb","lmmr","lc"].forEach(function(id){var el=$(id);if(!el)return;el.addEventListener("input",calc);el.addEventListener("change",calc)});
+  if($("pDirection"))$("pDirection").addEventListener("change",calc);
+  if($("lunit"))$("lunit").addEventListener("change",calc);
   document.querySelectorAll(".unitMode input").forEach(function(input){input.addEventListener("change",function(){state.pUnitMode=this.value;updatePUnitUI();calc()})});
   document.querySelectorAll(".unitChoice").forEach(function(btn){btn.addEventListener("click",function(){state.pUnit=btn.dataset.unit;state.pUnitMode="QUANTITY";updatePUnitUI();calc()})});
+  document.querySelectorAll(".liqToggle[data-liqmode]").forEach(function(btn){btn.addEventListener("click",function(){state.liqMode=btn.dataset.liqmode;updateLiqUI();calc()})});
+  document.querySelectorAll(".liqToggle[data-liqside]").forEach(function(btn){btn.addEventListener("click",function(){state.liqSide=btn.dataset.liqside;updateLiqUI();calc()})});
   resetQuickCalculators();calc();
 }
 function normalizeFlow(values){

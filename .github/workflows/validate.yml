@@ -144,6 +144,28 @@ jobs:
           print("Clean overview chart checks OK")
           PY
 
+      - name: Check PnL and liquidation calculator surfaces
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          html=Path("public/index.html").read_text()
+          start=html.index('<div id="quickCalculators"')
+          end=html.index('  </section>\n  <section id="view-scanner"',start)
+          section=html[start:end]
+          js_start=html.index("function resetQuickCalculators")
+          js_end=html.index("function normalizeFlow",js_start)
+          js=html[js_start:js_end]
+          assert "Liquidation Price" in section
+          assert "Risk : Reward" not in section
+          assert 'pnlMarginResult' in section and 'pnlResultValue' in section and 'pnlRoiResult' in section
+          assert 'fmt(pnlMargin)+" USDT"' in js and 'fmt(pnl)+" USDT"' in js
+          assert 'calcLiquidation' in js
+          assert '1-mmr' in js and '1+mmr' in js
+          assert 'calc-profit' in js and 'calc-loss' in js
+          assert 'resetQuickCalculators();' in html
+          print("P&L and liquidation calculator checks OK")
+          PY
+
       - name: Check calculator and safety-tool cleanup
         run: |
           python - <<'PY'
