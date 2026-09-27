@@ -67,6 +67,8 @@ console.log(JSON.stringify({
 
 const phase4=require("./phase4");
 const phase910=require("./phase9-10");
+const learning=require("./learning");
+assert(typeof learning.observeFinalDecision==="function","Final-gated adaptive learning observer is not exported.");
 assert(typeof phase4.updateFinalDecision==="function","Phase 4 final-signal learner is not exported.");
 const styleCheck=phase910.evaluate({
   interval:"15m",
