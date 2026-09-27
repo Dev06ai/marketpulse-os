@@ -17,16 +17,84 @@ const SYMBOLS=(process.env.SYMBOLS||'BTCUSDT,ETHUSDT,SOLUSDT,BNBUSDT,XRPUSDT,DOG
 const KLINE_LIMIT=Number(process.env.KLINE_LIMIT||420);
 const labels={BTCUSDT:'BTC',ETHUSDT:'ETH',SOLUSDT:'SOL',BNBUSDT:'BNB',XRPUSDT:'XRP',DOGEUSDT:'DOGE',ADAUSDT:'ADA'};
 const COINGECKO_IDS={BTCUSDT:'bitcoin',ETHUSDT:'ethereum',SOLUSDT:'solana',BNBUSDT:'binancecoin',XRPUSDT:'ripple',DOGEUSDT:'dogecoin',ADAUSDT:'cardano'};
+const COINCAP_IDS={BTCUSDT:'bitcoin',ETHUSDT:'ethereum',SOLUSDT:'solana',BNBUSDT:'binance-coin',XRPUSDT:'xrp',DOGEUSDT:'dogecoin',ADAUSDT:'cardano'};
 const MARKET_META_CACHE={ts:0,data:{}};
 const MARKET_META_TTL=60000;
+const TICKER_CACHE={ts:0,data:{}};
+const TICKER_TTL=10000;
+
+async function getBinanceTickerSnapshot(symbols=SYMBOLS){
+  const list=(symbols||SYMBOLS).filter(Boolean);
+  if(TICKER_CACHE.ts&&Date.now()-TICKER_CACHE.ts<TICKER_TTL){
+    return Object.fromEntries(list.map(s=>[s,TICKER_CACHE.data[s]||null]));
+  }
+  const bases=['https://api.binance.com','https://api-gcp.binance.com','https://api1.binance.com'];
+  const load=async base=>{
+    const u=new URL(base+'/api/v3/ticker/24hr');
+    u.searchParams.set('symbols',JSON.stringify(list));
+    const r=await fetch(u,{signal:timeoutSignal(4500),headers:{accept:'application/json'}});
+    if(!r.ok)throw Error('Binance ticker HTTP '+r.status);
+    const rows=await r.json();
+    const data={};
+    (Array.isArray(rows)?rows:[]).forEach(x=>{
+      const symbol=String(x.symbol||'').toUpperCase();
+      if(!symbol)return;
+      data[symbol]={
+        price:Number.isFinite(Number(x.lastPrice))?Number(x.lastPrice):null,
+        change24h:Number.isFinite(Number(x.priceChangePercent))?Number(x.priceChangePercent):null,
+        volume24h:Number.isFinite(Number(x.quoteVolume))?Number(x.quoteVolume):null,
+        source:'binance'
+      };
+    });
+    return data;
+  };
+  try{
+    const data=await Promise.any(bases.map(load));
+    TICKER_CACHE.ts=Date.now();TICKER_CACHE.data=data;
+    return Object.fromEntries(list.map(s=>[s,data[s]||null]));
+  }catch{
+    return Object.fromEntries(list.map(s=>[s,TICKER_CACHE.data[s]||null]));
+  }
+}
+
+async function getCoinCapMetadata(symbols){
+  const list=(symbols||SYMBOLS).filter(Boolean);
+  const ids=list.map(s=>COINGECKO_IDS[s]).filter(Boolean);
+  if(!ids.length)return {};
+  try{
+    const u=new URL('https://api.coincap.io/v2/assets');
+    u.searchParams.set('ids',ids.join(','));
+    const r=await fetch(u,{signal:timeoutSignal(5000),headers:{accept:'application/json'}});
+    if(!r.ok)throw Error('CoinCap HTTP '+r.status);
+    const body=await r.json();
+    const data={};
+    (Array.isArray(body?.data)?body.data:[]).forEach(x=>{
+      const symbol=Object.keys(COINCAP_IDS).find(k=>COINCAP_IDS[k]===x.id);
+      if(!symbol)return;
+      data[symbol]={
+        rank:Number.isFinite(Number(x.rank))?Number(x.rank):null,
+        marketCap:Number.isFinite(Number(x.marketCapUsd))?Number(x.marketCapUsd):null,
+        volume24h:Number.isFinite(Number(x.volumeUsd24Hr))?Number(x.volumeUsd24Hr):null,
+        geckoPrice:Number.isFinite(Number(x.priceUsd))?Number(x.priceUsd):null,
+        change24h:Number.isFinite(Number(x.changePercent24Hr))?Number(x.changePercent24Hr):null,
+        source:'coincap',
+        updatedAt:Date.now()
+      };
+    });
+    return data;
+  }catch{
+    return {};
+  }
+}
 async function getMarketMetadata(symbols=SYMBOLS){
   const list=(symbols||SYMBOLS).filter(Boolean);
   if(MARKET_META_CACHE.ts&&Date.now()-MARKET_META_CACHE.ts<MARKET_META_TTL){
     return Object.fromEntries(list.map(s=>[s,MARKET_META_CACHE.data[s]||null]));
   }
+  const ticker=await getBinanceTickerSnapshot(list);
+  let primary={};
   try{
     const ids=list.map(s=>COINGECKO_IDS[s]).filter(Boolean);
-    if(!ids.length)return {};
     const u=new URL('https://api.coingecko.com/api/v3/coins/markets');
     u.searchParams.set('vs_currency','usd');
     u.searchParams.set('ids',ids.join(','));
@@ -36,27 +104,41 @@ async function getMarketMetadata(symbols=SYMBOLS){
     u.searchParams.set('sparkline','false');
     u.searchParams.set('price_change_percentage','24h');
     const r=await fetch(u,{signal:timeoutSignal(5000),headers:{accept:'application/json'}});
-    if(!r.ok)throw Error('CoinGecko HTTP '+r.status);
-    const rows=await r.json();
-    const data={};
-    (Array.isArray(rows)?rows:[]).forEach(x=>{
-      const symbol=Object.keys(COINGECKO_IDS).find(k=>COINGECKO_IDS[k]===x.id);
-      if(!symbol)return;
-      data[symbol]={
-        rank:Number.isFinite(Number(x.market_cap_rank))?Number(x.market_cap_rank):null,
-        marketCap:Number.isFinite(Number(x.market_cap))?Number(x.market_cap):null,
-        volume24h:Number.isFinite(Number(x.total_volume))?Number(x.total_volume):null,
-        change24h:Number.isFinite(Number(x.price_change_percentage_24h))?Number(x.price_change_percentage_24h):null,
-        geckoPrice:Number.isFinite(Number(x.current_price))?Number(x.current_price):null,
-        source:'coingecko',
-        updatedAt:Date.now()
-      };
-    });
+    if(r.ok){
+      const rows=await r.json();
+      (Array.isArray(rows)?rows:[]).forEach(x=>{
+        const symbol=Object.keys(COINGECKO_IDS).find(k=>COINGECKO_IDS[k]===x.id);
+        if(!symbol)return;
+        primary[symbol]={
+          rank:Number.isFinite(Number(x.market_cap_rank))?Number(x.market_cap_rank):null,
+          marketCap:Number.isFinite(Number(x.market_cap))?Number(x.market_cap):null,
+          volume24h:Number.isFinite(Number(x.total_volume))?Number(x.total_volume):null,
+          geckoPrice:Number.isFinite(Number(x.current_price))?Number(x.current_price):null,
+          change24h:Number.isFinite(Number(x.price_change_percentage_24h))?Number(x.price_change_percentage_24h):null,
+          source:'coingecko',
+          updatedAt:Date.now()
+        };
+      });
+    }
+  }catch{}
+  const fallback=await getCoinCapMetadata(list);
+  const data={};
+  list.forEach(symbol=>{
+    const p=primary[symbol]||{},f=fallback[symbol]||{},t=ticker[symbol]||{};
+    data[symbol]={
+      rank:p.rank??f.rank??null,
+      marketCap:p.marketCap??f.marketCap??null,
+      volume24h:t.volume24h??p.volume24h??f.volume24h??null,
+      geckoPrice:t.price??p.geckoPrice??f.geckoPrice??null,
+      change24h:t.change24h??p.change24h??f.change24h??null,
+      source:p.marketCap!=null?'coingecko':(f.marketCap!=null?'coincap':'binance'),
+      updatedAt:Date.now()
+    };
+  });
+  if(Object.keys(data).length){
     MARKET_META_CACHE.ts=Date.now();MARKET_META_CACHE.data=data;
-    return Object.fromEntries(list.map(s=>[s,data[s]||null]));
-  }catch{
-    return Object.fromEntries(list.map(s=>[s,MARKET_META_CACHE.data[s]||null]));
   }
+  return Object.fromEntries(list.map(s=>[s,data[s]||MARKET_META_CACHE.data[s]||null]));
 }
 const KRAKEN_PAIRS={BTCUSDT:'XBTUSD',ETHUSDT:'ETHUSD',SOLUSDT:'SOLUSD',BNBUSDT:'BNBUSD',XRPUSDT:'XRPUSD',DOGEUSDT:'DOGEUSD',ADAUSDT:'ADAUSD'};
 const CACHE=new Map(); const TTL=45000;
@@ -1630,7 +1712,10 @@ const server=http.createServer(async(req,res)=>{
     if(req.method==='GET'&&u.pathname==='/api/core-scan'){
       const interval=u.searchParams.get('interval')||'1h',hit=SCAN_CACHE.get(interval);
       if(hit&&Date.now()-hit.ts<SCAN_TTL)return send(res,200,hit.payload);
+      const [ticker,marketMeta]=await Promise.all([getBinanceTickerSnapshot(SYMBOLS),getMarketMetadata(SYMBOLS)]);
       const scanOne=async symbol=>{
+        const tick=ticker[symbol]||{};
+        const meta=marketMeta[symbol]||{};
         try{
           const candles=await Promise.race([klines(symbol,interval),new Promise((_,reject)=>setTimeout(()=>reject(Error('Primary scan timeout')),6500))]);
           if(!candles||candles.length<220)throw Error('Insufficient candles');
@@ -1638,9 +1723,9 @@ const server=http.createServer(async(req,res)=>{
           const lower=interval==='15m'?null:await Promise.race([klines(symbol,'15m'),new Promise(resolve=>setTimeout(()=>resolve(null),1100))]).catch(()=>null);
           let analysis=analyze(candles,{interval,lower:lower&&lower.length>=220?analyze(lower,{interval:'15m'}):null,higher:higher&&higher.length>=220?analyze(higher,{interval:'4h'}):null,deriv:null});
           try{const learned=await Promise.race([learning.process(symbol,interval,candles,analysis,{observe:false}),new Promise(resolve=>setTimeout(()=>resolve(null),200))]);if(learned?.analysis)analysis=learned.analysis}catch{}
-          return{symbol,label:labels[symbol]||symbol,price:analysis.price,change24h:analysis.change24h,regime:analysis.regime,side:analysis.side,type:analysis.type,status:analysis.status,score:analysis.score,bias:analysis.bias,probabilityLabel:analysis.probabilityLabel,structure:analysis.structure,derivatives:null};
+          return{symbol,label:labels[symbol]||symbol,price:Number.isFinite(Number(analysis.price))?analysis.price:(tick.price??meta.geckoPrice??null),change24h:Number.isFinite(Number(analysis.change24h))?analysis.change24h:(tick.change24h??meta.change24h??null),regime:analysis.regime,side:analysis.side,type:analysis.type,status:analysis.status,score:analysis.score,bias:analysis.bias,probabilityLabel:analysis.probabilityLabel,structure:analysis.structure,market:meta,derivatives:null};
         }catch(e){
-          return{symbol,label:labels[symbol]||symbol,status:'WAITING',side:'WAIT',score:0,error:e.message};
+          return{symbol,label:labels[symbol]||symbol,price:tick.price??meta.geckoPrice??null,change24h:tick.change24h??meta.change24h??null,market:meta,status:'WAITING',side:'WAIT',score:0,error:e.message};
         }
       };
       const [marketMeta,rows]=await Promise.all([
