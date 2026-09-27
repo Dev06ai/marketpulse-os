@@ -224,7 +224,7 @@ function addSignal(state,symbol,interval,analysis,candle,evidence){
   const entryLow=finite(analysis.entryLow),entryHigh=finite(analysis.entryHigh),entry=entryLow!==null&&entryHigh!==null?(entryLow+entryHigh)/2:finite(analysis.price);
   if(entry===null||finite(analysis.stop)===null||finite(analysis.tp1)===null||analysis.side==="WAIT")return null;
   const signal={
-    id,symbol,interval,candleTs,createdAt:Date.now(),type:analysis.type,side:analysis.side,regime:analysis.regime,status:analysis.status,score:finite(analysis.score,0),
+    id,symbol,interval,candleTs,createdAt:Date.now(),type:analysis.type,side:analysis.side,regime:analysis.regime,status:analysis.status,score:finite(analysis.score,0),tradeStyle:analysis.tradeStyle||"INTRADAY",
     price:finite(analysis.price),entryLow:entryLow??entry,entryHigh:entryHigh??entry,entry,stop:finite(analysis.stop),target:finite(analysis.tp1),tp2:finite(analysis.tp2),
     rr:finite(analysis.rr),profile:strategyProfile(analysis),lifecycle:analysis.status==="READY"?"ARMED":"WATCHING",reasons:(analysis.reasons||[]).slice(0,6),
     evidence,evidenceTop:evidence?.top||[],risk:null,outcome:null,resultR:null,updatedAt:Date.now()
@@ -256,26 +256,76 @@ function strategyHealth(state){
   };
 }
 async function updateLive(deviceId,symbol,interval,analysis,candles){
+  // Legacy raw-candidate tracker retained for research compatibility.
+  // Live learning is now driven by updateFinalDecision() so only final gated signals
+  // can become paper trades.
+  return updateFinalDecision(deviceId,symbol,interval,{
+    liveSignalEligible:Boolean(analysis&&analysis.side!=="WAIT"&&analysis.status==="READY"),
+    state:analysis?.status==="READY"?"READY":"NO_TRADE",
+    action:analysis?.status==="READY"?analysis.side:"WAIT",
+    market:{
+      side:analysis?.side||"WAIT",score:finite(analysis?.score,0),confluenceScore:finite(analysis?.score,0),
+      price:finite(analysis?.price),regime:analysis?.regime,type:analysis?.type||"NO TRADE",
+      status:analysis?.status||"WAITING",tradeStyle:analysis?.tradeStyle||"INTRADAY"
+    },
+    levels:{
+      side:analysis?.side||"WAIT",entryLow:finite(analysis?.entryLow),entryHigh:finite(analysis?.entryHigh),
+      entry:finite(analysis?.price),stop:finite(analysis?.stop),tp1:finite(analysis?.tp1),tp2:finite(analysis?.tp2),rr:finite(analysis?.rr)
+    },
+    evidence:{thesis:[analysis?.thesis||"Raw candidate"],avgR:null}
+  },candles);
+}
+
+async function updateFinalDecision(deviceId,symbol,interval,decision,candles){
   const loaded=await load(deviceId),state=loaded.state,ts=Date.now(),candle=(candles||[])[(candles||[]).length-1];
+  const eligible=Boolean(decision?.liveSignalEligible===true&&decision?.state==="READY"&&["LONG","SHORT"].includes(String(decision?.action||"").toUpperCase()));
   let sig=currentSignal(state,symbol,interval);
+
   if(sig&&candle)advanceSignal(state,sig,candle,ts);
-  if(sig&&["WATCHING","ARMED"].includes(sig.lifecycle)&&analysis?.side==="WAIT"){
+
+  if(sig&&["WATCHING","ARMED"].includes(sig.lifecycle)&&!eligible){
     sig.lifecycle="CLOSED";sig.outcome="INVALIDATED";sig.resultR=0;sig.closedAt=ts;sig.updatedAt=ts;
-    pushEvent(state,"SIGNAL_INVALIDATED",symbol+" "+sig.side+" invalidated before trigger",sig.id);
+    pushEvent(state,"FINAL_SIGNAL_INVALIDATED",symbol+" "+sig.side+" final gate no longer eligible",sig.id);
     sig=null;
   }
-  if(!sig&&candle&&analysis&&analysis.side!=="WAIT"&&["READY","WATCH"].includes(analysis.status)){
-    const evidence=await historicalEvidence(symbol,interval,analysis);
-    sig=addSignal(state,symbol,interval,analysis,candle,evidence);
-  }else if(sig&&analysis&&sig.lifecycle!=="CLOSED"){
-    sig.score=finite(analysis.score,sig.score);sig.status=analysis.status;sig.price=finite(analysis.price,sig.price);sig.updatedAt=ts;
-    sig.reasons=(analysis.reasons||sig.reasons||[]).slice(0,6);
+
+  if(eligible){
+    const m=decision.market||{},lv=decision.levels||{};
+    const finalAnalysis={
+      side:String(decision.action).toUpperCase(),
+      status:"READY",
+      score:finite(m.confluenceScore,0),
+      price:finite(m.price),
+      entryLow:finite(lv.entryLow),entryHigh:finite(lv.entryHigh),
+      stop:finite(lv.stop),tp1:finite(lv.tp1),tp2:finite(lv.tp2),rr:finite(lv.rr),
+      regime:m.regime||"UNKNOWN",type:m.type||"FINAL GATED SETUP",
+      tradeStyle:decision.tradeStyle||m.tradeStyle||"INTRADAY",
+      reasons:Array.isArray(decision.evidence?.thesis)?decision.evidence.thesis.slice(0,6):[]
+    };
+
+    if(sig&&String(sig.side).toUpperCase()!==finalAnalysis.side){
+      sig.lifecycle="CLOSED";sig.outcome="INVALIDATED";sig.resultR=0;sig.closedAt=ts;sig.updatedAt=ts;
+      pushEvent(state,"FINAL_SIGNAL_REVERSED",symbol+" final bias changed from "+sig.side+" to "+finalAnalysis.side,sig.id);
+      sig=null;
+    }
+
+    if(!sig&&candle){
+      const evidence=await historicalEvidence(symbol,interval,finalAnalysis);
+      sig=addSignal(state,symbol,interval,finalAnalysis,candle,evidence);
+    }else if(sig&&sig.lifecycle!=="CLOSED"){
+      sig.score=finalAnalysis.score;sig.status="READY";sig.price=finalAnalysis.price;sig.type=finalAnalysis.type;
+      sig.entryLow=finalAnalysis.entryLow??sig.entryLow;sig.entryHigh=finalAnalysis.entryHigh??sig.entryHigh;
+      sig.entry=finite(lv.entry,sig.entry);sig.stop=finalAnalysis.stop;sig.target=finalAnalysis.tp1;sig.tp2=finalAnalysis.tp2;sig.rr=finalAnalysis.rr;
+      sig.tradeStyle=finalAnalysis.tradeStyle;sig.reasons=finalAnalysis.reasons;sig.updatedAt=ts;
+    }
   }
+
   if(sig&&candle)advanceSignal(state,sig,candle,ts);
   state.paper.open.forEach(pos=>pos.updatedAt=ts);
   await save(loaded.id,state);
-  return snapshotFromState(state,symbol,interval,analysis);
+  return snapshotFromState(state,symbol,interval,eligible?decision.market:null);
 }
+
 function latestSignal(state,symbol,interval){
   return state.signals.slice().reverse().find(s=>s.symbol===symbol&&s.interval===interval)||null;
 }
