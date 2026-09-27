@@ -2,6 +2,7 @@ const clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
 const last=v=>v[v.length-1];
 const {detectMarketStructure}=require("./market-structure");
 const {detectStrategySetups}=require("./strategy-setups");
+const {buildReactionMap}=require("./reaction-map");
 const finiteOr=(v,fallback)=>Number.isFinite(v)?v:fallback;
 
 function sma(v,p){const o=[];let s=0;for(let i=0;i<v.length;i++){s+=v[i];if(i>=p)s-=v[i-p];o.push(i+1>=p?s/p:NaN)}return o}
@@ -98,6 +99,12 @@ function analyze(c,ctx={}){
       marketStructure.score=Number(strategySetups.setup.score)||marketStructure.score;
     }
   }
+  const reactionMap=buildReactionMap(c,{
+    interval:ctx.interval||"1h",
+    marketStructure,
+    strategySetups,
+    derivatives:ctx.deriv||null
+  });
 
   const look=c.slice(Math.max(0,i-30),i); // exclude the live candle from structural ranges
   const rangeHigh=Math.max(...look.map(x=>x.h)),rangeLow=Math.min(...look.map(x=>x.l));
@@ -349,7 +356,7 @@ function analyze(c,ctx={}){
     thesis:thesis.join(" "),thesisParts:thesis,
     primaryScenario,alternateScenario,
     mtf:{lower:mtf15,higher:mtf4},stop,tp1,tp2,entryLow:el,entryHigh:eh,rr,
-    rangeHigh,rangeLow,rangePosition:rangePos,priorHigh,priorLow,updatedAt:Date.now()
+    rangeHigh,rangeLow,rangePosition:rangePos,priorHigh,priorLow,reactionMap,updatedAt:Date.now()
   };
 }
 
