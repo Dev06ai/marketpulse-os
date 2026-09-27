@@ -635,42 +635,89 @@ body.admin-mode .nav button.adminNav,body.admin-mode .mobileMenu button.adminNav
     <div class="section decisionSection">
       <div class="sectionHead"><div><div class="title">Decision Center</div><div class="sub">A simple summary of what the market is doing and what would change the view.</div></div><span class="chip" id="adaptiveChip">Adaptive: collecting</span></div>
       <div class="grid2">
-            <div id="quickCalculators" class="section card quickCalculators">
+            <div class="section grid2">
+      <div class="card decisionStateCard"><div class="sectionHead"><div><div class="title" id="thesisTitle">Loading market context…</div><div class="sub" id="thesisState">—</div></div><div class="value" id="thesisScore">—</div></div><div class="small" id="finalEngineMeta" style="margin-bottom:7px">Phase 9/10 engine warming…</div><div id="thesis" class="thesis">Waiting for the live model.</div><div class="chips" id="thesisChips"></div><div class="scenario"><div class="mini"><div class="k">Primary scenario</div><div class="v" id="primary">—</div></div><div class="mini"><div class="k">What would break it</div><div class="v" id="alternate">—</div></div></div></div>
+      <div class="card signalQualityCard"><div class="sectionHead"><div><div class="title">Why the signal looks this way</div><div class="sub">See which parts of the market are helping or weakening the setup.</div></div><span class="value" id="quality">—</span></div><div id="components" class="list"></div></div>
+    </div>
+      </div>
+      <div class="card" style="margin-top:10px">
+        <div class="sectionHead"><div><div class="title">Live validation &amp; safety gate</div><div class="sub">Historical replay calibrates the minimum evidence required before a signal is shown as eligible for live decision support.</div></div><span class="chip" id="validationChip">PAPER ONLY</span></div>
+        <div class="grid2">
+          <div><div class="label">Validation evidence</div><div class="value" id="validationEvidence">Collecting…</div><div class="sub" id="validationDetail">Waiting for the walk-forward sample.</div></div>
+          <div><div class="label">Live-use gate</div><div class="value" id="deploymentGate">PAPER ONLY</div><div class="sub" id="deploymentReason">Signals remain decision-support only until the validation and live-data gates pass.</div></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="priceActionSection" class="section card"><div class="sectionHead"><div><div class="title">Price action</div><div class="sub">Exchange-style HD candles · 50 EMA · drag to pan · wheel/pinch to zoom · move cursor for time, OHLC and price.</div></div><div class="chartHeaderTools"><div class="chartTimeframes" id="chartTimeframes"><button class="chartTf" data-chart-tf="15m">15m</button><button class="chartTf" data-chart-tf="30m">30m</button><button class="chartTf active" data-chart-tf="1h">1h</button><button class="chartTf" data-chart-tf="4h">4h</button><button class="chartTf" data-chart-tf="1d">1D</button></div><div class="chartTools"><button id="chartCandles" class="active" title="Candlestick chart">Candles</button><button id="chartLine" title="Closing-price line chart">Line</button><button id="chartAuto" title="Fit price scale automatically">Auto</button><button id="chartFit" title="Fit all visible candles">Fit</button><button id="panL" title="Move toward older candles">←</button><button id="panR" title="Move toward newer candles">→</button><button id="zoomOut" class="zoomBtn" title="Zoom out">− Zoom out</button><button id="zoomReset" title="Reset chart zoom">1:1</button><button id="zoomIn" class="zoomBtn" title="Zoom in">+ Zoom in</button><button id="chartFullscreen" class="chartFocusBtn" title="Expand only the Price Action chart">⛶ Expand</button><button id="chartSettings" title="Chart settings">⚙</button></div></div></div><div class="chartWrap"><canvas id="mainChart" class="chartCanvas"></canvas><div class="ohlc" id="ohlc">Move over chart</div></div><div class="levels"><div class="level"><div class="k">Entry zone</div><div class="v" id="entry">—</div></div><div class="level"><div class="k">Invalidation</div><div class="v" id="stop">—</div></div><div class="level"><div class="k">Target 1</div><div class="v" id="target">—</div></div><div class="level"><div class="k">R:R</div><div class="v" id="rr">—</div></div><div class="level"><div class="k">Trade style</div><div class="v" id="tradeStyle">—</div></div></div></div>
+
+    <div class="section"><div class="sectionHead"><div><div class="title">Market Overview</div><div class="sub">Long-term context plus a simple view of what is happening now.</div></div><span class="chip">Long-term context</span></div>
+      <div class="overGrid">
+        <div class="card"><div class="sectionHead"><div><b>Cycle phase</b><div class="sub" id="cycleText">Long-term cycle score · subtle phase zones · hover for BTC context</div></div><span class="chip c">LIVE</span></div><canvas id="cycleChart" class="miniChart"></canvas><div class="cycleMetric" style="margin-top:7px;font-size:10px"><b id="cycleScore">—</b><span id="cycleDetail" style="color:var(--muted)">—</span></div></div>
+        <div class="card"><div class="sectionHead"><div><b>Drawdown</b><div class="sub">Distance below high-water · cleaner risk view · hover for BTC context.</div></div><span class="chip">RISK</span></div><canvas id="ddChart" class="miniChart"></canvas><div class="cycleMetric" style="margin-top:7px;font-size:10px"><b id="ddValue">—</b><span id="ddDetail" style="color:var(--muted)">—</span></div></div>
+        <div class="card"><div class="sectionHead"><div><b>Live market screen</b><div class="sub">Best current alignments</div></div><span class="chip">LIVE</span></div><div id="marketRows" class="marketRows"><div class="small">Waiting for scanner…</div></div></div>
+      </div>
+    </div>
+
+
+    <div class="section grid2">
+      <div class="card">
+        <div class="sectionHead"><div><div class="title">Market Flow</div><div class="sub">See futures positioning, buy/sell pressure, funding, and forced exits.</div></div><span class="chip c" id="flowSource">LIVE</span></div>
+        <div class="flowGrid">
+          <div class="card flow"><div class="label">Open interest <span class="termHint" role="button" tabindex="0" title="How much futures position value is currently open.">?</span></div><div class="v" id="oi">—</div><div class="s" id="oiS">—</div></div>
+          <div class="card flow"><div class="label">Buy / sell pressure <span class="termHint" role="button" tabindex="0" title="CVD estimates whether aggressive buyers or sellers are dominating.">?</span></div><div class="v" id="cvd">—</div><div class="s" id="cvdS">—</div></div>
+          <div class="card flow"><div class="label">Futures positioning <span class="termHint" role="button" tabindex="0" title="A simple view of whether open interest is rising, falling, or flat.">?</span></div><div class="v" id="pos">—</div><div class="s" id="fund">—</div></div>
+          <div class="card flow"><div class="label">Forced exits <span class="termHint" role="button" tabindex="0" title="Positions closed because required margin is no longer available.">?</span></div><div class="v" id="liq">—</div><div class="s" id="liqS">—</div></div>
+        </div>
+        <div class="flowLegend"><span><i class="lg mint"></i>CVD</span><span><i class="lg lav"></i>OI</span><span><i class="lg ember"></i>Liquidations</span><span class="small">100 = starting level · lines are normalized for comparison</span></div>
+        <canvas id="flowChart" class="flowChart" height="190"></canvas>
+      </div>
+      <div class="card">
+        <div class="sectionHead"><div><div class="title">Learning from past setups</div><div class="sub">Past resolved setups help the model adjust gradually instead of reacting to one result.</div></div><span class="chip" id="learnState">COLLECTING</span></div>
+        <div class="grid2" style="grid-template-columns:1fr 1fr">
+          <div class="mini"><div class="k">Resolved examples</div><div class="v" id="learnN">0</div></div>
+          <div class="mini"><div class="k">Hit rate</div><div class="v" id="learnWin">—</div></div>
+          <div class="mini"><div class="k">Live adjustment</div><div class="v" id="learnAdj">0.0</div></div>
+          <div class="mini"><div class="k">Persistence</div><div class="v" id="learnPersist">—</div></div>
+        </div>
+        <div class="mini" style="margin-top:8px"><div class="k">Learning state</div><div class="v" id="learnNote">Collecting resolved outcomes before calibration.</div><div class="watchNote">12 resolved examples are required before setup-level score calibration can influence the live model.</div></div>
+      </div>
+    </div>
+    <div class="section card"><div class="sectionHead"><div><div class="title">Live Market Screens</div><div class="sub">The scanner stays available while the overview remains your command center.</div></div><button class="btn" data-view="scanner">Open Scanner</button></div><div class="tape" id="tape"></div></div>
+
+    <div class="section card">
+      <div class="sectionHead"><div><div class="title">Exchange agreement check</div><div class="sub">Checks whether multiple exchanges are showing roughly the same price before the safety gate can clear a setup.</div></div><button id="dcfRefresh" class="btn">Refresh</button></div>
+      <div class="grid3">
+        <div class="mini"><div class="k">State</div><div class="v" id="dcfState">WAITING</div></div>
+        <div class="mini"><div class="k">Exchange agreement</div><div class="v" id="dcfQuality">—</div></div>
+        <div class="mini"><div class="k">Price difference</div><div class="v" id="dcfDispersion">—</div></div>
+      </div>
+      <div class="watchNote" id="dcfSources">No independent feed snapshot yet.</div>
+    </div>
+    <div id="quickCalculators" class="section card quickCalculators">
       <div class="sectionHead"><div><div class="title">Quick calculators</div><div class="sub">Exchange-style futures math for position size, risk/reward, and linear-perpetual P&amp;L.</div></div><span class="chip">CALCULATORS</span></div>
       <div class="calcGrid">
-        <div class="calcBox">
-          <div class="label">Position size</div>
-          <div class="inputs">
-            <label class="small">Account<input id="ca" type="number" value="0" min="0" step="any" autocomplete="off" placeholder="0"></label>
-            <label class="small">Risk %<input id="cr" type="number" value="0" min="0" step=".05" autocomplete="off" placeholder="0"></label>
-            <label class="small">Entry<input id="ce" type="number" value="0" min="0" step="any" autocomplete="off" placeholder="0"></label>
-            <label class="small">Stop<input id="cs" type="number" value="0" min="0" step="any" autocomplete="off" placeholder="0"></label>
-            <label class="small">Leverage<input id="cl" type="number" value="0" min="1" step="1" autocomplete="off" placeholder="1"></label>
-          </div>
-          <div class="result calcResult" id="sizeResult">—</div>
-        </div>
-        <div class="calcBox">
-          <div class="label">Risk : Reward</div>
-          <div class="inputs">
-            <label class="small">Entry<input id="re" type="number" value="0" min="0" step="any" autocomplete="off" placeholder="0"></label>
-            <label class="small">Stop<input id="rs" type="number" value="0" min="0" step="any" autocomplete="off" placeholder="0"></label>
-            <label class="small">Target<input id="rt" type="number" value="0" min="0" step="any" autocomplete="off" placeholder="0"></label>
-            <label class="small">Direction<select id="rdirection" autocomplete="off"><option value="LONG">Long</option><option value="SHORT">Short</option></select></label>
-          </div>
-          <div class="result calcResult" id="rrResult">—</div>
-        </div>
-        <div class="calcBox">
-          <div class="label">Perpetual P&amp;L</div>
-          <div class="inputs">
-            <label class="small">Entry<input id="pe" type="number" value="0" min="0" step="any" autocomplete="off" placeholder="0"></label>
-            <label class="small">Exit<input id="pt" type="number" value="0" min="0" step="any" autocomplete="off" placeholder="0"></label>
-            <label class="small">Quantity<input id="pq" type="number" value="0" min="0" step="any" autocomplete="off" placeholder="0"></label>
-            <label class="small">Leverage<input id="pl" type="number" value="0" min="1" step="1" autocomplete="off" placeholder="1"></label>
-            <label class="small">Direction<select id="pDirection" autocomplete="off"><option value="LONG">Long</option><option value="SHORT">Short</option></select></label>
-          </div>
-          <div class="result calcResult" id="pnlResult">—</div>
-          <div class="watchNote">Linear USDT perpetual formula. Fees, funding, slippage, and liquidation are not included.</div>
-        </div>
+        <div class="calcBox"><div class="label">Position size</div><div class="inputs">
+          <label class="small">Account<input id="ca" type="number" value="0" min="0" step="any" autocomplete="off" placeholder="0"></label>
+          <label class="small">Risk %<input id="cr" type="number" value="0" min="0" step=".05" autocomplete="off" placeholder="0"></label>
+          <label class="small">Entry<input id="ce" type="number" value="0" min="0" step="any" autocomplete="off" placeholder="0"></label>
+          <label class="small">Stop<input id="cs" type="number" value="0" min="0" step="any" autocomplete="off" placeholder="0"></label>
+          <label class="small">Leverage<input id="cl" type="number" value="0" min="1" step="1" autocomplete="off" placeholder="1"></label>
+        </div><div class="result calcResult" id="sizeResult">—</div></div>
+        <div class="calcBox"><div class="label">Risk : Reward</div><div class="inputs">
+          <label class="small">Entry<input id="re" type="number" value="0" min="0" step="any" autocomplete="off" placeholder="0"></label>
+          <label class="small">Stop<input id="rs" type="number" value="0" min="0" step="any" autocomplete="off" placeholder="0"></label>
+          <label class="small">Target<input id="rt" type="number" value="0" min="0" step="any" autocomplete="off" placeholder="0"></label>
+          <label class="small">Direction<select id="rdirection" autocomplete="off"><option value="LONG">Long</option><option value="SHORT">Short</option></select></label>
+        </div><div class="result calcResult" id="rrResult">—</div></div>
+        <div class="calcBox"><div class="label">Perpetual P&amp;L</div><div class="inputs">
+          <label class="small">Entry<input id="pe" type="number" value="0" min="0" step="any" autocomplete="off" placeholder="0"></label>
+          <label class="small">Exit<input id="pt" type="number" value="0" min="0" step="any" autocomplete="off" placeholder="0"></label>
+          <label class="small">Quantity<input id="pq" type="number" value="0" min="0" step="any" autocomplete="off" placeholder="0"></label>
+          <label class="small">Leverage<input id="pl" type="number" value="0" min="1" step="1" autocomplete="off" placeholder="1"></label>
+          <label class="small">Direction<select id="pDirection" autocomplete="off"><option value="LONG">Long</option><option value="SHORT">Short</option></select></label>
+        </div><div class="result calcResult" id="pnlResult">—</div>
+        <div class="watchNote">Linear USDT perpetual formula. Fees, funding, slippage, and liquidation are not included.</div></div>
       </div>
     </div>
   </section>
@@ -2212,6 +2259,27 @@ async function loadDataFabric(){
     $("dcfState").textContent="ERROR";$("dcfSources").textContent=e.message||"Cross-exchange check unavailable";
   }
 }
+function resetQuickCalculators(){
+  ["ca","cr","ce","cs","cl","re","rs","rt","pe","pt","pq","pl"].forEach(function(id){var el=$(id);if(el)el.value="0"});
+  if($("rdirection"))$("rdirection").value="LONG";
+  if($("pDirection"))$("pDirection").value="LONG";
+  ["sizeResult","rrResult","pnlResult"].forEach(function(id){var el=$(id);if(!el)return;el.textContent="—";el.classList.remove("calc-profit","calc-loss","calc-neutral")});
+}
+function calc(){
+  var a=+$("ca").value||0,r=(+$("cr").value||0)/100,e=+$("ce").value||0,s=+$("cs").value||0,l=+$("cl").value||0,b=a*r,d=Math.abs(e-s),qty=d>0?b/d:0,notional=qty*e,margin=(qty>0&&l>0)?notional/l:0;
+  $("sizeResult").textContent=(b>0&&qty>0)?("Risk "+fmt(b)+" · Qty "+fmt(qty)+" · Notional "+fmt(notional)+" · Margin "+fmt(margin)):"—";
+  var re=+$("re").value||0,rs=+$("rs").value||0,rt=+$("rt").value||0,dir=$("rdirection").value,riskUnit=dir==="SHORT"?(rs-re):(re-rs),rewardUnit=dir==="SHORT"?(re-rt):(rt-re),rr=(riskUnit>0&&rewardUnit>0)?rewardUnit/riskUnit:0;
+  $("rrResult").textContent=rr>0?(rr.toFixed(2)+"R · Risk "+fmt(riskUnit)+" · Reward "+fmt(rewardUnit)+" · "+dir):"—";
+  var pe=+$("pe").value||0,pt=+$("pt").value||0,pq=+$("pq").value||0,pl=+$("pl").value||0,pdir=$("pDirection").value,pnl=pdir==="SHORT"?(pe-pt)*pq:(pt-pe)*pq,pnlMargin=(pe>0&&pq>0&&pl>0)?(pe*pq)/pl:0,roi=pnlMargin>0?(pnl/pnlMargin)*100:0,pnlEl=$("pnlResult");
+  pnlEl.classList.remove("calc-profit","calc-loss","calc-neutral");
+  if(pe>0&&pt>0&&pq>0&&pl>0){pnlEl.textContent=(pnl>=0?"+":"")+fmt(pnl)+" P/L · Margin "+fmt(pnlMargin)+" · ROI "+(roi>=0?"+":"")+roi.toFixed(2)+"%";pnlEl.classList.add(pnl>0?"calc-profit":pnl<0?"calc-loss":"calc-neutral")}else{pnlEl.textContent="—";pnlEl.classList.add("calc-neutral")}
+  var ra=+$("ra").value||0,rrisk=(+$("rrisk").value||0)/100,rv=+$("rentry").value||0,rst=+$("rstop").value||0,bd=ra*rrisk,dist=Math.abs(rv-rst);
+  $("riskOut").textContent=dist?"Risk "+fmt(bd)+" · Position size "+fmt(bd/dist):"Enter valid levels";
+}
+function setupCalculatorInputs(){
+  ["ca","cr","ce","cs","cl","re","rs","rt","pe","pt","pq","pl","rdirection","pDirection","ra","rrisk","rentry","rstop"].forEach(function(id){var el=$(id);if(!el)return;el.addEventListener("input",calc);el.addEventListener("change",calc)});
+  resetQuickCalculators();calc();
+}
 function normalizeFlow(values){
   values=(values||[]).map(Number).filter(Number.isFinite);if(values.length<2)return[];
   var first=values[0],maxDev=Math.max.apply(null,values.map(function(v){return Math.abs(v-first)}));if(!Number.isFinite(maxDev)||maxDev===0)return values.map(function(){return 100});
@@ -2654,7 +2722,6 @@ async function loadCore(){
 
     deferTask(loadCoreEnrichment,150);
     deferTask(loadDataFabric,800);
-
     deferTask(loadCoreAnalytics,1800);
     if(!state.secondaryStarted){
       queueSecondaryBoot();
@@ -2751,7 +2818,6 @@ $("refresh").addEventListener("click",loadCore);
   setTimeout(wakeMarketCore,0);
 })();
 $("dcfRefresh").addEventListener("click",loadDataFabric);
-
 $("symbol").addEventListener("change",function(){state.symbol=this.value;state.chartPinned=false;state.chartSymbol=state.symbol;state.chartCandles=[];loadFastTicker();loadCore()});
 $("interval").addEventListener("change",function(){state.interval=this.value;loadCore()});
 function deviceId(){
