@@ -82,7 +82,7 @@ const styleCheck=phase910.evaluate({
 assert(styleCheck.tradeStyle==="SCALP","15m final decision must be classified as SCALP.");
 assert(styleCheck.market?.tradeStyle==="SCALP","15m market payload must expose SCALP style.");
 
-const {detectStrategySetups}=require("./strategy-setups");
+const {detectStrategySetups,detectDLine}=require("./strategy-setups");
 
 function strategyCandles(){
   const out=[],start=Date.UTC(2026,8,20,0,0,0),hour=3600000;
@@ -123,5 +123,6 @@ function dlineCandles(){
 }
 
 const dline=detectStrategySetups(dlineCandles(),{interval:"15m",higher8h:{regime:"UPTREND"}});
+console.log("DLINE_DIRECT_DEBUG",JSON.stringify(detectDLine(dlineCandles(),"15m",{regime:"UPTREND"})));
 assert(dline.dLine?.kind==="D_LINE_BREAKOUT","D-Line breakout detector did not identify the synthetic breakout.");
 assert(dline.dLine?.side==="LONG","Bullish D-Line breakout must map to LONG.");
