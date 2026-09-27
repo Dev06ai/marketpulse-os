@@ -34,7 +34,7 @@ button,input,select,textarea{font:inherit}.wrap{width:min(1440px,calc(100% - 26p
 .overGrid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.overGrid>.card:nth-child(3){grid-column:1 / -1}.miniChart{width:100%;height:250px;display:block;background:linear-gradient(180deg,#081421 0%,#070b12 100%);border:1px solid rgba(103,232,255,.12);border-radius:12px;box-shadow:inset 0 1px 0 rgba(255,255,255,.035),0 10px 28px rgba(0,0,0,.18)}#cycleChart,#ddChart{background:#090c12;border:1px solid rgba(255,255,255,.07);box-shadow:inset 0 1px 0 rgba(255,255,255,.025),0 8px 22px rgba(0,0,0,.14)}.marketRows{display:grid;gap:5px}.marketRow{display:grid;grid-template-columns:42px 1fr 42px 44px;gap:5px;align-items:center;padding:7px;border:1px solid rgba(129,178,241,.09);border-radius:8px;background:rgba(255,255,255,.014);cursor:pointer}.marketRow:hover{border-color:rgba(103,232,255,.2)}.marketRow b,.marketRow span{font-size:8px}.marketRow span{color:#8394a9}.up{color:var(--green)!important}.down{color:var(--red)!important}.wait{color:var(--amber)!important}
 .tape{display:grid;grid-template-columns:repeat(5,1fr);gap:6px}.tapeCard{padding:8px;border:1px solid rgba(129,178,241,.09);border-radius:9px;background:rgba(255,255,255,.014)}.tapeCard b{font-size:8px}.tapeCard span{display:block;margin-top:4px;font-size:8px;color:#8797ab}
 .calcGrid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.inputs{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px}.inputs.one{grid-template-columns:1fr}.inputs input,.inputs select,.inputs textarea{width:100%;background:#08080b;border:1px solid var(--line);color:var(--text);border-radius:8px;padding:8px;font-size:9px}.result{margin-top:7px;padding:8px;border:1px solid rgba(103,232,255,.12);border-radius:8px;background:rgba(103,232,255,.035);font-size:9px}
-.scannerGrid{display:grid;grid-template-columns:1.5fr .8fr;gap:9px}.scanRows{display:grid;gap:6px}.scanRow{display:grid;grid-template-columns:30px 50px 1fr 84px 45px 55px;gap:6px;align-items:center;padding:8px;border:1px solid var(--line);border-radius:9px;background:rgba(255,255,255,.014)}.scanRow b,.scanRow span{font-size:8px}.score{font-weight:900;text-align:right}.filters{display:flex;gap:4px;flex-wrap:wrap}.filters button{border:1px solid var(--line);background:transparent;color:#7f90a6;padding:6px 8px;border-radius:8px;font-size:8px;cursor:pointer}.filters button.on{color:#fff;background:rgba(255,255,255,.05)}
+.scannerGrid{display:grid;grid-template-columns:1.55fr .8fr;gap:9px}.scanTableWrap{overflow:auto;border-radius:12px}.marketBoard{min-width:760px;display:grid;gap:5px}.marketBoardHead,.marketBoardRow{display:grid;grid-template-columns:42px 86px minmax(105px,1fr) 84px 110px 110px 150px;gap:8px;align-items:center}.marketBoardHead{padding:7px 9px;color:#718299;font-size:8px;font-weight:850;letter-spacing:.08em;text-transform:uppercase}.marketBoardRow{padding:9px;border:1px solid var(--line);border-radius:10px;background:rgba(255,255,255,.014);cursor:pointer;transition:border-color .18s,background .18s}.marketBoardRow:hover{border-color:rgba(103,232,255,.2);background:rgba(255,255,255,.025)}.marketBoardRow b,.marketBoardRow span{font-size:9px}.marketBoardRow .rank{color:#78879a;text-align:center}.marketBoardRow .coin{display:flex;align-items:center;gap:7px;font-weight:900}.marketBoardRow .coinMark{width:22px;height:22px;border-radius:50%;display:grid;place-items:center;background:#17191e;border:1px solid rgba(255,255,255,.09);font-size:7px;color:#d9e3ee}.marketBoardRow .price{font-weight:900}.marketBoardRow .marketDim{color:#a5b1c0}.marketBoardRow .marketCap,.marketBoardRow .marketVol{color:#bcc6d2}.marketBoardRow .marketVol{color:#8f9eaf}.marketAction{display:flex;align-items:center;justify-content:flex-end;gap:7px}.marketSignal{font-size:8px!important;font-weight:900!important;padding:5px 7px;border-radius:999px;border:1px solid rgba(255,255,255,.07);background:rgba(255,255,255,.025)}.marketSignal.long{color:#4ade80;border-color:rgba(74,222,128,.18);background:rgba(74,222,128,.06)}.marketSignal.short{color:#f87171;border-color:rgba(248,113,113,.18);background:rgba(248,113,113,.06)}.marketSignal.wait{color:#fbbf24;border-color:rgba(251,191,36,.18);background:rgba(251,191,36,.05)}.marketScore{color:#d7e2ee;font-weight:900;font-size:8px!important}.score{font-weight:900;text-align:right}.filters{display:flex;gap:4px;flex-wrap:wrap}.filters button{border:1px solid var(--line);background:transparent;color:#7f90a6;padding:6px 8px;border-radius:8px;font-size:8px;cursor:pointer}.filters button.on{color:#fff;background:rgba(255,255,255,.05)}
 .signalRows{display:grid;gap:6px}.signalRow{display:grid;grid-template-columns:68px 1fr 70px 50px;gap:7px;padding:8px;border:1px solid var(--line);border-radius:9px}.event{font-size:8px;font-weight:900;padding:5px;border-radius:6px;text-align:center}.event.ready{color:var(--green);background:rgba(101,240,172,.08)}.event.wait{color:var(--amber);background:rgba(255,209,102,.08)}.event.bad{color:var(--red);background:rgba(255,111,145,.08)}.event.update{color:var(--cyan);background:rgba(103,232,255,.06)}
 .aiGrid{display:grid;grid-template-columns:1fr 1fr;gap:9px}.aiGrid textarea{width:100%;min-height:130px;background:#121216 !important;border:1px solid rgba(255,255,255,.10);color:#f1f1f3;border-radius:10px;padding:12px;resize:vertical;outline:none;box-shadow:inset 0 1px 0 rgba(255,255,255,.025)}.aiGrid textarea::placeholder{color:#777783}.aiGrid textarea:focus{border-color:rgba(167,243,208,.32);box-shadow:0 0 0 3px rgba(167,243,208,.06),inset 0 1px 0 rgba(255,255,255,.025)}.aiOut{white-space:pre-wrap;line-height:1.6;color:#e8e8ec;min-height:130px;background:#101014;border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:12px}
 .brainStats{display:grid;grid-template-columns:repeat(4,1fr);gap:7px}.statCard{padding:9px;border:1px solid var(--line);border-radius:9px}.statCard .k{font-size:8px;color:var(--muted)}.statCard .v{font-size:14px;font-weight:900;margin-top:5px}.journalRows{display:grid;gap:6px}.journalRow{padding:8px;border:1px solid var(--line);border-radius:8px}.journalTop{display:flex;justify-content:space-between;gap:8px}.journalTop b,.journalTop span{font-size:8px}.journalRow .small{margin-top:4px;color:#8191a7;font-size:8px}
@@ -722,7 +722,7 @@ linear-gradient(180deg,#0c0e11 0%,#101214 48%,#0a0b0d 100%);box-shadow:0 -20px 7
       <div class="overGrid">
         <div class="card"><div class="sectionHead"><div><b>Cycle phase</b><div class="sub" id="cycleText">Long-term cycle score · subtle phase zones · hover for BTC context</div></div><span class="chip c">LIVE</span></div><canvas id="cycleChart" class="miniChart"></canvas><div class="cycleMetric" style="margin-top:7px;font-size:10px"><b id="cycleScore">—</b><span id="cycleDetail" style="color:var(--muted)">—</span></div></div>
         <div class="card"><div class="sectionHead"><div><b>Drawdown</b><div class="sub">Distance below high-water · cleaner risk view · hover for BTC context.</div></div><span class="chip">RISK</span></div><canvas id="ddChart" class="miniChart"></canvas><div class="cycleMetric" style="margin-top:7px;font-size:10px"><b id="ddValue">—</b><span id="ddDetail" style="color:var(--muted)">—</span></div></div>
-        <div class="card" data-admin-only="true"><div class="sectionHead"><div><b>Live market screen</b><div class="sub">Best current alignments</div></div><span class="chip">LIVE</span></div><div id="marketRows" class="marketRows"><div class="small">Waiting for scanner…</div></div></div>
+        <div class="card" data-admin-only="true"><div class="sectionHead"><div><b>Live market screen</b><div class="sub">Quick market snapshot with the same information style as a market tracker.</div></div><span class="chip">LIVE</span></div><div class="scanTableWrap"><div class="marketBoard" id="marketRows"><div class="small">Waiting for scanner…</div></div></div></div>
       </div>
     </div>
 
@@ -750,7 +750,10 @@ linear-gradient(180deg,#0c0e11 0%,#101214 48%,#0a0b0d 100%);box-shadow:0 -20px 7
         <div class="mini" style="margin-top:8px"><div class="k">Learning state</div><div class="v" id="learnNote">Collecting resolved outcomes before calibration.</div><div class="watchNote">12 resolved examples are required before setup-level score calibration can influence the live model.</div></div>
       </div>
     </div>
-    <div class="section card" data-admin-only="true"><div class="sectionHead"><div><div class="title">Live Market Screens</div><div class="sub">The scanner stays available while the overview remains your command center.</div></div><button class="btn" data-view="scanner">Open Scanner</button></div><div class="tape" id="tape"></div></div>
+    <div class="section card" data-admin-only="true">
+      <div class="sectionHead"><div><div class="title">Live Market Screens</div><div class="sub">Market-style board with live price, 24h change, market cap, volume and MarketPulse context.</div></div><button class="btn" data-view="scanner">Open Scanner</button></div>
+      <div class="scanTableWrap"><div class="marketBoard" id="tape"></div></div>
+    </div>
 
     <div class="section card" data-admin-only="true">
       <div class="sectionHead"><div><div class="title">Exchange agreement check</div><div class="sub">Checks whether multiple exchanges are showing roughly the same price before the safety gate can clear a setup.</div></div><button id="dcfRefresh" class="btn">Refresh</button></div>
@@ -829,7 +832,7 @@ linear-gradient(180deg,#0c0e11 0%,#101214 48%,#0a0b0d 100%);box-shadow:0 -20px 7
   </section>
   <section id="view-scanner" class="view">
     <div class="sectionHead"><div><div class="title">Market Matrix</div><div class="sub">Fast scan across the supported assets.</div></div><div class="filters" id="scanFilters"><button class="on" data-filter="ALL">All</button><button data-filter="LONG">Long</button><button data-filter="SHORT">Short</button><button data-filter="WAIT">No trade</button></div></div>
-    <div class="scannerGrid"><div class="card"><div id="scanRows" class="scanRows"><div class="small">Loading scanner…</div></div></div><div class="card"><div class="title">Scanner notes</div><div class="sub" style="margin-top:7px">Scanner shows raw market candidates only. CANDIDATE LONG/SHORT is not the final trade decision. Use the Dashboard Signal for the gated LONG / SHORT / NO TRADE decision.</div><div class="section mini"><div class="k">Auto refresh</div><div class="v">Every 45 seconds while the tab is visible.</div></div></div></div>
+    <div class="scannerGrid"><div class="card"><div class="scanTableWrap"><div class="marketBoardHead"><span>#</span><span>Coin</span><span>Price</span><span>24H</span><span>Market Cap</span><span>24H Volume</span><span>MarketPulse</span></div><div id="scanRows" class="marketBoard"><div class="small">Loading scanner…</div></div></div></div><div class="card"><div class="title">Scanner notes</div><div class="sub" style="margin-top:7px">Market data includes price, 24h change, market cap and volume. MarketPulse adds its own confluence, regime and candidate context on top.</div><div class="section mini"><div class="k">Auto refresh</div><div class="v">Every 45 seconds while the tab is visible.</div></div><div class="section mini"><div class="k">Data source</div><div class="v">Market metadata is refreshed from the connected market-data provider and cached briefly to keep the scanner responsive.</div></div></div></div>
   </section>
 
   <section id="view-flow" class="view"><div class="sectionHead"><div><div class="title">Positioning &amp; Flow</div><div class="sub">Focused execution context for the selected asset.</div></div></div><div class="card"><div class="flowGrid"><div class="card flow"><div class="label">Open interest</div><div class="v" id="fOi">—</div><div class="s" id="fOiS">—</div></div><div class="card flow"><div class="label">CVD</div><div class="v" id="fCvd">—</div><div class="s" id="fCvdS">—</div></div><div class="card flow"><div class="label">Positioning</div><div class="v" id="fPos">—</div><div class="s" id="fFund">—</div></div><div class="card flow"><div class="label">Liquidation</div><div class="v" id="fLiq">—</div><div class="s" id="fLiqS">—</div></div></div><canvas id="flowChart2" class="flowChart"></canvas></div></section>
@@ -2113,31 +2116,54 @@ function renderMarket(){
   if(!state.chartPinned)drawMain();
 }
 
+function fmtCompactUsd(value){
+  var n=Number(value);if(!Number.isFinite(n))return "—";
+  var a=Math.abs(n),u="";
+  if(a>=1e12)return "$"+(n/1e12).toFixed(a>=1e13?1:2)+"T";
+  if(a>=1e9)return "$"+(n/1e9).toFixed(a>=1e10?1:2)+"B";
+  if(a>=1e6)return "$"+(n/1e6).toFixed(a>=1e7?1:2)+"M";
+  if(a>=1e3)return "$"+(n/1e3).toFixed(a>=1e4?1:2)+"K";
+  return "$"+n.toLocaleString(undefined,{maximumFractionDigits:n>=1?2:6});
+}
+function fmtMarketPrice(value){
+  var n=Number(value);if(!Number.isFinite(n))return "—";
+  if(Math.abs(n)>=1000)return "$"+n.toLocaleString(undefined,{maximumFractionDigits:2});
+  if(Math.abs(n)>=1)return "$"+n.toLocaleString(undefined,{maximumFractionDigits:3});
+  return "$"+n.toLocaleString(undefined,{maximumFractionDigits:6});
+}
+function fmtRank(r){var n=Number(r);return Number.isFinite(n)?"#"+n:"—"}
+function marketMetaFor(r){return r&&r.market&&typeof r.market==="object"?r.market:{}}
+function marketSignalClass(side){var x=String(side||"WAIT").toUpperCase();return x==="LONG"?"long":x==="SHORT"?"short":"wait"}
+function marketSignalLabel(side){var x=String(side||"WAIT").toUpperCase();return x==="LONG"?"CANDIDATE LONG":x==="SHORT"?"CANDIDATE SHORT":"WAIT"}
+function renderMarketBoardRows(rows,limit){
+  var data=(rows||[]).slice(0,limit||rows?.length||0);
+  return data.map(function(r,idx){
+    var m=marketMetaFor(r),rawSide=String(r.side||"WAIT").toUpperCase(),sig=marketSignalClass(rawSide);
+    var change=Number.isFinite(Number(m.change24h))?Number(m.change24h):Number(r.change24h);
+    var changeCls=Number(change)>=0?"up":"down";
+    var rank=Number.isFinite(Number(m.rank))?m.rank:(idx+1);
+    var price=Number.isFinite(Number(r.price))?Number(r.price):Number(m.geckoPrice);
+    return '<div class="marketBoardRow" data-symbol="'+safeHtml(r.symbol)+'">'+
+      '<span class="rank">'+fmtRank(rank)+'</span>'+
+      '<span class="coin"><i class="coinMark">'+safeHtml(String(r.label||r.symbol).slice(0,4))+'</i>'+safeHtml(r.label||r.symbol)+'</span>'+
+      '<span class="price">'+fmtMarketPrice(price)+'</span>'+
+      '<span class="'+changeCls+' marketDim">'+pct(change)+'</span>'+
+      '<span class="marketCap">'+fmtCompactUsd(m.marketCap)+'</span>'+
+      '<span class="marketVol">'+fmtCompactUsd(m.volume24h)+'</span>'+
+      '<span class="marketAction"><span class="marketScore">'+fmt(r.score)+'/100</span><span class="marketSignal '+sig+'">'+marketSignalLabel(rawSide)+'</span></span>'+
+    '</div>';
+  }).join("")||'<div class="small">No market rows available.</div>';
+}
 function renderScanner(){
   var rows=state.scan||[],filtered=rows.filter(function(r){return state.filter==="ALL"||r.side===state.filter});
-  $("scanRows").innerHTML=filtered.map(function(r){
-    var watched=state.watch.indexOf(r.symbol)>=0;
-    var rawSide=String(r.side||"WAIT").toUpperCase();
-    var label=rawSide==="LONG"?"CANDIDATE LONG":rawSide==="SHORT"?"CANDIDATE SHORT":"WAIT";
-    return'<div class="scanRow"><button class="alertStar '+(watched?"on":"")+'" data-watch="'+r.symbol+'">'+(watched?"★":"☆")+'</button><b>'+r.label+'</b><span>'+fmt(r.price)+'</span><span class="score">'+fmt(r.score)+'</span><span class="'+(rawSide==="LONG"?"up":rawSide==="SHORT"?"down":"wait")+'">'+label+'</span><span>'+String(r.regime||"—").slice(0,11)+'</span></div>'
-  }).join("")||'<div class="small">No rows available.</div>';
-  var best=rows.slice().sort(function(a,b){return(Number(b.score)||0)-(Number(a.score)||0)}).slice(0,5);
-  $("marketRows").innerHTML=best.map(function(r){
-    var rawSide=String(r.side||"WAIT").toUpperCase();
-    var label=rawSide==="LONG"?"CANDIDATE LONG":rawSide==="SHORT"?"CANDIDATE SHORT":"WAIT";
-    return'<div class="marketRow" data-symbol="'+r.symbol+'"><b>'+r.label+'</b><span>'+String(r.regime||"—").slice(0,12)+'</span><span>'+fmt(r.score)+'</span><span class="'+(rawSide==="LONG"?"up":rawSide==="SHORT"?"down":"wait")+'">'+label+'</span></div>'
-  }).join("")||'<div class="small">Scanner warming up…</div>';
-  $("tape").innerHTML=best.map(function(r){
-    var rawSide=String(r.side||"WAIT").toUpperCase();
-    var label=rawSide==="LONG"?"CANDIDATE LONG":rawSide==="SHORT"?"CANDIDATE SHORT":"WAIT";
-    return'<div class="tapeCard"><b>'+r.label+'</b><span>'+fmt(r.price)+" · "+pct(r.change24h)+'</span><span>'+fmt(r.score)+"/100 · "+label+"</span></div>"
-  }).join("");
-  document.querySelectorAll("[data-watch]").forEach(function(el){el.onclick=function(ev){ev.stopPropagation();toggleWatch(el.dataset.watch)}});
+  $("scanRows").innerHTML='<div class="marketBoardHead"><span>#</span><span>Coin</span><span>Price</span><span>24H</span><span>Market Cap</span><span>24H Volume</span><span>MarketPulse</span></div>'+renderMarketBoardRows(filtered,filtered.length);
+  var best=rows.slice().sort(function(a,b){return(Number(b.score)||0)-(Number(a.score)||0)}).slice(0,rows.length);
+  $("marketRows").innerHTML='<div class="marketBoardHead"><span>#</span><span>Coin</span><span>Price</span><span>24H</span><span>Market Cap</span><span>24H Volume</span><span>MarketPulse</span></div>'+renderMarketBoardRows(best,best.length);
+  $("tape").innerHTML='<div class="marketBoardHead"><span>#</span><span>Coin</span><span>Price</span><span>24H</span><span>Market Cap</span><span>24H Volume</span><span>MarketPulse</span></div>'+renderMarketBoardRows(rows,rows.length);
   document.querySelectorAll("[data-symbol]").forEach(function(el){el.onclick=function(){state.symbol=el.dataset.symbol;$("symbol").value=state.symbol;loadCore()}});
   renderAlerts();
   checkAlerts(rows);
 }
-
 function renderSignals(){
   var rows=state.signals.slice(0,30);
   $("sigN").textContent=state.signals.length;
