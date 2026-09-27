@@ -8,8 +8,11 @@ function descending15m(){
   const out=[],start=Date.UTC(2026,8,27,0,0,0),m=15*60000;
   for(let i=0;i<120;i++){
     let h,l;
-    if(i<100){h=125;l=123;}
-    else {const line=130-2*(i-100);h=line-2;l=h-2;}
+    if(i<100){h=100+i*.2;l=h-2;}
+    else if(i<110){h=125-(i-100)*2.0-2;l=h-2;}
+    else if(i<115){h=105-(i-110)*1.8;l=h-2;}
+    else if(i<119){h=95-(i-115)*1.0;l=h-2;}
+    else {h=97;l=90;}
     const o=h-.7,cl=h-.9;
     out.push({t:start+i*m,o,c:cl,h,l,v:1000});
   }
@@ -23,8 +26,11 @@ function ascending1h(){
   const out=[],start=Date.UTC(2026,8,27,0,0,0),m=3600000;
   for(let i=0;i<120;i++){
     let h,l;
-    if(i<100){l=75;h=77;}
-    else {const line=70+2*(i-100);l=line+2;h=l+2;}
+    if(i<100){l=100-i*.2;h=l+2;}
+    else if(i<110){l=75+(i-100)*1.9;h=l+2;}
+    else if(i<115){l=95+(i-110)*1.8;h=l+2;}
+    else if(i<119){l=105+(i-115)*1.0;h=l+2;}
+    else {l=102;h=110;}
     const o=l+.7,cl=l+.9;
     out.push({t:start+i*m,o,c:cl,h,l,v:1000});
   }
