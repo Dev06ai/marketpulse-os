@@ -1479,10 +1479,22 @@ function drawMain(){
   var finalEligible=Boolean(final&&final.liveSignalEligible===true&&final.state==="READY"&&(final.action==="LONG"||final.action==="SHORT"));
   var model=finalEligible?final.levels:null;
   if(model){
-    [{name:"ENTRY",value:model.entryLow,color:theme.ema},{name:"STOP",value:model.stop,color:theme.bear},{name:"TP1",value:model.tp1,color:theme.bull}].forEach(function(z){
+    var elo=Number(model.entryLow),ehi=Number(model.entryHigh);
+    if(Number.isFinite(elo)&&Number.isFinite(ehi)){
+      var eTop=scale(Math.max(elo,ehi)),eBot=scale(Math.min(elo,ehi));
+      var bandTop=Math.max(top,Math.min(top+ph,eTop)),bandBot=Math.max(top,Math.min(top+ph,eBot));
+      ctx.save();
+      ctx.fillStyle=theme.ema;ctx.globalAlpha=.08;ctx.fillRect(left,bandTop,pw,Math.max(2,bandBot-bandTop));
+      ctx.setLineDash([5,5]);ctx.strokeStyle=theme.ema;ctx.globalAlpha=.72;ctx.lineWidth=1;
+      ctx.beginPath();ctx.moveTo(left,bandTop);ctx.lineTo(left+pw,bandTop);ctx.moveTo(left,bandBot);ctx.lineTo(left+pw,bandBot);ctx.stroke();
+      ctx.restore();
+      ctx.fillStyle=theme.ema;ctx.font="700 8px system-ui";ctx.fillText("ENTRY ZONE",left+5,Math.min(top+ph-5,Math.max(top+9,bandTop+11)));
+    }
+
+    [{name:"STOP",value:model.stop,color:theme.bear},{name:"TP1",value:model.tp1,color:theme.bull}].forEach(function(z){
       if(!Number.isFinite(Number(z.value)))return;
       var yy=scale(Number(z.value));if(yy<top||yy>top+ph)return;
-      ctx.save();ctx.setLineDash([5,5]);ctx.strokeStyle=z.color;ctx.globalAlpha=.55;ctx.beginPath();ctx.moveTo(left,yy);ctx.lineTo(left+pw,yy);ctx.stroke();ctx.restore();
+      ctx.save();ctx.setLineDash([5,5]);ctx.strokeStyle=z.color;ctx.globalAlpha=.62;ctx.beginPath();ctx.moveTo(left,yy);ctx.lineTo(left+pw,yy);ctx.stroke();ctx.restore();
       ctx.fillStyle=z.color;ctx.font="700 8px system-ui";ctx.fillText(z.name,left+5,yy-4);
     });
   }
@@ -2632,7 +2644,7 @@ async function renderFinalDecision(d){
   $("thesisChips").innerHTML=[["HTF",ev.mtfScore!=null?fmt(ev.mtfScore)+"/100":null],["Flow",ev.flowScore!=null?fmt(ev.flowScore)+"/100":null],["Data",data.score!=null?fmt(data.score)+"/100":null],["Style",side!=="WAIT"?(d.tradeStyle||m.tradeStyle||"—"):null],["Risk",pg.decision||"NOT EVALUATED"]].map(function(x){return'<span class="chip c">'+x[0]+": "+(x[1]||"—")+"</span>"}).join("");
   $("quality").textContent=fmt(m.confluenceScore)+"/100";$("quality").style.color=accent;
   $("components").innerHTML=(ev.components||[]).map(function(x){return'<div class="rowLine"><span class="small">'+safeHtml(x.name)+'</span><b style="font-size:9px;text-align:right">'+fmt(x.score)+'/100</b><div class="bar"><i style="width:'+Math.max(0,Math.min(100,Number(x.score)||0))+'%"></i></div></div>'}).join("");
-  $("entry").textContent=side!=="WAIT"&&lv.entryLow!=null?fmt(lv.entryLow)+" → "+fmt(lv.entryHigh):"Wait";$("stop").textContent=side!=="WAIT"?fmt(lv.stop):"0";$("target").textContent=side!=="WAIT"?fmt(lv.tp1):"0";$("rr").textContent=side!=="WAIT"&&lv.rr?Number(lv.rr).toFixed(2)+"R":"—";$("tradeStyle").textContent=side!=="WAIT"?((d.tradeStyle||m.tradeStyle||"—")+" · "+String(d.interval||"").toUpperCase()):"—";
+  $("entry").textContent=side!=="WAIT"&&lv.entryLow!=null?fmt(lv.entryLow)+" → "+fmt(lv.entryHigh):"Wait";$("stop").textContent=side!=="WAIT"?fmt(lv.stop):"—";$("target").textContent=side!=="WAIT"?fmt(lv.tp1):"—";$("rr").textContent=side!=="WAIT"&&lv.rr?Number(lv.rr).toFixed(2)+"R":"—";$("tradeStyle").textContent=side!=="WAIT"?((d.tradeStyle||m.tradeStyle||"—")+" · "+String(d.interval||"").toUpperCase()):"—";
   var s=v.summary||{},p=v.adaptive||{};
   var evidence=s.sufficient?("Sufficient sample · "+Number(s.trades||0)+" resolved setups"):("Collecting · "+Number(s.trades||0)+" resolved setups");
   if($("validationEvidence"))$("validationEvidence").textContent=evidence;
