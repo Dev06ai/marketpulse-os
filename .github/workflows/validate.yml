@@ -41,6 +41,7 @@ jobs:
       - run: node tests/advanced-price-action.js
       - run: node tests/advanced-elliott-wave.js
       - run: node tests/analyst-scenario-pack.js
+      - run: node tests/mindpillar-knowledge.js
       - name: Check browser script
         run: |
           python - <<'PY'
