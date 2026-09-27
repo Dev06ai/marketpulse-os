@@ -360,7 +360,7 @@ function queuePhase1113Validation(symbol,interval,candles){
   return hit?.payload||null;
 }
 
-async function buildDecisionSnapshot(symbol,interval,query){
+async function buildDecisionSnapshot(symbol,interval,query,deviceId=null){
   const key=symbol+"|"+interval,now=Date.now(),cached=DECISION_CACHE.get(key);
   if(cached&&now-cached.ts<DECISION_TTL)return Object.assign({cache:"fresh",cacheAgeMs:now-cached.ts},cached.payload);
   try{
@@ -429,7 +429,7 @@ async function buildDecisionSnapshot(symbol,interval,query){
     const gatedDecision=phase1113.applyDeploymentGate(decision,validation1113,{basePolicy:{minScore:config.minSignalScore,minRR:config.minRR}});
     const stableDecision=applySignalStability(gatedDecision,symbol,interval);
     const finalDecision=sanitizeFinalDecision(stableDecision);
-    try{phase4.updateFinalDecision(requestDevice(req),symbol,interval,finalDecision,candles).catch(()=>{})}catch{}
+    try{phase4.updateFinalDecision(deviceId||"00000000-0000-0000-0000-000000000000",symbol,interval,finalDecision,candles).catch(()=>{})}catch{}
     const payload={
       ok:true,...finalDecision,analysis,derivatives:flow,consensus,
       learning:learned?await learning.status().catch(()=>null):null,
@@ -1442,7 +1442,7 @@ const server=http.createServer(async(req,res)=>{
       if(!SYMBOLS.includes(symbol)||!['15m','30m','1h','4h','1d'].includes(interval))return send(res,400,{ok:false,error:'Unsupported symbol or interval'});
       try{
         const payload=await Promise.race([
-          buildDecisionSnapshot(symbol,interval,u.searchParams),
+          buildDecisionSnapshot(symbol,interval,u.searchParams,requestDevice(req)),
           new Promise((_,reject)=>setTimeout(()=>reject(new Error('DECISION_ENGINE_TIMEOUT')),8500))
         ]);
         return send(res,200,payload);
@@ -1739,7 +1739,7 @@ const server=http.createServer(async(req,res)=>{
       let raw="";for await(const chunk of req)raw+=chunk;let body={};try{body=JSON.parse(raw||"{}")}catch{return send(res,400,{error:"Invalid JSON"})}
       const symbol=(body.symbol||'BTCUSDT').toUpperCase(),interval=body.interval||'1h';
       try{
-        const finalDecision=await buildDecisionSnapshot(symbol,interval,u.searchParams);
+        const finalDecision=await buildDecisionSnapshot(symbol,interval,u.searchParams,requestDevice(req));
         if(!finalDecision?.liveSignalEligible||finalDecision?.state!=="READY"||!["LONG","SHORT"].includes(String(finalDecision?.action||"").toUpperCase())){
           return send(res,409,{ok:false,error:"FINAL_SIGNAL_NOT_ELIGIBLE",message:"Execution preparation is allowed only from a final gated LONG/SHORT decision.",decision:finalDecision});
         }
