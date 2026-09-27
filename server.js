@@ -1728,12 +1728,9 @@ const server=http.createServer(async(req,res)=>{
           return{symbol,label:labels[symbol]||symbol,price:tick.price??meta.geckoPrice??null,change24h:tick.change24h??meta.change24h??null,market:meta,status:'WAITING',side:'WAIT',score:0,error:e.message};
         }
       };
-      const [marketMeta,rows]=await Promise.all([
-        getMarketMetadata(SYMBOLS),
-        Promise.all(SYMBOLS.map(scanOne))
-      ]);
-      rows.forEach(function(row){row.market=marketMeta[row.symbol]||null});
-      const payload={ok:true,interval,rows,marketSource:"coingecko",updatedAt:Date.now(),cacheTtlMs:SCAN_TTL,mode:"fast-cached-scan-v3"};
+      const rows=await Promise.all(SYMBOLS.map(scanOne));
+      rows.forEach(function(row){if(!row.market)row.market=marketMeta[row.symbol]||null});
+      const payload={ok:true,interval,rows,marketSource:"multi-source",updatedAt:Date.now(),cacheTtlMs:SCAN_TTL,mode:"fast-cached-scan-v4"};
       SCAN_CACHE.set(interval,{ts:Date.now(),payload});return send(res,200,payload);
     }
 
