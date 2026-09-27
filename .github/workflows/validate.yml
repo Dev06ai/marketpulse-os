@@ -68,6 +68,30 @@ jobs:
           print("Single authoritative signal UI check OK")
           PY
 
+      - name: Check calculator unit settings
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          html=Path("public/index.html").read_text()
+          for x in [
+              'Order by Quantity',
+              'BTC</button>',
+              'USDT</button>',
+              'Cont</button>',
+              'Order by Cost (USDT)',
+              'id="pc"',
+              'function currentOrderNotional(entry)',
+              'function currentBaseQty(entry)',
+              'state.pUnitMode',
+              'calc-profit',
+              'calc-loss',
+              'resetQuickCalculators();',
+          ]:
+              assert x in html, x
+          assert '$(".unitChoice")' not in html
+          print("Calculator unit settings checks OK")
+          PY
+
       - name: Check cleaned calculator and removed safety tools
         run: |
           python - <<'PY'
