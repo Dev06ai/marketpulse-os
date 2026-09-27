@@ -600,11 +600,11 @@ async function buildDecisionSnapshot(symbol,interval,query,deviceId=null){
       dlineHigherInterval?Promise.race([klines(symbol,dlineHigherInterval),new Promise(resolve=>setTimeout(()=>resolve(null),1400))]).catch(()=>null):Promise.resolve(null),
       Promise.race([derivatives(symbol,interval),new Promise(resolve=>setTimeout(()=>resolve(null),1800))]).catch(()=>null),
       Promise.race([dataFabric.assess(symbol,interval,{
-        primaryPrice:candles[candles.length-1]?.c,
-        primaryAgeMs:candles[candles.length-1]?.t?now-Number(candles[candles.length-1].t):null,
-        primarySource:candles?.[0]?.source,
-        liveFlow:flowBucket(symbol)
-      }),new Promise(resolve=>setTimeout(()=>resolve(null),900))]).catch(()=>null)
+        primaryPrice:consensusPrimaryPrice,
+        primaryAgeMs:consensusPrimaryAge,
+        primarySource:liveSeed.markPrice!=null?"Bybit live flow":(candles?.[0]?.source||"engine"),
+        liveFlow:liveSeed
+      }),new Promise(resolve=>setTimeout(()=>resolve(null),2600))]).catch(()=>null)
     ]);
     const lower=lowerRaw?closedCandles(lowerRaw,lowerInterval,now):null;
     const higher=higherRaw?closedCandles(higherRaw,higherInterval,now):null;
@@ -636,10 +636,13 @@ async function buildDecisionSnapshot(symbol,interval,query,deviceId=null){
       maxPriceDispersionBps:Number(getQ('maxPriceDispersionBps',process.env.PROP_MAX_PRICE_DISPERSION_BPS||80)),
       blockMixedFlow:String(getQ('blockMixedFlow',process.env.PROP_BLOCK_MIXED_FLOW||"true"))!=="false"
     });
+    const liveMarketAgeMs=Number.isFinite(Number(liveSeed?.lastTs))&&Number(liveSeed.lastTs)>0
+      ?Math.max(0,now-Number(liveSeed.lastTs))
+      :(Number.isFinite(Number(consensus?.freshestAgeMs))?Number(consensus.freshestAgeMs):(candles.length?Math.max(0,now-Number(candles[candles.length-1].t)):null));
     const gate=propFirm.evaluateStandard({
       analysis,derivatives:flow,
       dataQuality:{
-        candleAgeMs:candles.length?Math.max(0,now-Number(candles[candles.length-1].t)):null,
+        candleAgeMs:liveMarketAgeMs,
         qualityPct:flow?.available?100:80,
         consensusQualityPct:consensus?.consensusQualityPct,
         priceDispersionBps:consensus?.priceDispersionBps,
@@ -650,7 +653,7 @@ async function buildDecisionSnapshot(symbol,interval,query,deviceId=null){
     });
     const decision=phase910.evaluate({
       symbol,interval,analysis,lower:lowerAnalysis,higher:higherAnalysis,derivatives:flow,consensus,
-      dataQuality:{candleAgeMs:candles.length?Math.max(0,now-Number(candles[candles.length-1].t)):null},
+      dataQuality:{candleAgeMs:liveMarketAgeMs},
       liveFlow:flow,validation:analytics?.validation||null,propGate:gate
     });
     const gatedDecision=phase1113.applyDeploymentGate(decision,validation1113,{basePolicy:{minScore:config.minSignalScore,minRR:config.minRR}});
