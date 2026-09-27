@@ -65,6 +65,21 @@ console.log(JSON.stringify({
   validationSummary:phaseResult.summary
 },null,2));
 
+const phase4=require("./phase4");
+const phase910=require("./phase9-10");
+assert(typeof phase4.updateFinalDecision==="function","Phase 4 final-signal learner is not exported.");
+const styleCheck=phase910.evaluate({
+  interval:"15m",
+  analysis:{side:"LONG",status:"WAITING",score:80,price:100,entryLow:99,entryHigh:100,stop:97,tp1:104,tp2:108},
+  higher:{regime:"UPTREND"},lower:{regime:"UPTREND"},
+  derivatives:{available:true,cvdState:"BUYERS CONFIRM",oiChangePct:2,orderBook:{imbalance:.15},takerImbalance:.1,liquidationBias:"SHORT LIQS DOMINANT",livePointCount:10},
+  consensus:{consensusQualityPct:95,priceDispersionBps:10},
+  dataQuality:{candleAgeMs:1000},liveFlow:{liveConnected:true,livePointCount:10},
+  propGate:{decision:"ELIGIBLE"}
+});
+assert(styleCheck.tradeStyle==="SCALP","15m final decision must be classified as SCALP.");
+assert(styleCheck.market?.tradeStyle==="SCALP","15m market payload must expose SCALP style.");
+
 const {detectStrategySetups}=require("./strategy-setups");
 
 function strategyCandles(){
