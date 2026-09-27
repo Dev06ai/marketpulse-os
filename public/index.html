@@ -2747,8 +2747,13 @@ async function loadFinalDecision(){
     state.finalDecision=d;state.finalDecisionTs=Date.now();renderFinalDecision(d);
   }catch(e){
     if(seq!==state.finalDecisionSeq||symbol!==state.symbol||interval!==state.interval)return;
-    suppressFinalSignal("Final decision refresh failed; directional output is intentionally suppressed until fresh data returns.");
-    var meta=$("finalEngineMeta");if(meta)meta.textContent="Phase 9/10/11-13 · FINAL DECISION UNAVAILABLE · "+(e.message||"refresh failed");
+    if(state.finalDecision){
+      var meta=$("finalEngineMeta");
+      if(meta)meta.textContent="Phase 9/10/11-13 · REFRESH DELAYED · keeping the last confirmed decision until fresh data returns";
+      return;
+    }
+    suppressFinalSignal("Final decision unavailable; waiting for the first fresh decision.");
+    var meta2=$("finalEngineMeta");if(meta2)meta2.textContent="Phase 9/10/11-13 · FINAL DECISION UNAVAILABLE · "+(e.message||"refresh failed");
   }
 }
 
@@ -2776,7 +2781,7 @@ async function loadCore(){
     }else if(state.chartInterval===requestedInterval){
       state.chartCandles=d.candles||state.chartCandles;
     }
-    state.bootRetry=0;setStatus("Live market data connected","ok");$("dataState").textContent="Live";renderMarket();
+    state.bootRetry=0;var sb=$("statusBar");if(sb&&sb.classList.contains("warn"))setStatus("Live market data connected","ok");$("dataState").textContent="Live";renderMarket();
 
     deferTask(loadCoreEnrichment,150);
     deferTask(loadDataFabric,800);
@@ -2789,10 +2794,17 @@ async function loadCore(){
       deferTask(loadScan,120);deferTask(loadCycle,180);deferTask(loadCoreEnrichment,250);deferTask(loadCoreAnalytics,600);deferTask(function(){if(state.chartPinned&&state.chartInterval!==requestedInterval)refreshPinnedChart()},700);deferTask(loadFinalDecision,900);
     }
   }catch(e){
+    if(state.market&&state.market.analysis){
+      // Background refresh failure: keep the last known-good state and wait for
+      // the normal 12-second refresh cycle. No yellow warning and no signal reset.
+      state.bootRetry=0;
+      $("dataState").textContent="Live · last good snapshot";
+      return;
+    }
     state.bootRetry=Math.min((state.bootRetry||0)+1,5);
     setStatus("Market source is waking up — price feed stays active and will retry automatically…","warn");$("dataState").textContent="Retrying";
-    suppressFinalSignal("Market refresh failed; directional output is intentionally suppressed until fresh data returns.");
-    var delay=Math.min(6500,Math.max(700,Math.pow(2,state.bootRetry-1)*700));
+    suppressFinalSignal("Market refresh failed; waiting for the first usable market snapshot.");
+    var delay=Math.min(6500,Math.max(1200,Math.pow(2,state.bootRetry-1)*1200));
     state.bootRetryTimer=setTimeout(function(){state.bootRetryTimer=null;loadCore()},delay);
   }finally{state.busy=false}
 }
