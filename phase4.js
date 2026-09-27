@@ -256,24 +256,10 @@ function strategyHealth(state){
   };
 }
 async function updateLive(deviceId,symbol,interval,analysis,candles){
-  // Legacy raw-candidate tracker retained for research compatibility.
-  // Live learning is now driven by updateFinalDecision() so only final gated signals
-  // can become paper trades.
-  return updateFinalDecision(deviceId,symbol,interval,{
-    liveSignalEligible:Boolean(analysis&&analysis.side!=="WAIT"&&analysis.status==="READY"),
-    state:analysis?.status==="READY"?"READY":"NO_TRADE",
-    action:analysis?.status==="READY"?analysis.side:"WAIT",
-    market:{
-      side:analysis?.side||"WAIT",score:finite(analysis?.score,0),confluenceScore:finite(analysis?.score,0),
-      price:finite(analysis?.price),regime:analysis?.regime,type:analysis?.type||"NO TRADE",
-      status:analysis?.status||"WAITING",tradeStyle:analysis?.tradeStyle||"INTRADAY"
-    },
-    levels:{
-      side:analysis?.side||"WAIT",entryLow:finite(analysis?.entryLow),entryHigh:finite(analysis?.entryHigh),
-      entry:finite(analysis?.price),stop:finite(analysis?.stop),tp1:finite(analysis?.tp1),tp2:finite(analysis?.tp2),rr:finite(analysis?.rr)
-    },
-    evidence:{thesis:[analysis?.thesis||"Raw candidate"],avgR:null}
-  },candles);
+  // Intentionally non-learning legacy path. Paper learning must only consume
+  // final gated decisions through updateFinalDecision().
+  const loaded=await load(deviceId);
+  return snapshotFromState(loaded.state,symbol,interval,null);
 }
 
 async function updateFinalDecision(deviceId,symbol,interval,decision,candles){
