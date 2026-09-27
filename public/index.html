@@ -678,6 +678,9 @@ linear-gradient(180deg,#0c0e11 0%,#101214 48%,#0a0b0d 100%);box-shadow:0 -20px 7
   .footerColumns{grid-template-columns:1fr 1fr}
   .footerBottom{align-items:flex-start;flex-direction:column}
 }
+</style><style id="market-board-responsive">
+@media(max-width:900px){.scannerGrid{grid-template-columns:1fr}}
+@media(max-width:700px){.scanTableWrap{overflow-x:auto}.marketBoard,.marketBoardHead{min-width:760px}}
 </style></head>
 <body>
 <header class="header"><div class="headerInner">
@@ -2156,7 +2159,8 @@ function renderMarketBoardRows(rows,limit){
 }
 function renderScanner(){
   var rows=state.scan||[],filtered=rows.filter(function(r){return state.filter==="ALL"||r.side===state.filter});
-  $("scanRows").innerHTML='<div class="marketBoardHead"><span>#</span><span>Coin</span><span>Price</span><span>24H</span><span>Market Cap</span><span>24H Volume</span><span>MarketPulse</span></div>'+renderMarketBoardRows(filtered,filtered.length);
+  // The scanner header is static in the page markup; render rows only to prevent duplicates.
+  $("scanRows").innerHTML=renderMarketBoardRows(filtered,filtered.length);
   var best=rows.slice().sort(function(a,b){return(Number(b.score)||0)-(Number(a.score)||0)}).slice(0,rows.length);
   $("marketRows").innerHTML='<div class="marketBoardHead"><span>#</span><span>Coin</span><span>Price</span><span>24H</span><span>Market Cap</span><span>24H Volume</span><span>MarketPulse</span></div>'+renderMarketBoardRows(best,best.length);
   $("tape").innerHTML='<div class="marketBoardHead"><span>#</span><span>Coin</span><span>Price</span><span>24H</span><span>Market Cap</span><span>24H Volume</span><span>MarketPulse</span></div>'+renderMarketBoardRows(rows,rows.length);
