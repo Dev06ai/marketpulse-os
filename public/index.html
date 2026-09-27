@@ -29,7 +29,19 @@ button,input,select,textarea{font:inherit}.wrap{width:min(1440px,calc(100% - 26p
 @media(max-width:900px){.chartHeaderTools{width:100%;display:flex;flex-direction:column;align-items:stretch;gap:7px}.chartTimeframes{width:100%;display:grid;grid-template-columns:repeat(5,1fr);gap:4px}.chartTf{text-align:center;padding:7px 4px}.chartTools{width:100%;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:5px;justify-content:stretch}.chartTools button{width:100%;min-width:0;overflow:hidden;text-overflow:ellipsis}.chartTools .chartFocusBtn{display:none!important}}
 @media(min-width:901px){.chartHeaderTools{max-width:75%}.chartTools{grid-template-columns:repeat(10,max-content)}}.chartWrap{position:relative;border:1px solid var(--line);border-radius:13px;overflow:hidden;background:#050507}.chartHeaderTools{display:flex;align-items:center;gap:7px;flex-wrap:wrap}.chartTimeframes{display:flex;gap:3px;overflow:auto;max-width:100%;scrollbar-width:none}.chartTimeframes::-webkit-scrollbar{display:none}.chartTf{border:1px solid rgba(255,255,255,.09);background:#0d0d11;color:#8395aa;border-radius:7px;padding:5px 8px;cursor:pointer;font-size:9px;font-weight:800;white-space:nowrap}.chartTf.active{color:#06131f;background:linear-gradient(100deg,#67e8ff,#b78cff);border-color:rgba(103,232,255,.35)}.chartToolbar{display:flex;justify-content:space-between;gap:8px;align-items:center;padding:8px 10px;border-bottom:1px solid rgba(129,178,241,.08)}.chartTools{display:flex;gap:4px}.chartTools button{border:1px solid rgba(255,255,255,.09);background:#101014;color:#8798ad;border-radius:7px;padding:5px 7px;cursor:pointer;font-size:9px}.chartCanvas{display:block;width:100%;height:430px;touch-action:none;image-rendering:auto}.ohlc{position:absolute;left:10px;top:47px;padding:5px 7px;border-radius:7px;background:rgba(16,16,20,.92);border:1px solid rgba(129,178,241,.12);font-size:8px;color:#dbe9f8;pointer-events:none}
 .levels{display:grid;grid-template-columns:repeat(5,1fr);gap:7px;margin-top:8px}.level{padding:9px;border:1px solid var(--line);border-radius:10px}.level .k{font-size:8px;color:var(--muted)}.level .v{margin-top:5px;font-size:10px;font-weight:850}
-.qualityGrid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}.list{display:grid;gap:5px}.rowLine{display:grid;grid-template-columns:1fr 50px;gap:6px;align-items:center}.bar{height:5px;border-radius:999px;background:rgba(255,255,255,.07);overflow:hidden;grid-column:1/-1;margin-top:-2px}.bar i{display:block;height:100%;background:linear-gradient(90deg,#67e8ff,#b78cff);border-radius:inherit}
+.qualityGrid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}.list{display:grid;gap:5px}.rowLine{display:grid;grid-template-columns:1fr 50px;gap:6px;align-items:center}
+.reactionList{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:8px}
+.reactionItem{min-width:0;padding:10px 11px;border:1px solid rgba(129,178,241,.11);border-radius:11px;background:linear-gradient(180deg,rgba(255,255,255,.028),rgba(255,255,255,.012));box-shadow:inset 0 1px 0 rgba(255,255,255,.018);overflow:hidden}
+.reactionTop{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;min-width:0}
+.reactionTitle{min-width:0;color:#e7edf6;font-size:9px;font-weight:850;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.reactionState{flex:0 0 auto;font-size:8px;font-weight:900;letter-spacing:.03em}
+.reactionPrice{margin-top:6px;color:#f1f5f9;font-size:12px;font-weight:900;letter-spacing:-.01em}
+.reactionMeta{margin-top:4px;color:#7f8b9d;font-size:8px;line-height:1.35}
+.reactionTrigger{margin-top:7px;color:#aeb8c7;font-size:8px;line-height:1.45}
+.reactionEvidence{margin-top:6px;color:#697688;font-size:7.5px;line-height:1.35}
+.reactionInvalidation{color:#8b95a4;font-weight:750}
+@media(max-width:900px){.reactionList{grid-template-columns:1fr}}
+.bar{height:5px;border-radius:999px;background:rgba(255,255,255,.07);overflow:hidden;grid-column:1/-1;margin-top:-2px}.bar i{display:block;height:100%;background:linear-gradient(90deg,#67e8ff,#b78cff);border-radius:inherit}
 .flowGrid{display:grid;grid-template-columns:repeat(4,1fr);gap:7px}.flow .v{font-size:11px;font-weight:900;margin-top:5px}.flow .s{font-size:8px;color:var(--muted);margin-top:3px}.flowChart{width:100%;height:230px;display:block;background:linear-gradient(180deg,#07121d 0%,#081018 100%);border:1px solid rgba(103,232,255,.10);border-radius:12px;box-shadow:inset 0 1px 0 rgba(255,255,255,.028),0 10px 28px rgba(0,0,0,.16);touch-action:none}.flowLegend{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:7px 0 2px;font-size:8px;color:#8ca0b6}.flowLegend span{display:flex;align-items:center;gap:5px}.lg{width:8px;height:3px;border-radius:99px;display:inline-block}.lg.mint{background:#2E7D32}.lg.lav{background:#1565C0}.lg.ember{background:#C62828}.calcBox{padding:2px}.calcBox .inputs label{display:flex;flex-direction:column;gap:4px}
 .overGrid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.overGrid>.card:nth-child(3){grid-column:1 / -1}.miniChart{width:100%;height:250px;display:block;background:linear-gradient(180deg,#081421 0%,#070b12 100%);border:1px solid rgba(103,232,255,.12);border-radius:12px;box-shadow:inset 0 1px 0 rgba(255,255,255,.035),0 10px 28px rgba(0,0,0,.18)}#cycleChart,#ddChart{background:#090c12;border:1px solid rgba(255,255,255,.07);box-shadow:inset 0 1px 0 rgba(255,255,255,.025),0 8px 22px rgba(0,0,0,.14)}.marketRows{display:grid;gap:5px}.marketRow{display:grid;grid-template-columns:42px 1fr 42px 44px;gap:5px;align-items:center;padding:7px;border:1px solid rgba(129,178,241,.09);border-radius:8px;background:rgba(255,255,255,.014);cursor:pointer}.marketRow:hover{border-color:rgba(103,232,255,.2)}.marketRow b,.marketRow span{font-size:8px}.marketRow span{color:#8394a9}.up{color:var(--green)!important}.down{color:var(--red)!important}.wait{color:var(--amber)!important}
 .tape{display:grid;grid-template-columns:repeat(5,1fr);gap:6px}.tapeCard{padding:8px;border:1px solid rgba(129,178,241,.09);border-radius:9px;background:rgba(255,255,255,.014)}.tapeCard b{font-size:8px}.tapeCard span{display:block;margin-top:4px;font-size:8px;color:#8797ab}
@@ -712,7 +724,7 @@ linear-gradient(180deg,#0c0e11 0%,#101214 48%,#0a0b0d 100%);box-shadow:0 -20px 7
       </div>
       <div class="card" id="reactionOpportunityCard" style="margin-top:10px">
         <div class="sectionHead">
-          <div><div class="title">Reaction Opportunities</div><div class="sub">Conditional setups around high-confluence zones. The zone alone is not a trade.</div></div>
+          <div><div class="title">Reaction Opportunities</div><div class="sub">Conditional setups around high-confluence zones. Wait for the reaction before acting.</div></div>
           <span class="chip" id="reactionMapState">WATCH</span>
         </div>
         <div id="reactionOpportunities" class="list">
@@ -3023,6 +3035,7 @@ function renderReactionMap(map){
     box.innerHTML='<div class="small">No nearby high-confluence reaction zones are currently mapped.</div>';
     return;
   }
+  box.className="reactionList";
   box.innerHTML=rows.slice(0,4).map(function(z){
     var action=z.action==="LONG"?"LONG":z.action==="SHORT"?"SHORT":"WAIT";
     var stateLabel=z.state==="CONFIRM_LONG"||z.state==="CONFIRM_SHORT"?"CONFIRMED":z.state==="BREAKOUT_LONG"||z.state==="BREAKDOWN_SHORT"?"BREAK / RETEST":"WATCH";
@@ -3031,16 +3044,15 @@ function renderReactionMap(map){
     var zoneHigh=Number.isFinite(Number(z.high))?fmt(z.high):"—";
     var evidence=Array.isArray(z.evidence)?z.evidence.slice(0,4).join(" · "):"Key confluence";
     var color=action==="LONG"?"#4ade80":action==="SHORT"?"#f87171":"#c084fc";
-    return '<div class="rowLine" style="padding:10px 0">'+
-      '<div style="display:flex;justify-content:space-between;gap:8px;align-items:center">'+
-        '<span class="small">'+safeHtml(z.label||"Reaction zone")+'</span>'+
-        '<b style="font-size:9px;color:'+color+'">'+stateLabel+' · '+action+'</b>'+
+    return '<div class="reactionItem">'+
+      '<div class="reactionTop">'+
+        '<div class="reactionTitle">'+safeHtml(z.label||"Reaction zone")+'</div>'+
+        '<div class="reactionState" style="color:'+color+'">'+stateLabel+' · '+action+'</div>'+
       '</div>'+
-      '<div style="margin-top:4px;color:#e7eaf0;font-size:10px;font-weight:800">'+zoneLow+' → '+zoneHigh+
-        '<span style="color:#7f8997;font-weight:600"> · '+z.confluence+' evidence · '+distance+' away</span></div>'+
-      '<div style="margin-top:4px;color:#8f98a6;font-size:9px">'+safeHtml(z.trigger||"Wait for a clean reaction.")+'</div>'+
-      '<div style="margin-top:3px;color:#6f7886;font-size:8px">'+safeHtml(evidence)+
-        (z.invalidation!=null?" · invalidation "+fmt(z.invalidation):"")+'</div>'+
+      '<div class="reactionPrice">'+zoneLow+' → '+zoneHigh+'</div>'+
+      '<div class="reactionMeta">'+z.confluence+' confluence sources · '+distance+' from price</div>'+
+      '<div class="reactionTrigger">'+safeHtml(z.trigger||"Wait for a clean reaction.")+'</div>'+
+      '<div class="reactionEvidence">'+safeHtml(evidence)+(z.invalidation!=null?' · <span class="reactionInvalidation">Invalidation '+fmt(z.invalidation)+'</span>':'')+'</div>'+
     '</div>';
   }).join("");
 }
