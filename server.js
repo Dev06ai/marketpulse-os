@@ -1327,7 +1327,12 @@ function summarizeDNA(records){
 }
 
 function staticFile(req,res){
-  const reqPath=req.url==='/'?'/index.html':req.url.split('?')[0],root=path.resolve(__dirname,'public'),file=path.resolve(root,'.'+reqPath),relative=path.relative(root,file);
+  // Normalize the URL path before handling the SPA root. The PWA manifest uses
+  // '/?app=marketpulse-mobile', so comparing the raw req.url to '/' would
+  // incorrectly try to read the public directory instead of public/index.html.
+  const urlPath=String(req.url||'/').split('?')[0]||'/';
+  const reqPath=urlPath==='/'?'/index.html':urlPath;
+  const root=path.resolve(__dirname,'public'),file=path.resolve(root,'.'+reqPath),relative=path.relative(root,file);
   if(relative.startsWith('..')||path.isAbsolute(relative))return send(res,403,{error:'Forbidden'});
   fs.readFile(file,(e,d)=>{
     if(e)return send(res,404,{error:'Not found'});
