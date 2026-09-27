@@ -68,6 +68,20 @@ jobs:
           print("Single authoritative signal UI check OK")
           PY
 
+      - name: Check charcoal quick calculator styling
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          html=Path("public/index.html").read_text()
+          assert 'id="quickCalculators"' in html
+          assert 'Quick calculator redesign — charcoal / clean / no green surfaces' in html
+          assert '.quickCalculators .calcBox' in html
+          assert 'background:#101116' in html
+          assert 'background:#0a0b0e' in html
+          assert '.quickCalculators .result' in html
+          print("Charcoal quick calculator styling checks OK")
+          PY
+
       - name: Check clean overview charts
         run: |
           python - <<'PY'

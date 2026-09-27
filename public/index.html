@@ -52,6 +52,100 @@ button,input,select,textarea{font:inherit}.wrap{width:min(1440px,calc(100% - 26p
 
 .portfolioGrid{display:grid;grid-template-columns:1.15fr .85fr;gap:10px}.portfolioMetricGrid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}.portfolioMetric,.portfolioPanel{background:#0f0f13;border:1px solid rgba(255,255,255,.07);border-radius:14px;padding:12px}.portfolioMetric .v{font-size:19px;font-weight:900;margin-top:5px}.portfolioMetric .subv{font-size:11px;color:#858792;margin-top:3px}.portfolioBars{display:grid;gap:7px}.portfolioBarRow{display:grid;grid-template-columns:70px 1fr 60px;gap:8px;align-items:center;font-size:11px}.portfolioBar{height:7px;background:#1a1a1f;border-radius:99px;overflow:hidden}.portfolioBar i{display:block;height:100%;background:linear-gradient(90deg,#67e8ff,#b78cff)}.portfolioTable{width:100%;border-collapse:collapse;font-size:11px}.portfolioTable th,.portfolioTable td{padding:7px 6px;border-bottom:1px solid rgba(255,255,255,.06);text-align:left}.portfolioTable th{color:#8e909b;font-weight:600}.portfolioPill{display:inline-flex;align-items:center;border:1px solid rgba(255,255,255,.08);border-radius:999px;padding:4px 8px;font-size:10px;color:#bfc1ca}.portfolioOk{color:#9BE7C4}.portfolioWarn{color:#FFCF99}.portfolioBad{color:#FF9B9B}.portfolioHeat{display:grid;grid-template-columns:repeat(7,1fr);gap:5px}.portfolioCell{padding:8px 5px;border:1px solid rgba(255,255,255,.06);border-radius:9px;text-align:center;background:#101014}.portfolioCell b{display:block;font-size:11px}.portfolioCell span{display:block;font-size:9px;color:#858792;margin-top:3px}.portfolioCorr{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}.portfolioCorrCell{height:32px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:8px;border:1px solid rgba(255,255,255,.045)}.portfolioStress{display:grid;grid-template-columns:1fr 1fr;gap:8px}.portfolioStressCard{padding:10px;border:1px solid rgba(255,255,255,.07);border-radius:10px;background:#101014}.portfolioStressCard .v{font-size:17px;font-weight:900;margin-top:4px}.portfolioEvent{display:grid;grid-template-columns:90px 1fr;gap:8px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,.06)}.portfolioEvent:last-child{border-bottom:0}.portfolioSmall{font-size:11px;color:#858792}.portfolioActions{display:flex;gap:7px;flex-wrap:wrap;align-items:end}.portfolioActions label{display:grid;gap:5px;font-size:11px;color:#92939e}.portfolioActions input{min-width:110px}.portfolioNote{margin-top:8px;color:#9597a2;font-size:12px;line-height:1.5}@media(max-width:860px){.portfolioGrid{grid-template-columns:1fr}.portfolioMetricGrid{grid-template-columns:1fr 1fr}.portfolioHeat,.portfolioCorr{grid-template-columns:repeat(4,1fr)}}@media(max-width:560px){.portfolioMetricGrid{grid-template-columns:1fr}.portfolioHeat,.portfolioCorr{grid-template-columns:repeat(2,1fr)}.portfolioActions{align-items:stretch}.portfolioActions label,.portfolioActions input{width:100%}}
 
+
+/* Quick calculator redesign — charcoal / clean / no green surfaces */
+.quickCalculators{
+  padding:14px;
+  background:linear-gradient(180deg,#0d0e12 0%,#0a0b0e 100%);
+  border:1px solid rgba(255,255,255,.075);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.025),0 18px 50px rgba(0,0,0,.28);
+}
+.quickCalculators .sectionHead{align-items:center;margin-bottom:12px}
+.quickCalculators .sectionHead .sub{font-size:10px;color:#7f8794}
+.quickCalculators .sectionHead .chip{
+  color:#9ba6b5;
+  background:#111318;
+  border-color:rgba(255,255,255,.08);
+  letter-spacing:.08em;
+}
+.quickCalculators .calcGrid{grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.quickCalculators .calcBox{
+  min-width:0;
+  padding:13px;
+  border:1px solid rgba(255,255,255,.075);
+  border-radius:12px;
+  background:#101116;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.025),0 10px 25px rgba(0,0,0,.16);
+}
+.quickCalculators .calcBox:hover{border-color:rgba(255,255,255,.12)}
+.quickCalculators .calcBox>.label{
+  color:#c9ced7;
+  font-size:11px;
+  font-weight:850;
+  letter-spacing:.01em;
+}
+.quickCalculators .inputs{
+  gap:8px;
+  margin-top:11px;
+}
+.quickCalculators .inputs label{
+  gap:5px;
+  color:#818997;
+  font-size:9px;
+  font-weight:650;
+}
+.quickCalculators .inputs input,
+.quickCalculators .inputs select{
+  min-height:37px;
+  width:100%;
+  padding:9px 10px;
+  border-radius:9px;
+  background:#0a0b0e;
+  border:1px solid rgba(255,255,255,.085);
+  color:#f0f2f5;
+  outline:none;
+  font-size:11px;
+  font-weight:650;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.018);
+}
+.quickCalculators .inputs input::placeholder{color:#5e6570}
+.quickCalculators .inputs input:focus,
+.quickCalculators .inputs select:focus{
+  border-color:rgba(167,243,208,.24);
+  box-shadow:0 0 0 3px rgba(167,243,208,.045),inset 0 1px 0 rgba(255,255,255,.018);
+}
+.quickCalculators .inputs select{
+  appearance:none;
+  background-image:linear-gradient(45deg,transparent 50%,#707785 50%),linear-gradient(135deg,#707785 50%,transparent 50%);
+  background-position:calc(100% - 13px) 15px,calc(100% - 9px) 15px;
+  background-size:4px 4px,4px 4px;
+  background-repeat:no-repeat;
+  padding-right:28px;
+}
+.quickCalculators .result{
+  min-height:39px;
+  display:flex;
+  align-items:center;
+  margin-top:10px;
+  padding:10px 11px;
+  border:1px solid rgba(255,255,255,.07);
+  border-radius:9px;
+  background:#0b0c0f;
+  color:#dce1e8;
+  font-size:10px;
+  font-weight:800;
+  letter-spacing:.01em;
+}
+.quickCalculators .result:empty{display:none}
+@media(max-width:900px){
+  .quickCalculators .calcGrid{grid-template-columns:1fr}
+}
+@media(max-width:700px){
+  .quickCalculators{padding:12px}
+  .quickCalculators .calcBox{padding:12px}
+  .quickCalculators .inputs input,
+  .quickCalculators .inputs select{min-height:40px}
+}
 </style>
 <style id="beginner-friendly-style">
 .beginnerGuideBtn{border-color:rgba(103,232,255,.22)!important;color:#bdefff!important}
@@ -636,8 +730,8 @@ body.admin-mode .nav button.adminNav,body.admin-mode .mobileMenu button.adminNav
       </div>
     </div>
 
-    <div class="section card">
-      <div class="sectionHead"><div><div class="title">Quick calculators</div><div class="sub">Enter a few numbers and MarketPulse does the math for you.</div></div><span class="chip">LIVE INPUTS</span></div>
+    <div id="quickCalculators" class="section card quickCalculators">
+      <div class="sectionHead"><div><div class="title">Quick calculators</div><div class="sub">Simple trade math with a clean, execution-focused layout.</div></div><span class="chip">CALCULATORS</span></div>
       <div class="calcGrid">
         <div class="calcBox"><div class="label">Position size</div><div class="inputs">
           <label class="small">Account<input id="ca" type="number" value="5000"></label><label class="small">Risk %<input id="cr" type="number" value="1" step=".05"></label>
