@@ -596,7 +596,8 @@ async function buildDecisionSnapshot(symbol,interval,query,deviceId=null){
     const lowerAnalysis=lower&&lower.length>=220&&lowerInterval?analyze(lower,{interval:lowerInterval}):null;
     const higherAnalysis=higher&&higher.length>=220&&higherInterval?analyze(higher,{interval:higherInterval}):null;
     const dlineHigherAnalysis=dlineHigher&&dlineHigher.length>=100?analyze(dlineHigher,{interval:dlineHigherInterval}):null;
-    let analysis=analyze(candles,{interval,lower:lowerAnalysis,higher:higherAnalysis,dlineHigher:dlineHigherAnalysis,deriv});
+    const dlineContext=interval==="1h"?(higherAnalysis||null):(dlineHigherAnalysis||higherAnalysis||null);
+    let analysis=analyze(candles,{interval,lower:lowerAnalysis,higher:higherAnalysis,dlineHigher:dlineContext,deriv});
     let learned=null;
     try{
       learned=await Promise.race([learning.process(symbol,interval,candles,analysis,{observe:false}),new Promise(resolve=>setTimeout(()=>resolve(null),500))]);
