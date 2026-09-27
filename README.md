@@ -116,9 +116,9 @@ The worker is decision-support only. It never enables execution or places trades
 
 Default cadence is 15m every 5 minutes, 1h every 15 minutes, 4h every 30 minutes, and 1d every 60 minutes. Supported symbols default to BTC, ETH, SOL, BNB, XRP, DOGE and ADA.
 
-Render deployment requires a separate Background Worker service with `npm run worker` and a `MARKETPULSE_WEB_URL` environment variable pointing to the MarketPulse web service. The worker also accepts `MARKETPULSE_WORKER_SYMBOLS`, `MARKETPULSE_WORKER_INTERVALS`, `MARKETPULSE_WORKER_TIMEOUT_MS`, `MARKETPULSE_WORKER_JITTER_MS` and `MARKETPULSE_WORKER_ENABLED`.
+A native Render Background Worker can run the long-lived `marketpulse-worker.js` process. When paid Render worker compute is not available, the repository also provides a no-cost GitHub Actions fallback: `.github/workflows/marketpulse-intelligence.yml` runs a scheduled `marketpulse-worker-once.js` sweep every 5 minutes. The sweep calls the same authoritative `/api/decision` endpoint and selects the 15m/1h/4h/1d intervals that are due.
 
-This removes the browser-session dependency from continuous learning. The web dashboard can be closed while the server-side intelligence loop continues, provided the Render worker/service deployment itself remains running.
+The GitHub Actions fallback is intentionally execution-free and does not require an open browser. Because GitHub scheduled workflows are hosted infrastructure rather than an always-on process, run timing can be delayed; this is a best-effort continuous-refresh path for the current free deployment, not a hard real-time guarantee.
 
 ## Phase 14 — Signal Intelligence (14.0.0)
 - Adds setup-specific knowledge profiles for SFP, NPOC, D-Line, breakout/retest, order blocks, Elliott context, trend continuation and range reversion.
