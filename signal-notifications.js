@@ -1,20 +1,74 @@
 const webpush=require("web-push");
+const crypto=require("crypto");
 
 const ENABLED=String(process.env.MARKETPULSE_SIGNAL_ALERTS_ENABLED??"true").toLowerCase()!=="false";
-const PUBLIC_KEY=String(process.env.MARKETPULSE_VAPID_PUBLIC_KEY||"").trim();
-const PRIVATE_KEY=String(process.env.MARKETPULSE_VAPID_PRIVATE_KEY||"").trim();
+const ENV_PUBLIC_KEY=String(process.env.MARKETPULSE_VAPID_VAPID_PUBLIC_KEY||"").trim();
+const ENV_PRIVATE_KEY=String(process.env.MARKETPULSE_VAPID_VAPID_PRIVATE_KEY||"").trim();
 const CONTACT_EMAIL=String(process.env.MARKETPULSE_ADMIN_EMAIL||"admin@marketpulse.local").trim();
+
+let VAPID_VAPID_PUBLIC_KEY="";
+let VAPID_VAPID_PRIVATE_KEY="";
 let VAPID_READY=false;
-if(ENABLED&&PUBLIC_KEY&&PRIVATE_KEY){
+let CONFIG_PROMISE=null;
+
+function validVapidPublicKey(value){
   try{
-    webpush.setVapidDetails("mailto:"+CONTACT_EMAIL,PUBLIC_KEY,PRIVATE_KEY);
-    VAPID_READY=true;
-  }catch(e){
-    console.error("MarketPulse push configuration error:",e.message);
-  }
+    const raw=Buffer.from(String(value||"").replace(/-/g,"+").replace(/_/g,"/")+"=".repeat((4-String(value||"").length%4)%4),"base64");
+    return raw.length===65 && raw[0]===4;
+  }catch{return false}
 }
-function pushConfigured(){
-  return Boolean(ENABLED&&PUBLIC_KEY&&PRIVATE_KEY&&VAPID_READY);
+function validVapidPrivateKey(value){
+  try{
+    const raw=Buffer.from(String(value||"").replace(/-/g,"+").replace(/_/g,"/")+"=".repeat((4-String(value||"").length%4)%4),"base64");
+    return raw.length===32;
+  }catch{return false}
+}
+function configureVapid(publicKey,privateKey){
+  if(!validVapidPublicKey(publicKey)||!validVapidPrivateKey(privateKey))throw new Error("Invalid VAPID keypair");
+  webpush.setVapidDetails("mailto:"+CONTACT_EMAIL,publicKey,privateKey);
+  VAPID_VAPID_PUBLIC_KEY=publicKey;
+  VAPID_VAPID_PRIVATE_KEY=privateKey;
+  VAPID_READY=true;
+}
+function generateVapidKeypair(){
+  // Generate a genuine P-256 VAPID pair using the web-push implementation.
+  return webpush.generateVAPIDKeys();
+}
+async function ensureConfigured(storage){
+  if(!ENABLED)return false;
+  if(VAPID_READY)return true;
+  if(CONFIG_PROMISE)return CONFIG_PROMISE;
+  CONFIG_PROMISE=(async()=>{
+    let saved=null;
+    try{saved=await storage.getAdminPushConfig()}catch{}
+    if(saved?.enabled!==false && validVapidPublicKey(saved?.publicKey)&&validVapidPrivateKey(saved?.privateKey)){
+      configureVapid(saved.publicKey,saved.privateKey);
+      return true;
+    }
+
+    // Ignore malformed environment keys rather than making the browser unusable.
+    if(validVapidPublicKey(ENV_PUBLIC_KEY)&&validVapidPrivateKey(ENV_PRIVATE_KEY)){
+      try{
+        configureVapid(ENV_PUBLIC_KEY,ENV_PRIVATE_KEY);
+        await storage.saveAdminPushConfig({publicKey:ENV_PUBLIC_KEY,privateKey:ENV_PRIVATE_KEY,contactEmail:CONTACT_EMAIL,enabled:true}).catch(()=>{});
+        return true;
+      }catch(e){console.error("MarketPulse VAPID environment configuration rejected:",e.message)}
+    }
+
+    const pair=generateVapidKeypair();
+    configureVapid(pair.publicKey,pair.privateKey);
+    await storage.saveAdminPushConfig({publicKey:pair.publicKey,privateKey:pair.privateKey,contactEmail:CONTACT_EMAIL,enabled:true});
+    console.log("MarketPulse generated and persisted a new VAPID keypair.");
+    return true;
+  })().catch(error=>{
+    VAPID_READY=false;
+    CONFIG_PROMISE=null;
+    console.error("MarketPulse push configuration failed:",error?.message||error);
+    return false;
+  });
+  const ok=await CONFIG_PROMISE;
+  CONFIG_PROMISE=null;
+  return ok;
 }
 
 const SETUP_LABELS={
@@ -86,6 +140,7 @@ function buildSignalAlert({decision,symbol,interval,candleTs}){
 }
 
 async function notifyAdminSignal(storage,context){
+  await ensureConfigured(storage);
   const alert=buildSignalAlert(context);
   if(!alert)return {sent:false,reason:"not_alert_eligible"};
   try{
@@ -124,6 +179,7 @@ async function notifyAdminSignal(storage,context){
 }
 
 async function sendAdminTest(storage){
+  await ensureConfigured(storage);
   if(!pushConfigured())return {sent:false,configured:false,delivered:0,expired:0};
   const subs=await storage.listAdminPushSubscriptions(50);
   let delivered=0,expired=0;
@@ -153,7 +209,8 @@ function config(){
   return {
     enabled:ENABLED,
     pushEnabled:pushConfigured(),
-    publicKey:pushConfigured()?PUBLIC_KEY:null,
+
+    publicKey:pushConfigured()?VAPID_VAPID_PUBLIC_KEY:null,
     symbol:"BTCUSDT",
     intervals:["15m","1h","4h"],
     note:"Admin-only confirmed BTC signal notifications."
