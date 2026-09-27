@@ -128,7 +128,7 @@ function buildElliottContext(c,opts={}){
 
   const targets=fibonacciTargets(active);
   const marketType=opts.marketType||"PERPETUAL";
-  const overlap=overlapRule(marketType);
+  const overlap=overlapRule(marketType,Boolean(opts.liquidationCascade));
   const oi=n(opts.oiChangePct),funding=n(opts.fundingRate),rsi4h=n(opts.rsi4h),volumeRatio=n(opts.wave2VolumeVs20d);
   const filters={
     wave1DailyRsi: rsi4h===null?"UNKNOWN":rsi4h,
@@ -163,7 +163,7 @@ function buildElliottContext(c,opts={}){
     invalidations:{
       wave2:active?.wave2Invalid||false,
       wave3Shortest:active?.wave3Shortest||false,
-      wave4OverlapSpot:overlap.mode==="SPOT"?(active?.wave4OverlapSpot||false):false
+      wave4OverlapSpot:(!overlap.allowed&&active)?Boolean(active.wave4OverlapSpot):false
     },
     note:"Source-derived Elliott context. Candidate wave counts remain hypotheses and require live market confirmation."
   };
