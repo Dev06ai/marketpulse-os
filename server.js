@@ -7,6 +7,7 @@ const phase6=require('./phase6');
 const phase7=require('./phase7');
 const phase910=require('./phase9-10');
 const phase1113=require('./phase11-13');
+const phase14=require('./phase14-signal-intelligence');
 const propFirm=require('./prop-firm');
 const research=require('./research-data');
 const dataFabric=require('./data-fabric');
@@ -500,7 +501,10 @@ const ADMIN_ONLY_PATHS=new Set([
   '/api/system-check',
   '/api/dna/clear',
   '/api/research/status',
-  '/api/research/train'
+  '/api/research/train',
+  '/api/phase14',
+  '/api/phase14/validation',
+  '/api/phase14/calibrate'
 ]);
 function normalizeFundingRate(value){
   const n=Number(value);
@@ -566,6 +570,17 @@ function queuePhase1113Validation(symbol,interval,candles){
   return hit?.payload||null;
 }
 
+function safePhase14Summary(validation){
+  return {
+    version:"14.0.0",
+    method:"Phase 11/12 walk-forward replay aggregated by setup and regime.",
+    setupBuckets:validation?.setupBuckets||{},
+    regimeBuckets:validation?.regimeBuckets||{},
+    adaptive:validation?.adaptive||null,
+    sample:validation?.summary||null
+  };
+}
+
 async function buildDecisionSnapshot(symbol,interval,query,deviceId=null){
   const key=symbol+"|"+interval,now=Date.now(),cached=DECISION_CACHE.get(key);
   if(cached&&now-cached.ts<DECISION_TTL)return Object.assign({cache:"fresh",cacheAgeMs:now-cached.ts},cached.payload);
@@ -573,6 +588,7 @@ async function buildDecisionSnapshot(symbol,interval,query,deviceId=null){
     const rawCandles=await getFastKlines(symbol,interval);
     const candles=closedCandles(rawCandles,interval,now);
     if(!candles||candles.length<220)throw Error("Insufficient closed candles");
+    const phase14Profile=await phase14.getAdaptiveProfile(storage,{symbol,interval}).catch(()=>null);
     const lowerInterval=interval==="15m"?null:"15m";
     const higherInterval=interval==="4h"?"1d":interval==="1d"?null:"4h";
     const dlineHigherInterval=interval==="15m"?"8h":null;
@@ -597,7 +613,7 @@ async function buildDecisionSnapshot(symbol,interval,query,deviceId=null){
     const higherAnalysis=higher&&higher.length>=220&&higherInterval?analyze(higher,{interval:higherInterval}):null;
     const dlineHigherAnalysis=dlineHigher&&dlineHigher.length>=100?analyze(dlineHigher,{interval:dlineHigherInterval}):null;
     const dlineContext=interval==="1h"?(higherAnalysis||null):(dlineHigherAnalysis||higherAnalysis||null);
-    let analysis=analyze(candles,{interval,lower:lowerAnalysis,higher:higherAnalysis,dlineHigher:dlineContext,deriv});
+    let analysis=analyze(candles,{interval,lower:lowerAnalysis,higher:higherAnalysis,dlineHigher:dlineContext,deriv,phase14Profile});
     let learned=null;
     try{
       learned=await Promise.race([learning.process(symbol,interval,candles,analysis,{observe:false}),new Promise(resolve=>setTimeout(()=>resolve(null),500))]);
@@ -642,11 +658,15 @@ async function buildDecisionSnapshot(symbol,interval,query,deviceId=null){
     const finalDecision=sanitizeFinalDecision(stableDecision);
     try{phase4.updateFinalDecision(deviceId||"00000000-0000-0000-0000-000000000000",symbol,interval,finalDecision,candles).catch(()=>{})}catch{}
     try{learning.observeFinalDecision(symbol,interval,candles,finalDecision).catch(()=>{})}catch{}
+    try{setTimeout(()=>phase14.refreshAdaptiveState(storage,{symbol,interval}).catch(()=>{}),250)}catch{}
     const payload={
       ok:true,...finalDecision,analysis,derivatives:flow,consensus,
       learning:null,
       backtest:analytics?.backtest||null,validation:analytics?.validation||null,setupStats:analytics?.setupStats||null,
-      phase11_13:validation1113,phase11:PHASE11_VERSION,phase12:PHASE12_VERSION,phase13:PHASE13_VERSION,
+      phase11_13:validation1113,
+      phase14:finalDecision.phase14||analysis.phase14||null,
+      phase14Status:finalDecision.phase14?.adaptive||analysis.phase14?.adaptive||null,
+      phase11:PHASE11_VERSION,phase12:PHASE12_VERSION,phase13:PHASE13_VERSION,phase14Version:"14.0.0",
       updatedAt:now
     };
     DECISION_CACHE.set(key,{ts:now,payload});
@@ -1785,6 +1805,34 @@ const server=http.createServer(async(req,res)=>{
         return send(res,200,{ok:true,ready:false,symbol,interval,message:'Validation is warming up in the background.',phase11:PHASE11_VERSION,phase12:PHASE12_VERSION,phase13:PHASE13_VERSION});
       }catch(e){return send(res,503,{ok:false,ready:false,error:String(e.message||e),phase11:PHASE11_VERSION,phase12:PHASE12_VERSION,phase13:PHASE13_VERSION})}
     }
+    if(req.method==='GET'&&u.pathname==='/api/phase14'){
+      const symbol=(u.searchParams.get('symbol')||'BTCUSDT').toUpperCase(),interval=u.searchParams.get('interval')||'1h';
+      if(!SYMBOLS.includes(symbol))return send(res,400,{ok:false,error:'Unsupported symbol'});
+      try{
+        const profile=await phase14.getAdaptiveProfile(storage,{symbol,interval});
+        const state=await storage.getLearningState();
+        return send(res,200,{ok:true,version:"14.0.0",symbol,interval,adaptive:profile,stored:state?.payload?.phase14||null,updatedAt:Date.now()});
+      }catch(e){return send(res,503,{ok:false,error:String(e.message||e),version:"14.0.0"})}
+    }
+    if(req.method==='GET'&&u.pathname==='/api/phase14/validation'){
+      const symbol=(u.searchParams.get('symbol')||'BTCUSDT').toUpperCase(),interval=u.searchParams.get('interval')||'1h';
+      if(!SYMBOLS.includes(symbol))return send(res,400,{ok:false,error:'Unsupported symbol'});
+      try{
+        const candles=closedCandles(await getFastKlines(symbol,interval),interval,Date.now());
+        const validation=queuePhase1113Validation(symbol,interval,candles);
+        if(!validation)return send(res,200,{ok:true,ready:false,symbol,interval,phase14:"14.0.0",message:'Validation is warming up.'});
+        return send(res,200,{ok:true,ready:true,symbol,interval,phase14:safePhase14Summary(validation),phase11_13:validation,updatedAt:Date.now()});
+      }catch(e){return send(res,503,{ok:false,error:String(e.message||e),version:"14.0.0"})}
+    }
+    if(req.method==='POST'&&u.pathname==='/api/phase14/calibrate'){
+      const symbol=(u.searchParams.get('symbol')||'BTCUSDT').toUpperCase(),interval=u.searchParams.get('interval')||'1h';
+      if(!SYMBOLS.includes(symbol))return send(res,400,{ok:false,error:'Unsupported symbol'});
+      try{
+        const profile=await phase14.refreshAdaptiveState(storage,{symbol,interval,limit:5000});
+        return send(res,200,{ok:true,version:"14.0.0",symbol,interval,profile,updatedAt:Date.now()});
+      }catch(e){return send(res,503,{ok:false,error:String(e.message||e),version:"14.0.0"})}
+    }
+
     if(req.method==='GET'&&u.pathname==='/api/data-fabric'){
       const symbol=(u.searchParams.get('symbol')||'BTCUSDT').toUpperCase(),interval=u.searchParams.get('interval')||'1h';
       if(!SYMBOLS.includes(symbol))return send(res,400,{ok:false,error:'Unsupported symbol'});
