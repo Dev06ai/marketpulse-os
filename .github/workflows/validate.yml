@@ -34,6 +34,7 @@ jobs:
       - run: node tests/data-fabric.js
       - run: node tests/phase7.js
       - run: node tests/reaction-map.js
+      - run: node tests/sfp-signal.js
       - run: node tests/analyst-scenario-pack.js
       - name: Check browser script
         run: |
