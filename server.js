@@ -8,6 +8,7 @@ const phase7=require('./phase7');
 const phase910=require('./phase9-10');
 const phase1113=require('./phase11-13');
 const phase14=require('./phase14-signal-intelligence');
+const signalNotifications=require('./signal-notifications');
 const propFirm=require('./prop-firm');
 const research=require('./research-data');
 const dataFabric=require('./data-fabric');
@@ -671,6 +672,14 @@ async function buildDecisionSnapshot(symbol,interval,query,deviceId=null){
     const gatedDecision=phase1113.applyDeploymentGate(decision,validation1113,{basePolicy:signalPolicy});
     const stableDecision=applySignalStability(gatedDecision,symbol,interval);
     const finalDecision=sanitizeFinalDecision(stableDecision);
+    try{
+      setTimeout(()=>signalNotifications.notifyAdminSignal(storage,{
+        decision:finalDecision,
+        symbol,
+        interval,
+        candleTs:candles?.[candles.length-1]?.t||null
+      }).catch(()=>{}),0);
+    }catch{}
     try{phase4.updateFinalDecision(deviceId||"00000000-0000-0000-0000-000000000000",symbol,interval,finalDecision,candles).catch(()=>{})}catch{}
     try{learning.observeFinalDecision(symbol,interval,candles,finalDecision).catch(()=>{})}catch{}
     try{setTimeout(()=>phase14.refreshAdaptiveState(storage,{symbol,interval}).catch(()=>{}),250)}catch{}
@@ -1643,6 +1652,31 @@ const server=http.createServer(async(req,res)=>{
     if(req.method==='POST'&&u.pathname==='/api/admin/flags'){
       let raw="";for await(const chunk of req)raw+=chunk;let body={};try{body=JSON.parse(raw||"{}")}catch{return send(res,400,{ok:false,error:"Invalid JSON"})}
       const user=await auth.userFromRequest(req);try{const row=await storage.saveFeatureFlag(body.key,body, user.email);await auditAdmin(req,"Updated feature flag "+row.key,"feature_flags",null,{enabled:row.enabled,rolloutPct:row.rolloutPct});return send(res,200,{ok:true,flag:row})}catch(e){return send(res,400,{ok:false,error:e.message})}
+    }
+    if(req.method==='GET'&&u.pathname==='/api/admin/notifications/config'){
+      return send(res,200,{ok:true,...signalNotifications.config()});
+    }
+    if(req.method==='GET'&&u.pathname==='/api/admin/signal-alerts'){
+      try{return send(res,200,{ok:true,alerts:await storage.listAdminSignalAlerts(50),config:signalNotifications.config()})}
+      catch(e){return send(res,503,{ok:false,error:String(e.message||e)})}
+    }
+    if(req.method==='POST'&&u.pathname==='/api/admin/notifications/subscribe'){
+      let raw="";for await(const chunk of req)raw+=chunk;
+      let body={};try{body=JSON.parse(raw||"{}")}catch{return send(res,400,{ok:false,error:"Invalid JSON"})}
+      try{
+        const saved=await storage.saveAdminPushSubscription(body);
+        await auditAdmin(req,"Enabled admin BTC signal push notifications","notifications");
+        return send(res,201,{ok:true,...saved,config:signalNotifications.config()});
+      }catch(e){return send(res,400,{ok:false,error:String(e.message||e)})}
+    }
+    if(req.method==='DELETE'&&u.pathname==='/api/admin/notifications/subscribe'){
+      const endpoint=String(u.searchParams.get('endpoint')||"");
+      if(!endpoint)return send(res,400,{ok:false,error:"Subscription endpoint required"});
+      try{
+        await storage.deleteAdminPushSubscription(endpoint);
+        await auditAdmin(req,"Disabled admin BTC signal push notifications","notifications");
+        return send(res,200,{ok:true});
+      }catch(e){return send(res,400,{ok:false,error:String(e.message||e)})}
     }
     if(req.method==='GET'&&u.pathname==='/api/admin/config')return send(res,200,{ok:true,config:await getAdminRuntime(true)});
     if(req.method==='POST'&&u.pathname==='/api/admin/config'){
