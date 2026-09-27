@@ -1,9 +1,45 @@
 {
+  "id":"/?app=marketpulse-mobile",
   "name":"MarketPulse — Crypto Intelligence",
   "short_name":"MarketPulse",
-  "start_url":"/",
+  "description":"Private admin-ready MarketPulse trading intelligence dashboard with BTC signal notifications and live market data.",
+  "start_url":"/?app=marketpulse-mobile",
+  "scope":"/",
   "display":"standalone",
-  "background_color":"#050914",
-  "theme_color":"#07111f",
-  "description":"Market-regime analytics and transparent trade setups for crypto."
+  "display_override":["standalone","window-controls-overlay"],
+  "background_color":"#050507",
+  "theme_color":"#050507",
+  "orientation":"any",
+  "lang":"en",
+  "dir":"ltr",
+  "categories":["finance","business","productivity"],
+  "prefer_related_applications":false,
+  "icons":[
+    {
+      "src":"/marketpulse-icon.svg",
+      "sizes":"any",
+      "type":"image/svg+xml",
+      "purpose":"any"
+    },
+    {
+      "src":"/marketpulse-icon-maskable.svg",
+      "sizes":"any",
+      "type":"image/svg+xml",
+      "purpose":"maskable"
+    }
+  ],
+  "shortcuts":[
+    {
+      "name":"BTC Dashboard",
+      "short_name":"BTC",
+      "url":"/?app=marketpulse-mobile&view=overview",
+      "icons":[{"src":"/marketpulse-icon.svg","sizes":"any","type":"image/svg+xml"}]
+    },
+    {
+      "name":"Admin Console",
+      "short_name":"Admin",
+      "url":"/?app=marketpulse-mobile&view=admin",
+      "icons":[{"src":"/marketpulse-icon.svg","sizes":"any","type":"image/svg+xml"}]
+    }
+  ]
 }
