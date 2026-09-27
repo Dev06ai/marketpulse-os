@@ -58,9 +58,9 @@ function decision(side){
       entryLow:isLong?99.7:100.3,
       entryHigh:isLong?100.2:100.6,
       stop:isLong?97:103,
-      tp1:isLong?105:95,
-      tp2:isLong?108:92,
-      rr:2,
+      tp1:isLong?109:91,
+      tp2:isLong?112:88,
+      rr:3.1,
       regime:"RANGE",
       type:"DAILY SFP "+side,
       marketStructure:{
