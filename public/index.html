@@ -2678,7 +2678,14 @@ async function renderFinalDecision(d){
   $("adaptiveChip").textContent="Adaptive: "+(p.mode||"collecting");
   $("finalEngineMeta").textContent="Phase 9/10/11-13 · "+(d.stale?"STALE / DIRECTION SUPPRESSED · ":"LIVE · ")+(d.state||"WAITING")+" · data "+fmt(data.score)+"/100 · risk "+(pg.decision||"NOT EVALUATED")+" · live gate "+gs;
   var ds=document.querySelector(".decisionSection");if(ds){ds.classList.remove("signal-long","signal-short","signal-wait");ds.classList.add(side==="LONG"?"signal-long":side==="SHORT"?"signal-short":"signal-wait")}
-  if(typeof drawMain==="function")drawMain();
+  var prev=state._lastRenderedFinalKey, nextKey=[
+    d.state,d.action,d.liveSignalEligible,m.confluenceScore,lv.entryLow,lv.entryHigh,lv.stop,lv.tp1,d.tradeStyle,d.updatedAt
+  ].map(function(x){return x==null?"":String(x)}).join("|");
+  state._lastRenderedFinalKey=nextKey;
+  if(typeof drawMain==="function" && (!prev || prev!==nextKey || state._chartNeedsFinalRedraw)) {
+    state._chartNeedsFinalRedraw=false;
+    drawMain();
+  }
 }
 function suppressFinalSignal(reason){
   state.finalDecisionSeq++;
@@ -2702,6 +2709,13 @@ function suppressFinalSignal(reason){
 
 async function loadFinalDecision(){
   var symbol=state.symbol,interval=state.interval,seq=++state.finalDecisionSeq;
+  var hadDecision=Boolean(state.finalDecision);
+  if(!hadDecision){
+    suppressFinalSignal("Waiting for the first confirmed final decision.");
+  }else{
+    var meta=$("finalEngineMeta");
+    if(meta)meta.textContent="Phase 9/10/11-13 · REFRESHING · keeping the last confirmed decision visible until fresh data returns";
+  }
   try{
     var q="symbol="+encodeURIComponent(symbol)+"&interval="+encodeURIComponent(interval);
     var d=await api("/api/decision?"+q,9000);
@@ -2719,7 +2733,12 @@ async function loadCore(){
   if(state.bootRetryTimer){clearTimeout(state.bootRetryTimer);state.bootRetryTimer=null}
   state.busy=true;setStatus("Loading BTC market data…");$("dataState").textContent="Connecting";$("symbol").value=state.symbol;
   const requestedSymbol=state.symbol,requestedInterval=state.interval;
-  suppressFinalSignal("Refreshing final decision for "+requestedSymbol+" "+requestedInterval+".");
+  if(!state.finalDecision){
+    suppressFinalSignal("Waiting for the first confirmed final decision.");
+  }else{
+    var refreshMeta=$("finalEngineMeta");
+    if(refreshMeta)refreshMeta.textContent="Phase 9/10/11-13 · REFRESHING MARKET DATA · last confirmed decision remains visible";
+  }
   try{
     var d=await api("/api/core?symbol="+encodeURIComponent(requestedSymbol)+"&interval="+encodeURIComponent(requestedInterval),6500);
     if(requestedSymbol!==state.symbol||requestedInterval!==state.interval)return;
