@@ -224,7 +224,7 @@ async function init(){
         subscription JSONB NOT NULL,
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-      `);
+      )`);
       await pool.query(`CREATE TABLE IF NOT EXISTS marketpulse_support_tickets (
         id BIGSERIAL PRIMARY KEY,
         user_id UUID NOT NULL REFERENCES marketpulse_users(id) ON DELETE CASCADE,
