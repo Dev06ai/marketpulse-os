@@ -16,6 +16,48 @@ const PORT=Number(process.env.PORT||3000);
 const SYMBOLS=(process.env.SYMBOLS||'BTCUSDT,ETHUSDT,SOLUSDT,BNBUSDT,XRPUSDT,DOGEUSDT,ADAUSDT').split(',').map(s=>s.trim()).filter(Boolean);
 const KLINE_LIMIT=Number(process.env.KLINE_LIMIT||420);
 const labels={BTCUSDT:'BTC',ETHUSDT:'ETH',SOLUSDT:'SOL',BNBUSDT:'BNB',XRPUSDT:'XRP',DOGEUSDT:'DOGE',ADAUSDT:'ADA'};
+const COINGECKO_IDS={BTCUSDT:'bitcoin',ETHUSDT:'ethereum',SOLUSDT:'solana',BNBUSDT:'binancecoin',XRPUSDT:'ripple',DOGEUSDT:'dogecoin',ADAUSDT:'cardano'};
+const MARKET_META_CACHE={ts:0,data:{}};
+const MARKET_META_TTL=60000;
+async function getMarketMetadata(symbols=SYMBOLS){
+  const list=(symbols||SYMBOLS).filter(Boolean);
+  if(MARKET_META_CACHE.ts&&Date.now()-MARKET_META_CACHE.ts<MARKET_META_TTL){
+    return Object.fromEntries(list.map(s=>[s,MARKET_META_CACHE.data[s]||null]));
+  }
+  try{
+    const ids=list.map(s=>COINGECKO_IDS[s]).filter(Boolean);
+    if(!ids.length)return {};
+    const u=new URL('https://api.coingecko.com/api/v3/coins/markets');
+    u.searchParams.set('vs_currency','usd');
+    u.searchParams.set('ids',ids.join(','));
+    u.searchParams.set('order','market_cap_desc');
+    u.searchParams.set('per_page',String(Math.min(250,ids.length)));
+    u.searchParams.set('page','1');
+    u.searchParams.set('sparkline','false');
+    u.searchParams.set('price_change_percentage','24h');
+    const r=await fetch(u,{signal:timeoutSignal(5000),headers:{accept:'application/json'}});
+    if(!r.ok)throw Error('CoinGecko HTTP '+r.status);
+    const rows=await r.json();
+    const data={};
+    (Array.isArray(rows)?rows:[]).forEach(x=>{
+      const symbol=Object.keys(COINGECKO_IDS).find(k=>COINGECKO_IDS[k]===x.id);
+      if(!symbol)return;
+      data[symbol]={
+        rank:Number.isFinite(Number(x.market_cap_rank))?Number(x.market_cap_rank):null,
+        marketCap:Number.isFinite(Number(x.market_cap))?Number(x.market_cap):null,
+        volume24h:Number.isFinite(Number(x.total_volume))?Number(x.total_volume):null,
+        change24h:Number.isFinite(Number(x.price_change_percentage_24h))?Number(x.price_change_percentage_24h):null,
+        geckoPrice:Number.isFinite(Number(x.current_price))?Number(x.current_price):null,
+        source:'coingecko',
+        updatedAt:Date.now()
+      };
+    });
+    MARKET_META_CACHE.ts=Date.now();MARKET_META_CACHE.data=data;
+    return Object.fromEntries(list.map(s=>[s,data[s]||null]));
+  }catch{
+    return Object.fromEntries(list.map(s=>[s,MARKET_META_CACHE.data[s]||null]));
+  }
+}
 const KRAKEN_PAIRS={BTCUSDT:'XBTUSD',ETHUSDT:'ETHUSD',SOLUSDT:'SOLUSD',BNBUSDT:'BNBUSD',XRPUSDT:'XRPUSD',DOGEUSDT:'DOGEUSD',ADAUSDT:'ADAUSD'};
 const CACHE=new Map(); const TTL=45000;
 const SCAN_CACHE=new Map(); const SCAN_TTL=20000;
@@ -1835,21 +1877,24 @@ const server=http.createServer(async(req,res)=>{
     }
     if(req.method==='GET'&&u.pathname==='/api/scanner'){
       const interval=u.searchParams.get('interval')||'1h';
-      const rows=await Promise.all(SYMBOLS.map(async symbol=>{
-        try{
-          const candles=await klines(symbol,interval);
-          const higher=interval==='4h'?null:await klines(symbol,'4h').catch(()=>null);
-          const lower=interval==='15m'?null:await klines(symbol,'15m').catch(()=>null);
-          const deriv=await Promise.race([
-            derivatives(symbol,interval),
-            new Promise(resolve=>setTimeout(()=>resolve(null),2200))
-          ]).catch(()=>null);
-          let a=analyze(candles,{interval,higher:higher&&higher.length>=220?analyze(higher,{interval:'4h'}):null,lower:lower&&lower.length>=220?analyze(lower,{interval:'15m'}):null,deriv});
-          a=(await learning.process(symbol,interval,candles,a,{observe:false})).analysis;
-          return {symbol,label:labels[symbol]||symbol,derivatives:deriv,...a};
-        }catch(e){return {symbol,label:labels[symbol]||symbol,error:e.message,type:"DATA ERROR",side:"WAIT",score:0,regime:"UNKNOWN"}}
-      }));
-      return send(res,200,{interval,rows,updatedAt:Date.now()});
+      const [marketMeta,rows]=await Promise.all([
+        getMarketMetadata(SYMBOLS),
+        Promise.all(SYMBOLS.map(async symbol=>{
+          try{
+            const candles=await klines(symbol,interval);
+            const higher=interval==='4h'?null:await klines(symbol,'4h').catch(()=>null);
+            const lower=interval==='15m'?null:await klines(symbol,'15m').catch(()=>null);
+            const deriv=await Promise.race([
+              derivatives(symbol,interval),
+              new Promise(resolve=>setTimeout(()=>resolve(null),2200))
+            ]).catch(()=>null);
+            let a=analyze(candles,{interval,higher:higher&&higher.length>=220?analyze(higher,{interval:'4h'}):null,lower:lower&&lower.length>=220?analyze(lower,{interval:'15m'}):null,deriv});
+            a=(await learning.process(symbol,interval,candles,a,{observe:false})).analysis;
+            return {symbol,label:labels[symbol]||symbol,market:marketMeta[symbol]||null,derivatives:deriv,...a};
+          }catch(e){return {symbol,label:labels[symbol]||symbol,market:marketMeta[symbol]||null,error:e.message,type:"DATA ERROR",side:"WAIT",score:0,regime:"UNKNOWN"}}
+        }))
+      ]);
+      return send(res,200,{interval,rows,marketSource:'coingecko',updatedAt:Date.now()});
     }
     return staticFile(req,res);
   }catch(e){return send(res,500,{error:e.message||'Server error'})}
