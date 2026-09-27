@@ -1,5 +1,6 @@
 const assert=require("assert");
 const worker=require("../marketpulse-worker");
+const once=require("../marketpulse-worker-once");
 
 const symbols=worker.parseCsv("BTCUSDT, ETHUSDT,BTCUSDT");
 assert.deepStrictEqual(symbols,["BTCUSDT","ETHUSDT"],"CSV de-duplication");
@@ -25,6 +26,19 @@ assert(summary.score===84&&summary.setup==="ORDER_BLOCK"&&summary.phase14Status=
 
 assert(worker.normaliseBaseUrl("https://example.com/")==="https://example.com","base URL normalization");
 
-console.log("MarketPulse 24/7 worker checks passed:",{
+const top=once.dueIntervals(new Date("2026-09-27T12:00:00Z"));
+assert.deepStrictEqual(top,["15m","1h","4h","1d"],"hour boundary sweep intervals");
+assert.deepStrictEqual(
+  once.dueIntervals(new Date("2026-09-27T12:30:00Z")),
+  ["15m","1h","4h"],
+  "30-minute sweep intervals"
+);
+assert.deepStrictEqual(
+  once.dueIntervals(new Date("2026-09-27T12:10:00Z")),
+  ["15m"],
+  "5-minute sweep intervals"
+);
+
+console.log("MarketPulse worker checks passed:",{
   plan:plan.length,cadence15m:worker.CADENCE_MS["15m"],cadence1h:worker.CADENCE_MS["1h"]
 });
