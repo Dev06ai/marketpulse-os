@@ -628,40 +628,47 @@ async function buildDecisionSnapshot(symbol,interval,query,deviceId=null){
     const analytics=queueCoreAnalytics(symbol,interval,candles);
     const validation1113=queuePhase1113Validation(symbol,interval,candles);
     const getQ=(k,d)=>query&&typeof query.get==='function'?(query.get(k)??d):(query?.[k]??d);
-    const config=propFirm.normalizeConfig({
-      accountSize:Number(getQ('accountSize',process.env.PROP_ACCOUNT_SIZE||5000)),
-      startingEquity:Number(getQ('equity',process.env.PROP_STARTING_EQUITY||5000)),
-      dailyLossLimitPct:Number(getQ('dailyLossLimitPct',process.env.PROP_DAILY_LOSS_PCT||3)),
-      maxDrawdownPct:Number(getQ('maxDrawdownPct',process.env.PROP_MAX_DRAWDOWN_PCT||6)),
-      riskPerTradePct:Number(getQ('riskPerTradePct',process.env.PROP_RISK_PER_TRADE_PCT||0.5)),
-      maxOpenRiskPct:Number(getQ('maxOpenRiskPct',process.env.PROP_MAX_OPEN_RISK_PCT||1)),
-      minSignalScore:Number(getQ('minSignalScore',process.env.PROP_MIN_SIGNAL_SCORE||78)),
-      minRR:Number(getQ('minRR',process.env.PROP_MIN_RR||1.5)),
+    const usePropFirmGate=String(getQ('propFirmGate',process.env.PROP_FIRM_GATE_ENABLED||"false")).toLowerCase()==="true";
+    const signalPolicy={
+      minSignalScore:Number(getQ('minSignalScore',process.env.MP_MIN_SIGNAL_SCORE||78)),
+      minRR:Number(getQ('minRR',process.env.MP_MIN_RR||1.5))
+    };
+    const config=usePropFirmGate?propFirm.normalizeConfig({
+      accountSize:Number(getQ('accountSize',process.env.PROP_ACCOUNT_SIZE||0)),
+      startingEquity:Number(getQ('equity',process.env.PROP_STARTING_EQUITY||0)),
+      dailyLossLimitPct:Number(getQ('dailyLossLimitPct',process.env.PROP_DAILY_LOSS_PCT||0)),
+      maxDrawdownPct:Number(getQ('maxDrawdownPct',process.env.PROP_MAX_DRAWDOWN_PCT||0)),
+      riskPerTradePct:Number(getQ('riskPerTradePct',process.env.PROP_RISK_PER_TRADE_PCT||0)),
+      maxOpenRiskPct:Number(getQ('maxOpenRiskPct',process.env.PROP_MAX_OPEN_RISK_PCT||0)),
+      minSignalScore:signalPolicy.minSignalScore,
+      minRR:signalPolicy.minRR,
       minConsensusQualityPct:Number(getQ('minConsensusQualityPct',process.env.PROP_MIN_CONSENSUS_QUALITY_PCT||85)),
       maxPriceDispersionBps:Number(getQ('maxPriceDispersionBps',process.env.PROP_MAX_PRICE_DISPERSION_BPS||80)),
       blockMixedFlow:String(getQ('blockMixedFlow',process.env.PROP_BLOCK_MIXED_FLOW||"true"))!=="false"
-    });
+    }):null;
     const liveMarketAgeMs=Number.isFinite(Number(liveSeed?.lastTs))&&Number(liveSeed.lastTs)>0
       ?Math.max(0,now-Number(liveSeed.lastTs))
       :(Number.isFinite(Number(consensus?.freshestAgeMs))?Number(consensus.freshestAgeMs):(candles.length?Math.max(0,now-Number(candles[candles.length-1].t)):null));
-    const gate=propFirm.evaluateStandard({
-      analysis,derivatives:flow,
-      dataQuality:{
-        candleAgeMs:liveMarketAgeMs,
-        qualityPct:flow?.available?100:80,
-        consensusQualityPct:consensus?.consensusQualityPct,
-        priceDispersionBps:consensus?.priceDispersionBps,
-        providerCount:consensus?.sourceCount,
-        independentSourceCount:consensus?.independentSourceCount
-      },
-      equity:config.startingEquity,dayStartEquity:config.startingEquity,peakEquity:config.startingEquity,config
-    });
+    const gate=usePropFirmGate
+      ?propFirm.evaluateStandard({
+        analysis,derivatives:flow,
+        dataQuality:{
+          candleAgeMs:liveMarketAgeMs,
+          qualityPct:flow?.available?100:80,
+          consensusQualityPct:consensus?.consensusQualityPct,
+          priceDispersionBps:consensus?.priceDispersionBps,
+          providerCount:consensus?.sourceCount,
+          independentSourceCount:consensus?.independentSourceCount
+        },
+        equity:config.startingEquity,dayStartEquity:config.startingEquity,peakEquity:config.startingEquity,config
+      })
+      :{decision:"DISABLED",reasons:[],warnings:["PROP_FIRM_GATE_DISABLED"],mode:"GENERAL_MARKET_MODE"};
     const decision=phase910.evaluate({
       symbol,interval,analysis,lower:lowerAnalysis,higher:higherAnalysis,derivatives:flow,consensus,
       dataQuality:{candleAgeMs:liveMarketAgeMs},
       liveFlow:flow,validation:analytics?.validation||null,propGate:gate
     });
-    const gatedDecision=phase1113.applyDeploymentGate(decision,validation1113,{basePolicy:{minScore:config.minSignalScore,minRR:config.minRR}});
+    const gatedDecision=phase1113.applyDeploymentGate(decision,validation1113,{basePolicy:signalPolicy});
     const stableDecision=applySignalStability(gatedDecision,symbol,interval);
     const finalDecision=sanitizeFinalDecision(stableDecision);
     try{phase4.updateFinalDecision(deviceId||"00000000-0000-0000-0000-000000000000",symbol,interval,finalDecision,candles).catch(()=>{})}catch{}
