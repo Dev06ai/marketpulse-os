@@ -4,12 +4,17 @@ const ENABLED=String(process.env.MARKETPULSE_SIGNAL_ALERTS_ENABLED??"true").toLo
 const PUBLIC_KEY=String(process.env.MARKETPULSE_VAPID_PUBLIC_KEY||"").trim();
 const PRIVATE_KEY=String(process.env.MARKETPULSE_VAPID_PRIVATE_KEY||"").trim();
 const CONTACT_EMAIL=String(process.env.MARKETPULSE_ADMIN_EMAIL||"admin@marketpulse.local").trim();
-
-function pushConfigured(){
-  return Boolean(ENABLED&&PUBLIC_KEY&&PRIVATE_KEY);
+let VAPID_READY=false;
+if(ENABLED&&PUBLIC_KEY&&PRIVATE_KEY){
+  try{
+    webpush.setVapidDetails("mailto:"+CONTACT_EMAIL,PUBLIC_KEY,PRIVATE_KEY);
+    VAPID_READY=true;
+  }catch(e){
+    console.error("MarketPulse push configuration error:",e.message);
+  }
 }
-if(pushConfigured()){
-  try{webpush.setVapidDetails("mailto:"+CONTACT_EMAIL,PUBLIC_KEY,PRIVATE_KEY)}catch(e){console.error("MarketPulse push configuration error:",e.message)}
+function pushConfigured(){
+  return Boolean(ENABLED&&PUBLIC_KEY&&PRIVATE_KEY&&VAPID_READY);
 }
 
 const SETUP_LABELS={
@@ -85,7 +90,7 @@ async function notifyAdminSignal(storage,context){
   if(!alert)return {sent:false,reason:"not_alert_eligible"};
   try{
     const claimed=await storage.claimAdminSignalAlert(alert.signalKey,alert);
-    if(!claimed?.recorded)return {sent:false,duplicate:true,alert};
+    if(claimed?.delivered)return {sent:false,duplicate:true,alreadyDelivered:true,alert};
     let delivered=0,expired=0;
     if(pushConfigured()){
       const subs=await storage.listAdminPushSubscriptions(50);
@@ -95,8 +100,8 @@ async function notifyAdminSignal(storage,context){
             type:"MARKETPULSE_SIGNAL",
             title:alert.title,
             body:alert.body,
-            icon:"/favicon.ico",
-            badge:"/favicon.ico",
+            icon:"/manifest-icon-192.png",
+            badge:"/manifest-icon-192.png",
             tag:"marketpulse-"+alert.signalKey,
             renotify:true,
             data:{url:alert.url,signalKey:alert.signalKey}
@@ -111,7 +116,10 @@ async function notifyAdminSignal(storage,context){
         }
       }
     }
-    return {sent:true,delivered,expired,configured:pushConfigured(),alert};
+    if(delivered>0){
+      await storage.markAdminSignalAlertDelivered(alert.signalKey,delivered).catch(()=>{});
+    }
+    return {sent:delivered>0,delivered,expired,configured:pushConfigured(),alert};
   }catch(error){
     return {sent:false,error:String(error?.message||error),alert};
   }
