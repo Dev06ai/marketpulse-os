@@ -1456,6 +1456,7 @@ const server=http.createServer(async(req,res)=>{
           AUTH_RATE_LIMIT:["Too many attempts. Please wait and try again.",429],
           ADMIN_MFA_REQUIRED:["Owner MFA code required.",401],
           ADMIN_MFA_INVALID:["Owner MFA code is incorrect or expired.",401],
+          ADMIN_PERSISTENCE_UNAVAILABLE:["Owner session storage is temporarily unavailable. Persistent admin login requires the PostgreSQL database to be healthy.",503],
         };
         const pair=map[e.message]||[e.message,422];
         return send(res,pair[1],{ok:false,error:pair[0],mfaRequired:e.message==="ADMIN_MFA_REQUIRED",adminMfa:e.message.startsWith("ADMIN_MFA_")});
