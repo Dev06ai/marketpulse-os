@@ -160,7 +160,7 @@ function closePaper(state,signal,position,status,resultR,reason,exitPrice,ts){
   state.paper.maxDrawdown=Math.max(finite(state.paper.maxDrawdown,0),state.paper.peakEquity-equity);
   const trade={id:"P4T-"+position.id,signalId:signal.id,symbol:signal.symbol,interval:signal.interval,side:signal.side,type:signal.type,regime:signal.regime,score:signal.score,entry,stop:signal.stop,target:signal.target,exitPrice:exit,resultR:normalizedR,pnl,status,reason,openedAt:position.openedAt,closedAt:ts,evidenceAvgR:finite(signal.evidence?.avgR)};
   state.paper.trades.push(trade);state.paper.trades=state.paper.trades.slice(-MAX_PAPER_TRADES);
-  const journalEntry={id:"P4J-"+trade.id,source:"PAPER",ts,status:"CLOSED",asset:signal.symbol,side:signal.side,entry,stop:signal.stop,target:signal.target,r:normalizedR,note:reason,regime:signal.regime,type:signal.type,score:signal.score,tradeId:trade.id};
+  const journalEntry={id:"P4J-"+trade.id,source:"FINAL_GATED_PAPER",ts,status:"CLOSED",asset:signal.symbol,side:signal.side,entry,stop:signal.stop,target:signal.target,r:normalizedR,note:reason,regime:signal.regime,type:signal.type,tradeStyle:signal.tradeStyle||"INTRADAY",score:signal.score,tradeId:trade.id};
   state.journal.push(journalEntry);state.journal=state.journal.slice(-MAX_JOURNAL);
   signal.lifecycle="CLOSED";signal.outcome=status;signal.resultR=normalizedR;signal.closedAt=ts;signal.exitPrice=exit;signal.updatedAt=ts;
   pushEvent(state,"TRADE_CLOSED",signal.symbol+" "+signal.side+" closed · "+status+" · "+normalizedR.toFixed(2)+"R",signal.id,{resultR:normalizedR});
@@ -171,7 +171,7 @@ function maybeOpenPaper(state,signal,ts){
   signal.risk=risk;
   if(!risk.allowed){pushEvent(state,"PAPER_BLOCKED",signal.symbol+" "+signal.side+" triggered but paper risk gate blocked the simulated trade",signal.id,{reason:risk.reason});return {opened:false,reason:risk.reason}}
   const qty=risk.riskPerUnit?risk.riskCash/risk.riskPerUnit:0;
-  const p={id:"P4P-"+signal.id,signalId:signal.id,symbol:signal.symbol,interval:signal.interval,side:signal.side,entry:signal.entry,stop:signal.stop,target:signal.target,qty,riskCash:risk.riskCash,riskPct:risk.riskPct,openedAt:ts,triggeredAt:ts};
+  const p={id:"P4P-"+signal.id,source:signal.source||"FINAL_GATED",signalId:signal.id,symbol:signal.symbol,interval:signal.interval,side:signal.side,entry:signal.entry,stop:signal.stop,target:signal.target,qty,riskCash:risk.riskCash,riskPct:risk.riskPct,openedAt:ts,triggeredAt:ts};
   state.paper.open.push(p);signal.lifecycle="ACTIVE";signal.triggeredAt=ts;signal.paperPositionId=p.id;
   pushEvent(state,"SIGNAL_TRIGGERED",signal.symbol+" "+signal.side+" triggered · paper position opened",signal.id,{entry:signal.entry,qty});
   return {opened:true,position:p};
@@ -224,7 +224,7 @@ function addSignal(state,symbol,interval,analysis,candle,evidence){
   const entryLow=finite(analysis.entryLow),entryHigh=finite(analysis.entryHigh),entry=entryLow!==null&&entryHigh!==null?(entryLow+entryHigh)/2:finite(analysis.price);
   if(entry===null||finite(analysis.stop)===null||finite(analysis.tp1)===null||analysis.side==="WAIT")return null;
   const signal={
-    id,symbol,interval,candleTs,createdAt:Date.now(),type:analysis.type,side:analysis.side,regime:analysis.regime,status:analysis.status,score:finite(analysis.score,0),tradeStyle:analysis.tradeStyle||"INTRADAY",
+    id,symbol,interval,candleTs,createdAt:Date.now(),source:"FINAL_GATED",type:analysis.type,side:analysis.side,regime:analysis.regime,status:analysis.status,score:finite(analysis.score,0),tradeStyle:analysis.tradeStyle||"INTRADAY",
     price:finite(analysis.price),entryLow:entryLow??entry,entryHigh:entryHigh??entry,entry,stop:finite(analysis.stop),target:finite(analysis.tp1),tp2:finite(analysis.tp2),
     rr:finite(analysis.rr),profile:strategyProfile(analysis),lifecycle:analysis.status==="READY"?"ARMED":"WATCHING",reasons:(analysis.reasons||[]).slice(0,6),
     evidence,evidenceTop:evidence?.top||[],risk:null,outcome:null,resultR:null,updatedAt:Date.now()
