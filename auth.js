@@ -114,6 +114,9 @@ async function login(email,password,key="login",mfaCode=""){
     const upgraded=newPassword(password);
     await storage.savePassword(user.id,upgraded.hash,upgraded.salt);
   }
+  // Admin sessions must live in durable storage. Never issue an owner session
+  // that would silently disappear when an ephemeral Render instance restarts.
+  if(admin&&!storage.status().durable)throw new Error("ADMIN_PERSISTENCE_UNAVAILABLE");
   const raw=token(),hours=admin?ADMIN_SESSION_HOURS:SESSION_DAYS*24;
   const expiresAt=new Date(Date.now()+hours*3600000),mfaAt=admin&&mfaEnabled?new Date().toISOString():null;
   if(admin)await storage.revokeUserSessions(user.id);
