@@ -170,6 +170,22 @@ function setupSignals(setup,analysis){
   return out;
 }
 
+function regimeSignals(side,analysis){
+  const regime=String(analysis?.regime||"UNKNOWN").toUpperCase();
+  const setup=setupKey(analysis);
+  const out=[];
+  if(regime==="UPTREND"&&side==="LONG")out.push({key:"regime_long",score:4,text:"Trend regime supports long continuation."});
+  if(regime==="DOWNTREND"&&side==="SHORT")out.push({key:"regime_short",score:4,text:"Trend regime supports short continuation."});
+  if(regime==="RANGE"){
+    if(["RANGE_REVERSION","SFP","NPOC"].includes(setup))out.push({key:"regime_range_fit",score:4,text:"Setup family is compatible with range conditions."});
+    else out.push({key:"regime_range_conflict",score:-4,text:"Continuation setup is operating inside a range regime."});
+  }
+  if(regime==="HIGH VOLATILITY"){
+    out.push({key:"regime_high_vol",score:-8,text:"High-volatility regime reduces tolerance for marginal setup quality."});
+  }
+  return out;
+}
+
 function rangeSignals(side,analysis){
   const out=[];
   const label=String(analysis?.marketStructure?.advancedPriceAction?.dealingRange?.positionLabel||"").toUpperCase();
@@ -191,6 +207,7 @@ function buildSignalIntelligence({analysis={},knowledgeContext={},derivatives={}
     signals.push(...mtfSignals(side,higher,lower));
     signals.push(...flowSignals(side,derivatives));
     signals.push(...setupSignals(setup,analysis));
+    signals.push(...regimeSignals(side,analysis));
     signals.push(...rangeSignals(side,analysis));
   }
   const rawSignalsScore=signals.reduce((sum,x)=>sum+(Number(x.score)||0),0);
