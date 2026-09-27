@@ -154,7 +154,7 @@ function analyze(c,ctx={}){
   const elliottContext=buildElliottContext(c,{
     marketType:ctx.marketType||"PERPETUAL",
     oiChangePct,
-    fundingRate:Number.isFinite(fundingRate)?fundingRate:null,
+    fundingRate:Number.isFinite(deriv?.fundingRate)?deriv.fundingRate:null,
     rsi4h:Number.isFinite(ctx.higher?.rsi)?ctx.higher.rsi:null,
     wave2VolumeVs20d:null,
     liquidationCascade:Boolean(liquidationTotal&&atrNow/price>.035)
