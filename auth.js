@@ -127,9 +127,23 @@ async function userFromRequest(req){
   const raw=parseCookies(req.headers.cookie||"")[COOKIE];if(!raw)return null;
   const tokenHash=hashToken(raw),session=await storage.getSession(tokenHash);if(!session)return null;
   if(session.bannedAt||session.restrictedUntil&&new Date(session.restrictedUntil).getTime()>Date.now()){await storage.deleteSession(tokenHash);return null}
+  const admin=isAdminEmail(session.email);
   const lastSeen=session.lastSeenAt?new Date(session.lastSeenAt).getTime():0;
   if(!lastSeen||Date.now()-lastSeen>30000)storage.touchSessionActivity(tokenHash).catch(()=>{});
-  return {id:session.userId,email:session.email,expiresAt:session.expiresAt,isAdmin:isAdminEmail(session.email),adminMfaAt:session.adminMfaAt||null};
+
+  // Owner sessions are persistent. Refresh the server-side expiry and browser cookie
+  // on authenticated activity so an existing owner login is upgraded without
+  // forcing the owner to sign in again.
+  let nextExpiresAt=session.expiresAt;
+  let setCookie=null;
+  if(admin){
+    const refreshed=new Date(Date.now()+ADMIN_SESSION_HOURS*3600000);
+    nextExpiresAt=refreshed.toISOString();
+    storage.extendSession(tokenHash,nextExpiresAt).catch(()=>{});
+    setCookie=cookie(raw,ADMIN_SESSION_HOURS*3600);
+  }
+
+  return {id:session.userId,email:session.email,expiresAt:nextExpiresAt,isAdmin:admin,adminMfaAt:session.adminMfaAt||null,setCookie};
 }
 async function requireAdmin(req){
   const user=await userFromRequest(req);
