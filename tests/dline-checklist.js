@@ -7,28 +7,27 @@ function lineAt(a,b,x){return a+(b-a)*(x-90)/(110-90)}
 function descending15m(){
   const out=[],start=Date.UTC(2026,8,27,0,0,0),m=15*60000;
   for(let i=0;i<120;i++){
-    const ln=lineAt(130,90,i);
-    const base=ln-3;
-    out.push({t:start+i*m,o:base+.4,c:base+.2,h:base+1,l:base-1,v:1000});
+    const line=130-2*(i-100);
+    const h=line-2,l=h-2,o=h-.7,cl=h-.9;
+    out.push({t:start+i*m,o,c:cl,h,l,v:1000});
   }
-  out[90]={t:start+90*m,o:128,c:128.5,h:130,l:126.5,v:1200};
-  out[100]={t:start+100*m,o:108,c:108.5,h:110,l:106.5,v:1200};
-  out[110]={t:start+110*m,o:88,c:88.5,h:90,l:86.5,v:1200};
-  out[119]={t:start+119*m,o:72.5,c:74.5,h:76,l:70,v:2800};
+  out[100]={t:start+100*m,o:129.1,c:129.2,h:130,l:127.8,v:1200};
+  out[110]={t:start+110*m,o:109.1,c:109.2,h:110,l:107.8,v:1200};
+  out[115]={t:start+115*m,o:99.1,c:99.2,h:100,l:97.8,v:1200};
+  out[119]={t:start+119*m,o:92.8,c:95.2,h:97,l:90,v:2800};
   return out;
 }
-
 function ascending1h(){
   const out=[],start=Date.UTC(2026,8,27,0,0,0),m=3600000;
   for(let i=0;i<120;i++){
-    const ln=70+(110-70)*(i-90)/(110-90);
-    const base=ln+3;
-    out.push({t:start+i*m,o:base-.4,c:base-.2,h:base+1,l:base-1,v:1000});
+    const line=70+2*(i-100);
+    const l=line+2,h=l+2,o=l+.7,cl=l+.9;
+    out.push({t:start+i*m,o,c:cl,h,l,v:1000});
   }
-  out[90]={t:start+90*m,o:72,c:71.5,h:73,l:70,v:1200};
-  out[100]={t:start+100*m,o:92,c:91.5,h:93,l:90,v:1200};
-  out[110]={t:start+110*m,o:112,c:111.5,h:113,l:110,v:1200};
-  out[119]={t:start+119*m,o:128,c:125,h:130,l:123,v:2800};
+  out[100]={t:start+100*m,o:70.9,c:70.8,h:73,l:70,v:1200};
+  out[110]={t:start+110*m,o:90.9,c:90.8,h:93,l:90,v:1200};
+  out[115]={t:start+115*m,o:100.9,c:100.8,h:103,l:100,v:1200};
+  out[119]={t:start+119*m,o:108.8,c:105.0,h:110,l:102.0,v:2800};
   return out;
 }
 
