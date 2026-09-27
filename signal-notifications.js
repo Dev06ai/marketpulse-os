@@ -69,6 +69,10 @@ async function ensureConfigured(storage){
   return ok;
 }
 
+function pushConfigured(){
+  return Boolean(ENABLED&&VAPID_READY&&VAPID_PUBLIC_KEY&&VAPID_PRIVATE_KEY);
+}
+
 const SETUP_LABELS={
   SFP:"SFP",
   NPOC:"NPOC reaction",
