@@ -2637,6 +2637,7 @@ async function renderFinalDecision(d){
   $("thesisState").textContent=(stability.state==="CONFIRMING"?"CONFIRMING · ":"")+(d.state||"WAITING")+" · "+(m.confluenceLabel||"");
   $("thesisScore").textContent=fmt(m.confluenceScore)+"/100";
   var thesisText=Array.isArray(ev.thesis)?ev.thesis.join(" "):"Decision engine context available.";
+  if(side!=="WAIT")thesisText+=" Trade style: "+(d.tradeStyle||m.tradeStyle||"INTRADAY")+" · signal timeframe: "+String(d.interval||"").toUpperCase()+".";
   if(stability.state==="CONFIRMING")thesisText+=" Signal confirmation: "+Number(stability.confirmations||0)+"/"+Number(stability.required||2)+" consecutive live checks.";
   if(d.stale)thesisText+=" Live decision refresh failed; directional output is intentionally suppressed until fresh data returns.";
   $("thesis").textContent=thesisText;
