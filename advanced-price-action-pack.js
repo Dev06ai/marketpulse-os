@@ -83,8 +83,8 @@ function detectBreakers(c){
   const out=[];
   for(let i=3;i<c.length;i++){
     const b=c[i-1],x=c[i],p=c[i-2];
-    const bullishSweep=p.l<b.l&&x.c>x.h;
-    const bearishSweep=p.h>b.h&&x.c<x.l;
+    const bullishSweep=p.l<b.l&&x.c>b.h;
+    const bearishSweep=p.h>b.h&&x.c<b.l;
     if(bullishSweep){
       out.push({kind:"BREAKER_BLOCK",side:"LONG",low:Math.min(p.l,b.l),high:Math.max(p.h,b.h),createdIndex:i,
         reason:"Failed bearish structure converted into a bullish support shelf after structural breakout."});
