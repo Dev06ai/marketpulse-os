@@ -3128,7 +3128,7 @@ function buildGateDiagnostics(d){
   var conflicts=Number(intel.conflictCount||0),coverage=Number(intel.domainCoveragePct);
   addGateDiag(rows,"Phase 14 knowledge",p14State,
     intel.setupKey?(intel.setupKey+" · "+(Number.isFinite(coverage)?coverage+"%":"—")+" required-domain coverage"):"No directional setup",
-    intel.hardConflicts?.length?("Hard conflicts: "+intel.hardConflicts.join(", ")):((intel.blocks||[]).length?"Blocks: "+intel.blocks.join(" · "):(conflicts+" conflict flags · adaptive sample "+Number(adaptive.sample||0)));
+    intel.hardConflicts?.length?("Hard conflicts: "+intel.hardConflicts.join(", ")):((intel.blocks||[]).length?"Blocks: "+intel.blocks.join(" · "):(conflicts+" conflict flags · adaptive sample "+Number(adaptive.sample||0))));
   var release=String(gate.state||"PAPER_ONLY").toUpperCase();
   addGateDiag(rows,"Final deployment gate",release==="SIGNAL_ELIGIBLE"?"PASS":(release==="BLOCKED"?"BLOCK":"WAIT"),
     release,
