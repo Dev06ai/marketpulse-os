@@ -248,7 +248,7 @@ function analyze(c,ctx={}){
     (side==="LONG"&&cvdState==="BUYERS CONFIRM") ||
     (side==="SHORT"&&cvdState==="SELLERS CONFIRM")
   ) || (!deriv);
-  const sfpDataReady=Boolean(deriv)||Number.isFinite(ctx?.dataQualityScore)?Number(ctx.dataQualityScore)>=85:true;
+  const sfpDataReady=Boolean(deriv&&deriv.available!==false);
   if((side==="LONG"&&mtf15==="DOWNTREND")||(side==="SHORT"&&mtf15==="UPTREND")){
     if(!(strongSfp&&sfpFlowSupport&&sfpDataReady)){
       score-=10;contributors.push("15M conflict");reasons.push("The 15M trend is working against this direction");
