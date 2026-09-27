@@ -1660,7 +1660,11 @@ async function enableAdminSignalPush(){
     var lower=msg.toLowerCase();
     var hint=msg;
     if(lower.includes("push service error")){
-      hint="The browser's push service rejected the subscription. Refresh MarketPulse once, then try again. On Chromium-based browsers, also check that site notifications are allowed and the browser's push messaging/Google services setting is enabled.";
+      var brave=false;
+      try{brave=Boolean(navigator.brave)}catch{}
+      hint=brave
+        ? "Brave is rejecting the push subscription. In brave://settings/privacy turn ON “Use Google services for push messaging”, relaunch Brave, then click “Reset & enable signal pop-ups” again. Your site notification permission is already separate from this push-service setting."
+        : "The browser's push service rejected the subscription. Refresh MarketPulse once, then retry. Make sure the browser's own push-messaging service is enabled and site notifications are allowed.";
     }else if(lower.includes("mime")||lower.includes("serviceworker")){
       hint="The service worker could not register. The server now serves signal-sw.js with the correct JavaScript MIME type; refresh this page completely and retry.";
     }
