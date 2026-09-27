@@ -82,6 +82,13 @@ function featureVector(pred){
   const oi=Number(d.oiChangePct);
   const ob=Number(d.orderBookImbalance);
   const taker=Number(d.takerImbalance);
+  const reaction=pred?.features?.reactionMap||pred?.reactionMap||{};
+  const active=reaction?.active||{};
+  const reactionAction=String(active.action||"WAIT").toUpperCase();
+  const reactionState=String(active.state||"WATCH_ZONE").toUpperCase();
+  const reactionSide=reactionAction==="LONG"?1:reactionAction==="SHORT"?-1:0;
+  const reactionConfidence=Number(active.confidence);
+  const reactionNear=Boolean(active.near);
   return {
     bias:side,
     score:Number.isFinite(score)?(score-50)/25:0,
@@ -96,7 +103,12 @@ function featureVector(pred){
     oi:(positioning.includes("LONG PARTICIPATION")||positioning.includes("SHORT COVERING")?1:positioning.includes("SHORT PARTICIPATION")||positioning.includes("LONG LIQUIDATION")?-1:0)*side,
     liquidation:(liq==="SHORT LIQS DOMINANT"?1:liq==="LONG LIQS DOMINANT"?-1:0)*side,
     orderbook:Number.isFinite(ob)?Math.max(-1,Math.min(1,ob))*side:0,
-    taker:Number.isFinite(taker)?Math.max(-1,Math.min(1,taker))*side:0
+    taker:Number.isFinite(taker)?Math.max(-1,Math.min(1,taker))*side:0,
+    reactionSide:reactionSide*side,
+    reactionStateConfirmed:/CONFIRM|BREAKOUT|BREAKDOWN/.test(reactionState)?1:0,
+    reactionConfidence:Number.isFinite(reactionConfidence)?Math.max(0,Math.min(100,reactionConfidence))/100:0,
+    reactionNear:reactionNear?1:0,
+    reactionConfluence:Number(active.confluence)?Math.max(0,Math.min(6,Number(active.confluence)))/6:0
   };
 }
 function sigmoid(z){return 1/(1+Math.exp(-Math.max(-20,Math.min(20,z))))}
@@ -302,7 +314,7 @@ async function observe(symbol,interval,candleTs,a){
     features:{
       score:Number(a.score)||0,regime:a.regime,side:a.side,type:a.type,status:a.status,
       rsi:a.rsi,adx:a.adx,atrPct:a.atrPct,volumeZ:a.volumeZ,structure:a.structure,
-      mtf:a.mtf,components:a.components,derivatives:a.derivatives
+      mtf:a.mtf,components:a.components,derivatives:a.derivatives,reactionMap:a.reactionMap||null
     }
   });
 }
@@ -341,7 +353,8 @@ async function observeFinalDecision(symbol,interval,candles,decision){
     structure:decision.analysis?.structure,
     mtf:decision.analysis?.mtf,
     components:ev.components||[],
-    derivatives:decision.derivatives||{}
+    derivatives:decision.derivatives||{},
+    reactionMap:decision.reactionMap||ev.reactionMap||null
   };
   const recorded=await storage.recordLearningPrediction({
     fingerprint,symbol,interval,candleTs,side,type,status:"READY",
