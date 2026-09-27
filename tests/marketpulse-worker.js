@@ -26,7 +26,7 @@ assert(summary.score===84&&summary.setup==="ORDER_BLOCK"&&summary.phase14Status=
 
 assert(worker.normaliseBaseUrl("https://example.com/")==="https://example.com","base URL normalization");
 
-const top=once.dueIntervals(new Date("2026-09-27T12:00:00Z"));
+const top=once.dueIntervals(new Date("2026-09-27T12:02:00Z"));
 assert.deepStrictEqual(top,["15m","1h","4h","1d"],"hour boundary sweep intervals");
 assert.deepStrictEqual(
   once.dueIntervals(new Date("2026-09-27T12:32:00Z")),
