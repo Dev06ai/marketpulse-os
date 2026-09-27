@@ -50,7 +50,7 @@ jobs:
           from pathlib import Path
           import re
           html = Path("public/index.html").read_text()
-          tags = list(re.finditer(r"<script\\b[^>]*>", html, re.I))
+          tags = list(re.finditer(r"<script\b[^>]*>", html, re.I))
           if not tags:
               raise SystemExit("No browser scripts found")
           for i, tag in enumerate(tags, 1):
