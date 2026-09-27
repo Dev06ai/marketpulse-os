@@ -68,6 +68,24 @@ jobs:
           print("Single authoritative signal UI check OK")
           PY
 
+      - name: Check independent chart timeframe refresh
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          html=Path("public/index.html").read_text()
+          assert 'chartPinned:false' in html
+          assert 'state.chartPinned=true' in html
+          assert 'async function refreshPinnedChart()' in html
+          # The core refresh must not unconditionally overwrite chartInterval.
+          start=html.index("async function loadCore(){")
+          end=html.index("\nasync function askAI(){",start)
+          core=html[start:end]
+          if 'state.chartInterval=requestedInterval;markChartTimeframe(requestedInterval);' in core:
+              raise SystemExit("loadCore still overwrites the manually selected chart timeframe")
+          assert 'refreshPinnedChart' in core
+          print("Independent chart timeframe refresh check OK")
+          PY
+
       - name: Check final signal chart and learning authority
         run: |
           python - <<'PY'

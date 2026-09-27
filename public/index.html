@@ -1145,6 +1145,8 @@ var state={
   crossY:null,
   chartType:"candles",
   chartInterval:"1h",
+  chartSymbol:null,
+  chartPinned:false,
   chartCandles:null,
   chartAutoScale:true,
   aiMode:"market",
@@ -1375,17 +1377,36 @@ function markChartTimeframe(tf){
 }
 async function loadChartTimeframe(tf){
   if(!["15m","30m","1h","4h","1d"].includes(tf))return;
+  state.chartPinned=true;
+  state.chartSymbol=state.symbol;
   markChartTimeframe(tf);
   $("ohlc").textContent="Loading "+tf+" chart…";
   try{
     var d=await api("/api/chart?symbol="+encodeURIComponent(state.symbol)+"&interval="+encodeURIComponent(tf),9000);
     if(!Array.isArray(d.candles)||!d.candles.length)throw Error("No candles returned");
-    state.chartInterval=tf;state.chartCandles=d.candles;state.chartVisible=Math.min(96,d.candles.length);state.chartOffset=0;state.chartYZoom=1;state.chartYShift=0;state.crossX=null;state.crossY=null;
+    state.chartInterval=tf;state.chartCandles=d.candles;state.chartSymbol=state.symbol;
+    state.chartVisible=Math.min(96,d.candles.length);state.chartOffset=0;state.chartYZoom=1;state.chartYShift=0;state.crossX=null;state.crossY=null;
     drawMain();
   }catch(e){
     $("ohlc").textContent="Chart data unavailable — retrying…";
-    setTimeout(function(){loadChartTimeframe(tf)},2200);
+    setTimeout(function(){if(state.chartPinned&&state.chartInterval===tf&&state.chartSymbol===state.symbol)loadChartTimeframe(tf)},2200);
   }
+}
+
+async function refreshPinnedChart(){
+  var tf=state.chartInterval,symbol=state.chartSymbol||state.symbol;
+  if(!state.chartPinned||!tf||!symbol||symbol!==state.symbol)return;
+  try{
+    var d=await api("/api/chart?symbol="+encodeURIComponent(symbol)+"&interval="+encodeURIComponent(tf),9000);
+    if(!Array.isArray(d.candles)||!d.candles.length)return;
+    if(state.chartPinned&&state.chartSymbol===symbol&&state.chartInterval===tf){
+      var prevVisible=Number(state.chartVisible)||96,prevOffset=Number(state.chartOffset)||0;
+      state.chartCandles=d.candles;
+      state.chartVisible=Math.min(Math.max(36,prevVisible),d.candles.length);
+      state.chartOffset=Math.max(0,Math.min(Math.max(0,d.candles.length-state.chartVisible),prevOffset));
+      drawMain();
+    }
+  }catch{}
 }
 function drawMain(){
   if(!state.market)return;
@@ -2702,7 +2723,16 @@ async function loadCore(){
   try{
     var d=await api("/api/core?symbol="+encodeURIComponent(requestedSymbol)+"&interval="+encodeURIComponent(requestedInterval),6500);
     if(requestedSymbol!==state.symbol||requestedInterval!==state.interval)return;
-    state.market=d;state.chartCandles=d.candles||[];state.chartInterval=requestedInterval;markChartTimeframe(requestedInterval);state.bootRetry=0;setStatus("Live market data connected","ok");$("dataState").textContent="Live";renderMarket();
+    state.market=d;
+    if(!state.chartPinned||state.chartSymbol!==requestedSymbol||!state.chartCandles||!state.chartCandles.length){
+      state.chartPinned=false;
+      state.chartSymbol=requestedSymbol;
+      state.chartInterval=requestedInterval;
+      state.chartCandles=d.candles||[];
+      markChartTimeframe(requestedInterval);
+    }
+    state.bootRetry=0;setStatus("Live market data connected","ok");$("dataState").textContent="Live";renderMarket();
+
     deferTask(loadCoreEnrichment,150);
     deferTask(loadDataFabric,800);
     deferTask(loadPropFirmGuard,1000);
@@ -2711,7 +2741,7 @@ async function loadCore(){
       queueSecondaryBoot();
       deferTask(loadFinalDecision,2200);
     }else if(state.activeView==="overview"){
-      deferTask(loadScan,120);deferTask(loadCycle,180);deferTask(loadCoreEnrichment,250);deferTask(loadCoreAnalytics,600);deferTask(loadFinalDecision,900);
+      deferTask(loadScan,120);deferTask(loadCycle,180);deferTask(loadCoreEnrichment,250);deferTask(loadCoreAnalytics,600);deferTask(refreshPinnedChart,700);deferTask(loadFinalDecision,900);
     }
   }catch(e){
     state.bootRetry=Math.min((state.bootRetry||0)+1,5);
@@ -2797,7 +2827,7 @@ $("refresh").addEventListener("click",loadCore);
 $("dcfRefresh").addEventListener("click",loadDataFabric);
 $("pfgRefresh").addEventListener("click",loadPropFirmGuard);
 $("ecgRefresh").addEventListener("click",loadEventGuard);
-$("symbol").addEventListener("change",function(){state.symbol=this.value;loadFastTicker();loadCore()});
+$("symbol").addEventListener("change",function(){state.symbol=this.value;state.chartPinned=false;state.chartSymbol=state.symbol;state.chartCandles=[];loadFastTicker();loadCore()});
 $("interval").addEventListener("change",function(){state.interval=this.value;loadCore()});
 function deviceId(){
   var k="mp-device-id",id=localStorage.getItem(k);
