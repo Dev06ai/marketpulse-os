@@ -1670,6 +1670,13 @@ const server=http.createServer(async(req,res)=>{
     if(req.method==='GET'&&u.pathname==='/api/admin/notifications/config'){
       return send(res,200,{ok:true,...signalNotifications.config()});
     }
+    if(req.method==='POST'&&u.pathname==='/api/admin/notifications/test'){
+      try{
+        const result=await signalNotifications.sendAdminTest(storage);
+        await auditAdmin(req,"Sent admin push notification test","notifications",null,result);
+        return send(res,result.sent?200:503,{ok:result.sent,...result});
+      }catch(e){return send(res,503,{ok:false,error:String(e.message||e)})}
+    }
     if(req.method==='GET'&&u.pathname==='/api/admin/signal-alerts'){
       try{return send(res,200,{ok:true,alerts:await storage.listAdminSignalAlerts(50),config:signalNotifications.config()})}
       catch(e){return send(res,503,{ok:false,error:String(e.message||e)})}
