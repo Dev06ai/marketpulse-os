@@ -186,8 +186,8 @@ function analyze(c,ctx={}){
   }
 
   let type="NO TRADE",side="WAIT",bias="Neutral";
-  const reasons=[];
-  const contributors=[];
+  let reasons=[];
+  let contributors=[];
   const reactionActive=reactionMap?.active||null;
   const reactionConfirmed=Boolean(
     reactionActive &&
@@ -245,7 +245,7 @@ function analyze(c,ctx={}){
   });
 
   // Confluence model — deliberately transparent rather than pretending to be a win probability.
-  const components=[
+  let components=[
     {name:"Regime",value:(regime==="UPTREND"||regime==="DOWNTREND")?16:6},
     {name:"Trend strength",value:adxNow>=25?11:adxNow>=18?7:2},
     {name:"Momentum",value:(side==="LONG"&&rsiNow>=50&&rsiNow<=68)||(side==="SHORT"&&rsiNow>=32&&rsiNow<=50)?11:4},
