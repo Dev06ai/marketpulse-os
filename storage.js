@@ -229,6 +229,14 @@ async function init(){
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       )`);
+      await pool.query(`CREATE TABLE IF NOT EXISTS marketpulse_admin_push_config (
+        id INTEGER PRIMARY KEY DEFAULT 1,
+        public_key TEXT NOT NULL,
+        private_key TEXT NOT NULL,
+        contact_email TEXT NOT NULL,
+        enabled BOOLEAN NOT NULL DEFAULT TRUE,
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )`);
       await pool.query(`CREATE TABLE IF NOT EXISTS marketpulse_support_tickets (
         id BIGSERIAL PRIMARY KEY,
         user_id UUID NOT NULL REFERENCES marketpulse_users(id) ON DELETE CASCADE,
@@ -882,6 +890,35 @@ async function deleteAdminPushSubscription(endpoint){
   const all=readLocal();all.__admin_push_subscriptions__=(all.__admin_push_subscriptions__||[]).filter(x=>x.endpoint!==ep);writeLocal(all);
 }
 
+async function getAdminPushConfig(){
+  await init();
+  if(mode==="postgres"){
+    const r=await pool.query(`SELECT public_key AS "publicKey",private_key AS "privateKey",contact_email AS "contactEmail",enabled,updated_at AS "updatedAt"
+      FROM marketpulse_admin_push_config WHERE id=1`);
+    return r.rows[0]||null;
+  }
+  const all=readLocal();return all.__admin_push_config__||null;
+}
+async function saveAdminPushConfig(config){
+  await init();
+  const c=config&&typeof config==="object"?config:{};
+  const row={
+    publicKey:String(c.publicKey||"").trim(),
+    privateKey:String(c.privateKey||"").trim(),
+    contactEmail:String(c.contactEmail||"admin@marketpulse.local").trim().slice(0,320),
+    enabled:c.enabled!==false,
+    updatedAt:new Date().toISOString()
+  };
+  if(!row.publicKey||!row.privateKey)throw new Error("Push keypair is required");
+  if(mode==="postgres"){
+    await pool.query(`INSERT INTO marketpulse_admin_push_config(id,public_key,private_key,contact_email,enabled,updated_at)
+      VALUES(1,$1,$2,$3,$4,NOW())
+      ON CONFLICT(id) DO UPDATE SET public_key=EXCLUDED.public_key,private_key=EXCLUDED.private_key,contact_email=EXCLUDED.contact_email,enabled=EXCLUDED.enabled,updated_at=NOW()`,
+      [row.publicKey,row.privateKey,row.contactEmail,row.enabled]);
+    return row;
+  }
+  const all=readLocal();all.__admin_push_config__=row;writeLocal(all);return row;
+}
 async function listBroadcasts(limit=100){
   await init();const n=Math.min(200,Math.max(1,Number(limit)||100));
   if(mode==="postgres"){const r=await pool.query(`SELECT id,title,body,audience,active,expires_at AS "expiresAt",created_by AS "createdBy",created_at AS "createdAt" FROM marketpulse_broadcasts ORDER BY created_at DESC LIMIT $1`,[n]);return r.rows}
@@ -936,4 +973,4 @@ async function restoreAdminConfig(snapshot){
   return true;
 }
 
-module.exports={init,health,get,save,clear,getLearningState,saveLearningState,recordLearningPrediction,getOpenLearningPredictions,getLearningPredictions,resolveLearningPrediction,saveSignalDNA,getSignalDNA,clearSignalDNA,getPhase4State,savePhase4State,getExecutionState,saveExecutionState,getPhase6State,savePhase6State,createUser,findUserByEmail,getUserById,touchUserLogin,recordLoginFailure,resetLoginFailures,savePassword,saveSession,getSession,extendSession,touchSessionActivity,revokeUserSessions,deleteSession,listUsers,userStats,moderateUser,getAccountMemory,saveAccountMemory,status,getAdminConfig,saveAdminConfig,getFeatureFlags,saveFeatureFlag,recordAdminAudit,listAdminAudit,recordSecurityEvent,listSecurityEvents,recordUsageEvent,adminAnalytics,listBroadcasts,createBroadcast,setBroadcastActive,getActiveBroadcasts,claimAdminSignalAlert,markAdminSignalAlertDelivered,listAdminSignalAlerts,saveAdminPushSubscription,listAdminPushSubscriptions,deleteAdminPushSubscription,createSupportTicket,recentUsageEvents,listSupportTickets,replySupportTicket,saveAdminSnapshot,listAdminSnapshots,getAdminSnapshot,restoreAdminConfig};
+module.exports={init,health,get,save,clear,getLearningState,saveLearningState,recordLearningPrediction,getOpenLearningPredictions,getLearningPredictions,resolveLearningPrediction,saveSignalDNA,getSignalDNA,clearSignalDNA,getPhase4State,savePhase4State,getExecutionState,saveExecutionState,getPhase6State,savePhase6State,createUser,findUserByEmail,getUserById,touchUserLogin,recordLoginFailure,resetLoginFailures,savePassword,saveSession,getSession,extendSession,touchSessionActivity,revokeUserSessions,deleteSession,listUsers,userStats,moderateUser,getAccountMemory,saveAccountMemory,status,getAdminConfig,saveAdminConfig,getFeatureFlags,saveFeatureFlag,recordAdminAudit,listAdminAudit,recordSecurityEvent,listSecurityEvents,recordUsageEvent,adminAnalytics,listBroadcasts,createBroadcast,setBroadcastActive,getActiveBroadcasts,claimAdminSignalAlert,markAdminSignalAlertDelivered,listAdminSignalAlerts,saveAdminPushSubscription,getAdminPushConfig,saveAdminPushConfig,listAdminPushSubscriptions,deleteAdminPushSubscription,createSupportTicket,recentUsageEvents,listSupportTickets,replySupportTicket,saveAdminSnapshot,listAdminSnapshots,getAdminSnapshot,restoreAdminConfig};
