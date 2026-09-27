@@ -256,8 +256,11 @@ const PUBLIC_SOURCES=[
   {topic:"playbook",url:"https://learn.mindpillar.com/the-trader-playbook"}
 ];
 
+function normalizeSetupToken(value=""){
+  return String(value||"").toUpperCase().replace(/[^A-Z0-9]+/g,"_").replace(/^_+|_+$/g,"");
+}
 function relevantDomains({setupKind="",side="WAIT"}={}){
-  const k=String(setupKind||"").toUpperCase();
+  const k=normalizeSetupToken(setupKind);
   const out=["marketStructure","supportResistance","multiTimeframe","risk","backtesting"];
   if(k.includes("SFP"))out.push("sfp","liquidity","cvd","orderFlow");
   if(k.includes("D_LINE")||k.includes("BREAKOUT"))out.push("dLine","liquidity","orderFlow","cvd");
