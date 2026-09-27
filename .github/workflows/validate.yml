@@ -166,6 +166,25 @@ jobs:
           print("P&L and liquidation calculator checks OK")
           PY
 
+      - name: Check quick calculators are liquidation and P&L only
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          html=Path("public/index.html").read_text()
+          s=html.index('<div id="quickCalculators"')
+          e=html.index('  </section>\n  <section id="view-scanner"',s)
+          quick=html[s:e]
+          js=html[html.index('function resetQuickCalculators'):html.index('function normalizeFlow')]
+          for x in ['Position size','sizeResult','id="ca"','id="cr"','id="ce"','id="cs"','id="cl"']:
+              if x in quick or x in js: raise SystemExit("Position Size calculator residue: "+x)
+          assert 'Liquidation Price' in quick
+          assert 'Perpetual P&amp;L' in quick
+          assert 'function calcLiquidation()' in js
+          assert 'function calc()' in js
+          assert 'pnlResultValue' in quick
+          print("Quick calculator two-tool layout check OK")
+          PY
+
       - name: Check calculator and safety-tool cleanup
         run: |
           python - <<'PY'

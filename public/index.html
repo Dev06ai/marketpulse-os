@@ -68,7 +68,7 @@ button,input,select,textarea{font:inherit}.wrap{width:min(1440px,calc(100% - 26p
   border-color:rgba(255,255,255,.08);
   letter-spacing:.08em;
 }
-.quickCalculators .calcGrid{grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.quickCalculators .calcGrid{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
 .quickCalculators .calcBox{
   min-width:0;
   padding:13px;
@@ -697,21 +697,9 @@ body.admin-mode .nav button.adminNav,body.admin-mode .mobileMenu button.adminNav
       <div class="watchNote" id="dcfSources">No independent feed snapshot yet.</div>
     </div>
     <div id="quickCalculators" class="section card quickCalculators">
-      <div class="sectionHead"><div><div class="title">Quick calculators</div><div class="sub">Exchange-style futures math for position size, liquidation price, and linear-perpetual P&amp;L.</div></div><span class="chip">CALCULATORS</span></div>
+      <div class="sectionHead"><div><div class="title">Quick calculators</div><div class="sub">Exchange-style liquidation and linear-perpetual P&amp;L calculations.</div></div><span class="chip">CALCULATORS</span></div>
       <div class="calcGrid">
-        <div class="calcBox">
-          <div class="label">Position size</div>
-          <div class="inputs">
-            <label class="small">Account<input id="ca" type="number" value="0" min="0" step="any" autocomplete="off" placeholder="0"></label>
-            <label class="small">Risk %<input id="cr" type="number" value="0" min="0" step=".05" autocomplete="off" placeholder="0"></label>
-            <label class="small">Entry<input id="ce" type="number" value="0" min="0" step="any" autocomplete="off" placeholder="0"></label>
-            <label class="small">Stop<input id="cs" type="number" value="0" min="0" step="any" autocomplete="off" placeholder="0"></label>
-            <label class="small">Leverage<input id="cl" type="number" value="0" min="1" step="1" autocomplete="off" placeholder="1"></label>
-          </div>
-          <div class="result calcResult" id="sizeResult">—</div>
-        </div>
-
-        <div class="calcBox">
+          <div class="calcBox">
           <div class="label">Liquidation Price</div>
           <div class="liqModeRow">
             <button type="button" class="liqToggle active" data-liqmode="ISOLATED">Isolated</button>
@@ -2318,7 +2306,7 @@ async function loadDataFabric(){
   }
 }
 function resetQuickCalculators(){
-  ["ca","cr","ce","cs","cl","pe","pt","pq","pl","pc","ll","lq","le","lb","lmmr","lc"].forEach(function(id){var el=$(id);if(el)el.value=id==="lmmr"?"0.5":id==="pc"||id==="lc"?"1":"0"});
+  ["pe","pt","pq","pl","pc","ll","lq","le","lb","lmmr","lc"].forEach(function(id){var el=$(id);if(el)el.value=id==="lmmr"?"0.5":id==="pc"||id==="lc"?"1":"0"});
   if($("pDirection"))$("pDirection").value="LONG";
   if($("pUnitQuantity"))$("pUnitQuantity").checked=true;
   if($("pUnitCost"))$("pUnitCost").checked=false;
@@ -2329,16 +2317,8 @@ function resetQuickCalculators(){
   state.liqUnit="USDT";
   updatePUnitUI();
   updateLiqUI();
-  ["sizeResult","liqResult"].forEach(function(id){var el=$(id);if(el){el.textContent="—";el.classList.remove("calc-profit","calc-loss","calc-neutral")}});
-  ["pnlMarginResult","pnlResultValue","pnlRoiResult"].forEach(function(id){var el=$(id);if(el)el.textContent=id==="pnlMarginResult"||id==="pnlResultValue"?"— USDT":"—";});
-}
-function currentOrderNotional(entry){
-  var raw=+$("pq").value||0,mode=state.pUnitMode||"QUANTITY",unit=state.pUnit||"BTC",contractValue=+$("pc").value||1;
-  if(raw<=0||entry<=0)return 0;
-  if(mode==="COST")return raw;
-  if(unit==="BTC")return raw*entry;
-  if(unit==="USDT")return raw;
-  return raw*Math.max(contractValue,0);
+  var el=$("liqResult");if(el){el.textContent="—";el.classList.remove("calc-profit","calc-loss","calc-neutral");}
+  ["pnlMarginResult","pnlResultValue","pnlRoiResult"].forEach(function(id){var node=$(id);if(node)node.textContent=id==="pnlMarginResult"||id==="pnlResultValue"?"— USDT":"—";});
 }
 function currentBaseQty(entry){
   var notional=currentOrderNotional(entry);
@@ -2394,9 +2374,6 @@ function calcLiquidation(){
   $("liqResult").classList.add("calc-neutral");
 }
 function calc(){
-  var a=+$("ca").value||0,r=(+$("cr").value||0)/100,e=+$("ce").value||0,s=+$("cs").value||0,l=+$("cl").value||0,b=a*r,d=Math.abs(e-s),qty=d>0?b/d:0,notional=qty*e,margin=(qty>0&&l>0)?notional/l:0;
-  $("sizeResult").textContent=(b>0&&qty>0)?("Risk "+fmt(b)+" · Qty "+fmt(qty)+" · Notional "+fmt(notional)+" · Margin "+fmt(margin)):"—";
-
   var pe=+$("pe").value||0,pt=+$("pt").value||0,pl=+$("pl").value||0,pdir=$("pDirection").value,baseQty=currentBaseQty(pe),pnl=pdir==="SHORT"?(pe-pt)*baseQty:(pt-pe)*baseQty,pnlMargin=(pe>0&&baseQty>0&&pl>0)?(pe*baseQty)/pl:0,roi=pnlMargin>0?(pnl/pnlMargin)*100:0;
   var pnlValue=$("pnlResultValue"),pnlMarginEl=$("pnlMarginResult"),pnlRoi=$("pnlRoiResult");
   pnlValue.classList.remove("calc-profit","calc-loss","calc-neutral");
@@ -2406,19 +2383,23 @@ function calc(){
     pnlRoi.textContent=(roi>=0?"+":"")+roi.toFixed(2)+"%";
     pnlValue.classList.add(pnl>0?"calc-profit":pnl<0?"calc-loss":"calc-neutral");
   }else{
-    pnlMarginEl.textContent="— USDT";pnlValue.textContent="— USDT";pnlRoi.textContent="—";pnlValue.classList.add("calc-neutral");
+    pnlMarginEl.textContent="— USDT";
+    pnlValue.textContent="— USDT";
+    pnlRoi.textContent="—";
+    pnlValue.classList.add("calc-neutral");
   }
   calcLiquidation();
 }
 function setupCalculatorInputs(){
-  ["ca","cr","ce","cs","cl","pe","pt","pq","pl","pc","le","ll","lq","lb","lmmr","lc"].forEach(function(id){var el=$(id);if(!el)return;el.addEventListener("input",calc);el.addEventListener("change",calc)});
+  ["pe","pt","pq","pl","pc","le","ll","lq","lb","lmmr","lc"].forEach(function(id){var el=$(id);if(!el)return;el.addEventListener("input",calc);el.addEventListener("change",calc)});
   if($("pDirection"))$("pDirection").addEventListener("change",calc);
   if($("lunit"))$("lunit").addEventListener("change",calc);
   document.querySelectorAll(".unitMode input").forEach(function(input){input.addEventListener("change",function(){state.pUnitMode=this.value;updatePUnitUI();calc()})});
   document.querySelectorAll(".unitChoice").forEach(function(btn){btn.addEventListener("click",function(){state.pUnit=btn.dataset.unit;state.pUnitMode="QUANTITY";updatePUnitUI();calc()})});
   document.querySelectorAll(".liqToggle[data-liqmode]").forEach(function(btn){btn.addEventListener("click",function(){state.liqMode=btn.dataset.liqmode;updateLiqUI();calc()})});
   document.querySelectorAll(".liqToggle[data-liqside]").forEach(function(btn){btn.addEventListener("click",function(){state.liqSide=btn.dataset.liqside;updateLiqUI();calc()})});
-  resetQuickCalculators();calc();
+  resetQuickCalculators();
+  calc();
 }
 function normalizeFlow(values){
   values=(values||[]).map(Number).filter(Number.isFinite);if(values.length<2)return[];
