@@ -68,6 +68,25 @@ jobs:
           print("Single authoritative signal UI check OK")
           PY
 
+      - name: Check smooth refresh rendering
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          html=Path("public/index.html").read_text()
+          assert 'function setupCanvas(c,height)' in html
+          assert 'var needsResize=c.width!==pxW||c.height!==pxH;' in html
+          assert 'if(needsResize){c.width=pxW;c.height=pxH;}' in html
+          assert 'if(!state.chartPinned)drawMain();' in html
+          assert 'REFRESHING MARKET DATA · last confirmed decision remains visible' in html
+          # A normal 12s decision refresh must not call the full signal suppressor.
+          start=html.index("async function loadCore(){")
+          end=html.index("\nasync function askAI(){",start)
+          core=html[start:end]
+          assert 'suppressFinalSignal("Waiting for the first confirmed final decision.")' in core
+          assert 'suppressFinalSignal("Refreshing final decision' not in core
+          print("Smooth refresh rendering checks OK")
+          PY
+
       - name: Check independent chart timeframe refresh
         run: |
           python - <<'PY'
