@@ -75,8 +75,11 @@ jobs:
           html=Path("public/index.html").read_text()
           phase4=Path("phase4.js").read_text()
           phase9=Path("phase9-10.js").read_text()
+          learning=Path("learning.js").read_text()
           server=Path("server.js").read_text()
           assert 'function updateFinalDecision' in phase4
+          assert 'function observeFinalDecision' in learning
+          assert 'FINAL_GATED' in learning
           assert 'Paper learning must only consume' in phase4
           assert 'liveSignalEligible===true' in phase4
           assert 'tradeStyle' in phase9
