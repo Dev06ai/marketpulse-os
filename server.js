@@ -1344,6 +1344,22 @@ const server=http.createServer(async(req,res)=>{
       const guard=await auth.requireAdmin(req);
       if(!guard.ok)return send(res,guard.status,{ok:false,error:guard.error});
     }
+    const authFastPath=(u.pathname==='/api/auth/me'||u.pathname==='/api/auth/presence')&&req.method==="GET";
+    if(u.pathname==='/api/auth/me'&&req.method==="GET"){
+      try{
+        const user=await auth.userFromRequest(req);
+        return send(res,200,{
+          ok:true,
+          authenticated:Boolean(user),
+          user:user?{id:user.id,email:user.email,expiresAt:user.expiresAt,isAdmin:Boolean(user.isAdmin),adminMfaAt:user.adminMfaAt||null}:null,
+          adminConfigured:auth.adminConfigured,
+          mfaEnabled:auth.mfaEnabled,
+          passwordPepperEnabled:auth.passwordPepperEnabled,
+          sessionPersistence:storage.status()
+        });
+      }catch(e){return send(res,503,{ok:false,authenticated:false,error:e.message,sessionPersistence:storage.status()})}
+    }
+
     const fastPublic=FAST_PUBLIC_PATHS.has(u.pathname)&&req.method==="GET";
     const adminCfg=fastPublic?(ADMIN_RUNTIME.config||{
       mode:"normal",maintenanceMode:false,readOnlyMode:false,registrationsEnabled:true,
@@ -1407,12 +1423,6 @@ const server=http.createServer(async(req,res)=>{
     
     if(req.method==='GET'&&u.pathname==='/api/learning/status')return send(res,200,await learning.status());
 
-    if(req.method==='GET'&&u.pathname==='/api/auth/me'){
-      try{
-        const user=await auth.userFromRequest(req);
-        return send(res,200,{ok:true,authenticated:Boolean(user),user:user?{id:user.id,email:user.email,expiresAt:user.expiresAt,isAdmin:Boolean(user.isAdmin),adminMfaAt:user.adminMfaAt||null}:null,adminConfigured:auth.adminConfigured,mfaEnabled:auth.mfaEnabled,passwordPepperEnabled:auth.passwordPepperEnabled});
-      }catch(e){return send(res,500,{ok:false,error:e.message})}
-    }
     if(req.method==='POST'&&u.pathname==='/api/auth/presence'){
       const user=await auth.userFromRequest(req);
       const device=String(req.headers["x-marketpulse-device"]||"").slice(0,128);
