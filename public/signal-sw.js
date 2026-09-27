@@ -1,5 +1,5 @@
-const CACHE_NAME="marketpulse-shell-v5";
-const SHELL_ASSETS=["/","/manifest.json","/marketpulse-icon-v3.svg","/marketpulse-icon-maskable-v3.svg"];
+const CACHE_NAME="marketpulse-shell-v6";
+const SHELL_ASSETS=["/","/manifest.json","/marketpulse-icon-v4.svg","/marketpulse-icon-maskable-v4.svg"];
 
 self.addEventListener("install",event=>{
   event.waitUntil((async()=>{
@@ -66,8 +66,8 @@ self.addEventListener("push",event=>{
   const title=data.title||"MarketPulse signal";
   const options={
     body:data.body||"A new BTC signal is available.",
-    icon:data.icon||"/marketpulse-icon.svg",
-    badge:data.badge||"/marketpulse-icon.svg",
+    icon:data.icon||"/marketpulse-icon-v4.svg",
+    badge:data.badge||"/marketpulse-icon-v4.svg",
     tag:data.tag||(isSignal?"marketpulse-signal":"marketpulse"),
     renotify:data.renotify!==false,
     requireInteraction:Boolean(data.requireInteraction&&isSignal),
