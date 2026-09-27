@@ -32,6 +32,8 @@ jobs:
       - run: node --check prop-firm.js
       - run: node --check research-data.js
       - run: node --check data-fabric.js
+      - run: node --check marketpulse-worker.js
+      - run: node tests/marketpulse-worker.js
       - run: node tests/smoke.js
       - run: node tests/prop-firm.js
       - run: node tests/data-fabric.js

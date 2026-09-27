@@ -108,6 +108,18 @@ The validation layer now sits after the Phase 9/10 engine and before any live-re
 The current validation payload is available from `GET /api/validation`, while `GET /api/decision` includes the validation summary and deployment gate used by the Decision Center.
 
 
+## 24/7 Intelligence Worker
+
+MarketPulse can run its decision and learning loop independently of an open browser session through `marketpulse-worker.js`. The worker calls the authoritative `/api/decision` endpoint on a staggered schedule so the existing server-side Phase 9/10, Phase 11-13, Phase 14, signal-stability and learning pipeline continues to execute continuously.
+
+The worker is decision-support only. It never enables execution or places trades.
+
+Default cadence is 15m every 5 minutes, 1h every 15 minutes, 4h every 30 minutes, and 1d every 60 minutes. Supported symbols default to BTC, ETH, SOL, BNB, XRP, DOGE and ADA.
+
+Render deployment requires a separate Background Worker service with `npm run worker` and a `MARKETPULSE_WEB_URL` environment variable pointing to the MarketPulse web service. The worker also accepts `MARKETPULSE_WORKER_SYMBOLS`, `MARKETPULSE_WORKER_INTERVALS`, `MARKETPULSE_WORKER_TIMEOUT_MS`, `MARKETPULSE_WORKER_JITTER_MS` and `MARKETPULSE_WORKER_ENABLED`.
+
+This removes the browser-session dependency from continuous learning. The web dashboard can be closed while the server-side intelligence loop continues, provided the Render worker/service deployment itself remains running.
+
 ## Phase 14 — Signal Intelligence (14.0.0)
 - Adds setup-specific knowledge profiles for SFP, NPOC, D-Line, breakout/retest, order blocks, Elliott context, trend continuation and range reversion.
 - Converts the MindPillar knowledge core into a deterministic knowledge-alignment and conflict-resolution layer.
