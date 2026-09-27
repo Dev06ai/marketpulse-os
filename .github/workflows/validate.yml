@@ -100,6 +100,27 @@ jobs:
           print("Clean overview chart checks OK")
           PY
 
+      - name: Check calculator and safety-tool cleanup
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          html=Path("public/index.html").read_text()
+          server=Path("server.js").read_text()
+          forbidden=["pfgCard","ecgCard","pfgRefresh","ecgRefresh","/api/propfirm","loadPropFirmGuard","loadEventGuard","Prop firm risk check","Event contract safety check"]
+          bad=[x for x in forbidden if x in html or x in server]
+          if bad: raise SystemExit("Removed safety-tool surface still present: "+", ".join(bad))
+          assert 'value="0"' in html
+          assert 'function resetQuickCalculators()' in html
+          assert 'function setupCalculatorInputs()' in html
+          assert 'function calc()' in html
+          assert 'calc-profit' in html
+          assert 'calc-loss' in html
+          assert 'Margin '+ 'fmt' in html
+          assert 'ROI ' in html
+          assert 'window.addEventListener("pageshow",function(e)' in html
+          print("Safety-tool removal and exchange-style calculator checks OK")
+          PY
+
       - name: Check stable live status bar
         run: |
           python - <<'PY'
