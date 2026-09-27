@@ -2567,6 +2567,14 @@ function resetQuickCalculators(){
   var el=$("liqResult");if(el){el.textContent="—";el.classList.remove("calc-profit","calc-loss","calc-neutral");}
   ["pnlMarginResult","pnlResultValue","pnlRoiResult"].forEach(function(id){var node=$(id);if(node)node.textContent=id==="pnlMarginResult"||id==="pnlResultValue"?"— USDT":"—";});
 }
+function currentOrderNotional(entry){
+  var raw=+$("pq").value||0,mode=state.pUnitMode||"QUANTITY",unit=state.pUnit||"BTC",contract=+$("pc").value||1;
+  if(raw<=0||entry<=0)return 0;
+  if(mode==="COST")return raw;
+  if(unit==="BTC")return raw*entry;
+  if(unit==="USDT")return raw;
+  return raw*Math.max(contract,0);
+}
 function currentBaseQty(entry){
   var notional=currentOrderNotional(entry);
   return entry>0?notional/entry:0;
