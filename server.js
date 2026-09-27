@@ -148,6 +148,8 @@ async function getMarketMetadata(symbols=SYMBOLS){
 const KRAKEN_PAIRS={BTCUSDT:'XBTUSD',ETHUSDT:'ETHUSD',SOLUSDT:'SOLUSD',BNBUSDT:'BNBUSD',XRPUSDT:'XRPUSD',DOGEUSDT:'DOGEUSD',ADAUSDT:'ADAUSD'};
 const CACHE=new Map(); const TTL=45000;
 const SCAN_CACHE=new Map(); const SCAN_TTL=20000;
+const SNAPSHOT_CACHE=new Map(); const SNAPSHOT_TTL=5000;
+const SCAN_JOBS=new Map();
 const CORE_ANALYTICS_CACHE=new Map();
 const CORE_ANALYTICS_JOBS=new Set();
 const CORE_ANALYTICS_TTL=120000;
@@ -1235,6 +1237,48 @@ function staticFile(req,res){
   });
 }
 
+async function warmCoreScan(interval,force=false){
+  const current=SCAN_JOBS.get(interval);
+  if(current){
+    if(!force)return current;
+    try{await current;return}catch{}
+  }
+  const job=(async()=>{
+    const cached=SCAN_CACHE.get(interval);
+    if(!force&&cached&&Date.now()-cached.ts<SCAN_TTL)return cached.payload;
+    const [ticker,marketMeta]=await Promise.all([getBinanceTickerSnapshot(SYMBOLS),getMarketMetadata(SYMBOLS)]);
+    const scanOne=async symbol=>{
+      const tick=ticker[symbol]||{},meta=marketMeta[symbol]||{};
+      try{
+        const candles=await Promise.race([klines(symbol,interval),new Promise((_,reject)=>setTimeout(()=>reject(Error('Primary scan timeout')),6500))]);
+        if(!candles||candles.length<220)throw Error('Insufficient candles');
+        const higher=interval==='4h'?null:await Promise.race([klines(symbol,'4h'),new Promise(resolve=>setTimeout(()=>resolve(null),1100))]).catch(()=>null);
+        const lower=interval==='15m'?null:await Promise.race([klines(symbol,'15m'),new Promise(resolve=>setTimeout(()=>resolve(null),1100))]).catch(()=>null);
+        let analysis=analyze(candles,{interval,lower:lower&&lower.length>=220?analyze(lower,{interval:'15m'}):null,higher:higher&&higher.length>=220?analyze(higher,{interval:'4h'}):null,deriv:null});
+        try{
+          const learned=await Promise.race([learning.process(symbol,interval,candles,analysis,{observe:false}),new Promise(resolve=>setTimeout(()=>resolve(null),200))]);
+          if(learned?.analysis)analysis=learned.analysis;
+        }catch{}
+        return {
+          symbol,label:labels[symbol]||symbol,
+          price:Number.isFinite(Number(tick.price))?tick.price:(Number.isFinite(Number(analysis.price))?analysis.price:(meta.geckoPrice??null)),
+          change24h:Number.isFinite(Number(tick.change24h))?tick.change24h:(Number.isFinite(Number(analysis.change24h))?analysis.change24h:(meta.change24h??null)),
+          regime:analysis.regime,side:analysis.side,type:analysis.type,status:analysis.status,
+          score:analysis.score,bias:analysis.bias,probabilityLabel:analysis.probabilityLabel,structure:analysis.structure,
+          market:meta,derivatives:null
+        };
+      }catch(e){
+        return {symbol,label:labels[symbol]||symbol,price:tick.price??meta.geckoPrice??null,change24h:tick.change24h??meta.change24h??null,market:meta,status:'WAITING',side:'WAIT',score:0,error:e.message};
+      }
+    };
+    const rows=await Promise.all(SYMBOLS.map(scanOne));
+    const payload={ok:true,interval,rows,marketSource:'multi-source',updatedAt:Date.now(),cacheTtlMs:SCAN_TTL,mode:'fast-cached-scan-v4'};
+    SCAN_CACHE.set(interval,{ts:Date.now(),payload});
+    return payload;
+  })();
+  SCAN_JOBS.set(interval,job);
+  try{return await job}finally{SCAN_JOBS.delete(interval)}
+}
 const server=http.createServer(async(req,res)=>{
   const started=Date.now();SERVER_METRICS.requests++;
   const rawPath=String(req.url||"").split("?")[0];
@@ -1714,31 +1758,65 @@ const server=http.createServer(async(req,res)=>{
       }
     }
 
-    if(req.method==='GET'&&u.pathname==='/api/core-scan'){
-      const interval=u.searchParams.get('interval')||'1h',hit=SCAN_CACHE.get(interval);
-      if(hit&&Date.now()-hit.ts<SCAN_TTL)return send(res,200,hit.payload);
-      const [ticker,marketMeta]=await Promise.all([getBinanceTickerSnapshot(SYMBOLS),getMarketMetadata(SYMBOLS)]);
-      const scanOne=async symbol=>{
-        const tick=ticker[symbol]||{};
-        const meta=marketMeta[symbol]||{};
-        try{
-          const candles=await Promise.race([klines(symbol,interval),new Promise((_,reject)=>setTimeout(()=>reject(Error('Primary scan timeout')),6500))]);
-          if(!candles||candles.length<220)throw Error('Insufficient candles');
-          const higher=interval==='4h'?null:await Promise.race([klines(symbol,'4h'),new Promise(resolve=>setTimeout(()=>resolve(null),1100))]).catch(()=>null);
-          const lower=interval==='15m'?null:await Promise.race([klines(symbol,'15m'),new Promise(resolve=>setTimeout(()=>resolve(null),1100))]).catch(()=>null);
-          let analysis=analyze(candles,{interval,lower:lower&&lower.length>=220?analyze(lower,{interval:'15m'}):null,higher:higher&&higher.length>=220?analyze(higher,{interval:'4h'}):null,deriv:null});
-          try{const learned=await Promise.race([learning.process(symbol,interval,candles,analysis,{observe:false}),new Promise(resolve=>setTimeout(()=>resolve(null),200))]);if(learned?.analysis)analysis=learned.analysis}catch{}
-          return{symbol,label:labels[symbol]||symbol,price:Number.isFinite(Number(tick.price))?tick.price:(Number.isFinite(Number(analysis.price))?analysis.price:(meta.geckoPrice??null)),change24h:Number.isFinite(Number(tick.change24h))?tick.change24h:(Number.isFinite(Number(analysis.change24h))?analysis.change24h:(meta.change24h??null)),regime:analysis.regime,side:analysis.side,type:analysis.type,status:analysis.status,score:analysis.score,bias:analysis.bias,probabilityLabel:analysis.probabilityLabel,structure:analysis.structure,market:meta,derivatives:null};
-        }catch(e){
-          return{symbol,label:labels[symbol]||symbol,price:Number.isFinite(Number(tick.price))?tick.price:(meta.geckoPrice??null),change24h:Number.isFinite(Number(tick.change24h))?tick.change24h:(meta.change24h??null),market:meta,status:'WAITING',side:'WAIT',score:0,error:e.message};
-        }
-      };
-      const rows=await Promise.all(SYMBOLS.map(scanOne));
-      rows.forEach(function(row){if(!row.market)row.market=marketMeta[row.symbol]||null});
-      const payload={ok:true,interval,rows,marketSource:"multi-source",updatedAt:Date.now(),cacheTtlMs:SCAN_TTL,mode:"fast-cached-scan-v4"};
-      SCAN_CACHE.set(interval,{ts:Date.now(),payload});return send(res,200,payload);
+    if(req.method==='GET'&&u.pathname==='/api/market-snapshot'){
+      const interval=u.searchParams.get('interval')||'1h';
+      const hit=SNAPSHOT_CACHE.get(interval);
+      if(hit&&Date.now()-hit.ts<SNAPSHOT_TTL) return send(res,200,hit.payload);
+      try{
+        const ticker=await getBinanceTickerSnapshot(SYMBOLS);
+        const cachedMeta=Object.fromEntries(SYMBOLS.map(s=>[s,MARKET_META_CACHE.data[s]||null]));
+        const rows=SYMBOLS.map(function(symbol){
+          const t=ticker[symbol]||{},m=cachedMeta[symbol]||{};
+          return {
+            symbol,label:labels[symbol]||symbol,
+            price:t.price??m.geckoPrice??null,
+            change24h:t.change24h??m.change24h??null,
+            market:m,
+            status:'SNAPSHOT',side:'WAIT',score:null
+          };
+        });
+        const payload={ok:true,interval,rows,source:'fast-market-snapshot',updatedAt:Date.now()};
+        SNAPSHOT_CACHE.set(interval,{ts:Date.now(),payload});
+        // Warm metadata and deep scan in the background; never block the first paint.
+        getMarketMetadata(SYMBOLS).catch(()=>{});
+        queueMicrotask(()=>warmCoreScan(interval));
+        return send(res,200,payload);
+      }catch(e){return send(res,503,{ok:false,error:String(e.message||e),source:'fast-market-snapshot'})}
     }
 
+    if(req.method==='GET'&&u.pathname==='/api/core-scan'){
+      const interval=u.searchParams.get('interval')||'1h';
+      const deep=String(u.searchParams.get('deep')||'0')==='1';
+      const cached=SCAN_CACHE.get(interval);
+
+      if(!deep){
+        if(cached&&Date.now()-cached.ts<SCAN_TTL)return send(res,200,cached.payload);
+        const snap=SNAPSHOT_CACHE.get(interval);
+        if(snap&&Date.now()-snap.ts<SNAPSHOT_TTL){
+          queueMicrotask(()=>warmCoreScan(interval));
+          return send(res,200,{...snap.payload,mode:'snapshot-fallback'});
+        }
+        const ticker=await getBinanceTickerSnapshot(SYMBOLS);
+        const marketMeta=await getMarketMetadata(SYMBOLS).catch(()=>({}));
+        const rows=SYMBOLS.map(function(symbol){
+          const t=ticker[symbol]||{},m=marketMeta[symbol]||{};
+          return {symbol,label:labels[symbol]||symbol,price:t.price??m.geckoPrice??null,change24h:t.change24h??m.change24h??null,market:m,status:'SNAPSHOT',side:'WAIT',score:null};
+        });
+        const payload={ok:true,interval,rows,marketSource:'multi-source',updatedAt:Date.now(),cacheTtlMs:SCAN_TTL,mode:'snapshot-fallback'};
+        SNAPSHOT_CACHE.set(interval,{ts:Date.now(),payload});
+        queueMicrotask(()=>warmCoreScan(interval));
+        return send(res,200,payload);
+      }
+
+      try{
+        await warmCoreScan(interval,true);
+        const fresh=SCAN_CACHE.get(interval);
+        if(fresh)return send(res,200,{...fresh.payload,mode:'deep-scan'});
+        return send(res,503,{ok:false,error:'DEEP_SCAN_NOT_READY'});
+      }catch(e){
+        return send(res,503,{ok:false,error:String(e.message||e),mode:'deep-scan'});
+      }
+    }
 
     if(req.method==='GET'&&u.pathname==='/api/edge'){
       const symbol=(u.searchParams.get('symbol')||'BTCUSDT').toUpperCase(),interval=u.searchParams.get('interval')||'1h';
