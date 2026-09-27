@@ -2,8 +2,8 @@ const assert=require("assert");
 const {buildElliottContext,goldenPocketFromWave1}=require("../advanced-elliott-wave");
 
 const gp=goldenPocketFromWave1(100,200,"BULLISH");
-assert(gp.protocolA.low===70 && gp.protocolA.high===76.4,"0.618–0.65 Golden Pocket math mismatch.");
-assert(gp.protocolB.low===76.4 && gp.protocolB.high===100,"0.500–0.618 institutional zone math mismatch.");
+assert(Math.abs(gp.protocolA.low-135)<1e-9 && Math.abs(gp.protocolA.high-138.2)<1e-9,"0.618–0.65 Golden Pocket math mismatch.");
+assert(Math.abs(gp.protocolB.low-138.2)<1e-9 && Math.abs(gp.protocolB.high-150)<1e-9,"0.500–0.618 institutional zone math mismatch.");
 
 const c=[];
 const start=Date.UTC(2026,0,1);
