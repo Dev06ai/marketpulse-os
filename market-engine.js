@@ -88,7 +88,7 @@ function analyze(c,ctx={}){
   const E20=ema(closes,20),E50=ema(closes,50),E200=ema(closes,200),R=rsi(closes),A=atr(c),D=adx(c),vz=volumeZ(volumes);
   const atrNow=finiteOr(A[i],Math.max(price*.01,1)),adxNow=finiteOr(D[i],0),rsiNow=finiteOr(R[i],50),st=structure(c);
   const marketStructure=detectMarketStructure(c,{interval:ctx.interval||"1h"});
-  const strategySetups=detectStrategySetups(c,{interval:ctx.interval||"1h",higher8h:ctx.dlineHigher||null});
+  const strategySetups=detectStrategySetups(c,{interval:ctx.interval||"1h",higher8h:ctx.dlineHigher||ctx.higher||null});
   if(strategySetups.setup){
     marketStructure.strategySetup=strategySetups.setup;
     marketStructure.strategyDetected=strategySetups.detected;
