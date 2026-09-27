@@ -16,6 +16,7 @@ jobs:
       - run: node --check market-engine.js
       - run: node --check market-structure.js
       - run: node --check strategy-setups.js
+      - run: node --check reaction-map.js
       - run: node --check phase11-13.js
       - run: node --check market-structure.js
       - run: node validation-selftest.js
@@ -31,6 +32,7 @@ jobs:
       - run: node tests/prop-firm.js
       - run: node tests/data-fabric.js
       - run: node tests/phase7.js
+      - run: node tests/reaction-map.js
       - name: Check browser script
         run: |
           python - <<'PY'
@@ -65,6 +67,8 @@ jobs:
           bad=[x for x in forbidden if x in market]
           if bad: raise SystemExit("Raw renderMarket still writes authoritative signal fields: "+", ".join(bad))
           if 'function renderFinalDecision(d)' not in html: raise SystemExit("Final decision renderer missing")
+          if 'function renderReactionMap(map)' not in html: raise SystemExit("Reaction map renderer missing")
+          if 'id="reactionOpportunities"' not in html: raise SystemExit("Reaction opportunity surface missing")
           print("Single authoritative signal UI check OK")
           PY
 
