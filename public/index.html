@@ -2260,9 +2260,12 @@ function renderEdge(data){
   }
 }
 async function loadEdge(){
+  var key="edge-"+state.symbol+"-"+state.interval;
+  var cached=readViewCache(key);
+  if(cached){state.edge=cached;renderEdge(cached)}
   try{
     var j=await api("/api/edge?symbol="+encodeURIComponent(state.symbol)+"&interval="+encodeURIComponent(state.interval),7000);
-    renderEdge(j);
+    writeViewCache(key,j);renderEdge(j);
   }catch(e){}
 }
 async function saveEdgeConfig(){
@@ -2409,7 +2412,13 @@ function renderPortfolio(data){
   $("pfEvents").innerHTML=(data.events||[]).slice(0,12).map(function(e){return'<div class="portfolioEvent"><span class="portfolioSmall">'+new Date(e.ts).toLocaleTimeString()+'</span><div><b>'+safeHtml(e.type)+'</b><div class="portfolioSmall">'+safeHtml(e.message)+'</div></div></div>'}).join("")||'<div class="portfolioSmall">No portfolio events.</div>';
 }
 async function loadPortfolio(){
-  try{renderPortfolio(await api("/api/portfolio?interval="+encodeURIComponent(state.interval)+"&lookback="+encodeURIComponent($("pfLookback")?.textContent?.match(/\\d+/)?.[0]||60),12000))}catch(e){if($("pfConfigNote"))$("pfConfigNote").textContent="Portfolio refresh failed: "+e.message}
+  var key="portfolio-"+state.interval;
+  var cached=readViewCache(key);
+  if(cached){state.portfolio=cached;renderPortfolio(cached)}
+  try{
+    var fresh=await api("/api/portfolio?interval="+encodeURIComponent(state.interval)+"&lookback="+encodeURIComponent($("pfLookback")?.textContent?.match(/\\d+/)?.[0]||60),12000);
+    writeViewCache(key,fresh);renderPortfolio(fresh);
+  }catch(e){if($("pfConfigNote"))$("pfConfigNote").textContent="Portfolio refresh failed: "+e.message}
 }
 async function savePortfolioConfig(){
   var payload={account:+$("pfAccount").value||0,maxPortfolioRiskPct:+$("pfMaxRisk").value||4,maxSymbolExposurePct:+$("pfMaxSymbol").value||2,maxCorrelatedClusterRiskPct:+$("pfMaxCluster").value||3,correlationBlockThreshold:+$("pfCorrLimit").value||.85,stressMovePct:+$("pfStressMove").value||5};
@@ -2822,11 +2831,15 @@ function renderFlowView(data){
 async function loadFlow(force){
   if(state.flowBusy&&!force)return;
   state.flowBusy=true;
-  $("flowSource").textContent="CONNECTING";
+  var flowKey="flow-"+state.symbol+"-"+state.interval;
+  var cachedFlow=readViewCache(flowKey);
+  if(cachedFlow?.data){state.market=state.market||{};state.market.derivatives=cachedFlow.data;renderMarketNoFlow();renderFlowView(cachedFlow.data);drawFlowData(cachedFlow.data)}
+  $("flowSource").textContent=cachedFlow?.data?"REFRESHING":"CONNECTING";
   try{
     var j=await api("/api/core-flow?symbol="+encodeURIComponent(state.symbol)+"&interval="+encodeURIComponent(state.interval),10000);
     if(j&&j.data){
       state.market=state.market||{};state.market.derivatives=j.data;
+      writeViewCache(flowKey,{data:j.data});
       renderMarketNoFlow();renderFlowView(j.data);drawFlowData(j.data);
       $("flowSource").textContent=j.data.available===false?"RETRYING":(j.data.provider||"LIVE");
       if(j.data.available===false)throw Error("Flow feed unavailable");
@@ -3792,10 +3805,12 @@ function renderPhase7(){
   $("mp7SetupTable").innerHTML=mp7Table(a.bySetup);
 }
 async function loadPhase7(){
+  var key="phase7",cached=readViewCache(key);
+  if(cached?.analytics){state.phase7=cached.analytics;renderPhase7()}
   try{
-    $("mp7HealthText").textContent="Loading journal analytics…";
+    $("mp7HealthText").textContent=cached?"Refreshing journal analytics…":"Loading journal analytics…";
     var d=await api("/api/analytics?device="+encodeURIComponent(deviceId()),7000);
-    state.phase7=d.analytics;renderPhase7();
+    state.phase7=d.analytics;writeViewCache(key,d);renderPhase7();
   }catch(e){
     $("mp7HealthText").textContent="Analytics unavailable: "+e.message;
   }
