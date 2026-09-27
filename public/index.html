@@ -3,6 +3,14 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="manifest" href="/manifest.json">
+<link rel="icon" href="/marketpulse-icon.svg" type="image/svg+xml">
+<meta name="theme-color" content="#050507">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="MarketPulse">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="application-name" content="MarketPulse">
 <meta name="theme-color" content="#050507">
 <title>MarketPulse — Crypto Intelligence</title>
 <style>
@@ -536,6 +544,10 @@ body.admin-mode .nav button.adminNav,body.admin-mode .mobileMenu button.adminNav
 #adminSignalToast.show{opacity:1;transform:translateY(0)}
 #adminSignalToast .t{font-size:11px;font-weight:950}
 #adminSignalToast .b{margin-top:5px;color:#aebccd;font-size:9px;line-height:1.45}
+.pwaInstallPanel{margin-top:9px;padding:10px;border:1px solid rgba(192,132,252,.16);border-radius:10px;background:linear-gradient(180deg,rgba(192,132,252,.05),rgba(255,255,255,.015))}
+.pwaInstallRow{display:flex;align-items:center;justify-content:space-between;gap:9px;flex-wrap:wrap}
+.pwaInstallTitle{font-size:9px;font-weight:950;color:#edf4f8}
+.pwaInstallHint{font-size:8px;color:#7f90a5;line-height:1.45;margin-top:4px}
 .adminBadge{display:inline-flex;align-items:center;gap:6px;border:1px solid rgba(192,132,252,.28);background:rgba(192,132,252,.07);color:#e9d5ff;border-radius:999px;padding:6px 9px;font-size:9px;font-weight:900;letter-spacing:.06em}
 .adminGrid{display:grid;grid-template-columns:repeat(3,1fr);gap:9px}
 .adminMetric{padding:12px;border:1px solid rgba(255,255,255,.07);border-radius:11px;background:#0d0d12}
@@ -1539,6 +1551,8 @@ var state={
   adminPushConfig:null,
   adminSignalLastPollAt:0,
   adminSignalPollTimer:null,
+  pwaInstallPrompt:null,
+  pwaInstalled:false,
   flags:{}
 };
 
@@ -1568,6 +1582,60 @@ function adminSignalToast(alert){
   if(!host){host=document.createElement("div");host.id="adminSignalToast";document.body.appendChild(host)}
   host.innerHTML='<div class="t">'+safeHtml(alert.title||"BTC signal")+'</div><div class="b">'+safeHtml(alert.body||"A confirmed BTC signal is available.")+'</div>';
   host.classList.add("show");clearTimeout(adminSignalToast._timer);adminSignalToast._timer=setTimeout(function(){host.classList.remove("show")},10000);
+}
+function isStandalonePwa(){
+  return window.matchMedia&&window.matchMedia("(display-mode: standalone)").matches;
+}
+function updatePwaInstallUI(){
+  var btn=$("installMarketPulseApp"),hint=$("pwaInstallHint");
+  if(!btn)return;
+  if(isStandalonePwa()||state.pwaInstalled){
+    btn.textContent="App installed";
+    btn.disabled=true;
+    if(hint)hint.textContent="MarketPulse is installed as an app on this device. Open it from your home screen; the live site updates automatically.";
+    return;
+  }
+  if(state.pwaInstallPrompt){
+    btn.textContent="Install app";
+    btn.disabled=false;
+    return;
+  }
+  btn.textContent="How to install";
+  btn.disabled=false;
+  if(hint)hint.textContent="On Android Chrome, use the browser menu → Install app. After installation, MarketPulse opens directly from your home screen.";
+}
+async function promptMarketPulseInstall(){
+  if(!isAdminUser())return;
+  if(isStandalonePwa()){updatePwaInstallUI();return}
+  var promptEvent=state.pwaInstallPrompt;
+  if(promptEvent){
+    promptEvent.prompt();
+    try{await promptEvent.userChoice}catch{}
+    state.pwaInstallPrompt=null;
+    updatePwaInstallUI();
+    return;
+  }
+  if($("pwaInstallHint"))$("pwaInstallHint").textContent="Open this page in Chrome on Android, then use ⋮ → Install app / Add to Home screen. The installed app opens directly without the normal browser UI.";
+}
+function initPwaInstall(){
+  try{
+    state.pwaInstalled=isStandalonePwa();
+    window.addEventListener("beforeinstallprompt",function(e){
+      e.preventDefault();
+      state.pwaInstallPrompt=e;
+      updatePwaInstallUI();
+    });
+    window.addEventListener("appinstalled",function(){
+      state.pwaInstalled=true;
+      state.pwaInstallPrompt=null;
+      updatePwaInstallUI();
+    });
+    window.addEventListener("pageshow",function(){updatePwaInstallUI()});
+    document.addEventListener("visibilitychange",function(){
+      if(document.visibilityState==="visible")updatePwaInstallUI();
+    });
+    updatePwaInstallUI();
+  }catch{}
 }
 async function getAdminPushState(){
   var permission=("Notification"in window)?Notification.permission:"unsupported";
@@ -1727,6 +1795,7 @@ function scheduleAccountUIEarly(){
   else boot();
 }
 scheduleAccountUIEarly();
+initPwaInstall();
 
 function installCriticalChartUI(){
   var c=document.getElementById("mainChart");
