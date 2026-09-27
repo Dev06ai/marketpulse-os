@@ -710,6 +710,15 @@ linear-gradient(180deg,#0c0e11 0%,#101214 48%,#0a0b0d 100%);box-shadow:0 -20px 7
       <div class="card signalQualityCard"><div class="sectionHead"><div><div class="title">Why the signal looks this way</div><div class="sub">See which parts of the market are helping or weakening the setup.</div></div><span class="value" id="quality">—</span></div><div id="components" class="list"></div></div>
     </div>
       </div>
+      <div class="card" id="reactionOpportunityCard" style="margin-top:10px">
+        <div class="sectionHead">
+          <div><div class="title">Reaction Opportunities</div><div class="sub">Conditional setups around high-confluence zones. The zone alone is not a trade.</div></div>
+          <span class="chip" id="reactionMapState">WATCH</span>
+        </div>
+        <div id="reactionOpportunities" class="list">
+          <div class="small">Waiting for reaction zones…</div>
+        </div>
+      </div>
       <div class="card" style="margin-top:10px" data-admin-only="true">
         <div class="sectionHead"><div><div class="title">Live validation &amp; safety gate</div><div class="sub">Historical replay calibrates the minimum evidence required before a signal is shown as eligible for live decision support.</div></div><span class="chip" id="validationChip">PAPER ONLY</span></div>
         <div class="grid2">
@@ -2999,9 +3008,47 @@ function queueSecondaryBoot(){
   setTimeout(function(){if(!state.cycle)loadCycle()},7000);
 }
 
+function renderReactionMap(map){
+  var box=$("reactionOpportunities"),state=$("reactionMapState");
+  if(!box)return;
+  map=map||{};
+  var rows=Array.isArray(map.zones)?map.zones:[];
+  var active=map.active||null;
+  if(state){
+    state.textContent=active
+      ?(active.action==="LONG"?"LONG CANDIDATE":active.action==="SHORT"?"SHORT CANDIDATE":"WATCH")
+      :"WATCH";
+  }
+  if(!rows.length){
+    box.innerHTML='<div class="small">No nearby high-confluence reaction zones are currently mapped.</div>';
+    return;
+  }
+  box.innerHTML=rows.slice(0,4).map(function(z){
+    var action=z.action==="LONG"?"LONG":z.action==="SHORT"?"SHORT":"WAIT";
+    var stateLabel=z.state==="CONFIRM_LONG"||z.state==="CONFIRM_SHORT"?"CONFIRMED":z.state==="BREAKOUT_LONG"||z.state==="BREAKDOWN_SHORT"?"BREAK / RETEST":"WATCH";
+    var distance=Number.isFinite(Number(z.distance))?fmt(Math.abs(Number(z.distance))):"—";
+    var zoneLow=Number.isFinite(Number(z.low))?fmt(z.low):"—";
+    var zoneHigh=Number.isFinite(Number(z.high))?fmt(z.high):"—";
+    var evidence=Array.isArray(z.evidence)?z.evidence.slice(0,4).join(" · "):"Key confluence";
+    var color=action==="LONG"?"#4ade80":action==="SHORT"?"#f87171":"#c084fc";
+    return '<div class="rowLine" style="padding:10px 0">'+
+      '<div style="display:flex;justify-content:space-between;gap:8px;align-items:center">'+
+        '<span class="small">'+safeHtml(z.label||"Reaction zone")+'</span>'+
+        '<b style="font-size:9px;color:'+color+'">'+stateLabel+' · '+action+'</b>'+
+      '</div>'+
+      '<div style="margin-top:4px;color:#e7eaf0;font-size:10px;font-weight:800">'+zoneLow+' → '+zoneHigh+
+        '<span style="color:#7f8997;font-weight:600"> · '+z.confluence+' evidence · '+distance+' away</span></div>'+
+      '<div style="margin-top:4px;color:#8f98a6;font-size:9px">'+safeHtml(z.trigger||"Wait for a clean reaction.")+'</div>'+
+      '<div style="margin-top:3px;color:#6f7886;font-size:8px">'+safeHtml(evidence)+
+        (z.invalidation!=null?" · invalidation "+fmt(z.invalidation):"")+'</div>'+
+    '</div>';
+  }).join("");
+}
+
 async function renderFinalDecision(d){
   if(!d)return;
   var m=d.market||{},ev=d.evidence||{},lv=d.levels||{},data=d.data||{},pg=d.propGate||{},v=d.phase11_13||{},gate=d.deploymentGate||{},stability=d.signalStability||{};
+  renderReactionMap(d.reactionMap||ev.reactionMap||{});
   // The UI must never present a directional trade unless the server explicitly confirms it.
   var side=d.liveSignalEligible===true&&d.state==="READY"&&(d.action==="LONG"||d.action==="SHORT")
     ?String(d.action).toUpperCase():"WAIT";
