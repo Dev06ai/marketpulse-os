@@ -29,6 +29,11 @@ function strictSignalChecks(a,side,higher,lower,flowScore,dataScore,levels,deriv
   if(a?.regime==="HIGH VOLATILITY")reasons.push("high-volatility regime");
   const requiresHigher=String(interval).toLowerCase()!=="1d";
   const ms=a?.marketStructure||{};
+  const reaction=a?.reactionMap?.active||null;
+  const reactionConfirmed=Boolean(reaction&&["CONFIRM_LONG","CONFIRM_SHORT","BREAKOUT_LONG","BREAKDOWN_SHORT"].includes(String(reaction.state||""))&&["LONG","SHORT"].includes(String(reaction.action||"")));
+  const reactionMatches=reactionConfirmed&&String(reaction.action).toUpperCase()===side;
+  if(reactionMatches&&flowScore<70)reasons.push("reaction confirmed but order-flow confirmation is below 70");
+  if(reactionMatches&&dataScore<85)reasons.push("reaction confirmed but data quality is below 85");
   const setupKind=String(ms.setup?.kind||"").toUpperCase();
   const setupScore=n(ms.setup?.score,0);
   const levelReversal=(setupKind==="SFP"||setupKind==="NPOC"||setupKind==="ORDER_BLOCK")&&setupScore>=85;
@@ -38,8 +43,9 @@ function strictSignalChecks(a,side,higher,lower,flowScore,dataScore,levels,deriv
   const higherMissing=(h==="UNKNOWN");
   if(requiresHigher&&(higherConflict||higherMissing)){
     const controlledReversal=levelReversal&&flowScore>=75&&dataScore>=90;
+    const controlledReaction=reactionMatches&&flowScore>=70&&dataScore>=85;
     const controlledDline=dline&&higher8===(side==="LONG"?"UPTREND":"DOWNTREND")&&flowScore>=70&&dataScore>=85;
-    if(!controlledReversal&&!controlledDline)reasons.push(higherMissing?"higher-timeframe trend unavailable":"higher-timeframe trend conflicts");
+    if(!controlledReversal&&!controlledReaction&&!controlledDline)reasons.push(higherMissing?"higher-timeframe trend unavailable":"higher-timeframe trend conflicts");
   }
   if(side==="LONG"&&l==="DOWNTREND")reasons.push("15M trend conflicts");
   if(side==="SHORT"&&l==="UPTREND")reasons.push("15M trend conflicts");
@@ -106,6 +112,12 @@ function evaluate(x={}){
   ];
   const thesis=[];
   thesis.push(side==="LONG"?"Bullish setup under the current structure and momentum model.":side==="SHORT"?"Bearish setup under the current structure and momentum model.":"Neutral conditions: waiting for clearer structure.");
+  if(a?.reactionMap?.active){
+    const rx=a.reactionMap.active;
+    if(rx.action&&rx.action!=="WAIT")thesis.push("Reaction map: "+String(rx.state||"WATCH")+" · "+String(rx.action)+" at "+Number(rx.low||0).toFixed(0)+"–"+Number(rx.high||0).toFixed(0)+".");
+    if(rx.trigger)thesis.push(rx.trigger);
+    if(rx.analystPrimaryTrigger)thesis.push("Analyst scenario: "+rx.analystPrimaryTrigger);
+  }
   if(a?.marketStructure?.setup){
     const s=a.marketStructure.setup;
     const why=s.reason||"Strategy trigger detected.";
