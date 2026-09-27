@@ -112,13 +112,15 @@ function fibonacciTargets(candidate){
   };
 }
 
-function overlapRule(marketType){
+function overlapRule(marketType,liquidationCascade=false){
   const type=String(marketType||"PERPETUAL").toUpperCase();
+  if(type.includes("PERP")&&liquidationCascade){
+    return {mode:"PERPETUAL",maxOverlapPct:4.5,allowed:true,sourceRule:"4.5% overlap tolerance only during high-volatility liquidation cascades"};
+  }
   return type.includes("PERP")
-    ?{mode:"PERPETUAL",maxOverlapPct:4.5,sourceRule:"4.5% overlap tolerance only during high-volatility liquidation cascades"}
-    :{mode:"SPOT",maxOverlapPct:0,sourceRule:"Wave 4 may not overlap Wave 1 price territory"};
+    ?{mode:"PERPETUAL",maxOverlapPct:0,allowed:false,sourceRule:"No overlap unless the 4.5% perpetual exception is activated during a high-volatility liquidation cascade"}
+    :{mode:"SPOT",maxOverlapPct:0,allowed:false,sourceRule:"Wave 4 may not overlap Wave 1 price territory"};
 }
-
 function buildElliottContext(c,opts={}){
   if(!Array.isArray(c)||c.length<70)return {version:"2.0+4.2",candidates:[],active:null,protocols:{}};
   const candidates=alternatingCandidates(c);
