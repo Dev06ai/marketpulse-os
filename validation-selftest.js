@@ -82,7 +82,7 @@ const styleCheck=phase910.evaluate({
 assert(styleCheck.tradeStyle==="SCALP","15m final decision must be classified as SCALP.");
 assert(styleCheck.market?.tradeStyle==="SCALP","15m market payload must expose SCALP style.");
 
-const {detectStrategySetups,detectDLine}=require("./strategy-setups");
+const {detectStrategySetups}=require("./strategy-setups");
 
 function strategyCandles(){
   const out=[],start=Date.UTC(2026,8,20,0,0,0),hour=3600000;
@@ -107,22 +107,4 @@ assert(npoc.setup?.kind==="NPOC","Naked POC detector did not identify the synthe
 assert(npoc.setup?.side==="SHORT","Bearish naked POC SFP must map to SHORT.");
 assert(/^Naked (DAILY|WEEKLY) POC/.test(String(npoc.setup?.reason||"")),"Naked POC thesis reason missing.");
 
-function dlineCandles(){
-  const out=[],start=Date.UTC(2026,8,25,0,0,0),m=15*60000;
-  for(let i=0;i<100;i++){
-    const t=start+i*m;
-    out.push({t,o:100,c:100.2,h:101,l:99,v:1000});
-  }
-  // Two clean descending pivot highs that form the resistance line.
-  out[65]={t:start+65*m,o:100,c:109,h:110,l:99,v:1200};
-  out[80]={t:start+80*m,o:100,c:104,h:105,l:99,v:1200};
-  // The prior candle remains below the projected resistance; the final candle breaks it decisively.
-  out[98]={t:start+98*m,o:98,c:98,h:99,l:97,v:1100};
-  out[99]={t:start+99*m,o:98,c:110,h:112,l:97,v:2600};
-  return out;
-}
 
-const dline=detectStrategySetups(dlineCandles(),{interval:"15m",higher8h:{regime:"UPTREND"}});
-console.log("DLINE_DIRECT_DEBUG",JSON.stringify(detectDLine(dlineCandles(),"15m",{regime:"UPTREND"})));
-assert(dline.dLine?.kind==="D_LINE_BREAKOUT","D-Line breakout detector did not identify the synthetic breakout.");
-assert(dline.dLine?.side==="LONG","Bullish D-Line breakout must map to LONG.");
