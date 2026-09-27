@@ -39,6 +39,7 @@ button,input,select,textarea{font:inherit}.wrap{width:min(1440px,calc(100% - 26p
 .reactionMeta{margin-top:4px;color:#7f8b9d;font-size:8px;line-height:1.35}
 .reactionTrigger{margin-top:7px;color:#aeb8c7;font-size:8px;line-height:1.45}
 .reactionEvidence{margin-top:6px;color:#697688;font-size:7.5px;line-height:1.35}
+.reactionSource{color:#a78bfa;font-weight:850}
 .reactionInvalidation{color:#8b95a4;font-weight:750}
 @media(max-width:900px){.reactionList{grid-template-columns:1fr}}
 .bar{height:5px;border-radius:999px;background:rgba(255,255,255,.07);overflow:hidden;grid-column:1/-1;margin-top:-2px}.bar i{display:block;height:100%;background:linear-gradient(90deg,#67e8ff,#b78cff);border-radius:inherit}
@@ -3050,7 +3051,7 @@ function renderReactionMap(map){
         '<div class="reactionState" style="color:'+color+'">'+stateLabel+' · '+action+'</div>'+
       '</div>'+
       '<div class="reactionPrice">'+zoneLow+' → '+zoneHigh+'</div>'+
-      '<div class="reactionMeta">'+z.confluence+' confluence sources · '+distance+' from price</div>'+
+      '<div class="reactionMeta">'+z.confluence+' confluence sources · '+distance+' from price'+(z.analyst? ' · <span class="reactionSource">Analyst scenario</span>':'')+'</div>'+
       '<div class="reactionTrigger">'+safeHtml(z.trigger||"Wait for a clean reaction.")+'</div>'+
       '<div class="reactionEvidence">'+safeHtml(evidence)+(z.invalidation!=null?' · <span class="reactionInvalidation">Invalidation '+fmt(z.invalidation)+'</span>':'')+'</div>'+
     '</div>';
