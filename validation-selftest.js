@@ -109,14 +109,18 @@ assert(/^Naked (DAILY|WEEKLY) POC/.test(String(npoc.setup?.reason||"")),"Naked P
 
 function dlineCandles(){
   const out=[],start=Date.UTC(2026,8,25,0,0,0),m=15*60000;
-  for(let i=0;i<100;i++)out.push({t:start+i*m,o:100,c:100.2,h:101,l:99,v:1000});
-  out[70]={t:start+70*m,o:100,c:109,h:110,l:99,v:1000};
-  out[85]={t:start+85*m,o:100,c:105,h:106,l:99,v:1000};
-  out[97]={t:start+97*m,o:100,c:102,h:103,l:99,v:1000};
-  out[98]={t:start+98*m,o:100,c:102,h:103,l:99,v:1000};
-  out[99]={t:start+99*m,o:104,c:110,h:111,l:103,v:2200};
+  for(let i=0;i<100;i++){
+    const t=start+i*m;
+    out.push({t,o:100,c:100.2,h:101,l:99,v:1000});
+  }
+  // Two clean descending pivot highs that form the resistance line.
+  out[65]={t:start+65*m,o:100,c:119,h:120,l:99,v:1200};
+  out[80]={t:start+80*m,o:105,c:109,h:110,l:103,v:1200};
+  // Final candle breaks decisively above the projected line with volume.
+  out[99]={t:start+99*m,o:108,c:121,h:123,l:107,v:2600};
   return out;
 }
+
 const dline=detectStrategySetups(dlineCandles(),{interval:"15m",higher8h:{regime:"UPTREND"}});
 assert(dline.dLine?.kind==="D_LINE_BREAKOUT","D-Line breakout detector did not identify the synthetic breakout.");
 assert(dline.dLine?.side==="LONG","Bullish D-Line breakout must map to LONG.");
