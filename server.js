@@ -389,7 +389,7 @@ async function buildDecisionSnapshot(symbol,interval,query,deviceId=null){
     let analysis=analyze(candles,{interval,lower:lowerAnalysis,higher:higherAnalysis,dlineHigher:dlineHigherAnalysis,deriv});
     let learned=null;
     try{
-      learned=await Promise.race([learning.process(symbol,interval,candles,analysis),new Promise(resolve=>setTimeout(()=>resolve(null),500))]);
+      learned=await Promise.race([learning.process(symbol,interval,candles,analysis,{observe:false}),new Promise(resolve=>setTimeout(()=>resolve(null),500))]);
       if(learned?.analysis)analysis=learned.analysis;
     }catch{}
     const flow=mergeFlowSnapshot(symbol,deriv||{});
@@ -430,6 +430,7 @@ async function buildDecisionSnapshot(symbol,interval,query,deviceId=null){
     const stableDecision=applySignalStability(gatedDecision,symbol,interval);
     const finalDecision=sanitizeFinalDecision(stableDecision);
     try{phase4.updateFinalDecision(deviceId||"00000000-0000-0000-0000-000000000000",symbol,interval,finalDecision,candles).catch(()=>{})}catch{}
+    try{learning.observeFinalDecision(symbol,interval,candles,finalDecision).catch(()=>{})}catch{}
     const payload={
       ok:true,...finalDecision,analysis,derivatives:flow,consensus,
       learning:learned?await learning.status().catch(()=>null):null,
@@ -1482,7 +1483,7 @@ const server=http.createServer(async(req,res)=>{
           deriv
         });
         let learned=null;
-        try{learned=await learning.process(symbol,interval,base,analysis)}catch{}
+        try{learned=await learning.process(symbol,interval,base,analysis,{observe:false})}catch{}
         // Phase 4 paper learning is updated from the final gated decision in /api/decision.
         return send(res,200,{ok:true,symbol,interval,
           analysis:learned?.analysis||analysis,
@@ -1688,7 +1689,7 @@ const server=http.createServer(async(req,res)=>{
           const higher=interval==='4h'?null:await Promise.race([klines(symbol,'4h'),new Promise(resolve=>setTimeout(()=>resolve(null),1100))]).catch(()=>null);
           const lower=interval==='15m'?null:await Promise.race([klines(symbol,'15m'),new Promise(resolve=>setTimeout(()=>resolve(null),1100))]).catch(()=>null);
           let analysis=analyze(candles,{interval,lower:lower&&lower.length>=220?analyze(lower,{interval:'15m'}):null,higher:higher&&higher.length>=220?analyze(higher,{interval:'4h'}):null,deriv:null});
-          try{const learned=await Promise.race([learning.process(symbol,interval,candles,analysis),new Promise(resolve=>setTimeout(()=>resolve(null),200))]);if(learned?.analysis)analysis=learned.analysis}catch{}
+          try{const learned=await Promise.race([learning.process(symbol,interval,candles,analysis,{observe:false}),new Promise(resolve=>setTimeout(()=>resolve(null),200))]);if(learned?.analysis)analysis=learned.analysis}catch{}
           return{symbol,label:labels[symbol]||symbol,price:analysis.price,change24h:analysis.change24h,regime:analysis.regime,side:analysis.side,type:analysis.type,status:analysis.status,score:analysis.score,bias:analysis.bias,probabilityLabel:analysis.probabilityLabel,structure:analysis.structure,derivatives:null};
         }catch(e){
           return{symbol,label:labels[symbol]||symbol,status:'WAITING',side:'WAIT',score:0,error:e.message};
@@ -1883,7 +1884,7 @@ const server=http.createServer(async(req,res)=>{
         const [lower,higher]=await Promise.all([lowerPromise,higherPromise]);
         const deriv=await Promise.race([derivatives(symbol,interval),new Promise(resolve=>setTimeout(()=>resolve(null),1000))]).catch(()=>null);
         let analysis=analyze(candles,{interval,lower:lower&&lower.length>=220?analyze(lower,{interval:'15m'}):null,higher:higher&&higher.length>=220?analyze(higher,{interval:'4h'}):null,deriv});
-        try{const learned=await Promise.race([learning.process(symbol,interval,candles,analysis),new Promise(resolve=>setTimeout(()=>resolve(null),700))]);if(learned?.analysis)analysis=learned.analysis}catch{}
+        try{const learned=await Promise.race([learning.process(symbol,interval,candles,analysis,{observe:false}),new Promise(resolve=>setTimeout(()=>resolve(null),700))]);if(learned?.analysis)analysis=learned.analysis}catch{}
         return send(res,200,{ok:true,symbol,interval,candles,analysis,derivatives:deriv,learning:{phase:2,state:'COLLECTING',durable:storage.status().durable}});
       }catch(e){return send(res,503,{ok:false,error:String(e.message||e)})}
     }
@@ -1915,7 +1916,7 @@ const server=http.createServer(async(req,res)=>{
       ]).catch(()=>null);
       let analysis=analyze(candles,{interval,higher:higherA,lower:lowerA,deriv});
       let learningResult=null;
-      try{learningResult=await Promise.race([learning.process(symbol,interval,candles,analysis),new Promise(resolve=>setTimeout(()=>resolve(null),1500))])}catch{}
+      try{learningResult=await Promise.race([learning.process(symbol,interval,candles,analysis,{observe:false}),new Promise(resolve=>setTimeout(()=>resolve(null),1500))])}catch{}
       if(learningResult?.analysis)analysis=learningResult.analysis;
       const learningStatus=await Promise.race([learning.status(),new Promise(resolve=>setTimeout(()=>resolve({phase:2,state:'COLLECTING',durable:storage.status().durable,resolved:0}),700))]).catch(()=>({phase:2,state:'COLLECTING',durable:storage.status().durable,resolved:0}));
       return send(res,200,{symbol,interval,candles,analysis,derivatives:deriv,learning:learningStatus,backtest:backtest(candles),validation:walkForwardBacktest(candles),setupStats:require("./market-engine").backtestBySetup(candles)});
@@ -1938,7 +1939,7 @@ const server=http.createServer(async(req,res)=>{
             new Promise(resolve=>setTimeout(()=>resolve(null),2200))
           ]).catch(()=>null);
           let a=analyze(candles,{interval,higher:higher&&higher.length>=220?analyze(higher,{interval:'4h'}):null,lower:lower&&lower.length>=220?analyze(lower,{interval:'15m'}):null,deriv});
-          a=(await learning.process(symbol,interval,candles,a)).analysis;
+          a=(await learning.process(symbol,interval,candles,a,{observe:false})).analysis;
           return {symbol,label:labels[symbol]||symbol,derivatives:deriv,...a};
         }catch(e){return {symbol,label:labels[symbol]||symbol,error:e.message,type:"DATA ERROR",side:"WAIT",score:0,regime:"UNKNOWN"}}
       }));
