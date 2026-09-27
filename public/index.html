@@ -1303,7 +1303,7 @@ linear-gradient(180deg,#0a1530 0%,#0b1022 48%,#130b22 100%);box-shadow:0 -20px 7
         <h4>Learn</h4>
         <div class="footerLinks">
           <button type="button" id="footerGuideBtn">Beginner Guide</button>
-          <button type="button" onclick="document.getElementById('siteFooter')?.scrollIntoView({behavior:'smooth'})">FAQ</button>
+          <button type="button" id="footerFaqBtn">FAQ</button>
           <button type="button" data-view="ai">Market Copilot</button>
           <button type="button" id="footerTopBtn">Back to top</button>
         </div>
@@ -1344,6 +1344,7 @@ linear-gradient(180deg,#0a1530 0%,#0b1022 48%,#130b22 100%);box-shadow:0 -20px 7
   document.addEventListener("click",function(e){
     var t=e.target;
     if(t.closest&&t.closest("#footerGuideBtn")){e.preventDefault();openGuide()}
+    if(t.closest&&t.closest("#footerFaqBtn")){e.preventDefault();document.getElementById("siteFooter")?.scrollIntoView({behavior:"smooth"})}
     if(t.closest&&t.closest("#footerTopBtn")){e.preventDefault();window.scrollTo({top:0,behavior:"smooth"})}
   });
 })();
