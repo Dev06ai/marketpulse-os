@@ -360,7 +360,7 @@ function queuePhase1113Validation(symbol,interval,candles){
   return hit?.payload||null;
 }
 
-async function buildDecisionSnapshot(symbol,interval,query){
+async function buildDecisionSnapshot(symbol,interval,query,deviceId=null){
   const key=symbol+"|"+interval,now=Date.now(),cached=DECISION_CACHE.get(key);
   if(cached&&now-cached.ts<DECISION_TTL)return Object.assign({cache:"fresh",cacheAgeMs:now-cached.ts},cached.payload);
   try{
@@ -389,7 +389,7 @@ async function buildDecisionSnapshot(symbol,interval,query){
     let analysis=analyze(candles,{interval,lower:lowerAnalysis,higher:higherAnalysis,dlineHigher:dlineHigherAnalysis,deriv});
     let learned=null;
     try{
-      learned=await Promise.race([learning.process(symbol,interval,candles,analysis),new Promise(resolve=>setTimeout(()=>resolve(null),500))]);
+      learned=await Promise.race([learning.process(symbol,interval,candles,analysis,{observe:false}),new Promise(resolve=>setTimeout(()=>resolve(null),500))]);
       if(learned?.analysis)analysis=learned.analysis;
     }catch{}
     const flow=mergeFlowSnapshot(symbol,deriv||{});
@@ -429,6 +429,8 @@ async function buildDecisionSnapshot(symbol,interval,query){
     const gatedDecision=phase1113.applyDeploymentGate(decision,validation1113,{basePolicy:{minScore:config.minSignalScore,minRR:config.minRR}});
     const stableDecision=applySignalStability(gatedDecision,symbol,interval);
     const finalDecision=sanitizeFinalDecision(stableDecision);
+    try{phase4.updateFinalDecision(deviceId||"00000000-0000-0000-0000-000000000000",symbol,interval,finalDecision,candles).catch(()=>{})}catch{}
+    try{learning.observeFinalDecision(symbol,interval,candles,finalDecision).catch(()=>{})}catch{}
     const payload={
       ok:true,...finalDecision,analysis,derivatives:flow,consensus,
       learning:learned?await learning.status().catch(()=>null):null,
@@ -1441,7 +1443,7 @@ const server=http.createServer(async(req,res)=>{
       if(!SYMBOLS.includes(symbol)||!['15m','30m','1h','4h','1d'].includes(interval))return send(res,400,{ok:false,error:'Unsupported symbol or interval'});
       try{
         const payload=await Promise.race([
-          buildDecisionSnapshot(symbol,interval,u.searchParams),
+          buildDecisionSnapshot(symbol,interval,u.searchParams,requestDevice(req)),
           new Promise((_,reject)=>setTimeout(()=>reject(new Error('DECISION_ENGINE_TIMEOUT')),8500))
         ]);
         return send(res,200,payload);
@@ -1481,8 +1483,8 @@ const server=http.createServer(async(req,res)=>{
           deriv
         });
         let learned=null;
-        try{learned=await learning.process(symbol,interval,base,analysis)}catch{}
-        try{phase4.updateLive(requestDevice(req),symbol,interval,learned?.analysis||analysis,base).catch(()=>{})}catch{}
+        try{learned=await learning.process(symbol,interval,base,analysis,{observe:false})}catch{}
+        // Phase 4 paper learning is updated from the final gated decision in /api/decision.
         return send(res,200,{ok:true,symbol,interval,
           analysis:learned?.analysis||analysis,
           lower:lower&&lower.length>=220?analyze(lower,{interval:'15m'}):null,
@@ -1687,7 +1689,7 @@ const server=http.createServer(async(req,res)=>{
           const higher=interval==='4h'?null:await Promise.race([klines(symbol,'4h'),new Promise(resolve=>setTimeout(()=>resolve(null),1100))]).catch(()=>null);
           const lower=interval==='15m'?null:await Promise.race([klines(symbol,'15m'),new Promise(resolve=>setTimeout(()=>resolve(null),1100))]).catch(()=>null);
           let analysis=analyze(candles,{interval,lower:lower&&lower.length>=220?analyze(lower,{interval:'15m'}):null,higher:higher&&higher.length>=220?analyze(higher,{interval:'4h'}):null,deriv:null});
-          try{const learned=await Promise.race([learning.process(symbol,interval,candles,analysis),new Promise(resolve=>setTimeout(()=>resolve(null),200))]);if(learned?.analysis)analysis=learned.analysis}catch{}
+          try{const learned=await Promise.race([learning.process(symbol,interval,candles,analysis,{observe:false}),new Promise(resolve=>setTimeout(()=>resolve(null),200))]);if(learned?.analysis)analysis=learned.analysis}catch{}
           return{symbol,label:labels[symbol]||symbol,price:analysis.price,change24h:analysis.change24h,regime:analysis.regime,side:analysis.side,type:analysis.type,status:analysis.status,score:analysis.score,bias:analysis.bias,probabilityLabel:analysis.probabilityLabel,structure:analysis.structure,derivatives:null};
         }catch(e){
           return{symbol,label:labels[symbol]||symbol,status:'WAITING',side:'WAIT',score:0,error:e.message};
@@ -1738,8 +1740,17 @@ const server=http.createServer(async(req,res)=>{
       let raw="";for await(const chunk of req)raw+=chunk;let body={};try{body=JSON.parse(raw||"{}")}catch{return send(res,400,{error:"Invalid JSON"})}
       const symbol=(body.symbol||'BTCUSDT').toUpperCase(),interval=body.interval||'1h';
       try{
-        const edge=await phase4.snapshot(requestDevice(req),symbol,interval,null);
-        return send(res,200,{ok:true,order:await execution.prepareFromSignal(edge.signal),edge});
+        const finalDecision=await buildDecisionSnapshot(symbol,interval,u.searchParams,requestDevice(req));
+        if(!finalDecision?.liveSignalEligible||finalDecision?.state!=="READY"||!["LONG","SHORT"].includes(String(finalDecision?.action||"").toUpperCase())){
+          return send(res,409,{ok:false,error:"FINAL_SIGNAL_NOT_ELIGIBLE",message:"Execution preparation is allowed only from a final gated LONG/SHORT decision.",decision:finalDecision});
+        }
+        const signal={
+          symbol,interval,side:finalDecision.action,status:"READY",score:finalDecision.market?.confluenceScore||0,
+          entryLow:finalDecision.levels?.entryLow,entryHigh:finalDecision.levels?.entryHigh,entry:finalDecision.levels?.entry,
+          stop:finalDecision.levels?.stop,target:finalDecision.levels?.tp1,tp2:finalDecision.levels?.tp2,rr:finalDecision.levels?.rr,
+          type:finalDecision.market?.type,regime:finalDecision.market?.regime,tradeStyle:finalDecision.tradeStyle
+        };
+        return send(res,200,{ok:true,order:await execution.prepareFromSignal(signal),decision:finalDecision});
       }catch(e){return send(res,400,{error:e.message})}
     }
     if(req.method==='POST'&&u.pathname==='/api/execution/intent'){
@@ -1873,7 +1884,7 @@ const server=http.createServer(async(req,res)=>{
         const [lower,higher]=await Promise.all([lowerPromise,higherPromise]);
         const deriv=await Promise.race([derivatives(symbol,interval),new Promise(resolve=>setTimeout(()=>resolve(null),1000))]).catch(()=>null);
         let analysis=analyze(candles,{interval,lower:lower&&lower.length>=220?analyze(lower,{interval:'15m'}):null,higher:higher&&higher.length>=220?analyze(higher,{interval:'4h'}):null,deriv});
-        try{const learned=await Promise.race([learning.process(symbol,interval,candles,analysis),new Promise(resolve=>setTimeout(()=>resolve(null),700))]);if(learned?.analysis)analysis=learned.analysis}catch{}
+        try{const learned=await Promise.race([learning.process(symbol,interval,candles,analysis,{observe:false}),new Promise(resolve=>setTimeout(()=>resolve(null),700))]);if(learned?.analysis)analysis=learned.analysis}catch{}
         return send(res,200,{ok:true,symbol,interval,candles,analysis,derivatives:deriv,learning:{phase:2,state:'COLLECTING',durable:storage.status().durable}});
       }catch(e){return send(res,503,{ok:false,error:String(e.message||e)})}
     }
@@ -1905,7 +1916,7 @@ const server=http.createServer(async(req,res)=>{
       ]).catch(()=>null);
       let analysis=analyze(candles,{interval,higher:higherA,lower:lowerA,deriv});
       let learningResult=null;
-      try{learningResult=await Promise.race([learning.process(symbol,interval,candles,analysis),new Promise(resolve=>setTimeout(()=>resolve(null),1500))])}catch{}
+      try{learningResult=await Promise.race([learning.process(symbol,interval,candles,analysis,{observe:false}),new Promise(resolve=>setTimeout(()=>resolve(null),1500))])}catch{}
       if(learningResult?.analysis)analysis=learningResult.analysis;
       const learningStatus=await Promise.race([learning.status(),new Promise(resolve=>setTimeout(()=>resolve({phase:2,state:'COLLECTING',durable:storage.status().durable,resolved:0}),700))]).catch(()=>({phase:2,state:'COLLECTING',durable:storage.status().durable,resolved:0}));
       return send(res,200,{symbol,interval,candles,analysis,derivatives:deriv,learning:learningStatus,backtest:backtest(candles),validation:walkForwardBacktest(candles),setupStats:require("./market-engine").backtestBySetup(candles)});
@@ -1928,7 +1939,7 @@ const server=http.createServer(async(req,res)=>{
             new Promise(resolve=>setTimeout(()=>resolve(null),2200))
           ]).catch(()=>null);
           let a=analyze(candles,{interval,higher:higher&&higher.length>=220?analyze(higher,{interval:'4h'}):null,lower:lower&&lower.length>=220?analyze(lower,{interval:'15m'}):null,deriv});
-          a=(await learning.process(symbol,interval,candles,a)).analysis;
+          a=(await learning.process(symbol,interval,candles,a,{observe:false})).analysis;
           return {symbol,label:labels[symbol]||symbol,derivatives:deriv,...a};
         }catch(e){return {symbol,label:labels[symbol]||symbol,error:e.message,type:"DATA ERROR",side:"WAIT",score:0,regime:"UNKNOWN"}}
       }));

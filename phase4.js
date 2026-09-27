@@ -142,7 +142,7 @@ function currentSignal(state,symbol,interval){
 }
 function openRiskPct(state){
   const account=Math.max(1,finite(state.config.account,100000));
-  return state.paper.open.reduce((a,p)=>a+(finite(p.riskPct,0)||0),0);
+  return state.paper.open.filter(p=>p.source==="FINAL_GATED").reduce((a,p)=>a+(finite(p.riskPct,0)||0),0);
 }
 function closePaper(state,signal,position,status,resultR,reason,exitPrice,ts){
   const posIndex=state.paper.open.findIndex(x=>x.id===position.id);
@@ -160,7 +160,7 @@ function closePaper(state,signal,position,status,resultR,reason,exitPrice,ts){
   state.paper.maxDrawdown=Math.max(finite(state.paper.maxDrawdown,0),state.paper.peakEquity-equity);
   const trade={id:"P4T-"+position.id,signalId:signal.id,symbol:signal.symbol,interval:signal.interval,side:signal.side,type:signal.type,regime:signal.regime,score:signal.score,entry,stop:signal.stop,target:signal.target,exitPrice:exit,resultR:normalizedR,pnl,status,reason,openedAt:position.openedAt,closedAt:ts,evidenceAvgR:finite(signal.evidence?.avgR)};
   state.paper.trades.push(trade);state.paper.trades=state.paper.trades.slice(-MAX_PAPER_TRADES);
-  const journalEntry={id:"P4J-"+trade.id,source:"PAPER",ts,status:"CLOSED",asset:signal.symbol,side:signal.side,entry,stop:signal.stop,target:signal.target,r:normalizedR,note:reason,regime:signal.regime,type:signal.type,score:signal.score,tradeId:trade.id};
+  const journalEntry={id:"P4J-"+trade.id,source:"FINAL_GATED_PAPER",ts,status:"CLOSED",asset:signal.symbol,side:signal.side,entry,stop:signal.stop,target:signal.target,r:normalizedR,note:reason,regime:signal.regime,type:signal.type,tradeStyle:signal.tradeStyle||"INTRADAY",score:signal.score,tradeId:trade.id};
   state.journal.push(journalEntry);state.journal=state.journal.slice(-MAX_JOURNAL);
   signal.lifecycle="CLOSED";signal.outcome=status;signal.resultR=normalizedR;signal.closedAt=ts;signal.exitPrice=exit;signal.updatedAt=ts;
   pushEvent(state,"TRADE_CLOSED",signal.symbol+" "+signal.side+" closed · "+status+" · "+normalizedR.toFixed(2)+"R",signal.id,{resultR:normalizedR});
@@ -171,7 +171,7 @@ function maybeOpenPaper(state,signal,ts){
   signal.risk=risk;
   if(!risk.allowed){pushEvent(state,"PAPER_BLOCKED",signal.symbol+" "+signal.side+" triggered but paper risk gate blocked the simulated trade",signal.id,{reason:risk.reason});return {opened:false,reason:risk.reason}}
   const qty=risk.riskPerUnit?risk.riskCash/risk.riskPerUnit:0;
-  const p={id:"P4P-"+signal.id,signalId:signal.id,symbol:signal.symbol,interval:signal.interval,side:signal.side,entry:signal.entry,stop:signal.stop,target:signal.target,qty,riskCash:risk.riskCash,riskPct:risk.riskPct,openedAt:ts,triggeredAt:ts};
+  const p={id:"P4P-"+signal.id,source:signal.source||"FINAL_GATED",signalId:signal.id,symbol:signal.symbol,interval:signal.interval,side:signal.side,entry:signal.entry,stop:signal.stop,target:signal.target,qty,riskCash:risk.riskCash,riskPct:risk.riskPct,openedAt:ts,triggeredAt:ts};
   state.paper.open.push(p);signal.lifecycle="ACTIVE";signal.triggeredAt=ts;signal.paperPositionId=p.id;
   pushEvent(state,"SIGNAL_TRIGGERED",signal.symbol+" "+signal.side+" triggered · paper position opened",signal.id,{entry:signal.entry,qty});
   return {opened:true,position:p};
@@ -224,7 +224,7 @@ function addSignal(state,symbol,interval,analysis,candle,evidence){
   const entryLow=finite(analysis.entryLow),entryHigh=finite(analysis.entryHigh),entry=entryLow!==null&&entryHigh!==null?(entryLow+entryHigh)/2:finite(analysis.price);
   if(entry===null||finite(analysis.stop)===null||finite(analysis.tp1)===null||analysis.side==="WAIT")return null;
   const signal={
-    id,symbol,interval,candleTs,createdAt:Date.now(),type:analysis.type,side:analysis.side,regime:analysis.regime,status:analysis.status,score:finite(analysis.score,0),
+    id,symbol,interval,candleTs,createdAt:Date.now(),source:"FINAL_GATED",type:analysis.type,side:analysis.side,regime:analysis.regime,status:analysis.status,score:finite(analysis.score,0),tradeStyle:analysis.tradeStyle||"INTRADAY",
     price:finite(analysis.price),entryLow:entryLow??entry,entryHigh:entryHigh??entry,entry,stop:finite(analysis.stop),target:finite(analysis.tp1),tp2:finite(analysis.tp2),
     rr:finite(analysis.rr),profile:strategyProfile(analysis),lifecycle:analysis.status==="READY"?"ARMED":"WATCHING",reasons:(analysis.reasons||[]).slice(0,6),
     evidence,evidenceTop:evidence?.top||[],risk:null,outcome:null,resultR:null,updatedAt:Date.now()
@@ -246,7 +246,7 @@ function personalEdge(state){
   return {trades:rows.length,byRegime:normalize(groups.regime||{}),bySide:normalize(groups.side||{}),byType:normalize(groups.type||{})};
 }
 function strategyHealth(state){
-  const trades=state.paper.trades||[],recent=trades.slice(-20),s=summarizeTrades(trades),rs=summarizeTrades(recent),div=recent.filter(x=>Number.isFinite(x.evidenceAvgR)).map(x=>(finite(x.resultR,0)||0)-(finite(x.evidenceAvgR,0)||0));
+  const trades=(state.paper.trades||[]).filter(x=>x.source==="FINAL_GATED"),recent=trades.slice(-20),s=summarizeTrades(trades),rs=summarizeTrades(recent),div=recent.filter(x=>Number.isFinite(x.evidenceAvgR)).map(x=>(finite(x.resultR,0)||0)-(finite(x.evidenceAvgR,0)||0));
   return {
     sample:s.trades,recentSample:rs.trades,winRate:s.winRate,netR:s.netR,avgR:s.avgR,drawdownR:(finite(state.paper.maxDrawdown,0)||0)/(Math.max(1,finite(state.paper.startingEquity,1))),recentNetR:rs.netR,
     evidenceDivergence:div.length?div.reduce((a,b)=>a+b,0)/div.length:null,
@@ -256,34 +256,71 @@ function strategyHealth(state){
   };
 }
 async function updateLive(deviceId,symbol,interval,analysis,candles){
+  // Intentionally non-learning legacy path. Paper learning must only consume
+  // final gated decisions through updateFinalDecision().
+  const loaded=await load(deviceId);
+  return snapshotFromState(loaded.state,symbol,interval,null);
+}
+
+async function updateFinalDecision(deviceId,symbol,interval,decision,candles){
   const loaded=await load(deviceId),state=loaded.state,ts=Date.now(),candle=(candles||[])[(candles||[]).length-1];
+  const eligible=Boolean(decision?.liveSignalEligible===true&&decision?.state==="READY"&&["LONG","SHORT"].includes(String(decision?.action||"").toUpperCase()));
   let sig=currentSignal(state,symbol,interval);
+
   if(sig&&candle)advanceSignal(state,sig,candle,ts);
-  if(sig&&["WATCHING","ARMED"].includes(sig.lifecycle)&&analysis?.side==="WAIT"){
+
+  if(sig&&["WATCHING","ARMED"].includes(sig.lifecycle)&&!eligible){
     sig.lifecycle="CLOSED";sig.outcome="INVALIDATED";sig.resultR=0;sig.closedAt=ts;sig.updatedAt=ts;
-    pushEvent(state,"SIGNAL_INVALIDATED",symbol+" "+sig.side+" invalidated before trigger",sig.id);
+    pushEvent(state,"FINAL_SIGNAL_INVALIDATED",symbol+" "+sig.side+" final gate no longer eligible",sig.id);
     sig=null;
   }
-  if(!sig&&candle&&analysis&&analysis.side!=="WAIT"&&["READY","WATCH"].includes(analysis.status)){
-    const evidence=await historicalEvidence(symbol,interval,analysis);
-    sig=addSignal(state,symbol,interval,analysis,candle,evidence);
-  }else if(sig&&analysis&&sig.lifecycle!=="CLOSED"){
-    sig.score=finite(analysis.score,sig.score);sig.status=analysis.status;sig.price=finite(analysis.price,sig.price);sig.updatedAt=ts;
-    sig.reasons=(analysis.reasons||sig.reasons||[]).slice(0,6);
+
+  if(eligible){
+    const m=decision.market||{},lv=decision.levels||{};
+    const finalAnalysis={
+      side:String(decision.action).toUpperCase(),
+      status:"READY",
+      score:finite(m.confluenceScore,0),
+      price:finite(m.price),
+      entryLow:finite(lv.entryLow),entryHigh:finite(lv.entryHigh),
+      stop:finite(lv.stop),tp1:finite(lv.tp1),tp2:finite(lv.tp2),rr:finite(lv.rr),
+      regime:m.regime||"UNKNOWN",type:m.type||"FINAL GATED SETUP",
+      tradeStyle:decision.tradeStyle||m.tradeStyle||"INTRADAY",
+      reasons:Array.isArray(decision.evidence?.thesis)?decision.evidence.thesis.slice(0,6):[]
+    };
+
+    if(sig&&String(sig.side).toUpperCase()!==finalAnalysis.side){
+      sig.lifecycle="CLOSED";sig.outcome="INVALIDATED";sig.resultR=0;sig.closedAt=ts;sig.updatedAt=ts;
+      pushEvent(state,"FINAL_SIGNAL_REVERSED",symbol+" final bias changed from "+sig.side+" to "+finalAnalysis.side,sig.id);
+      sig=null;
+    }
+
+    if(!sig&&candle){
+      const evidence=await historicalEvidence(symbol,interval,finalAnalysis);
+      sig=addSignal(state,symbol,interval,finalAnalysis,candle,evidence);
+    }else if(sig&&sig.lifecycle!=="CLOSED"){
+      sig.score=finalAnalysis.score;sig.status="READY";sig.price=finalAnalysis.price;sig.type=finalAnalysis.type;
+      sig.entryLow=finalAnalysis.entryLow??sig.entryLow;sig.entryHigh=finalAnalysis.entryHigh??sig.entryHigh;
+      sig.entry=finite(lv.entry,sig.entry);sig.stop=finalAnalysis.stop;sig.target=finalAnalysis.tp1;sig.tp2=finalAnalysis.tp2;sig.rr=finalAnalysis.rr;
+      sig.tradeStyle=finalAnalysis.tradeStyle;sig.reasons=finalAnalysis.reasons;sig.updatedAt=ts;
+    }
   }
+
   if(sig&&candle)advanceSignal(state,sig,candle,ts);
   state.paper.open.forEach(pos=>pos.updatedAt=ts);
   await save(loaded.id,state);
-  return snapshotFromState(state,symbol,interval,analysis);
+  return snapshotFromState(state,symbol,interval,eligible?decision.market:null);
 }
+
 function latestSignal(state,symbol,interval){
   return state.signals.slice().reverse().find(s=>s.symbol===symbol&&s.interval===interval)||null;
 }
 function snapshotFromState(state,symbol,interval,analysis){
   const sig=currentSignal(state,symbol,interval)||latestSignal(state,symbol,interval);
   const risk=sig?riskCheck({entry:sig.entry,stop:sig.stop,target:sig.target,rr:sig.rr},state.config,openRiskPct(state)):riskCheck({},state.config,openRiskPct(state));
-  const paper=Object.assign({},summarizeTrades(state.paper.trades),{
-    startingEquity:state.paper.startingEquity,equity:state.paper.startingEquity+state.paper.realizedPnl,open:state.paper.open,
+  const finalTrades=state.paper.trades.filter(x=>x.source==="FINAL_GATED"),finalOpen=state.paper.open.filter(x=>x.source==="FINAL_GATED");
+  const paper=Object.assign({},summarizeTrades(finalTrades),{
+    startingEquity:state.paper.startingEquity,equity:state.paper.startingEquity+state.paper.realizedPnl,open:finalOpen,
     openRiskPct:openRiskPct(state),maxDrawdown:state.paper.maxDrawdown,realizedPnl:state.paper.realizedPnl,realizedR:state.paper.realizedR
   });
   const health=strategyHealth(state);
@@ -319,6 +356,7 @@ module.exports={
   similarityScore,
   summarizeTrades,
   updateLive,
+  updateFinalDecision,
   snapshot,
   setConfig,
   addJournal,
