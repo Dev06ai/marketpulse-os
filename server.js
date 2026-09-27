@@ -1348,6 +1348,7 @@ const server=http.createServer(async(req,res)=>{
     if(u.pathname==='/api/auth/me'&&req.method==="GET"){
       try{
         const user=await auth.userFromRequest(req);
+        if(user?.setCookie)res.setHeader("Set-Cookie",user.setCookie);
         return send(res,200,{
           ok:true,
           authenticated:Boolean(user),
