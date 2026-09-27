@@ -3101,7 +3101,7 @@ function buildGateDiagnostics(d){
   var propState=pg.decision==="BLOCKED"?"BLOCK":(pg.decision==="ELIGIBLE_WITH_WARNINGS"?"PASS":"PASS");
   addGateDiag(rows,"Prop-firm risk gate",propState,
     pg.decision||"NOT EVALUATED",
-    propReasons.length?propReasons.map(function(x){return String(x).replaceAll("_"," ").toLowerCase()}).join(" · "):(propWarnings.length?"Warnings: "+propWarnings.join(" · "):"No prop-firm blocker reported.");
+    propReasons.length?propReasons.map(function(x){return String(x).replaceAll("_"," ").toLowerCase()}).join(" · "):(propWarnings.length?"Warnings: "+propWarnings.join(" · "):"No prop-firm blocker reported."));
   var dataScore=Number(data.score);
   addGateDiag(rows,"Live data quality",Number.isFinite(dataScore)&&dataScore>=85?"PASS":"BLOCK",
     Number.isFinite(dataScore)?fmt(dataScore)+"/100":"Unavailable",
@@ -3128,7 +3128,7 @@ function buildGateDiagnostics(d){
   var conflicts=Number(intel.conflictCount||0),coverage=Number(intel.domainCoveragePct);
   addGateDiag(rows,"Phase 14 knowledge",p14State,
     intel.setupKey?(intel.setupKey+" · "+(Number.isFinite(coverage)?coverage+"%":"—")+" required-domain coverage"):"No directional setup",
-    intel.hardConflicts?.length?("Hard conflicts: "+intel.hardConflicts.join(", ")):((intel.blocks||[]).length?"Blocks: "+intel.blocks.join(" · "):(conflicts+" conflict flags · adaptive sample "+Number(adaptive.sample||0)));
+    intel.hardConflicts?.length?("Hard conflicts: "+intel.hardConflicts.join(", ")):((intel.blocks||[]).length?"Blocks: "+intel.blocks.join(" · "):(conflicts+" conflict flags · adaptive sample "+Number(adaptive.sample||0))));
   var release=String(gate.state||"PAPER_ONLY").toUpperCase();
   addGateDiag(rows,"Final deployment gate",release==="SIGNAL_ELIGIBLE"?"PASS":(release==="BLOCKED"?"BLOCK":"WAIT"),
     release,
