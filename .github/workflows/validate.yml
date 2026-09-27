@@ -229,9 +229,9 @@ jobs:
           end=html.index("\nasync function askAI(){",start)
           core=html[start:end]
           decision=html[html.index("async function loadFinalDecision()"):html.index("\nasync function loadCore(){",html.index("async function loadFinalDecision()"))]
-          assert 'if(state.market&&state.market.analysis)' in core
-          assert 'Live · last good snapshot' in core
-          assert 'if(state.finalDecision)' in decision
+          assert 'var hasMarket=Boolean(state.market&&state.market.analysis)' in core
+          assert 'Showing last market snapshot · refreshing in background' in core
+          assert 'var hadDecision=Boolean(state.finalDecision)' in decision
           assert 'keeping the last confirmed decision' in decision
           print("Background retry is non-disruptive")
           PY
