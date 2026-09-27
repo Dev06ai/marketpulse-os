@@ -185,7 +185,7 @@ function elliottConfluence({side,context,derivatives,candles}={}){
     const inA=Number.isFinite(price)&&price>=z.low&&price<=z.high;
     if(inA){score+=12;reasons.push("Price is in the 0.618–0.65 Golden Pocket.");}
   }
-  if(Number(context.filters.wave3OiExpansion)===true && context.active.ratios.wave3Of1>=1.618){score+=5;reasons.push("OI expansion filter supports Wave-3 context.");}
+  if(context.filters.wave3OiExpansion===true && context.active.ratios.wave3Of1>=1.618){score+=5;reasons.push("OI expansion filter supports Wave-3 context.");}
   const cvd=String(derivatives?.cvdState||"").toUpperCase();
   if((side==="LONG"&&cvd==="BUYERS CONFIRM")||(side==="SHORT"&&cvd==="SELLERS CONFIRM")){score+=5;reasons.push("CVD confirms Elliott direction.");}
   return {score:clamp(score,-20,45),reasons,flags};
