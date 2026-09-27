@@ -17,6 +17,7 @@ jobs:
       - run: node --check market-structure.js
       - run: node --check strategy-setups.js
       - run: node --check reaction-map.js
+      - run: node --check analyst-scenario-pack.js
       - run: node --check phase11-13.js
       - run: node --check market-structure.js
       - run: node validation-selftest.js
@@ -33,6 +34,7 @@ jobs:
       - run: node tests/data-fabric.js
       - run: node tests/phase7.js
       - run: node tests/reaction-map.js
+      - run: node tests/analyst-scenario-pack.js
       - name: Check browser script
         run: |
           python - <<'PY'
@@ -69,6 +71,7 @@ jobs:
           if 'function renderFinalDecision(d)' not in html: raise SystemExit("Final decision renderer missing")
           if 'function renderReactionMap(map)' not in html: raise SystemExit("Reaction map renderer missing")
           if 'id="reactionOpportunities"' not in html: raise SystemExit("Reaction opportunity surface missing")
+          if 'Analyst scenario' not in html: raise SystemExit("Analyst reaction context missing from UI")
           print("Single authoritative signal UI check OK")
           PY
 
