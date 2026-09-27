@@ -314,7 +314,9 @@ function buildReactionMap(c,{interval="1h",marketStructure=null,strategySetups=n
   ]:[];
   const analystPack=getActiveAnalystPack();
   const evidence=levelEvidence(marketStructure,strategySetups,analystPack);
-  const raw=[...evidence,...rangePocEvidence,...fib];
+  const referenceRadius=Math.max(atr*8,c[i].c*.045);
+  const nearbyEvidence=evidence.filter(x=>x.evidence!=="Analyst scenario pack"||Math.abs(Number(x.center)-c[i].c)<=referenceRadius);
+  const raw=[...nearbyEvidence,...rangePocEvidence,...fib];
   const clusters=clusterLevels(raw,atr);
   const zones=clusters
     .filter(z=>Number.isFinite(z.low)&&Number.isFinite(z.high))
