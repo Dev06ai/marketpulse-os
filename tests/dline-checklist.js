@@ -7,8 +7,10 @@ function lineAt(a,b,x){return a+(b-a)*(x-90)/(110-90)}
 function descending15m(){
   const out=[],start=Date.UTC(2026,8,27,0,0,0),m=15*60000;
   for(let i=0;i<120;i++){
-    const line=130-2*(i-100);
-    const h=line-2,l=h-2,o=h-.7,cl=h-.9;
+    let h,l;
+    if(i<100){h=125;l=123;}
+    else {const line=130-2*(i-100);h=line-2;l=h-2;}
+    const o=h-.7,cl=h-.9;
     out.push({t:start+i*m,o,c:cl,h,l,v:1000});
   }
   out[100]={t:start+100*m,o:129.1,c:129.2,h:130,l:127.8,v:1200};
@@ -20,8 +22,10 @@ function descending15m(){
 function ascending1h(){
   const out=[],start=Date.UTC(2026,8,27,0,0,0),m=3600000;
   for(let i=0;i<120;i++){
-    const line=70+2*(i-100);
-    const l=line+2,h=l+2,o=l+.7,cl=l+.9;
+    let h,l;
+    if(i<100){l=75;h=77;}
+    else {const line=70+2*(i-100);l=line+2;h=l+2;}
+    const o=l+.7,cl=l+.9;
     out.push({t:start+i*m,o,c:cl,h,l,v:1000});
   }
   out[100]={t:start+100*m,o:70.9,c:70.8,h:73,l:70,v:1200};
