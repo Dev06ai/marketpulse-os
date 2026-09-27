@@ -3098,10 +3098,14 @@ function buildGateDiagnostics(d){
     readySide?"The system can still block later on risk, validation or stability gates.":"A large price move alone does not satisfy the directional setup requirement.");
   var propReasons=Array.isArray(pg.reasons)?pg.reasons:[];
   var propWarnings=Array.isArray(pg.warnings)?pg.warnings:[];
-  var propState=pg.decision==="BLOCKED"?"BLOCK":(pg.decision==="ELIGIBLE_WITH_WARNINGS"?"PASS":"PASS");
-  addGateDiag(rows,"Prop-firm risk gate",propState,
-    pg.decision||"NOT EVALUATED",
-    propReasons.length?propReasons.map(function(x){return String(x).replaceAll("_"," ").toLowerCase()}).join(" · "):(propWarnings.length?"Warnings: "+propWarnings.join(" · "):"No prop-firm blocker reported."));
+  var propState=pg.decision==="BLOCKED"?"BLOCK":(pg.decision==="ELIGIBLE_WITH_WARNINGS"?"PASS":pg.decision==="DISABLED"?"INFO":"PASS");
+  if(pg.decision==="DISABLED"){
+    addGateDiag(rows,"Funded-account gate","INFO","DISABLED","No 5k/funded-account constraints are active. MarketPulse is operating under its general market, data, validation and safety gates.");
+  }else{
+    addGateDiag(rows,"Prop-firm risk gate",propState,
+      pg.decision||"NOT EVALUATED",
+      propReasons.length?propReasons.map(function(x){return String(x).replaceAll("_"," ").toLowerCase()}).join(" · "):(propWarnings.length?"Warnings: "+propWarnings.join(" · "):"No prop-firm blocker reported."));
+  }
   var dataScore=Number(data.score);
   addGateDiag(rows,"Live data quality",Number.isFinite(dataScore)&&dataScore>=85?"PASS":"BLOCK",
     Number.isFinite(dataScore)?fmt(dataScore)+"/100":"Unavailable",
@@ -4149,7 +4153,7 @@ setInterval(function(){if(document.visibilityState==="visible")loadPhase7()},600
     <div class="beginnerSteps">
       <div class="beginnerStep"><b>1 · Start with the Signal</b><span>The top cards show price, market mode, the current signal and a confidence score. “No trade” means the signals are not aligned enough.</span></div>
       <div class="beginnerStep"><b>2 · Check the chart</b><span>Choose 15m, 30m, 1h, 4h or 1D. Move over candles to see time and OHLC. Use the 50 EMA and volume for extra context.</span></div>
-      <div class="beginnerStep"><b>3 · Check safety</b><span>Market Flow shows futures positioning. The prop-firm and event checks turn your own rules into simple pass, caution or blocked results.</span></div>
+      <div class="beginnerStep"><b>3 · Check safety</b><span>Market Flow shows futures positioning. Optional funded-account rules can be enabled separately; core market/data/validation safety gates always remain active.</span></div>
     </div>
     <div class="beginnerGlossary">
       <div class="beginnerTerm"><b>Open interest (OI)</b><span>How much futures position value is still open.</span></div>
