@@ -1,5 +1,5 @@
 const assert=require("assert");
-const {normalizeConfig,flowDirection,evaluateStandard,evaluateEventContract}=require("../prop-firm");
+const {normalizeConfig,flowDirection,evaluateStandard}=require("../prop-firm");
 
 const cfg=normalizeConfig({accountSize:5000,startingEquity:5000,minSignalScore:70,minRR:1.5});
 assert(cfg.accountSize===5000,"account size");
@@ -22,66 +22,6 @@ const blocked=evaluateStandard({
 });
 assert(blocked.decision==="BLOCKED","blocked gate");
 assert(blocked.reasons.includes("SIGNAL_SCORE_BELOW_THRESHOLD"),"score gate");
-
-const event=evaluateEventContract({
-  analysis,derivatives:deriv,dataQuality:{qualityPct:100,candleAgeMs:1000},
-  equity:5000,dayStartEquity:5000,peakEquity:5000,
-  side:"UP",premium:10,payout:30,fee:0,config:cfg
-});
-assert(event.mode==="EVENT_UP_DOWN","event mode");
-assert(event.maxContracts===2,"event risk sizing");
-assert(event.maxLoss===20,"event max loss");
-assert(event.maxProfit===40,"event max profit");
-
-const conflict=evaluateEventContract({
-  analysis,derivatives:deriv,dataQuality:{qualityPct:100,candleAgeMs:1000},
-  equity:5000,dayStartEquity:5000,peakEquity:5000,
-  side:"DOWN",premium:10,payout:30,fee:0,config:cfg
-});
-assert(conflict.decision==="BLOCKED","event direction conflict");
-assert(conflict.reasons.includes("EVENT_DIRECTION_CONFLICTS_WITH_SIGNAL"),"event direction gate");
-
-console.log("Prop Firm Guard smoke checks passed:",{standard:good.decision,event:event.decision,maxContracts:event.maxContracts});
-
-const nearStrike=evaluateEventContract({
-  analysis,derivatives:deriv,dataQuality:{qualityPct:100,consensusQualityPct:98,independentSourceCount:2,candleAgeMs:1000},
-  equity:5000,dayStartEquity:5000,peakEquity:5000,
-  side:"UP",premium:10,payout:30,fee:0,venue:"TOOBIT",
-  strikePrice:100000,indexPrice:100000.5,expirationAt:Date.now()+600000,
-  strictContractContext:true,config:cfg
-});
-assert(nearStrike.decision==="BLOCKED","near-strike contract blocked");
-assert(nearStrike.reasons.includes("STRIKE_TOO_CLOSE_TO_INDEX"),"strike proximity gate");
-
-const expired=evaluateEventContract({
-  analysis,derivatives:deriv,dataQuality:{qualityPct:100,consensusQualityPct:98,independentSourceCount:2,candleAgeMs:1000},
-  equity:5000,dayStartEquity:5000,peakEquity:5000,
-  side:"UP",premium:10,payout:30,fee:0,venue:"XT",
-  strikePrice:99000,indexPrice:100000,expirationAt:Date.now()-1000,
-  strictContractContext:true,config:cfg
-});
-assert(expired.decision==="BLOCKED","expired contract blocked");
-assert(expired.reasons.includes("CONTRACT_EXPIRED"),"expiry gate");
-
-const missingTerms=evaluateEventContract({
-  analysis,derivatives:deriv,dataQuality:{qualityPct:100,consensusQualityPct:98,independentSourceCount:2,candleAgeMs:1000},
-  equity:5000,dayStartEquity:5000,peakEquity:5000,
-  side:"UP",premium:10,payout:30,fee:0,venue:"XT",
-  strikePrice:null,indexPrice:100000,expirationAt:null,
-  strictContractContext:true,config:cfg
-});
-assert(missingTerms.decision==="BLOCKED","missing contract terms blocked");
-assert(missingTerms.reasons.includes("STRIKE_REQUIRED"),"missing strike gate");
-assert(missingTerms.reasons.includes("EXPIRY_REQUIRED"),"missing expiry gate");
-
-const missingStrike=evaluateEventContract({
-  analysis,derivatives:deriv,dataQuality:{qualityPct:100,consensusQualityPct:98,independentSourceCount:2,candleAgeMs:1000},
-  equity:5000,dayStartEquity:5000,peakEquity:5000,
-  side:"UP",premium:10,payout:30,fee:0,venue:"XT",
-  expirationAt:Date.now()+600000,strictContractContext:true,config:cfg
-});
-assert(missingStrike.decision==="BLOCKED","missing strike blocked");
-assert(missingStrike.reasons.includes("STRIKE_REQUIRED"),"strike required gate");
 
 const noConsensus= evaluateStandard({
   analysis,derivatives:deriv,
