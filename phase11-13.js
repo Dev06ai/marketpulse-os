@@ -202,7 +202,7 @@ function applyDeploymentGate(decision,validation,opts={}){
   const v=validation||{};
   const policy=v.adaptive||adaptivePolicy(v,opts.basePolicy);
   const dataScore=num(d?.data?.score,0);
-  const riskOk=d?.propGate?.decision!=="BLOCKED";
+  const riskOk=!["BLOCKED"].includes(String(d?.propGate?.decision||""));
   const currentScore=num(d?.market?.confluenceScore,0);
   const fresh=!d?.stale;
   const engineHealthy=d?.operational?.failSafe===true&&d?.operational?.executionEnabled===false;
