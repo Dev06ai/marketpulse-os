@@ -1597,7 +1597,7 @@ function setView(name){
   document.querySelectorAll(".nav button,.mobileMenu button").forEach(function(b){b.classList.toggle("active",b.dataset.view===name)});
   var menu=$("mobileMenu"),btn=$("mobileMenuBtn");if(menu){menu.classList.remove("open");menu.setAttribute("aria-hidden","true")}if(btn)btn.setAttribute("aria-expanded","false");
   state.activeView=name;window.scrollTo(0,0);trackActivity("navigation","view",state.symbol,state.interval,{view:name});
-  if(name==="scanner"){loadScan(true)}
+  if(name==="scanner"){if(state.scan&&state.scan.length)renderScanner();loadScan(false)}
   if(name==="flow"){loadFlow(true)}
   if(name==="edge"){loadEdge()}
   if(name==="execution"&&state.account?.isAdmin){loadExecution()}
@@ -2925,22 +2925,34 @@ async function loadCycle(){
 async function loadScan(force){
   if(state.scanBusy&&!force)return;
   state.scanBusy=true;
-  var attempt=Number(state.scanAttempts||0)+1;state.scanAttempts=attempt;
-  $("scanRows").innerHTML='<div class="small">Loading market scanner… · attempt '+attempt+'</div>';
+  // Paint a fast market snapshot first. Deep MarketPulse analysis is refreshed in the background.
   try{
-    var j=await api("/api/core-scan?interval="+encodeURIComponent(state.interval),14000);
-    if(j&&Array.isArray(j.rows)){
-      state.scan=j.rows;state.scanAttempts=0;renderScanner();
+    var snap=await api("/api/market-snapshot?interval="+encodeURIComponent(state.interval),3500);
+    if(snap&&Array.isArray(snap.rows)){
+      state.scan=snap.rows;
+      renderScanner();
       $("scanRows").dataset.loaded="1";
-      return;
     }
-    throw Error("Scanner returned no rows");
   }catch(e){
-    $("scanRows").innerHTML='<div class="small">Scanner is warming up… retrying automatically.</div>';
-    if(attempt<5)setTimeout(function(){state.scanBusy=false;loadScan(true)},Math.min(9000,1200*attempt));
+    // Fall back to the existing cached/deep scanner endpoint without blocking navigation.
+    try{
+      var fallback=await api("/api/core-scan?interval="+encodeURIComponent(state.interval),3500);
+      if(fallback&&Array.isArray(fallback.rows)){state.scan=fallback.rows;renderScanner();$("scanRows").dataset.loaded="1";}
+    }catch{}
   }finally{
     state.scanBusy=false;
   }
+
+  // Deep analysis is deliberately non-blocking: it updates the same table when ready.
+  var symbol=state.symbol,interval=state.interval;
+  deferTask(function(){
+    api("/api/core-scan?interval="+encodeURIComponent(interval)+"&deep=1",12000)
+      .then(function(j){
+        if(symbol!==state.symbol||interval!==state.interval)return;
+        if(j&&Array.isArray(j.rows)){state.scan=j.rows;renderScanner();$("scanRows").dataset.loaded="1";}
+      })
+      .catch(function(){});
+  },0);
 }
 
 function deferTask(fn,delay){
@@ -2950,12 +2962,12 @@ function deferTask(fn,delay){
 function queueSecondaryBoot(){
   if(state.secondaryStarted)return;
   state.secondaryStarted=true;
-  deferTask(function(){loadScan(false)},700);
-  deferTask(loadCycle,350);
-  deferTask(function(){loadFlow(false)},900);
-  deferTask(loadEdge,900);
-  deferTask(syncMemory,1200);
-  setTimeout(function(){if(!state.cycle)loadCycle()},5000);
+  deferTask(function(){loadScan(false)},80);
+  deferTask(loadCycle,900);
+  deferTask(function(){loadFlow(false)},1200);
+  deferTask(loadEdge,1200);
+  deferTask(syncMemory,1600);
+  setTimeout(function(){if(!state.cycle)loadCycle()},7000);
 }
 
 async function renderFinalDecision(d){
