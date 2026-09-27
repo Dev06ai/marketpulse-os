@@ -3,6 +3,7 @@ const last=v=>v[v.length-1];
 const {detectMarketStructure}=require("./market-structure");
 const {detectStrategySetups}=require("./strategy-setups");
 const {buildReactionMap}=require("./reaction-map");
+const {buildAdvancedContext,advancedConfluence}=require("./advanced-price-action-pack");
 const finiteOr=(v,fallback)=>Number.isFinite(v)?v:fallback;
 
 function sma(v,p){const o=[];let s=0;for(let i=0;i<v.length;i++){s+=v[i];if(i>=p)s-=v[i-p];o.push(i+1>=p?s/p:NaN)}return o}
@@ -140,6 +141,16 @@ function analyze(c,ctx={}){
   const currentOi=Number.isFinite(deriv?.oi)?deriv.oi:null;
   const liquidationBias=deriv?.liquidationBias||"UNKNOWN";
   const liquidationTotal=Number.isFinite(deriv?.liquidationTotal)?deriv.liquidationTotal:null;
+  const advancedContext=buildAdvancedContext(c,{
+    lookback:96,
+    oiContext:{
+      oiChangePct,
+      cvdState,
+      priceChangePct:flowPriceChangePct,
+      liquidationBias
+    }
+  });
+  marketStructure.advancedPriceAction=advancedContext;
   const flow=normalizeOrderFlow(deriv);
   const orderBookImbalance=flow.imbalance;
   const micropriceBias=flow.microBias;
@@ -241,7 +252,10 @@ function analyze(c,ctx={}){
     {name:"Taker flow",value:side==="WAIT"||takerImbalance===null?3:
       ((side==="LONG"&&takerImbalance>=0.08)||(side==="SHORT"&&takerImbalance<=-0.08))?7:
       ((side==="LONG"&&takerImbalance<=-0.08)||(side==="SHORT"&&takerImbalance>=0.08))?1:4}
-  ];  let score=components.reduce((sum,x)=>sum+x.value,0);
+  ];
+  const advancedPA=advancedConfluence({side,setup:ms,context:advancedContext,derivatives:deriv,candles:c});
+  components.push({name:"Advanced price action",value:clamp(Math.round(5+advancedPA.score*.16),0,13),source:"HTF liquidity + premium/discount + FVG/breaker + source execution rules"});
+  let score=components.reduce((sum,x)=>sum+x.value,0);
   if((side==="LONG"&&mtf4==="DOWNTREND")||(side==="SHORT"&&mtf4==="UPTREND")){score-=20;contributors.push("4H conflict");reasons.push("The 4H trend directly conflicts with this direction");}
   const strongSfp=Boolean(ms&&strategyKind==="SFP"&&Number(ms.score)>=82);
   const sfpFlowSupport=(
@@ -284,6 +298,9 @@ function analyze(c,ctx={}){
   }
   if(regime==="HIGH VOLATILITY"){score-=14;contributors.push("volatility penalty");reasons.push("Volatility is elevated enough to reduce setup quality");}
   if(side==="WAIT")score=Math.min(score,54);
+  if(advancedPA.reasons.length)reasons.push(...advancedPA.reasons.slice(0,3));
+  if(advancedPA.flags.length)contributors.push(...advancedPA.flags.map(x=>"Advanced PA: "+x));
+  if(advancedPA.score<0)reasons.push("Advanced price-action context is counter to the current direction.");
   score=clamp(Math.round(score),0,92);
 
   let el=null,eh=null,stop=null,tp1=null,tp2=null,rr=null;
@@ -384,12 +401,12 @@ function analyze(c,ctx={}){
     regime,mood,momentum,volState,structure:st.state,type,side,bias,directionalLean,probabilityLabel,
     score,status,reasons,contributors,components,
     strategyFamily:strategyReady?String(ms.kind||"UNKNOWN"):"NONE",
-    marketStructure:{score:marketStructure.score,setup:marketStructure.setup,strategySetup:marketStructure.strategySetup||null,levels:marketStructure.levels,nakedPocs:marketStructure.nakedPocs||strategySetups.nakedPocs||[],dLine:marketStructure.dLine||strategySetups.dLine||null,previousDay:marketStructure.previousDay,previousWeek:marketStructure.previousWeek,nearestSupport:marketStructure.nearestSupport,nearestResistance:marketStructure.nearestResistance,detected:{...(marketStructure.detected||{}),strategy:strategySetups.detected},note:marketStructure.note},
+    marketStructure:{score:marketStructure.score,setup:marketStructure.setup,strategySetup:marketStructure.strategySetup||null,levels:marketStructure.levels,nakedPocs:marketStructure.nakedPocs||strategySetups.nakedPocs||[],dLine:marketStructure.dLine||strategySetups.dLine||null,advancedPriceAction:marketStructure.advancedPriceAction||advancedContext,previousDay:marketStructure.previousDay,previousWeek:marketStructure.previousWeek,nearestSupport:marketStructure.nearestSupport,nearestResistance:marketStructure.nearestResistance,detected:{...(marketStructure.detected||{}),strategy:strategySetups.detected},note:marketStructure.note},
     derivatives:{available:!!deriv,oi:currentOi,cvdState,positioning,oiChangePct,cvdDelta,cvdRatio:deriv?.cvdRatio??null,flowPriceChangePct,tradeCount:deriv?.tradeCount??0,fundingRate:deriv?.fundingRate??null,longPercent,shortPercent,longShortRatio,liquidationBias:liquidationBias&&liquidationBias!=="UNKNOWN"?liquidationBias:"NOT AVAILABLE",liquidationTotal,orderBookImbalance,micropriceBias,spreadBps,takerImbalance,depthNotional:flow.depth,provider:deriv?.provider??null,errors:deriv?.errors??[]},
     thesis:thesis.join(" "),thesisParts:thesis,
     primaryScenario,alternateScenario,
     mtf:{lower:mtf15,higher:mtf4},stop,tp1,tp2,entryLow:el,entryHigh:eh,rr,
-    rangeHigh,rangeLow,rangePosition:rangePos,priorHigh,priorLow,reactionMap,reactionConfirmed,updatedAt:Date.now()
+    rangeHigh,rangeLow,rangePosition:rangePos,priorHigh,priorLow,reactionMap,reactionConfirmed,advancedPriceAction:advancedContext,advancedConfluence:advancedPA,updatedAt:Date.now()
   };
 }
 
