@@ -179,7 +179,10 @@ function analyze(c,ctx={}){
   const ms=marketStructure.setup;
   const msReady=Boolean(ms&&Number(ms.score)>=74);
   const strategyKind=String(ms?.kind||"").toUpperCase();
-  const strategyReady=Boolean(ms&&["SFP","ORDER_BLOCK","BREAKOUT_RETEST","NPOC","D_LINE_BREAKOUT"].includes(strategyKind)&&Number(ms.score)>=80);
+  const strategyReady=Boolean(ms&&(
+    (strategyKind==="SFP"&&Number(ms.score)>=74) ||
+    (["ORDER_BLOCK","BREAKOUT_RETEST","NPOC","D_LINE_BREAKOUT"].includes(strategyKind)&&Number(ms.score)>=80)
+  ));
 
   const strategyType=(m,dir)=>{
     const k=String(m?.kind||"").toUpperCase();
@@ -240,7 +243,20 @@ function analyze(c,ctx={}){
       ((side==="LONG"&&takerImbalance<=-0.08)||(side==="SHORT"&&takerImbalance>=0.08))?1:4}
   ];  let score=components.reduce((sum,x)=>sum+x.value,0);
   if((side==="LONG"&&mtf4==="DOWNTREND")||(side==="SHORT"&&mtf4==="UPTREND")){score-=20;contributors.push("4H conflict");reasons.push("The 4H trend directly conflicts with this direction");}
-  if((side==="LONG"&&mtf15==="DOWNTREND")||(side==="SHORT"&&mtf15==="UPTREND")){score-=10;contributors.push("15M conflict");reasons.push("The 15M trend is working against this direction");}
+  const strongSfp=Boolean(ms&&strategyKind==="SFP"&&Number(ms.score)>=82);
+  const sfpFlowSupport=(
+    (side==="LONG"&&cvdState==="BUYERS CONFIRM") ||
+    (side==="SHORT"&&cvdState==="SELLERS CONFIRM")
+  ) || (!deriv);
+  const sfpDataReady=Boolean(deriv)||Number.isFinite(ctx?.dataQualityScore)?Number(ctx.dataQualityScore)>=85:true;
+  if((side==="LONG"&&mtf15==="DOWNTREND")||(side==="SHORT"&&mtf15==="UPTREND")){
+    if(!(strongSfp&&sfpFlowSupport&&sfpDataReady)){
+      score-=10;contributors.push("15M conflict");reasons.push("The 15M trend is working against this direction");
+    }else{
+      contributors.push("SFP reversal overrides 15M conflict");
+      reasons.push("A strong SFP is reversing the local 15M trend; live confirmation is required.");
+    }
+  }
   if((side==="LONG"&&cvdState==="BEARISH DIVERGENCE")||(side==="SHORT"&&cvdState==="BULLISH DIVERGENCE")){score-=8;contributors.push("CVD divergence");reasons.push("Aggressive flow is diverging from price");}
   if((side==="LONG"&&cvdState==="BUYERS CONFIRM")||(side==="SHORT"&&cvdState==="SELLERS CONFIRM")){score+=4;contributors.push("CVD confirmation");}
   if((side==="LONG"&&positioning.includes("SHORT PARTICIPATION"))||(side==="SHORT"&&positioning.includes("LONG PARTICIPATION"))){score-=6;contributors.push("OI conflict");}
@@ -301,7 +317,9 @@ function analyze(c,ctx={}){
 
   let status="WAITING";
   if(side!=="WAIT"){
-    if(score>=72&&rr>=1.5&&!(mtf4==="DOWNTREND"&&side==="LONG")&&!(mtf4==="UPTREND"&&side==="SHORT"))status="READY";
+    const strongSfpReady=Boolean(ms&&strategyKind==="SFP"&&Number(ms.score)>=82&&sfpFlowSupport);
+    const higherConflict=(mtf4==="DOWNTREND"&&side==="LONG")||(mtf4==="UPTREND"&&side==="SHORT");
+    if(score>=72&&rr>=1.5&&(!higherConflict||strongSfpReady))status="READY";
     else if(score>=55)status="WATCH";
   }
 
