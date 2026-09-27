@@ -3065,11 +3065,33 @@ async function loadFinalDecision(){
   }
 }
 
+function readViewCache(key){
+  try{
+    var raw=sessionStorage.getItem("mp-view-cache-"+key);
+    if(!raw)return null;
+    var item=JSON.parse(raw);
+    if(!item||!item.data)return null;
+    return item.data;
+  }catch{return null}
+}
+function writeViewCache(key,data){
+  try{sessionStorage.setItem("mp-view-cache-"+key,JSON.stringify({ts:Date.now(),data:data}))}catch{}
+}
 async function loadCore(){
   if(state.busy)return;
   if(state.bootRetryTimer){clearTimeout(state.bootRetryTimer);state.bootRetryTimer=null}
   state.busy=true;var hasMarket=Boolean(state.market&&state.market.analysis);if(!hasMarket){setStatus("Loading BTC market data…");$("dataState").textContent="Connecting";}else{$("dataState").textContent="Live";}$("symbol").value=state.symbol;
   const requestedSymbol=state.symbol,requestedInterval=state.interval;
+  var cachedMarket=readViewCache("core-"+requestedSymbol+"-"+requestedInterval);
+  if(!state.market&&cachedMarket){
+    state.market=cachedMarket;
+    state.chartCandles=cachedMarket.candles||[];
+    state.chartSymbol=requestedSymbol;
+    state.chartInterval=requestedInterval;
+    renderMarket();
+    $("dataState").textContent="Cached";
+    setStatus("Showing last market snapshot · refreshing in background","ok");
+  }
   if(!state.finalDecision){
     suppressFinalSignal("Waiting for the first confirmed final decision.");
   }else{
@@ -3080,6 +3102,7 @@ async function loadCore(){
     var d=await api("/api/core?symbol="+encodeURIComponent(requestedSymbol)+"&interval="+encodeURIComponent(requestedInterval),6500);
     if(requestedSymbol!==state.symbol||requestedInterval!==state.interval)return;
     state.market=d;
+    writeViewCache("core-"+requestedSymbol+"-"+requestedInterval,d);
     if(!state.chartPinned||state.chartSymbol!==requestedSymbol||!state.chartCandles||!state.chartCandles.length){
       state.chartPinned=false;
       state.chartSymbol=requestedSymbol;
@@ -3094,10 +3117,7 @@ async function loadCore(){
     deferTask(loadCoreEnrichment,150);
     if(isAdminUser())deferTask(loadDataFabric,800);
     deferTask(loadCoreAnalytics,1800);
-    if(!state.secondaryStarted){
-      queueSecondaryBoot();
-      deferTask(loadFinalDecision,2200);
-    }else if(state.activeView==="overview"){
+    if(state.activeView==="overview"){
       deferTask(loadScan,120);deferTask(loadCycle,180);deferTask(loadCoreEnrichment,250);deferTask(loadCoreAnalytics,600);deferTask(function(){if(state.chartPinned&&state.chartInterval!==requestedInterval)refreshPinnedChart()},700);deferTask(loadFinalDecision,900);
     }
   }catch(e){
@@ -3173,6 +3193,9 @@ $("refresh").addEventListener("click",loadCore);
       if(state.market||state.busy)return;
       watchdogTries++;
       if($("statusBar")&&watchdogTries===1)setStatus("Connecting to live market data…");
+      // Start secondary user-facing data in parallel with the dashboard core.
+      // A slow dashboard analysis must never block Scanner / Flow / Edge / Portfolio.
+      if(!state.secondaryStarted)queueSecondaryBoot();
       loadFastTicker();
       loadCore();
     }catch(e){
