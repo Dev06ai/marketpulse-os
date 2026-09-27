@@ -215,6 +215,8 @@ async function sendAdminTest(storage){
         type:"MARKETPULSE_TEST",
         title:"MarketPulse · Push test",
         body:"Admin BTC signal notifications are connected.",
+        icon:"/marketpulse-icon-v4.svg",
+        badge:"/marketpulse-icon-v4.svg",
         tag:"marketpulse-push-test",
         renotify:true,
         data:{url:"/?view=admin"}
