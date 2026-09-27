@@ -1,13 +1,11 @@
 const webpush=require("web-push");
-const crypto=require("crypto");
-
 const ENABLED=String(process.env.MARKETPULSE_SIGNAL_ALERTS_ENABLED??"true").toLowerCase()!=="false";
-const ENV_PUBLIC_KEY=String(process.env.MARKETPULSE_VAPID_VAPID_PUBLIC_KEY||"").trim();
-const ENV_PRIVATE_KEY=String(process.env.MARKETPULSE_VAPID_VAPID_PRIVATE_KEY||"").trim();
+const ENV_PUBLIC_KEY=String(process.env.MARKETPULSE_VAPID_PUBLIC_KEY||"").trim();
+const ENV_PRIVATE_KEY=String(process.env.MARKETPULSE_VAPID_PRIVATE_KEY||"").trim();
 const CONTACT_EMAIL=String(process.env.MARKETPULSE_ADMIN_EMAIL||"admin@marketpulse.local").trim();
 
-let VAPID_VAPID_PUBLIC_KEY="";
-let VAPID_VAPID_PRIVATE_KEY="";
+let VAPID_PUBLIC_KEY="";
+let VAPID_PRIVATE_KEY="";
 let VAPID_READY=false;
 let CONFIG_PROMISE=null;
 
@@ -26,8 +24,8 @@ function validVapidPrivateKey(value){
 function configureVapid(publicKey,privateKey){
   if(!validVapidPublicKey(publicKey)||!validVapidPrivateKey(privateKey))throw new Error("Invalid VAPID keypair");
   webpush.setVapidDetails("mailto:"+CONTACT_EMAIL,publicKey,privateKey);
-  VAPID_VAPID_PUBLIC_KEY=publicKey;
-  VAPID_VAPID_PRIVATE_KEY=privateKey;
+  VAPID_PUBLIC_KEY=publicKey;
+  VAPID_PRIVATE_KEY=privateKey;
   VAPID_READY=true;
 }
 function generateVapidKeypair(){
@@ -210,7 +208,7 @@ function config(){
     enabled:ENABLED,
     pushEnabled:pushConfigured(),
 
-    publicKey:pushConfigured()?VAPID_VAPID_PUBLIC_KEY:null,
+    publicKey:pushConfigured()?VAPID_PUBLIC_KEY:null,
     symbol:"BTCUSDT",
     intervals:["15m","1h","4h"],
     note:"Admin-only confirmed BTC signal notifications."
