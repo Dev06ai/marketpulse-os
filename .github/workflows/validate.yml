@@ -44,17 +44,27 @@ jobs:
       - run: node tests/analyst-scenario-pack.js
       - run: node tests/phase14-signal-intelligence.js
       - run: node tests/mindpillar-knowledge.js
-      - name: Check browser script
+      - name: Check all browser scripts
         run: |
           python - <<'PY'
           from pathlib import Path
+          import re
           html = Path("public/index.html").read_text()
-          tag = html.index("<script")
-          start = html.index(">", tag) + 1
-          end = html.index("</script>", start)
-          Path("/tmp/browser.js").write_text(html[start:end])
+          tags = list(re.finditer(r"<script\\b[^>]*>", html, re.I))
+          if not tags:
+              raise SystemExit("No browser scripts found")
+          for i, tag in enumerate(tags, 1):
+              start = tag.end()
+              end = html.find("</script>", start)
+              if end < 0:
+                  raise SystemExit(f"Script {i} has no closing tag")
+              Path(f"/tmp/browser-{i}.js").write_text(html[start:end])
+          print(f"Extracted {len(tags)} browser scripts")
           PY
-          node --check /tmp/browser.js
+          for f in /tmp/browser-*.js; do
+            echo "Checking $f"
+            node --check "$f"
+          done
 
       - name: Check single authoritative signal UI
         run: |
