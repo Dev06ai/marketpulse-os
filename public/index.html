@@ -1497,6 +1497,23 @@ var state={
 };
 
 function $(id){return document.getElementById(id)}
+// EARLY CORE BOOT: schedule the market loader before optional UI initializers run.
+// If a later non-critical initializer throws, the dashboard still gets a chance
+// to populate BTC data instead of remaining on "Starting MarketPulse…".
+(function earlyMarketCoreBoot(){
+  setTimeout(function(){
+    try{
+      if(!state.market&&!state.busy&&typeof loadCore==="function")loadCore();
+    }catch(err){console.error("Early MarketPulse core boot failed",err)}
+  },0);
+  window.addEventListener("error",function(){
+    setTimeout(function(){
+      try{
+        if(!state.market&&!state.busy&&typeof loadCore==="function")loadCore();
+      }catch(err){console.error("Recovery MarketPulse core boot failed",err)}
+    },250);
+  });
+})();
 // Register account UI before the rest of the large UI boot sequence.
 // This keeps Guest/login usable even if a later optional widget initializer throws.
 function scheduleAccountUIEarly(){
