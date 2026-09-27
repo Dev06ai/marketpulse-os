@@ -147,7 +147,7 @@ button,input,select,textarea{font:inherit}.wrap{width:min(1440px,calc(100% - 26p
   .quickCalculators .inputs select{min-height:40px}
 }
 
-.quickCalculators .calcResult{transition:box-shadow .16s ease,border-color .16s ease,color .16s ease}.quickCalculators .calcResult.calc-profit{color:#75f0a7;border-color:rgba(92,240,163,.42);box-shadow:0 0 18px rgba(92,240,163,.10),inset 0 0 18px rgba(92,240,163,.035)}.quickCalculators .calcResult.calc-loss{color:#ff7897;border-color:rgba(255,88,124,.42);box-shadow:0 0 18px rgba(255,88,124,.12),inset 0 0 18px rgba(255,88,124,.035)}.quickCalculators .calcResult.calc-neutral{color:#aab2bf;border-color:rgba(255,255,255,.07);box-shadow:none}
+.quickCalculators .unitSettings{margin-top:10px;padding:10px;border:1px solid rgba(255,255,255,.065);border-radius:10px;background:#0b0c0f}.quickCalculators .unitSettingsTitle{font-size:9px;font-weight:900;letter-spacing:.08em;text-transform:uppercase;color:#788291;margin-bottom:9px}.quickCalculators .unitMode{position:relative;display:flex;align-items:flex-start;gap:9px;padding:8px 7px;border-radius:8px;cursor:pointer;color:#aeb6c2}.quickCalculators .unitMode:hover{background:rgba(255,255,255,.025)}.quickCalculators .unitMode input{position:absolute;opacity:0;pointer-events:none}.quickCalculators .unitRadio{width:14px;height:14px;margin-top:2px;border:1px solid #55606d;border-radius:50%;box-shadow:inset 0 0 0 3px #0b0c0f;flex:none}.quickCalculators .unitMode input:checked+.unitRadio{border-color:#a7f3d0;background:#a7f3d0}.quickCalculators .unitMode b{display:block;color:#e1e6ed;font-size:10px;font-weight:850}.quickCalculators .unitMode small{display:block;margin-top:3px;color:#697381;font-size:8px;line-height:1.35}.quickCalculators .unitChoices{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;padding:0 0 8px 23px}.quickCalculators .unitChoice{border:1px solid rgba(255,255,255,.07);background:#111217;color:#8f98a6;border-radius:8px;padding:8px 6px;font-size:9px;font-weight:850;cursor:pointer}.quickCalculators .unitChoice:hover{border-color:rgba(167,243,208,.22)}.quickCalculators .unitChoice.active{border-color:rgba(103,232,255,.30);background:linear-gradient(100deg,rgba(103,232,255,.10),rgba(183,140,255,.08));color:#dceeff}.quickCalculators .contractSizeRow{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:end;padding:0 0 4px 23px}.quickCalculators .contractSizeRow>span{padding-bottom:10px;color:#677180;font-size:8px}.quickCalculators .contractSizeRow[hidden]{display:none}@media(max-width:700px){.quickCalculators .unitChoices{padding-left:21px}.quickCalculators .contractSizeRow{grid-template-columns:1fr;padding-left:21px}.quickCalculators .contractSizeRow>span{padding-bottom:0}}.quickCalculators .calcResult{transition:box-shadow .16s ease,border-color .16s ease,color .16s ease}.quickCalculators .calcResult.calc-profit{color:#75f0a7;border-color:rgba(92,240,163,.42);box-shadow:0 0 18px rgba(92,240,163,.10),inset 0 0 18px rgba(92,240,163,.035)}.quickCalculators .calcResult.calc-loss{color:#ff7897;border-color:rgba(255,88,124,.42);box-shadow:0 0 18px rgba(255,88,124,.12),inset 0 0 18px rgba(255,88,124,.035)}.quickCalculators .calcResult.calc-neutral{color:#aab2bf;border-color:rgba(255,255,255,.07);box-shadow:none}
 </style>
 <style id="beginner-friendly-style">
 .beginnerGuideBtn{border-color:rgba(103,232,255,.22)!important;color:#bdefff!important}
@@ -713,11 +713,23 @@ body.admin-mode .nav button.adminNav,body.admin-mode .mobileMenu button.adminNav
         <div class="calcBox"><div class="label">Perpetual P&amp;L</div><div class="inputs">
           <label class="small">Entry<input id="pe" type="number" value="0" min="0" step="any" autocomplete="off" placeholder="0"></label>
           <label class="small">Exit<input id="pt" type="number" value="0" min="0" step="any" autocomplete="off" placeholder="0"></label>
-          <label class="small">Quantity<input id="pq" type="number" value="0" min="0" step="any" autocomplete="off" placeholder="0"></label>
-          <label class="small">Leverage<input id="pl" type="number" value="0" min="1" step="1" autocomplete="off" placeholder="1"></label>
+          <label class="small" id="pOrderValueLabel">Quantity<input id="pq" type="number" value="0" min="0" step="any" autocomplete="off" placeholder="0"></label>
+          <label class="small">Leverage<input id="pl" type="number" value="0" min="1" step="1" autocomplete="off" placeholder="0"></label>
           <label class="small">Direction<select id="pDirection" autocomplete="off"><option value="LONG">Long</option><option value="SHORT">Short</option></select></label>
-        </div><div class="result calcResult" id="pnlResult">—</div>
-        <div class="watchNote">Linear USDT perpetual formula. Fees, funding, slippage, and liquidation are not included.</div></div>
+        </div>
+        <div class="unitSettings">
+          <div class="unitSettingsTitle">Unit settings</div>
+          <label class="unitMode"><input type="radio" name="pUnitMode" id="pUnitQuantity" value="QUANTITY" checked><span class="unitRadio"></span><span><b>Order by Quantity</b><small>Select the unit used for the order quantity.</small></span></label>
+          <div class="unitChoices" id="pUnitChoices">
+            <button type="button" class="unitChoice active" data-unit="BTC">BTC</button>
+            <button type="button" class="unitChoice" data-unit="USDT">USDT</button>
+            <button type="button" class="unitChoice" data-unit="CONT">Cont</button>
+          </div>
+          <label class="unitMode"><input type="radio" name="pUnitMode" id="pUnitCost" value="COST"><span class="unitRadio"></span><span><b>Order by Cost (USDT)</b><small>Interpret the value above as opening notional/cost.</small></span></label>
+          <div class="contractSizeRow" id="pContractSizeRow" hidden><label class="small">Contract value<input id="pc" type="number" value="1" min="0.000001" step="any" autocomplete="off"></label><span>USDT notional per contract.</span></div>
+        </div>
+        <div class="result calcResult" id="pnlResult">—</div>
+        <div class="watchNote">Linear USDT perpetual formula. P&amp;L = signed price move × base quantity. Fees, funding, slippage, and liquidation are not included.</div></div></div>
       </div>
     </div>
   </section>
@@ -1214,6 +1226,8 @@ var state={
   chartInterval:"1h",
   chartSymbol:null,
   chartPinned:false,
+  pUnit:"BTC",
+  pUnitMode:"QUANTITY",
   chartCandles:null,
   chartAutoScale:true,
   aiMode:"market",
@@ -2261,23 +2275,58 @@ async function loadDataFabric(){
 }
 function resetQuickCalculators(){
   ["ca","cr","ce","cs","cl","re","rs","rt","pe","pt","pq","pl"].forEach(function(id){var el=$(id);if(el)el.value="0"});
+  if($("pc"))$("pc").value="1";
   if($("rdirection"))$("rdirection").value="LONG";
   if($("pDirection"))$("pDirection").value="LONG";
+  if($("pUnitQuantity"))$("pUnitQuantity").checked=true;
+  if($("pUnitCost"))$("pUnitCost").checked=false;
+  state.pUnit="BTC";
+  state.pUnitMode="QUANTITY";
+  updatePUnitUI();
   ["sizeResult","rrResult","pnlResult"].forEach(function(id){var el=$(id);if(!el)return;el.textContent="—";el.classList.remove("calc-profit","calc-loss","calc-neutral")});
+}
+function currentOrderNotional(entry){
+  var raw=+$("pq").value||0,mode=state.pUnitMode||"QUANTITY",unit=state.pUnit||"BTC",contractValue=+$("pc").value||1;
+  if(raw<=0||entry<=0)return 0;
+  if(mode==="COST")return raw;
+  if(unit==="BTC")return raw*entry;
+  if(unit==="USDT")return raw;
+  return raw*Math.max(contractValue,0);
+}
+function currentBaseQty(entry){
+  var notional=currentOrderNotional(entry);
+  return entry>0?notional/entry:0;
+}
+function updatePUnitUI(){
+  var mode=state.pUnitMode||"QUANTITY",unit=state.pUnit||"BTC";
+  var cost=mode==="COST",label=$("pOrderValueLabel");
+  if(label)label.firstChild.textContent=cost?"Cost (USDT)":"Quantity ("+(unit==="CONT"?"Cont":unit)+")";
+  var choices=$$(".unitChoice");
+  choices.forEach(function(btn){btn.classList.toggle("active",!cost&&btn.dataset.unit===unit);btn.disabled=cost});
+  if($("pUnitQuantity"))$("pUnitQuantity").checked=!cost;
+  if($("pUnitCost"))$("pUnitCost").checked=cost;
+  var row=$("pContractSizeRow");if(row)row.hidden=cost||unit!=="CONT";
 }
 function calc(){
   var a=+$("ca").value||0,r=(+$("cr").value||0)/100,e=+$("ce").value||0,s=+$("cs").value||0,l=+$("cl").value||0,b=a*r,d=Math.abs(e-s),qty=d>0?b/d:0,notional=qty*e,margin=(qty>0&&l>0)?notional/l:0;
   $("sizeResult").textContent=(b>0&&qty>0)?("Risk "+fmt(b)+" · Qty "+fmt(qty)+" · Notional "+fmt(notional)+" · Margin "+fmt(margin)):"—";
   var re=+$("re").value||0,rs=+$("rs").value||0,rt=+$("rt").value||0,dir=$("rdirection").value,riskUnit=dir==="SHORT"?(rs-re):(re-rs),rewardUnit=dir==="SHORT"?(re-rt):(rt-re),rr=(riskUnit>0&&rewardUnit>0)?rewardUnit/riskUnit:0;
   $("rrResult").textContent=rr>0?(rr.toFixed(2)+"R · Risk "+fmt(riskUnit)+" · Reward "+fmt(rewardUnit)+" · "+dir):"—";
-  var pe=+$("pe").value||0,pt=+$("pt").value||0,pq=+$("pq").value||0,pl=+$("pl").value||0,pdir=$("pDirection").value,pnl=pdir==="SHORT"?(pe-pt)*pq:(pt-pe)*pq,pnlMargin=(pe>0&&pq>0&&pl>0)?(pe*pq)/pl:0,roi=pnlMargin>0?(pnl/pnlMargin)*100:0,pnlEl=$("pnlResult");
+
+  var pe=+$("pe").value||0,pt=+$("pt").value||0,pl=+$("pl").value||0,pdir=$("pDirection").value,baseQty=currentBaseQty(pe),pnl=pdir==="SHORT"?(pe-pt)*baseQty:(pt-pe)*baseQty,pnlMargin=(pe>0&&baseQty>0&&pl>0)?(pe*baseQty)/pl:0,roi=pnlMargin>0?(pnl/pnlMargin)*100:0,pnlEl=$("pnlResult");
   pnlEl.classList.remove("calc-profit","calc-loss","calc-neutral");
-  if(pe>0&&pt>0&&pq>0&&pl>0){pnlEl.textContent=(pnl>=0?"+":"")+fmt(pnl)+" P/L · Margin "+fmt(pnlMargin)+" · ROI "+(roi>=0?"+":"")+roi.toFixed(2)+"%";pnlEl.classList.add(pnl>0?"calc-profit":pnl<0?"calc-loss":"calc-neutral")}else{pnlEl.textContent="—";pnlEl.classList.add("calc-neutral")}
+  if(pe>0&&pt>0&&baseQty>0&&pl>0){
+    var unitTxt=(state.pUnitMode==="COST"?"Cost "+fmt(+$("pq").value||0)+" USDT":("Qty "+fmt(+$("pq").value||0)+" "+(state.pUnit==="CONT"?"Cont":state.pUnit)));
+    pnlEl.textContent=(pnl>=0?"+":"")+fmt(pnl)+" P/L · "+unitTxt+" · Margin "+fmt(pnlMargin)+" · ROI "+(roi>=0?"+":"")+roi.toFixed(2)+"%";
+    pnlEl.classList.add(pnl>0?"calc-profit":pnl<0?"calc-loss":"calc-neutral");
+  }else{pnlEl.textContent="—";pnlEl.classList.add("calc-neutral")}
   var ra=+$("ra").value||0,rrisk=(+$("rrisk").value||0)/100,rv=+$("rentry").value||0,rst=+$("rstop").value||0,bd=ra*rrisk,dist=Math.abs(rv-rst);
   $("riskOut").textContent=dist?"Risk "+fmt(bd)+" · Position size "+fmt(bd/dist):"Enter valid levels";
 }
 function setupCalculatorInputs(){
-  ["ca","cr","ce","cs","cl","re","rs","rt","pe","pt","pq","pl","rdirection","pDirection","ra","rrisk","rentry","rstop"].forEach(function(id){var el=$(id);if(!el)return;el.addEventListener("input",calc);el.addEventListener("change",calc)});
+  ["ca","cr","ce","cs","cl","re","rs","rt","pe","pt","pq","pl","rdirection","pDirection","pc","ra","rrisk","rentry","rstop"].forEach(function(id){var el=$(id);if(!el)return;el.addEventListener("input",calc);el.addEventListener("change",calc)});
+  document.querySelectorAll(".unitMode input").forEach(function(input){input.addEventListener("change",function(){state.pUnitMode=this.value;updatePUnitUI();calc()})});
+  document.querySelectorAll(".unitChoice").forEach(function(btn){btn.addEventListener("click",function(){state.pUnit=btn.dataset.unit;state.pUnitMode="QUANTITY";updatePUnitUI();calc()})});
   resetQuickCalculators();calc();
 }
 function normalizeFlow(values){
