@@ -3126,9 +3126,19 @@ function buildGateDiagnostics(d){
     st.state==="CONFIRMED"?"Confirmation requirement is satisfied.":st.state==="CONFIRMING"?"The directional candidate must persist across another live refresh.":"No active stability confirmation is currently being held.");
   var p14State=intel.status==="ALIGNED"?"PASS":(intel.status==="CAUTION"?"WAIT":"INFO");
   var conflicts=Number(intel.conflictCount||0),coverage=Number(intel.domainCoveragePct);
-  addGateDiag(rows,"Phase 14 knowledge",p14State,
-    intel.setupKey?(intel.setupKey+" · "+(Number.isFinite(coverage)?coverage+"%":"—")+" required-domain coverage"):"No directional setup",
-    intel.hardConflicts?.length?("Hard conflicts: "+intel.hardConflicts.join(", ")):((intel.blocks||[]).length?"Blocks: "+intel.blocks.join(" · "):(conflicts+" conflict flags · adaptive sample "+Number(adaptive.sample||0))));
+  var missingDomains=Array.isArray(intel.missingDomains)?intel.missingDomains:[];
+  var presentDomains=Array.isArray(intel.presentDomains)?intel.presentDomains:[];
+  var knowledgeDetail=intel.setupKey
+    ?(intel.setupKey+" · "+(Number.isFinite(coverage)?coverage+"%":"—")+" required-domain coverage")
+    :"No directional setup";
+  var knowledgeHint=intel.hardConflicts?.length
+    ?("Hard conflicts: "+intel.hardConflicts.join(", "))
+    :((intel.blocks||[]).length
+      ?"Blocks: "+intel.blocks.join(" · ")
+      :(missingDomains.length
+        ?"Missing domains: "+missingDomains.join(", ")
+        :"Required domains covered: "+presentDomains.join(", ")));
+  addGateDiag(rows,"Phase 14 knowledge",p14State,knowledgeDetail,knowledgeHint);
   var release=String(gate.state||"PAPER_ONLY").toUpperCase();
   addGateDiag(rows,"Final deployment gate",release==="SIGNAL_ELIGIBLE"?"PASS":(release==="BLOCKED"?"BLOCK":"WAIT"),
     release,
