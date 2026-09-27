@@ -764,6 +764,52 @@ linear-gradient(180deg,#0c0e11 0%,#101214 48%,#0a0b0d 100%);box-shadow:0 -20px 7
 @media(max-width:700px){.scanTableWrap{overflow-x:auto}.marketBoard,.marketBoardHead{min-width:760px}}
 </style></head>
 <body>
+<div id="mpLaunch" aria-hidden="true">
+  <div class="mpLaunchNoise"></div><div class="mpLaunchOrb one"></div><div class="mpLaunchOrb two"></div>
+  <div class="mpLaunchChart">
+    <svg viewBox="0 0 1000 300" preserveAspectRatio="none" aria-hidden="true">
+      <defs>
+        <linearGradient id="mpStroke" x1="0" y1="0" x2="1" y2="0"><stop stop-color="#67e8f9"/><stop offset=".55" stop-color="#60a5fa"/><stop offset="1" stop-color="#c084fc"/></linearGradient>
+        <linearGradient id="mpArea" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#60a5fa" stop-opacity=".20"/><stop offset="1" stop-color="#60a5fa" stop-opacity="0"/></linearGradient>
+        <filter id="mpGlow"><feGaussianBlur stdDeviation="3" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+      </defs>
+      <path class="area" d="M0 246 L90 224 L150 238 L220 205 L280 216 L350 160 L430 181 L510 118 L580 140 L650 92 L720 108 L790 62 L865 86 L930 38 L1000 14 L1000 300 L0 300 Z"/>
+      <path class="path" d="M0 246 L90 224 L150 238 L220 205 L280 216 L350 160 L430 181 L510 118 L580 140 L650 92 L720 108 L790 62 L865 86 L930 38 L1000 14"/>
+    </svg>
+  </div>
+  <div class="mpLaunchStage">
+    <div class="mpLaunchTop"><b>MARKETPULSE OS</b><span class="live"><i></i>LIVE INTELLIGENCE</span></div>
+    <div class="mpLaunchLogo" role="img" aria-label="MarketPulse">
+      <span class="mpLaunchMark">
+        <i class="line a"></i><i class="line b"></i><i class="line c"></i>
+        <i class="candle c1"></i><i class="candle c2"></i><i class="candle c3"></i>
+      </span>
+    </div>
+    <div class="mpLaunchTitle"><span>MarketPulse</span></div>
+    <div class="mpLaunchSub">Crypto Intelligence • Signal Engine</div>
+    <div class="mpLaunchQuote">Read the structure. Track the flow. Wait for the edge.</div>
+    <div class="mpLaunchTelemetry">
+      <div class="mpLaunchMetric"><div class="k">Market feed</div><div class="v live">CONNECTING</div></div>
+      <div class="mpLaunchMetric"><div class="k">Signal engine</div><div class="v">WARMING</div></div>
+      <div class="mpLaunchMetric"><div class="k">Data fabric</div><div class="v">ONLINE</div></div>
+    </div>
+    <div class="mpLaunchProgress"><div class="mpLaunchProgressTrack"><div class="mpLaunchProgressBar"></div></div><div class="mpLaunchProgressMeta"><span>INITIALIZING</span><span>SECURE SESSION</span></div></div>
+  </div>
+</div>
+<script nonce="__CSP_NONCE__">
+(function(){
+  function hideLaunch(){
+    var el=document.getElementById("mpLaunch"); if(!el)return;
+    el.classList.add("isHidden");
+    setTimeout(function(){try{el.remove()}catch{}},620);
+  }
+  var hideTimer=setTimeout(hideLaunch,1800);
+  window.addEventListener("load",function(){clearTimeout(hideTimer);setTimeout(hideLaunch,380)});
+  document.addEventListener("DOMContentLoaded",function(){setTimeout(function(){
+    if(document.readyState==="interactive"){} 
+  },650)});
+})();
+</script>
 <header class="header"><div class="headerInner">
   <div class="logo"><div class="mark" aria-label="MarketPulse logo"></div><div><div class="brandK">CRYPTO MARKET INTELLIGENCE</div><div class="brandName">MarketPulse</div><div class="brandSub">Less noise. More signal. Better decisions.</div></div></div>
   <nav class="nav" id="nav"><button class="active" data-view="overview" title="Main dashboard and current market picture">Dashboard</button><button data-view="scanner" title="Compare many coins">Market scanner</button><button data-view="signals" title="Review possible setups">Setups</button><button data-view="flow" title="Futures flow and positioning">Market flow</button><button data-view="lab" title="Test a strategy on past data">Backtest</button><button data-view="replay" title="Replay past market conditions">Replay</button><button data-view="dna" title="Review recurring setup patterns">Pattern DNA</button><button data-view="research" title="Explore historical research">Research</button><button data-view="edge" title="Review strategy statistics">Edge</button><button data-view="portfolio" title="Portfolio risk and exposure">Portfolio</button><button id="executionNav" class="adminNav" data-view="execution" title="Advanced execution tools">Execution</button><button data-view="brain" title="Trading journal">Journal</button><button data-view="ai" title="MarketPulse copilot">Copilot</button><button data-view="alerts" title="Watchlist conditions">Watchlist</button><button data-view="risk" title="Risk controls">Risk</button><button id="adminNav" class="adminNav" data-view="admin" title="Administrator controls">Admin</button></nav>
