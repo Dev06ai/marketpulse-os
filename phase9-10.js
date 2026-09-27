@@ -37,18 +37,21 @@ function strictSignalChecks(a,side,higher,lower,flowScore,dataScore,levels,deriv
   const setupKind=String(ms.setup?.kind||"").toUpperCase();
   const setupScore=n(ms.setup?.score,0);
   const levelReversal=(setupKind==="SFP"||setupKind==="NPOC"||setupKind==="ORDER_BLOCK")&&setupScore>=85;
+  const strongSfp=setupKind==="SFP"&&setupScore>=82;
   const dline=setupKind==="D_LINE_BREAKOUT"&&setupScore>=88;
   const higher8=String(ms?.dLine?.higherRegime||ms?.strategySetup?.higher8hRegime||"UNKNOWN").toUpperCase();
   const higherConflict=(side==="LONG"&&h==="DOWNTREND")||(side==="SHORT"&&h==="UPTREND");
   const higherMissing=(h==="UNKNOWN");
   if(requiresHigher&&(higherConflict||higherMissing)){
     const controlledReversal=levelReversal&&flowScore>=75&&dataScore>=90;
+    const controlledSfp=strongSfp&&flowScore>=70&&dataScore>=85;
     const controlledReaction=reactionMatches&&flowScore>=70&&dataScore>=85;
     const controlledDline=dline&&higher8===(side==="LONG"?"UPTREND":"DOWNTREND")&&flowScore>=70&&dataScore>=85;
-    if(!controlledReversal&&!controlledReaction&&!controlledDline)reasons.push(higherMissing?"higher-timeframe trend unavailable":"higher-timeframe trend conflicts");
+    if(!controlledReversal&&!controlledSfp&&!controlledReaction&&!controlledDline)reasons.push(higherMissing?"higher-timeframe trend unavailable":"higher-timeframe trend conflicts");
   }
-  if(side==="LONG"&&l==="DOWNTREND")reasons.push("15M trend conflicts");
-  if(side==="SHORT"&&l==="UPTREND")reasons.push("15M trend conflicts");
+  const sfpLowerConfirmed=strongSfp&&flowScore>=70&&dataScore>=85;
+  if(side==="LONG"&&l==="DOWNTREND"&&!sfpLowerConfirmed)reasons.push("15M trend conflicts");
+  if(side==="SHORT"&&l==="UPTREND"&&!sfpLowerConfirmed)reasons.push("15M trend conflicts");
   if(String(d.cvdState||"").toUpperCase().includes("DIVERGENCE"))reasons.push("CVD divergence");
   if(Number.isFinite(Number(levels?.rr))&&Number(levels.rr)<1.5)reasons.push("R:R below 1.5");
   if(d.available===false)reasons.push("derivatives unavailable");
