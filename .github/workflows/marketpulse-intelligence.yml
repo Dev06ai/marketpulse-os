@@ -1,0 +1,39 @@
+name: MarketPulse Continuous Intelligence
+
+on:
+  schedule:
+    # GitHub-hosted scheduled runs provide the no-cost fallback for the
+    # Render-free deployment. The sweep itself decides which timeframes are due.
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: marketpulse-intelligence
+  cancel-in-progress: false
+
+jobs:
+  intelligence:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    env:
+      MARKETPULSE_WEB_URL: https://marketpulse-os-d4p9.onrender.com
+      MARKETPULSE_WORKER_ENABLED: "true"
+      MARKETPULSE_WORKER_SYMBOLS: BTCUSDT,ETHUSDT,SOLUSDT,BNBUSDT,XRPUSDT,DOGEUSDT,ADAUSDT
+      MARKETPULSE_WORKER_INTERVALS: 15m,1h,4h,1d
+      MARKETPULSE_WORKER_DEVICE: github-actions-24x7
+      MARKETPULSE_WORKER_TIMEOUT_MS: "20000"
+      MARKETPULSE_WORKER_JITTER_MS: "1500"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Run scheduled intelligence sweep
+        run: node marketpulse-worker-once.js
