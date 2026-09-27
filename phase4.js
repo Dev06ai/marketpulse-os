@@ -369,6 +369,7 @@ module.exports={
   similarityScore,
   summarizeTrades,
   updateLive,
+  updateFinalDecision,
   snapshot,
   setConfig,
   addJournal,
