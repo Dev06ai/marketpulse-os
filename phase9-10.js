@@ -114,7 +114,7 @@ function evaluate(x={}){
     {name:"Order flow",score:f(flow),source:"CVD + book + taker"},
     {name:"Key levels / price action",score:f(level),source:"daily/weekly levels + SFP + order-block + retest"},
     {name:"Data integrity",score:f(data.score),source:"freshness + consensus"},
-    {name:"Risk gate",score:x.propGate?.decision==="ELIGIBLE"?100:x.propGate?.decision==="ELIGIBLE_WITH_WARNINGS"?75:x.propGate?.decision==="BLOCKED"?0:50,source:"prop-firm safety checks"}
+    {name:"Account safety",score:x.propGate?.decision==="BLOCKED"?0:100,source:x.propGate?.decision==="DISABLED"?"Funded-account rules disabled; core data/validation gates remain active":"Configured account safety checks"}
   ];
   const thesis=[];
   thesis.push(side==="LONG"?"Bullish setup under the current structure and momentum model.":side==="SHORT"?"Bearish setup under the current structure and momentum model.":"Neutral conditions: waiting for clearer structure.");
