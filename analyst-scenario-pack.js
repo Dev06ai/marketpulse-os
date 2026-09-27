@@ -162,15 +162,207 @@ const PACK={
   rule:"Use analyst levels as conditional context only. Never promote directly to a live directional signal without current MarketPulse confirmation and all safety gates."
 };
 
+const CURRENT_VISUAL_PACK={
+  id:"dewald-thiart-btc-visual-scenarios-2026-09-27",
+  source:"Dewald Thiart — supplied BTC chart screenshots",
+  symbol:"BTCUSDT",
+  asOf:"2026-09-27T17:09:00Z",
+  validHours:24,
+  timeframeContext:["8h","1h"],
+  higherTimeframe:{
+    thesis:"Bullish alternative shows BTC continuing the rising-channel wave sequence toward a possible wave-5 extension; bearish alternative shows a corrective/WXY decline into the marked Fibonacci/support ladder.",
+    wave5Target:100000,
+    channelRetest:"Watch the rising channel for a wave-4 style reaction before a possible wave-5 continuation."
+  },
+  zones:[
+    {
+      id:"VISUAL_R1_85224",
+      label:"1H WXY 85,224 resistance anchor",
+      low:85150,
+      high:85275,
+      kind:"RESISTANCE",
+      sources:["1H WXY 0 level","B-wave high / structural resistance"],
+      primaryAction:"SHORT",
+      primaryTrigger:"Price rejects/sweeps the 85,224 area and closes back below with bearish confirmation.",
+      alternateAction:"LONG",
+      alternateTrigger:"Clean acceptance above 85,224 followed by a bullish retest with participation.",
+      invalidationText:"Sustained acceptance above the resistance anchor."
+    },
+    {
+      id:"VISUAL_S1_82792",
+      label:"1H WXY 0.618 reaction level",
+      low:82750,
+      high:82835,
+      kind:"SUPPORT",
+      sources:["0.618 Fibonacci"],
+      primaryAction:"LONG",
+      primaryTrigger:"Downside leg reaches the level and produces a confirmed bullish reaction/reclaim.",
+      alternateAction:"SHORT",
+      alternateTrigger:"Decisive breakdown and failed reclaim.",
+      invalidationText:"Acceptance below the level after failed reclaim."
+    },
+    {
+      id:"VISUAL_S2_82131",
+      label:"1H WXY 0.786 reaction level",
+      low:82090,
+      high:82170,
+      kind:"SUPPORT",
+      sources:["0.786 Fibonacci"],
+      primaryAction:"LONG",
+      primaryTrigger:"Confirmed slowdown/sweep and bullish reclaim.",
+      alternateAction:"SHORT",
+      alternateTrigger:"Breakdown with failed retest.",
+      invalidationText:"Acceptance below the level."
+    },
+    {
+      id:"VISUAL_S3_81289",
+      label:"1H WXY 1.0 structural level",
+      low:81245,
+      high:81335,
+      kind:"SUPPORT",
+      sources:["1.0 Fibonacci / structural target"],
+      primaryAction:"LONG",
+      primaryTrigger:"Strong reaction and reclaim at the structural target.",
+      alternateAction:"SHORT",
+      alternateTrigger:"Breakdown and failed reclaim, opening the next extension targets.",
+      invalidationText:"Sustained acceptance below the structural level."
+    },
+    {
+      id:"VISUAL_S4_80360",
+      label:"1H WXY 1.236 extension",
+      low:80320,
+      high:80410,
+      kind:"SUPPORT",
+      sources:["1.236 Fibonacci extension"],
+      primaryAction:"LONG",
+      primaryTrigger:"Confirmed bullish reaction.",
+      alternateAction:"SHORT",
+      alternateTrigger:"Breakdown/retest failure.",
+      invalidationText:"Acceptance below the extension level."
+    },
+    {
+      id:"VISUAL_S5_79796",
+      label:"1H WXY 1.382 extension",
+      low:79755,
+      high:79835,
+      kind:"SUPPORT",
+      sources:["1.382 Fibonacci extension"],
+      primaryAction:"LONG",
+      primaryTrigger:"Confirmed bullish reaction.",
+      alternateAction:"SHORT",
+      alternateTrigger:"Breakdown/retest failure.",
+      invalidationText:"Acceptance below the extension level."
+    },
+    {
+      id:"VISUAL_S6_78857",
+      label:"1H WXY 1.618 extension",
+      low:78810,
+      high:78905,
+      kind:"SUPPORT",
+      sources:["1.618 Fibonacci extension"],
+      primaryAction:"LONG",
+      primaryTrigger:"Confirmed bullish reaction.",
+      alternateAction:"SHORT",
+      alternateTrigger:"Breakdown/retest failure.",
+      invalidationText:"Acceptance below the extension level."
+    },
+    {
+      id:"VISUAL_S7_77354",
+      label:"1H WXY 2.0 extension",
+      low:77305,
+      high:77405,
+      kind:"SUPPORT",
+      sources:["2.0 Fibonacci extension"],
+      primaryAction:"LONG",
+      primaryTrigger:"Confirmed bullish reaction.",
+      alternateAction:"SHORT",
+      alternateTrigger:"Breakdown/retest failure.",
+      invalidationText:"Acceptance below the extension level."
+    },
+    {
+      id:"VISUAL_CHANNEL_4",
+      label:"Rising-channel wave-4 reaction area",
+      low:79000,
+      high:82000,
+      kind:"SUPPORT",
+      sources:["8H/HTF rising channel","bullish wave-4 projection"],
+      primaryAction:"LONG",
+      primaryTrigger:"Price reaches the rising channel, slows, and confirms a bullish wave-4 style reaction/reclaim.",
+      alternateAction:"SHORT",
+      alternateTrigger:"Channel breakdown with failed reclaim invalidates the bullish continuation idea and supports the bearish corrective path.",
+      invalidationText:"Clean breakdown and failed reclaim of the rising channel."
+    },
+    {
+      id:"VISUAL_BEAR_75K",
+      label:"Bearish-option major support",
+      low:74450,
+      high:75350,
+      kind:"SUPPORT",
+      sources:["Bearish chart green support zone","projected corrective destination"],
+      primaryAction:"LONG",
+      primaryTrigger:"Price reaches the marked support zone and gives a confirmed reversal reaction.",
+      alternateAction:"SHORT",
+      alternateTrigger:"Support breaks and the retest fails, extending the bearish structure.",
+      invalidationText:"Sustained acceptance below the zone."
+    }
+  ],
+  scenarios:[
+    {
+      id:"VISUAL_HTF_BULL_WAVE5",
+      bias:"BULLISH",
+      thesis:"The most bullish chart scenario is a rising-channel hold/wave-4 reaction followed by a wave-5 continuation toward roughly 100K.",
+      confirmation:["channel support holds","wave-4 style corrective reaction resolves upward","breakout/impulse confirmation","volume/flow supports continuation"],
+      invalidation:["channel breakdown and failed reclaim"],
+      preferredZones:["VISUAL_CHANNEL_4"]
+    },
+    {
+      id:"VISUAL_1H_WXY_BEARISH",
+      bias:"BEARISH",
+      thesis:"The 1H chart shows a WXY-style corrective alternative from the 85,224 area, with the C/Y leg potentially progressing down the marked Fibonacci ladder.",
+      confirmation:["85,224 area rejects","lower-timeframe bearish structure confirms","downside levels are reached with continuation/retest failure"],
+      invalidation:["clean acceptance above 85,224 with bullish continuation"],
+      preferredZones:["VISUAL_R1_85224","VISUAL_S1_82792","VISUAL_S2_82131","VISUAL_S3_81289"]
+    },
+    {
+      id:"VISUAL_BEARISH_SUPPORT_LADDER",
+      bias:"BEARISH",
+      thesis:"If the WXY downside develops, use the marked Fib ladder as sequential reaction/continuation checkpoints rather than assuming every level must break.",
+      confirmation:["level breaks with body-close and participation","failed reclaim at the broken level"],
+      invalidation:["strong bullish reaction that reclaims the prior level and changes structure"],
+      preferredZones:["VISUAL_S4_80360","VISUAL_S5_79796","VISUAL_S6_78857","VISUAL_S7_77354","VISUAL_BEAR_75K"]
+    }
+  ],
+  chartNotes:[
+    "First supplied chart shows a rising HTF channel with waves 1–4 and a projected wave 5 near the 100K area.",
+    "Second supplied chart shows a bearish alternative with projected chop/downside into the green support zone around 75K.",
+    "Third supplied chart is labeled 1 Hour - WXY and marks 85,224 as the upper reference plus the visible Fibonacci targets."
+  ],
+  rule:"These chart annotations are conditional scenario context. MarketPulse must still require live reaction, market structure, order flow, data quality and risk gates before a directional signal."
+};
+
 function getActiveAnalystPack(now=Date.now()){
-  const asOf=Date.parse(PACK.asOf);
-  const expiresAt=asOf+PACK.validHours*3600000;
-  const active=Number.isFinite(asOf)&&now<=expiresAt;
+  const packs=[PACK,CURRENT_VISUAL_PACK];
+  const activePacks=packs.map(p=>{
+    const asOf=Date.parse(p.asOf);
+    const expiresAt=asOf+p.validHours*3600000;
+    return {...p,active:Number.isFinite(asOf)&&now<=expiresAt,expiresAt,status:Number.isFinite(asOf)&&now<=expiresAt?"ACTIVE":"EXPIRED"};
+  });
+  const active=activePacks.filter(p=>p.active);
   return {
-    ...PACK,
-    active,
-    expiresAt,
-    status:active?"ACTIVE":"EXPIRED"
+    id:active.map(p=>p.id).join("+")||"none",
+    source:active.map(p=>p.source).join(" + ")||"none",
+    sources:active.map(p=>p.source),
+    symbol:"BTCUSDT",
+    active:active.length>0,
+    status:active.length?"ACTIVE":"EXPIRED",
+    asOf:active.map(p=>p.asOf).sort().at(-1)||null,
+    expiresAt:active.length?Math.max(...active.map(p=>p.expiresAt)):null,
+    timeframeContext:[...new Set(active.flatMap(p=>p.timeframeContext||[]))],
+    zones:active.flatMap(p=>(p.zones||[]).map(z=>({...z,sourcePackId:p.id,source:p.source,asOf:p.asOf,expiresAt:p.expiresAt}))),
+    scenarios:active.flatMap(p=>(p.scenarios||[]).map(x=>({...x,sourcePackId:p.id,source:p.source,asOf:p.asOf,expiresAt:p.expiresAt}))),
+    structureModifiers:active.flatMap(p=>p.structureModifiers||[]),
+    higherTimeframe:active.map(p=>p.higherTimeframe).filter(Boolean),
+    chartNotes:active.flatMap(p=>p.chartNotes||[])
   };
 }
 
