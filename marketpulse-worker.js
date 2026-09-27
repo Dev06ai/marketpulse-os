@@ -30,8 +30,10 @@
 const DEFAULT_SYMBOLS="BTCUSDT,ETHUSDT,SOLUSDT,BNBUSDT,XRPUSDT,DOGEUSDT,ADAUSDT";
 const DEFAULT_INTERVALS=["15m","1h","4h","1d"];
 const CADENCE_MS={"15m":5*60*1000,"1h":15*60*1000,"4h":30*60*1000,"1d":60*60*1000};
-const DEFAULT_TIMEOUT_MS=20000;
+const DEFAULT_TIMEOUT_MS=30000;
 const DEFAULT_JITTER_MS=1500;
+const DEFAULT_RETRY_ATTEMPTS=3;
+const DEFAULT_RETRY_BASE_MS=1200;
 
 function parseCsv(value,fallback=[]){
   const rows=String(value==null?"":value).split(",").map(x=>x.trim()).filter(Boolean);
@@ -100,8 +102,17 @@ async function requestDecision(baseUrl,symbol,interval,{timeoutMs=DEFAULT_TIMEOU
     const text=await res.text();
     let body={};
     try{body=JSON.parse(text)}catch{}
-    if(!res.ok)throw new Error(body?.error||("HTTP "+res.status));
-    if(!body?.ok)throw new Error(body?.error||"Decision endpoint returned an invalid payload");
+    if(!res.ok){
+      const error=new Error(body?.error||("HTTP "+res.status));
+      error.status=res.status;
+      throw error;
+    }
+    if(!body?.ok){
+      const error=new Error(body?.error||"Decision endpoint returned an invalid payload");
+      error.status=res.status;
+      error.retryable=true;
+      throw error;
+    }
     return body;
   }finally{clearTimeout(timer)}
 }
@@ -115,13 +126,43 @@ function buildRuntimeConfig(env=process.env){
     intervals:intervals.length?intervals:DEFAULT_INTERVALS.slice(),
     timeoutMs:Math.max(5000,Number(env.MARKETPULSE_WORKER_TIMEOUT_MS||DEFAULT_TIMEOUT_MS)||DEFAULT_TIMEOUT_MS),
     jitterMs:Math.max(0,Number(env.MARKETPULSE_WORKER_JITTER_MS||DEFAULT_JITTER_MS)||DEFAULT_JITTER_MS),
+    retries:Math.max(1,Math.min(5,Number(env.MARKETPULSE_WORKER_RETRIES||DEFAULT_RETRY_ATTEMPTS)||DEFAULT_RETRY_ATTEMPTS)),
+    retryBaseMs:Math.max(250,Math.min(10000,Number(env.MARKETPULSE_WORKER_RETRY_BASE_MS||DEFAULT_RETRY_BASE_MS)||DEFAULT_RETRY_BASE_MS)),
     deviceId:String(env.MARKETPULSE_WORKER_DEVICE||"marketpulse-24x7-worker").slice(0,128)
   };
+}
+function isRetryableError(error){
+  const status=Number(error?.status||0);
+  if([408,425,429].includes(status)||status>=500)return true;
+  if(error?.retryable===true)return true;
+  return error?.name==="AbortError"||error?.name==="TypeError";
+}
+async function sleep(ms){return new Promise(resolve=>setTimeout(resolve,ms))}
+async function requestDecisionWithRetry(baseUrl,symbol,interval,{retries=DEFAULT_RETRY_ATTEMPTS,retryBaseMs=DEFAULT_RETRY_BASE_MS,...options}={}){
+  let lastError;
+  for(let attempt=1;attempt<=Math.max(1,retries);attempt++){
+    try{
+      return await requestDecision(baseUrl,symbol,interval,options);
+    }catch(error){
+      lastError=error;
+      if(attempt>=Math.max(1,retries)||!isRetryableError(error))throw error;
+      const backoff=retryBaseMs*Math.pow(2,attempt-1);
+      const jitter=Math.floor(Math.random()*500);
+      console.warn(JSON.stringify({
+        event:"decision_refresh_retry",
+        symbol,interval,attempt,nextAttempt:attempt+1,
+        delayMs:backoff+jitter,
+        error:String(error?.message||error)
+      }));
+      await sleep(backoff+jitter);
+    }
+  }
+  throw lastError||new Error("Decision refresh failed");
 }
 async function runJob(job,config){
   const started=Date.now();
   try{
-    const decision=await requestDecision(config.baseUrl,job.symbol,job.interval,config);
+    const decision=await requestDecisionWithRetry(config.baseUrl,job.symbol,job.interval,config);
     const s=summarizeDecision(decision);
     console.log(JSON.stringify({event:"decision_refresh",symbol:job.symbol,interval:job.interval,latencyMs:Date.now()-started,...s}));
     return {ok:true,decision};
@@ -169,4 +210,4 @@ if(require.main===module){
     process.exitCode=1;
   }
 }
-module.exports={CADENCE_MS,parseCsv,normaliseBaseUrl,buildPlan,dueJobs,nextWakeMs,summarizeDecision,requestDecision,buildRuntimeConfig,runJob,runWorker};
+module.exports={CADENCE_MS,parseCsv,normaliseBaseUrl,buildPlan,dueJobs,nextWakeMs,summarizeDecision,isRetryableError,requestDecision,requestDecisionWithRetry,buildRuntimeConfig,runJob,runWorker};
