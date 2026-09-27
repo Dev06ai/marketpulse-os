@@ -114,14 +114,14 @@ function dlineCandles(){
     out.push({t,o:100,c:100.2,h:101,l:99,v:1000});
   }
   // Two clean descending pivot highs that form the resistance line.
-  out[65]={t:start+65*m,o:100,c:119,h:120,l:99,v:1200};
-  out[80]={t:start+80*m,o:105,c:109,h:110,l:103,v:1200};
-  // Final candle breaks decisively above the projected line with volume.
-  out[99]={t:start+99*m,o:108,c:121,h:123,l:107,v:2600};
+  out[65]={t:start+65*m,o:100,c:109,h:110,l:99,v:1200};
+  out[80]={t:start+80*m,o:100,c:104,h:105,l:99,v:1200};
+  // The prior candle remains below the projected resistance; the final candle breaks it decisively.
+  out[98]={t:start+98*m,o:98,c:98,h:99,l:97,v:1100};
+  out[99]={t:start+99*m,o:98,c:110,h:112,l:97,v:2600};
   return out;
 }
 
 const dline=detectStrategySetups(dlineCandles(),{interval:"15m",higher8h:{regime:"UPTREND"}});
-console.log("DLINE_DEBUG",JSON.stringify(dline));
 assert(dline.dLine?.kind==="D_LINE_BREAKOUT","D-Line breakout detector did not identify the synthetic breakout.");
 assert(dline.dLine?.side==="LONG","Bullish D-Line breakout must map to LONG.");
