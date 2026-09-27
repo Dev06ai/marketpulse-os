@@ -553,7 +553,7 @@ body.admin-mode .nav button.adminNav,body.admin-mode .mobileMenu button.adminNav
       </div>
     </div>
 
-    <div id="priceActionSection" class="section card"><div class="sectionHead"><div><div class="title">Price action</div><div class="sub">Exchange-style HD candles · 50 EMA · drag to pan · wheel/pinch to zoom · move cursor for time, OHLC and price.</div></div><div class="chartHeaderTools"><div class="chartTimeframes" id="chartTimeframes"><button class="chartTf" data-chart-tf="15m">15m</button><button class="chartTf" data-chart-tf="30m">30m</button><button class="chartTf active" data-chart-tf="1h">1h</button><button class="chartTf" data-chart-tf="4h">4h</button><button class="chartTf" data-chart-tf="1d">1D</button></div><div class="chartTools"><button id="chartCandles" class="active" title="Candlestick chart">Candles</button><button id="chartLine" title="Closing-price line chart">Line</button><button id="chartAuto" title="Fit price scale automatically">Auto</button><button id="chartFit" title="Fit all visible candles">Fit</button><button id="panL" title="Move toward older candles">←</button><button id="panR" title="Move toward newer candles">→</button><button id="zoomOut" class="zoomBtn" title="Zoom out">− Zoom out</button><button id="zoomReset" title="Reset chart zoom">1:1</button><button id="zoomIn" class="zoomBtn" title="Zoom in">+ Zoom in</button><button id="chartFullscreen" class="chartFocusBtn" title="Expand only the Price Action chart">⛶ Expand</button><button id="chartSettings" title="Chart settings">⚙</button></div></div></div><div class="chartWrap"><canvas id="mainChart" class="chartCanvas"></canvas><div class="ohlc" id="ohlc">Move over chart</div></div><div class="levels"><div class="level"><div class="k">Entry zone</div><div class="v" id="entry">—</div></div><div class="level"><div class="k">Invalidation</div><div class="v" id="stop">—</div></div><div class="level"><div class="k">Target 1</div><div class="v" id="target">—</div></div><div class="level"><div class="k">R:R</div><div class="v" id="rr">—</div></div></div></div>
+    <div id="priceActionSection" class="section card"><div class="sectionHead"><div><div class="title">Price action</div><div class="sub">Exchange-style HD candles · 50 EMA · drag to pan · wheel/pinch to zoom · move cursor for time, OHLC and price.</div></div><div class="chartHeaderTools"><div class="chartTimeframes" id="chartTimeframes"><button class="chartTf" data-chart-tf="15m">15m</button><button class="chartTf" data-chart-tf="30m">30m</button><button class="chartTf active" data-chart-tf="1h">1h</button><button class="chartTf" data-chart-tf="4h">4h</button><button class="chartTf" data-chart-tf="1d">1D</button></div><div class="chartTools"><button id="chartCandles" class="active" title="Candlestick chart">Candles</button><button id="chartLine" title="Closing-price line chart">Line</button><button id="chartAuto" title="Fit price scale automatically">Auto</button><button id="chartFit" title="Fit all visible candles">Fit</button><button id="panL" title="Move toward older candles">←</button><button id="panR" title="Move toward newer candles">→</button><button id="zoomOut" class="zoomBtn" title="Zoom out">− Zoom out</button><button id="zoomReset" title="Reset chart zoom">1:1</button><button id="zoomIn" class="zoomBtn" title="Zoom in">+ Zoom in</button><button id="chartFullscreen" class="chartFocusBtn" title="Expand only the Price Action chart">⛶ Expand</button><button id="chartSettings" title="Chart settings">⚙</button></div></div></div><div class="chartWrap"><canvas id="mainChart" class="chartCanvas"></canvas><div class="ohlc" id="ohlc">Move over chart</div></div><div class="levels"><div class="level"><div class="k">Entry zone</div><div class="v" id="entry">—</div></div><div class="level"><div class="k">Invalidation</div><div class="v" id="stop">—</div></div><div class="level"><div class="k">Target 1</div><div class="v" id="target">—</div></div><div class="level"><div class="k">R:R</div><div class="v" id="rr">—</div></div><div class="level"><div class="k">Trade style</div><div class="v" id="tradeStyle">—</div></div></div></div>
 
     <div class="section"><div class="sectionHead"><div><div class="title">Market Overview</div><div class="sub">Long-term context plus a simple view of what is happening now.</div></div><span class="chip">Long-term context</span></div>
       <div class="overGrid">
@@ -1474,7 +1474,10 @@ function drawMain(){
   }
   ctx.restore();
 
-  var current=dataAll[dataAll.length-1].c,cy=scale(current),model=state.market&&state.market.analysis;
+  var current=dataAll[dataAll.length-1].c,cy=scale(current);
+  var final=state.finalDecision;
+  var finalEligible=Boolean(final&&final.liveSignalEligible===true&&final.state==="READY"&&(final.action==="LONG"||final.action==="SHORT"));
+  var model=finalEligible?final.levels:null;
   if(model){
     [{name:"ENTRY",value:model.entryLow,color:theme.ema},{name:"STOP",value:model.stop,color:theme.bear},{name:"TP1",value:model.tp1,color:theme.bull}].forEach(function(z){
       if(!Number.isFinite(Number(z.value)))return;
@@ -2626,10 +2629,10 @@ async function renderFinalDecision(d){
   if(d.stale)thesisText+=" Live decision refresh failed; directional output is intentionally suppressed until fresh data returns.";
   $("thesis").textContent=thesisText;
   $("primary").textContent=ev.primaryScenario||"—";$("alternate").textContent=ev.invalidationScenario||"—";
-  $("thesisChips").innerHTML=[["HTF",ev.mtfScore!=null?fmt(ev.mtfScore)+"/100":null],["Flow",ev.flowScore!=null?fmt(ev.flowScore)+"/100":null],["Data",data.score!=null?fmt(data.score)+"/100":null],["Risk",pg.decision||"NOT EVALUATED"]].map(function(x){return'<span class="chip c">'+x[0]+": "+(x[1]||"—")+"</span>"}).join("");
+  $("thesisChips").innerHTML=[["HTF",ev.mtfScore!=null?fmt(ev.mtfScore)+"/100":null],["Flow",ev.flowScore!=null?fmt(ev.flowScore)+"/100":null],["Data",data.score!=null?fmt(data.score)+"/100":null],["Style",side!=="WAIT"?(d.tradeStyle||m.tradeStyle||"—"):null],["Risk",pg.decision||"NOT EVALUATED"]].map(function(x){return'<span class="chip c">'+x[0]+": "+(x[1]||"—")+"</span>"}).join("");
   $("quality").textContent=fmt(m.confluenceScore)+"/100";$("quality").style.color=accent;
   $("components").innerHTML=(ev.components||[]).map(function(x){return'<div class="rowLine"><span class="small">'+safeHtml(x.name)+'</span><b style="font-size:9px;text-align:right">'+fmt(x.score)+'/100</b><div class="bar"><i style="width:'+Math.max(0,Math.min(100,Number(x.score)||0))+'%"></i></div></div>'}).join("");
-  $("entry").textContent=lv.entryLow!=null?fmt(lv.entryLow)+" → "+fmt(lv.entryHigh):"Wait";$("stop").textContent=fmt(lv.stop);$("target").textContent=fmt(lv.tp1);$("rr").textContent=lv.rr?Number(lv.rr).toFixed(2)+"R":"—";
+  $("entry").textContent=side!=="WAIT"&&lv.entryLow!=null?fmt(lv.entryLow)+" → "+fmt(lv.entryHigh):"Wait";$("stop").textContent=side!=="WAIT"?fmt(lv.stop):"0";$("target").textContent=side!=="WAIT"?fmt(lv.tp1):"0";$("rr").textContent=side!=="WAIT"&&lv.rr?Number(lv.rr).toFixed(2)+"R":"—";$("tradeStyle").textContent=side!=="WAIT"?(d.tradeStyle||m.tradeStyle||"—"):"—";
   var s=v.summary||{},p=v.adaptive||{};
   var evidence=s.sufficient?("Sufficient sample · "+Number(s.trades||0)+" resolved setups"):("Collecting · "+Number(s.trades||0)+" resolved setups");
   if($("validationEvidence"))$("validationEvidence").textContent=evidence;
@@ -2641,6 +2644,7 @@ async function renderFinalDecision(d){
   $("adaptiveChip").textContent="Adaptive: "+(p.mode||"collecting");
   $("finalEngineMeta").textContent="Phase 9/10/11-13 · "+(d.stale?"STALE / DIRECTION SUPPRESSED · ":"LIVE · ")+(d.state||"WAITING")+" · data "+fmt(data.score)+"/100 · risk "+(pg.decision||"NOT EVALUATED")+" · live gate "+gs;
   var ds=document.querySelector(".decisionSection");if(ds){ds.classList.remove("signal-long","signal-short","signal-wait");ds.classList.add(side==="LONG"?"signal-long":side==="SHORT"?"signal-short":"signal-wait")}
+  if(typeof drawMain==="function")drawMain();
 }
 function suppressFinalSignal(reason){
   state.finalDecisionSeq++;
