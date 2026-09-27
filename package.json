@@ -6,7 +6,8 @@
   "scripts": {
     "start": "node server.js",
     "test": "node validation-selftest.js",
-    "worker": "node marketpulse-worker.js"
+    "worker": "node marketpulse-worker.js",
+    "worker:once": "node marketpulse-worker-once.js"
   },
   "engines": {
     "node": ">=20"
