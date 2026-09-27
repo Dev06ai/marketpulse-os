@@ -540,10 +540,42 @@ body.admin-mode .nav button.adminNav,body.admin-mode .mobileMenu button.adminNav
 .adminSignalRow .meta{font-size:8px;color:#8493a7;margin-top:3px;line-height:1.4}
 .adminSignalRow .score{font-size:9px;color:#d9e7f2}
 @media(max-width:700px){.adminSignalGrid{grid-template-columns:1fr}.adminSignalRow{grid-template-columns:64px 1fr}.adminSignalRow .score{grid-column:2}}
-#adminSignalToast{position:fixed;right:16px;bottom:18px;z-index:2000;width:min(420px,calc(100vw - 28px));padding:12px;border:1px solid rgba(103,232,255,.24);border-radius:14px;background:rgba(9,12,17,.96);backdrop-filter:blur(18px);box-shadow:0 22px 70px rgba(0,0,0,.55);transform:translateY(18px);opacity:0;pointer-events:none;transition:opacity .2s ease,transform .2s ease}
-#adminSignalToast.show{opacity:1;transform:translateY(0)}
-#adminSignalToast .t{font-size:11px;font-weight:950}
-#adminSignalToast .b{margin-top:5px;color:#aebccd;font-size:9px;line-height:1.45}
+#adminSignalToast{
+  position:fixed;right:16px;bottom:18px;z-index:2000;
+  width:min(430px,calc(100vw - 28px));
+  padding:0;border:1px solid rgba(255,255,255,.10);border-radius:18px;
+  background:linear-gradient(180deg,#111318 0%,#0b0d10 100%);
+  box-shadow:0 28px 90px rgba(0,0,0,.68),0 0 0 1px rgba(167,243,208,.05);
+  overflow:hidden;backdrop-filter:blur(24px);
+  transform:translateY(24px) scale(.985);opacity:0;pointer-events:none;
+  transition:opacity .22s ease,transform .22s ease;
+}
+#adminSignalToast.show{opacity:1;transform:translateY(0) scale(1);pointer-events:auto}
+#adminSignalToast .mpSignalAccent{height:3px;background:linear-gradient(90deg,#a7f3d0,#60a5fa,#c084fc)}
+#adminSignalToast .mpSignalHead{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:13px 14px 9px}
+#adminSignalToast .mpSignalBrand{font-size:8px;letter-spacing:.14em;color:#7f8b9c;font-weight:950}
+#adminSignalToast .mpSignalTitle{font-size:15px;line-height:1.15;font-weight:1000;letter-spacing:-.02em;margin-top:4px}
+#adminSignalToast .mpSignalTitle.long{color:#a7f3d0}
+#adminSignalToast .mpSignalTitle.short{color:#ffb4b4}
+#adminSignalToast .mpSignalClose{width:28px;height:28px;border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.025);color:#93a1b2;border-radius:9px;font-size:15px;display:grid;place-items:center;cursor:pointer}
+#adminSignalToast .mpSignalMain{padding:0 14px 13px}
+#adminSignalToast .mpSignalSetup{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
+#adminSignalToast .mpChip{border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.035);border-radius:999px;padding:5px 8px;font-size:8px;color:#bac6d3;font-weight:900;letter-spacing:.05em}
+#adminSignalToast .mpChip.signal{border-color:rgba(167,243,208,.20);color:#d9fff0}
+#adminSignalToast .mpGrid{display:grid;grid-template-columns:1fr 1fr;gap:7px}
+#adminSignalToast .mpLevel{border:1px solid rgba(255,255,255,.07);background:rgba(255,255,255,.025);border-radius:10px;padding:9px 10px}
+#adminSignalToast .mpLevel.kicker{color:#788596;font-size:7px;text-transform:uppercase;letter-spacing:.10em}
+#adminSignalToast .mpLevel.value{color:#eef4f8;font-size:10px;font-weight:950;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#adminSignalToast .mpLevel.value.entry{color:#a7f3d0}
+#adminSignalToast .mpLevel.value.stop{color:#ff9d9d}
+#adminSignalToast .mpLevel.value.tp{color:#b7d7ff}
+#adminSignalToast .mpFooter{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:9px;padding-top:9px;border-top:1px solid rgba(255,255,255,.07)}
+#adminSignalToast .mpScore{font-size:9px;color:#d7e2ed;font-weight:950}
+#adminSignalToast .mpStatus{font-size:7px;font-weight:950;letter-spacing:.08em;padding:5px 7px;border-radius:999px;border:1px solid rgba(74,222,128,.18);color:#86efac;background:rgba(74,222,128,.05)}
+#adminSignalToast .mpOpen{margin-top:10px;width:100%;padding:9px 10px;border-radius:10px;border:1px solid rgba(96,165,250,.20);background:linear-gradient(180deg,rgba(96,165,250,.16),rgba(96,165,250,.06));color:#dbeafe;font-size:9px;font-weight:950;cursor:pointer}
+@media(max-width:520px){
+  #adminSignalToast{right:10px;left:10px;bottom:10px;width:auto}
+}
 .pwaInstallPanel{margin-top:9px;padding:10px;border:1px solid rgba(192,132,252,.16);border-radius:10px;background:linear-gradient(180deg,rgba(192,132,252,.05),rgba(255,255,255,.015))}
 .pwaInstallRow{display:flex;align-items:center;justify-content:space-between;gap:9px;flex-wrap:wrap}
 .pwaInstallTitle{font-size:9px;font-weight:950;color:#edf4f8}
@@ -1592,6 +1624,13 @@ function adminSignalToast(alert){
   host.innerHTML='<div class="t">'+safeHtml(alert.title||"BTC signal")+'</div><div class="b">'+safeHtml(alert.body||"A confirmed BTC signal is available.")+'</div>';
   host.classList.add("show");clearTimeout(adminSignalToast._timer);adminSignalToast._timer=setTimeout(function(){host.classList.remove("show")},10000);
 }
+function initSignalPushMessageBridge(){
+  if(!("serviceWorker"in navigator))return;
+  navigator.serviceWorker.addEventListener("message",function(event){
+    var data=event?.data;
+    if(data?.type==="MARKETPULSE_SIGNAL"&&data.alert&&isAdminUser())adminSignalToast(data.alert);
+  });
+}
 function isStandalonePwa(){
   return window.matchMedia&&window.matchMedia("(display-mode: standalone)").matches;
 }
@@ -1810,6 +1849,7 @@ function scheduleAccountUIEarly(){
 }
 scheduleAccountUIEarly();
 initPwaInstall();
+initSignalPushMessageBridge();
 
 function installCriticalChartUI(){
   var c=document.getElementById("mainChart");
