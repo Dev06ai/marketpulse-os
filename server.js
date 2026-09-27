@@ -1872,7 +1872,7 @@ const server=http.createServer(async(req,res)=>{
         SNAPSHOT_CACHE.set(interval,{ts:Date.now(),payload});
         // Warm metadata and deep scan in the background; never block the first paint.
         getMarketMetadata(SYMBOLS).catch(()=>{});
-        queueMicrotask(()=>warmCoreScan(interval));
+        queueMicrotask(()=>warmCoreScan(interval).catch(()=>{}));
         return send(res,200,payload);
       }catch(e){return send(res,503,{ok:false,error:String(e.message||e),source:'fast-market-snapshot'})}
     }
@@ -1886,7 +1886,7 @@ const server=http.createServer(async(req,res)=>{
         if(cached&&Date.now()-cached.ts<SCAN_TTL)return send(res,200,cached.payload);
         const snap=SNAPSHOT_CACHE.get(interval);
         if(snap&&Date.now()-snap.ts<SNAPSHOT_TTL){
-          queueMicrotask(()=>warmCoreScan(interval));
+          queueMicrotask(()=>warmCoreScan(interval).catch(()=>{}));
           return send(res,200,{...snap.payload,mode:'snapshot-fallback'});
         }
         const [ticker,marketMeta]=await Promise.all([
@@ -1899,7 +1899,7 @@ const server=http.createServer(async(req,res)=>{
         });
         const payload={ok:true,interval,rows,marketSource:'multi-source',updatedAt:Date.now(),cacheTtlMs:SCAN_TTL,mode:'snapshot-fallback'};
         SNAPSHOT_CACHE.set(interval,{ts:Date.now(),payload});
-        queueMicrotask(()=>warmCoreScan(interval));
+        queueMicrotask(()=>warmCoreScan(interval).catch(()=>{}));
         return send(res,200,payload);
       }
 
