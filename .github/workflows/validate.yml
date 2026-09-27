@@ -107,7 +107,7 @@ jobs:
           start=html.index("function calc(){")
           end=html.index("\nfunction normalizeFlow",start)
           calc=html[start:end]
-          for x in ["riskUnit","rewardUnit","pnlMargin","roi"]:
+          for x in ["baseQty","currentBaseQty","pnlMargin","roi"]:
               if x not in calc: raise SystemExit("Missing exchange-style formula: "+x)
           print("Calculator logic/reset and safety-tool cleanup checks OK")
           PY
