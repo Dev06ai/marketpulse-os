@@ -429,6 +429,7 @@ async function buildDecisionSnapshot(symbol,interval,query){
     const gatedDecision=phase1113.applyDeploymentGate(decision,validation1113,{basePolicy:{minScore:config.minSignalScore,minRR:config.minRR}});
     const stableDecision=applySignalStability(gatedDecision,symbol,interval);
     const finalDecision=sanitizeFinalDecision(stableDecision);
+    try{phase4.updateFinalDecision(requestDevice({headers:{}}),symbol,interval,finalDecision,candles).catch(()=>{})}catch{}
     const payload={
       ok:true,...finalDecision,analysis,derivatives:flow,consensus,
       learning:learned?await learning.status().catch(()=>null):null,
@@ -1482,7 +1483,7 @@ const server=http.createServer(async(req,res)=>{
         });
         let learned=null;
         try{learned=await learning.process(symbol,interval,base,analysis)}catch{}
-        try{phase4.updateLive(requestDevice(req),symbol,interval,learned?.analysis||analysis,base).catch(()=>{})}catch{}
+        // Phase 4 paper learning is updated from the final gated decision in /api/decision.
         return send(res,200,{ok:true,symbol,interval,
           analysis:learned?.analysis||analysis,
           lower:lower&&lower.length>=220?analyze(lower,{interval:'15m'}):null,
@@ -1738,8 +1739,17 @@ const server=http.createServer(async(req,res)=>{
       let raw="";for await(const chunk of req)raw+=chunk;let body={};try{body=JSON.parse(raw||"{}")}catch{return send(res,400,{error:"Invalid JSON"})}
       const symbol=(body.symbol||'BTCUSDT').toUpperCase(),interval=body.interval||'1h';
       try{
-        const edge=await phase4.snapshot(requestDevice(req),symbol,interval,null);
-        return send(res,200,{ok:true,order:await execution.prepareFromSignal(edge.signal),edge});
+        const finalDecision=await buildDecisionSnapshot(symbol,interval,u.searchParams);
+        if(!finalDecision?.liveSignalEligible||finalDecision?.state!=="READY"||!["LONG","SHORT"].includes(String(finalDecision?.action||"").toUpperCase())){
+          return send(res,409,{ok:false,error:"FINAL_SIGNAL_NOT_ELIGIBLE",message:"Execution preparation is allowed only from a final gated LONG/SHORT decision.",decision:finalDecision});
+        }
+        const signal={
+          symbol,interval,side:finalDecision.action,status:"READY",score:finalDecision.market?.confluenceScore||0,
+          entryLow:finalDecision.levels?.entryLow,entryHigh:finalDecision.levels?.entryHigh,entry:finalDecision.levels?.entry,
+          stop:finalDecision.levels?.stop,target:finalDecision.levels?.tp1,tp2:finalDecision.levels?.tp2,rr:finalDecision.levels?.rr,
+          type:finalDecision.market?.type,regime:finalDecision.market?.regime,tradeStyle:finalDecision.tradeStyle
+        };
+        return send(res,200,{ok:true,order:await execution.prepareFromSignal(signal),decision:finalDecision});
       }catch(e){return send(res,400,{error:e.message})}
     }
     if(req.method==='POST'&&u.pathname==='/api/execution/intent'){
