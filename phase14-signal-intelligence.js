@@ -79,14 +79,17 @@ function clamp(x,a,b){return Math.max(a,Math.min(b,x))}
 function n(x,f=null){return Number.isFinite(Number(x))?Number(x):f}
 function sideOf(a){const s=String(a?.side||a?.action||"WAIT").toUpperCase();return s==="LONG"||s==="SHORT"?s:"WAIT"}
 
+function normaliseSetupToken(value=""){
+  return String(value||"").toUpperCase().replace(/[^A-Z0-9]+/g,"_").replace(/^_+|_+$/g,"");
+}
 function setupKey(analysis={}){
-  const raw=String(
+  const raw=normaliseSetupToken(
     analysis?.strategyFamily||
     analysis?.marketStructure?.setup?.kind||
     analysis?.marketStructure?.strategySetup?.kind||
     analysis?.type||
     ""
-  ).toUpperCase();
+  );
   if(raw.includes("SFP"))return "SFP";
   if(raw.includes("NPOC"))return "NPOC";
   if(raw.includes("D_LINE"))return "D_LINE_BREAKOUT";
