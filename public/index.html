@@ -1188,7 +1188,16 @@ linear-gradient(180deg,#0c0e11 0%,#101214 48%,#0a0b0d 100%);box-shadow:0 -20px 7
       <button id="adminRefreshSignalAlerts" class="btn">Refresh alerts</button>
     </div>
     <div id="adminSignalPushHint" class="sub" style="margin-top:7px">Enable this once on the device/browser where you want to receive BTC signal notifications. The server-side alert engine continues running even when this dashboard is closed.</div>
-    <div class="adminSignalHistory" id="adminSignalHistory"><div class="small">No BTC signal alerts recorded yet.</div></div>
+    <div class="pwaInstallPanel" id="pwaInstallPanel">
+      <div class="pwaInstallRow">
+        <div>
+          <div class="pwaInstallTitle">📱 MarketPulse phone app</div>
+          <div class="pwaInstallHint" id="pwaInstallHint">Install MarketPulse on your Android home screen for one-tap access and the same live updates and push alerts.</div>
+        </div>
+        <button id="installMarketPulseApp" class="btn primary">Install MarketPulse app</button>
+      </div>
+    </div>
+    <div class="adminSignalHistory" id="adminSignalHistory"><div class="small">No confirmed BTC signal alerts recorded yet.</div></div>
   </div>
     <div class="adminCommandKpis">
     <div class="adminCommandKpi live"><div class="k">Live visitors</div><div class="v" id="acLiveVisitors">—</div></div>
@@ -1615,7 +1624,12 @@ async function promptMarketPulseInstall(){
     updatePwaInstallUI();
     return;
   }
-  if($("pwaInstallHint"))$("pwaInstallHint").textContent="Open this page in Chrome on Android, then use ⋮ → Install app / Add to Home screen. The installed app opens directly without the normal browser UI.";
+  if($("pwaInstallHint"))$("pwaInstallHint").textContent=(function(){
+    var brave=false;try{brave=Boolean(navigator.brave)}catch{}
+    return brave
+      ?"Brave may not expose the in-page install prompt. Use Brave ⋮ → Add to Home screen / Install app. After installation, MarketPulse opens directly from your home screen."
+      :"Use the browser menu → Install app / Add to Home screen. After installation, MarketPulse opens directly from your home screen.";
+  })();
 }
 function initPwaInstall(){
   try{
