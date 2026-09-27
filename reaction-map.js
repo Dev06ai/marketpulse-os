@@ -77,6 +77,24 @@ function localSwing(c,lookback){
   return {high:hi,low:lo,highIndex:hiIndex,lowIndex:loIndex,start,end};
 }
 
+function rangePoc(c,start,end,bins=32){
+  const from=Math.max(0,start),to=Math.min(c.length-1,end);
+  if(to-from<8)return null;
+  let lo=Infinity,hi=-Infinity,total=0;
+  for(let i=from;i<=to;i++){lo=Math.min(lo,c[i].l);hi=Math.max(hi,c[i].h);total+=Math.max(0,Number(c[i].v)||0)}
+  if(!Number.isFinite(lo)||!Number.isFinite(hi)||hi<=lo)return null;
+  const step=(hi-lo)/bins,vol=new Array(bins).fill(0);
+  for(let i=from;i<=to;i++){
+    const tp=(c[i].h+c[i].l+c[i].c)/3;
+    const idx=Math.max(0,Math.min(bins-1,Math.floor((tp-lo)/step)));
+    vol[idx]+=Math.max(0,Number(c[i].v)||0);
+  }
+  let best=0;
+  for(let i=1;i<bins;i++)if(vol[i]>vol[best])best=i;
+  const poc=lo+(best+.5)*step;
+  return {poc,totalVolume:total,low:lo,high:hi};
+}
+
 function fibZones(swing,atrNow){
   const span=Math.max(swing.high-swing.low,atrNow);
   const zonePad=Math.max(atrNow*.08,swing.high*.00018);
@@ -265,8 +283,12 @@ function buildReactionMap(c,{interval="1h",marketStructure=null,strategySetups=n
   const i=c.length-1,atr=Math.max(num(atrSeries(c)[i],Math.max(c[i].c*.005,1)),1);
   const lookback=intervalLookback(interval),swing=localSwing(c,lookback);
   const fib=fibZones(swing,atr);
+  const rangeProfile=rangePoc(c,Math.max(0,c.length-lookback),c.length-1,32);
+  const rangePocEvidence=rangeProfile?[
+    {id:"RANGE_POC",label:"Range POC",kind:"SUPPORT",low:rangeProfile.poc,high:rangeProfile.poc,center:rangeProfile.poc,evidence:"Range POC"}
+  ]:[];
   const evidence=levelEvidence(marketStructure,strategySetups);
-  const raw=[...evidence,...fib];
+  const raw=[...evidence,...rangePocEvidence,...fib];
   const clusters=clusterLevels(raw,atr);
   const zones=clusters
     .filter(z=>Number.isFinite(z.low)&&Number.isFinite(z.high))
