@@ -215,4 +215,4 @@ function config(){
   };
 }
 
-module.exports={buildSignalAlert,notifyAdminSignal,sendAdminTest,config,pushConfigured,normaliseSetup,signalStyle};
+module.exports={buildSignalAlert,notifyAdminSignal,sendAdminTest,ensureConfigured,config,pushConfigured,normaliseSetup,signalStyle};
