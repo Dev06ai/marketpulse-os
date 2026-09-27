@@ -725,7 +725,6 @@ linear-gradient(180deg,#0c0e11 0%,#101214 48%,#0a0b0d 100%);box-shadow:0 -20px 7
       <div class="overGrid">
         <div class="card"><div class="sectionHead"><div><b>Cycle phase</b><div class="sub" id="cycleText">Long-term cycle score · subtle phase zones · hover for BTC context</div></div><span class="chip c">LIVE</span></div><canvas id="cycleChart" class="miniChart"></canvas><div class="cycleMetric" style="margin-top:7px;font-size:10px"><b id="cycleScore">—</b><span id="cycleDetail" style="color:var(--muted)">—</span></div></div>
         <div class="card"><div class="sectionHead"><div><b>Drawdown</b><div class="sub">Distance below high-water · cleaner risk view · hover for BTC context.</div></div><span class="chip">RISK</span></div><canvas id="ddChart" class="miniChart"></canvas><div class="cycleMetric" style="margin-top:7px;font-size:10px"><b id="ddValue">—</b><span id="ddDetail" style="color:var(--muted)">—</span></div></div>
-        <div class="card" data-admin-only="true"><div class="sectionHead"><div><b>Live market screen</b><div class="sub">Quick market snapshot with the same information style as a market tracker.</div></div><span class="chip">LIVE</span></div><div class="scanTableWrap"><div class="marketBoard" id="marketRows"><div class="small">Waiting for scanner…</div></div></div></div>
       </div>
     </div>
 
@@ -755,7 +754,7 @@ linear-gradient(180deg,#0c0e11 0%,#101214 48%,#0a0b0d 100%);box-shadow:0 -20px 7
     </div>
     <div class="section card" data-admin-only="true">
       <div class="sectionHead"><div><div class="title">Live Market Screens</div><div class="sub">Market-style board with live price, 24h change, market cap, volume and MarketPulse context.</div></div><button class="btn" data-view="scanner">Open Scanner</button></div>
-      <div class="scanTableWrap"><div class="marketBoard" id="tape"></div></div>
+      <div class="scanTableWrap"><div class="marketBoard" id="marketRows"><div class="small">Waiting for scanner…</div></div></div>
     </div>
 
     <div class="section card" data-admin-only="true">
@@ -2164,8 +2163,8 @@ function renderScanner(){
   // The scanner header is static in the page markup; render rows only to prevent duplicates.
   $("scanRows").innerHTML=renderMarketBoardRows(filtered,filtered.length);
   var best=rows.slice().sort(function(a,b){return(Number(b.score)||0)-(Number(a.score)||0)}).slice(0,rows.length);
-  $("marketRows").innerHTML='<div class="marketBoardHead"><span>#</span><span>Coin</span><span>Price</span><span>24H</span><span>Market Cap</span><span>24H Volume</span><span>MarketPulse</span></div>'+renderMarketBoardRows(best,best.length);
-  $("tape").innerHTML='<div class="marketBoardHead"><span>#</span><span>Coin</span><span>Price</span><span>24H</span><span>Market Cap</span><span>24H Volume</span><span>MarketPulse</span></div>'+renderMarketBoardRows(rows,rows.length);
+  var board=$("marketRows");
+  if(board)board.innerHTML='<div class="marketBoardHead"><span>#</span><span>Coin</span><span>Price</span><span>24H</span><span>Market Cap</span><span>24H Volume</span><span>MarketPulse</span></div>'+renderMarketBoardRows(best,best.length);
   document.querySelectorAll("[data-symbol]").forEach(function(el){el.onclick=function(){state.symbol=el.dataset.symbol;$("symbol").value=state.symbol;loadCore()}});
   renderAlerts();
   checkAlerts(rows);
@@ -2850,7 +2849,7 @@ async function loadFlow(force){
   }catch(e){
     state.flowAttempts=Number(state.flowAttempts||0)+1;
     renderFlowView({available:false});drawFlowData(null);$("flowSource").textContent="RETRYING";
-    if(state.flowAttempts<8)setTimeout(function(){state.flowBusy=false;loadFlow(true)},Math.min(10000,1400*state.flowAttempts));
+    if(state.flowAttempts<2)setTimeout(function(){state.flowBusy=false;loadFlow(true)},2500);
   }finally{state.flowBusy=false}
 }
 
@@ -2923,15 +2922,21 @@ async function loadCoreAnalytics(){
     }
   }catch{}
 }
-async function loadCycle(){
+async function loadCycle(force){
   if(state.cycleBusy)return;
+  var key="cycle-"+state.symbol;
+  var cached=readViewCache(key);
+  if(cached&&Array.isArray(cached.candles)&&cached.candles.length){
+    state.cycle=cached;renderCycle();
+  }
   state.cycleBusy=true;
   try{
-    var d=await api("/api/cycle?symbol="+encodeURIComponent(state.symbol),12000);
-    if(d&&Array.isArray(d.candles)&&d.candles.length){state.cycle=d;renderCycle();state.cycleAttempts=0}
+    var d=await api("/api/cycle?symbol="+encodeURIComponent(state.symbol),6500);
+    if(d&&Array.isArray(d.candles)&&d.candles.length){
+      state.cycle=d;writeViewCache(key,d);renderCycle();state.cycleAttempts=0;
+    }
   }catch(e){
     state.cycleAttempts=Math.min(Number(state.cycleAttempts||0)+1,4);
-    if(!state.cycle&&state.cycleAttempts<4)setTimeout(function(){state.cycleBusy=false;loadCycle()},Math.min(12000,1800*state.cycleAttempts));
   }finally{state.cycleBusy=false}
 }
 
@@ -3131,7 +3136,12 @@ async function loadCore(){
     if(isAdminUser())deferTask(loadDataFabric,800);
     deferTask(loadCoreAnalytics,1800);
     if(state.activeView==="overview"){
-      deferTask(loadScan,120);deferTask(loadCycle,180);deferTask(loadCoreEnrichment,250);deferTask(loadCoreAnalytics,600);deferTask(function(){if(state.chartPinned&&state.chartInterval!==requestedInterval)refreshPinnedChart()},700);deferTask(loadFinalDecision,900);
+      deferTask(loadCoreEnrichment,250);
+      deferTask(loadFinalDecision,700);
+      if(!state.scan||!state.scan.length)deferTask(loadScan,80);
+      if(!state.cycle)deferTask(loadCycle,350);
+      deferTask(loadCoreAnalytics,1200);
+      deferTask(function(){if(state.chartPinned&&state.chartInterval!==requestedInterval)refreshPinnedChart()},700);
     }
   }catch(e){
     if(state.market&&state.market.analysis){
