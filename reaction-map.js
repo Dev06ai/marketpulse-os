@@ -178,8 +178,7 @@ function levelEvidence(marketStructure,strategySetups,analystPack=null){
       });
     }
   }
-  return out;
-  if(analystPack?.active){
+  if(analystPack?.active){if(analystPack?.active){
     for(const z of analystPack.zones||[]){
       if(!Number.isFinite(Number(z.low))||!Number.isFinite(Number(z.high)))continue;
       out.push({
