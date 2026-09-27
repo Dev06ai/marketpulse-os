@@ -165,6 +165,12 @@ function analyze(c,ctx={}){
   let type="NO TRADE",side="WAIT",bias="Neutral";
   const reasons=[];
   const contributors=[];
+  const reactionActive=reactionMap?.active||null;
+  const reactionConfirmed=Boolean(
+    reactionActive &&
+    ["CONFIRM_LONG","CONFIRM_SHORT","BREAKOUT_LONG","BREAKDOWN_SHORT"].includes(String(reactionActive.state||""))
+    && ["LONG","SHORT"].includes(String(reactionActive.action||""))
+  );
 
   const trendLong=regime==="UPTREND"&&price>=E20[i]*.985&&price<=E20[i]*1.02&&rsiNow>=50&&rsiNow<=70;
   const trendShort=regime==="DOWNTREND"&&price<=E20[i]*1.015&&price>=E20[i]*.98&&rsiNow>=30&&rsiNow<=50;
@@ -184,7 +190,15 @@ function analyze(c,ctx={}){
     if(k==="ORDER_BLOCK")return "ORDER BLOCK REJECTION "+dir;
     return k+" "+dir;
   };
-  if(strategyReady&&ms.side==="LONG"){
+  if(reactionConfirmed){
+    side=String(reactionActive.action).toUpperCase();
+    bias=side==="LONG"?"Bullish":"Bearish";
+    type="REACTION "+side;
+    reasons.push(
+      reactionActive.trigger||"Reaction confirmed at a mapped confluence zone.",
+      reactionActive.analystPrimaryTrigger||"Analyst scenario context agrees with the observed reaction."
+    );
+  }else if(strategyReady&&ms.side==="LONG"){
     side="LONG";bias="Bullish";type=strategyType(ms,"LONG");
     reasons.push(ms.reason,"Strategy trigger is confirmed by the market-structure layer.");
   }else if(strategyReady&&ms.side==="SHORT"){
@@ -207,6 +221,7 @@ function analyze(c,ctx={}){
     {name:"Structure",value:(side==="LONG"&&st.state.includes("BULLISH"))||(side==="SHORT"&&st.state.includes("BEARISH"))?9:4},
     {name:"Key level / price action",value:side!=="WAIT"&&ms?.side===side?clamp(Math.round(ms.score*.12),0,12):3},
     {name:"Strategy trigger",value:strategyReady&&ms?.side===side?clamp(Math.round(ms.score*.10),0,10):2},
+    {name:"Reaction confirmation",value:reactionConfirmed&&reactionActive?.action===side?clamp(Math.round(Number(reactionActive.confidence||0)*.10),0,10):(reactionMap?.active?4:2)},
     {name:"4H alignment",value:(side==="LONG"&&mtf4==="UPTREND")||(side==="SHORT"&&mtf4==="DOWNTREND")?9:(side==="WAIT"||mtf4==="UNKNOWN"?4:0)},
     {name:"15M alignment",value:(side==="LONG"&&mtf15==="UPTREND")||(side==="SHORT"&&mtf15==="DOWNTREND")?7:(side==="WAIT"||mtf15==="UNKNOWN"?3:0)},
     {name:"CVD pressure",value:side==="WAIT"||cvdState==="UNKNOWN"?3:
@@ -356,7 +371,7 @@ function analyze(c,ctx={}){
     thesis:thesis.join(" "),thesisParts:thesis,
     primaryScenario,alternateScenario,
     mtf:{lower:mtf15,higher:mtf4},stop,tp1,tp2,entryLow:el,entryHigh:eh,rr,
-    rangeHigh,rangeLow,rangePosition:rangePos,priorHigh,priorLow,reactionMap,updatedAt:Date.now()
+    rangeHigh,rangeLow,rangePosition:rangePos,priorHigh,priorLow,reactionMap,reactionConfirmed,updatedAt:Date.now()
   };
 }
 
