@@ -15,6 +15,7 @@ const fvgs=detectFvg(c);
 assert(fvgs.some(x=>x.kind==="FVG"&&x.side==="LONG"),"Bullish FVG not detected.");
 
 const breakers=detectBreakers([
+  {t:0,o:102,c:101,h:103,l:99,v:900},
   {t:1,o:100,c:96,h:101,l:93,v:1000},
   {t:2,o:96,c:99,h:100,l:94,v:1000},
   {t:3,o:99,c:103,h:104,l:98,v:1800}
