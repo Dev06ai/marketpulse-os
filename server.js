@@ -1668,6 +1668,7 @@ const server=http.createServer(async(req,res)=>{
       const user=await auth.userFromRequest(req);try{const row=await storage.saveFeatureFlag(body.key,body, user.email);await auditAdmin(req,"Updated feature flag "+row.key,"feature_flags",null,{enabled:row.enabled,rolloutPct:row.rolloutPct});return send(res,200,{ok:true,flag:row})}catch(e){return send(res,400,{ok:false,error:e.message})}
     }
     if(req.method==='GET'&&u.pathname==='/api/admin/notifications/config'){
+      await signalNotifications.ensureConfigured(storage);
       return send(res,200,{ok:true,...signalNotifications.config()});
     }
     if(req.method==='POST'&&u.pathname==='/api/admin/notifications/test'){
@@ -1678,8 +1679,10 @@ const server=http.createServer(async(req,res)=>{
       }catch(e){return send(res,503,{ok:false,error:String(e.message||e)})}
     }
     if(req.method==='GET'&&u.pathname==='/api/admin/signal-alerts'){
-      try{return send(res,200,{ok:true,alerts:await storage.listAdminSignalAlerts(50),config:signalNotifications.config()})}
-      catch(e){return send(res,503,{ok:false,error:String(e.message||e)})}
+      try{
+        await signalNotifications.ensureConfigured(storage);
+        return send(res,200,{ok:true,alerts:await storage.listAdminSignalAlerts(50),config:signalNotifications.config()})
+      }catch(e){return send(res,503,{ok:false,error:String(e.message||e)})}
     }
     if(req.method==='POST'&&u.pathname==='/api/admin/notifications/subscribe'){
       let raw="";for await(const chunk of req)raw+=chunk;
