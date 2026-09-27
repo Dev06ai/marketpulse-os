@@ -429,7 +429,7 @@ async function buildDecisionSnapshot(symbol,interval,query){
     const gatedDecision=phase1113.applyDeploymentGate(decision,validation1113,{basePolicy:{minScore:config.minSignalScore,minRR:config.minRR}});
     const stableDecision=applySignalStability(gatedDecision,symbol,interval);
     const finalDecision=sanitizeFinalDecision(stableDecision);
-    try{phase4.updateFinalDecision(requestDevice({headers:{}}),symbol,interval,finalDecision,candles).catch(()=>{})}catch{}
+    try{phase4.updateFinalDecision(requestDevice(req),symbol,interval,finalDecision,candles).catch(()=>{})}catch{}
     const payload={
       ok:true,...finalDecision,analysis,derivatives:flow,consensus,
       learning:learned?await learning.status().catch(()=>null):null,
