@@ -55,6 +55,8 @@ function strictSignalChecks(a,side,higher,lower,flowScore,dataScore,levels,deriv
   if(String(d.cvdState||"").toUpperCase().includes("DIVERGENCE"))reasons.push("CVD divergence");
   if(Number.isFinite(Number(levels?.rr))&&Number(levels.rr)<1.5)reasons.push("R:R below 1.5");
   if(setupKind==="D_LINE_BREAKOUT"&&(!Number.isFinite(Number(levels?.rr))||Number(levels.rr)<2))reasons.push("D-Line checklist requires 2:1+ R:R");
+  const advancedExecutionSetup=["SFP","ORDER_BLOCK","BREAKOUT_RETEST"].includes(setupKind);
+  if(advancedExecutionSetup&&(!Number.isFinite(Number(levels?.rr))||Number(levels.rr)<3))reasons.push("Advanced price-action framework requires 3:1+ R:R");
   if(d.available===false)reasons.push("derivatives unavailable");
   const completeness=d.completeness&&typeof d.completeness==="object"
     ?Object.values(d.completeness).filter(Boolean).length
