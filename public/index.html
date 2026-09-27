@@ -1568,6 +1568,23 @@ function adminSignalToast(alert){
   host.innerHTML='<div class="t">'+safeHtml(alert.title||"BTC signal")+'</div><div class="b">'+safeHtml(alert.body||"A confirmed BTC signal is available.")+'</div>';
   host.classList.add("show");clearTimeout(adminSignalToast._timer);adminSignalToast._timer=setTimeout(function(){host.classList.remove("show")},10000);
 }
+async function getAdminPushState(){
+  var permission=("Notification"in window)?Notification.permission:"unsupported";
+  var supported=("serviceWorker"in navigator)&&("PushManager"in window)&&("Notification"in window);
+  if(!supported)return {supported:false,permission,subscribed:false,registration:false};
+  try{
+    var registration=await navigator.serviceWorker.getRegistration("/signal-sw.js");
+    var subscription=registration&&await registration.pushManager.getSubscription();
+    return {supported:true,permission,subscribed:Boolean(subscription),registration:Boolean(registration)};
+  }catch{return {supported:true,permission,subscribed:false,registration:false}}
+}
+async function updateAdminPushStatus(){
+  var cfg=state.adminPushConfig||{};
+  var ps=await getAdminPushState();
+  var ready=Boolean(cfg.pushEnabled&&ps.permission==="granted"&&ps.subscribed);
+  adminSignalStatusText(ready?"PUSH ENABLED":(cfg.pushEnabled&&ps.permission==="granted"?"PUSH NOT REGISTERED":"PUSH NOT ENABLED"),ready?"ready":"off");
+  return {cfg,ps,ready};
+}
 async function loadAdminSignalAlerts(initial){
   if(!isAdminUser())return;
   try{
@@ -1582,8 +1599,7 @@ async function loadAdminSignalAlerts(initial){
       });
     }
     state.adminSignalLastPollAt=Date.now();
-    var perm=("Notification"in window)?Notification.permission:"unsupported";
-    adminSignalStatusText((d.config?.pushEnabled&&perm==="granted")?"PUSH ENABLED":"PUSH NOT ENABLED",d.config?.pushEnabled&&perm==="granted"?"ready":"off");
+    await updateAdminPushStatus();
   }catch(e){adminSignalStatusText("ALERT SERVICE CHECK FAILED","off")}
 }
 async function enableAdminSignalPush(){
@@ -1604,9 +1620,11 @@ async function enableAdminSignalPush(){
     var registration=await navigator.serviceWorker.register("/signal-sw.js",{scope:"/"});
     var subscription=await registration.pushManager.getSubscription();
     if(!subscription)subscription=await registration.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:urlBase64ToUint8Array(cfg.publicKey)});
-    await apiPost("/api/admin/notifications/subscribe",subscription.toJSON());
+    var subscriptionJson=subscription.toJSON();
+    await apiPost("/api/admin/notifications/subscribe",subscriptionJson);
     state.adminPushConfig=cfg;
-    adminSignalStatusText("PUSH ENABLED","ready");
+    var status=await updateAdminPushStatus();
+    if(!status.ready)throw Error("Push subscription was not registered successfully on this device.");
     if($("adminSignalPushHint"))$("adminSignalPushHint").textContent="Enabled on this device. Confirmed BTC signals will now appear as system notifications even when the dashboard is closed.";
   }catch(e){
     adminSignalStatusText("PUSH SETUP FAILED","off");
@@ -1622,7 +1640,7 @@ async function disableAdminSignalPush(){
       await fetch("/api/admin/notifications/subscribe?endpoint="+endpoint,{method:"DELETE",credentials:"same-origin",headers:{"x-marketpulse-device":deviceId()}});
       await subscription.unsubscribe();
     }
-    adminSignalStatusText("PUSH NOT ENABLED","off");
+    await updateAdminPushStatus();
     if($("adminSignalPushHint"))$("adminSignalPushHint").textContent="Push alerts are disabled on this device. Your stored alert history remains available.";
   }catch(e){adminSignalStatusText("DISABLE FAILED","off")}
 }
