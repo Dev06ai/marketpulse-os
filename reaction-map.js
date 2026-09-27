@@ -179,7 +179,6 @@ function levelEvidence(marketStructure,strategySetups,analystPack=null){
     }
   }
   return out;
-}
   if(analystPack?.active){
     for(const z of analystPack.zones||[]){
       if(!Number.isFinite(Number(z.low))||!Number.isFinite(Number(z.high)))continue;
@@ -198,6 +197,8 @@ function levelEvidence(marketStructure,strategySetups,analystPack=null){
       });
     }
   }
+  return out;
+}
 function clusterLevels(levels,atrNow){
   const tolerance=Math.max(atrNow*.42,0.0035*Math.max(...levels.map(x=>x.center).filter(Number.isFinite),1));
   const sorted=[...levels].filter(x=>Number.isFinite(Number(x.center))).sort((a,b)=>a.center-b.center);
