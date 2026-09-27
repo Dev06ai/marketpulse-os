@@ -1365,9 +1365,12 @@ function line(ctx,pts){
 
 function setupCanvas(c,height){
   var r=c.getBoundingClientRect(),dpr=Math.min(window.devicePixelRatio||1,4),W=Math.max(280,Math.round(r.width)),H=Math.max(100,Math.round(height));
-  c.width=Math.round(W*dpr);c.height=Math.round(H*dpr);
-  var ctx=c.getContext("2d",{alpha:false,desynchronized:true,willReadFrequently:false});ctx.setTransform(dpr,0,0,dpr,0,0);ctx.imageSmoothingEnabled=true;
-  return {ctx:ctx,W:W,H:H}
+  var pxW=Math.round(W*dpr),pxH=Math.round(H*dpr);
+  var needsResize=c.width!==pxW||c.height!==pxH;
+  if(needsResize){c.width=pxW;c.height=pxH;}
+  var ctx=c.getContext("2d",{alpha:false,desynchronized:true,willReadFrequently:false});
+  ctx.setTransform(dpr,0,0,dpr,0,0);ctx.imageSmoothingEnabled=true;
+  return {ctx:ctx,W:W,H:H,needsResize:needsResize}
 }
 
 function getChartCandles(){return state.chartCandles&&state.chartCandles.length?state.chartCandles:(state.market&&state.market.candles)||[]}
@@ -1769,7 +1772,9 @@ function renderMarket(){
   $("adaptiveChip").textContent=d.learning&&d.learning.state?("Adaptive: "+String(d.learning.state).toLowerCase()):"Adaptive: background learning";
   $("learnState").textContent=d.learning&&d.learning.state?d.learning.state:"COLLECTING";$("learnN").textContent=d.learning&&d.learning.resolved!=null?d.learning.resolved:0;$("learnWin").textContent=d.learning&&d.learning.winRate!=null?Number(d.learning.winRate).toFixed(1)+"%":"—";$("learnAdj").textContent=d.learning&&d.learning.lastAdjustment!=null?Number(d.learning.lastAdjustment).toFixed(1):"0.0";$("learnPersist").textContent=d.learning&&d.learning.durable?"Postgres cloud":(d.learning?"Local fallback":"—");$("learnNote").textContent=d.learning&&d.learning.state==="ADAPTIVE"?"Adaptive calibration active. Historical outcomes are influencing confluence.":"Collecting resolved outcomes before calibration.";
   state.validation={backtest:d.backtest,validation:d.validation,setupStats:d.setupStats,learning:d.learning};renderLab();renderBrainInsights();
-  recordSignal(a);drawMain();
+  recordSignal(a);
+  // When a custom chart timeframe is pinned, refreshPinnedChart owns the redraw.
+  if(!state.chartPinned)drawMain();
 }
 
 function renderScanner(){
@@ -2749,6 +2754,8 @@ async function loadCore(){
       state.chartInterval=requestedInterval;
       state.chartCandles=d.candles||[];
       markChartTimeframe(requestedInterval);
+    }else if(state.chartInterval===requestedInterval){
+      state.chartCandles=d.candles||state.chartCandles;
     }
     state.bootRetry=0;setStatus("Live market data connected","ok");$("dataState").textContent="Live";renderMarket();
 
@@ -2760,7 +2767,7 @@ async function loadCore(){
       queueSecondaryBoot();
       deferTask(loadFinalDecision,2200);
     }else if(state.activeView==="overview"){
-      deferTask(loadScan,120);deferTask(loadCycle,180);deferTask(loadCoreEnrichment,250);deferTask(loadCoreAnalytics,600);deferTask(refreshPinnedChart,700);deferTask(loadFinalDecision,900);
+      deferTask(loadScan,120);deferTask(loadCycle,180);deferTask(loadCoreEnrichment,250);deferTask(loadCoreAnalytics,600);deferTask(function(){if(state.chartPinned&&state.chartInterval!==requestedInterval)refreshPinnedChart()},700);deferTask(loadFinalDecision,900);
     }
   }catch(e){
     state.bootRetry=Math.min((state.bootRetry||0)+1,5);
