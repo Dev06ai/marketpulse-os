@@ -91,54 +91,59 @@ async function getMarketMetadata(symbols=SYMBOLS){
   if(MARKET_META_CACHE.ts&&Date.now()-MARKET_META_CACHE.ts<MARKET_META_TTL){
     return Object.fromEntries(list.map(s=>[s,MARKET_META_CACHE.data[s]||null]));
   }
-  const ticker=await getBinanceTickerSnapshot(list);
+  const [ticker,coincap,cc]=await Promise.all([
+    getBinanceTickerSnapshot(list),
+    getCoinCapMetadata(list),
+    getCryptoCompareMetadata(list)
+  ]);
   let primary={};
   try{
     const ids=list.map(s=>COINGECKO_IDS[s]).filter(Boolean);
-    const u=new URL('https://api.coingecko.com/api/v3/coins/markets');
-    u.searchParams.set('vs_currency','usd');
-    u.searchParams.set('ids',ids.join(','));
-    u.searchParams.set('order','market_cap_desc');
-    u.searchParams.set('per_page',String(Math.min(250,ids.length)));
-    u.searchParams.set('page','1');
-    u.searchParams.set('sparkline','false');
-    u.searchParams.set('price_change_percentage','24h');
-    const r=await fetch(u,{signal:timeoutSignal(5000),headers:{accept:'application/json'}});
-    if(r.ok){
-      const rows=await r.json();
-      (Array.isArray(rows)?rows:[]).forEach(x=>{
-        const symbol=Object.keys(COINGECKO_IDS).find(k=>COINGECKO_IDS[k]===x.id);
-        if(!symbol)return;
-        primary[symbol]={
-          rank:Number.isFinite(Number(x.market_cap_rank))?Number(x.market_cap_rank):null,
-          marketCap:Number.isFinite(Number(x.market_cap))?Number(x.market_cap):null,
-          volume24h:Number.isFinite(Number(x.total_volume))?Number(x.total_volume):null,
-          geckoPrice:Number.isFinite(Number(x.current_price))?Number(x.current_price):null,
-          change24h:Number.isFinite(Number(x.price_change_percentage_24h))?Number(x.price_change_percentage_24h):null,
-          source:'coingecko',
-          updatedAt:Date.now()
-        };
-      });
+    if(ids.length){
+      const u=new URL('https://api.coingecko.com/api/v3/coins/markets');
+      u.searchParams.set('vs_currency','usd');
+      u.searchParams.set('ids',ids.join(','));
+      u.searchParams.set('order','market_cap_desc');
+      u.searchParams.set('per_page',String(Math.min(250,ids.length)));
+      u.searchParams.set('page','1');
+      u.searchParams.set('sparkline','false');
+      u.searchParams.set('price_change_percentage','24h');
+      const r=await fetch(u,{signal:timeoutSignal(5000),headers:{accept:'application/json'}});
+      if(r.ok){
+        const rows=await r.json();
+        (Array.isArray(rows)?rows:[]).forEach(x=>{
+          const symbol=Object.keys(COINGECKO_IDS).find(k=>COINGECKO_IDS[k]===x.id);
+          if(!symbol)return;
+          primary[symbol]={
+            rank:Number.isFinite(Number(x.market_cap_rank))?Number(x.market_cap_rank):null,
+            marketCap:Number.isFinite(Number(x.market_cap))?Number(x.market_cap):null,
+            volume24h:Number.isFinite(Number(x.total_volume))?Number(x.total_volume):null,
+            geckoPrice:Number.isFinite(Number(x.current_price))?Number(x.current_price):null,
+            change24h:Number.isFinite(Number(x.price_change_percentage_24h))?Number(x.price_change_percentage_24h):null,
+            source:'coingecko',
+            updatedAt:Date.now()
+          };
+        });
+      }
     }
   }catch{}
-  const fallback=await getCoinCapMetadata(list);
   const data={};
   list.forEach(symbol=>{
-    const p=primary[symbol]||{},f=fallback[symbol]||{},t=ticker[symbol]||{};
+    const p=primary[symbol]||{}, cg=coincap[symbol]||{}, ccx=cc[symbol]||{}, t=ticker[symbol]||{};
     data[symbol]={
-      rank:p.rank??f.rank??null,
-      marketCap:p.marketCap??f.marketCap??null,
-      volume24h:t.volume24h??p.volume24h??f.volume24h??null,
-      geckoPrice:t.price??p.geckoPrice??f.geckoPrice??null,
-      change24h:t.change24h??p.change24h??f.change24h??null,
-      source:p.marketCap!=null?'coingecko':(f.marketCap!=null?'coincap':'binance'),
+      rank:p.rank??cg.rank??ccx.rank??null,
+      marketCap:p.marketCap??cg.marketCap??ccx.marketCap??null,
+      // Binance is the freshest volume source; fall back to metadata providers.
+      volume24h:t.volume24h??p.volume24h??cg.volume24h??ccx.volume24h??null,
+      geckoPrice:t.price??p.geckoPrice??cg.geckoPrice??ccx.geckoPrice??null,
+      // The fast Binance ticker should win for 24h movement.
+      change24h:t.change24h??p.change24h??cg.change24h??ccx.change24h??null,
+      source:p.marketCap!=null?'coingecko':(cg.marketCap!=null?'coincap':(ccx.marketCap!=null?'cryptocompare':'binance')),
       updatedAt:Date.now()
     };
   });
-  if(Object.keys(data).length){
-    MARKET_META_CACHE.ts=Date.now();MARKET_META_CACHE.data=data;
-  }
-  return Object.fromEntries(list.map(s=>[s,data[s]||MARKET_META_CACHE.data[s]||null]));
+  MARKET_META_CACHE.ts=Date.now();MARKET_META_CACHE.data=data;
+  return Object.fromEntries(list.map(s=>[s,data[s]||null]));
 }
 const KRAKEN_PAIRS={BTCUSDT:'XBTUSD',ETHUSDT:'ETHUSD',SOLUSDT:'SOLUSD',BNBUSDT:'BNBUSD',XRPUSDT:'XRPUSD',DOGEUSDT:'DOGEUSD',ADAUSDT:'ADAUSD'};
 const CACHE=new Map(); const TTL=45000;
@@ -1723,9 +1728,9 @@ const server=http.createServer(async(req,res)=>{
           const lower=interval==='15m'?null:await Promise.race([klines(symbol,'15m'),new Promise(resolve=>setTimeout(()=>resolve(null),1100))]).catch(()=>null);
           let analysis=analyze(candles,{interval,lower:lower&&lower.length>=220?analyze(lower,{interval:'15m'}):null,higher:higher&&higher.length>=220?analyze(higher,{interval:'4h'}):null,deriv:null});
           try{const learned=await Promise.race([learning.process(symbol,interval,candles,analysis,{observe:false}),new Promise(resolve=>setTimeout(()=>resolve(null),200))]);if(learned?.analysis)analysis=learned.analysis}catch{}
-          return{symbol,label:labels[symbol]||symbol,price:Number.isFinite(Number(analysis.price))?analysis.price:(tick.price??meta.geckoPrice??null),change24h:Number.isFinite(Number(analysis.change24h))?analysis.change24h:(tick.change24h??meta.change24h??null),regime:analysis.regime,side:analysis.side,type:analysis.type,status:analysis.status,score:analysis.score,bias:analysis.bias,probabilityLabel:analysis.probabilityLabel,structure:analysis.structure,market:meta,derivatives:null};
+          return{symbol,label:labels[symbol]||symbol,price:Number.isFinite(Number(tick.price))?tick.price:(Number.isFinite(Number(analysis.price))?analysis.price:(meta.geckoPrice??null)),change24h:Number.isFinite(Number(tick.change24h))?tick.change24h:(Number.isFinite(Number(analysis.change24h))?analysis.change24h:(meta.change24h??null)),regime:analysis.regime,side:analysis.side,type:analysis.type,status:analysis.status,score:analysis.score,bias:analysis.bias,probabilityLabel:analysis.probabilityLabel,structure:analysis.structure,market:meta,derivatives:null};
         }catch(e){
-          return{symbol,label:labels[symbol]||symbol,price:tick.price??meta.geckoPrice??null,change24h:tick.change24h??meta.change24h??null,market:meta,status:'WAITING',side:'WAIT',score:0,error:e.message};
+          return{symbol,label:labels[symbol]||symbol,price:Number.isFinite(Number(tick.price))?tick.price:(meta.geckoPrice??null),change24h:Number.isFinite(Number(tick.change24h))?tick.change24h:(meta.change24h??null),market:meta,status:'WAITING',side:'WAIT',score:0,error:e.message};
         }
       };
       const rows=await Promise.all(SYMBOLS.map(scanOne));
