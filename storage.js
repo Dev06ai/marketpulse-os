@@ -527,6 +527,18 @@ async function deleteSession(tokenHash){
   if(mode==="postgres"){await pool.query("DELETE FROM marketpulse_sessions WHERE token_hash=$1",[tokenHash]);return}
   const all=readLocal();if(all.__sessions__?.[tokenHash]){delete all.__sessions__[tokenHash];writeLocal(all)}
 }
+async function extendSession(tokenHash,expiresAt){
+  await init();
+  if(mode==="postgres"){
+    await pool.query("UPDATE marketpulse_sessions SET expires_at=$2,last_seen_at=NOW() WHERE token_hash=$1",[tokenHash,expiresAt]);
+    return;
+  }
+  const all=readLocal(),x=all.__sessions__?.[tokenHash];if(!x)return;
+  x.expiresAt=expiresAt;
+  x.lastSeenAt=new Date().toISOString();
+  const u=all.__users__?.[x.userId];if(u)u.lastSeenAt=new Date().toISOString();
+  writeLocal(all);
+}
 async function touchSessionActivity(tokenHash){
   await init();
   const now=new Date();
@@ -814,4 +826,4 @@ async function restoreAdminConfig(snapshot){
   return true;
 }
 
-module.exports={init,health,get,save,clear,getLearningState,saveLearningState,recordLearningPrediction,getOpenLearningPredictions,resolveLearningPrediction,saveSignalDNA,getSignalDNA,clearSignalDNA,getPhase4State,savePhase4State,getExecutionState,saveExecutionState,getPhase6State,savePhase6State,createUser,findUserByEmail,getUserById,touchUserLogin,recordLoginFailure,resetLoginFailures,savePassword,saveSession,getSession,touchSessionActivity,revokeUserSessions,deleteSession,listUsers,userStats,moderateUser,getAccountMemory,saveAccountMemory,status,getAdminConfig,saveAdminConfig,getFeatureFlags,saveFeatureFlag,recordAdminAudit,listAdminAudit,recordSecurityEvent,listSecurityEvents,recordUsageEvent,adminAnalytics,listBroadcasts,createBroadcast,setBroadcastActive,getActiveBroadcasts,createSupportTicket,recentUsageEvents,listSupportTickets,replySupportTicket,saveAdminSnapshot,listAdminSnapshots,getAdminSnapshot,restoreAdminConfig};
+module.exports={init,health,get,save,clear,getLearningState,saveLearningState,recordLearningPrediction,getOpenLearningPredictions,resolveLearningPrediction,saveSignalDNA,getSignalDNA,clearSignalDNA,getPhase4State,savePhase4State,getExecutionState,saveExecutionState,getPhase6State,savePhase6State,createUser,findUserByEmail,getUserById,touchUserLogin,recordLoginFailure,resetLoginFailures,savePassword,saveSession,getSession,extendSession,touchSessionActivity,revokeUserSessions,deleteSession,listUsers,userStats,moderateUser,getAccountMemory,saveAccountMemory,status,getAdminConfig,saveAdminConfig,getFeatureFlags,saveFeatureFlag,recordAdminAudit,listAdminAudit,recordSecurityEvent,listSecurityEvents,recordUsageEvent,adminAnalytics,listBroadcasts,createBroadcast,setBroadcastActive,getActiveBroadcasts,createSupportTicket,recentUsageEvents,listSupportTickets,replySupportTicket,saveAdminSnapshot,listAdminSnapshots,getAdminSnapshot,restoreAdminConfig};
