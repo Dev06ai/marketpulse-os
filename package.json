@@ -5,7 +5,8 @@
   "type": "commonjs",
   "scripts": {
     "start": "node server.js",
-    "test": "node validation-selftest.js"
+    "test": "node validation-selftest.js",
+    "worker": "node marketpulse-worker.js"
   },
   "engines": {
     "node": ">=20"
