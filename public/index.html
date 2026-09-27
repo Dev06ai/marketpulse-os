@@ -2760,7 +2760,7 @@ async function loadFinalDecision(){
 async function loadCore(){
   if(state.busy)return;
   if(state.bootRetryTimer){clearTimeout(state.bootRetryTimer);state.bootRetryTimer=null}
-  state.busy=true;setStatus("Loading BTC market data…");$("dataState").textContent="Connecting";$("symbol").value=state.symbol;
+  state.busy=true;var hasMarket=Boolean(state.market&&state.market.analysis);if(!hasMarket){setStatus("Loading BTC market data…");$("dataState").textContent="Connecting";}else{$("dataState").textContent="Live";}$("symbol").value=state.symbol;
   const requestedSymbol=state.symbol,requestedInterval=state.interval;
   if(!state.finalDecision){
     suppressFinalSignal("Waiting for the first confirmed final decision.");
@@ -2781,7 +2781,7 @@ async function loadCore(){
     }else if(state.chartInterval===requestedInterval){
       state.chartCandles=d.candles||state.chartCandles;
     }
-    state.bootRetry=0;var sb=$("statusBar");if(sb&&sb.classList.contains("warn"))setStatus("Live market data connected","ok");$("dataState").textContent="Live";renderMarket();
+    state.bootRetry=0;var sb=$("statusBar");if(sb&&sb.textContent!=="Live market data connected")setStatus("Live market data connected","ok");$("dataState").textContent="Live";renderMarket();
 
     deferTask(loadCoreEnrichment,150);
     deferTask(loadDataFabric,800);
@@ -2798,7 +2798,7 @@ async function loadCore(){
       // Background refresh failure: keep the last known-good state and wait for
       // the normal 12-second refresh cycle. No yellow warning and no signal reset.
       state.bootRetry=0;
-      $("dataState").textContent="Live · last good snapshot";
+      $("dataState").textContent="Live";
       return;
     }
     state.bootRetry=Math.min((state.bootRetry||0)+1,5);
