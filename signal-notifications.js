@@ -123,6 +123,32 @@ async function notifyAdminSignal(storage,context){
   }
 }
 
+async function sendAdminTest(storage){
+  if(!pushConfigured())return {sent:false,configured:false,delivered:0,expired:0};
+  const subs=await storage.listAdminPushSubscriptions(50);
+  let delivered=0,expired=0;
+  for(const row of subs){
+    try{
+      await webpush.sendNotification(row.subscription,JSON.stringify({
+        type:"MARKETPULSE_TEST",
+        title:"MarketPulse · Push test",
+        body:"Admin BTC signal notifications are connected.",
+        tag:"marketpulse-push-test",
+        renotify:true,
+        data:{url:"/?view=admin"}
+      }),{TTL:300,urgency:"high"});
+      delivered++;
+    }catch(error){
+      const status=Number(error?.statusCode||error?.status||0);
+      if(status===404||status===410){
+        await storage.deleteAdminPushSubscription(row.endpoint).catch(()=>{});
+        expired++;
+      }
+    }
+  }
+  return {sent:delivered>0,configured:true,delivered,expired,subscriptions:subs.length};
+}
+
 function config(){
   return {
     enabled:ENABLED,
@@ -134,4 +160,4 @@ function config(){
   };
 }
 
-module.exports={buildSignalAlert,notifyAdminSignal,config,pushConfigured,normaliseSetup,signalStyle};
+module.exports={buildSignalAlert,notifyAdminSignal,sendAdminTest,config,pushConfigured,normaliseSetup,signalStyle};
