@@ -5,6 +5,7 @@ const {detectStrategySetups}=require("./strategy-setups");
 const {buildReactionMap}=require("./reaction-map");
 const {buildAdvancedContext,advancedConfluence}=require("./advanced-price-action-pack");
 const {buildKnowledgeContext}=require("./mindpillar-knowledge");
+const phase14=require("./phase14-signal-intelligence");
 const {buildElliottContext,elliottConfluence}=require("./advanced-elliott-wave");
 const finiteOr=(v,fallback)=>Number.isFinite(v)?v:fallback;
 
@@ -185,8 +186,8 @@ function analyze(c,ctx={}){
   }
 
   let type="NO TRADE",side="WAIT",bias="Neutral";
-  const reasons=[];
-  const contributors=[];
+  let reasons=[];
+  let contributors=[];
   const reactionActive=reactionMap?.active||null;
   const reactionConfirmed=Boolean(
     reactionActive &&
@@ -244,7 +245,7 @@ function analyze(c,ctx={}){
   });
 
   // Confluence model — deliberately transparent rather than pretending to be a win probability.
-  const components=[
+  let components=[
     {name:"Regime",value:(regime==="UPTREND"||regime==="DOWNTREND")?16:6},
     {name:"Trend strength",value:adxNow>=25?11:adxNow>=18?7:2},
     {name:"Momentum",value:(side==="LONG"&&rsiNow>=50&&rsiNow<=68)||(side==="SHORT"&&rsiNow>=32&&rsiNow<=50)?11:4},
@@ -372,6 +373,35 @@ function analyze(c,ctx={}){
   else if(side==="LONG")directionalLean="LEAN LONG";
   else if(side==="SHORT")directionalLean="LEAN SHORT";
 
+  let probabilityLabel=score>=80?"HIGH CONFLUENCE":score>=68?"MODERATE-HIGH CONFLUENCE":score>=55?"EARLY / WATCH":"LOW CONFLUENCE";
+  let phase14Meta=null;
+  try{
+    const provisional={
+      side,status,score,rr,regime,type,bias,directionalLean,
+      strategyFamily:strategyReady?String(ms?.kind||"UNKNOWN"):"NONE",
+      mtf:{lower:mtf15,higher:mtf4},
+      components,reasons,contributors,
+      marketStructure,reactionMap,
+      advancedPriceAction:advancedContext,advancedConfluence:advancedPA,
+      elliottWave:elliottContext,elliottConfluence:elliottPA,
+      derivatives:deriv,
+      knowledgeContext
+    };
+    const enriched=phase14.enrichAnalysis(provisional,{
+      knowledgeContext,
+      derivatives:deriv||{},
+      higher:ctx.higher||{regime:mtf4},
+      lower:ctx.lower||{regime:mtf15},
+      adaptiveProfile:ctx.phase14Profile||null
+    });
+    score=enriched.score;
+    status=enriched.status;
+    components=enriched.components;
+    reasons=enriched.reasons;
+    contributors=enriched.contributors;
+    probabilityLabel=enriched.probabilityLabel;
+    phase14Meta=enriched.phase14||null;
+  }catch{}
   const thesis=[];
   if(status==="READY"){
     thesis.push(directionalLean+" — multiple timeframes and core momentum/structure inputs are aligned.");
@@ -411,7 +441,8 @@ function analyze(c,ctx={}){
     ?"Bearish thesis weakens if the 15M/4H structure flips and price reclaims the trigger zone."
     :"A directional thesis becomes more credible after a range break plus volume confirmation.";
 
-  const probabilityLabel=score>=80?"HIGH CONFLUENCE":score>=68?"MODERATE-HIGH CONFLUENCE":score>=55?"EARLY / WATCH":"LOW CONFLUENCE";
+  // Probability label is finalized by Phase 14 before the return payload.
+
 
   const dayBars=Math.max(1,Math.round(1440/(({"15m":15,"1h":60,"4h":240,"1d":1440})[ctx.interval]||60)));
   const lookback=Math.min(i,dayBars);
@@ -426,6 +457,7 @@ function analyze(c,ctx={}){
     derivatives:{available:!!deriv,oi:currentOi,cvdState,positioning,oiChangePct,cvdDelta,cvdRatio:deriv?.cvdRatio??null,flowPriceChangePct,tradeCount:deriv?.tradeCount??0,fundingRate:deriv?.fundingRate??null,longPercent,shortPercent,longShortRatio,liquidationBias:liquidationBias&&liquidationBias!=="UNKNOWN"?liquidationBias:"NOT AVAILABLE",liquidationTotal,orderBookImbalance,micropriceBias,spreadBps,takerImbalance,depthNotional:flow.depth,provider:deriv?.provider??null,errors:deriv?.errors??[]},
     thesis:thesis.join(" "),thesisParts:thesis,
     knowledgeContext,
+    phase14:phase14Meta,
     primaryScenario,alternateScenario,
     mtf:{lower:mtf15,higher:mtf4},stop,tp1,tp2,entryLow:el,entryHigh:eh,rr,
     rangeHigh,rangeLow,rangePosition:rangePos,priorHigh,priorLow,reactionMap,reactionConfirmed,advancedPriceAction:advancedContext,advancedConfluence:advancedPA,elliottWave:elliottContext,elliottConfluence:elliottPA,updatedAt:Date.now()

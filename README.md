@@ -106,3 +106,14 @@ The validation layer now sits after the Phase 9/10 engine and before any live-re
 - The execution layer remains disabled by the decision engine. A `SIGNAL_ELIGIBLE` result means the signal passed the configured validation/data/risk gates for decision support; it is not a guarantee of profit and does not turn on automatic trading.
 
 The current validation payload is available from `GET /api/validation`, while `GET /api/decision` includes the validation summary and deployment gate used by the Decision Center.
+
+
+## Phase 14 — Signal Intelligence (14.0.0)
+- Adds setup-specific knowledge profiles for SFP, NPOC, D-Line, breakout/retest, order blocks, Elliott context, trend continuation and range reversion.
+- Converts the MindPillar knowledge core into a deterministic knowledge-alignment and conflict-resolution layer.
+- Adds regime-aware context, bounded historical calibration from resolved final-gated outcomes, and a setup/regime performance profile.
+- Phase 11/12 walk-forward validation now exposes setup and regime outcome buckets for Phase 14 diagnostics.
+- Final-gated learning records now retain setup-key, knowledge-context and Phase 14 evidence for later calibration.
+- Owner-only /api/phase14, /api/phase14/validation and /api/phase14/calibrate endpoints expose adaptive-profile and validation diagnostics.
+- Phase 14 never bypasses the existing data-quality, prop-firm, validation or signal-stability gates.
+- Historical calibration is bounded and only uses resolved final-gated observations; no future candles are used to construct historical signal windows.

@@ -302,6 +302,24 @@ async function recordLearningPrediction(pred){
   rows.push(Object.assign({},p,{outcome:null,resultR:null,createdAt:new Date().toISOString()}));
   all.__learning_predictions__=rows.slice(-5000);writeLocal(all);return {recorded:true};
 }
+async function getLearningPredictions({symbol=null,interval=null,limit=2000,resolvedOnly=true}={}){
+  await init();
+  const lim=Math.max(1,Math.min(Number(limit)||2000,10000));
+  if(mode==="postgres"){
+    const params=[];const where=[];
+    if(symbol){params.push(symbol);where.push(`symbol=${params.length}`)}
+    if(interval){params.push(interval);where.push(`interval=${params.length}`)}
+    if(resolvedOnly)where.push("outcome IS NOT NULL");
+    params.push(lim);
+    const q=`SELECT fingerprint,symbol,interval,candle_ts,side,type,status,score,price,stop,target,regime,features,horizon_bars,outcome,result_r,created_at,resolved_at
+      FROM marketpulse_learning_predictions ${where.length?"WHERE "+where.join(" AND "):""}
+      ORDER BY candle_ts DESC LIMIT ${params.length}`;
+    const r=await pool.query(q,params);return r.rows;
+  }
+  const all=readLocal();let rows=Array.isArray(all.__learning_predictions__)?all.__learning_predictions__:[ ];
+  rows=rows.filter(x=>(!symbol||x.symbol===symbol)&&(!interval||x.interval===interval)&&(resolvedOnly?Boolean(x.outcome):true));
+  return rows.sort((a,b)=>Number(b.candleTs||0)-Number(a.candleTs||0)).slice(0,lim);
+}
 async function getOpenLearningPredictions(symbol,interval,limit=200){
   await init();
   if(mode==="postgres"){
@@ -826,4 +844,4 @@ async function restoreAdminConfig(snapshot){
   return true;
 }
 
-module.exports={init,health,get,save,clear,getLearningState,saveLearningState,recordLearningPrediction,getOpenLearningPredictions,resolveLearningPrediction,saveSignalDNA,getSignalDNA,clearSignalDNA,getPhase4State,savePhase4State,getExecutionState,saveExecutionState,getPhase6State,savePhase6State,createUser,findUserByEmail,getUserById,touchUserLogin,recordLoginFailure,resetLoginFailures,savePassword,saveSession,getSession,extendSession,touchSessionActivity,revokeUserSessions,deleteSession,listUsers,userStats,moderateUser,getAccountMemory,saveAccountMemory,status,getAdminConfig,saveAdminConfig,getFeatureFlags,saveFeatureFlag,recordAdminAudit,listAdminAudit,recordSecurityEvent,listSecurityEvents,recordUsageEvent,adminAnalytics,listBroadcasts,createBroadcast,setBroadcastActive,getActiveBroadcasts,createSupportTicket,recentUsageEvents,listSupportTickets,replySupportTicket,saveAdminSnapshot,listAdminSnapshots,getAdminSnapshot,restoreAdminConfig};
+module.exports={init,health,get,save,clear,getLearningState,saveLearningState,recordLearningPrediction,getOpenLearningPredictions,getLearningPredictions,resolveLearningPrediction,saveSignalDNA,getSignalDNA,clearSignalDNA,getPhase4State,savePhase4State,getExecutionState,saveExecutionState,getPhase6State,savePhase6State,createUser,findUserByEmail,getUserById,touchUserLogin,recordLoginFailure,resetLoginFailures,savePassword,saveSession,getSession,extendSession,touchSessionActivity,revokeUserSessions,deleteSession,listUsers,userStats,moderateUser,getAccountMemory,saveAccountMemory,status,getAdminConfig,saveAdminConfig,getFeatureFlags,saveFeatureFlag,recordAdminAudit,listAdminAudit,recordSecurityEvent,listSecurityEvents,recordUsageEvent,adminAnalytics,listBroadcasts,createBroadcast,setBroadcastActive,getActiveBroadcasts,createSupportTicket,recentUsageEvents,listSupportTickets,replySupportTicket,saveAdminSnapshot,listAdminSnapshots,getAdminSnapshot,restoreAdminConfig};

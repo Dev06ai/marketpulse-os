@@ -354,7 +354,10 @@ async function observeFinalDecision(symbol,interval,candles,decision){
     mtf:decision.analysis?.mtf,
     components:ev.components||[],
     derivatives:decision.derivatives||{},
-    reactionMap:decision.reactionMap||ev.reactionMap||null
+    reactionMap:decision.reactionMap||ev.reactionMap||null,
+    setupKey:String(decision.phase14?.intelligence?.setupKey||m.type||"GENERIC").toUpperCase(),
+    knowledgeContext:decision.analysis?.knowledgeContext||null,
+    phase14:decision.phase14||null
   };
   const recorded=await storage.recordLearningPrediction({
     fingerprint,symbol,interval,candleTs,side,type,status:"READY",
