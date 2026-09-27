@@ -3778,6 +3778,12 @@ function initAccountUI(){
   syncRoleVisibility();
   loadAuth();loadPublicConfig();
   setInterval(sendPresence,30000);
+  // Keep the owner login persistent while the admin workspace is in use.
+  setInterval(function(){
+    if(state.account?.isAdmin){
+      fetch("/api/auth/me",{method:"GET",cache:"no-store",credentials:"same-origin"}).catch(()=>{});
+    }
+  },300000);
   var adminRun=$("adminRunCheck"),adminExec=$("adminOpenExecution");
   if($("adminUsersRefresh"))$("adminUsersRefresh").addEventListener("click",loadAdminUsers);
   if($("adminUsersSearch"))$("adminUsersSearch").addEventListener("input",adminRenderUsers);
