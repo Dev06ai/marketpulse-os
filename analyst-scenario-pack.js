@@ -340,8 +340,66 @@ const CURRENT_VISUAL_PACK={
   rule:"These chart annotations are conditional scenario context. MarketPulse must still require live reaction, market structure, order flow, data quality and risk gates before a directional signal."
 };
 
+
+
+/* Dewald Thiart BTC Visual Reference Pack — 2026-09-27
+   Source: three supplied TradingView screenshots. These are time-bound analyst annotations, not guaranteed outcomes. */
+const CURRENT_VISUAL_PACK_20260927={
+  id:"dewald-thiart-btc-visual-levels-2026-09-27",
+  source:"Dewald Thiart — supplied BTC chart screenshots",
+  symbol:"BTCUSDT",
+  asOf:"2026-09-27T17:26:00Z",
+  validHours:24,
+  timeframeContext:["1h","16m","2h","8h","1d","1w"],
+  higherTimeframe:{
+    thesis:"The supplied charts show two conditional paths: a 1H ABC-down/WXY-style correction with a Fibonacci downside ladder, and a local bullish nested-1,2 interpretation with a clearly marked invalidation band.",
+    bearishPath:"ABC Down / corrective continuation with C projected near the 1.0 level around 80,608, followed by lower Fibonacci extension checkpoints.",
+    bullishPath:"Local bullish option with nested 1,2s; the bullish interpretation is invalidated by sustained acceptance through the marked 83.99K–83.78K area.",
+    weeklyReference:"Weekly nPOC is marked near 87,783.9; the higher red nPOC is near 87,996.6."
+  },
+  snapshotPrices:[{at:"2026-09-27T17:20:00Z",price:84401.4,sourceLabel:"16m chart snapshot"},{at:"2026-09-27T17:26:00Z",price:84717.7,sourceLabel:"16m chart snapshot"}],
+  levels:[
+    {id:"DT_1H_FIB_0",label:"1H Fibonacci 0",price:85151.0,kind:"RESISTANCE",source:"1H ABC-down chart"},
+    {id:"DT_RANGE_POC",label:"Range POC",price:85820.7,kind:"RESISTANCE",source:"1H / 2H profile"},
+    {id:"DT_WEEKLY_NPOC",label:"Weekly nPOC",price:87783.9,kind:"RESISTANCE",source:"2H/weekly profile"},
+    {id:"DT_NPOC_HIGH",label:"Higher nPOC",price:87996.6,kind:"RESISTANCE",source:"1H/2H profile"},
+    {id:"DT_DAILY_NPOC",label:"Daily nPOC",price:84056.0,kind:"SUPPORT",source:"Local bullish chart"},
+    {id:"DT_DAILY_OB",label:"Daily OB",price:81143.9,kind:"SUPPORT",source:"2H/1H profile chart"},
+    {id:"DT_NPOC_LOW",label:"Lower nPOC",price:80463.9,kind:"SUPPORT",source:"1H/2H profile"},
+    {id:"DT_1H_FIB_0618",label:"1H Fibonacci 0.618",price:82343.5,kind:"SUPPORT",source:"1H ABC-down chart"},
+    {id:"DT_1H_FIB_0786",label:"1H Fibonacci 0.786",price:81680.3,kind:"SUPPORT",source:"1H ABC-down chart"},
+    {id:"DT_1H_FIB_1",label:"1H Fibonacci 1.0 / C projection",price:80608.0,kind:"SUPPORT",source:"1H ABC-down chart"},
+    {id:"DT_1H_FIB_1236",label:"1H Fibonacci 1.236 extension",price:79536.0,kind:"SUPPORT",source:"1H ABC-down chart"},
+    {id:"DT_1H_FIB_1382",label:"1H Fibonacci 1.382 extension",price:78872.8,kind:"SUPPORT",source:"1H ABC-down chart"},
+    {id:"DT_1H_FIB_1618",label:"1H Fibonacci 1.618 extension",price:77800.7,kind:"SUPPORT",source:"1H ABC-down chart"}
+  ],
+  zones:[
+    {id:"DT_R1_2H_OB",label:"2H OB / Range POC confluence",low:85600,high:85950,kind:"RESISTANCE",sources:["2H OB","Range POC 85,820.7"],primaryAction:"SHORT",primaryTrigger:"Sweep/rejection from the 2H OB with a bearish close and seller-flow confirmation.",alternateAction:"LONG",alternateTrigger:"Clean acceptance above the zone, then a high-volume retest/hold.",invalidationText:"Sustained acceptance above the zone."},
+    {id:"DT_R2_WEEKLY_NPOC",label:"Weekly nPOC / higher nPOC resistance",low:87750,high:88025,kind:"RESISTANCE",sources:["Weekly nPOC 87,783.9","Higher nPOC 87,996.6"],primaryAction:"SHORT",primaryTrigger:"Bearish reaction after reaching the higher-timeframe value area.",alternateAction:"LONG",alternateTrigger:"Impulsive breakout and sustained acceptance above the higher nPOC.",invalidationText:"Sustained acceptance above the higher nPOC."},
+    {id:"DT_LOCAL_BULL_PIVOT",label:"Local bullish pivot band",low:84056.0,high:84401.4,kind:"SUPPORT",sources:["Daily nPOC 84,056.0","16m snapshot reference 84,401.4","Nested 1,2 local bullish option"],primaryAction:"LONG",primaryTrigger:"Bullish reaction/reclaim from the pivot band with constructive flow.",alternateAction:"SHORT",alternateTrigger:"Acceptance below the band followed by a failed reclaim.",invalidationText:"Loss of the lower invalidation band below this pivot."},
+    {id:"DT_LOCAL_BULL_INVALIDATION",label:"Local bullish invalidation band",low:83778.4,high:83986.1,kind:"SUPPORT",sources:["Chart-marked invalidation","Daily nPOC neighborhood"],primaryAction:"LONG",primaryTrigger:"Reclaim and hold after a liquidity sweep if the local bullish scenario is otherwise confirmed.",alternateAction:"SHORT",alternateTrigger:"Clean close below the band plus failed reclaim and downside-flow confirmation.",invalidationText:"Sustained acceptance below the band invalidates the local bullish scenario."},
+    {id:"DT_FIB_0618",label:"ABC-down 0.618 support checkpoint",low:82295,high:82395,kind:"SUPPORT",sources:["1H Fibonacci 0.618 = 82,343.5"],primaryAction:"LONG",primaryTrigger:"Confirmed bullish reaction/reclaim.",alternateAction:"SHORT",alternateTrigger:"Breakdown and failed reclaim.",invalidationText:"Acceptance below the level."},
+    {id:"DT_FIB_0786",label:"ABC-down 0.786 support checkpoint",low:81635,high:81725,kind:"SUPPORT",sources:["1H Fibonacci 0.786 = 81,680.3"],primaryAction:"LONG",primaryTrigger:"Confirmed bullish reaction/reclaim.",alternateAction:"SHORT",alternateTrigger:"Breakdown and failed reclaim.",invalidationText:"Acceptance below the level."},
+    {id:"DT_DAILY_OB_ZONE",label:"Daily OB support",low:81090,high:81200,kind:"SUPPORT",sources:["Daily OB = 81,143.9"],primaryAction:"LONG",primaryTrigger:"Strong reaction and reclaim.",alternateAction:"SHORT",alternateTrigger:"Breakdown and failed retest.",invalidationText:"Sustained acceptance below the Daily OB."},
+    {id:"DT_C_TARGET",label:"ABC-down C / 1.0 checkpoint",low:80550,high:80670,kind:"SUPPORT",sources:["1H Fibonacci 1.0 = 80,608.0","ABC Down C label"],primaryAction:"LONG",primaryTrigger:"Downside completes into the C checkpoint and confirms a bullish reaction.",alternateAction:"SHORT",alternateTrigger:"Breakdown with failed reclaim.",invalidationText:"Acceptance below the checkpoint."},
+    {id:"DT_EXT_1236",label:"1.236 extension checkpoint",low:79490,high:79585,kind:"SUPPORT",sources:["1.236 = 79,536.0"],primaryAction:"LONG",primaryTrigger:"Confirmed reaction.",alternateAction:"SHORT",alternateTrigger:"Breakdown/retest failure.",invalidationText:"Acceptance below the extension."},
+    {id:"DT_EXT_1382",label:"1.382 extension checkpoint",low:78830,high:78915,kind:"SUPPORT",sources:["1.382 = 78,872.8"],primaryAction:"LONG",primaryTrigger:"Confirmed reaction.",alternateAction:"SHORT",alternateTrigger:"Breakdown/retest failure.",invalidationText:"Acceptance below the extension."},
+    {id:"DT_EXT_1618",label:"1.618 extension checkpoint",low:77755,high:77845,kind:"SUPPORT",sources:["1.618 = 77,800.7"],primaryAction:"LONG",primaryTrigger:"Confirmed reaction.",alternateAction:"SHORT",alternateTrigger:"Breakdown/retest failure.",invalidationText:"Acceptance below the extension."}
+  ],
+  scenarios:[
+    {id:"DT_ABC_DOWN",bias:"BEARISH",thesis:"The 1H chart explicitly labels an ABC Down structure with B near the 85.15K region and C projected toward 80.608K; the lower Fibonacci extensions are continuation checkpoints, not assumptions that every level must break.",confirmation:["rejection from the upper resistance/POC area","failure of the local bullish pivot","bearish body-close / failed retest","seller-side CVD/OI/order-flow confirmation"],invalidation:["clean acceptance back above the resistance confluence","local bullish structure reclaims and holds the marked invalidation band"],preferredZones:["DT_R1_2H_OB","DT_FIB_0618","DT_FIB_0786","DT_C_TARGET","DT_EXT_1236","DT_EXT_1382","DT_EXT_1618"]},
+    {id:"DT_LOCAL_BULL_NESTED_12",bias:"BULLISH",thesis:"The 16m chart marks a local bullish option with nested 1,2s and a clear invalidation; the bullish interpretation requires the local pivot to hold and must be confirmed by current structure and flow.",confirmation:["support holds around the local pivot band","nested 1,2 structure remains intact","acceptance above 85,151 followed by the 85,820.7 Range POC","positive CVD/OI/order-book confirmation"],invalidation:["sustained acceptance below the 83,986.1–83,778.4 invalidation band"],preferredZones:["DT_LOCAL_BULL_PIVOT","DT_LOCAL_BULL_INVALIDATION","DT_R1_2H_OB","DT_R2_WEEKLY_NPOC"]}
+  ],
+  chartNotes:[
+    "Screenshot 4002/4004: 1H ABC Down with 0 at 85,151.0, 0.618 at 82,343.5, 0.786 at 81,680.3, 1.0 at 80,608.0, then 1.236/1.382/1.618 at 79,536.0/78,872.8/77,800.7.",
+    "Screenshot 4003/4004: local bullish option, nested 1,2s and a chart-marked invalidation band around 83.99K–83.78K; projected bullish path climbs through the Range POC and higher nPOCs.",
+    "Screenshot 4004/4004: local support/resistance map with 2H OB near the Range POC, Daily OB at 81,143.9, Daily nPOC at 84,056.0 and lower nPOC at 80,463.9."
+  ],
+  rule:"Use these levels and scenarios as time-bound conditional reference context. Never promote them directly to a live trade signal without current MarketPulse structure, reaction, derivatives, data-quality and prop-firm safety gates."
+};
+
 function getActiveAnalystPack(now=Date.now()){
-  const packs=[PACK,CURRENT_VISUAL_PACK];
+  const packs=[PACK,CURRENT_VISUAL_PACK,CURRENT_VISUAL_PACK_20260927];
   const activePacks=packs.map(p=>{
     const asOf=Date.parse(p.asOf);
     const expiresAt=asOf+p.validHours*3600000;
