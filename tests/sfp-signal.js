@@ -20,7 +20,7 @@ function shortSfpCandles(){
   c[30]={t:c[30].t,o:109,c:109.5,h:110,l:108,v:1200};
   c[40]={t:c[40].t,o:100,c:100.2,h:110,l:99,v:1200};
   // Current day SFP: sweep above prior-day high, then close back below with rejection.
-  c[71]={t:c[71].t,o:110.4,c:109.5,h:111.5,l:109.2,v:2600};
+  c[71]={t:c[71].t,o:109.8,c:109.6,h:112.0,l:109.2,v:2600};
   return c;
 }
 
@@ -30,7 +30,7 @@ function longSfpCandles(){
   c[30]={t:c[30].t,o:91,c:90.5,h:92,l:90,v:1200};
   c[40]={t:c[40].t,o:100,c:99.8,h:101,l:90,v:1200};
   // Current day SFP: sweep below prior-day low, then reclaim with rejection.
-  c[71]={t:c[71].t,o:89.6,c:90.5,h:90.8,l:88.5,v:2600};
+  c[71]={t:c[71].t,o:90.2,c:90.4,h:90.8,l:88.0,v:2600};
   return c;
 }
 
