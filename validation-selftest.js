@@ -105,7 +105,7 @@ function strategyCandles(){
 const npoc=detectStrategySetups(strategyCandles(),{interval:"1h"});
 assert(npoc.setup?.kind==="NPOC","Naked POC detector did not identify the synthetic SFP.");
 assert(npoc.setup?.side==="SHORT","Bearish naked POC SFP must map to SHORT.");
-assert(String(npoc.setup?.reason||"").includes("Naked DAILY POC"),"Naked POC thesis reason missing.");
+assert(/^Naked (DAILY|WEEKLY) POC/.test(String(npoc.setup?.reason||"")),"Naked POC thesis reason missing.");
 
 function dlineCandles(){
   const out=[],start=Date.UTC(2026,8,25,0,0,0),m=15*60000;
