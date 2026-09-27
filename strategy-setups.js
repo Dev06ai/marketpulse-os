@@ -111,47 +111,141 @@ function lineAt(a,b,x){
   return a.p+(b.p-a.p)*(x-a.i)/(b.i-a.i);
 }
 
-function detectDLine(c,interval,higher){
-  if(interval!=="15m"||c.length<80||!higher)return null;
-  const i=c.length-1;
-  const highs=[],lows=[];
-  for(let j=Math.max(3,i-50);j<i-2;j++){
-    if(pivotHigh(c,j))highs.push({i:j,p:c[j].h});
-    if(pivotLow(c,j))lows.push({i:j,p:c[j].l});
-  }
-  const a=Math.max(i-50,1);
-  const aa=c.slice(Math.max(0,i-30));
-  const avgV=aa.length?aa.reduce((s,x)=>s+x.v,0)/aa.length:0;
-  const x=c[i],prev=c[i-1],atrNow=Math.max(atr(c)[i]||x.c*.005,1),buf=Math.max(atrNow*.08,x.c*.00025);
-  const hReg=String(higher.regime||"UNKNOWN").toUpperCase();
+function trendlineAngleDeg(p1,p2,atrNow){
+  const bars=Math.max(1,Math.abs(p2.i-p1.i));
+  const slope=Math.abs((p2.p-p1.p)/bars);
+  const normalized=slope/Math.max(Number(atrNow)||1,1e-9);
+  return Math.atan(normalized)*180/Math.PI;
+}
 
-  const rh=highs.slice(-3);
-  if(rh.length>=2){
-    const p1=rh[rh.length-2],p2=rh[rh.length-1];
-    if(p2.p<p1.p&&p2.i>p1.i){
-      const linePrev=lineAt(p1,p2,i-1),lineNow=lineAt(p1,p2,i);
-      const breakout=Number.isFinite(linePrev)&&Number.isFinite(lineNow)&&prev.c<=linePrev+buf&&x.c>lineNow+buf&&x.c>x.o&&(avgV>0?x.v>=avgV*.85:true);
-      if(breakout&&hReg==="UPTREND"){
-        return {kind:"D_LINE_BREAKOUT",side:"LONG",direction:"BULLISH",score:92,timeframe:"15M/8H",lineType:"DESCENDING_RESISTANCE",
-          linePrev,lineNow,pivot1:p1,pivot2:p2,reason:"D-Line breakout: price broke the descending 15M resistance line with the 8H structure aligned bullish."};
+function chooseTrendLine(points,direction,c,i,atrNow){
+  if(!Array.isArray(points)||points.length<2)return null;
+  const pool=points.slice(-8);
+  const tol=Math.max(atrNow*.28,c[i].c*.0009);
+  let best=null;
+  for(let a=0;a<pool.length-1;a++){
+    for(let b=a+1;b<pool.length;b++){
+      const p1=pool[a],p2=pool[b];
+      if(p2.i<=p1.i)continue;
+      if(direction==="DOWN"&&!(p2.p<p1.p))continue;
+      if(direction==="UP"&&!(p2.p>p1.p))continue;
+      const touches=pool.filter(p=>{
+        const line=lineAt(p1,p2,p.i);
+        return Number.isFinite(line)&&Math.abs(p.p-line)<=tol;
+      });
+      if(touches.length<2)continue;
+      const angle=trendlineAngleDeg(p1,p2,atrNow);
+      const angleScore=Math.max(0,1-Math.abs(angle-45)/45);
+      const recency=p2.i/Math.max(i,1);
+      const value=touches.length*20+angleScore*15+recency*10;
+      if(!best||value>best.value){
+        best={p1,p2,touches,angle,tolerance:tol,value};
       }
     }
   }
-  const rl=lows.slice(-3);
-  if(rl.length>=2){
-    const p1=rl[rl.length-2],p2=rl[rl.length-1];
-    if(p2.p>p1.p&&p2.i>p1.i){
-      const linePrev=lineAt(p1,p2,i-1),lineNow=lineAt(p1,p2,i);
-      const breakdown=Number.isFinite(linePrev)&&Number.isFinite(lineNow)&&prev.c>=linePrev-buf&&x.c<lineNow-buf&&x.c<x.o&&(avgV>0?x.v>=avgV*.85:true);
-      if(breakdown&&hReg==="DOWNTREND"){
-        return {kind:"D_LINE_BREAKOUT",side:"SHORT",direction:"BEARISH",score:92,timeframe:"15M/8H",lineType:"ASCENDING_SUPPORT_BREAK",
-          linePrev,lineNow,pivot1:p1,pivot2:p2,reason:"D-Line breakdown: price broke the ascending 15M support line with the 8H structure aligned bearish."};
-      }
+  return best;
+}
+
+function dLineChecklist(interval,trend,entryMode,biggerTrend,bodyClose,rangeState){
+  return {
+    timeframe:interval,
+    allowedTimeframes:["15m","1h"],
+    timeframePass:interval==="15m"||interval==="1h",
+    trendLineTouches:trend?.touches?.length||0,
+    preferredTouches:3,
+    touchesPass:(trend?.touches?.length||0)>=2,
+    touchesPreferred:(trend?.touches?.length||0)>=3,
+    angleProxyDeg:trend?.angle??null,
+    targetAngleDeg:45,
+    anglePass:Number.isFinite(Number(trend?.angle))&&Number(trend.angle)>=22.5&&Number(trend.angle)<=67.5,
+    biggerTrend:String(biggerTrend||"UNKNOWN").toUpperCase(),
+    biggerTrendAligned:Boolean(biggerTrend),
+    bodyCloseConfirmed:Boolean(bodyClose),
+    entryMode:entryMode||null,
+    entryRule:"Break-out Entry or Re-test",
+    rangingMarket:String(rangeState||"UNKNOWN").toUpperCase()==="RANGE",
+    rangingManagement:"Aggressive profit taking",
+    minimumRR:2,
+    stopRule:"Stop Loss below recent low",
+    riskChecklistSource:"Risk to Reward Ratio 2:1 or more; source checklist also contains the wording 'Risking more than 3% of Capital Place' and this source wording is preserved without changing the existing stricter risk controls.",
+    emotionalChecklist:[
+      "Did you take losses today",
+      "Are you over-excited",
+      "Did you consume alcohol or are under the influence of any drugs",
+      "Am I ok with the loss"
+    ],
+    execution:{
+      entry:"Break-out Entry or Re-test",
+      takeProfit1:"0.618 Fib Retracement (Protect Position)",
+      takeProfit2:"Local high from start of trend"
+    }
+  };
+}
+
+function detectDLine(c,interval,higher){
+  if(!["15m","1h"].includes(interval)||c.length<80||!higher)return null;
+  const i=c.length-1, x=c[i], prev=c[i-1]||x;
+  const atrNow=Math.max(atr(c)[i]||x.c*.005,1),buf=Math.max(atrNow*.08,x.c*.00025);
+  const hReg=String(higher.regime||"UNKNOWN").toUpperCase();
+  const highs=[],lows=[];
+  for(let j=Math.max(3,i-60);j<i-2;j++){
+    if(pivotHigh(c,j))highs.push({i:j,p:c[j].h});
+    if(pivotLow(c,j))lows.push({i:j,p:c[j].l});
+  }
+  const volumeWindow=c.slice(Math.max(0,i-30),i);
+  const avgV=volumeWindow.length?volumeWindow.reduce((s,z)=>s+(Number(z.v)||0),0)/volumeWindow.length:0;
+
+  const resistance=chooseTrendLine(highs,"DOWN",c,i,atrNow);
+  if(resistance){
+    const linePrev=lineAt(resistance.p1,resistance.p2,i-1);
+    const lineNow=lineAt(resistance.p1,resistance.p2,i);
+    const breakout=Number.isFinite(linePrev)&&Number.isFinite(lineNow)&&prev.c<=linePrev+buf&&x.c>lineNow+buf&&x.c>x.o;
+    const retest=Number.isFinite(linePrev)&&Number.isFinite(lineNow)&&prev.c>linePrev+buf&&x.l<=lineNow+buf&&x.c>lineNow&&x.c>=x.o;
+    const mode=breakout?"BREAKOUT":retest?"RETEST":null;
+    if(mode&&hReg==="UPTREND"){
+      const bodyClose=x.c>lineNow;
+      const check=dLineChecklist(interval,resistance,mode,hReg,bodyClose,null);
+      const score=clamp(74+
+        (check.touchesPreferred?8:check.touchesPass?4:0)+
+        (check.anglePass?6:0)+
+        (bodyClose?4:0)+
+        (mode==="RETEST"?4:0),0,97);
+      return {
+        kind:"D_LINE_BREAKOUT",side:"LONG",direction:"BULLISH",score,timeframe:interval.toUpperCase(),
+        lineType:"DESCENDING_RESISTANCE",entryMode:mode,linePrev,lineNow,pivot1:resistance.p1,pivot2:resistance.p2,
+        trendTouches:resistance.touches,angleDeg:resistance.angle,checklist:check,
+        recentLow:Math.min(...c.slice(Math.max(0,i-20),i).map(z=>z.l)),
+        reason:"D-Line bullish breakout/retest: body closed above descending resistance with the bigger trend aligned bullish."
+      };
+    }
+  }
+
+  const support=chooseTrendLine(lows,"UP",c,i,atrNow);
+  if(support){
+    const linePrev=lineAt(support.p1,support.p2,i-1);
+    const lineNow=lineAt(support.p1,support.p2,i);
+    const breakdown=Number.isFinite(linePrev)&&Number.isFinite(lineNow)&&prev.c>=linePrev-buf&&x.c<lineNow-buf&&x.c<x.o;
+    const retest=Number.isFinite(linePrev)&&Number.isFinite(lineNow)&&prev.c<linePrev-buf&&x.h>=lineNow-buf&&x.c<lineNow&&x.c<=x.o;
+    const mode=breakdown?"BREAKOUT":retest?"RETEST":null;
+    if(mode&&hReg==="DOWNTREND"){
+      const bodyClose=x.c<lineNow;
+      const check=dLineChecklist(interval,support,mode,hReg,bodyClose,null);
+      const score=clamp(74+
+        (check.touchesPreferred?8:check.touchesPass?4:0)+
+        (check.anglePass?6:0)+
+        (bodyClose?4:0)+
+        (mode==="RETEST"?4:0),0,97);
+      return {
+        kind:"D_LINE_BREAKOUT",side:"SHORT",direction:"BEARISH",score,timeframe:interval.toUpperCase(),
+        lineType:"ASCENDING_SUPPORT_BREAK",entryMode:mode,linePrev,lineNow,pivot1:support.p1,pivot2:support.p2,
+        trendTouches:support.touches,angleDeg:support.angle,checklist:check,
+        recentHigh:Math.max(...c.slice(Math.max(0,i-20),i).map(z=>z.h)),
+        reason:"D-Line bearish breakdown/retest: body closed below ascending support with the bigger trend aligned bearish."
+      };
     }
   }
   return null;
 }
-
 function detectStrategySetups(c,{interval="1h",higher8h=null}={}){
   if(!Array.isArray(c)||c.length<60)return {score:0,setup:null,nakedPocs:[],dLine:null};
   const a=atr(c),i=c.length-1,atrNow=Math.max(a[i]||c[i].c*.005,1);
@@ -169,6 +263,7 @@ function detectStrategySetups(c,{interval="1h",higher8h=null}={}){
     setup:candidates[0]||null,
     nakedPocs:[...dayNpocs.slice(-6),...weekNpocs.slice(-6)],
     dLine:dLine?{...dLine,higherRegime:String(higher8h?.regime||"UNKNOWN").toUpperCase()}:null,
+    dLineChecklist:dLine?.checklist||dLineChecklist(interval,null,String(higher8h?.regime||"UNKNOWN").toUpperCase(),null,null,null),
     detected:{npocSfps:npocCandidates.length,dLine:Boolean(dLine)}
   };
 }
