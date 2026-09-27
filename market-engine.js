@@ -152,11 +152,6 @@ function analyze(c,ctx={}){
       liquidationBias
     }
   });
-  const knowledgeContext=buildKnowledgeContext({
-    setupKind:String(marketStructure?.setup?.kind||strategyKind||""),
-    side,
-    interval:ctx.interval||"1h"
-  });
   const elliottContext=buildElliottContext(c,{
     marketType:ctx.marketType||"PERPETUAL",
     oiChangePct,
@@ -241,6 +236,12 @@ function analyze(c,ctx={}){
   else if(rangeLong){type="RANGE LONG WATCH";side="LONG";bias="Mean reversion";reasons.push("Trend strength is muted","Downside momentum is stretched","Price is near the lower range");}
   else if(rangeShort){type="RANGE SHORT WATCH";side="SHORT";bias="Mean reversion";reasons.push("Trend strength is muted","Upside momentum is stretched","Price is near the upper range");}
   else reasons.push("The current evidence is mixed; no clean trigger has formed");
+
+  const knowledgeContext=buildKnowledgeContext({
+    setupKind:String(marketStructure?.setup?.kind||strategyKind||""),
+    side,
+    interval:ctx.interval||"1h"
+  });
 
   // Confluence model — deliberately transparent rather than pretending to be a win probability.
   const components=[
