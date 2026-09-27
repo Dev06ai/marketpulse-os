@@ -2119,9 +2119,10 @@ function renderMarket(){
   if(!state.chartPinned)drawMain();
 }
 
+function hasNum(value){return value!==null&&value!==undefined&&value!==""&&Number.isFinite(Number(value))}
 function fmtCompactUsd(value){
-  var n=Number(value);if(!Number.isFinite(n))return "—";
-  var a=Math.abs(n),u="";
+  if(!hasNum(value))return "—";
+  var n=Number(value),a=Math.abs(n);
   if(a>=1e12)return "$"+(n/1e12).toFixed(a>=1e13?1:2)+"T";
   if(a>=1e9)return "$"+(n/1e9).toFixed(a>=1e10?1:2)+"B";
   if(a>=1e6)return "$"+(n/1e6).toFixed(a>=1e7?1:2)+"M";
@@ -2129,12 +2130,13 @@ function fmtCompactUsd(value){
   return "$"+n.toLocaleString(undefined,{maximumFractionDigits:n>=1?2:6});
 }
 function fmtMarketPrice(value){
-  var n=Number(value);if(!Number.isFinite(n))return "—";
+  if(!hasNum(value))return "—";
+  var n=Number(value);
   if(Math.abs(n)>=1000)return "$"+n.toLocaleString(undefined,{maximumFractionDigits:2});
   if(Math.abs(n)>=1)return "$"+n.toLocaleString(undefined,{maximumFractionDigits:3});
   return "$"+n.toLocaleString(undefined,{maximumFractionDigits:6});
 }
-function fmtRank(r){var n=Number(r);return Number.isFinite(n)?"#"+n:"—"}
+function fmtRank(r){return hasNum(r)?"#"+Number(r):"—"}
 function marketMetaFor(r){return r&&r.market&&typeof r.market==="object"?r.market:{}}
 function marketSignalClass(side){var x=String(side||"WAIT").toUpperCase();return x==="LONG"?"long":x==="SHORT"?"short":"wait"}
 function marketSignalLabel(side){var x=String(side||"WAIT").toUpperCase();return x==="LONG"?"CANDIDATE LONG":x==="SHORT"?"CANDIDATE SHORT":"WAIT"}
@@ -2142,15 +2144,15 @@ function renderMarketBoardRows(rows,limit){
   var data=(rows||[]).slice(0,limit||rows?.length||0);
   return data.map(function(r,idx){
     var m=marketMetaFor(r),rawSide=String(r.side||"WAIT").toUpperCase(),sig=marketSignalClass(rawSide);
-    var change=Number.isFinite(Number(m.change24h))?Number(m.change24h):Number(r.change24h);
-    var changeCls=Number(change)>=0?"up":"down";
-    var rank=Number.isFinite(Number(m.rank))?m.rank:(idx+1);
-    var price=Number.isFinite(Number(r.price))?Number(r.price):Number(m.geckoPrice);
+    var change=hasNum(m.change24h)?Number(m.change24h):(hasNum(r.change24h)?Number(r.change24h):null);
+    var changeCls=change===null?"marketDim":(change>=0?"up":"down");
+    var rank=hasNum(m.rank)?Number(m.rank):(idx+1);
+    var price=hasNum(r.price)?Number(r.price):(hasNum(m.geckoPrice)?Number(m.geckoPrice):null);
     return '<div class="marketBoardRow" data-symbol="'+safeHtml(r.symbol)+'">'+
       '<span class="rank">'+fmtRank(rank)+'</span>'+
       '<span class="coin"><i class="coinMark">'+safeHtml(String(r.label||r.symbol).slice(0,4))+'</i>'+safeHtml(r.label||r.symbol)+'</span>'+
       '<span class="price">'+fmtMarketPrice(price)+'</span>'+
-      '<span class="'+changeCls+' marketDim">'+pct(change)+'</span>'+
+      '<span class="'+changeCls+' marketDim">'+(change===null?"—":pct(change))+'</span>'+
       '<span class="marketCap">'+fmtCompactUsd(m.marketCap)+'</span>'+
       '<span class="marketVol">'+fmtCompactUsd(m.volume24h)+'</span>'+
       '<span class="marketAction"><span class="marketScore">'+fmt(r.score)+'/100</span><span class="marketSignal '+sig+'">'+marketSignalLabel(rawSide)+'</span></span>'+
