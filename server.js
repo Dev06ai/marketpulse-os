@@ -547,19 +547,23 @@ async function buildDecisionSnapshot(symbol,interval,query,deviceId=null){
     const lowerInterval=interval==="15m"?null:"15m";
     const higherInterval=interval==="4h"?"1d":interval==="1d"?null:"4h";
     const dlineHigherInterval=interval==="15m"?"8h":null;
-    const lowerRaw=lowerInterval?await Promise.race([klines(symbol,lowerInterval),new Promise(resolve=>setTimeout(()=>resolve(null),1500))]).catch(()=>null):null;
-    const higherRaw=higherInterval?await Promise.race([klines(symbol,higherInterval),new Promise(resolve=>setTimeout(()=>resolve(null),1500))]).catch(()=>null):null;
-    const dlineHigherRaw=dlineHigherInterval?await Promise.race([klines(symbol,dlineHigherInterval),new Promise(resolve=>setTimeout(()=>resolve(null),1700))]).catch(()=>null):null;
+    // Supporting feeds are independent. Fetch them concurrently so one slow
+    // provider cannot serially consume the entire decision-engine timeout.
+    const [lowerRaw,higherRaw,dlineHigherRaw,deriv,consensus]=await Promise.all([
+      lowerInterval?Promise.race([klines(symbol,lowerInterval),new Promise(resolve=>setTimeout(()=>resolve(null),1400))]).catch(()=>null):Promise.resolve(null),
+      higherInterval?Promise.race([klines(symbol,higherInterval),new Promise(resolve=>setTimeout(()=>resolve(null),1400))]).catch(()=>null):Promise.resolve(null),
+      dlineHigherInterval?Promise.race([klines(symbol,dlineHigherInterval),new Promise(resolve=>setTimeout(()=>resolve(null),1400))]).catch(()=>null):Promise.resolve(null),
+      Promise.race([derivatives(symbol,interval),new Promise(resolve=>setTimeout(()=>resolve(null),1800))]).catch(()=>null),
+      Promise.race([dataFabric.assess(symbol,interval,{
+        primaryPrice:candles[candles.length-1]?.c,
+        primaryAgeMs:candles[candles.length-1]?.t?now-Number(candles[candles.length-1].t):null,
+        primarySource:candles?.[0]?.source,
+        liveFlow:flowBucket(symbol)
+      }),new Promise(resolve=>setTimeout(()=>resolve(null),900))]).catch(()=>null)
+    ]);
     const lower=lowerRaw?closedCandles(lowerRaw,lowerInterval,now):null;
     const higher=higherRaw?closedCandles(higherRaw,higherInterval,now):null;
     const dlineHigher=dlineHigherRaw?closedCandles(dlineHigherRaw,dlineHigherInterval,now):null;
-    const deriv=await Promise.race([derivatives(symbol,interval),new Promise(resolve=>setTimeout(()=>resolve(null),2600))]).catch(()=>null);
-    const consensus=await Promise.race([dataFabric.assess(symbol,interval,{
-      primaryPrice:candles[candles.length-1]?.c,
-      primaryAgeMs:candles[candles.length-1]?.t?now-Number(candles[candles.length-1].t):null,
-      primarySource:candles?.[0]?.source,
-      liveFlow:flowBucket(symbol)
-    }),new Promise(resolve=>setTimeout(()=>resolve(null),1500))]).catch(()=>null);
     const lowerAnalysis=lower&&lower.length>=220&&lowerInterval?analyze(lower,{interval:lowerInterval}):null;
     const higherAnalysis=higher&&higher.length>=220&&higherInterval?analyze(higher,{interval:higherInterval}):null;
     const dlineHigherAnalysis=dlineHigher&&dlineHigher.length>=100?analyze(dlineHigher,{interval:dlineHigherInterval}):null;
@@ -610,7 +614,7 @@ async function buildDecisionSnapshot(symbol,interval,query,deviceId=null){
     try{learning.observeFinalDecision(symbol,interval,candles,finalDecision).catch(()=>{})}catch{}
     const payload={
       ok:true,...finalDecision,analysis,derivatives:flow,consensus,
-      learning:learned?await learning.status().catch(()=>null):null,
+      learning:null,
       backtest:analytics?.backtest||null,validation:analytics?.validation||null,setupStats:analytics?.setupStats||null,
       phase11_13:validation1113,phase11:PHASE11_VERSION,phase12:PHASE12_VERSION,phase13:PHASE13_VERSION,
       updatedAt:now
@@ -1664,7 +1668,7 @@ const server=http.createServer(async(req,res)=>{
       try{
         const payload=await Promise.race([
           buildDecisionSnapshot(symbol,interval,u.searchParams,requestDevice(req)),
-          new Promise((_,reject)=>setTimeout(()=>reject(new Error('DECISION_ENGINE_TIMEOUT')),8500))
+          new Promise((_,reject)=>setTimeout(()=>reject(new Error('DECISION_ENGINE_TIMEOUT')),8200))
         ]);
         return send(res,200,payload);
       }catch(e){return send(res,503,{ok:false,error:String(e.message||e),phase9:PHASE9_VERSION,phase10:PHASE10_VERSION})}
