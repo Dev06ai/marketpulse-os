@@ -3264,6 +3264,8 @@ window.addEventListener("load",function(){
   if(!state.market){scheduleInitialBoot(50)}
 },{once:true});
 window.addEventListener("pageshow",function(e){
+  resetQuickCalculators();
+  calc();
   if(e.persisted&&!state.market)scheduleInitialBoot(50);
 });
 document.addEventListener("visibilitychange",function(){
