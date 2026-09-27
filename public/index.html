@@ -613,18 +613,44 @@ body.admin-mode .nav button.adminNav,body.admin-mode .mobileMenu button.adminNav
   .adminFlagRow .flagName{font-size:10px}
   .adminFlagRow .flagDesc{font-size:9px}
 }
+</style>
+<style id="role-visibility-style">
+body:not(.admin-mode) .nav button[data-view="lab"],
+body:not(.admin-mode) .nav button[data-view="replay"],
+body:not(.admin-mode) .nav button[data-view="dna"],
+body:not(.admin-mode) .nav button[data-view="research"],
+body:not(.admin-mode) .nav button[data-view="execution"],
+body:not(.admin-mode) .nav button[data-view="admin"],
+body:not(.admin-mode) .mobileMenu button[data-view="lab"],
+body:not(.admin-mode) .mobileMenu button[data-view="replay"],
+body:not(.admin-mode) .mobileMenu button[data-view="dna"],
+body:not(.admin-mode) .mobileMenu button[data-view="research"],
+body:not(.admin-mode) .mobileMenu button[data-view="execution"],
+body:not(.admin-mode) .mobileMenu button[data-view="admin"]{display:none!important}
+body:not(.admin-mode) #view-lab,
+body:not(.admin-mode) #view-replay,
+body:not(.admin-mode) #view-dna,
+body:not(.admin-mode) #view-research,
+body:not(.admin-mode) #view-execution,
+body:not(.admin-mode) #view-admin{display:none!important}
+body:not(.admin-mode) [data-admin-only="true"]{display:none!important}
+.viewHelper{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin:10px 0;padding:10px 12px;border:1px solid rgba(103,232,255,.10);border-radius:11px;background:linear-gradient(90deg,rgba(103,232,255,.035),rgba(192,132,252,.025));color:#91a3b8}
+.viewHelper b{display:block;color:#e9f7ff;font-size:10px;margin-bottom:3px}
+.viewHelper span{display:block;font-size:9px;line-height:1.45}
+body.admin-mode .viewHelper{display:none!important}
+@media(max-width:700px){.viewHelper{padding:9px 10px}.viewHelper span{font-size:8.5px}}
 </style></head>
 <body>
 <header class="header"><div class="headerInner">
   <div class="logo"><div class="mark" aria-label="MarketPulse logo"></div><div><div class="brandK">CRYPTO MARKET INTELLIGENCE</div><div class="brandName">MarketPulse</div><div class="brandSub">Less noise. More signal. Better decisions.</div></div></div>
   <nav class="nav" id="nav"><button class="active" data-view="overview" title="Main dashboard and current market picture">Dashboard</button><button data-view="scanner" title="Compare many coins">Market scanner</button><button data-view="signals" title="Review possible setups">Setups</button><button data-view="flow" title="Futures flow and positioning">Market flow</button><button data-view="lab" title="Test a strategy on past data">Backtest</button><button data-view="replay" title="Replay past market conditions">Replay</button><button data-view="dna" title="Review recurring setup patterns">Pattern DNA</button><button data-view="research" title="Explore historical research">Research</button><button data-view="edge" title="Review strategy statistics">Edge</button><button data-view="portfolio" title="Portfolio risk and exposure">Portfolio</button><button id="executionNav" class="adminNav" data-view="execution" title="Advanced execution tools">Execution</button><button data-view="brain" title="Trading journal">Journal</button><button data-view="ai" title="MarketPulse copilot">Copilot</button><button data-view="alerts" title="Watchlist conditions">Watchlist</button><button data-view="risk" title="Risk controls">Risk</button><button id="adminNav" class="adminNav" data-view="admin" title="Administrator controls">Admin</button></nav>
   <button id="mobileMenuBtn" class="mobileMenuBtn" aria-label="Open MarketPulse menu" aria-expanded="false">☰</button>
-  <div id="mobileMenu" class="mobileMenu" aria-hidden="true"><button data-view="overview">Dashboard</button><button data-view="scanner">Market scanner</button><button data-view="signals">Setups</button><button data-view="flow">Market flow</button><button data-view="lab">Backtest</button><button data-view="replay">Replay</button><button data-view="dna">Pattern DNA</button><button data-view="research">Research</button><button data-view="edge">Edge</button><button data-view="portfolio">Portfolio</button><button data-view="execution">Execution</button><button data-view="brain">Journal</button><button data-view="ai">Copilot</button><button data-view="alerts">Watchlist</button><button data-view="risk">Risk</button><button id="adminNavMobile" class="adminNav" data-view="admin">Admin</button></div>
+  <div id="mobileMenu" class="mobileMenu" aria-hidden="true"><button data-view="overview">Dashboard</button><button data-view="scanner">Market scanner</button><button data-view="signals">Setups</button><button data-view="flow">Market flow</button><button data-view="lab">Backtest</button><button data-view="replay">Replay</button><button data-view="dna">Pattern DNA</button><button data-view="research">Research</button><button data-view="edge">Edge</button><button data-view="portfolio">Portfolio</button><button class="adminNav" data-view="execution">Execution</button><button data-view="brain">Journal</button><button data-view="ai">Copilot</button><button data-view="alerts">Watchlist</button><button data-view="risk">Risk</button><button id="adminNavMobile" class="adminNav" data-view="admin">Admin</button></div>
   <div class="headerTools"><button id="beginnerGuideBtn" class="btn beginnerGuideBtn" title="Open the beginner guide">Guide</button><button id="accountBtn" class="btn">Guest</button><span class="dataState"><i class="liveDot"></i><span id="dataState">Connecting</span></span><select id="symbol" class="select"></select><select id="interval" class="select"><option>15m</option><option selected>1h</option><option>4h</option><option>1d</option></select><button id="refresh" class="btn primary">Refresh</button></div>
 </div></header>
 
 <main class="wrap">
-  <div id="statusBar" class="statusBar">Starting MarketPulse…</div><div class="beginnerStrip"><div><strong>New here?</strong> Start with the Signal, then check the chart and market flow. <span style="color:#8191a7">You do not need to understand every metric.</span></div><button id="beginnerGuideInline" class="btn" type="button">How it works</button></div><div id="broadcastBar" class="broadcastBar" aria-live="polite"><div><b id="broadcastTitle">MarketPulse Notice</b><p id="broadcastBody"></p></div><button id="broadcastClose" class="broadcastClose" aria-label="Close">×</button></div>
+  <div id="statusBar" class="statusBar">Starting MarketPulse…</div><div id="viewHelper" class="viewHelper" hidden aria-live="polite"><div><b>Dashboard</b><span>Start with the signal, then use the chart and Market Flow for context.</span></div></div><div class="beginnerStrip"><div><strong>New here?</strong> Start with the Signal, then check the chart and market flow. <span style="color:#8191a7">You do not need to understand every metric.</span></div><button id="beginnerGuideInline" class="btn" type="button">How it works</button></div><div id="broadcastBar" class="broadcastBar" aria-live="polite"><div><b id="broadcastTitle">MarketPulse Notice</b><p id="broadcastBody"></p></div><button id="broadcastClose" class="broadcastClose" aria-label="Close">×</button></div>
   <section id="view-overview" class="view active">
     <div class="hero">
       <div class="metric"><div class="label">Price</div><div class="value" id="mPrice">—</div><div class="subv" id="mChange">—</div></div>
@@ -642,7 +668,7 @@ body.admin-mode .nav button.adminNav,body.admin-mode .mobileMenu button.adminNav
       <div class="card signalQualityCard"><div class="sectionHead"><div><div class="title">Why the signal looks this way</div><div class="sub">See which parts of the market are helping or weakening the setup.</div></div><span class="value" id="quality">—</span></div><div id="components" class="list"></div></div>
     </div>
       </div>
-      <div class="card" style="margin-top:10px">
+      <div class="card" style="margin-top:10px" data-admin-only="true">
         <div class="sectionHead"><div><div class="title">Live validation &amp; safety gate</div><div class="sub">Historical replay calibrates the minimum evidence required before a signal is shown as eligible for live decision support.</div></div><span class="chip" id="validationChip">PAPER ONLY</span></div>
         <div class="grid2">
           <div><div class="label">Validation evidence</div><div class="value" id="validationEvidence">Collecting…</div><div class="sub" id="validationDetail">Waiting for the walk-forward sample.</div></div>
@@ -657,7 +683,7 @@ body.admin-mode .nav button.adminNav,body.admin-mode .mobileMenu button.adminNav
       <div class="overGrid">
         <div class="card"><div class="sectionHead"><div><b>Cycle phase</b><div class="sub" id="cycleText">Long-term cycle score · subtle phase zones · hover for BTC context</div></div><span class="chip c">LIVE</span></div><canvas id="cycleChart" class="miniChart"></canvas><div class="cycleMetric" style="margin-top:7px;font-size:10px"><b id="cycleScore">—</b><span id="cycleDetail" style="color:var(--muted)">—</span></div></div>
         <div class="card"><div class="sectionHead"><div><b>Drawdown</b><div class="sub">Distance below high-water · cleaner risk view · hover for BTC context.</div></div><span class="chip">RISK</span></div><canvas id="ddChart" class="miniChart"></canvas><div class="cycleMetric" style="margin-top:7px;font-size:10px"><b id="ddValue">—</b><span id="ddDetail" style="color:var(--muted)">—</span></div></div>
-        <div class="card"><div class="sectionHead"><div><b>Live market screen</b><div class="sub">Best current alignments</div></div><span class="chip">LIVE</span></div><div id="marketRows" class="marketRows"><div class="small">Waiting for scanner…</div></div></div>
+        <div class="card"> data-admin-only="true"<div class="sectionHead"><div><b>Live market screen</b><div class="sub">Best current alignments</div></div><span class="chip">LIVE</span></div><div id="marketRows" class="marketRows"><div class="small">Waiting for scanner…</div></div></div>
       </div>
     </div>
 
@@ -674,7 +700,7 @@ body.admin-mode .nav button.adminNav,body.admin-mode .mobileMenu button.adminNav
         <div class="flowLegend"><span><i class="lg mint"></i>CVD</span><span><i class="lg lav"></i>OI</span><span><i class="lg ember"></i>Liquidations</span><span class="small">100 = starting level · lines are normalized for comparison</span></div>
         <canvas id="flowChart" class="flowChart" height="190"></canvas>
       </div>
-      <div class="card">
+      <div class="card" data-admin-only="true">
         <div class="sectionHead"><div><div class="title">Learning from past setups</div><div class="sub">Past resolved setups help the model adjust gradually instead of reacting to one result.</div></div><span class="chip" id="learnState">COLLECTING</span></div>
         <div class="grid2" style="grid-template-columns:1fr 1fr">
           <div class="mini"><div class="k">Resolved examples</div><div class="v" id="learnN">0</div></div>
@@ -685,9 +711,9 @@ body.admin-mode .nav button.adminNav,body.admin-mode .mobileMenu button.adminNav
         <div class="mini" style="margin-top:8px"><div class="k">Learning state</div><div class="v" id="learnNote">Collecting resolved outcomes before calibration.</div><div class="watchNote">12 resolved examples are required before setup-level score calibration can influence the live model.</div></div>
       </div>
     </div>
-    <div class="section card"><div class="sectionHead"><div><div class="title">Live Market Screens</div><div class="sub">The scanner stays available while the overview remains your command center.</div></div><button class="btn" data-view="scanner">Open Scanner</button></div><div class="tape" id="tape"></div></div>
+    <div class="section card" data-admin-only="true"><div class="sectionHead"><div><div class="title">Live Market Screens</div><div class="sub">The scanner stays available while the overview remains your command center.</div></div><button class="btn" data-view="scanner">Open Scanner</button></div><div class="tape" id="tape"></div></div>
 
-    <div class="section card">
+    <div class="section card" data-admin-only="true">
       <div class="sectionHead"><div><div class="title">Exchange agreement check</div><div class="sub">Checks whether multiple exchanges are showing roughly the same price before the safety gate can clear a setup.</div></div><button id="dcfRefresh" class="btn">Refresh</button></div>
       <div class="grid3">
         <div class="mini"><div class="k">State</div><div class="v" id="dcfState">WAITING</div></div>
@@ -1384,8 +1410,40 @@ async function submitUserTicket(){
   var subject=$("supportSubject").value.trim(),message=$("supportMessage").value.trim();if(!subject||!message){$("supportUserStatus").textContent="Subject and message are required.";return}
   try{await apiPost("/api/support/tickets",{category:$("supportCategory").value,subject,message});$("supportUserStatus").textContent="Sent. We'll respond in your account.";$("supportSubject").value="";$("supportMessage").value="";loadUserTickets()}catch(e){$("supportUserStatus").textContent=e.message}
 }
+const USER_VIEW_IDS=["overview","scanner","signals","flow","edge","portfolio","brain","ai","alerts","risk"];
+const VIEW_HELPER_COPY={
+  overview:["Dashboard","Start with the signal, then use the chart and Market Flow for context."],
+  scanner:["Market Scanner","Compare coins quickly. Focus on the strongest setups instead of reading every metric."],
+  signals:["Setups","Review active trade ideas. READY means the setup has met the system's current evidence rules."],
+  flow:["Market Flow","Use OI, CVD, funding and liquidations to understand futures positioning."],
+  edge:["Edge","See how setups have behaved historically. Use this as context, not as a guarantee."],
+  portfolio:["Portfolio","Track exposure and risk in one place. Keep the limits easy to understand before acting."],
+  brain:["Journal","Record trades and lessons so your own results become easier to review over time."],
+  ai:["Market Copilot","Ask for a plain-language market review or have a specific trade plan checked."],
+  alerts:["Watchlist","Set a threshold and watch selected assets without staring at the screen."],
+  risk:["Risk","Use the calculator and risk rules to understand the downside before taking a trade."]
+};
+function isAdminUser(){return Boolean(state.account&&state.account.isAdmin)}
+function canOpenView(name){return isAdminUser()||USER_VIEW_IDS.indexOf(String(name))>=0}
+function updateViewHelper(name){
+  var el=$("viewHelper");if(!el)return;
+  if(isAdminUser()||!VIEW_HELPER_COPY[name]){el.hidden=true;el.setAttribute("aria-hidden","true");return}
+  var c=VIEW_HELPER_COPY[name];el.hidden=false;el.setAttribute("aria-hidden","false");
+  var b=el.querySelector("b"),sp=el.querySelector("span");if(b)b.textContent=c[0];if(sp)sp.textContent=c[1];
+}
+function syncRoleVisibility(){
+  var admin=isAdminUser();
+  document.querySelectorAll(".nav button[data-view],.mobileMenu button[data-view]").forEach(function(b){
+    var allowed=admin||USER_VIEW_IDS.indexOf(String(b.dataset.view))>=0;
+    b.hidden=!allowed;b.setAttribute("aria-hidden",String(!allowed));
+  });
+  document.querySelectorAll("[data-admin-only='true']").forEach(function(el){
+    el.hidden=!admin;el.setAttribute("aria-hidden",String(!admin));
+  });
+  updateViewHelper(state.activeView||"overview");
+}
 function setView(name){
-  if((name==="admin"||name==="execution")&&!state.account?.isAdmin){name="overview"}
+  if(!canOpenView(name))name="overview";
   document.querySelectorAll(".view").forEach(function(v){v.classList.toggle("active",v.id==="view-"+name)});
   document.querySelectorAll(".nav button,.mobileMenu button").forEach(function(b){b.classList.toggle("active",b.dataset.view===name)});
   var menu=$("mobileMenu"),btn=$("mobileMenuBtn");if(menu){menu.classList.remove("open");menu.setAttribute("aria-hidden","true")}if(btn)btn.setAttribute("aria-expanded","false");
@@ -1398,6 +1456,9 @@ function setView(name){
   if(name==="lab"&&state.account?.isAdmin){deferTask(runSystemCheck,60)}
   if(name==="brain"){deferTask(function(){loadPhase7();loadPhase7Health()},40)}
   if(name==="admin"&&state.account?.isAdmin){deferTask(loadAdminConsole,20);deferTask(loadAdminUsers,40)}
+  if(name==="research"&&state.account?.isAdmin){deferTask(loadResearchCatalog,80)}
+  updateViewHelper(name);
+  syncRoleVisibility();
   if(name==="overview"&&state.market){queueChartDraw()}
 }
 document.querySelectorAll("[data-view]").forEach(function(b){
@@ -2757,8 +2818,10 @@ async function renderFinalDecision(d){
   if($("deploymentGate"))$("deploymentGate").textContent=gs;
   if($("deploymentReason"))$("deploymentReason").textContent=gate.reason||"Signals remain decision-support only until the validation and live-data gates pass.";
   if($("validationChip"))$("validationChip").textContent=gs;
-  $("adaptiveChip").textContent="Adaptive: "+(p.mode||"collecting");
-  $("finalEngineMeta").textContent="Phase 9/10/11-13 · "+(d.stale?"STALE / DIRECTION SUPPRESSED · ":"LIVE · ")+(d.state||"WAITING")+" · data "+fmt(data.score)+"/100 · risk "+(pg.decision||"NOT EVALUATED")+" · live gate "+gs;
+  $("adaptiveChip").textContent=isAdminUser()?"Adaptive: "+(p.mode||"collecting"):"Model status: live";
+  $("finalEngineMeta").textContent=isAdminUser()
+    ?"Phase 9/10/11-13 · "+(d.stale?"STALE / DIRECTION SUPPRESSED · ":"LIVE · ")+(d.state||"WAITING")+" · data "+fmt(data.score)+"/100 · risk "+(pg.decision||"NOT EVALUATED")+" · live gate "+gs
+    :"Market model · "+(d.stale?"stale data":"live data")+" · signal state "+(d.state||"WAITING");
   var ds=document.querySelector(".decisionSection");if(ds){ds.classList.remove("signal-long","signal-short","signal-wait");ds.classList.add(side==="LONG"?"signal-long":side==="SHORT"?"signal-short":"signal-wait")}
   var prev=state._lastRenderedFinalKey, nextKey=[
     d.state,d.action,d.liveSignalEligible,m.confluenceScore,lv.entryLow,lv.entryHigh,lv.stop,lv.tp1,d.tradeStyle,d.updatedAt
@@ -2842,7 +2905,7 @@ async function loadCore(){
     state.bootRetry=0;var sb=$("statusBar");if(sb&&sb.textContent!=="Live market data connected")setStatus("Live market data connected","ok");$("dataState").textContent="Live";renderMarket();
 
     deferTask(loadCoreEnrichment,150);
-    deferTask(loadDataFabric,800);
+    if(isAdminUser())deferTask(loadDataFabric,800);
     deferTask(loadCoreAnalytics,1800);
     if(!state.secondaryStarted){
       queueSecondaryBoot();
@@ -2976,6 +3039,11 @@ function renderAccount(){
   var ex=$("executionNav");if(ex)ex.classList.toggle("adminNav",!admin);
   if(ex)ex.style.display=admin?"block":"none";
   var an=$("adminNav"),am=$("adminNavMobile");if(an)an.style.display=admin?"block":"none";if(am)am.style.display=admin?"block":"none";
+  syncRoleVisibility();
+  if(admin){
+    deferTask(loadDataFabric,120);
+    deferTask(loadResearchCatalog,180);
+  }
 }
 function openAccount(){renderAccount();$("accountModal").classList.add("open");$("accountModal").setAttribute("aria-hidden","false")}
 function closeAccount(){ $("accountModal").classList.remove("open");$("accountModal").setAttribute("aria-hidden","true");$("accountError").textContent=""}
@@ -3276,7 +3344,7 @@ async function syncMemory(){
 syncPhase3Symbols();
 $("loadReplay").addEventListener("click",loadReplay);$("toggleReplay").addEventListener("click",toggleReplay);$("replayCursor").addEventListener("input",function(){replayState.cursor=+this.value;renderReplayFrame()});
 $("refreshDNA").addEventListener("click",refreshDNA);$("loadDNA").addEventListener("click",loadDNA);$("runResearch").addEventListener("click",runResearch);
-deferTask(loadResearchCatalog,900);
+if(isAdminUser())deferTask(loadResearchCatalog,900);
 $("askAi").addEventListener("click",askAI);$("sync").addEventListener("click",syncMemory);$("runSystemCheck").addEventListener("click",function(){if(state.account?.isAdmin)runSystemCheck()});$("notifBtn").addEventListener("click",enableNotifications);$("alertScore").addEventListener("input",renderAlerts);$("chartSettings").addEventListener("click",openChartSettings);$("chartClose").addEventListener("click",closeChartSettings);$("chartCancel").addEventListener("click",closeChartSettings);$("showEma").addEventListener("change",function(){syncEmaToggleUI();chartSettings.showEma=this.checked;chartSettings=normalizeChartSettings(chartSettings);if(state.market)drawMain();persistChartSettings()});
 $("chartApply").addEventListener("click",applyChartSettings);document.querySelectorAll("[data-preset]").forEach(function(b){b.addEventListener("click",function(){document.querySelectorAll("[data-preset]").forEach(function(x){x.classList.remove("active")});b.classList.add("active");$("bullColor").value=CHART_PRESETS[b.dataset.preset].bull;$("bearColor").value=CHART_PRESETS[b.dataset.preset].bear})});$("aiMarketMode").addEventListener("click",function(){state.aiMode="market";$("aiMarketMode").classList.add("on");$("aiTradeMode").classList.remove("on");$("tradeFields").classList.add("hidden")});$("aiTradeMode").addEventListener("click",function(){state.aiMode="trade";$("aiTradeMode").classList.add("on");$("aiMarketMode").classList.remove("on");$("tradeFields").classList.remove("hidden")});renderSignals();
 
@@ -3564,6 +3632,7 @@ function initAccountUI(){
   if(accountLogout)accountLogout.addEventListener("click",logoutAccount);
   accountModal.addEventListener("click",function(e){if(e.target===this)closeAccount()});
   renderAccount();
+  syncRoleVisibility();
   loadAuth();loadPublicConfig();
   setInterval(sendPresence,30000);
   var adminRun=$("adminRunCheck"),adminExec=$("adminOpenExecution");
