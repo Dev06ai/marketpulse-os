@@ -142,7 +142,7 @@ function currentSignal(state,symbol,interval){
 }
 function openRiskPct(state){
   const account=Math.max(1,finite(state.config.account,100000));
-  return state.paper.open.reduce((a,p)=>a+(finite(p.riskPct,0)||0),0);
+  return state.paper.open.filter(p=>p.source==="FINAL_GATED").reduce((a,p)=>a+(finite(p.riskPct,0)||0),0);
 }
 function closePaper(state,signal,position,status,resultR,reason,exitPrice,ts){
   const posIndex=state.paper.open.findIndex(x=>x.id===position.id);
@@ -246,7 +246,7 @@ function personalEdge(state){
   return {trades:rows.length,byRegime:normalize(groups.regime||{}),bySide:normalize(groups.side||{}),byType:normalize(groups.type||{})};
 }
 function strategyHealth(state){
-  const trades=state.paper.trades||[],recent=trades.slice(-20),s=summarizeTrades(trades),rs=summarizeTrades(recent),div=recent.filter(x=>Number.isFinite(x.evidenceAvgR)).map(x=>(finite(x.resultR,0)||0)-(finite(x.evidenceAvgR,0)||0));
+  const trades=(state.paper.trades||[]).filter(x=>x.source==="FINAL_GATED"),recent=trades.slice(-20),s=summarizeTrades(trades),rs=summarizeTrades(recent),div=recent.filter(x=>Number.isFinite(x.evidenceAvgR)).map(x=>(finite(x.resultR,0)||0)-(finite(x.evidenceAvgR,0)||0));
   return {
     sample:s.trades,recentSample:rs.trades,winRate:s.winRate,netR:s.netR,avgR:s.avgR,drawdownR:(finite(state.paper.maxDrawdown,0)||0)/(Math.max(1,finite(state.paper.startingEquity,1))),recentNetR:rs.netR,
     evidenceDivergence:div.length?div.reduce((a,b)=>a+b,0)/div.length:null,
@@ -332,8 +332,9 @@ function latestSignal(state,symbol,interval){
 function snapshotFromState(state,symbol,interval,analysis){
   const sig=currentSignal(state,symbol,interval)||latestSignal(state,symbol,interval);
   const risk=sig?riskCheck({entry:sig.entry,stop:sig.stop,target:sig.target,rr:sig.rr},state.config,openRiskPct(state)):riskCheck({},state.config,openRiskPct(state));
-  const paper=Object.assign({},summarizeTrades(state.paper.trades),{
-    startingEquity:state.paper.startingEquity,equity:state.paper.startingEquity+state.paper.realizedPnl,open:state.paper.open,
+  const finalTrades=state.paper.trades.filter(x=>x.source==="FINAL_GATED"),finalOpen=state.paper.open.filter(x=>x.source==="FINAL_GATED");
+  const paper=Object.assign({},summarizeTrades(finalTrades),{
+    startingEquity:state.paper.startingEquity,equity:state.paper.startingEquity+state.paper.realizedPnl,open:finalOpen,
     openRiskPct:openRiskPct(state),maxDrawdown:state.paper.maxDrawdown,realizedPnl:state.paper.realizedPnl,realizedR:state.paper.realizedR
   });
   const health=strategyHealth(state);
