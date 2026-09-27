@@ -362,6 +362,17 @@ function analyze(c,ctx={}){
     else if(score>=55)status="WATCH";
   }
 
+  let mood="CALM";
+  if(regime==="HIGH VOLATILITY")mood="HEATED";
+  else if(regime==="UPTREND"||regime==="DOWNTREND")mood=adxNow>=25?"TRENDING":"BUILDING";
+  else mood="CHOPPY";
+
+  let directionalLean="NEUTRAL";
+  if(score>=70&&side==="LONG")directionalLean="BULLISH BIAS";
+  else if(score>=70&&side==="SHORT")directionalLean="BEARISH BIAS";
+  else if(side==="LONG")directionalLean="LEAN LONG";
+  else if(side==="SHORT")directionalLean="LEAN SHORT";
+
   let phase14Meta=null;
   try{
     const provisional={
@@ -391,17 +402,6 @@ function analyze(c,ctx={}){
     probabilityLabel=enriched.probabilityLabel;
     phase14Meta=enriched.phase14||null;
   }catch{}
-  let mood="CALM";
-  if(regime==="HIGH VOLATILITY")mood="HEATED";
-  else if(regime==="UPTREND"||regime==="DOWNTREND")mood=adxNow>=25?"TRENDING":"BUILDING";
-  else mood="CHOPPY";
-
-  let directionalLean="NEUTRAL";
-  if(score>=70&&side==="LONG")directionalLean="BULLISH BIAS";
-  else if(score>=70&&side==="SHORT")directionalLean="BEARISH BIAS";
-  else if(side==="LONG")directionalLean="LEAN LONG";
-  else if(side==="SHORT")directionalLean="LEAN SHORT";
-
   const thesis=[];
   if(status==="READY"){
     thesis.push(directionalLean+" — multiple timeframes and core momentum/structure inputs are aligned.");
