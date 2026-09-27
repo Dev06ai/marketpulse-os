@@ -377,7 +377,6 @@ function analyze(c,ctx={}){
   try{
     const provisional={
       side,status,score,rr,regime,type,bias,directionalLean,
-      probabilityLabel,
       strategyFamily:strategyReady?String(ms?.kind||"UNKNOWN"):"NONE",
       mtf:{lower:mtf15,higher:mtf4},
       components,reasons,contributors,
