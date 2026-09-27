@@ -592,6 +592,11 @@ async function buildDecisionSnapshot(symbol,interval,query,deviceId=null){
     const lowerInterval=interval==="15m"?null:"15m";
     const higherInterval=interval==="4h"?"1d":interval==="1d"?null:"4h";
     const dlineHigherInterval=interval==="15m"?"8h":null;
+    const liveSeed=flowBucket(symbol);
+    const consensusPrimaryPrice=Number.isFinite(Number(liveSeed.markPrice))?Number(liveSeed.markPrice):candles[candles.length-1]?.c;
+    const consensusPrimaryAge=Number.isFinite(Number(liveSeed.lastTs))&&Number(liveSeed.lastTs)>0
+      ?Math.max(0,now-Number(liveSeed.lastTs))
+      :(candles[candles.length-1]?.t?Math.max(0,now-Number(candles[candles.length-1].t)):null);
     // Supporting feeds are independent. Fetch them concurrently so one slow
     // provider cannot serially consume the entire decision-engine timeout.
     const [lowerRaw,higherRaw,dlineHigherRaw,deriv,consensus]=await Promise.all([
