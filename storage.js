@@ -207,6 +207,24 @@ async function init(){
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       )`);
       await pool.query('CREATE INDEX IF NOT EXISTS idx_broadcasts_active ON marketpulse_broadcasts(active,created_at DESC)');
+      await pool.query(`CREATE TABLE IF NOT EXISTS marketpulse_admin_signal_alerts (
+        signal_key TEXT PRIMARY KEY,
+        symbol TEXT NOT NULL,
+        interval TEXT NOT NULL,
+        side TEXT NOT NULL,
+        setup TEXT NOT NULL,
+        style TEXT NOT NULL,
+        score NUMERIC,
+        payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )`);
+      await pool.query('CREATE INDEX IF NOT EXISTS idx_admin_signal_alerts_time ON marketpulse_admin_signal_alerts(created_at DESC)');
+      await pool.query(`CREATE TABLE IF NOT EXISTS marketpulse_admin_push_subscriptions (
+        endpoint TEXT PRIMARY KEY,
+        subscription JSONB NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      `);
       await pool.query(`CREATE TABLE IF NOT EXISTS marketpulse_support_tickets (
         id BIGSERIAL PRIMARY KEY,
         user_id UUID NOT NULL REFERENCES marketpulse_users(id) ON DELETE CASCADE,
@@ -790,6 +808,63 @@ async function adminAnalytics(){
     intervals:aggregate("interval")
   };
 }
+async function claimAdminSignalAlert(signalKey,payload={}){
+  await init();
+  const key=String(signalKey||"").slice(0,300);
+  if(!key)throw new Error("Signal alert key is required");
+  const p=payload&&typeof payload==="object"?payload:{};
+  if(mode==="postgres"){
+    const r=await pool.query(`INSERT INTO marketpulse_admin_signal_alerts(signal_key,symbol,interval,side,setup,style,score,payload)
+      VALUES($1,$2,$3,$4,$5,$6,$7,$8)
+      ON CONFLICT(signal_key) DO NOTHING
+      RETURNING signal_key AS "signalKey",created_at AS "createdAt"`,
+      [key,String(p.symbolCode||"BTCUSDT"),String(p.interval||""),String(p.side||""),String(p.setup||"").slice(0,100),String(p.style||"").slice(0,30),Number.isFinite(Number(p.score))?Number(p.score):null,p]);
+    return {recorded:Boolean(r.rowCount),...(r.rows[0]||{})};
+  }
+  const all=readLocal(),rows=Array.isArray(all.__admin_signal_alerts__)?all.__admin_signal_alerts__:[];
+  if(rows.some(x=>x.signalKey===key))return {recorded:false,signalKey:key};
+  const row={signalKey:key,symbol:String(p.symbolCode||"BTCUSDT"),interval:String(p.interval||""),side:String(p.side||""),setup:String(p.setup||""),style:String(p.style||""),score:Number.isFinite(Number(p.score))?Number(p.score):null,payload:p,createdAt:new Date().toISOString()};
+  rows.push(row);all.__admin_signal_alerts__=rows.slice(-1000);writeLocal(all);return {recorded:true,signalKey:key,createdAt:row.createdAt};
+}
+async function listAdminSignalAlerts(limit=50){
+  await init();const n=Math.min(200,Math.max(1,Number(limit)||50));
+  if(mode==="postgres"){
+    const r=await pool.query(`SELECT signal_key AS "signalKey",symbol,interval,side,setup,style,score,payload,created_at AS "createdAt"
+      FROM marketpulse_admin_signal_alerts ORDER BY created_at DESC LIMIT $1`,[n]);return r.rows;
+  }
+  const all=readLocal();return (all.__admin_signal_alerts__||[]).slice(-n).reverse();
+}
+async function saveAdminPushSubscription(subscription){
+  await init();
+  const s=subscription&&typeof subscription==="object"?subscription:{};
+  const endpoint=String(s.endpoint||"").trim();
+  if(!endpoint||endpoint.length>2048)throw new Error("Invalid push subscription endpoint");
+  const row={endpoint,subscription:s,updatedAt:new Date().toISOString()};
+  if(mode==="postgres"){
+    await pool.query(`INSERT INTO marketpulse_admin_push_subscriptions(endpoint,subscription,updated_at)
+      VALUES($1,$2,NOW())
+      ON CONFLICT(endpoint) DO UPDATE SET subscription=EXCLUDED.subscription,updated_at=NOW()`,[endpoint,s]);
+    return {saved:true,endpoint};
+  }
+  const all=readLocal(),rows=Array.isArray(all.__admin_push_subscriptions__)?all.__admin_push_subscriptions__:[];
+  const idx=rows.findIndex(x=>x.endpoint===endpoint);
+  if(idx>=0)rows[idx]=row;else rows.push(row);
+  all.__admin_push_subscriptions__=rows.slice(-20);writeLocal(all);return {saved:true,endpoint};
+}
+async function listAdminPushSubscriptions(limit=50){
+  await init();const n=Math.min(100,Math.max(1,Number(limit)||50));
+  if(mode==="postgres"){
+    const r=await pool.query(`SELECT endpoint,subscription,created_at AS "createdAt",updated_at AS "updatedAt"
+      FROM marketpulse_admin_push_subscriptions ORDER BY updated_at DESC LIMIT $1`,[n]);return r.rows;
+  }
+  const all=readLocal();return (all.__admin_push_subscriptions__||[]).slice(-n).reverse();
+}
+async function deleteAdminPushSubscription(endpoint){
+  await init();const ep=String(endpoint||"").trim();if(!ep)return;
+  if(mode==="postgres"){await pool.query("DELETE FROM marketpulse_admin_push_subscriptions WHERE endpoint=$1",[ep]);return}
+  const all=readLocal();all.__admin_push_subscriptions__=(all.__admin_push_subscriptions__||[]).filter(x=>x.endpoint!==ep);writeLocal(all);
+}
+
 async function listBroadcasts(limit=100){
   await init();const n=Math.min(200,Math.max(1,Number(limit)||100));
   if(mode==="postgres"){const r=await pool.query(`SELECT id,title,body,audience,active,expires_at AS "expiresAt",created_by AS "createdBy",created_at AS "createdAt" FROM marketpulse_broadcasts ORDER BY created_at DESC LIMIT $1`,[n]);return r.rows}
@@ -844,4 +919,4 @@ async function restoreAdminConfig(snapshot){
   return true;
 }
 
-module.exports={init,health,get,save,clear,getLearningState,saveLearningState,recordLearningPrediction,getOpenLearningPredictions,getLearningPredictions,resolveLearningPrediction,saveSignalDNA,getSignalDNA,clearSignalDNA,getPhase4State,savePhase4State,getExecutionState,saveExecutionState,getPhase6State,savePhase6State,createUser,findUserByEmail,getUserById,touchUserLogin,recordLoginFailure,resetLoginFailures,savePassword,saveSession,getSession,extendSession,touchSessionActivity,revokeUserSessions,deleteSession,listUsers,userStats,moderateUser,getAccountMemory,saveAccountMemory,status,getAdminConfig,saveAdminConfig,getFeatureFlags,saveFeatureFlag,recordAdminAudit,listAdminAudit,recordSecurityEvent,listSecurityEvents,recordUsageEvent,adminAnalytics,listBroadcasts,createBroadcast,setBroadcastActive,getActiveBroadcasts,createSupportTicket,recentUsageEvents,listSupportTickets,replySupportTicket,saveAdminSnapshot,listAdminSnapshots,getAdminSnapshot,restoreAdminConfig};
+module.exports={init,health,get,save,clear,getLearningState,saveLearningState,recordLearningPrediction,getOpenLearningPredictions,getLearningPredictions,resolveLearningPrediction,saveSignalDNA,getSignalDNA,clearSignalDNA,getPhase4State,savePhase4State,getExecutionState,saveExecutionState,getPhase6State,savePhase6State,createUser,findUserByEmail,getUserById,touchUserLogin,recordLoginFailure,resetLoginFailures,savePassword,saveSession,getSession,extendSession,touchSessionActivity,revokeUserSessions,deleteSession,listUsers,userStats,moderateUser,getAccountMemory,saveAccountMemory,status,getAdminConfig,saveAdminConfig,getFeatureFlags,saveFeatureFlag,recordAdminAudit,listAdminAudit,recordSecurityEvent,listSecurityEvents,recordUsageEvent,adminAnalytics,listBroadcasts,createBroadcast,setBroadcastActive,getActiveBroadcasts,claimAdminSignalAlert,listAdminSignalAlerts,saveAdminPushSubscription,listAdminPushSubscriptions,deleteAdminPushSubscription,createSupportTicket,recentUsageEvents,listSupportTickets,replySupportTicket,saveAdminSnapshot,listAdminSnapshots,getAdminSnapshot,restoreAdminConfig};
