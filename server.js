@@ -22,6 +22,52 @@ const MARKET_META_CACHE={ts:0,data:{}};
 const MARKET_META_TTL=60000;
 const TICKER_CACHE={ts:0,data:{}};
 const TICKER_TTL=10000;
+const RELIABLE_TICKER_CACHE={ts:0,data:{}};
+const RELIABLE_TICKER_TTL=5000;
+
+async function getReliableTickerSnapshot(symbols=SYMBOLS){
+  const list=(symbols||SYMBOLS).filter(Boolean);
+  if(RELIABLE_TICKER_CACHE.ts&&Date.now()-RELIABLE_TICKER_CACHE.ts<RELIABLE_TICKER_TTL){
+    return Object.fromEntries(list.map(s=>[s,RELIABLE_TICKER_CACHE.data[s]||null]));
+  }
+
+  const rows=await Promise.all(list.map(async symbol=>{
+    const now=Date.now();
+    try{
+      const live=flowBucket(symbol);
+      if(Number.isFinite(Number(live.markPrice))&&now-Number(live.lastTs||0)<10000){
+        return [symbol,{
+          price:Number(live.markPrice),
+          change24h:null,
+          volume24h:null,
+          source:"Bybit live flow",
+          updatedAt:now
+        }];
+      }
+
+      const snapshot=await Promise.race([
+        dataFabric.krakenSnapshot(symbol),
+        dataFabric.coinbaseSnapshot(symbol)
+      ]);
+
+      const price=Number(snapshot?.price);
+      return [symbol,{
+        price:Number.isFinite(price)?price:null,
+        change24h:null,
+        volume24h:null,
+        source:snapshot?.name||"market feed",
+        updatedAt:now
+      }];
+    }catch{
+      return [symbol,null];
+    }
+  }));
+
+  const data=Object.fromEntries(rows);
+  RELIABLE_TICKER_CACHE.ts=Date.now();
+  RELIABLE_TICKER_CACHE.data=data;
+  return Object.fromEntries(list.map(s=>[s,data[s]||null]));
+}
 
 async function getBinanceTickerSnapshot(symbols=SYMBOLS){
   const list=(symbols||SYMBOLS).filter(Boolean);
@@ -1763,10 +1809,12 @@ const server=http.createServer(async(req,res)=>{
       const hit=SNAPSHOT_CACHE.get(interval);
       if(hit&&Date.now()-hit.ts<SNAPSHOT_TTL) return send(res,200,hit.payload);
       try{
-        const ticker=await getBinanceTickerSnapshot(SYMBOLS);
-        const cachedMeta=Object.fromEntries(SYMBOLS.map(s=>[s,MARKET_META_CACHE.data[s]||null]));
+        const [ticker,marketMeta]=await Promise.all([
+          getReliableTickerSnapshot(SYMBOLS),
+          getMarketMetadata(SYMBOLS).catch(()=>({}))
+        ]);
         const rows=SYMBOLS.map(function(symbol){
-          const t=ticker[symbol]||{},m=cachedMeta[symbol]||{};
+          const t=ticker[symbol]||{},m=marketMeta[symbol]||{};
           return {
             symbol,label:labels[symbol]||symbol,
             price:t.price??m.geckoPrice??null,
@@ -1796,8 +1844,10 @@ const server=http.createServer(async(req,res)=>{
           queueMicrotask(()=>warmCoreScan(interval));
           return send(res,200,{...snap.payload,mode:'snapshot-fallback'});
         }
-        const ticker=await getBinanceTickerSnapshot(SYMBOLS);
-        const marketMeta=await getMarketMetadata(SYMBOLS).catch(()=>({}));
+        const [ticker,marketMeta]=await Promise.all([
+          getReliableTickerSnapshot(SYMBOLS),
+          getMarketMetadata(SYMBOLS).catch(()=>({}))
+        ]);
         const rows=SYMBOLS.map(function(symbol){
           const t=ticker[symbol]||{},m=marketMeta[symbol]||{};
           return {symbol,label:labels[symbol]||symbol,price:t.price??m.geckoPrice??null,change24h:t.change24h??m.change24h??null,market:m,status:'SNAPSHOT',side:'WAIT',score:null};
