@@ -273,8 +273,8 @@ function buildReactionMap(c,{interval="1h",marketStructure=null,strategySetups=n
     .filter(z=>Math.abs(z.center-c[i].c)<=Math.max(atr*8,c[i].c*.045))
     .sort((a,b)=>Math.abs(a.center-c[i].c)-Math.abs(b.center-c[i].c))
     .slice(0,6);
-  const volumeZ=volumeZ(c,i);
-  const ctx={...derivatives,volumeZ};
+  const volumeZNow=volumeZ(c,i);
+  const ctx={...derivatives,volumeZ:volumeZNow};
   const opportunities=zones.map(z=>reactionForZone(c,z,atr,ctx))
     .sort((a,b)=>(b.state!=="WATCH_ZONE"?1:0)-(a.state!=="WATCH_ZONE"?1:0) || b.confidence-a.confidence || a.distance-b.distance)
     .slice(0,4);
