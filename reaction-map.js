@@ -208,7 +208,7 @@ function reactionForZone(c,zone,atrNow,ctx={}){
   const positioning=String(ctx.positioning||"").toUpperCase();
   const flowLong=(cvd==="BUYERS CONFIRM"||cvd.includes("BUYERS"))&&(oi===null||oi>-1);
   const flowShort=(cvd==="SELLERS CONFIRM"||cvd.includes("SELLERS"))&&(oi===null||oi>-1);
-  const bullishSweep=zone.side==="SUPPORT"&&inside&&x.l<zone.low-buf*.25&&x.c>zone.high*.999&&x.c>x.o&&w.lower>=Math.max(w.body*1.15,atrNow*.16);
+  const bullishSweep=zone.side==="SUPPORT"&&inside&&x.l<zone.low-buf*.25&&x.c>zone.center+buf*.05&&x.c>x.o&&w.lower>=Math.max(w.body*1.15,atrNow*.16);
   const bearishSweep=zone.side==="RESISTANCE"&&inside&&x.h>zone.high+buf*.25&&x.c<zone.low+buf*.35&&x.c<x.o&&w.upper>=Math.max(w.body*1.15,atrNow*.16);
   const bullishBreak=zone.side==="RESISTANCE"&&prev.c<=zone.high+buf&&x.c>zone.high+buf&&x.c>x.o&&(vz>=.8||flowLong);
   const bearishBreak=zone.side==="SUPPORT"&&prev.c>=zone.low-buf&&x.c<zone.low-buf&&x.c<x.o&&(vz>=.8||flowShort);
