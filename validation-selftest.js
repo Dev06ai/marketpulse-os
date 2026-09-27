@@ -122,5 +122,6 @@ function dlineCandles(){
 }
 
 const dline=detectStrategySetups(dlineCandles(),{interval:"15m",higher8h:{regime:"UPTREND"}});
+console.log("DLINE_DEBUG",JSON.stringify(dline));
 assert(dline.dLine?.kind==="D_LINE_BREAKOUT","D-Line breakout detector did not identify the synthetic breakout.");
 assert(dline.dLine?.side==="LONG","Bullish D-Line breakout must map to LONG.");
