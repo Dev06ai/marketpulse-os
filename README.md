@@ -129,3 +129,7 @@ The GitHub Actions fallback is intentionally execution-free and does not require
 - Owner-only /api/phase14, /api/phase14/validation and /api/phase14/calibrate endpoints expose adaptive-profile and validation diagnostics.
 - Phase 14 never bypasses the existing data-quality, prop-firm, validation or signal-stability gates.
 - Historical calibration is bounded and only uses resolved final-gated observations; no future candles are used to construct historical signal windows.
+
+
+### 24/7 scheduler hardening
+The no-cost scheduler runs every five minutes at minute offsets that avoid GitHub's top-of-hour load window. Each decision refresh uses a 30-second request timeout, bounded retries with exponential backoff for transient failures (timeouts, rate limits and server errors), and bounded concurrency for the multi-symbol sweeps. This is designed to survive Render cold starts and short-lived provider/network errors without requiring an open browser.
