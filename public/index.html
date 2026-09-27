@@ -1170,7 +1170,7 @@ linear-gradient(180deg,#0c0e11 0%,#101214 48%,#0a0b0d 100%);box-shadow:0 -20px 7
       <div class="adminSignalMini"><div class="k">Style</div><div class="v">15m scalp · 1h/4h swing</div></div>
     </div>
     <div style="display:flex;gap:7px;flex-wrap:wrap;margin-top:9px">
-      <button id="adminEnableSignalPush" class="btn primary">Enable signal pop-ups</button>
+      <button id="adminEnableSignalPush" class="btn primary">Reset & enable signal pop-ups</button>
       <button id="adminTestSignalPush" class="btn">Send test notification</button>
       <button id="adminDisableSignalPush" class="btn">Disable on this device</button>
       <button id="adminRefreshSignalAlerts" class="btn">Refresh alerts</button>
@@ -1603,33 +1603,69 @@ async function loadAdminSignalAlerts(initial){
     await updateAdminPushStatus();
   }catch(e){adminSignalStatusText("ALERT SERVICE CHECK FAILED","off")}
 }
+async function registerAdminPushSubscription(cfg){
+  var registration=await navigator.serviceWorker.getRegistration("/signal-sw.js");
+  if(registration){
+    try{await registration.update()}catch{}
+    var old=await registration.pushManager.getSubscription().catch(()=>null);
+    if(old){
+      try{await old.unsubscribe()}catch{}
+    }
+    try{await registration.unregister()}catch{}
+  }
+  registration=await navigator.serviceWorker.register("/signal-sw.js?rev=20260928",{scope:"/"});
+  registration=await navigator.serviceWorker.ready;
+  var subscription=await registration.pushManager.subscribe({
+    userVisibleOnly:true,
+    applicationServerKey:urlBase64ToUint8Array(cfg.publicKey)
+  });
+  var subscriptionJson=subscription.toJSON();
+  if(!subscriptionJson||!subscriptionJson.endpoint||!subscriptionJson.keys?.p256dh||!subscriptionJson.keys?.auth){
+    throw Error("Browser created an incomplete push subscription.");
+  }
+  await apiPost("/api/admin/notifications/subscribe",subscriptionJson);
+  return {registration,subscription};
+}
 async function enableAdminSignalPush(){
   if(!isAdminUser())return;
   if(!("Notification"in window)||!("serviceWorker"in navigator)||!("PushManager"in window)){
     if($("adminSignalPushHint"))$("adminSignalPushHint").textContent="This browser does not support the required push-notification APIs.";
+    adminSignalStatusText("PUSH UNSUPPORTED","off");
     return;
   }
   try{
     var cfg=await api("/api/admin/notifications/config",6000);
-    if(!cfg.pushEnabled||!cfg.publicKey)throw Error("Server-side push notifications are not configured yet.");
+    if(!cfg.pushEnabled||!cfg.publicKey)throw Error("Server-side push notifications are not configured.");
     var permission=await Notification.requestPermission();
     if(permission!=="granted"){
       adminSignalStatusText("PERMISSION "+permission.toUpperCase(),"off");
       if($("adminSignalPushHint"))$("adminSignalPushHint").textContent="Browser notification permission is "+permission+". Allow notifications for MarketPulse and try again.";
       return;
     }
-    var registration=await navigator.serviceWorker.register("/signal-sw.js",{scope:"/"});
-    var subscription=await registration.pushManager.getSubscription();
-    if(!subscription)subscription=await registration.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:urlBase64ToUint8Array(cfg.publicKey)});
-    var subscriptionJson=subscription.toJSON();
-    await apiPost("/api/admin/notifications/subscribe",subscriptionJson);
+    var result;
+    try{
+      result=await registerAdminPushSubscription(cfg);
+    }catch(firstError){
+      // One clean retry handles stale service-worker registrations and stale
+      // Chromium push subscriptions without requiring the user to debug them.
+      await new Promise(function(resolve){setTimeout(resolve,700)});
+      result=await registerAdminPushSubscription(cfg);
+    }
     state.adminPushConfig=cfg;
     var status=await updateAdminPushStatus();
     if(!status.ready)throw Error("Push subscription was not registered successfully on this device.");
-    if($("adminSignalPushHint"))$("adminSignalPushHint").textContent="Enabled on this device. Confirmed BTC signals will now appear as system notifications even when the dashboard is closed.";
+    if($("adminSignalPushHint"))$("adminSignalPushHint").textContent="Push is connected on this device. Use “Send test notification” to verify end-to-end delivery.";
   }catch(e){
+    var msg=String(e?.message||e||"Push setup failed");
+    var lower=msg.toLowerCase();
+    var hint=msg;
+    if(lower.includes("push service error")){
+      hint="The browser's push service rejected the subscription. Refresh MarketPulse once, then try again. On Chromium-based browsers, also check that site notifications are allowed and the browser's push messaging/Google services setting is enabled.";
+    }else if(lower.includes("mime")||lower.includes("serviceworker")){
+      hint="The service worker could not register. The server now serves signal-sw.js with the correct JavaScript MIME type; refresh this page completely and retry.";
+    }
     adminSignalStatusText("PUSH SETUP FAILED","off");
-    if($("adminSignalPushHint"))$("adminSignalPushHint").textContent=e.message||"Push notification setup failed.";
+    if($("adminSignalPushHint"))$("adminSignalPushHint").textContent=hint;
   }
 }
 async function testAdminSignalPush(){
