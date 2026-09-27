@@ -1331,7 +1331,21 @@ function staticFile(req,res){
   if(relative.startsWith('..')||path.isAbsolute(relative))return send(res,403,{error:'Forbidden'});
   fs.readFile(file,(e,d)=>{
     if(e)return send(res,404,{error:'Not found'});
-    const ext=path.extname(file),type=ext==='.html'?'text/html; charset=utf-8':ext==='.json'?'application/json; charset=utf-8':'text/plain; charset=utf-8';
+    const ext=path.extname(file).toLowerCase();
+    const mime={
+      '.html':'text/html; charset=utf-8',
+      '.js':'application/javascript; charset=utf-8',
+      '.mjs':'application/javascript; charset=utf-8',
+      '.css':'text/css; charset=utf-8',
+      '.json':'application/json; charset=utf-8',
+      '.svg':'image/svg+xml',
+      '.png':'image/png',
+      '.jpg':'image/jpeg',
+      '.jpeg':'image/jpeg',
+      '.webp':'image/webp',
+      '.ico':'image/x-icon'
+    };
+    const type=mime[ext]||'text/plain; charset=utf-8';
     const nonce=crypto.randomBytes(18).toString('base64');
     let body=d;
     if(ext==='.html')body=Buffer.from(d.toString().replaceAll('__CSP_NONCE__',nonce));
