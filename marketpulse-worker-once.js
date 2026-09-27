@@ -1,10 +1,10 @@
 /*
  * MarketPulse scheduled intelligence sweep
  * ----------------------------------------
- * Designed for Render Cron Jobs when a native always-on Background Worker
- * is not available through the connected Render control surface.
+ * Designed for the no-cost GitHub Actions scheduler when a native always-on
+ * Background Worker is not available through the connected Render control surface.
  *
- * The sweep is intentionally one-shot. Render runs it every 5 minutes and
+ * The sweep is intentionally one-shot. GitHub runs it every 5 minutes and
  * this script selects the timeframes that are due:
  *   15m -> every 5 minutes
  *   1h  -> every 15 minutes
