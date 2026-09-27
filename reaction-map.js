@@ -1,3 +1,4 @@
+const {getActiveAnalystPack}=require("./analyst-scenario-pack");
 /*
   Reaction Map layer
   -------------------
@@ -146,7 +147,7 @@ function fibZones(swing,atrNow){
   return out;
 }
 
-function levelEvidence(marketStructure,strategySetups){
+function levelEvidence(marketStructure,strategySetups,analystPack=null){
   const out=[];
   for(const l of marketStructure?.levels||[]){
     if(Number.isFinite(Number(l.price))){
@@ -179,7 +180,24 @@ function levelEvidence(marketStructure,strategySetups){
   }
   return out;
 }
-
+  if(analystPack?.active){
+    for(const z of analystPack.zones||[]){
+      if(!Number.isFinite(Number(z.low))||!Number.isFinite(Number(z.high)))continue;
+      out.push({
+        id:z.id,label:"Analyst · "+z.label,kind:z.kind,low:Number(z.low),high:Number(z.high),
+        center:(Number(z.low)+Number(z.high))/2,evidence:"Analyst scenario pack",
+        analyst:{
+          source:analystPack.source,
+          primaryAction:z.primaryAction||"WAIT",
+          primaryTrigger:z.primaryTrigger||null,
+          alternateAction:z.alternateAction||"WAIT",
+          alternateTrigger:z.alternateTrigger||null,
+          invalidationText:z.invalidationText||null,
+          sources:Array.isArray(z.sources)?z.sources.slice(0,8):[]
+        }
+      });
+    }
+  }
 function clusterLevels(levels,atrNow){
   const tolerance=Math.max(atrNow*.42,0.0035*Math.max(...levels.map(x=>x.center).filter(Number.isFinite),1));
   const sorted=[...levels].filter(x=>Number.isFinite(Number(x.center))).sort((a,b)=>a.center-b.center);
@@ -205,6 +223,7 @@ function clusterLevels(levels,atrNow){
       confluence:g.items.length,
       evidence:g.items.map(x=>x.label).slice(0,8),
       evidenceSources:[...new Set(g.items.map(x=>x.evidence).filter(Boolean))],
+      analyst:g.items.find(x=>x.analyst)?.analyst||null,
       mixed:kinds.size>1
     };
   });
@@ -264,8 +283,11 @@ function reactionForZone(c,zone,atrNow,ctx={}){
   if(state==="WATCH_ZONE"&&!near)confidence=Math.max(0,confidence-18);
 
   const invalidation=zone.side==="SUPPORT"?zone.low-atrNow*.22:zone.high+atrNow*.22;
+  const analystPrimary=zone.analyst?.primaryAction||"WAIT";
+  const analystMatch=action!=="WAIT"&&analystPrimary===action;
   return {
     ...zone,state,action,confidence:clamp(Math.round(confidence),0,97),trigger,
+    analystMatch,analystPrimaryTrigger:zone.analyst?.primaryTrigger||null,analystAlternateAction:zone.analyst?.alternateAction||"WAIT",analystAlternateTrigger:zone.analyst?.alternateTrigger||null,
     invalidation,price:x.c,distance,near,
     confirmation:{
       volumeZ:vz,
@@ -287,7 +309,8 @@ function buildReactionMap(c,{interval="1h",marketStructure=null,strategySetups=n
   const rangePocEvidence=rangeProfile?[
     {id:"RANGE_POC",label:"Range POC",kind:"SUPPORT",low:rangeProfile.poc,high:rangeProfile.poc,center:rangeProfile.poc,evidence:"Range POC"}
   ]:[];
-  const evidence=levelEvidence(marketStructure,strategySetups);
+  const analystPack=getActiveAnalystPack();
+  const evidence=levelEvidence(marketStructure,strategySetups,analystPack);
   const raw=[...evidence,...rangePocEvidence,...fib];
   const clusters=clusterLevels(raw,atr);
   const zones=clusters
@@ -306,6 +329,8 @@ function buildReactionMap(c,{interval="1h",marketStructure=null,strategySetups=n
     interval,
     price:c[i].c,
     atr,
+    analystPack:{id:analystPack.id,source:analystPack.source,asOf:analystPack.asOf,status:analystPack.status,expiresAt:analystPack.expiresAt},
+    analystScenarios:analystPack.scenarios,
     swing:{high:swing.high,low:swing.low,highIndex:swing.highIndex,lowIndex:swing.lowIndex},
     zones:opportunities,
     opportunities:opportunities.filter(x=>x.action!=="WAIT"),
