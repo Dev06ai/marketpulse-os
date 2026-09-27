@@ -161,7 +161,10 @@ function runWalkForward(candles,opts={}){
     rows.push({
       ts:candles[i]?.t||null,score:Number(decision.market?.confluenceScore)||0,side:decision.action,
       state:decision.state,entry:lv.entry,stop:lv.stop,tp1:lv.tp1,outcome:fwd.outcome,resultR:fwd.resultR,
-      barsHeld:fwd.barsHeld,reason:fwd.reason,regime:decision.market?.regime||"UNKNOWN"
+      barsHeld:fwd.barsHeld,reason:fwd.reason,regime:decision.market?.regime||"UNKNOWN",
+      setupKey:String(decision.market?.type||analysis?.strategyFamily||"GENERIC").toUpperCase(),
+      strategyFamily:String(analysis?.strategyFamily||decision.market?.type||"GENERIC").toUpperCase(),
+      phase14:analysis?.phase14||null
     });
   }
   const testBars=Math.max(0,candles.length-start);
@@ -171,6 +174,9 @@ function runWalkForward(candles,opts={}){
     short:summarise(rows.filter(x=>x.side==="SHORT"),{opportunities:rows.filter(x=>x.side==="SHORT").length,testBars})
   };
   const buckets=analyseScoreBuckets(rows);
+  const groupBy=(key)=>{const g={};for(const row of rows){const k=String(row?.[key]||"GENERIC").toUpperCase();(g[k]||(g[k]=[])).push(row)};return Object.fromEntries(Object.entries(g).map(([k,v])=>{const s=summarise(v,{opportunities:v.length,testBars:testBars,minTrades:10,minTestBars:1});return [k,{key:k,...s}] }));};
+  const setupBuckets=groupBy("setupKey");
+  const regimeBuckets=groupBy("regime");
   const validation={
     version:VERSION,phase11:PHASE11,phase12:PHASE12,phase13:PHASE13,
     interval,symbol:opts.symbol||"BTCUSDT",
@@ -182,7 +188,7 @@ function runWalkForward(candles,opts={}){
       "Open positions at the replay horizon are marked at the horizon close and capped to ±1R.",
       "Past performance does not establish future profitability."
     ],
-    summary,directional,buckets,
+    summary,directional,buckets,setupBuckets,regimeBuckets,
     adaptive:null,
     generatedAt:Date.now(),
     recent:rows.slice(-25)
