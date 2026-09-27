@@ -4,7 +4,7 @@ on:
   schedule:
     # GitHub-hosted scheduled runs provide the no-cost fallback for the
     # Render-free deployment. The sweep itself decides which timeframes are due.
-    - cron: "*/5 * * * *"
+    - cron: "2-59/5 * * * *"
   workflow_dispatch:
 
 permissions:
@@ -17,15 +17,17 @@ concurrency:
 jobs:
   intelligence:
     runs-on: ubuntu-latest
-    timeout-minutes: 4
+    timeout-minutes: 8
     env:
       MARKETPULSE_WEB_URL: https://marketpulse-os-d4p9.onrender.com
       MARKETPULSE_WORKER_ENABLED: "true"
       MARKETPULSE_WORKER_SYMBOLS: BTCUSDT,ETHUSDT,SOLUSDT,BNBUSDT,XRPUSDT,DOGEUSDT,ADAUSDT
       MARKETPULSE_WORKER_INTERVALS: 15m,1h,4h,1d
       MARKETPULSE_WORKER_DEVICE: github-actions-24x7
-      MARKETPULSE_WORKER_TIMEOUT_MS: "20000"
+      MARKETPULSE_WORKER_TIMEOUT_MS: "30000"
       MARKETPULSE_WORKER_JITTER_MS: "1500"
+      MARKETPULSE_WORKER_RETRIES: "3"
+      MARKETPULSE_WORKER_RETRY_BASE_MS: "1200"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
