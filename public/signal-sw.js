@@ -4,8 +4,8 @@ self.addEventListener("push",event=>{
   const title=data.title||"MarketPulse signal";
   const options={
     body:data.body||"A new BTC signal is available.",
-    icon:data.icon||"/favicon.ico",
-    badge:data.badge||"/favicon.ico",
+    icon:data.icon||undefined,
+    badge:data.badge||undefined,
     tag:data.tag||"marketpulse-signal",
     renotify:data.renotify!==false,
     data:data.data||{url:"/"}
