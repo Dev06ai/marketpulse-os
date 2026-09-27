@@ -15,11 +15,11 @@
   "categories":["finance","business","productivity"],
   "prefer_related_applications":false,
   "icons":[
-    {"src":"/marketpulse-icon-v3.svg","sizes":"any","type":"image/svg+xml","purpose":"any"},
-    {"src":"/marketpulse-icon-maskable-v3.svg","sizes":"any","type":"image/svg+xml","purpose":"maskable"}
+    {"src":"/marketpulse-icon-v4.svg","sizes":"any","type":"image/svg+xml","purpose":"any"},
+    {"src":"/marketpulse-icon-maskable-v4.svg","sizes":"any","type":"image/svg+xml","purpose":"maskable"}
   ],
   "shortcuts":[
-    {"name":"BTC Dashboard","short_name":"BTC","url":"/?app=marketpulse-mobile&view=overview","icons":[{"src":"/marketpulse-icon-v3.svg","sizes":"any","type":"image/svg+xml"}]},
-    {"name":"Admin Console","short_name":"Admin","url":"/?app=marketpulse-mobile&view=admin","icons":[{"src":"/marketpulse-icon-v3.svg","sizes":"any","type":"image/svg+xml"}]}
+    {"name":"BTC Dashboard","short_name":"BTC","url":"/?app=marketpulse-mobile&view=overview","icons":[{"src":"/marketpulse-icon-v4.svg","sizes":"any","type":"image/svg+xml"}]},
+    {"name":"Admin Console","short_name":"Admin","url":"/?app=marketpulse-mobile&view=admin","icons":[{"src":"/marketpulse-icon-v4.svg","sizes":"any","type":"image/svg+xml"}]}
   ]
 }
