@@ -123,18 +123,39 @@ function buildSignalAlert({decision,symbol,interval,candleTs}){
   const setupKey=String(decision?.phase14?.intelligence?.setupKey||"GENERIC").toUpperCase();
   const key=[symbol,interval,candleTs||"na",side,setupKey].join("|");
   const title="BTC "+side+" · "+interval+" "+style;
+  const scoreText=Number.isFinite(score)?Math.round(score)+"/100":"—";
+  const rrText=Number.isFinite(rr)?rr.toFixed(2):"—";
+  const gateText=gate==="PAPER_ONLY"?"PAPER-ONLY":"READY";
+  const entryText=levels.entryLow!=null&&levels.entryHigh!=null
+    ?price(levels.entryLow)+" – "+price(levels.entryHigh)
+    :price(levels.entryLow??levels.entry);
   const body=[
-    setup,
-    "Score "+(Number.isFinite(score)?Math.round(score):"—")+"/100",
-    "Entry "+price(levels.entryLow??levels.entry),
-    "SL "+price(levels.stop),
-    "TP1 "+price(levels.tp1),
-    Number.isFinite(rr)?"R:R "+rr.toFixed(2):null,
-    gate==="PAPER_ONLY"?"PAPER-ONLY":"READY"
-  ].filter(Boolean).join(" · ");
+    interval+" "+style+" • "+setup,
+    "Score "+scoreText+" • R:R "+rrText,
+    "Entry "+entryText+" • SL "+price(levels.stop),
+    "TP1 "+price(levels.tp1)+" • TP2 "+price(levels.tp2),
+    "Confirmed • "+gateText
+  ].join("\n");
   return {
     signalKey:key,symbol:"BTC",symbolCode:symbol,interval,style,side,setup,
-    title,body,score:Number.isFinite(score)?score:null,
+    title:"MARKETPULSE • BTC "+side,
+    body,score:Number.isFinite(score)?score:null,
+    status:"CONFIRMED",
+    gate:gateText,
+    details:{
+      timeframe:interval,
+      style,
+      setup,
+      side,
+      score:Number.isFinite(score)?score:null,
+      rr:Number.isFinite(rr)?rr:null,
+      entryLow:levels.entryLow??null,
+      entryHigh:levels.entryHigh??null,
+      stop:levels.stop??null,
+      tp1:levels.tp1??null,
+      tp2:levels.tp2??null,
+      gate:gateText
+    },
     levels:{entryLow:levels.entryLow??null,entryHigh:levels.entryHigh??null,entry:levels.entry??null,stop:levels.stop??null,tp1:levels.tp1??null,tp2:levels.tp2??null,rr:Number.isFinite(rr)?rr:null},
     candleTs:candleTs||null,createdAt:new Date().toISOString(),
     url:"/?view=overview&symbol=BTCUSDT&interval="+encodeURIComponent(interval)
@@ -157,9 +178,12 @@ async function notifyAdminSignal(storage,context){
             type:"MARKETPULSE_SIGNAL",
             title:alert.title,
             body:alert.body,
+            icon:"/marketpulse-icon.svg",
+            badge:"/marketpulse-icon.svg",
             tag:"marketpulse-"+alert.signalKey,
             renotify:true,
-            data:{url:alert.url,signalKey:alert.signalKey}
+            requireInteraction:true,
+            data:{url:alert.url,signalKey:alert.signalKey,alert:alert}
           }),{TTL:300,urgency:"high"});
           delivered++;
         }catch(error){
