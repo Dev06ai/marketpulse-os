@@ -1128,6 +1128,7 @@ const server=http.createServer(async(req,res)=>{
       maintenanceMessage:"MarketPulse is temporarily unavailable."
     }):await getAdminRuntime();
     const userForMode=fastPublic?null:await auth.userFromRequest(req);
+    if(userForMode?.setCookie)res.setHeader("Set-Cookie",userForMode.setCookie);
     const isAdminUser=Boolean(userForMode?.isAdmin);
     const publicAllowed=new Set(['/api/config','/api/auth/me','/api/auth/login','/api/auth/register','/api/auth/logout','/api/auth/presence','/api/broadcasts/active','/api/telemetry/event','/health','/']);
     if(adminCfg.maintenanceMode&&!isAdminUser&&u.pathname.startsWith('/api/')&&!publicAllowed.has(u.pathname))return send(res,503,{ok:false,error:"MAINTENANCE_MODE",maintenance:true,message:adminCfg.maintenanceMessage});
