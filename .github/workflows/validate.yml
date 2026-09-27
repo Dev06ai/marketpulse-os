@@ -102,7 +102,7 @@ jobs:
           forbidden=["pfgCard","ecgCard","pfgRefresh","ecgRefresh","/api/propfirm","loadPropFirmGuard","loadEventGuard","evaluateEventContract"]
           bad=[x for x in forbidden if x in html or x in server or x in prop]
           if bad: raise SystemExit("Removed safety tool still referenced: "+", ".join(bad))
-          for x in ["function resetQuickCalculators()","function setupCalculatorInputs()","calc-profit","calc-loss","Perpetual P&amp;L","window.addEventListener("pageshow",function(e)"]:
+          for x in ["function resetQuickCalculators()","function setupCalculatorInputs()","calc-profit","calc-loss","Perpetual P&amp;L",'window.addEventListener("pageshow",function(e)']:
               if x not in html: raise SystemExit("Missing calculator requirement: "+x)
           start=html.index("function calc(){")
           end=html.index("\nfunction normalizeFlow",start)
