@@ -3101,7 +3101,7 @@ function buildGateDiagnostics(d){
   var propState=pg.decision==="BLOCKED"?"BLOCK":(pg.decision==="ELIGIBLE_WITH_WARNINGS"?"PASS":"PASS");
   addGateDiag(rows,"Prop-firm risk gate",propState,
     pg.decision||"NOT EVALUATED",
-    propReasons.length?propReasons.map(function(x){return String(x).replaceAll("_"," ").toLowerCase()}).join(" · "):(propWarnings.length?"Warnings: "+propWarnings.join(" · "):"No prop-firm blocker reported.");
+    propReasons.length?propReasons.map(function(x){return String(x).replaceAll("_"," ").toLowerCase()}).join(" · "):(propWarnings.length?"Warnings: "+propWarnings.join(" · "):"No prop-firm blocker reported."));
   var dataScore=Number(data.score);
   addGateDiag(rows,"Live data quality",Number.isFinite(dataScore)&&dataScore>=85?"PASS":"BLOCK",
     Number.isFinite(dataScore)?fmt(dataScore)+"/100":"Unavailable",
