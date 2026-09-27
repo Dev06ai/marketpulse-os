@@ -86,6 +86,22 @@ jobs:
           print("Clean overview chart checks OK")
           PY
 
+      - name: Check non-disruptive background retry handling
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          html=Path("public/index.html").read_text()
+          start=html.index("async function loadCore(){")
+          end=html.index("\nasync function askAI(){",start)
+          core=html[start:end]
+          decision=html[html.index("async function loadFinalDecision()"):html.index("\nasync function loadCore(){",html.index("async function loadFinalDecision()"))]
+          assert 'if(state.market&&state.market.analysis)' in core
+          assert 'Live · last good snapshot' in core
+          assert 'if(state.finalDecision)' in decision
+          assert 'keeping the last confirmed decision' in decision
+          print("Background retry is non-disruptive")
+          PY
+
       - name: Check smooth refresh rendering
         run: |
           python - <<'PY'
