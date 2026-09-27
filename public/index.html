@@ -514,6 +514,28 @@ body.admin-mode .adminOnly{display:block!important}body.admin-mode .edgeAction.a
 .nav button.adminNav,.mobileMenu button.adminNav{display:none}
 body.admin-mode .nav button.adminNav,body.admin-mode .mobileMenu button.adminNav{display:block;color:#d8c3ff;border-color:rgba(192,132,252,.25);background:rgba(192,132,252,.06)}
 .adminPanel{border-color:rgba(192,132,252,.22);box-shadow:0 0 0 1px rgba(192,132,252,.05),0 0 36px rgba(192,132,252,.08),var(--shadow)}
+.adminSignalPanel{border-color:rgba(103,232,255,.20)!important;background:linear-gradient(180deg,rgba(8,20,29,.96),rgba(8,8,12,.94))}
+.adminSignalHeader{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.adminSignalStatus{display:inline-flex;align-items:center;gap:6px;padding:6px 9px;border-radius:999px;font-size:8px;font-weight:950;letter-spacing:.05em;border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.025);color:#94a3b8}
+.adminSignalStatus.ready{color:#86efac;border-color:rgba(74,222,128,.22);background:rgba(74,222,128,.06)}
+.adminSignalStatus.off{color:#fbbf24;border-color:rgba(251,191,36,.22);background:rgba(251,191,36,.06)}
+.adminSignalGrid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:7px;margin-top:9px}
+.adminSignalMini{padding:9px;border:1px solid rgba(255,255,255,.07);border-radius:10px;background:rgba(255,255,255,.02)}
+.adminSignalMini .k{font-size:8px;color:#7f90a5;text-transform:uppercase;letter-spacing:.06em}
+.adminSignalMini .v{font-size:10px;font-weight:900;margin-top:5px;color:#eaf2f8}
+.adminSignalHistory{display:grid;gap:6px;margin-top:10px}
+.adminSignalRow{display:grid;grid-template-columns:78px 1fr auto;gap:8px;align-items:center;padding:9px;border:1px solid rgba(103,232,255,.09);border-radius:10px;background:rgba(255,255,255,.018)}
+.adminSignalRow .side{font-size:9px;font-weight:950;text-align:center;padding:6px 7px;border-radius:8px}
+.adminSignalRow .side.long{color:#86efac;background:rgba(74,222,128,.07)}
+.adminSignalRow .side.short{color:#fda4af;background:rgba(248,113,113,.07)}
+.adminSignalRow .title{font-size:9px;font-weight:900}
+.adminSignalRow .meta{font-size:8px;color:#8493a7;margin-top:3px;line-height:1.4}
+.adminSignalRow .score{font-size:9px;color:#d9e7f2}
+@media(max-width:700px){.adminSignalGrid{grid-template-columns:1fr}.adminSignalRow{grid-template-columns:64px 1fr}.adminSignalRow .score{grid-column:2}}
+#adminSignalToast{position:fixed;right:16px;bottom:18px;z-index:2000;width:min(420px,calc(100vw - 28px));padding:12px;border:1px solid rgba(103,232,255,.24);border-radius:14px;background:rgba(9,12,17,.96);backdrop-filter:blur(18px);box-shadow:0 22px 70px rgba(0,0,0,.55);transform:translateY(18px);opacity:0;pointer-events:none;transition:opacity .2s ease,transform .2s ease}
+#adminSignalToast.show{opacity:1;transform:translateY(0)}
+#adminSignalToast .t{font-size:11px;font-weight:950}
+#adminSignalToast .b{margin-top:5px;color:#aebccd;font-size:9px;line-height:1.45}
 .adminBadge{display:inline-flex;align-items:center;gap:6px;border:1px solid rgba(192,132,252,.28);background:rgba(192,132,252,.07);color:#e9d5ff;border-radius:999px;padding:6px 9px;font-size:9px;font-weight:900;letter-spacing:.06em}
 .adminGrid{display:grid;grid-template-columns:repeat(3,1fr);gap:9px}
 .adminMetric{padding:12px;border:1px solid rgba(255,255,255,.07);border-radius:11px;background:#0d0d12}
@@ -1136,6 +1158,25 @@ linear-gradient(180deg,#0c0e11 0%,#101214 48%,#0a0b0d 100%);box-shadow:0 -20px 7
     </div>
     <div class="section card" style="margin-top:10px"><div class="title">Protected checks</div><div class="healthGrid" id="adminHealthGrid"></div><div class="sub" id="adminHealthText" style="margin-top:7px">Owner-only system diagnostics.</div></div>
   </div>
+
+  <div class="card adminPanelSmall adminSignalPanel" style="margin-top:10px">
+    <div class="adminSignalHeader">
+      <div><div class="title">BTC Signal Notifications</div><div class="sub">Owner-only push alerts for confirmed BTC LONG/SHORT signals on 15m, 1h and 4h.</div></div>
+      <span id="adminSignalPushStatus" class="adminSignalStatus off">PUSH NOT ENABLED</span>
+    </div>
+    <div class="adminSignalGrid">
+      <div class="adminSignalMini"><div class="k">Market</div><div class="v">BTC only</div></div>
+      <div class="adminSignalMini"><div class="k">Timeframes</div><div class="v">15m · 1h · 4h</div></div>
+      <div class="adminSignalMini"><div class="k">Style</div><div class="v">15m scalp · 1h/4h swing</div></div>
+    </div>
+    <div style="display:flex;gap:7px;flex-wrap:wrap;margin-top:9px">
+      <button id="adminEnableSignalPush" class="btn primary">Enable signal pop-ups</button>
+      <button id="adminDisableSignalPush" class="btn">Disable on this device</button>
+      <button id="adminRefreshSignalAlerts" class="btn">Refresh alerts</button>
+    </div>
+    <div id="adminSignalPushHint" class="sub" style="margin-top:7px">Enable this once on the device/browser where you want to receive BTC signal notifications. The server-side alert engine continues running even when this dashboard is closed.</div>
+    <div class="adminSignalHistory" id="adminSignalHistory"><div class="small">No BTC signal alerts recorded yet.</div></div>
+  </div>
     <div class="adminCommandKpis">
     <div class="adminCommandKpi live"><div class="k">Live visitors</div><div class="v" id="acLiveVisitors">—</div></div>
     <div class="adminCommandKpi"><div class="k">Active today</div><div class="v" id="acActiveDay">—</div></div>
@@ -1493,10 +1534,105 @@ var state={
   adminAudit:[],
   adminSecurity:[],
   adminSnapshots:[],
+  adminSignalAlerts:[],
+  adminPushConfig:null,
+  adminSignalLastPollAt:0,
+  adminSignalPollTimer:null,
   flags:{}
 };
 
-function $(id){return document.getElementById(id)}
+function $(id){return document.getElementById(id)};
+function urlBase64ToUint8Array(base64String){
+  var padding="=".repeat((4-base64String.length%4)%4),base64=(base64String+padding).replace(/-/g,"+").replace(/_/g,"/");
+  var raw=atob(base64),output=new Uint8Array(raw.length),i;
+  for(i=0;i<raw.length;i++)output[i]=raw.charCodeAt(i);
+  return output;
+}
+function adminSignalStatusText(text,kind){
+  var el=$("adminSignalPushStatus");if(!el)return;
+  el.textContent=text;el.className="adminSignalStatus "+(kind||"off");
+}
+function renderAdminSignalAlerts(rows){
+  var el=$("adminSignalHistory");if(!el)return;
+  var list=Array.isArray(rows)?rows:[];
+  el.innerHTML=list.slice(0,12).map(function(x){
+    var side=String(x.side||"").toUpperCase(),cls=side==="LONG"?"long":"short";
+    var p=x.payload||{};
+    return '<div class="adminSignalRow"><span class="side '+cls+'">'+safeHtml(side)+'</span><div><div class="title">'+safeHtml(String(x.symbol||"BTC"))+' · '+safeHtml(String(x.interval||""))+' · '+safeHtml(String(x.style||""))+'</div><div class="meta">'+safeHtml(String(x.setup||"Market structure"))+' · '+adminDate(x.createdAt)+(p?.levels?.entryLow!=null?' · Entry '+safeHtml(fmt(p.levels.entryLow)):'')+(p?.levels?.stop!=null?' · SL '+safeHtml(fmt(p.levels.stop)):'')+'</div></div><span class="score">'+safeHtml(Number.isFinite(Number(x.score))?Math.round(Number(x.score))+"/100":"—")+'</span></div>';
+  }).join("")||'<div class="small">No confirmed BTC signal alerts recorded yet.</div>';
+}
+function adminSignalToast(alert){
+  if(!alert||!isAdminUser())return;
+  var host=$("adminSignalToast");
+  if(!host){host=document.createElement("div");host.id="adminSignalToast";document.body.appendChild(host)}
+  host.innerHTML='<div class="t">'+safeHtml(alert.title||"BTC signal")+'</div><div class="b">'+safeHtml(alert.body||"A confirmed BTC signal is available.")+'</div>';
+  host.classList.add("show");clearTimeout(adminSignalToast._timer);adminSignalToast._timer=setTimeout(function(){host.classList.remove("show")},10000);
+}
+async function loadAdminSignalAlerts(initial){
+  if(!isAdminUser())return;
+  try{
+    var d=await api("/api/admin/signal-alerts",6000),rows=d.alerts||[];
+    state.adminPushConfig=d.config||null;
+    renderAdminSignalAlerts(rows);
+    if(!initial){
+      var previous=Number(state.adminSignalLastPollAt||0);
+      rows.slice().reverse().forEach(function(x){
+        var ts=new Date(x.createdAt||0).getTime();
+        if(previous&&ts>previous)adminSignalToast({title:String(x.symbol||"BTC")+" "+String(x.side||"")+" · "+String(x.interval||"")+" "+String(x.style||""),body:String(x.setup||"Signal")+" · Score "+(Number.isFinite(Number(x.score))?Math.round(Number(x.score)):"—")+"/100"});
+      });
+    }
+    state.adminSignalLastPollAt=Date.now();
+    var perm=("Notification"in window)?Notification.permission:"unsupported";
+    adminSignalStatusText((d.config?.pushEnabled&&perm==="granted")?"PUSH ENABLED":"PUSH NOT ENABLED",d.config?.pushEnabled&&perm==="granted"?"ready":"off");
+  }catch(e){adminSignalStatusText("ALERT SERVICE CHECK FAILED","off")}
+}
+async function enableAdminSignalPush(){
+  if(!isAdminUser())return;
+  if(!("Notification"in window)||!("serviceWorker"in navigator)||!("PushManager"in window)){
+    if($("adminSignalPushHint"))$("adminSignalPushHint").textContent="This browser does not support the required push-notification APIs.";
+    return;
+  }
+  try{
+    var cfg=await api("/api/admin/notifications/config",6000);
+    if(!cfg.pushEnabled||!cfg.publicKey)throw Error("Server-side push notifications are not configured yet.");
+    var permission=await Notification.requestPermission();
+    if(permission!=="granted"){
+      adminSignalStatusText("PERMISSION "+permission.toUpperCase(),"off");
+      if($("adminSignalPushHint"))$("adminSignalPushHint").textContent="Browser notification permission is "+permission+". Allow notifications for MarketPulse and try again.";
+      return;
+    }
+    var registration=await navigator.serviceWorker.register("/signal-sw.js",{scope:"/"});
+    var subscription=await registration.pushManager.getSubscription();
+    if(!subscription)subscription=await registration.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:urlBase64ToUint8Array(cfg.publicKey)});
+    await apiPost("/api/admin/notifications/subscribe",subscription.toJSON());
+    state.adminPushConfig=cfg;
+    adminSignalStatusText("PUSH ENABLED","ready");
+    if($("adminSignalPushHint"))$("adminSignalPushHint").textContent="Enabled on this device. Confirmed BTC signals will now appear as system notifications even when the dashboard is closed.";
+  }catch(e){
+    adminSignalStatusText("PUSH SETUP FAILED","off");
+    if($("adminSignalPushHint"))$("adminSignalPushHint").textContent=e.message||"Push notification setup failed.";
+  }
+}
+async function disableAdminSignalPush(){
+  if(!("serviceWorker"in navigator))return;
+  try{
+    var registration=await navigator.serviceWorker.getRegistration("/signal-sw.js"),subscription=registration&&await registration.pushManager.getSubscription();
+    if(subscription){
+      var endpoint=encodeURIComponent(subscription.endpoint);
+      await fetch("/api/admin/notifications/subscribe?endpoint="+endpoint,{method:"DELETE",credentials:"same-origin",headers:{"x-marketpulse-device":deviceId()}});
+      await subscription.unsubscribe();
+    }
+    adminSignalStatusText("PUSH NOT ENABLED","off");
+    if($("adminSignalPushHint"))$("adminSignalPushHint").textContent="Push alerts are disabled on this device. Your stored alert history remains available.";
+  }catch(e){adminSignalStatusText("DISABLE FAILED","off")}
+}
+function startAdminSignalPolling(){
+  if(state.adminSignalPollTimer||!isAdminUser())return;
+  state.adminSignalPollTimer=setInterval(function(){if(isAdminUser())loadAdminSignalAlerts(false)},30000);
+}
+function stopAdminSignalPolling(){
+  if(state.adminSignalPollTimer){clearInterval(state.adminSignalPollTimer);state.adminSignalPollTimer=null}
+}
 // EARLY CORE BOOT: schedule the market loader before optional UI initializers run.
 // If a later non-critical initializer throws, the dashboard still gets a chance
 // to populate BTC data instead of remaining on "Starting MarketPulse…".
@@ -1664,6 +1800,9 @@ function setView(name){
 document.querySelectorAll("[data-view]").forEach(function(b){
   b.addEventListener("click",function(){setView(b.dataset.view)})
 });
+if($("adminEnableSignalPush"))$("adminEnableSignalPush").addEventListener("click",enableAdminSignalPush);
+if($("adminDisableSignalPush"))$("adminDisableSignalPush").addEventListener("click",disableAdminSignalPush);
+if($("adminRefreshSignalAlerts"))$("adminRefreshSignalAlerts").addEventListener("click",function(){loadAdminSignalAlerts(false)});
 $("mobileMenuBtn").addEventListener("click",function(){
   var menu=$("mobileMenu"),open=!menu.classList.contains("open");menu.classList.toggle("open",open);menu.setAttribute("aria-hidden",String(!open));this.setAttribute("aria-expanded",String(open));
 });
@@ -3454,6 +3593,7 @@ function renderAccount(){
   if(ex)ex.style.display=admin?"block":"none";
   var an=$("adminNav"),am=$("adminNavMobile");if(an)an.style.display=admin?"block":"none";if(am)am.style.display=admin?"block":"none";
   syncRoleVisibility();
+  if(!admin)stopAdminSignalPolling();
   if(admin){
     deferTask(loadDataFabric,120);
     deferTask(loadResearchCatalog,180);
@@ -3568,7 +3708,7 @@ async function loadAdminConsole(){
     var r=await api("/api/admin/storage-health",7000);
     if($("adminStorage"))$("adminStorage").textContent=r.connected?"Postgres":"Local fallback";if($("adminStorageDetail"))$("adminStorageDetail").textContent=r.connected?"Live database connection verified":"Running on local fallback storage";
   }catch(e){if($("adminStorage"))$("adminStorage").textContent="Unavailable";if($("adminStorageDetail"))$("adminStorageDetail").textContent=e.message||"Storage health check failed"}
-  loadAdminUsers();loadAdminCenter();
+  loadAdminUsers();loadAdminCenter();loadAdminSignalAlerts(true);startAdminSignalPolling();
 }
 function adminDate(v){
   if(!v)return "—";
