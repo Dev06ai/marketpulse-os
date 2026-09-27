@@ -70,6 +70,14 @@ function levels(a){
   const risk=entry!==null&&stop!==null?Math.abs(entry-stop):null,reward=entry!==null&&tp1!==null?Math.abs(tp1-entry):null;
   return {side:sideOf(a),entryLow:lo,entryHigh:hi,entry,stop,tp1,tp2,riskDistance:risk,target1Distance:reward,rr:reward!==null&&risk>0?reward/risk:n(a?.rr)};
 }
+function tradeStyle(interval){
+  const tf=String(interval||"1h").toLowerCase();
+  if(tf==="15m"||tf==="30m")return {label:"SCALP",horizon:"Short-duration / same-session",expectedBars:tf==="15m"?16:12};
+  if(tf==="1h")return {label:"INTRADAY",horizon:"Intraday / same-day",expectedBars:12};
+  if(tf==="4h")return {label:"SWING",horizon:"Multi-session swing",expectedBars:6};
+  if(tf==="1d")return {label:"SWING",horizon:"Multi-day swing",expectedBars:3};
+  return {label:"INTRADAY",horizon:"Intraday",expectedBars:12};
+}
 function readiness(a,confluence,dataScore,gate,strict={eligible:true,reasons:[]}){
   const side=sideOf(a);
   if(dataScore<60)return {state:"DATA_BLOCKED",action:"WAIT",reason:"Critical data quality is below the safe threshold."};
@@ -80,7 +88,7 @@ function readiness(a,confluence,dataScore,gate,strict={eligible:true,reasons:[]}
   return {state:"NO_TRADE",action:"WAIT",reason:"Evidence is not aligned enough for a high-confidence directional setup."};
 }
 function evaluate(x={}){
-  const a=x.analysis||{},side=sideOf(a),base=clamp(Math.round(n(a.score,50)),0,100);
+  const a=x.analysis||{},side=sideOf(a),base=clamp(Math.round(n(a.score,50)),0,100),style=tradeStyle(x.interval||"1h");
   const data=dataIntegrity(x),mtf=trendAlignment(side,x.higher,x.lower),flow=flowAlignment(side,x.derivatives);
   const level=clamp(n(a?.marketStructure?.score,0),0,100);
   const qScore=clamp(Math.round(base*.50+mtf*.13+flow*.15+data.score*.09+level*.13),0,100);
@@ -114,12 +122,13 @@ function evaluate(x={}){
   return {
     version:VERSION,phase9:"9.0.0",phase10:"10.0.0",symbol:x.symbol||"BTCUSDT",interval:x.interval||"1h",generatedAt:Date.now(),
     state:r.state,action:r.action,reason:r.reason,
-    market:{side,score:base,confluenceScore:qScore,confluenceLabel:qScore>=80?"HIGH":qScore>=68?"MODERATE-HIGH":qScore>=55?"DEVELOPING":"LOW",price:n(a.price),change24h:n(a.change24h),regime:a.regime||"RANGE",mood:a.mood||"CALM",status:a.status||"WAITING",type:a.type||"NO TRADE",structure:a.structure||"UNKNOWN",momentum:a.momentum||"UNKNOWN",bias:a.directionalLean||a.bias||"NEUTRAL"},
+    market:{side,score:base,confluenceScore:qScore,confluenceLabel:qScore>=80?"HIGH":qScore>=68?"MODERATE-HIGH":qScore>=55?"DEVELOPING":"LOW",price:n(a.price),change24h:n(a.change24h),regime:a.regime||"RANGE",mood:a.mood||"CALM",status:a.status||"WAITING",type:a.type||"NO TRADE",structure:a.structure||"UNKNOWN",momentum:a.momentum||"UNKNOWN",bias:a.directionalLean||a.bias||"NEUTRAL",tradeStyle:style.label,tradeHorizon:style.horizon},
     levels:lv,
     evidence:{mtfScore:f(mtf),flowScore:f(flow),levelScore:f(level),dataScore:f(data.score),components,warnings:data.warnings,strictGate:strict,marketStructure:a?.marketStructure||null,thesis,primaryScenario:side==="LONG"?"Continuation higher while price holds invalidation and flow stays constructive.":side==="SHORT"?"Continuation lower while price stays beneath invalidation and flow remains constructive.":"Range / rotation until a confirmed boundary break.",invalidationScenario:side==="LONG"?"Loss of invalidation or major timeframe conflict.":side==="SHORT"?"Reclaim of invalidation or major timeframe conflict.":"A directional thesis needs a confirmed break with volume.",contributors:Array.isArray(a.contributors)?a.contributors.slice(0,12):[]},
     data:{score:data.score,candleAgeMs:n(x.dataQuality?.candleAgeMs),derivativesAvailable:Boolean(x.derivatives&&x.derivatives.available!==false),consensusQualityPct:n(x.consensus?.consensusQualityPct),priceDispersionBps:n(x.consensus?.priceDispersionBps),providerCount:n(x.consensus?.sourceCount),independentSourceCount:n(x.consensus?.independentSourceCount),liveConnected:Boolean(x.liveFlow?.liveConnected||x.liveFlow?.wsConnected),livePointCount:n(x.liveFlow?.livePointCount)},
     validation:{available:Boolean(x.validation),sample:n(x.validation?.sample??x.validation?.totalTrades),coverage:n(x.validation?.coverage),note:"Historical validation describes past samples; it is not a guarantee of future results."},
     propGate:x.propGate||{decision:"NOT_EVALUATED"},
+    tradeStyle:style.label,tradeHorizon:style.horizon,tradeExpectedBars:style.expectedBars,
     operational:{failSafe:true,executionEnabled:false,generatedBy:"MarketPulse Phase 9/10 Decision Engine"}
   };
 }
