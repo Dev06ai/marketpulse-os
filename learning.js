@@ -6,7 +6,7 @@ const MIN_ADAPTIVE_SAMPLE=12;
 const MIN_COMPONENT_SAMPLE=20;
 const COMPONENT_ADJUSTMENT_CAP=1.25;
 const TOTAL_COMPONENT_ADJUSTMENT_CAP=4;
-const STATE_VERSION=2;
+const STATE_VERSION=3;
 const MODEL_MIN_UPDATES=30;
 const MODEL_LR=0.06;
 const MODEL_L2=0.0008;
@@ -29,11 +29,16 @@ function baseState(){
     lastSetupAdjustment:0,
     lastComponentAdjustment:0,
     calibrationHistory:[],
-    model:{version:1,bias:0,weights:{},updates:0,logLoss:0,lastUpdateAt:null,trainedKeys:[]}
+    model:{version:2,bias:0,weights:{},updates:0,logLoss:0,lastUpdateAt:null,trainedKeys:[]}
   };
 }
 function ensureState(raw){
-  const s=raw&&typeof raw==="object"?raw:baseState();
+  const incoming=raw&&typeof raw==="object"?raw:null;
+  // Version 3 is intentionally a clean final-signal learning boundary.
+  // Older state may contain raw-candidate observations, so do not mix it into
+  // the new final-gated calibration population.
+  if(!incoming||Number(incoming.version||0)!==STATE_VERSION)return baseState();
+  const s=incoming;
   if(!s.buckets||typeof s.buckets!=="object")s.buckets={};
   if(!s.scoreBuckets||typeof s.scoreBuckets!=="object")s.scoreBuckets={};
   if(!s.componentStats||typeof s.componentStats!=="object")s.componentStats={};
@@ -191,8 +196,9 @@ async function init(){
   initPromise=(async()=>{
     await storage.init();
     const saved=await storage.getLearningState();
-    state=ensureState(saved.payload||baseState());
-    if(!saved.payload)await storage.saveLearningState(state);
+    const previous=saved.payload||null;
+    state=ensureState(previous);
+    if(!previous||Number(previous.version||0)!==STATE_VERSION)await storage.saveLearningState(state);
   })();
   return initPromise;
 }
@@ -201,6 +207,7 @@ async function resolve(symbol,interval,candles){
   const open=await storage.getOpenLearningPredictions(symbol,interval,200);
   let changed=false;
   for(const p of open){
+    if(p?.features?.source!=="FINAL_GATED")continue;
     const o=outcomeFromCandles(p,candles);
     if(!o)continue;
     await storage.resolveLearningPrediction(p.fingerprint,o.outcome,o.resultR);
@@ -299,12 +306,51 @@ async function observe(symbol,interval,candleTs,a){
     }
   });
 }
-async function process(symbol,interval,candles,a){
+async function process(symbol,interval,candles,a,options={}){
   await resolve(symbol,interval,candles);
   const adapted=recalibrate(a);
   const candle=candles?.[candles.length-1];
-  const observed=await observe(symbol,interval,candle?.t,adapted);
+  const observed=options.observe===false?{recorded:false,source:"FINAL_GATED_ONLY"}:await observe(symbol,interval,candle?.t,adapted);
   return {analysis:adapted,observed};
+}
+
+async function observeFinalDecision(symbol,interval,candles,decision){
+  await init();
+  await resolve(symbol,interval,candles);
+  const eligible=Boolean(decision?.liveSignalEligible===true&&decision?.state==="READY"&&["LONG","SHORT"].includes(String(decision?.action||"").toUpperCase()));
+  if(!eligible)return {recorded:false,eligible:false};
+
+  const m=decision.market||{},lv=decision.levels||{},ev=decision.evidence||{},candle=candles?.[candles.length-1];
+  const candleTs=Number(candle?.t);
+  if(!Number.isFinite(candleTs))return {recorded:false,eligible:true,reason:"missing candle timestamp"};
+
+  const side=String(decision.action).toUpperCase(),type=m.type||"FINAL GATED SETUP";
+  const open=await storage.getOpenLearningPredictions(symbol,interval,200);
+  const active=open.find(p=>p?.features?.source==="FINAL_GATED"&&p.side===side&&p.type===type);
+  if(active)return {recorded:false,eligible:true,reason:"active final-gated prediction already exists",fingerprint:active.fingerprint};
+
+  const fingerprint=["FINAL_GATED",symbol,interval,candleTs,side,type].join("|");
+  const features={
+    source:"FINAL_GATED",
+    score:Number(m.confluenceScore)||0,
+    regime:m.regime,side,type,status:"READY",
+    tradeStyle:decision.tradeStyle||m.tradeStyle||"INTRADAY",
+    rsi:Number(decision.analysis?.rsi),
+    adx:Number(decision.analysis?.adx),
+    volumeZ:Number(decision.analysis?.volumeZ),
+    structure:decision.analysis?.structure,
+    mtf:decision.analysis?.mtf,
+    components:ev.components||[],
+    derivatives:decision.derivatives||{}
+  };
+  const recorded=await storage.recordLearningPrediction({
+    fingerprint,symbol,interval,candleTs,side,type,status:"READY",
+    score:Number(m.confluenceScore)||0,price:lv.entry??m.price??null,
+    stop:lv.stop??null,target:lv.tp1??null,regime:m.regime||"UNKNOWN",
+    horizonBars:decision.tradeExpectedBars||HORIZON_BARS[interval]||12,
+    features
+  });
+  return {recorded:Boolean(recorded?.recorded),eligible:true,fingerprint};
 }
 async function trainFromReplay(records){
   await init();
@@ -312,6 +358,7 @@ async function trainFromReplay(records){
   let trained=0,skipped=0;
   const seen=new Set(state.model.trainedKeys||[]);
   for(const row of rows){
+    if(row?.snapshot?.source!=="FINAL_GATED"&&row?.source!=="FINAL_GATED"){skipped++;continue}
     const outcome=row?.outcome?.status==="TARGET_1"?"WIN":row?.outcome?.status==="STOP"?"LOSS":null;
     if(!outcome){skipped++;continue}
     const key=String(row.signalKey||[row.symbol,row.interval,row.candleTs,row.side,row.score].join("|"));
@@ -373,4 +420,4 @@ async function status(){
     lastComponentAdjustment:Number(state.lastComponentAdjustment)||0
   };
 }
-module.exports={init,process,recalibrate,status,resolve,trainFromReplay};
+module.exports={init,process,recalibrate,status,resolve,observeFinalDecision,trainFromReplay};
