@@ -100,8 +100,6 @@ async function notifyAdminSignal(storage,context){
             type:"MARKETPULSE_SIGNAL",
             title:alert.title,
             body:alert.body,
-            icon:"/manifest-icon-192.png",
-            badge:"/manifest-icon-192.png",
             tag:"marketpulse-"+alert.signalKey,
             renotify:true,
             data:{url:alert.url,signalKey:alert.signalKey}
