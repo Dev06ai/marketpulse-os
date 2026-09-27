@@ -373,6 +373,7 @@ function analyze(c,ctx={}){
   else if(side==="LONG")directionalLean="LEAN LONG";
   else if(side==="SHORT")directionalLean="LEAN SHORT";
 
+  let probabilityLabel=score>=80?"HIGH CONFLUENCE":score>=68?"MODERATE-HIGH CONFLUENCE":score>=55?"EARLY / WATCH":"LOW CONFLUENCE";
   let phase14Meta=null;
   try{
     const provisional={
@@ -440,7 +441,8 @@ function analyze(c,ctx={}){
     ?"Bearish thesis weakens if the 15M/4H structure flips and price reclaims the trigger zone."
     :"A directional thesis becomes more credible after a range break plus volume confirmation.";
 
-  let probabilityLabel=score>=80?"HIGH CONFLUENCE":score>=68?"MODERATE-HIGH CONFLUENCE":score>=55?"EARLY / WATCH":"LOW CONFLUENCE";
+  // Probability label is finalized by Phase 14 before the return payload.
+
 
   const dayBars=Math.max(1,Math.round(1440/(({"15m":15,"1h":60,"4h":240,"1d":1440})[ctx.interval]||60)));
   const lookback=Math.min(i,dayBars);
