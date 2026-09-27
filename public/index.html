@@ -1171,6 +1171,7 @@ linear-gradient(180deg,#0c0e11 0%,#101214 48%,#0a0b0d 100%);box-shadow:0 -20px 7
     </div>
     <div style="display:flex;gap:7px;flex-wrap:wrap;margin-top:9px">
       <button id="adminEnableSignalPush" class="btn primary">Enable signal pop-ups</button>
+      <button id="adminTestSignalPush" class="btn">Send test notification</button>
       <button id="adminDisableSignalPush" class="btn">Disable on this device</button>
       <button id="adminRefreshSignalAlerts" class="btn">Refresh alerts</button>
     </div>
@@ -1631,6 +1632,16 @@ async function enableAdminSignalPush(){
     if($("adminSignalPushHint"))$("adminSignalPushHint").textContent=e.message||"Push notification setup failed.";
   }
 }
+async function testAdminSignalPush(){
+  if(!isAdminUser())return;
+  try{
+    var d=await apiPost("/api/admin/notifications/test",{});
+    if(!d.sent)throw Error(d.configured===false?"Server push is not configured.":"No active push subscription is registered on this device.");
+    if($("adminSignalPushHint"))$("adminSignalPushHint").textContent="Test notification sent. Check this device's system notification area.";
+  }catch(e){
+    if($("adminSignalPushHint"))$("adminSignalPushHint").textContent=e.message||"Push test failed.";
+  }
+}
 async function disableAdminSignalPush(){
   if(!("serviceWorker"in navigator))return;
   try{
@@ -1819,6 +1830,7 @@ document.querySelectorAll("[data-view]").forEach(function(b){
   b.addEventListener("click",function(){setView(b.dataset.view)})
 });
 if($("adminEnableSignalPush"))$("adminEnableSignalPush").addEventListener("click",enableAdminSignalPush);
+if($("adminTestSignalPush"))$("adminTestSignalPush").addEventListener("click",testAdminSignalPush);
 if($("adminDisableSignalPush"))$("adminDisableSignalPush").addEventListener("click",disableAdminSignalPush);
 if($("adminRefreshSignalAlerts"))$("adminRefreshSignalAlerts").addEventListener("click",function(){loadAdminSignalAlerts(false)});
 $("mobileMenuBtn").addEventListener("click",function(){
