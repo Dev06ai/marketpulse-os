@@ -639,6 +639,47 @@ body:not(.admin-mode) [data-admin-only="true"]{display:none!important}
 .viewHelper span{display:block;font-size:9px;line-height:1.45}
 body.admin-mode .viewHelper{display:none!important}
 @media(max-width:700px){.viewHelper{padding:9px 10px}.viewHelper span{font-size:8.5px}}
+</style><style id="public-footer-style">
+.publicFooter{margin-top:34px;border-top:1px solid rgba(255,255,255,.08);overflow:hidden;border-radius:18px 18px 0 0;background:
+radial-gradient(circle at 18% 0%,rgba(96,165,250,.15),transparent 34%),
+radial-gradient(circle at 82% 8%,rgba(192,132,252,.14),transparent 32%),
+linear-gradient(180deg,#0a1530 0%,#0b1022 48%,#130b22 100%);box-shadow:0 -20px 70px rgba(0,0,0,.22)}
+.publicFooterInner{width:min(1200px,calc(100% - 28px));margin:0 auto;padding:44px 0 28px}
+.footerQuestions{text-align:center;max-width:860px;margin:0 auto}
+.footerEyebrow{font-size:9px;letter-spacing:.18em;text-transform:uppercase;color:#8fb7e8;font-weight:900}
+.footerTitle{font-size:31px;font-weight:950;letter-spacing:-.05em;margin-top:8px;color:#f7fbff}
+.footerLead{font-size:11px;line-height:1.6;color:#92a4bb;max-width:620px;margin:7px auto 20px}
+.footerFaq{margin:0 auto;text-align:left;border-top:1px solid rgba(126,174,231,.18)}
+.footerFaq details{border-bottom:1px solid rgba(126,174,231,.18)}
+.footerFaq summary{list-style:none;display:flex;justify-content:space-between;gap:16px;align-items:center;padding:14px 4px;color:#e8f1fb;font-size:11px;font-weight:800;cursor:pointer}
+.footerFaq summary::-webkit-details-marker{display:none}
+.footerFaq summary:after{content:"+";font-size:18px;line-height:1;color:#80a7d2}
+.footerFaq details[open] summary:after{content:"−"}
+.footerFaq details>div{padding:0 28px 15px 4px;color:#94a6bc;font-size:10px;line-height:1.65}
+.footerColumns{display:grid;grid-template-columns:1.5fr 1fr 1fr 1fr;gap:34px;margin-top:42px;padding-top:30px;border-top:1px solid rgba(255,255,255,.10)}
+.footerBrand{font-size:22px;font-weight:950;letter-spacing:-.05em;color:#fff}
+.footerBrandSub{margin-top:7px;color:#899bb3;font-size:10px;line-height:1.6;max-width:270px}
+.footerCol h4{margin:0 0 10px;color:#7f9bc0;font-size:8px;letter-spacing:.16em;text-transform:uppercase}
+.footerLinks{display:grid;gap:7px}
+.footerLinks button{padding:0;border:0;background:none;color:#c4d0df;text-align:left;font-size:9px;cursor:pointer}
+.footerLinks button:hover{color:#fff}
+.footerDisclosure{margin-top:32px;padding:24px;border:1px solid rgba(255,255,255,.10);border-radius:15px;background:rgba(4,7,15,.36)}
+.footerDisclosure h3{margin:0;color:#f2f7ff;font-size:17px}
+.footerDisclosureGrid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-top:15px}
+.footerDisclosureItem b{display:block;color:#dbe8f7;font-size:9px;margin-bottom:5px}
+.footerDisclosureItem span{display:block;color:#91a2b8;font-size:8.5px;line-height:1.6}
+.footerBottom{display:flex;justify-content:space-between;gap:16px;align-items:center;margin-top:20px;padding-top:17px;border-top:1px solid rgba(255,255,255,.08);color:#66788f;font-size:8px}
+.footerBottom strong{color:#91a4bb}
+@media(max-width:800px){
+  .footerColumns{grid-template-columns:1fr 1fr;gap:24px}
+  .footerDisclosureGrid{grid-template-columns:1fr}
+}
+@media(max-width:520px){
+  .publicFooterInner{padding-top:34px}
+  .footerTitle{font-size:25px}
+  .footerColumns{grid-template-columns:1fr 1fr}
+  .footerBottom{align-items:flex-start;flex-direction:column}
+}
 </style></head>
 <body>
 <header class="header"><div class="headerInner">
@@ -1193,7 +1234,100 @@ body.admin-mode .viewHelper{display:none!important}
 
   <div id="chartModal" class="modal" aria-hidden="true"><div class="modalCard"><div class="modalTop"><h3>Chart settings</h3><button id="chartClose" class="modalClose">×</button></div><div class="sub" style="margin-top:6px">Choose a visual preset or customize the candle colors. Signed-in settings sync to your account; Guest settings stay on this device.</div><div class="presetGrid" id="presetGrid"><button class="preset" data-preset="aurora"><div class="preview" style="background:#07131a;--pc1:#9BE7C4;--pc2:#FFB38A"><i></i><i></i><i></i><i></i></div><b>Aurora</b><small>Mint / ember</small></button><button class="preset" data-preset="lavender"><div class="preview" style="background:#0e1018;--pc1:#E5D0FF;--pc2:#FFB8D8"><i></i><i></i><i></i><i></i></div><b>Lavender</b><small>Soft / premium</small></button><button class="preset" data-preset="forest"><div class="preview" style="background:#08120f;--pc1:#A8E6CF;--pc2:#F8C6A0"><i></i><i></i><i></i><i></i></div><b>Forest</b><small>Mint / coral</small></button><button class="preset" data-preset="classic"><div class="preview" style="background:#090909;--pc1:#22c55e;--pc2:#ef4444"><i></i><i></i><i></i><i></i></div><b>Classic</b><small>Green / red</small></button><button class="preset" data-preset="mono"><div class="preview" style="background:#090909;--pc1:#f1f5f9;--pc2:#64748b"><i></i><i></i><i></i><i></i></div><b>Mono</b><small>White / slate</small></button></div><div class="colorGrid"><div class="colorItem"><span>Bull candle</span><input id="bullColor" type="color"></div><div class="colorItem"><span>Bear candle</span><input id="bearColor" type="color"></div><div class="colorItem emaSettingRow"><span>50 EMA <small style="display:block;color:#7f90a6;font-size:8px;margin-top:2px">Fixed period · 50</small></span><div class="emaSettingControls"><input id="emaColor" type="color" title="50 EMA color"><label class="emaSwitch" for="showEma"><input id="showEma" type="checkbox" checked><span class="emaSwitchTrack"><span class="emaSwitchThumb"></span></span><span id="emaSwitchText" class="emaSwitchText">ON</span></label></div></div><div class="colorItem"><span>Volume</span><b style="font-size:10px;color:#67e8ff">Visible</b></div></div><div class="axisNote">Exchange-style candles with a fixed 50 EMA, crosshair time/date, and right-side price scale.</div><div class="modalFoot"><button id="chartCancel" class="btn">Cancel</button><button id="chartApply" class="btn primary">Apply</button></div></div></div>
 
-  <div class="foot">MarketPulse is educational decision-support software. It does not place orders, manage funds, or guarantee outcomes. Adaptive learning calibrates from resolved historical examples; it is not a promise of future performance.</div>
+  <footer class="publicFooter" id="siteFooter">
+  <div class="publicFooterInner">
+    <section class="footerQuestions" aria-labelledby="footerQuestionsTitle">
+      <div class="footerEyebrow">MARKETPULSE · QUESTIONS</div>
+      <div class="footerTitle" id="footerQuestionsTitle">Questions</div>
+      <div class="footerLead">A few straightforward answers so new traders can understand what MarketPulse is, what it does, and what it does not do.</div>
+      <div class="footerFaq">
+        <details>
+          <summary>Is this a signal group?</summary>
+          <div>No. MarketPulse is a market-analysis and decision-support workspace. It presents market data, structure, flow and setup context so you can make your own trading decisions. It is not a chat group or a promise to tell you what to buy or sell.</div>
+        </details>
+        <details>
+          <summary>Do you touch my money or connect directly to my exchange?</summary>
+          <div>MarketPulse does not take custody of your funds. Any exchange or execution capability is subject to the controls, permissions and safety boundaries shown inside the product. Never give your exchange password or withdrawal credentials to anyone.</div>
+        </details>
+        <details>
+          <summary>Will this make me a better trader?</summary>
+          <div>The platform is designed to make market information easier to organize and review. Improvement still depends on your own practice, risk management, discipline and decision-making. No tool can guarantee profitable trading.</div>
+        </details>
+        <details>
+          <summary>Which assets can I analyze?</summary>
+          <div>Use the asset selector and the Market Scanner to see the instruments currently supported by the live data layer. Availability can change when a provider changes its coverage.</div>
+        </details>
+        <details>
+          <summary>I've never used tools like these. Can I learn them here?</summary>
+          <div>Yes. The Guide, beginner explanations, simple labels and plain-language descriptions are designed so you can start with the dashboard before exploring advanced concepts such as OI, CVD, funding and liquidations.</div>
+        </details>
+        <details>
+          <summary>Do I need to be a full-time or day trader?</summary>
+          <div>No. MarketPulse can be used for learning, market review, planning and trade journaling. Choose a timeframe and workflow that matches your own objectives rather than forcing a particular trading style.</div>
+        </details>
+        <details>
+          <summary>What does MarketPulse actually show me?</summary>
+          <div>The core workspace combines price action, market structure, futures flow, confluence, setup context, risk tools, watchlists and journaling. Advanced validation and infrastructure diagnostics are reserved for the owner/admin layer.</div>
+        </details>
+        <details>
+          <summary>Where does the data come from?</summary>
+          <div>MarketPulse combines live market data from connected providers with derived analytics. Source availability and coverage can vary, so data panels should be read with the source/status information shown by the product.</div>
+        </details>
+      </div>
+    </section>
+
+    <div class="footerColumns">
+      <div>
+        <div class="footerBrand">MarketPulse</div>
+        <div class="footerBrandSub">Crypto market intelligence built to reduce noise, organize evidence and make trading analysis easier to understand.</div>
+      </div>
+      <div class="footerCol">
+        <h4>Workspace</h4>
+        <div class="footerLinks">
+          <button type="button" data-view="overview">Dashboard</button>
+          <button type="button" data-view="scanner">Market Scanner</button>
+          <button type="button" data-view="signals">Setups</button>
+          <button type="button" data-view="flow">Market Flow</button>
+        </div>
+      </div>
+      <div class="footerCol">
+        <h4>Tools</h4>
+        <div class="footerLinks">
+          <button type="button" data-view="edge">Edge</button>
+          <button type="button" data-view="portfolio">Portfolio</button>
+          <button type="button" data-view="brain">Journal</button>
+          <button type="button" data-view="risk">Risk</button>
+        </div>
+      </div>
+      <div class="footerCol">
+        <h4>Learn</h4>
+        <div class="footerLinks">
+          <button type="button" id="footerGuideBtn">Beginner Guide</button>
+          <button type="button" onclick="document.getElementById('siteFooter')?.scrollIntoView({behavior:'smooth'})">FAQ</button>
+          <button type="button" data-view="ai">Market Copilot</button>
+          <button type="button" id="footerTopBtn">Back to top</button>
+        </div>
+      </div>
+    </div>
+
+    <section class="footerDisclosure" aria-labelledby="footerDisclosureTitle">
+      <div class="footerEyebrow">IMPORTANT INFORMATION</div>
+      <h3 id="footerDisclosureTitle">Disclaimer</h3>
+      <div class="footerDisclosureGrid">
+        <div class="footerDisclosureItem"><b>Educational Content Only</b><span>MarketPulse is designed for education, research and market decision support. It is not a substitute for independent judgment or professional financial advice.</span></div>
+        <div class="footerDisclosureItem"><b>Trading Risk</b><span>Crypto trading can involve substantial risk, including rapid losses and liquidation. Past performance, historical tests and model outputs do not guarantee future results.</span></div>
+        <div class="footerDisclosureItem"><b>No Guarantees</b><span>Signals, scores, confluence and analytics are estimates or decision-support outputs. Market conditions can change quickly and data can be delayed, incomplete or unavailable.</span></div>
+        <div class="footerDisclosureItem"><b>Not Financial Advice</b><span>Nothing on MarketPulse should be treated as a personalized recommendation to buy, sell or hold an asset. You remain responsible for your own decisions.</span></div>
+        <div class="footerDisclosureItem"><b>Technology &amp; Data Providers</b><span>Charts, market data and analytics may depend on third-party services. Provider outages, latency, revisions or methodology changes can affect displayed information.</span></div>
+        <div class="footerDisclosureItem"><b>Statistics Need Context</b><span>Backtests and statistics describe historical samples under defined assumptions. They should be reviewed for timeframe, sample size, methodology and changing market conditions.</span></div>
+      </div>
+      <div class="footerBottom">
+        <span>By using MarketPulse, you acknowledge that trading decisions remain your responsibility.</span>
+        <span><strong>© 2026 MarketPulse</strong> · All rights reserved.</span>
+      </div>
+    </section>
+  </div>
+</footer>
 </main>
 <script nonce="__CSP_NONCE__">
 (function(){
@@ -1207,6 +1341,11 @@ body.admin-mode .viewHelper{display:none!important}
     if(t.id==="beginnerGuideModal")closeGuide();
   });
   document.addEventListener("keydown",function(e){if(e.key==="Escape")closeGuide()});
+  document.addEventListener("click",function(e){
+    var t=e.target;
+    if(t.closest&&t.closest("#footerGuideBtn")){e.preventDefault();openGuide()}
+    if(t.closest&&t.closest("#footerTopBtn")){e.preventDefault();window.scrollTo({top:0,behavior:"smooth"})}
+  });
 })();
 </script>
 <script nonce="__CSP_NONCE__">
