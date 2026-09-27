@@ -132,6 +132,35 @@ async function getCoinCapMetadata(symbols){
     return {};
   }
 }
+async function getCryptoCompareMetadata(symbols){
+  const list=(symbols||SYMBOLS).filter(Boolean);
+  const fs=list.map(s=>String(labels[s]||s).replace('USDT','')).join(',');
+  if(!fs)return {};
+  try{
+    const u=new URL('https://min-api.cryptocompare.com/data/pricemultifull');
+    u.searchParams.set('fsyms',fs);
+    u.searchParams.set('tsyms','USD');
+    const r=await fetch(u,{signal:timeoutSignal(4500),headers:{accept:'application/json'}});
+    if(!r.ok)throw Error('CryptoCompare HTTP '+r.status);
+    const body=await r.json();
+    const raw=body?.RAW||{};
+    const data={};
+    list.forEach(function(symbol){
+      const coin=String(labels[symbol]||symbol).replace('USDT','').toUpperCase();
+      const usd=raw?.[coin]?.USD||{};
+      data[symbol]={
+        rank:null,
+        marketCap:Number.isFinite(Number(usd.MKTCAP))?Number(usd.MKTCAP):null,
+        volume24h:Number.isFinite(Number(usd.TOTALVOLUME24H))?Number(usd.TOTALVOLUME24H):null,
+        geckoPrice:Number.isFinite(Number(usd.PRICE))?Number(usd.PRICE):null,
+        change24h:Number.isFinite(Number(usd.CHANGE24HOURPCT))?Number(usd.CHANGE24HOURPCT):null,
+        source:'cryptocompare',
+        updatedAt:Date.now()
+      };
+    });
+    return data;
+  }catch{return {}}
+}
 async function getMarketMetadata(symbols=SYMBOLS){
   const list=(symbols||SYMBOLS).filter(Boolean);
   if(MARKET_META_CACHE.ts&&Date.now()-MARKET_META_CACHE.ts<MARKET_META_TTL){
