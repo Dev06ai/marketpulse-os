@@ -216,8 +216,12 @@ async function init(){
         style TEXT NOT NULL,
         score NUMERIC,
         payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+        delivered_count INTEGER NOT NULL DEFAULT 0,
+        delivered_at TIMESTAMPTZ,
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       )`);
+      await pool.query('ALTER TABLE marketpulse_admin_signal_alerts ADD COLUMN IF NOT EXISTS delivered_count INTEGER NOT NULL DEFAULT 0');
+      await pool.query('ALTER TABLE marketpulse_admin_signal_alerts ADD COLUMN IF NOT EXISTS delivered_at TIMESTAMPTZ');
       await pool.query('CREATE INDEX IF NOT EXISTS idx_admin_signal_alerts_time ON marketpulse_admin_signal_alerts(created_at DESC)');
       await pool.query(`CREATE TABLE IF NOT EXISTS marketpulse_admin_push_subscriptions (
         endpoint TEXT PRIMARY KEY,
@@ -814,17 +818,30 @@ async function claimAdminSignalAlert(signalKey,payload={}){
   if(!key)throw new Error("Signal alert key is required");
   const p=payload&&typeof payload==="object"?payload:{};
   if(mode==="postgres"){
-    const r=await pool.query(`INSERT INTO marketpulse_admin_signal_alerts(signal_key,symbol,interval,side,setup,style,score,payload)
+    await pool.query(`INSERT INTO marketpulse_admin_signal_alerts(signal_key,symbol,interval,side,setup,style,score,payload)
       VALUES($1,$2,$3,$4,$5,$6,$7,$8)
-      ON CONFLICT(signal_key) DO NOTHING
-      RETURNING signal_key AS "signalKey",created_at AS "createdAt"`,
+      ON CONFLICT(signal_key) DO NOTHING`,
       [key,String(p.symbolCode||"BTCUSDT"),String(p.interval||""),String(p.side||""),String(p.setup||"").slice(0,100),String(p.style||"").slice(0,30),Number.isFinite(Number(p.score))?Number(p.score):null,p]);
-    return {recorded:Boolean(r.rowCount),...(r.rows[0]||{})};
+    const r=await pool.query(`SELECT signal_key AS "signalKey",created_at AS "createdAt",delivered_count AS "deliveredCount",delivered_at AS "deliveredAt"
+      FROM marketpulse_admin_signal_alerts WHERE signal_key=$1`,[key]);
+    const row=r.rows[0]||{};
+    return {recorded:true,...row,delivered:Boolean(row.deliveredAt||Number(row.deliveredCount)>0)};
   }
   const all=readLocal(),rows=Array.isArray(all.__admin_signal_alerts__)?all.__admin_signal_alerts__:[];
-  if(rows.some(x=>x.signalKey===key))return {recorded:false,signalKey:key};
-  const row={signalKey:key,symbol:String(p.symbolCode||"BTCUSDT"),interval:String(p.interval||""),side:String(p.side||""),setup:String(p.setup||""),style:String(p.style||""),score:Number.isFinite(Number(p.score))?Number(p.score):null,payload:p,createdAt:new Date().toISOString()};
-  rows.push(row);all.__admin_signal_alerts__=rows.slice(-1000);writeLocal(all);return {recorded:true,signalKey:key,createdAt:row.createdAt};
+  const existing=rows.find(x=>x.signalKey===key);
+  if(existing)return {recorded:true,signalKey:key,createdAt:existing.createdAt,delivered:Boolean(existing.deliveredAt||Number(existing.deliveredCount)>0),deliveredCount:Number(existing.deliveredCount)||0};
+  const row={signalKey:key,symbol:String(p.symbolCode||"BTCUSDT"),interval:String(p.interval||""),side:String(p.side||""),setup:String(p.setup||""),style:String(p.style||""),score:Number.isFinite(Number(p.score))?Number(p.score):null,payload:p,deliveredCount:0,deliveredAt:null,createdAt:new Date().toISOString()};
+  rows.push(row);all.__admin_signal_alerts__=rows.slice(-1000);writeLocal(all);return {recorded:true,signalKey:key,createdAt:row.createdAt,delivered:false};
+}
+async function markAdminSignalAlertDelivered(signalKey,count=1){
+  await init();const key=String(signalKey||""),n=Math.max(1,Number(count)||1);
+  if(mode==="postgres"){
+    await pool.query(`UPDATE marketpulse_admin_signal_alerts
+      SET delivered_count=delivered_count+$2,delivered_at=NOW()
+      WHERE signal_key=$1`,[key,n]);return;
+  }
+  const all=readLocal(),row=(all.__admin_signal_alerts__||[]).find(x=>x.signalKey===key);
+  if(row){row.deliveredCount=Number(row.deliveredCount)||0;row.deliveredCount+=n;row.deliveredAt=new Date().toISOString();writeLocal(all)}
 }
 async function listAdminSignalAlerts(limit=50){
   await init();const n=Math.min(200,Math.max(1,Number(limit)||50));
@@ -919,4 +936,4 @@ async function restoreAdminConfig(snapshot){
   return true;
 }
 
-module.exports={init,health,get,save,clear,getLearningState,saveLearningState,recordLearningPrediction,getOpenLearningPredictions,getLearningPredictions,resolveLearningPrediction,saveSignalDNA,getSignalDNA,clearSignalDNA,getPhase4State,savePhase4State,getExecutionState,saveExecutionState,getPhase6State,savePhase6State,createUser,findUserByEmail,getUserById,touchUserLogin,recordLoginFailure,resetLoginFailures,savePassword,saveSession,getSession,extendSession,touchSessionActivity,revokeUserSessions,deleteSession,listUsers,userStats,moderateUser,getAccountMemory,saveAccountMemory,status,getAdminConfig,saveAdminConfig,getFeatureFlags,saveFeatureFlag,recordAdminAudit,listAdminAudit,recordSecurityEvent,listSecurityEvents,recordUsageEvent,adminAnalytics,listBroadcasts,createBroadcast,setBroadcastActive,getActiveBroadcasts,claimAdminSignalAlert,listAdminSignalAlerts,saveAdminPushSubscription,listAdminPushSubscriptions,deleteAdminPushSubscription,createSupportTicket,recentUsageEvents,listSupportTickets,replySupportTicket,saveAdminSnapshot,listAdminSnapshots,getAdminSnapshot,restoreAdminConfig};
+module.exports={init,health,get,save,clear,getLearningState,saveLearningState,recordLearningPrediction,getOpenLearningPredictions,getLearningPredictions,resolveLearningPrediction,saveSignalDNA,getSignalDNA,clearSignalDNA,getPhase4State,savePhase4State,getExecutionState,saveExecutionState,getPhase6State,savePhase6State,createUser,findUserByEmail,getUserById,touchUserLogin,recordLoginFailure,resetLoginFailures,savePassword,saveSession,getSession,extendSession,touchSessionActivity,revokeUserSessions,deleteSession,listUsers,userStats,moderateUser,getAccountMemory,saveAccountMemory,status,getAdminConfig,saveAdminConfig,getFeatureFlags,saveFeatureFlag,recordAdminAudit,listAdminAudit,recordSecurityEvent,listSecurityEvents,recordUsageEvent,adminAnalytics,listBroadcasts,createBroadcast,setBroadcastActive,getActiveBroadcasts,claimAdminSignalAlert,markAdminSignalAlertDelivered,listAdminSignalAlerts,saveAdminPushSubscription,listAdminPushSubscriptions,deleteAdminPushSubscription,createSupportTicket,recentUsageEvents,listSupportTickets,replySupportTicket,saveAdminSnapshot,listAdminSnapshots,getAdminSnapshot,restoreAdminConfig};
