@@ -108,7 +108,7 @@ The validation layer now sits after the Phase 9/10 engine and before any live-re
 The current validation payload is available from `GET /api/validation`, while `GET /api/decision` includes the validation summary and deployment gate used by the Decision Center.
 
 
-## Phase 14 — Signal Intelligence
+## Phase 14 — Signal Intelligence (14.0.0)
 - Adds setup-specific knowledge profiles for SFP, NPOC, D-Line, breakout/retest, order blocks, Elliott context, trend continuation and range reversion.
 - Converts the MindPillar knowledge core into a deterministic knowledge-alignment and conflict-resolution layer.
 - Adds regime-aware context, bounded historical calibration from resolved final-gated outcomes, and a setup/regime performance profile.
