@@ -200,7 +200,7 @@ jobs:
           assert 'function calc()' in html
           assert 'calc-profit' in html
           assert 'calc-loss' in html
-          assert 'Margin '+ 'fmt' in html
+          assert 'pnlMarginEl.textContent=fmt(pnlMargin)' in html
           assert 'ROI ' in html
           assert 'window.addEventListener("pageshow",function(e)' in html
           print("Safety-tool removal and exchange-style calculator checks OK")
