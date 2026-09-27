@@ -1624,6 +1624,17 @@ function adminSignalToast(alert){
   host.innerHTML='<div class="t">'+safeHtml(alert.title||"BTC signal")+'</div><div class="b">'+safeHtml(alert.body||"A confirmed BTC signal is available.")+'</div>';
   host.classList.add("show");clearTimeout(adminSignalToast._timer);adminSignalToast._timer=setTimeout(function(){host.classList.remove("show")},10000);
 }
+async function ensureMarketPulseServiceWorker(){
+  if(!("serviceWorker"in navigator))return null;
+  try{
+    var registration=await navigator.serviceWorker.register("/signal-sw.js",{scope:"/"});
+    await navigator.serviceWorker.ready;
+    return registration;
+  }catch(error){
+    console.warn("MarketPulse service worker registration failed",error);
+    return null;
+  }
+}
 function initSignalPushMessageBridge(){
   if(!("serviceWorker"in navigator))return;
   navigator.serviceWorker.addEventListener("message",function(event){
@@ -1640,35 +1651,56 @@ function updatePwaInstallUI(){
   if(isStandalonePwa()||state.pwaInstalled){
     btn.textContent="App installed";
     btn.disabled=true;
-    if(hint)hint.textContent="MarketPulse is installed as an app on this device. Open it from your home screen; the live site updates automatically.";
+    if(hint)hint.textContent="MarketPulse is installed on this device. Open it from your home screen; live MarketPulse updates continue automatically.";
     return;
   }
   if(state.pwaInstallPrompt){
     btn.textContent="Install app";
     btn.disabled=false;
+    if(hint)hint.textContent="MarketPulse is ready to install. Tap the button to open the browser's install prompt.";
     return;
   }
-  btn.textContent="How to install";
+  btn.textContent="Install app";
   btn.disabled=false;
-  if(hint)hint.textContent="On Android Chrome, use the browser menu → Install app. After installation, MarketPulse opens directly from your home screen.";
+  if(hint)hint.textContent="Preparing the install experience… if your browser does not offer an in-page prompt, use its Install app / Add to Home screen menu.";
 }
 async function promptMarketPulseInstall(){
   if(!isAdminUser())return;
+  var btn=$("installMarketPulseApp"),hint=$("pwaInstallHint");
   if(isStandalonePwa()){updatePwaInstallUI();return}
   var promptEvent=state.pwaInstallPrompt;
   if(promptEvent){
-    promptEvent.prompt();
-    try{await promptEvent.userChoice}catch{}
-    state.pwaInstallPrompt=null;
-    updatePwaInstallUI();
-    return;
+    try{
+      var result=await promptEvent.prompt();
+      state.pwaInstallPrompt=null;
+      if(result?.outcome==="accepted"){
+        if(hint)hint.textContent="Installing MarketPulse… finish the browser prompt, then open it from your home screen.";
+        return;
+      }
+      if(hint)hint.textContent="Install prompt dismissed. You can use the browser menu → Install app / Add to Home screen anytime.";
+      updatePwaInstallUI();
+      return;
+    }catch(error){
+      promptEvent=null;
+      state.pwaInstallPrompt=null;
+    }
   }
-  if($("pwaInstallHint"))$("pwaInstallHint").textContent=(function(){
-    var brave=false;try{brave=Boolean(navigator.brave)}catch{}
-    return brave
-      ?"Brave may not expose the in-page install prompt. Use Brave ⋮ → Add to Home screen / Install app. After installation, MarketPulse opens directly from your home screen."
-      :"Use the browser menu → Install app / Add to Home screen. After installation, MarketPulse opens directly from your home screen.";
-  })();
+
+  var ua=navigator.userAgent||"";
+  var isAndroid=/Android/i.test(ua);
+  var isBrave=false;try{isBrave=Boolean(navigator.brave)}catch{}
+  if(hint){
+    hint.innerHTML=isAndroid
+      ? (isBrave
+        ? "<strong>Brave:</strong> this browser may not expose the programmatic install prompt. Tap <strong>⋮</strong> → <strong>Add to Home screen</strong> / <strong>Install app</strong>. For a true standalone Android app/WebAPK, open MarketPulse in <strong>Chrome</strong> and use Install app."
+        : "<strong>Android:</strong> use the browser's <strong>Install app</strong> / <strong>Add to Home screen</strong> option. Chrome will show the install dialog when the app is eligible.")
+      : "Use your browser's Install / Add to Home screen option. MarketPulse is already configured as an installable app.";
+  }
+  if(btn){
+    btn.textContent=isBrave?"Open install instructions":"Check install menu";
+    btn.classList.add("primary");
+    setTimeout(function(){updatePwaInstallUI()},5000);
+  }
 }
 function initPwaInstall(){
   try{
@@ -1734,7 +1766,7 @@ async function registerAdminPushSubscription(cfg){
     }
     try{await registration.unregister()}catch{}
   }
-  registration=await navigator.serviceWorker.register("/signal-sw.js?rev=20260928",{scope:"/"});
+  registration=await navigator.serviceWorker.register("/signal-sw.js",{scope:"/"});
   registration=await navigator.serviceWorker.ready;
   var subscription=await registration.pushManager.subscribe({
     userVisibleOnly:true,
@@ -1849,7 +1881,9 @@ function scheduleAccountUIEarly(){
 }
 scheduleAccountUIEarly();
 initPwaInstall();
+setTimeout(function(){updatePwaInstallUI()},1500);
 initSignalPushMessageBridge();
+ensureMarketPulseServiceWorker();
 
 function installCriticalChartUI(){
   var c=document.getElementById("mainChart");
