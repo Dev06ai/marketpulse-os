@@ -68,6 +68,26 @@ jobs:
           print("Single authoritative signal UI check OK")
           PY
 
+      - name: Check cleaned calculator and removed safety tools
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          html=Path("public/index.html").read_text()
+          server=Path("server.js").read_text()
+          prop=Path("prop-firm.js").read_text()
+          forbidden=["pfgCard","ecgCard","pfgRefresh","ecgRefresh","/api/propfirm","loadPropFirmGuard","loadEventGuard","evaluateEventContract"]
+          bad=[x for x in forbidden if x in html or x in server or x in prop]
+          if bad: raise SystemExit("Removed safety tool still referenced: "+", ".join(bad))
+          for x in ["function resetQuickCalculators()","function setupCalculatorInputs()","calc-profit","calc-loss","Perpetual P&amp;L","window.addEventListener("pageshow",function(e)"]:
+              if x not in html: raise SystemExit("Missing calculator requirement: "+x)
+          start=html.index("function calc(){")
+          end=html.index("\nfunction normalizeFlow",start)
+          calc=html[start:end]
+          for x in ["riskUnit","rewardUnit","pnlMargin","roi"]:
+              if x not in calc: raise SystemExit("Missing exchange-style formula: "+x)
+          print("Calculator logic/reset and safety-tool cleanup checks OK")
+          PY
+
       - name: Check charcoal quick calculator styling
         run: |
           python - <<'PY'
@@ -98,6 +118,27 @@ jobs:
           assert 'DRAWDOWN FROM HIGH-WATER' in chart
           assert 'CYCLE SCORE' in chart
           print("Clean overview chart checks OK")
+          PY
+
+      - name: Check calculator and safety-tool cleanup
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          html=Path("public/index.html").read_text()
+          server=Path("server.js").read_text()
+          forbidden=["pfgCard","ecgCard","pfgRefresh","ecgRefresh","/api/propfirm","loadPropFirmGuard","loadEventGuard","Prop firm risk check","Event contract safety check"]
+          bad=[x for x in forbidden if x in html or x in server]
+          if bad: raise SystemExit("Removed safety-tool surface still present: "+", ".join(bad))
+          assert 'value="0"' in html
+          assert 'function resetQuickCalculators()' in html
+          assert 'function setupCalculatorInputs()' in html
+          assert 'function calc()' in html
+          assert 'calc-profit' in html
+          assert 'calc-loss' in html
+          assert 'Margin '+ 'fmt' in html
+          assert 'ROI ' in html
+          assert 'window.addEventListener("pageshow",function(e)' in html
+          print("Safety-tool removal and exchange-style calculator checks OK")
           PY
 
       - name: Check stable live status bar

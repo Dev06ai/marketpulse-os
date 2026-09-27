@@ -146,6 +146,8 @@ button,input,select,textarea{font:inherit}.wrap{width:min(1440px,calc(100% - 26p
   .quickCalculators .inputs input,
   .quickCalculators .inputs select{min-height:40px}
 }
+
+.quickCalculators .calcResult{transition:box-shadow .16s ease,border-color .16s ease,color .16s ease}.quickCalculators .calcResult.calc-profit{color:#75f0a7;border-color:rgba(92,240,163,.42);box-shadow:0 0 18px rgba(92,240,163,.10),inset 0 0 18px rgba(92,240,163,.035)}.quickCalculators .calcResult.calc-loss{color:#ff7897;border-color:rgba(255,88,124,.42);box-shadow:0 0 18px rgba(255,88,124,.12),inset 0 0 18px rgba(255,88,124,.035)}.quickCalculators .calcResult.calc-neutral{color:#aab2bf;border-color:rgba(255,255,255,.07);box-shadow:none}
 </style>
 <style id="beginner-friendly-style">
 .beginnerGuideBtn{border-color:rgba(103,232,255,.22)!important;color:#bdefff!important}
@@ -620,7 +622,7 @@ body.admin-mode .nav button.adminNav,body.admin-mode .mobileMenu button.adminNav
 </div></header>
 
 <main class="wrap">
-  <div id="statusBar" class="statusBar">Starting MarketPulse…</div><div class="beginnerStrip"><div><strong>New here?</strong> Start with the Signal, then check the chart, market flow, and risk check. <span style="color:#8191a7">You do not need to understand every metric.</span></div><button id="beginnerGuideInline" class="btn" type="button">How it works</button></div><div id="broadcastBar" class="broadcastBar" aria-live="polite"><div><b id="broadcastTitle">MarketPulse Notice</b><p id="broadcastBody"></p></div><button id="broadcastClose" class="broadcastClose" aria-label="Close">×</button></div>
+  <div id="statusBar" class="statusBar">Starting MarketPulse…</div><div class="beginnerStrip"><div><strong>New here?</strong> Start with the Signal, then check the chart and market flow. <span style="color:#8191a7">You do not need to understand every metric.</span></div><button id="beginnerGuideInline" class="btn" type="button">How it works</button></div><div id="broadcastBar" class="broadcastBar" aria-live="polite"><div><b id="broadcastTitle">MarketPulse Notice</b><p id="broadcastBody"></p></div><button id="broadcastClose" class="broadcastClose" aria-label="Close">×</button></div>
   <section id="view-overview" class="view active">
     <div class="hero">
       <div class="metric"><div class="label">Price</div><div class="value" id="mPrice">—</div><div class="subv" id="mChange">—</div></div>
@@ -692,59 +694,30 @@ body.admin-mode .nav button.adminNav,body.admin-mode .mobileMenu button.adminNav
       </div>
       <div class="watchNote" id="dcfSources">No independent feed snapshot yet.</div>
     </div>
-
-    <div class="section grid2">
-      <div class="card gateCard" id="pfgCard">
-        <div class="sectionHead"><div><div class="title">Prop firm risk check</div><div class="sub">Enter your account rules once. MarketPulse checks whether the current setup fits those limits.</div></div><span class="chip" id="pfgGateChip">WAITING</span></div>
-        <div class="inputs">
-          <label class="small">Account size<input id="pfgEvalAccount" type="number" value="0" min="1"></label>
-          <label class="small">Current equity<input id="pfgEquity" type="number" value="0" min="1"></label>
-          <label class="small">Daily loss limit %<input id="pfgDailyLoss" type="number" value="0" step=".1"></label>
-          <label class="small">Total loss limit %<input id="pfgMaxDD" type="number" value="0" step=".1"></label>
-          <label class="small">Risk per trade %<input id="pfgRiskTrade" type="number" value="0" step=".05"></label>
-          <label class="small">Minimum signal strength<input id="pfgScore" type="number" value="0" min="0" max="100"></label>
-          <label class="small">Minimum reward / risk<input id="pfgRR" type="number" value="0" step=".1"></label>
-        </div>
-        <button id="pfgRefresh" class="btn primary" style="margin-top:8px">Check this setup</button>
-        <div class="gatePrimary"><span class="gateIcon"></span><b>Decision:</b><span id="pfgDecisionText">Waiting for data</span></div>
-        <div class="result" id="pfgResult" style="margin-top:8px">Waiting for market data.</div>
-        <div class="gateChecks" id="pfgChecks"></div><div class="gateExplain" id="pfgExplain">The guard checks signal quality, market confirmation and account safety before it allows a setup.</div>
-        <div class="watchNote" id="pfgReasons" style="margin-top:6px">No gate result yet.</div><div class="gateHint">Tip: you do not need to understand every technical metric. A green result means the safety rules are satisfied; red means do not treat the setup as approved.</div>
-      </div>
-      <div class="card gateCard" id="ecgCard">
-        <div class="sectionHead"><div><div class="title">Event contract safety check</div><div class="sub">Copy the contract details from the venue. This checks the rules; it does not place an order.</div></div><span class="chip" id="ecgGateChip">WAITING</span></div>
-        <div class="inputs">
-          <label class="small">Platform<select id="ecgVenue"><option>GENERIC</option><option>TOOBIT</option><option>XT</option></select></label>
-          <label class="small">Direction<select id="ecgSide"><option>UP</option><option>DOWN</option></select></label>
-          <label class="small">Loss if wrong<input id="ecgPremium" type="number" value="10" min="0" step=".01"></label>
-          <label class="small">Payout if correct<input id="ecgPayout" type="number" value="20" min="0" step=".01"></label>
-          <label class="small">Strike price<input title="The price level the contract settles against." id="ecgStrike" type="number" value="" min="0" step=".01" placeholder="Enter venue strike"></label>
-          <label class="small">Minutes to expiry<input id="ecgExpiryMin" type="number" value="5" min="0.5" step=".5"></label>
-          <label class="small">Fees<input id="ecgFee" type="number" value="0" min="0" step=".01"></label>
-        </div>
-        <button id="ecgRefresh" class="btn primary" style="margin-top:8px">Check this contract</button>
-        <div class="gatePrimary"><span class="gateIcon"></span><b>Decision:</b><span id="ecgDecisionText">Waiting for data</span></div>
-        <div class="result" id="ecgResult" style="margin-top:8px">Enter the contract terms shown by the venue.</div>
-        <div class="gateChecks" id="ecgChecks"></div><div class="gateExplain" id="ecgExplain">This does not predict the market by itself. It checks whether the contract terms and MarketPulse evidence make the trade permissible.</div>
-        <div class="watchNote" id="ecgReasons" style="margin-top:6px">The gate never places an order.</div><div class="gateHint">Beginner rule: if this box is red, skip the contract rather than trying to force a trade.</div>
-      </div>
-    </div>
-
     <div id="quickCalculators" class="section card quickCalculators">
-      <div class="sectionHead"><div><div class="title">Quick calculators</div><div class="sub">Simple trade math with a clean, execution-focused layout.</div></div><span class="chip">CALCULATORS</span></div>
+      <div class="sectionHead"><div><div class="title">Quick calculators</div><div class="sub">Exchange-style futures math for position size, risk/reward, and linear-perpetual P&amp;L.</div></div><span class="chip">CALCULATORS</span></div>
       <div class="calcGrid">
         <div class="calcBox"><div class="label">Position size</div><div class="inputs">
-          <label class="small">Account<input id="ca" type="number" value="5000"></label><label class="small">Risk %<input id="cr" type="number" value="1" step=".05"></label>
-          <label class="small">Entry<input id="ce" type="number" value="84000"></label><label class="small">Stop<input id="cs" type="number" value="82000"></label>
-        </div><div class="result" id="sizeResult">—</div></div>
+          <label class="small">Account<input id="ca" type="number" value="0" min="0" step="any" autocomplete="off" placeholder="0"></label>
+          <label class="small">Risk %<input id="cr" type="number" value="0" min="0" step=".05" autocomplete="off" placeholder="0"></label>
+          <label class="small">Entry<input id="ce" type="number" value="0" min="0" step="any" autocomplete="off" placeholder="0"></label>
+          <label class="small">Stop<input id="cs" type="number" value="0" min="0" step="any" autocomplete="off" placeholder="0"></label>
+          <label class="small">Leverage<input id="cl" type="number" value="0" min="1" step="1" autocomplete="off" placeholder="1"></label>
+        </div><div class="result calcResult" id="sizeResult">—</div></div>
         <div class="calcBox"><div class="label">Risk : Reward</div><div class="inputs">
-          <label class="small">Entry<input id="re" type="number" value="84000"></label><label class="small">Stop<input id="rs" type="number" value="82000"></label>
-          <label class="small">Target<input id="rt" type="number" value="88000"></label><label class="small">Direction<select id="rdirection"><option value="LONG">Long</option><option value="SHORT">Short</option></select></label>
-        </div><div class="result" id="rrResult">—</div></div>
-        <div class="calcBox"><div class="label">P&amp;L</div><div class="inputs">
-          <label class="small">Entry<input id="pe" type="number" value="84000"></label><label class="small">Exit<input id="pt" type="number" value="88000"></label>
-          <label class="small">Quantity<input id="pq" type="number" value=".1" step=".01"></label><label class="small">Direction<select id="pDirection"><option value="LONG">Long</option><option value="SHORT">Short</option></select></label>
-        </div><div class="result" id="pnlResult">—</div></div>
+          <label class="small">Entry<input id="re" type="number" value="0" min="0" step="any" autocomplete="off" placeholder="0"></label>
+          <label class="small">Stop<input id="rs" type="number" value="0" min="0" step="any" autocomplete="off" placeholder="0"></label>
+          <label class="small">Target<input id="rt" type="number" value="0" min="0" step="any" autocomplete="off" placeholder="0"></label>
+          <label class="small">Direction<select id="rdirection" autocomplete="off"><option value="LONG">Long</option><option value="SHORT">Short</option></select></label>
+        </div><div class="result calcResult" id="rrResult">—</div></div>
+        <div class="calcBox"><div class="label">Perpetual P&amp;L</div><div class="inputs">
+          <label class="small">Entry<input id="pe" type="number" value="0" min="0" step="any" autocomplete="off" placeholder="0"></label>
+          <label class="small">Exit<input id="pt" type="number" value="0" min="0" step="any" autocomplete="off" placeholder="0"></label>
+          <label class="small">Quantity<input id="pq" type="number" value="0" min="0" step="any" autocomplete="off" placeholder="0"></label>
+          <label class="small">Leverage<input id="pl" type="number" value="0" min="1" step="1" autocomplete="off" placeholder="1"></label>
+          <label class="small">Direction<select id="pDirection" autocomplete="off"><option value="LONG">Long</option><option value="SHORT">Short</option></select></label>
+        </div><div class="result calcResult" id="pnlResult">—</div>
+        <div class="watchNote">Linear USDT perpetual formula. Fees, funding, slippage, and liquidation are not included.</div></div>
       </div>
     </div>
   </section>
@@ -2286,157 +2259,27 @@ async function loadDataFabric(){
     $("dcfState").textContent="ERROR";$("dcfSources").textContent=e.message||"Cross-exchange check unavailable";
   }
 }
-function gateDecisionClass(decision){
-  decision=String(decision||"").toUpperCase();
-  if(decision==="BLOCKED")return"gate-blocked";
-  if(decision==="ELIGIBLE")return"gate-passed";
-  if(decision==="ELIGIBLE_WITH_WARNINGS")return"gate-warning";
-  return"";
-}
-function friendlyGateReason(code){
-  var map={
-    NO_DIRECTIONAL_SETUP:"No clear UP/DOWN market setup.",
-    SIGNAL_SCORE_BELOW_THRESHOLD:"Signal strength is below your minimum.",
-    R_R_BELOW_THRESHOLD:"The target is too close for your minimum reward/risk.",
-    DERIVATIVES_UNAVAILABLE:"Open-interest/flow data is unavailable.",
-    DATA_QUALITY_BELOW_THRESHOLD:"Market data quality is below the required level.",
-    CANDLE_DATA_STALE:"The candle feed is too old.",
-    FLOW_DATA_STALE:"The live flow feed is too old.",
-    SPREAD_TOO_WIDE:"The market spread is too wide right now.",
-    DAILY_LOSS_LIMIT_REACHED:"Your daily loss limit has already been reached.",
-    MAX_DRAWDOWN_LIMIT_REACHED:"Your account is too close to the maximum drawdown.",
-    OPEN_RISK_LIMIT_REACHED:"Existing open risk leaves no room for another trade.",
-    MAX_OPEN_POSITIONS_REACHED:"You already have the maximum number of open positions.",
-    DAILY_TRADE_LIMIT_REACHED:"Today's trade limit has been reached.",
-    CONSECUTIVE_LOSS_LIMIT_REACHED:"The loss-streak protection is active.",
-    LOSS_COOLDOWN_ACTIVE:"The post-loss cooldown is still active.",
-    HIGH_VOLATILITY_BLOCKED:"Volatility is above the configured safety limit.",
-    FLOW_MIXED:"Order flow is mixed, so the direction is not confirmed.",
-    FLOW_CONFLICTS_WITH_DIRECTION:"Order flow disagrees with the suggested direction.",
-    MARKET_CONSENSUS_UNAVAILABLE:"Independent price confirmation is unavailable.",
-    MARKET_CONSENSUS_WEAK:"Independent price feeds are not confirming the move strongly enough.",
-    INSUFFICIENT_INDEPENDENT_PRICE_SOURCES:"Not enough independent price feeds are available.",
-    CONSENSUS_SOURCE_COUNT_UNAVAILABLE:"The independent-source check could not be completed.",
-    PRICE_FEEDS_CONFLICT:"Independent price feeds disagree too much.",
-    EVENT_SIDE_REQUIRED:"Choose UP or DOWN.",
-    PREMIUM_REQUIRED:"Enter the amount you can lose on this contract.",
-    PAYOUT_REQUIRED:"Enter the payout shown by the venue.",
-    PAYOUT_NOT_ABOVE_STAKE:"The payout is not greater than the stake and fees.",
-    EVENT_PAYOFF_BELOW_RISK_REQUIREMENT:"The contract payout is too small for your minimum reward/risk.",
-    PER_TRADE_RISK_EXCEEDED:"Position size risks more than the configured amount per trade.",
-    PER_TRADE_RISK_EXCEEDED_AFTER_EXCHANGE_ROUNDING:"Exchange tick/quantity rounding pushed risk above the allowed amount.",
-    EVENT_DIRECTION_CONFLICTS_WITH_SIGNAL:"The contract direction conflicts with MarketPulse.",
-    NO_CONTRACTS_WITHIN_RISK_BUDGET:"The contract is too large for your remaining risk budget.",
-    STRIKE_REQUIRED:"Enter the venue's strike price.",
-    EXPIRY_REQUIRED:"Enter the contract expiry.",
-    CONTRACT_EXPIRED:"This contract has already expired.",
-    EXPIRY_TOO_CLOSE:"There is too little time left to satisfy the safety rule.",
-    STRIKE_TOO_CLOSE_TO_INDEX:"The strike is too close to the current index.",
-    INVALID_LEVELS:"Entry, stop and target levels are invalid.",
-    MAX_DAILY_LOSS:"The execution daily-loss limit is active.",
-    RECONCILIATION_BLOCK:"Exchange state must be reconciled before execution.",
-    KILL_SWITCH_ACTIVE:"The execution kill switch is active."
-  };
-  return map[code]||String(code||"Safety check failed.").replaceAll("_"," ").toLowerCase();
-}
-function applyGateVisual(cardId,chipId,decision){
-  var card=$(cardId),chip=$(chipId);if(!card||!chip)return;
-  card.classList.remove("gate-blocked","gate-passed","gate-warning");
-  var cls=gateDecisionClass(decision);if(cls)card.classList.add(cls);
-  chip.textContent=decision||"WAITING";
-}
-function renderGateChecks(id,items){
-  var el=$(id);if(!el)return;
-  el.innerHTML=(items||[]).map(function(x){
-    return '<div class="gateCheck '+(x.state==="ok"?"ok":x.state==="bad"?"bad":"warn")+'"><b>'+safeHtml(x.label)+'</b><span>'+safeHtml(x.value)+'</span></div>';
-  }).join("");
-}
-function setGateExplain(id,decision,reasons){
-  var el=$(id);if(!el)return;
-  if(decision==="BLOCKED")el.textContent="DON'T TRADE — one or more safety checks failed.";
-  else if(decision==="ELIGIBLE")el.textContent="TRADE CHECK PASSED — the configured safety checks are clear.";
-  else if(decision==="ELIGIBLE_WITH_WARNINGS")el.textContent="CAUTION — the setup cleared the hard blocks, but warnings remain.";
-  else el.textContent="Waiting for enough data to complete the safety check.";
-  el.dataset.reasons=(reasons||[]).join("|");
-}
-
-function resetPropFirmGuardInputs(){
-  ["pfgEvalAccount","pfgEquity","pfgDailyLoss","pfgMaxDD","pfgRiskTrade","pfgScore","pfgRR"].forEach(function(id){var el=$(id);if(el)el.value="0"});
-  applyGateVisual("pfgCard","pfgGateChip","WAITING");
-  setGateExplain("pfgExplain","WAITING",[]);
-  if($("pfgDecisionText"))$("pfgDecisionText").textContent="WAITING";
-  if($("pfgResult"))$("pfgResult").textContent="Enter evaluation rules, then check this setup.";
-  if($("pfgChecks"))$("pfgChecks").innerHTML="";
-  if($("pfgReasons"))$("pfgReasons").textContent="No gate result yet.";
-}
-async function loadPropFirmGuard(){
-  if(!$("pfgResult"))return;
-  var fields=["pfgEvalAccount","pfgEquity","pfgDailyLoss","pfgMaxDD","pfgRiskTrade","pfgScore","pfgRR"].map(function(id){return Number($(id)?.value||0)});
-  if(fields[0]<=0||fields[1]<=0||fields[2]<=0||fields[3]<=0||fields[4]<=0||fields[5]<=0||fields[6]<=0){
-    resetPropFirmGuardInputs();
-    return;
-  }
-  try{
-    var q=new URLSearchParams({
-      symbol:state.symbol,interval:state.interval,
-      accountSize:$("pfgEvalAccount").value,equity:$("pfgEquity").value,
-      dailyLossLimitPct:$("pfgDailyLoss").value,maxDrawdownPct:$("pfgMaxDD").value,
-      riskPerTradePct:$("pfgRiskTrade").value,minSignalScore:$("pfgScore").value,minRR:$("pfgRR").value
-    });
-    var d=await api("/api/propfirm?"+q.toString(),8500),g=d.gate||{};
-    applyGateVisual("pfgCard","pfgGateChip",g.decision||"WAITING");
-    setGateExplain("pfgExplain",g.decision,g.reasons);
-    $("pfgDecisionText").textContent=g.decision==="ELIGIBLE"?"PASS":g.decision==="ELIGIBLE_WITH_WARNINGS"?"CAUTION":g.decision==="BLOCKED"?"BLOCKED":"WAITING";
-    $("pfgResult").textContent=(g.signalSide||"WAIT")+" · score "+fmt(g.score)+" · R:R "+Number(g.rr||0).toFixed(2)+" · remaining risk "+fmt(g.riskHeadroomCash||0);
-    renderGateChecks("pfgChecks",[
-      {label:"Signal",state:Number(g.score)>=Number(g.config?.minSignalScore||72)?"ok":"bad",value:fmt(g.score)+"/"+fmt(g.config?.minSignalScore||72)},
-      {label:"Reward / risk",state:Number(g.rr)>=Number(g.config?.minRR||1.5)?"ok":"bad",value:Number(g.rr||0).toFixed(2)+"R"},
-      {label:"Market confirm",state:(Number(g.consensusQualityPct||0)>=Number(g.config?.minConsensusQualityPct||85)&&Number(g.independentSourceCount||0)>=2)?"ok":"bad",value:Number(g.consensusQualityPct||0).toFixed(0)+"%"},
-      {label:"Flow",state:g.flow&&g.flow!=="UNKNOWN"&&g.flow!=="MIXED"?"ok":"warn",value:g.flow||"Unavailable"},
-      {label:"Account safety",state:Number(g.riskHeadroomCash||0)>0&&Number(g.dailyLossPct||0)<Number(g.config?.maxDailyLossPct||3)&&Number(g.maxDrawdownPct||0)<Number(g.config?.maxDrawdownPct||6)?"ok":"bad",value:fmt(g.riskHeadroomCash||0)+" headroom"}
-    ]);
-    $("pfgReasons").textContent=(g.reasons&&g.reasons.length?("Why blocked: "+g.reasons.map(friendlyGateReason).join(" · ")):("Checks passed"+(g.warnings&&g.warnings.length?(" · Caution: "+g.warnings.map(friendlyGateReason).join(" · ")):"")));
-  }catch(e){
-    applyGateVisual("pfgCard","pfgGateChip","BLOCKED");setGateExplain("pfgExplain","BLOCKED",["DATA_QUALITY_BELOW_THRESHOLD"]);
-    $("pfgDecisionText").textContent="BLOCKED";$("pfgResult").textContent="Safety check unavailable";$("pfgReasons").textContent=e.message||"Request failed";
-  }
-}
-async function loadEventGuard(){
-  if(!$("ecgResult"))return;
-  try{
-    var q=new URLSearchParams({
-      symbol:state.symbol,interval:state.interval,
-      accountSize:$("pfgEvalAccount").value||5000,equity:$("pfgEquity").value||5000,
-      dailyLossLimitPct:$("pfgDailyLoss").value||3,maxDrawdownPct:$("pfgMaxDD").value||6,
-      riskPerTradePct:$("pfgRiskTrade").value||.5,minSignalScore:$("pfgScore").value||72,minRR:$("pfgRR").value||1.5,
-      side:$("ecgSide").value,premium:$("ecgPremium").value,payout:$("ecgPayout").value,fee:$("ecgFee").value,
-      venue:$("ecgVenue").value,strikePrice:$("ecgStrike").value,expirationAt:String(Date.now()+((Number($("ecgExpiryMin").value)||5)*60000)),strictContractContext:true
-    });
-    var d=await api("/api/propfirm/event?"+q.toString(),8500),g=d.gate||{};
-    applyGateVisual("ecgCard","ecgGateChip",g.decision||"WAITING");
-    setGateExplain("ecgExplain",g.decision,g.reasons);
-    $("ecgDecisionText").textContent=g.decision==="ELIGIBLE"?"PASS":g.decision==="ELIGIBLE_WITH_WARNINGS"?"CAUTION":g.decision==="BLOCKED"?"BLOCKED":"WAITING";
-    $("ecgResult").textContent=(g.eventSide||"WAIT")+" · "+Number(g.maxContracts||0)+" contract(s) · max loss "+fmt(g.maxLoss||0)+" · max profit "+fmt(g.maxProfit||0)+" · payoff "+Number(g.payoffR||0).toFixed(2)+"R"+(g.strikeDistanceBps!=null?" · strike distance "+Number(g.strikeDistanceBps).toFixed(1)+" bps":"");
-    renderGateChecks("ecgChecks",[
-      {label:"Direction",state:g.eventSide&&g.signalSide&&g.eventSide===g.signalSide?"ok":"bad",value:g.eventSide||"Choose UP/DOWN"},
-      {label:"Payout",state:Number(g.payoffR||0)>=Number(g.config?.minRR||1.5)?"ok":"bad",value:Number(g.payoffR||0).toFixed(2)+"R"},
-      {label:"Risk budget",state:Number(g.maxContracts||0)>0?"ok":"bad",value:Number(g.maxContracts||0)+" max"},
-      {label:"Strike",state:g.strikePrice!=null&&Number(g.strikeDistanceBps||0)>=Number(g.config?.eventMinStrikeDistanceBps||1)?"ok":"bad",value:g.strikePrice!=null?fmt(g.strikePrice):"Enter strike"},
-      {label:"Expiry",state:Number(g.secondsToExpiry||0)>=Number(g.config?.eventMinSecondsToExpiry||30)?"ok":"bad",value:g.secondsToExpiry!=null?Math.max(0,Math.round(g.secondsToExpiry))+"s":"Enter expiry"}
-    ]);
-    $("ecgReasons").textContent=(g.reasons&&g.reasons.length?("Why blocked: "+g.reasons.map(friendlyGateReason).join(" · ")):("Checks passed"+(g.warnings&&g.warnings.length?(" · Caution: "+g.warnings.map(friendlyGateReason).join(" · ")):"")))+".";
-  }catch(e){
-    applyGateVisual("ecgCard","ecgGateChip","BLOCKED");setGateExplain("ecgExplain","BLOCKED",["DATA_QUALITY_BELOW_THRESHOLD"]);
-    $("ecgDecisionText").textContent="BLOCKED";$("ecgResult").textContent="Safety check unavailable";$("ecgReasons").textContent=e.message||"Request failed";
-  }
+function resetQuickCalculators(){
+  ["ca","cr","ce","cs","cl","re","rs","rt","pe","pt","pq","pl"].forEach(function(id){var el=$(id);if(el)el.value="0"});
+  if($("rdirection"))$("rdirection").value="LONG";
+  if($("pDirection"))$("pDirection").value="LONG";
+  ["sizeResult","rrResult","pnlResult"].forEach(function(id){var el=$(id);if(!el)return;el.textContent="—";el.classList.remove("calc-profit","calc-loss","calc-neutral")});
 }
 function calc(){
-  var a=+$("ca").value||0,r=(+$("cr").value||0)/100,e=+$("ce").value||0,s=+$("cs").value||0,b=a*r,d=Math.abs(e-s);$("sizeResult").textContent=d?"Risk "+fmt(b)+" · Position size "+fmt(b/d)+" units":"Enter valid stop";
-  var re=+$("re").value||0,rs=+$("rs").value||0,rt=+$("rt").value||0,rd=Math.abs(re-rs),rw=Math.abs(rt-re),dir=$("rdirection").value;$("rrResult").textContent=rd?(rw/rd).toFixed(2)+"R · "+dir:"—";
-  var pe=+$("pe").value||0,pt=+$("pt").value||0,pq=+$("pq").value||0,pdir=$("pDirection").value,pnl=(pdir==="SHORT"?(pe-pt):(pt-pe))*pq;$("pnlResult").textContent="P/L "+fmt(pnl);
-  var ra=+$("ra").value||0,rr=(+$("rrisk").value||0)/100,rv=+$("rentry").value||0,rst=+$("rstop").value||0,bd=ra*rr,dist=Math.abs(rv-rst);$("riskOut").textContent=dist?"Risk "+fmt(bd)+" · Position size "+fmt(bd/dist):"Enter valid levels";
+  var a=+$("ca").value||0,r=(+$("cr").value||0)/100,e=+$("ce").value||0,s=+$("cs").value||0,l=+$("cl").value||0,b=a*r,d=Math.abs(e-s),qty=d>0?b/d:0,notional=qty*e,margin=(qty>0&&l>0)?notional/l:0;
+  $("sizeResult").textContent=(b>0&&qty>0)?("Risk "+fmt(b)+" · Qty "+fmt(qty)+" · Notional "+fmt(notional)+" · Margin "+fmt(margin)):"—";
+  var re=+$("re").value||0,rs=+$("rs").value||0,rt=+$("rt").value||0,dir=$("rdirection").value,riskUnit=dir==="SHORT"?(rs-re):(re-rs),rewardUnit=dir==="SHORT"?(re-rt):(rt-re),rr=(riskUnit>0&&rewardUnit>0)?rewardUnit/riskUnit:0;
+  $("rrResult").textContent=rr>0?(rr.toFixed(2)+"R · Risk "+fmt(riskUnit)+" · Reward "+fmt(rewardUnit)+" · "+dir):"—";
+  var pe=+$("pe").value||0,pt=+$("pt").value||0,pq=+$("pq").value||0,pl=+$("pl").value||0,pdir=$("pDirection").value,pnl=pdir==="SHORT"?(pe-pt)*pq:(pt-pe)*pq,pnlMargin=(pe>0&&pq>0&&pl>0)?(pe*pq)/pl:0,roi=pnlMargin>0?(pnl/pnlMargin)*100:0,pnlEl=$("pnlResult");
+  pnlEl.classList.remove("calc-profit","calc-loss","calc-neutral");
+  if(pe>0&&pt>0&&pq>0&&pl>0){pnlEl.textContent=(pnl>=0?"+":"")+fmt(pnl)+" P/L · Margin "+fmt(pnlMargin)+" · ROI "+(roi>=0?"+":"")+roi.toFixed(2)+"%";pnlEl.classList.add(pnl>0?"calc-profit":pnl<0?"calc-loss":"calc-neutral")}else{pnlEl.textContent="—";pnlEl.classList.add("calc-neutral")}
+  var ra=+$("ra").value||0,rrisk=(+$("rrisk").value||0)/100,rv=+$("rentry").value||0,rst=+$("rstop").value||0,bd=ra*rrisk,dist=Math.abs(rv-rst);
+  $("riskOut").textContent=dist?"Risk "+fmt(bd)+" · Position size "+fmt(bd/dist):"Enter valid levels";
 }
-
+function setupCalculatorInputs(){
+  ["ca","cr","ce","cs","cl","re","rs","rt","pe","pt","pq","pl","rdirection","pDirection","ra","rrisk","rentry","rstop"].forEach(function(id){var el=$(id);if(!el)return;el.addEventListener("input",calc);el.addEventListener("change",calc)});
+  resetQuickCalculators();calc();
+}
 function normalizeFlow(values){
   values=(values||[]).map(Number).filter(Number.isFinite);if(values.length<2)return[];
   var first=values[0],maxDev=Math.max.apply(null,values.map(function(v){return Math.abs(v-first)}));if(!Number.isFinite(maxDev)||maxDev===0)return values.map(function(){return 100});
@@ -2879,7 +2722,6 @@ async function loadCore(){
 
     deferTask(loadCoreEnrichment,150);
     deferTask(loadDataFabric,800);
-    deferTask(loadPropFirmGuard,1000);
     deferTask(loadCoreAnalytics,1800);
     if(!state.secondaryStarted){
       queueSecondaryBoot();
@@ -2976,8 +2818,6 @@ $("refresh").addEventListener("click",loadCore);
   setTimeout(wakeMarketCore,0);
 })();
 $("dcfRefresh").addEventListener("click",loadDataFabric);
-$("pfgRefresh").addEventListener("click",loadPropFirmGuard);
-$("ecgRefresh").addEventListener("click",loadEventGuard);
 $("symbol").addEventListener("change",function(){state.symbol=this.value;state.chartPinned=false;state.chartSymbol=state.symbol;state.chartCandles=[];loadFastTicker();loadCore()});
 $("interval").addEventListener("change",function(){state.interval=this.value;loadCore()});
 function deviceId(){
@@ -3468,7 +3308,7 @@ if($("chartFit").dataset.criticalChartBound!=="1")$("chartFit").addEventListener
 if($("chartAuto").dataset.criticalChartBound!=="1")$("chartAuto").addEventListener("click",function(){state.chartYZoom=1;state.chartYShift=0;queueChartDraw()});
 
 
-$("interval").value=state.interval;renderJournal();renderBrainInsights();renderAlerts();calc();
+$("interval").value=state.interval;renderJournal();renderBrainInsights();renderAlerts();setupCalculatorInputs();
 
 var initialBootTimer=null,initialBootAttempts=0;
 function scheduleInitialBoot(delay){
@@ -3490,6 +3330,8 @@ window.addEventListener("load",function(){
   if(!state.market){scheduleInitialBoot(50)}
 },{once:true});
 window.addEventListener("pageshow",function(e){
+  resetQuickCalculators();
+  calc();
   if(e.persisted&&!state.market)scheduleInitialBoot(50);
 });
 document.addEventListener("visibilitychange",function(){
