@@ -2685,6 +2685,7 @@ async function loadCore(){
   if(state.bootRetryTimer){clearTimeout(state.bootRetryTimer);state.bootRetryTimer=null}
   state.busy=true;setStatus("Loading BTC market data…");$("dataState").textContent="Connecting";$("symbol").value=state.symbol;
   const requestedSymbol=state.symbol,requestedInterval=state.interval;
+  suppressFinalSignal("Refreshing final decision for "+requestedSymbol+" "+requestedInterval+".");
   try{
     var d=await api("/api/core?symbol="+encodeURIComponent(requestedSymbol)+"&interval="+encodeURIComponent(requestedInterval),6500);
     if(requestedSymbol!==state.symbol||requestedInterval!==state.interval)return;
