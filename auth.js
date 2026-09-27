@@ -3,7 +3,11 @@ const storage=require("./storage");
 const totp=require("./totp");
 
 const SESSION_DAYS=Math.max(1,Number(process.env.MARKETPULSE_SESSION_DAYS||30));
-const ADMIN_SESSION_HOURS=Math.max(1,Number(process.env.MARKETPULSE_ADMIN_SESSION_HOURS||8));
+// Owner/admin login is intentionally persistent: once the owner completes MFA,
+// the session remains valid for years and ends only on explicit sign-out, account
+// revocation/moderation, or infrastructure-level session invalidation.
+// A shorter environment value cannot accidentally re-enable frequent owner logouts.
+const ADMIN_SESSION_HOURS=Math.max(24*365*10,Number(process.env.MARKETPULSE_ADMIN_SESSION_HOURS||24*365*10));
 const COOKIE="mp_session";
 const ADMIN_EMAIL=String(process.env.MARKETPULSE_ADMIN_EMAIL||"").trim().toLowerCase();
 const PASSWORD_PEPPER=String(process.env.MARKETPULSE_PASSWORD_PEPPER||"");
