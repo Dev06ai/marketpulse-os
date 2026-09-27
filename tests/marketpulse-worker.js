@@ -29,15 +29,19 @@ assert(worker.normaliseBaseUrl("https://example.com/")==="https://example.com","
 const top=once.dueIntervals(new Date("2026-09-27T12:00:00Z"));
 assert.deepStrictEqual(top,["15m","1h","4h","1d"],"hour boundary sweep intervals");
 assert.deepStrictEqual(
-  once.dueIntervals(new Date("2026-09-27T12:30:00Z")),
+  once.dueIntervals(new Date("2026-09-27T12:32:00Z")),
   ["15m","1h","4h"],
   "30-minute sweep intervals"
 );
 assert.deepStrictEqual(
-  once.dueIntervals(new Date("2026-09-27T12:10:00Z")),
+  once.dueIntervals(new Date("2026-09-27T12:07:00Z")),
   ["15m"],
   "5-minute sweep intervals"
 );
+assert(once.MAX_CONCURRENCY===3,"bounded cron concurrency");
+assert(worker.isRetryableError(Object.assign(new Error("timeout"),{name:"AbortError"})),"abort retries");
+assert(worker.isRetryableError(Object.assign(new Error("rate limit"),{status:429})),"rate-limit retries");
+assert(!worker.isRetryableError(Object.assign(new Error("bad request"),{status:400})),"client errors do not retry");
 
 console.log("MarketPulse worker checks passed:",{
   plan:plan.length,cadence15m:worker.CADENCE_MS["15m"],cadence1h:worker.CADENCE_MS["1h"]
