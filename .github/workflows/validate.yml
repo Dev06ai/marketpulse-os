@@ -18,6 +18,7 @@ jobs:
       - run: node --check strategy-setups.js
       - run: node --check reaction-map.js
       - run: node --check analyst-scenario-pack.js
+      - run: node --check advanced-price-action-pack.js
       - run: node --check phase11-13.js
       - run: node --check market-structure.js
       - run: node validation-selftest.js
@@ -36,6 +37,7 @@ jobs:
       - run: node tests/reaction-map.js
       - run: node tests/sfp-signal.js
       - run: node tests/dline-checklist.js
+      - run: node tests/advanced-price-action.js
       - run: node tests/analyst-scenario-pack.js
       - name: Check browser script
         run: |
