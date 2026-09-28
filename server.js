@@ -241,7 +241,7 @@ const CORE_ANALYTICS_JOBS=new Set();
 const CORE_ANALYTICS_TTL=120000;
 const PHASE2_VERSION=2; const PHASE3_VERSION=3; const PHASE4_VERSION=4; const PHASE5_VERSION=5; const PHASE6_VERSION=6; const PHASE7_VERSION=7; const PHASE7_DATA_VERSION=2;
 const PHASE9_VERSION=9; const PHASE10_VERSION=10; const PHASE11_VERSION=11; const PHASE12_VERSION=12; const PHASE13_VERSION=13;
-const DECISION_CACHE=new Map(); const DECISION_TTL=8000; const DECISION_LAST_GOOD=new Map();
+const DECISION_CACHE=new Map(); const DECISION_TTL=5000; const DECISION_LAST_GOOD=new Map();
 const DECISION_JOBS=new Map();
 const TRADE_RADAR_CACHE=new Map();
 const TRADE_RADAR_JOBS=new Map();
@@ -950,7 +950,7 @@ function flowBucket(symbol){
 }
 function recordFlowPoint(symbol){
   const v=flowBucket(symbol),now=Date.now();
-  if(v.lastPointAt&&now-v.lastPointAt<1500)return;
+  if(v.lastPointAt&&now-v.lastPointAt<1000)return;
   v.lastPointAt=now;
   v.points.push({ts:now,liqLong:v.liqLong,liqShort:v.liqShort,liqTotal:v.liqLong+v.liqShort,cvd:v.cvd,cvdRatio:v.cvdNotional?v.cvd/v.cvdNotional:null,oi:v.oi,fundingRate:v.fundingRate,markPrice:v.markPrice,lastPrice:v.lastPrice,price24hPcnt:v.price24hPcnt,orderBook:v.orderBook});
   if(v.points.length>LIVE_FLOW_LIMIT)v.points.shift();
