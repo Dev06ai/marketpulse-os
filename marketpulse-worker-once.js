@@ -17,7 +17,7 @@
 const {buildRuntimeConfig,requestDecisionWithRetry,summarizeDecision}=require("./marketpulse-worker");
 
 const SCHEDULE_OFFSET_MINUTE=2;
-const MAX_CONCURRENCY=1;
+const MAX_CONCURRENCY=3;
 
 function dueIntervals(date=new Date()){
   const minute=date.getUTCMinutes();
