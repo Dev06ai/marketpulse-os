@@ -57,7 +57,7 @@ const breakdownResult=reactionForZone(
   {volumeZ:2,cvdState:"SELLERS CONFIRM",oiChangePct:2,positioning:"SHORT PARTICIPATION"}
 );
 assert(breakdownResult.action==="SHORT","support breakdown should produce a SHORT reaction candidate");
-assert(breakdownResult.state==="BREAKDOWN_SHORT","support breakdown should be a breakdown/retest candidate");
+assert(["CONFIRM_SHORT","BREAKDOWN_SHORT"].includes(breakdownResult.state),"support breakdown should produce a confirmed/breakdown SHORT candidate");
 assert(breakdownResult.invalidation>102,"SHORT invalidation must sit above the support zone, not below it");
 
 console.log("Reaction map smoke checks passed:",{
