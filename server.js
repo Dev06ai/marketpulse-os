@@ -2698,17 +2698,31 @@ const server=http.createServer(async(req,res)=>{
       try{
         let records=await storage.getSignalDNA({symbol:symbol||undefined,interval:interval||undefined,limit});
         if(records.length<50){
-          const symbols=symbol?[symbol]:SYMBOLS,sets=await Promise.all(symbols.map(async sym=>{
+          const symbols=symbol?[symbol]:SYMBOLS;
+          const sets=await Promise.all(symbols.map(async sym=>{
             try{
-              const ds=await buildReplayDataset(sym,interval||"1h",{points:50,bars:(interval||"1h")==="1d"?1800:420});return dnaRecordsFromReplay(ds);
+              const ds=await buildReplayDataset(sym,interval||"1h",{points:50,bars:(interval||"1h")==="1d"?1800:420});
+              return dnaRecordsFromReplay(ds);
             }catch{return[]}
           }));
           records=sets.flat();
           try{await storage.saveSignalDNA(records)}catch{}
         }
         try{await learning.trainFromReplay(records)}catch{}
-        return send(res,200,{ok:true,filters:{symbol:symbol||"ALL",interval:interval||"ALL"},summary:summarizeDNA(records),records:records.slice(0,limit),learning:await learning.status(),updatedAt:Date.now()});
-      }catch(e){return send(res,503,{ok:fal    if(req.method==='GET'&&u.pathname==='/api/system-check'){
+        return send(res,200,{
+          ok:true,
+          filters:{symbol:symbol||"ALL",interval:interval||"ALL"},
+          summary:summarizeDNA(records),
+          records:records.slice(0,limit),
+          learning:await learning.status(),
+          updatedAt:Date.now()
+        });
+      }catch(e){
+        return send(res,503,{ok:false,error:e.message});
+      }
+    }
+
+    if(req.method==='GET'&&u.pathname==='/api/system-check'){
       const checks={server:true,marketEngine:true,learning:false,memory:false,marketData:false,derivatives:false,oi:false,cvd:false,liquidations:false,execution:false,portfolio:false,phase7:false,coreAnalytics:true,decisionEngine:false,phase11_13:false};
       const bounded=async(fn,ms)=>{
         try{
@@ -2794,8 +2808,7 @@ const server=http.createServer(async(req,res)=>{
       await auditAdmin(req,"Ran full system check","system",null,{ok:result.ok,checks});
       return send(res,200,result);
     }
- send(res,200,result);
-    }
+
     if(req.method==='GET'&&u.pathname==='/api/live'){
       const symbol=(u.searchParams.get('symbol')||'BTCUSDT').toUpperCase(),interval=u.searchParams.get('interval')||'1h';
       if(!SYMBOLS.includes(symbol))return send(res,400,{error:'Unsupported symbol'});
