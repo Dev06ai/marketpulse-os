@@ -967,7 +967,7 @@ async function buildDecisionSnapshot(symbol,interval,query,deviceId=null){
         security:Boolean(phaseStackState?.security?.ok),
         observability:true,operations:true
       },
-      exchangeHealth:{reliabilityPct:100},
+      exchangeHealth:{reliabilityPct:null},
       portfolio:{positions:[]},
       checklist:{
         side:finalDecision?.action,
