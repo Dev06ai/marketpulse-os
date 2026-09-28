@@ -550,15 +550,11 @@ function rateRequest(req,path){
   // by the heavy API limiter. The dashboard is intentionally chatty while
   // maintaining a real-time market session.
   if(method==="GET"&&(
-    route==="/" ||
+    !route.startsWith("/api/") ||
     route==="/api/live-sync" ||
     route==="/api/fast-ticker" ||
     route==="/api/market-state" ||
-    route==="/health" ||
-    route==="/api/chart" ||
-    route.startsWith("/assets/") ||
-    route==="/manifest.webmanifest" ||
-    route==="/sw.js"
+    route==="/api/chart"
   ))return true;
 
   const key=clientIp(req),now=Date.now(),x=GLOBAL_RATE.get(key);
