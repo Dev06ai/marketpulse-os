@@ -29,6 +29,9 @@ const TICKER_CACHE={ts:0,data:{}};
 const TICKER_TTL=10000;
 const RELIABLE_TICKER_CACHE={ts:0,data:{}};
 const RELIABLE_TICKER_TTL=5000;
+const CORE_SNAPSHOT_CACHE=new Map();
+const CORE_SNAPSHOT_TTL=20000;
+const CORE_SNAPSHOT_JOBS=new Map();
 
 async function getReliableTickerSnapshot(symbols=SYMBOLS){
   const list=(symbols||SYMBOLS).filter(Boolean);
@@ -802,7 +805,7 @@ async function getBybitKlines(symbol,interval,timeoutMs=2200){
 }
 async function getFastKlines(symbol,interval){
   const key="FAST|"+symbol+"|"+interval,hit=CACHE.get(key);
-  if(hit&&Date.now()-hit.ts<8000)return hit.rows;
+  if(hit&&Date.now()-hit.ts<20000)return hit.rows;
   const providers=[
     ["bybit",()=>getBybitKlines(symbol,interval,2200)],
     ["kraken",()=>getKraken(symbol,interval,2600)],
@@ -1954,20 +1957,44 @@ const server=http.createServer(async(req,res)=>{
     if(req.method==='GET'&&u.pathname==='/api/core'){
       const symbol=(u.searchParams.get('symbol')||'BTCUSDT').toUpperCase(),interval=u.searchParams.get('interval')||'1h';
       if(!SYMBOLS.includes(symbol))return send(res,400,{error:'Unsupported symbol'});
+      const key=symbol+"|"+interval,nowTs=Date.now(),cached=CORE_SNAPSHOT_CACHE.get(key);
+      if(cached&&nowTs-cached.ts<CORE_SNAPSHOT_TTL){
+        return send(res,200,{...cached.payload,cache:"server",cacheAgeMs:nowTs-cached.ts,stale:false});
+      }
+      if(CORE_SNAPSHOT_JOBS.has(key)&&cached){
+        return send(res,200,{...cached.payload,cache:"server-stale",cacheAgeMs:nowTs-cached.ts,stale:true});
+      }
+      const refresh=async()=>{
+        try{
+          const candles=await getFastKlines(symbol,interval);
+          if(!candles||candles.length<220)throw Error('Insufficient candles');
+          const analysis=analyze(candles,{interval,lower:null,higher:null,deriv:null});
+          const analytics=queueCoreAnalytics(symbol,interval,candles);
+          const payload={
+            ok:true,symbol,interval,candles,analysis,derivatives:null,learning:null,
+            backtest:analytics?.backtest||null,validation:analytics?.validation||null,setupStats:analytics?.setupStats||null,
+            source:candles?.[0]?.source||'market data',dataConsensus:null,
+            phase2:PHASE2_VERSION,phase3:PHASE3_VERSION,phase4:PHASE4_VERSION,
+            dataQuality:{candleCount:candles.length,candleAgeMs:candles.length?Math.max(0,Date.now()-Number(candles[candles.length-1].t)):null,derivativesAvailable:false},
+            updatedAt:Date.now(),performance:{fastPath:true,serverCached:true,enrichmentBackground:true,analyticsBackground:true}
+          };
+          CORE_SNAPSHOT_CACHE.set(key,{ts:Date.now(),payload});
+          return payload;
+        }finally{CORE_SNAPSHOT_JOBS.delete(key)}
+      };
+      const job=refresh();
+      CORE_SNAPSHOT_JOBS.set(key,job);
       try{
-        const candles=await getFastKlines(symbol,interval);
-        if(!candles||candles.length<220)throw Error('Insufficient candles');
-        const analysis=analyze(candles,{interval,lower:null,higher:null,deriv:null});
-        const analytics=queueCoreAnalytics(symbol,interval,candles);
-        return send(res,200,{
-          ok:true,symbol,interval,candles,analysis,derivatives:null,learning:null,
-          backtest:analytics?.backtest||null,validation:analytics?.validation||null,setupStats:analytics?.setupStats||null,
-          source:candles?.[0]?.source||'market data',dataConsensus:null,
-          phase2:PHASE2_VERSION,phase3:PHASE3_VERSION,phase4:PHASE4_VERSION,
-          dataQuality:{candleCount:candles.length,candleAgeMs:candles.length?Math.max(0,Date.now()-Number(candles[candles.length-1].t)):null,derivativesAvailable:false},
-          updatedAt:Date.now(),performance:{fastPath:true,enrichmentBackground:true,analyticsBackground:true}
-        });
-      }catch(e){return send(res,503,{ok:false,error:String(e.message||e),source:'market data'})}
+        const payload=await Promise.race([job,new Promise((resolve)=>setTimeout(()=>resolve(null),2500))]);
+        if(payload)return send(res,200,{...payload,cache:"fresh",cacheAgeMs:0,stale:false});
+        if(cached)return send(res,200,{...cached.payload,cache:"server-stale",cacheAgeMs:nowTs-cached.ts,stale:true});
+        // Never leave the browser staring at an empty dashboard when the first
+        // provider is slow; the client already has its own last-known snapshot.
+        return send(res,503,{ok:false,error:"CORE_WARMING",retryAfterMs:1200,source:"market data"});
+      }catch(e){
+        if(cached)return send(res,200,{...cached.payload,cache:"server-stale",cacheAgeMs:nowTs-cached.ts,stale:true});
+        return send(res,503,{ok:false,error:String(e.message||e),source:'market data'});
+      }
     }
     if(req.method==='GET'&&u.pathname==='/api/core-enrichment'){
       const symbol=(u.searchParams.get('symbol')||'BTCUSDT').toUpperCase(),interval=u.searchParams.get('interval')||'1h';
