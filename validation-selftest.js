@@ -199,3 +199,16 @@ assert(npoc.setup?.side==="SHORT","Bearish naked POC SFP must map to SHORT.");
 assert(/^Naked (DAILY|WEEKLY) POC/.test(String(npoc.setup?.reason||"")),"Naked POC thesis reason missing.");
 
 
+
+
+const phase51to100=require("./phase51-100-stack");
+assert(phase51to100.selfTest().ok,"Phase 51–100 stack self-test failed.");
+const phase51to100Files=fs.readdirSync(".").filter(function(name){
+  return /^(?:phase(?:5[1-9]|[6-9][0-9])-.*|phase100-.*)\\.js$/.test(name) && name!=="phase51-100-stack.js" && name!=="phase51-100-utils.js";
+});
+assert(phase51to100Files.length===50,"Expected 50 Phase 51–100 module files; found "+phase51to100Files.length+".");
+for(const name of phase51to100Files){
+  const mod=require("./"+name);
+  assert(mod&&typeof mod.selfTest==="function","Phase module self-test missing: "+name);
+  assert(mod.selfTest().ok,"Phase module self-test failed: "+name);
+}
