@@ -63,6 +63,7 @@ jobs:
       - run: node --check phase48-performance-budget.js
       - run: node --check phase49-live-readiness.js
       - run: node --check phase50-shadow-controller.js
+      - run: node --check phase21-50-stack.js
       - run: node --check phase18-opportunity.js
       - run: node --check phase18-execution-router.js
       - run: node --check marketpulse-autotrader.js
