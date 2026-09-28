@@ -573,6 +573,7 @@ async function closeSimulationPosition(positionId,exitPrice,meta={}){
   const exit=finite(exitPrice);if(exit===null)throw new Error("Exit price required");
   const pnl=p.side==="LONG"?(exit-p.entry)*p.qty:(p.entry-exit)*p.qty;
   const r=p.riskCash?((pnl)/p.riskCash):0;
+  const reason=String(meta.reason||"MANUAL").toUpperCase();
   state.metrics.realizedPnl+=pnl;state.metrics.realizedR+=r;state.positions=state.positions.filter(x=>x.id!==positionId);
   const o=p.orderId?findOrder(state,p.orderId):state.orders.find(x=>x.externalOrderId==="SIM-"+String(p.id).replace("MP5P-",""));
   if(o){
@@ -585,7 +586,6 @@ async function closeSimulationPosition(positionId,exitPrice,meta={}){
     o.resultR=r;
     o.durationMs=Math.max(0,Number(o.closedAt)-Number(o.filledAt||o.createdAt||o.closedAt));
   }
-  const reason=String(meta.reason||"MANUAL").toUpperCase();
   addJournal(state,{id:"MP5J-C-"+positionId,ts:now(),type:"SIMULATION_CLOSED",positionId,orderId:p.orderId||o?.id||null,symbol:p.symbol,interval:p.interval||null,side:p.side,qty:p.qty,entry:p.entry,stop:p.stop,target:p.target,tp2:p.tp2??null,exit,resultR:r,pnl,openedAt:p.openedAt,closedAt:now(),durationMs:Math.max(0,now()-Number(p.openedAt||now())),strategy:p.strategy||null,setup:p.setup||null,regime:p.regime||null,score:Number(p.score)||0,rr:Number(p.rr)||0,easyMode:Boolean(p.easyMode),message:"Simulation trade closed · "+reason});
   pushEvent(state,"POSITION_CLOSED",p.symbol+" "+p.side+" closed · "+r.toFixed(2)+"R",{positionId,pnl,r,reason});
   if(String(p.source||"")==="SIMULATION"&&p.strategy){
