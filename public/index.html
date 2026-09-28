@@ -5445,11 +5445,10 @@ function getConditionalTradeLevels(d,p){
   var evidence=usable(d.candidateEvidence?.levels)?d.candidateEvidence.levels:null;
   var analysis=usable(d.analysis)?d.analysis:null;
   var existing=direct||conditional||evidence||analysis;
-  if(existing)return existing;
 
   // Deterministic client-side fallback mirrors the market-engine's published
   // level construction when the API response has a directional setup but its
-  // level object was stripped by an older/stale backend response.
+  // level object was stripped or only partially populated by the backend.
   var side=String(p.stableSide||p.candidate||d.rawAction||d.analysis?.side||d.market?.side||"WAIT").toUpperCase();
   if(side!=="LONG"&&side!=="SHORT")return {};
   var price=validLevel(p.livePrice)||validLevel(d.analysis?.price)||validLevel(d.market?.price);
@@ -5511,7 +5510,7 @@ function getConditionalTradeLevels(d,p){
     ?price+Math.max(actualRisk*2.4,2.1*atr)
     :price-Math.max(actualRisk*2.4,2.1*atr);
 
-  return {
+  var fallback={
     side,
     entryLow,entryHigh,entry,
     stop,tp1,tp2,
@@ -5520,6 +5519,9 @@ function getConditionalTradeLevels(d,p){
     rr:Math.abs(tp1-entry)/Math.max(Math.abs(entry-stop),1e-9),
     source
   };
+  // Prefer authoritative server/model values, but fill any missing pieces
+  // from the deterministic fallback so the UI never shows a blank trade map.
+  return Object.assign({},fallback,existing||{});
 }
 
 function validLevel(v){
