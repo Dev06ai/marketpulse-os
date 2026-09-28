@@ -267,13 +267,8 @@ async function getDecisionSnapshotCached(symbol,interval,searchParams,device){
     const last=DECISION_LAST_GOOD.get(key);
     if(last?.payload){
       return {
-        ...last.payload,
-        ok:true,
-        stale:true,
-        warming:true,
-        action:"WAIT",
-        state:"NO_TRADE",
-        liveSignalEligible:false,
+        ...last.payload,ok:true,stale:true,warming:true,
+        action:"WAIT",state:"NO_TRADE",liveSignalEligible:false,
         market:{...(last.payload.market||{}),side:"WAIT",status:"WARMING",type:"ENGINE WARMING / NO TRADE",bias:"Neutral",directionalLean:"NEUTRAL"},
         levels:{...(last.payload.levels||{}),entryLow:null,entryHigh:null,entry:null,stop:null,tp1:null,tp2:null,rr:null},
         deploymentGate:{...(last.payload.deploymentGate||{}),state:"BLOCKED",reason:"Fresh decision is still computing; stale data is not eligible for a live signal."},
@@ -283,8 +278,8 @@ async function getDecisionSnapshotCached(symbol,interval,searchParams,device){
       };
     }
     return {
-      ok:true,warming:true,stale:false,cache:"warming",
-      symbol,interval,action:"WAIT",state:"NO_TRADE",liveSignalEligible:false,
+      ok:true,warming:true,stale:false,cache:"warming",symbol,interval,
+      action:"WAIT",state:"NO_TRADE",liveSignalEligible:false,
       market:{side:"WAIT",status:"WARMING",type:"ENGINE WARMING / NO TRADE",bias:"Neutral",directionalLean:"NEUTRAL",confluenceScore:0},
       levels:{entryLow:null,entryHigh:null,entry:null,stop:null,tp1:null,tp2:null,rr:null},
       deploymentGate:{state:"BLOCKED",reason:"Decision engine is warming; no trade signal is available."},
@@ -292,6 +287,527 @@ async function getDecisionSnapshotCached(symbol,interval,searchParams,device){
       signalStability:{state:"RELEASED",reason:"decision_warming"},
       degraded:"DECISION_ENGINE_WARMING"
     };
+  }
+}
+const SIGNAL_STABILITY=new Map();
+const SIGNAL_CONFIRMATIONS_REQUIRED=2;
+const SIGNAL_RELEASE_MISSES=2;
+
+function signalStabilityKey(symbol,interval){return String(symbol)+"|"+String(interval)}
+function hardSignalBlock(decision){
+  const state=String(decision?.state||"").toUpperCase();
+  const gate=String(decision?.deploymentGate?.state||"").toUpperCase();
+  const reason=String(decision?.reason||"").toLowerCase();
+  return Boolean(
+    decision?.stale ||
+    state==="DATA_BLOCKED" ||
+    state==="RISK_BLOCKED" ||
+    gate==="BLOCKED" ||
+    reason.includes("data quality") ||
+    reason.includes("risk gate") ||
+    reason.includes("stale") ||
+    reason.includes("higher-timeframe trend conflicts") ||
+    reason.includes("15m trend conflicts") ||
+    reason.includes("cvd divergence") ||
+    reason.includes("r:r below") ||
+    reason.includes("derivatives unavailable") ||
+    reason.includes("insufficient derivatives completeness")
+  );
+}
+function applySignalStability(decision,symbol,interval){
+  const d=decision||{}, key=signalStabilityKey(symbol,interval), now=Date.now();
+  const candidate=["LONG","SHORT"].includes(String(d?.action||"").toUpperCase()) ? String(d.action).toUpperCase() : null;
+  const eligible=Boolean(d?.liveSignalEligible&&candidate);
+  const row=SIGNAL_STABILITY.get(key)||{side:null,confirmations:0,misses:0,confirmed:false,lastTs:0};
+
+  if(eligible){
+    if(row.side===candidate){
+      row.confirmations=Math.min(SIGNAL_CONFIRMATIONS_REQUIRED,row.confirmations+1);
+    }else{
+      row.side=candidate; row.confirmations=1; row.misses=0; row.confirmed=false;
+    }
+    row.lastTs=now;
+    if(row.confirmations>=SIGNAL_CONFIRMATIONS_REQUIRED)row.confirmed=true;
+    SIGNAL_STABILITY.set(key,row);
+
+    if(row.confirmed){
+      return {...d,signalStability:{state:"CONFIRMED",side:candidate,confirmations:row.confirmations,required:SIGNAL_CONFIRMATIONS_REQUIRED,misses:0},
+        rawAction:d.rawAction||candidate};
+    }
+
+    const confirmingReason="Directional setup detected, but it must persist across "+SIGNAL_CONFIRMATIONS_REQUIRED+" live refreshes before becoming a confirmed signal.";
+    return {
+      ...d,
+      rawAction:d.rawAction||candidate,
+      action:"WAIT",
+      state:"NO_TRADE",
+      liveSignalEligible:false,
+      market:{...(d.market||{}),side:"WAIT",status:"WAITING",type:"CONFIRMING SETUP",bias:"Neutral",directionalLean:"NEUTRAL"},
+      levels:{...(d.levels||{}),entryLow:null,entryHigh:null,entry:null,stop:null,tp1:null,tp2:null,rr:null},
+      deploymentGate:{...(d.deploymentGate||{}),state:"CONFIRMING",reason:confirmingReason},
+      operational:{...(d.operational||{}),liveUse:"PAPER_ONLY"},
+      signalStability:{state:"CONFIRMING",side:candidate,confirmations:row.confirmations,required:SIGNAL_CONFIRMATIONS_REQUIRED,misses:0}
+    };
+  }
+
+  if(!row.confirmed){
+    SIGNAL_STABILITY.delete(key);
+    return {...d,signalStability:{state:"NONE",side:null,confirmations:0,required:SIGNAL_CONFIRMATIONS_REQUIRED,misses:0}};
+  }
+
+  if(hardSignalBlock(d)){
+    SIGNAL_STABILITY.delete(key);
+    return {...d,action:"WAIT",state:"NO_TRADE",liveSignalEligible:false,
+      market:{...(d.market||{}),side:"WAIT",status:"WAITING",type:"NO TRADE",bias:"Neutral",directionalLean:"NEUTRAL"},
+      levels:{...(d.levels||{}),entryLow:null,entryHigh:null,entry:null,stop:null,tp1:null,tp2:null,rr:null},
+      deploymentGate:{...(d.deploymentGate||{}),state:"BLOCKED"},
+      signalStability:{state:"RELEASED",side:row.side,confirmations:row.confirmations,required:SIGNAL_CONFIRMATIONS_REQUIRED,misses:SIGNAL_RELEASE_MISSES}};
+  }
+
+  if(row.side===String(d?.rawAction||"").toUpperCase() || row.side===String(d?.market?.side||"").toUpperCase()){
+    row.misses+=1; row.lastTs=now;
+    if(row.misses<SIGNAL_RELEASE_MISSES){
+      SIGNAL_STABILITY.set(key,row);
+      return {...d,action:row.side,state:"READY",liveSignalEligible:true,
+        market:{...(d.market||{}),side:row.side},
+        signalStability:{state:"HOLDING",side:row.side,confirmations:row.confirmations,required:SIGNAL_CONFIRMATIONS_REQUIRED,misses:row.misses,releaseAfter:SIGNAL_RELEASE_MISSES}};
+    }
+  }
+
+  SIGNAL_STABILITY.delete(key);
+  return {...d,action:"WAIT",state:"NO_TRADE",liveSignalEligible:false,
+    market:{...(d.market||{}),side:"WAIT",status:"WAITING",type:"NO TRADE",bias:"Neutral",directionalLean:"NEUTRAL"},
+    levels:{...(d.levels||{}),entryLow:null,entryHigh:null,entry:null,stop:null,tp1:null,tp2:null,rr:null},
+    deploymentGate:{...(d.deploymentGate||{}),state:"PAPER_ONLY"},
+    signalStability:{state:"RELEASED",side:row.side,confirmations:row.confirmations,required:SIGNAL_CONFIRMATIONS_REQUIRED,misses:SIGNAL_RELEASE_MISSES}};
+}
+function sanitizeFinalDecision(decision){
+  const d=decision||{};
+  const eligible=Boolean(d.liveSignalEligible===true&&d.state==="READY"&&["LONG","SHORT"].includes(String(d.action||"").toUpperCase()));
+  if(eligible)return d;
+
+  const candidate={
+    action:d.rawAction||d.analysis?.side||d.market?.side||"WAIT",
+    state:d.state||"NO_TRADE",
+    market:d.market||null,
+    levels:d.levels||null,
+    thesis:d.evidence?.thesis||null,
+    type:d.market?.type||null,
+    strategyFamily:d.analysis?.strategyFamily||d.strategyFamily||"NONE"
+  };
+
+  const neutral={
+    ...d,
+    candidateEvidence:candidate,
+    action:"WAIT",
+    state:"NO_TRADE",
+    liveSignalEligible:false,
+    market:{
+      ...(d.market||{}),
+      side:"WAIT",
+      status:"WAITING",
+      type:"NO TRADE",
+      bias:"Neutral",
+      directionalLean:"NEUTRAL",
+      probabilityLabel:"LOW CONFLUENCE"
+    },
+    levels:{
+      ...(d.levels||{}),
+      side:"WAIT",
+      entryLow:null,
+      entryHigh:null,
+      entry:null,
+      stop:null,
+      tp1:null,
+      tp2:null,
+      rr:null,
+      riskDistance:null,
+      target1Distance:null
+    },
+    evidence:{
+      ...(d.evidence||{}),
+      thesis:[
+        d.stale
+          ?"Live decision data is stale; directional output is suppressed until a fresh decision is available."
+          :"No trade — the directional candidate has not cleared the final confirmation, validation, data, and risk gates."
+      ],
+      primaryScenario:"Wait for a confirmed directional setup.",
+      invalidationScenario:"A new closed-candle setup plus all final safety gates must clear before a direction is shown.",
+      contributors:[],
+      strictGate:{
+        ...(d.evidence?.strictGate||{}),
+        eligible:false
+      }
+    },
+    strategyFamily:"NONE",
+    deploymentGate:{
+      ...(d.deploymentGate||{}),
+      state:String(d.deploymentGate?.state||"PAPER_ONLY").toUpperCase()==="BLOCKED"?"BLOCKED":"PAPER_ONLY"
+    },
+    operational:{
+      ...(d.operational||{}),
+      liveUse:"PAPER_ONLY"
+    }
+  };
+
+  return neutral;
+}
+const PHASE1113_CACHE=new Map(); const PHASE1113_JOBS=new Set(); const PHASE1113_TTL=10*60*1000;
+const OPENAI_API_KEY=process.env.OPENAI_API_KEY||"";
+const OPENAI_MODEL=process.env.OPENAI_MODEL||"gpt-5.6-luna";
+const AI_LIMIT_MS=8000; const AI_CALLS=new Map();
+const DATA_TIMEOUT_MS=7000;
+const GLOBAL_RATE_WINDOW_MS=5*60*1000;
+const GLOBAL_RATE_LIMIT=300;
+const GLOBAL_RATE=new Map();
+const FAST_PUBLIC_PATHS=new Set(["/api/core","/api/chart","/api/fast-ticker","/api/core-enrichment","/api/core-analytics","/api/decision","/api/validation","/api/data-fabric","/api/config","/health","/"]);
+const FAST_TICKER_CACHE=new Map();
+const CSRF_COOKIE="mp_csrf";
+const SERVER_METRICS={startedAt:Date.now(),requests:0,errors:0,totalLatencyMs:0,routeCounts:new Map(),lastErrors:[],recentRequests:[]};
+let RESEARCH_JOB={running:false,startedAt:null,finishedAt:null,error:null,symbol:null,interval:null,bars:0,records:0,trained:0,skipped:0,progress:{processed:0,total:0,pct:0}};
+async function runResearchWarmup(){
+  if(RESEARCH_JOB.running)return {skipped:true,reason:"job_running"};
+  const enabled=String(process.env.RESEARCH_WARMUP_ENABLED??"true").toLowerCase()!=="false";
+  if(!enabled)return {skipped:true,reason:"disabled"};
+  try{
+    const st=await Promise.race([learning.status(),new Promise(resolve=>setTimeout(()=>resolve(null),5000))]);
+    const updates=Number(st?.model?.updates)||0;
+    if(updates>=150)return {skipped:true,reason:"already_warmed",updates};
+  }catch{}
+  const symbols=String(process.env.RESEARCH_WARMUP_SYMBOLS||"BTCUSDT,ETHUSDT").split(",").map(s=>s.trim().toUpperCase()).filter(s=>SYMBOLS.includes(s));
+  const bars=Math.max(600,Math.min(3000,Number(process.env.RESEARCH_WARMUP_BARS||1500)));
+  for(const symbol of symbols){
+    if(RESEARCH_JOB.running)return {skipped:true,reason:"job_running"};
+    RESEARCH_JOB={running:true,startedAt:Date.now(),finishedAt:null,error:null,symbol,interval:"1h",bars,records:0,trained:0,skipped:0,mode:"automatic",progress:{processed:0,total:0,pct:0}};
+    try{
+      const built=await research.buildReplayRecords({symbol,interval:"1h",bars,analyze,onProgress:async function(progress){RESEARCH_JOB.progress=progress}});
+      RESEARCH_JOB.records=built.records.length;
+      RESEARCH_JOB.progress={processed:built.bars,total:built.bars,pct:100};
+      const trained=await learning.trainFromReplay(built.records);
+      RESEARCH_JOB.trained=trained.trained;RESEARCH_JOB.skipped=trained.skipped;
+      RESEARCH_JOB.running=false;RESEARCH_JOB.finishedAt=Date.now();
+    }catch(e){
+      RESEARCH_JOB.running=false;RESEARCH_JOB.finishedAt=Date.now();RESEARCH_JOB.error=String(e.message||e);
+    }
+  }
+  return {ok:true};
+}
+let ADMIN_RUNTIME={loadedAt:0,config:null};
+async function getAdminRuntime(force=false){
+  if(!force&&ADMIN_RUNTIME.config&&Date.now()-ADMIN_RUNTIME.loadedAt<2000)return ADMIN_RUNTIME.config;
+  try{ADMIN_RUNTIME.config=await storage.getAdminConfig();ADMIN_RUNTIME.loadedAt=Date.now();return ADMIN_RUNTIME.config}catch{return ADMIN_RUNTIME.config||{mode:"normal",maintenanceMode:false,readOnlyMode:false,registrationsEnabled:true,aiEnabled:true,executionEnabled:true,marketDataEnabled:true,writesEnabled:true,maintenanceMessage:"MarketPulse is temporarily unavailable."}}
+}
+async function setAdminRuntime(payload){ADMIN_RUNTIME.config=payload;ADMIN_RUNTIME.loadedAt=Date.now();return payload}
+function featureEnabled(flags,key){return Boolean(flags?.[key]?.enabled!==false&&Number(flags?.[key]?.rolloutPct??100)>0)}
+async function auditAdmin(req,action,category,targetUserId,metadata){
+  try{const u=await auth.userFromRequest(req);if(u?.isAdmin)await storage.recordAdminAudit(u.email,action,category,targetUserId,metadata||{})}catch{}
+}
+async function securityEvent(severity,eventType,email,metadata){try{await storage.recordSecurityEvent(severity,eventType,email,metadata||{})}catch{}}
+
+function clientIp(req){return String(req.headers["x-forwarded-for"]||"").split(",")[0].trim()||String(req.socket?.remoteAddress||"unknown")}
+function rateRequest(req){
+  const key=clientIp(req),now=Date.now(),x=GLOBAL_RATE.get(key);
+  if(!x||now-x.started>GLOBAL_RATE_WINDOW_MS){GLOBAL_RATE.set(key,{started:now,count:1});return true}
+  x.count++;return x.count<=GLOBAL_RATE_LIMIT;
+}
+function originAllowed(req){
+  const origin=req.headers.origin;
+  if(!origin)return true;
+  const proto=String(req.headers["x-forwarded-proto"]||"http").split(",")[0].trim();
+  const host=String(req.headers.host||"");
+  return origin===proto+"://"+host;
+}
+function csrfCookie(){
+  const secure=String(process.env.NODE_ENV||"").toLowerCase()==="production"?" Secure;":"";
+  return CSRF_COOKIE+"="+crypto.randomBytes(32).toString("hex")+"; Path=/; SameSite=Strict; Max-Age=86400;"+secure;
+}
+const ADMIN_ONLY_PREFIXES=['/api/admin'];
+const LIVE_VISITORS=new Map();
+function markLiveVisitor(device,registered){
+  const id=String(device||"").slice(0,128);
+  if(!id)return;
+  LIVE_VISITORS.set(id,{lastSeen:Date.now(),registered:Boolean(registered)});
+}
+function liveVisitorStats(){
+  const cutoff=Date.now()-120000;
+  let visitors=0,registered=0;
+  for(const [id,row] of LIVE_VISITORS){if(row.lastSeen<cutoff){LIVE_VISITORS.delete(id);continue}visitors++;if(row.registered)registered++}
+  return {liveVisitors:visitors,liveRegistered:registered};
+}
+
+const ADMIN_ONLY_PATHS=new Set([
+  '/api/memory/status',
+  '/api/phase7/health',
+  '/api/learning/status',
+  '/api/edge/health',
+  '/api/edge/events',
+  '/api/edge/config',
+  '/api/edge/journal',
+  '/api/execution',
+  '/api/execution/config',
+  '/api/execution/arm',
+  '/api/execution/kill',
+  '/api/execution/reconcile',
+  '/api/execution/prepare',
+  '/api/execution/intent',
+  '/api/execution/submit',
+  '/api/execution/cancel',
+  '/api/execution/close-sim',
+  '/api/autotrader',
+  '/api/autotrader/history',
+  '/api/autotrader/config',
+  '/api/autotrader/arm',
+  '/api/autotrader/pause',
+  '/api/autotrader/kill',
+  '/api/portfolio/config',
+  '/api/portfolio/health',
+  '/api/system-check',
+  '/api/dna/clear',
+  '/api/research/status',
+  '/api/research/train',
+  '/api/phase14',
+  '/api/phase14/validation',
+  '/api/phase14/calibrate',
+  '/api/phase15',
+  '/api/phase15/calibrate',
+  '/api/phase15/audit'
+]);
+function normalizeFundingRate(value){
+  const n=Number(value);
+  if(!Number.isFinite(n))return null;
+  if(Math.abs(n)>0.1)return n/100;
+  return n;
+}
+function timeoutSignal(ms){return typeof AbortSignal!=="undefined"&&AbortSignal.timeout?AbortSignal.timeout(ms):undefined;}
+function queueCoreAnalytics(symbol,interval,candles){
+  const key=String(symbol)+"|"+String(interval),hit=CORE_ANALYTICS_CACHE.get(key);
+  if(hit&&Date.now()-hit.ts<CORE_ANALYTICS_TTL)return hit.payload;
+  if(CORE_ANALYTICS_JOBS.has(key))return hit?.payload||null;
+  CORE_ANALYTICS_JOBS.add(key);
+  const sample=(candles||[]).slice(-600);
+  setTimeout(()=>{
+    (async()=>{
+      try{
+        if(sample.length<240)return;
+        const payload={
+          backtest:backtest(sample),
+          validation:walkForwardBacktest(sample),
+          setupStats:backtestBySetup(sample)
+        };
+        CORE_ANALYTICS_CACHE.set(key,{ts:Date.now(),payload});
+      }catch{}finally{CORE_ANALYTICS_JOBS.delete(key)}
+    })();
+  },1500);
+  return hit?.payload||null;
+}
+
+function queuePhase1113Validation(symbol,interval,candles){
+  const key="P11-13|"+String(symbol)+"|"+String(interval),now=Date.now(),hit=PHASE1113_CACHE.get(key);
+  if(hit&&now-hit.ts<PHASE1113_TTL)return hit.payload;
+  if(PHASE1113_JOBS.has(key))return hit?.payload||null;
+  const fallback=(candles||[]).slice(-900);
+  if(fallback.length<260)return hit?.payload||null;
+  PHASE1113_JOBS.add(key);
+  setTimeout(async()=>{
+    try{
+      let source=fallback;
+      try{
+        const historical=await research.fetchBinanceKlines(symbol,interval,{maxBars:1800});
+        const closed=closedCandles(historical,interval,Date.now());
+        if(closed.length>=600)source=closed;
+      }catch{}
+      const sample=source.slice(-1500);
+      let higher8h=null;
+      if(String(interval).toLowerCase()==="15m"){
+        try{
+          const h=await research.fetchBinanceKlines(symbol,"8h",{maxBars:1800});
+          higher8h=closedCandles(h,"8h",Date.now());
+        }catch{}
+      }
+      const validation=phase1113.runWalkForward(sample,{symbol,interval,higher8h,basePolicy:{minScore:78,minRR:1.5},step:2,maxSamples:350,minTrades:80,minTestBars:300});
+      PHASE1113_CACHE.set(key,{ts:Date.now(),payload:validation});
+      try{
+        const state=await storage.getLearningState();
+        const payload=state?.payload&&typeof state.payload==="object"?state.payload:{};
+        await storage.saveLearningState({...payload,phase11_13:{...validation,storedAt:Date.now()}});
+      }catch{}
+    }catch{}finally{PHASE1113_JOBS.delete(key)}
+  },100);
+  return hit?.payload||null;
+}
+
+function safePhase14Summary(validation){
+  return {
+    version:"14.0.0",
+    method:"Phase 11/12 walk-forward replay aggregated by setup and regime.",
+    setupBuckets:validation?.setupBuckets||{},
+    regimeBuckets:validation?.regimeBuckets||{},
+    adaptive:validation?.adaptive||null,
+    sample:validation?.summary||null
+  };
+}
+
+async function buildDecisionSnapshot(symbol,interval,query,deviceId=null){
+  const key=symbol+"|"+interval,now=Date.now(),cached=DECISION_CACHE.get(key);
+  if(cached&&now-cached.ts<DECISION_TTL)return Object.assign({cache:"fresh",cacheAgeMs:now-cached.ts},cached.payload);
+  try{
+    const rawCandles=await getFastKlines(symbol,interval);
+    const candles=closedCandles(rawCandles,interval,now);
+    if(!candles||candles.length<220)throw Error("Insufficient closed candles");
+    const phase14Profile=phase14.peekAdaptiveProfile({symbol,interval})||null;
+    if(!phase14Profile){
+      setTimeout(()=>phase14.getAdaptiveProfile(storage,{symbol,interval}).catch(()=>null),0);
+    }
+    const lowerInterval=interval==="15m"?null:"15m";
+    const higherInterval=interval==="4h"?"1d":interval==="1d"?null:"4h";
+    const dlineHigherInterval=interval==="15m"?"8h":null;
+    const liveSeed=flowBucket(symbol);
+    const consensusPrimaryPrice=Number.isFinite(Number(liveSeed.markPrice))?Number(liveSeed.markPrice):candles[candles.length-1]?.c;
+    const consensusPrimaryAge=Number.isFinite(Number(liveSeed.lastTs))&&Number(liveSeed.lastTs)>0
+      ?Math.max(0,now-Number(liveSeed.lastTs))
+      :(candles[candles.length-1]?.t?Math.max(0,now-Number(candles[candles.length-1].t)):null);
+    // Supporting feeds are independent. Fetch them concurrently so one slow
+    // provider cannot serially consume the entire decision-engine timeout.
+    const [lowerRaw,higherRaw,dlineHigherRaw,deriv,consensus]=await Promise.all([
+      lowerInterval?Promise.race([klines(symbol,lowerInterval),new Promise(resolve=>setTimeout(()=>resolve(null),1400))]).catch(()=>null):Promise.resolve(null),
+      higherInterval?Promise.race([klines(symbol,higherInterval),new Promise(resolve=>setTimeout(()=>resolve(null),1400))]).catch(()=>null):Promise.resolve(null),
+      dlineHigherInterval?Promise.race([klines(symbol,dlineHigherInterval),new Promise(resolve=>setTimeout(()=>resolve(null),1400))]).catch(()=>null):Promise.resolve(null),
+      Promise.race([derivatives(symbol,interval),new Promise(resolve=>setTimeout(()=>resolve(null),1800))]).catch(()=>null),
+      Promise.race([dataFabric.assess(symbol,interval,{
+        primaryPrice:consensusPrimaryPrice,
+        primaryAgeMs:consensusPrimaryAge,
+        primarySource:liveSeed.markPrice!=null?"Bybit live flow":(candles?.[0]?.source||"engine"),
+        liveFlow:liveSeed
+      }),new Promise(resolve=>setTimeout(()=>resolve(null),2600))]).catch(()=>null)
+    ]);
+    const lower=lowerRaw?closedCandles(lowerRaw,lowerInterval,now):null;
+    const higher=higherRaw?closedCandles(higherRaw,higherInterval,now):null;
+    const dlineHigher=dlineHigherRaw?closedCandles(dlineHigherRaw,dlineHigherInterval,now):null;
+    const lowerAnalysis=lower&&lower.length>=220&&lowerInterval?analyze(lower,{interval:lowerInterval}):null;
+    const higherAnalysis=higher&&higher.length>=220&&higherInterval?analyze(higher,{interval:higherInterval}):null;
+    const dlineHigherAnalysis=dlineHigher&&dlineHigher.length>=100?analyze(dlineHigher,{interval:dlineHigherInterval}):null;
+    const dlineContext=interval==="1h"?(higherAnalysis||null):(dlineHigherAnalysis||higherAnalysis||null);
+    let analysis=analyze(candles,{interval,lower:lowerAnalysis,higher:higherAnalysis,dlineHigher:dlineContext,deriv,phase14Profile});
+    let learned=null;
+    try{
+      learned=await Promise.race([learning.process(symbol,interval,candles,analysis,{observe:false}),new Promise(resolve=>setTimeout(()=>resolve(null),500))]);
+      if(learned?.analysis)analysis=learned.analysis;
+    }catch{}
+    const flow=mergeFlowSnapshot(symbol,deriv||{});
+    const analytics=queueCoreAnalytics(symbol,interval,candles);
+    const validation1113=queuePhase1113Validation(symbol,interval,candles);
+    const getQ=(k,d)=>query&&typeof query.get==='function'?(query.get(k)??d):(query?.[k]??d);
+    const usePropFirmGate=String(getQ('propFirmGate',process.env.PROP_FIRM_GATE_ENABLED||"false")).toLowerCase()==="true";
+    const signalPolicy={
+      minSignalScore:Number(getQ('minSignalScore',process.env.MP_MIN_SIGNAL_SCORE||78)),
+      minRR:Number(getQ('minRR',process.env.MP_MIN_RR||1.5))
+    };
+    const config=usePropFirmGate?propFirm.normalizeConfig({
+      accountSize:Number(getQ('accountSize',process.env.PROP_ACCOUNT_SIZE||0)),
+      startingEquity:Number(getQ('equity',process.env.PROP_STARTING_EQUITY||0)),
+      dailyLossLimitPct:Number(getQ('dailyLossLimitPct',process.env.PROP_DAILY_LOSS_PCT||0)),
+      maxDrawdownPct:Number(getQ('maxDrawdownPct',process.env.PROP_MAX_DRAWDOWN_PCT||0)),
+      riskPerTradePct:Number(getQ('riskPerTradePct',process.env.PROP_RISK_PER_TRADE_PCT||0)),
+      maxOpenRiskPct:Number(getQ('maxOpenRiskPct',process.env.PROP_MAX_OPEN_RISK_PCT||0)),
+      minSignalScore:signalPolicy.minSignalScore,
+      minRR:signalPolicy.minRR,
+      minConsensusQualityPct:Number(getQ('minConsensusQualityPct',process.env.PROP_MIN_CONSENSUS_QUALITY_PCT||85)),
+      maxPriceDispersionBps:Number(getQ('maxPriceDispersionBps',process.env.PROP_MAX_PRICE_DISPERSION_BPS||80)),
+      blockMixedFlow:String(getQ('blockMixedFlow',process.env.PROP_BLOCK_MIXED_FLOW||"true"))!=="false"
+    }):null;
+    const liveMarketAgeMs=Number.isFinite(Number(liveSeed?.lastTs))&&Number(liveSeed.lastTs)>0
+      ?Math.max(0,now-Number(liveSeed.lastTs))
+      :(Number.isFinite(Number(consensus?.freshestAgeMs))?Number(consensus.freshestAgeMs):(candles.length?Math.max(0,now-Number(candles[candles.length-1].t)):null));
+    const gate=usePropFirmGate
+      ?propFirm.evaluateStandard({
+        analysis,derivatives:flow,
+        dataQuality:{
+          candleAgeMs:liveMarketAgeMs,
+          qualityPct:flow?.available?100:80,
+          consensusQualityPct:consensus?.consensusQualityPct,
+          priceDispersionBps:consensus?.priceDispersionBps,
+          providerCount:consensus?.sourceCount,
+          independentSourceCount:consensus?.independentSourceCount
+        },
+        equity:config.startingEquity,dayStartEquity:config.startingEquity,peakEquity:config.startingEquity,config
+      })
+      :{decision:"DISABLED",reasons:[],warnings:["PROP_FIRM_GATE_DISABLED"],mode:"GENERAL_MARKET_MODE"};
+    const decision=phase910.evaluate({
+      symbol,interval,analysis,lower:lowerAnalysis,higher:higherAnalysis,derivatives:flow,consensus,
+      dataQuality:{candleAgeMs:liveMarketAgeMs},
+      liveFlow:flow,validation:analytics?.validation||null,propGate:gate
+    });
+    const gatedDecision=phase1113.applyDeploymentGate(decision,validation1113,{basePolicy:signalPolicy});
+    const stableDecision=applySignalStability(gatedDecision,symbol,interval);
+    const finalDecision=sanitizeFinalDecision(stableDecision);
+    try{
+      setTimeout(()=>signalNotifications.notifyAdminSignal(storage,{
+        decision:finalDecision,
+        symbol,
+        interval,
+        candleTs:candles?.[candles.length-1]?.t||null
+      }).catch(()=>{}),0);
+      setTimeout(()=>signalNotifications.notifyAdminOpportunity(storage,{
+        decision:finalDecision,
+        symbol,
+        interval,
+        candleTs:candles?.[candles.length-1]?.t||null
+      }).catch(()=>{}),0);
+    }catch{}
+
+    try{
+      const candleTs=candles?.[candles.length-1]?.t;
+      if(Number.isFinite(Number(candleTs)))setTimeout(()=>phase15.recordDecision({
+        symbol,interval,candleTs:Number(candleTs),decision:finalDecision,analysis
+      }).catch(()=>{}),0);
+    }catch{}
+
+    try{
+      const autoEnabled=String(process.env.LIVE_AUTO_EXECUTION_ENABLED||"false").toLowerCase()==="true";
+      if(autoEnabled&&finalDecision?.liveSignalEligible&&finalDecision?.state==="READY"&&["LONG","SHORT"].includes(String(finalDecision?.action||"").toUpperCase())){
+        const signal={
+          id:["LIVE_AUTO",symbol,interval,candles?.[candles.length-1]?.t,finalDecision.action].join("|"),
+          symbol,interval,side:String(finalDecision.action).toUpperCase(),status:"READY",score:finalDecision.market?.confluenceScore||0,
+          entry:finalDecision.levels?.entry,stop:finalDecision.levels?.stop,target:finalDecision.levels?.tp1,tp2:finalDecision.levels?.tp2,
+          rr:finalDecision.levels?.rr,type:finalDecision.market?.type,regime:finalDecision.market?.regime,tradeStyle:finalDecision.tradeStyle
+        };
+        setTimeout(()=>execution.autoSubmitFinalDecision(signal).catch(()=>{}),0);
+      }
+    }catch{}
+    try{phase4.updateFinalDecision(deviceId||"00000000-0000-0000-0000-000000000000",symbol,interval,finalDecision,candles).catch(()=>{})}catch{}
+    try{learning.observeFinalDecision(symbol,interval,candles,finalDecision).catch(()=>{})}catch{}
+    try{setTimeout(()=>phase14.refreshAdaptiveState(storage,{symbol,interval}).catch(()=>{}),250)}catch{}
+    const payload={
+      ok:true,...finalDecision,analysis,derivatives:flow,consensus,
+      learning:null,
+      backtest:analytics?.backtest||null,validation:analytics?.validation||null,setupStats:analytics?.setupStats||null,
+      phase11_13:validation1113,
+      phase14:finalDecision.phase14||analysis.phase14||null,
+      phase14Status:finalDecision.phase14?.adaptive||analysis.phase14?.adaptive||null,
+      phase11:PHASE11_VERSION,phase12:PHASE12_VERSION,phase13:PHASE13_VERSION,phase14Version:"14.0.0",
+      updatedAt:now
+    };
+    DECISION_CACHE.set(key,{ts:now,payload});
+    DECISION_LAST_GOOD.set(key,{ts:now,payload});
+    return Object.assign({cache:"fresh",cacheAgeMs:0},payload);
+  }catch(e){
+    const last=DECISION_LAST_GOOD.get(key);
+    if(last){
+      const safeStale={
+        ...last.payload,
+        stale:true,
+        action:"WAIT",
+        state:"NO_TRADE",
+        liveSignalEligible:false,
+        market:{...(last.payload.market||{}),side:"WAIT",status:"WAITING",type:"STALE DATA / NO TRADE",bias:"Neutral",directionalLean:"NEUTRAL"},
+        levels:{...(last.payload.levels||{}),entryLow:null,entryHigh:null,entry:null,stop:null,tp1:null,tp2:null,rr:null},
+        deploymentGate:{...(last.payload.deploymentGate||{}),state:"BLOCKED",reason:"Decision refresh failed; stale directional data is not eligible for a live signal."},
+        operational:{...(last.payload.operational||{}),liveUse:"PAPER_ONLY"},
+        signalStability:{state:"RELEASED",reason:"stale_decision"}
+      };
+      return Object.assign({cache:"stale",stale:true,cacheAgeMs:Math.max(0,now-last.ts),degraded:String(e.message||e)},safeStale);
+    }
+    throw e;
   }
 }
 
