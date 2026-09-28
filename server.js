@@ -9,6 +9,7 @@ const phase910=require('./phase9-10');
 const phase1113=require('./phase11-13');
 const phase14=require('./phase14-signal-intelligence');
 const phase15=require('./phase15');
+const phase16=require('./phase16');
 const signalNotifications=require('./signal-notifications');
 const propFirm=require('./prop-firm');
 const research=require('./research-data');
@@ -1454,6 +1455,52 @@ const server=http.createServer(async(req,res)=>{
   try{
     if(!rateRequest(req))return send(res,429,{ok:false,error:"Too many requests. Please slow down."});
     const u=new URL(req.url,'http://localhost');
+    if(u.pathname==='/api/watchdog/internal'){
+      const expected=String(process.env.MARKETPULSE_WATCHDOG_TOKEN||"");
+      const supplied=String(req.headers["x-marketpulse-watchdog-token"]||"");
+      if(!expected||supplied!==expected)return send(res,403,{ok:false,error:"WATCHDOG_UNAUTHORIZED"});
+      const action=u.searchParams.get("action")||"status";
+      try{
+        if(action==="system-check"){
+          const checks={server:true,marketEngine:true,learning:false,memory:false,marketData:false,derivatives:false,oi:false,cvd:false,liquidations:false,execution:false,portfolio:false,phase7:false,coreAnalytics:true,decisionEngine:false,phase11_13:false};
+          let marketError=null,derivativesError=null;
+          try{checks.learning=Boolean(await learning.status())}catch{}
+          try{checks.memory=Boolean(storage.status())}catch{}
+          let marketRows=null;
+          try{marketRows=await klines('BTCUSDT','1h');checks.marketData=Boolean(marketRows&&marketRows.length>=50)}catch(e){marketError=e.message}
+          try{
+            const d=await Promise.race([derivatives('BTCUSDT','15m'),new Promise(resolve=>setTimeout(()=>resolve(null),6500))]);
+            checks.derivatives=Boolean(d&&d.available);checks.oi=Boolean(Number.isFinite(Number(d?.oi)));
+            checks.cvd=Boolean(Number.isFinite(Number(d?.cvdDelta))||["BUYERS PRESSURE","SELLERS PRESSURE","BALANCED"].includes(d?.cvdState));
+            checks.liquidations=Boolean(d&&(d.liveConnected||Number(d.livePointCount)>0||Array.isArray(d?.series?.liq)&&d.series.liq.length>1));
+            if(!checks.derivatives)derivativesError="No derivatives provider returned usable data";
+          }catch(e){derivativesError=String(e.message||e)}
+          try{checks.execution=Boolean(await execution.snapshot())}catch{}
+          try{checks.portfolio=Boolean(await phase6.snapshot())}catch{}
+          try{const st=phase7.selfTest();checks.phase7=Boolean(st&&st.ok)}catch{}
+          try{const st=phase910.selfTest();checks.decisionEngine=Boolean(st&&st.ok)}catch{}
+          try{const st=phase1113.selfTest();checks.phase11_13=Boolean(st&&st.ok)}catch{}
+          return send(res,200,{ok:Object.values(checks).every(Boolean),checks,marketError,derivativesError,phase16:phase16.VERSION,timestamp:Date.now()});
+        }
+        if(action==="execution")return send(res,200,{ok:true,...await execution.snapshot()});
+        if(action==="reconcile"){
+          const snap=await execution.snapshot();
+          if(snap.mode==="SIMULATION")return send(res,200,{ok:true,skipped:true,reason:"SIMULATION_MODE",execution:snap});
+          return send(res,200,{ok:true,execution:await execution.reconcile()});
+        }
+        if(action==="kill-execution"){
+          return send(res,200,{ok:true,execution:await execution.killSwitch(true)});
+        }
+        if(action==="reset-caches"){
+          CACHE.clear();SCAN_CACHE.clear();SNAPSHOT_CACHE.clear();CORE_ANALYTICS_CACHE.clear();DECISION_CACHE.clear();DECISION_LAST_GOOD.clear();SIGNAL_STABILITY.clear();PHASE1113_CACHE.clear();
+          return send(res,200,{ok:true,action:"reset-caches",at:Date.now()});
+        }
+        if(action==="status"){
+          return send(res,200,{ok:true,phase16:phase16.VERSION,uptimeMs:Date.now()-SERVER_METRICS.startedAt,metrics:SERVER_METRICS});
+        }
+        return send(res,400,{ok:false,error:"UNKNOWN_WATCHDOG_ACTION"});
+      }catch(e){return send(res,503,{ok:false,error:String(e.message||e)})}
+    }
     const unsafe=req.method==='POST'||req.method==='PUT'||req.method==='PATCH'||req.method==='DELETE';
     if(unsafe&&!originAllowed(req))return send(res,403,{ok:false,error:"Cross-origin request blocked"});
     if(Number(req.headers["content-length"]||0)>262144)return send(res,413,{ok:false,error:"Request too large"});
