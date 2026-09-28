@@ -1,5 +1,5 @@
 const assert=require("assert");
-const {buildReactionMap}=require("../reaction-map");
+const {buildReactionMap,reactionForZone}=require("../reaction-map");
 
 function candles(mode="support"){
   const out=[],start=Date.UTC(2026,8,20,0,0,0),hour=3600000;
@@ -44,6 +44,21 @@ const resistance=buildReactionMap(candles("resistance"),{
 });
 assert(resistance.zones.some(x=>x.side==="RESISTANCE"),"resistance zone should be represented");
 assert(resistance.opportunities.some(x=>x.action==="SHORT"&&x.state==="CONFIRM_SHORT"),"resistance sweep/rejection should confirm SHORT");
+
+const breakdownCandles=[
+  {o:100.8,c:100.2,h:101.2,l:99.8,v:1000},
+  {o:100.5,c:100.4,h:100.9,l:99.9,v:1100},
+  {o:100.6,c:99.7,h:100.1,l:99.4,v:2200}
+];
+const breakdownResult=reactionForZone(
+  breakdownCandles,
+  {id:"SUPPORT_BREAK",low:100,high:102,center:101,side:"SUPPORT",confluence:2,evidence:["Support"],evidenceSources:["Test"]},
+  2,
+  {volumeZ:2,cvdState:"SELLERS CONFIRM",oiChangePct:2,positioning:"SHORT PARTICIPATION"}
+);
+assert(breakdownResult.action==="SHORT","support breakdown should produce a SHORT reaction candidate");
+assert(breakdownResult.state==="BREAKDOWN_SHORT","support breakdown should be a breakdown/retest candidate");
+assert(breakdownResult.invalidation>102,"SHORT invalidation must sit above the support zone, not below it");
 
 console.log("Reaction map smoke checks passed:",{
   supportState:support.opportunities[0]?.state||support.active?.state,
