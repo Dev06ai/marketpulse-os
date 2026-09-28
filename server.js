@@ -1504,6 +1504,14 @@ const server=http.createServer(async(req,res)=>{
           return send(res,200,{ok:Object.values(checks).every(Boolean),checks,marketError,derivativesError,phase16:phase16.VERSION,timestamp:Date.now()});
         }
         if(action==="autotrader-status")return send(res,200,await execution.getBotSnapshot());
+        if(action==="autotrader-manage"){
+          let raw="";for await(const chunk of req)raw+=chunk;
+          let body={};try{body=JSON.parse(raw||"{}")}catch{return send(res,400,{ok:false,error:"Invalid JSON"})}
+          try{
+            const result=await execution.manageSimulationPositions(body.markPrices||{},body.options||{});
+            return send(res,200,result);
+          }catch(e){return send(res,400,{ok:false,error:e.message})}
+        }
         if(action==="autotrader-execute"){
           let raw="";for await(const chunk of req)raw+=chunk;
           let body={};try{body=JSON.parse(raw||"{}")}catch{return send(res,400,{ok:false,error:"Invalid JSON"})}
