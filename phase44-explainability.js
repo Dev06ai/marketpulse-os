@@ -11,5 +11,5 @@ function explain(snapshot={}){
   if(snapshot.risk?.blocked)conflicts.push("RISK_BLOCK");
   return {version:VERSION,action:snapshot.action||"WAIT",reasons,conflicts,missing:reasons.length?"":"NO_EVIDENCE"};
 }
-function selfTest(){const x=explain({action:"WAIT",structure:{setup:"SFP"},validation:{paperOnly:true}});return {ok=x.reasons.length===1&&x.conflicts.includes("PAPER_ONLY"),version:VERSION};}
+function selfTest(){const x=explain({action:"WAIT",structure:{setup:"SFP"},validation:{paperOnly:true}});return {ok:x.reasons.length===1&&x.conflicts.includes("PAPER_ONLY"),version:VERSION};}
 module.exports={VERSION,explain,selfTest};
