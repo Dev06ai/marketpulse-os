@@ -4,7 +4,10 @@
  * Hard invalidation and data-integrity blocks remain in force.
  */
 
-const VERSION="18.0.0";
+const VERSION="18.0.1";
+const TWIN_CACHE=new Map();
+const TWIN_INFLIGHT=new Map();
+const TWIN_TTL=60000;
 
 function n(x,d=null){const v=Number(x);return Number.isFinite(v)?v:d}
 function clamp(x,a,b){return Math.max(a,Math.min(b,x))}
@@ -61,10 +64,12 @@ function directionalFlowAligned(side,state,decision){
   return {orderbook:ob,cvd:cvdOk,aligned:ob||cvdOk};
 }
 async function digitalTwin(storage,decision,marketState){
-  try{
-    const symbol=decision?.symbol||"BTCUSDT",interval=decision?.interval||"15m",limit=1500;
-    const rows=await storage.getLearningPredictions({symbol,interval,limit,resolvedOnly:true});
-    const side=sideOf(decision),regime=String(decision?.market?.regime||"UNKNOWN"),type=String(decision?.market?.type||"UNKNOWN");
+  const symbol=decision?.symbol||"BTCUSDT",interval=decision?.interval||"15m",cacheKey=symbol+"|"+interval,ts=Date.now(),hit=TWIN_CACHE.get(cacheKey);
+  if(hit&&ts-hit.ts<TWIN_TTL)return {...hit.payload,cache:"memory",cacheAgeMs:ts-hit.ts};
+  if(TWIN_INFLIGHT.has(cacheKey)&&hit)return {...hit.payload,cache:"stale-inflight",stale:true,cacheAgeMs:ts-hit.ts};
+  const job=(async()=>{
+    const rows=await storage.getLearningPredictions({symbol,interval,limit:900,resolvedOnly:true});
+    const side=sideOf(decision),regime=String(decision?.market?.regime||decision?.candidateEvidence?.market?.regime||"UNKNOWN"),type=String(decision?.market?.type||decision?.candidateEvidence?.market?.type||"UNKNOWN");
     const targetScore=score(decision);
     const candidates=(Array.isArray(rows)?rows:[]).map(p=>{
       const pRegime=String(p?.regime||p?.features?.regime||"UNKNOWN");
@@ -95,10 +100,18 @@ async function digitalTwin(storage,decision,marketState){
       ready:resolved>=8,
       examples:candidates.slice(0,5).map(x=>({candleTs:x.candleTs,side:x.side,score:x.score,regime:x.regime,type:x.type,outcome:x.outcome,resultR:x.resultR,similarity:Number(x.similarity.toFixed(3))}))
     };
+  })();
+  TWIN_INFLIGHT.set(cacheKey,job);
+  try{
+    const payload=await job;
+    TWIN_CACHE.set(cacheKey,{ts:Date.now(),payload});
+    return payload;
   }catch{
+    if(hit)return {...hit.payload,cache:"last-good",stale:true,cacheAgeMs:Date.now()-hit.ts};
     return {matchedStates:0,wins:0,losses:0,winRate:null,expectancyR:null,similarityTop:0,ready:false,examples:[]};
-  }
+  }finally{TWIN_INFLIGHT.delete(cacheKey)}
 }
+
 function evaluate(decision,marketState,{weekdayOnly=true,easyMode=true}={}){
   const e=effectiveDecision(decision),d=e.decision,side=e.side;
   const s=score(d),r=rr(d),dq=dataQuality(d),px=priceNow(marketState,d),band=entryBand(d);
