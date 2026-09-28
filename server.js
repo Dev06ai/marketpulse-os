@@ -2195,7 +2195,7 @@ const server=http.createServer(async(req,res)=>{
             :await getDecisionSnapshotCached(symbol,interval,u.searchParams,requestDevice(req));
         const [decision,marketState]=await Promise.all([
           Promise.resolve(recentDecision),
-          phase18MarketState.snapshot(symbol,{fast:true})
+          phase18MarketState.snapshot(symbol,{fast:false,liveFlow:flowBucket(symbol)})
         ]);
         const radar=phase18Opportunity.evaluate(decision,marketState,{weekdayOnly:true,easyMode:true});
         const twinPromise=phase18Opportunity.digitalTwin(storage,decision,marketState);
@@ -2708,29 +2708,93 @@ const server=http.createServer(async(req,res)=>{
         }
         try{await learning.trainFromReplay(records)}catch{}
         return send(res,200,{ok:true,filters:{symbol:symbol||"ALL",interval:interval||"ALL"},summary:summarizeDNA(records),records:records.slice(0,limit),learning:await learning.status(),updatedAt:Date.now()});
-      }catch(e){return send(res,503,{ok:false,error:e.message})}
-    }
-
-    if(req.method==='GET'&&u.pathname==='/api/system-check'){
+      }catch(e){return send(res,503,{ok:fal    if(req.method==='GET'&&u.pathname==='/api/system-check'){
       const checks={server:true,marketEngine:true,learning:false,memory:false,marketData:false,derivatives:false,oi:false,cvd:false,liquidations:false,execution:false,portfolio:false,phase7:false,coreAnalytics:true,decisionEngine:false,phase11_13:false};
-      let marketError=null,derivativesError=null;
-      try{checks.learning=Boolean(await learning.status())}catch(e){}
-      try{checks.memory=Boolean(storage.status())}catch(e){}
-      let marketRows=null;
-      try{marketRows=await klines('BTCUSDT','1h');checks.marketData=Boolean(marketRows&&marketRows.length>=50)}catch(e){marketError=e.message}
-      try{
-        const d=await Promise.race([derivatives('BTCUSDT','15m'),new Promise(resolve=>setTimeout(()=>resolve(null),2500))]);
-        checks.derivatives=Boolean(d&&d.available);checks.oi=Boolean(Number.isFinite(Number(d?.oi)));
-        checks.cvd=Boolean(Number.isFinite(Number(d?.cvdDelta))||["BUYERS PRESSURE","SELLERS PRESSURE","BALANCED"].includes(d?.cvdState));
-        checks.liquidations=Boolean(d&&(d.liveConnected||Number(d.livePointCount)>0||Array.isArray(d?.series?.liq)&&d.series.liq.length>1));
-        if(!checks.derivatives)derivativesError="No derivatives provider returned usable data";
-      }catch(e){derivativesError=String(e.message||e)}
-      try{checks.execution=Boolean(await execution.snapshot())}catch(e){checks.execution=false}
-      try{checks.portfolio=Boolean(await phase6.snapshot())}catch(e){checks.portfolio=false}
-      try{const st=phase7.selfTest();checks.phase7=Boolean(st&&st.ok)}catch(e){checks.phase7=false}
-      try{const st=phase910.selfTest();checks.decisionEngine=Boolean(st&&st.ok)}catch(e){checks.decisionEngine=false}
-      try{const st=phase1113.selfTest();checks.phase11_13=Boolean(st&&st.ok)}catch(e){checks.phase11_13=false}
-      const result={ok:Object.values(checks).every(Boolean),checks,marketError,derivativesError,phase2:PHASE2_VERSION,phase3:PHASE3_VERSION,phase4:PHASE4_VERSION,phase5:PHASE5_VERSION,phase6:PHASE6_VERSION,phase7:PHASE7_VERSION,phase9:PHASE9_VERSION,phase10:PHASE10_VERSION,phase11:PHASE11_VERSION,phase12:PHASE12_VERSION,phase13:PHASE13_VERSION,routes:{core:true,chart:true,coreAnalytics:true,decision:true,validation:true,coreScan:true,coreFlow:true,cycle:true,ai:true,memory:true,learning:true,replay:true,dna:true,research:true,edge:true,edgeHealth:true,edgeConfig:true,edgeJournal:true,execution:true,executionConfig:true,executionArm:true,executionKill:true,executionReconcile:true,portfolio:true,portfolioConfig:true,phase7Analytics:true,phase7Health:true},timestamp:Date.now()};await auditAdmin(req,"Ran full system check","system",null,{ok:result.ok,checks});return send(res,200,result);
+      const bounded=async(fn,ms)=>{
+        try{
+          const value=await Promise.race([
+            Promise.resolve().then(fn),
+            new Promise(resolve=>setTimeout(()=>resolve({__timeout:true}),ms))
+          ]);
+          if(value&&value.__timeout)return {ok:false,timeout:true,value:null,error:"Timed out after "+ms+"ms"};
+          return {ok:true,timeout:false,value,error:null};
+        }catch(e){
+          return {ok:false,timeout:false,value:null,error:String(e?.message||e)};
+        }
+      };
+
+      const [
+        learningCheck,memoryCheck,marketCheck,derivativesCheck,
+        executionCheck,portfolioCheck,phase7Check,decisionCheck,validationCheck
+      ]=await Promise.all([
+        bounded(()=>learning.status(),2500),
+        bounded(()=>storage.status(),1500),
+        bounded(()=>klines('BTCUSDT','1h'),5000),
+        bounded(()=>derivatives('BTCUSDT','15m'),3000),
+        bounded(()=>execution.snapshot(),2500),
+        bounded(()=>phase6.snapshot(),2500),
+        bounded(()=>phase7.selfTest(),2500),
+        bounded(()=>phase910.selfTest(),3500),
+        bounded(()=>phase1113.selfTest(),4500)
+      ]);
+
+      checks.learning=Boolean(learningCheck.value);
+      checks.memory=Boolean(memoryCheck.value);
+      checks.marketData=Boolean(marketCheck.value&&marketCheck.value.length>=50);
+
+      const d=derivativesCheck.value;
+      checks.derivatives=Boolean(d&&d.available);
+      checks.oi=Boolean(Number.isFinite(Number(d?.oi)));
+      checks.cvd=Boolean(Number.isFinite(Number(d?.cvdDelta))||["BUYERS PRESSURE","SELLERS PRESSURE","BALANCED"].includes(d?.cvdState));
+      checks.liquidations=Boolean(
+        d&&(
+          d.liveConnected||
+          Number(d.livePointCount)>0||
+          Array.isArray(d?.series?.liq)&&d.series.liq.length>1
+        )
+      );
+
+      checks.execution=Boolean(executionCheck.value);
+      checks.portfolio=Boolean(portfolioCheck.value);
+      checks.phase7=Boolean(phase7Check.value&&phase7Check.value.ok);
+      checks.decisionEngine=Boolean(decisionCheck.value&&decisionCheck.value.ok);
+      checks.phase11_13=Boolean(validationCheck.value&&validationCheck.value.ok);
+
+      const marketError=marketCheck.error||null;
+      const derivativesError=derivativesCheck.error||(d&&!d.available?"No derivatives provider returned usable data":null);
+      const result={
+        ok:Object.values(checks).every(Boolean),
+        checks,
+        marketError,
+        derivativesError,
+        timing:{
+          learningMs:learningCheck.timeout?"timeout":null,
+          marketDataMs:marketCheck.timeout?"timeout":null,
+          derivativesMs:derivativesCheck.timeout?"timeout":null,
+          executionMs:executionCheck.timeout?"timeout":null,
+          portfolioMs:portfolioCheck.timeout?"timeout":null,
+          phase7Ms:phase7Check.timeout?"timeout":null,
+          decisionEngineMs:decisionCheck.timeout?"timeout":null,
+          phase11_13Ms:validationCheck.timeout?"timeout":null
+        },
+        phase2:PHASE2_VERSION,phase3:PHASE3_VERSION,phase4:PHASE4_VERSION,
+        phase5:PHASE5_VERSION,phase6:PHASE6_VERSION,phase7:PHASE7_VERSION,
+        phase9:PHASE9_VERSION,phase10:PHASE10_VERSION,phase11:PHASE11_VERSION,
+        phase12:PHASE12_VERSION,phase13:PHASE13_VERSION,
+        routes:{
+          core:true,chart:true,coreAnalytics:true,decision:true,validation:true,
+          coreScan:true,coreFlow:true,cycle:true,ai:true,memory:true,learning:true,
+          replay:true,dna:true,research:true,edge:true,edgeHealth:true,
+          edgeConfig:true,edgeJournal:true,execution:true,executionConfig:true,
+          executionArm:true,executionKill:true,executionReconcile:true,
+          portfolio:true,portfolioConfig:true,phase7Analytics:true,phase7Health:true
+        },
+        timestamp:Date.now()
+      };
+      await auditAdmin(req,"Ran full system check","system",null,{ok:result.ok,checks});
+      return send(res,200,result);
+    }
+ send(res,200,result);
     }
     if(req.method==='GET'&&u.pathname==='/api/live'){
       const symbol=(u.searchParams.get('symbol')||'BTCUSDT').toUpperCase(),interval=u.searchParams.get('interval')||'1h';
