@@ -16,7 +16,9 @@ const p70=require("./phase70-anti-chop-cooldown");
 const p73=require("./phase73-uncertainty-coverage");
 const p74=require("./phase74-cost-aware-expectancy");
 const p80=require("./phase80-no-trade-quality");
+const p86=require("./phase86-symbol-correlation");
 const p87=require("./phase87-portfolio-risk");
+const p88=require("./phase88-event-risk");
 const p89=require("./phase89-exchange-health");
 const p90=require("./phase90-trader-checklist");
 const p99=require("./phase99-free-public-readiness");
@@ -123,17 +125,24 @@ function evaluate(input={}){
   const aged=Boolean(input.signalAgeExpired??ttlResult.expired);
   if(aged&&!q.blockers.includes("SIGNAL_EXPIRED"))q.blockers.push("SIGNAL_EXPIRED");
   const rawCalibration=Number(input.calibration?.probability);
-  const calibrated=Number.isFinite(rawCalibration)?u.probability(rawCalibration<=1?rawCalibration*100:rawCalibration):null;
+  const normalizedProbability=Number.isFinite(rawCalibration)?u.probability(rawCalibration<=1?rawCalibration*100:rawCalibration):null;
+  const calibrationSource=String(input.calibration?.source||"");
+  const calibrated=normalizedProbability!=null&&calibrationSource==="CALIBRATED"?normalizedProbability:null;
+  const empirical=normalizedProbability!=null&&calibrationSource==="WALK_FORWARD_EMPIRICAL"?normalizedProbability:null;
+  const probability=calibrated??empirical;
   const relative=u.probability(Math.max(0,Math.min(100,Math.max(q.dir.long,q.dir.short)*.75+q.coverage.coverage*.25)));
-  const confidence=calibrated??relative;
+  const confidence=probability??relative;
   const expectancy=p74.evaluate(input.expectancy||{});
+  const expectancyProbability=probability==null?null:probability/100;
   const expectancyGate=p65.evaluate({
-    probability:calibrated,
+    probability:expectancyProbability,
     rr:s.levels?.rr??levelResult.rr,
     costBps:input.costBps
   });
   const uncertainty=p73.evaluate(input.uncertainty||{});
+  const correlation=p86.evaluate(input.correlation||{});
   const portfolio=p87.evaluate(input.portfolio||{});
+  const eventRisk=p88.evaluate(input.eventRisk||{});
   const exchange=p89.evaluate(input.exchangeHealth||{});
   const checklist=p90.build(input.checklist||{});
   const freeGate=p99.gate(input.publicReadiness||{});
@@ -141,18 +150,20 @@ function evaluate(input={}){
     data:dataGood,structure:Boolean(input.setupEvidence??(s.analysis?.marketStructure?.setup||s.analysis?.setup)),
     flow:Boolean(input.flowEvidence??(s.flow?.cvdState||s.flow?.takerImbalance!=null)),
     mtf:mtfAligned,trigger,invalidation,levels:levelsValid,risk:riskClear,
-    anomaly:anomalyClear,exchange:exchange.healthy,portfolio:!portfolio.blocked,uncertainty:!uncertainty.uncertain,
-    calibrated:calibrated!=null,expectancy:expectancyGate.pass,publicReadiness:freeGate.ready
+    anomaly:anomalyClear,exchange:exchange.healthy,portfolio:!portfolio.blocked,correlation:!correlation.highCorrelation,eventRisk:!eventRisk.blocked,leverage:!leverageResult.blocked,uncertainty:!uncertainty.uncertain,
+    calibrated:probability!=null,expectancy:expectancyGate.pass,publicReadiness:freeGate.ready
   }});
-  const publicAllowed=qualification.eligible&&!aged&&Boolean(expectancyGate.pass)&&!uncertainty.uncertain&&!portfolio.blocked&&exchange.healthy&&freeGate.ready;
+  const leverageClear=!leverageResult.blocked;
+  const publicAllowed=qualification.eligible&&!aged&&probability!=null&&Boolean(expectancyGate.pass)&&!uncertainty.uncertain&&!portfolio.blocked&&exchange.healthy&&leverageClear&&freeGate.ready;
   const publicAction=publicAllowed?q.dominant:"WAIT";
   const publicBlockers=u.unique([
     ...q.blockers,
-    ...(calibrated==null?["CALIBRATION_NOT_AVAILABLE"]:[]),
+    ...(probability==null?["PROBABILITY_EVIDENCE_NOT_AVAILABLE"]:[]),
     ...(expectancyGate.pass?[]:["EXPECTANCY_GATE"]),
     ...(uncertainty.uncertain?uncertainty.reasons:[]),
     ...(portfolio.blocked?["PORTFOLIO_RISK"]:[]),
     ...(exchange.healthy?[]:exchange.blockers),
+    ...(leverageClear?[]:leverageResult.blockers),
     ...(freeGate.ready?[]:freeGate.missing)
   ]);
   const publicGate=p100.evaluate({readiness:publicAllowed,action:publicAction,blockers:publicBlockers,automaticExecutionEnabled:false});
@@ -161,7 +172,7 @@ function evaluate(input={}){
     version:VERSION,
     signal:{
       symbol:s.symbol,interval:s.interval,timestamp:Date.now(),action,candidateAction:q.dominant,status:action==="WAIT"?"WAIT":"QUALIFIED_CANDIDATE",
-      price:s.price,confidence,confidenceSource:calibrated!=null?"CALIBRATED":"RELATIVE_EVIDENCE_ONLY",calibrated:calibrated!=null,
+      price:s.price,confidence,confidenceSource:calibrated!=null?"CALIBRATED":empirical!=null?"WALK_FORWARD_EMPIRICAL":"RELATIVE_EVIDENCE_ONLY",calibrated:calibrated!=null,
       evidence:evidence(s),direction:q.dir,coverage:q.coverage,
       entry:s.levels?.entry??levelResult.entry??s.levels?.entryLow??null,entryHigh:s.levels?.entryHigh??levelResult.entryHigh??null,
       stop:s.levels?.stop??levelResult.stop??null,tp1:s.levels?.tp1??levelResult.tp1??null,tp2:s.levels?.tp2??levelResult.tp2??null,rr:s.levels?.rr??levelResult.rr??null,
@@ -169,9 +180,9 @@ function evaluate(input={}){
       blockers:publicBlockers,ageMs,ttlMs,realMoneyUse:"DECISION_SUPPORT_ONLY",automaticExecutionEnabled:false
     },
     gate:{qualified:publicGate.publicSignalAllowed,candidateQualified:q.qualified&&!aged,blockers:u.unique(publicBlockers)},
-    diagnostics:{relativeConfidence:relative,calibratedConfidence:calibrated,
+    diagnostics:{relativeConfidence:relative,calibratedConfidence:calibrated,empiricalConfidence:empirical,expectancyProbability,
       mtf:mtfResult,trigger:triggerResult,invalidation:invalidationResult,levels:levelResult,
-      leverage:leverageResult,ttl:ttlResult,chop:chopResult,expectancy,expectancyGate,uncertainty,portfolio,exchange,
+      leverage:leverageResult,ttl:ttlResult,chop:chopResult,expectancy,expectancyGate,uncertainty,correlation,portfolio,eventRisk,exchange,
       checklist,qualification,publicReadiness:freeGate,publicGate}
   };
 }
@@ -185,12 +196,13 @@ function selfTest(){
     derivatives:{cvdState:"BUYERS CONFIRM",takerImbalance:.12,oiChangePct:2,orderBook:{imbalance:.1}},
     phaseStack:{data:{quality:{liveEligible:true}},risk:{blocked:false},anomaly:{anomalous:false}},
     triggerConfirmed:true,mtfAligned:true,setupEvidence:true,flowEvidence:true,invalidation:true,levelsValid:true,
-    calibration:{probability:.72},
+    calibration:{probability:.72,source:"CALIBRATED"},
     uncertainty:{coveragePct:95,calibrationSamples:500,disagreementPct:5},
     publicReadiness:{data:true,validation:true,calibration:true,risk:true,security:true,observability:true,operations:true},
     expectancy:{winProbability:.72,averageWinR:2,averageLossR:1,costR:.05},
     exchangeHealth:{reliabilityPct:100},
-    portfolio:{positions:[]}
+    portfolio:{positions:[]},
+    leverage:{leverage:2,liquidationDistancePct:10}
   });
   const y=evaluate({dataQualityOk:false,triggerConfirmed:false,mtfAligned:false});
   return {ok:x.signal.action==="LONG"&&x.gate.qualified&&x.signal.automaticExecutionEnabled===false&&y.signal.action==="WAIT",version:VERSION};

@@ -49,13 +49,28 @@ const live=stack.evaluate({
  derivatives:{cvdState:"BUYERS CONFIRM",takerImbalance:.12,oiChangePct:2,orderBook:{imbalance:.1}},
  phaseStack:{data:{quality:{liveEligible:true}},risk:{blocked:false},anomaly:{anomalous:false}},
  triggerConfirmed:true,mtfAligned:true,setupEvidence:true,flowEvidence:true,invalidation:true,levelsValid:true,
- calibration:{probability:.72},uncertainty:{coveragePct:95,calibrationSamples:500,disagreementPct:5},
+ calibration:{probability:.72,source:"CALIBRATED"},uncertainty:{coveragePct:95,calibrationSamples:500,disagreementPct:5},
  publicReadiness:{data:true,validation:true,calibration:true,risk:true,security:true,observability:true,operations:true},
  expectancy:{winProbability:.72,averageWinR:2,averageLossR:1,costR:.05},
- exchangeHealth:{reliabilityPct:100},portfolio:{positions:[]}
+ exchangeHealth:{reliabilityPct:100},portfolio:{positions:[]},leverage:{leverage:2,liquidationDistancePct:10}
 });
 assert(live.signal.action==="LONG"&&live.gate.qualified,"51-100 stack did not publish eligible signal");
+assert(live.diagnostics.expectancyProbability===0.72,"Calibrated probability must remain 0–1 inside expectancy math");
+assert(live.diagnostics.expectancyGate.expectancy<2,"Expectancy gate probability unit regression");
 assert(live.signal.automaticExecutionEnabled===false,"51-100 auto execution");
 const blocked=stack.evaluate({dataQualityOk:false,triggerConfirmed:false,mtfAligned:false,calibration:{probability:null}});
 assert(blocked.signal.action==="WAIT","51-100 must fail safe to WAIT");
 console.log("phase51-100 tests: ok");
+
+// Every Phase 51–100 module must load and expose a self-test.
+const fs=require("fs");
+const phaseFiles=fs.readdirSync(__dirname+"/..").filter(x=>/^phase(?:5[1-9]|[6-9][0-9]|100)-.*\.js$/.test(x)&&!["phase51-100-stack.js","phase51-100-utils.js","phase51-100-selftest.js"].includes(x)).sort((a,b)=>{
+  const pa=Number(a.match(/^phase(\d+)/)[1]),pb=Number(b.match(/^phase(\d+)/)[1]); return pa-pb;
+});
+assert(phaseFiles.length===50,"Expected exactly 50 Phase 51–100 modules, found "+phaseFiles.length);
+for(const file of phaseFiles){
+  const mod=require("../"+file);
+  assert(typeof mod.selfTest==="function",file+" missing selfTest");
+  assert(mod.selfTest().ok===true,file+" selfTest failed");
+}
+assert(phaseFiles.every((f,i)=>Number(f.match(/^phase(\d+)/)[1])===i+51),"Phase module coverage has a gap");
