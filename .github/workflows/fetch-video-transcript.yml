@@ -19,17 +19,48 @@ jobs:
       - name: Install media tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y ffmpeg
+          sudo apt-get install -y ffmpeg jq
 
       - name: Install transcription tools
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -q yt-dlp faster-whisper
+          python -m pip install -q faster-whisper
 
-      - name: Download video audio
+      - name: Resolve public audio stream
+        shell: bash
         run: |
           set -euo pipefail
-          yt-dlp --no-playlist --extract-audio --audio-format wav             --audio-quality 0             -o "marketpulse_video_audio.%(ext)s"             "https://www.youtube.com/watch?v=H97QbGdCPa0"
+          VIDEO_ID="H97QbGdCPa0"
+          INSTANCES=(
+            "https://pipedapi.kavin.rocks"
+            "https://pipedapi.adminforge.de"
+            "https://pipedapi.reallyaweso.me"
+          )
+          STREAM_URL=""
+          for base in "${INSTANCES[@]}"; do
+            echo "Trying $base"
+            if curl -fsSL --retry 2 --connect-timeout 10 --max-time 30               "$base/streams/$VIDEO_ID" -o piped.json; then
+              STREAM_URL="$(jq -r '
+                if (.audioStreams // []) | length > 0
+                then (.audioStreams | sort_by(.bitrate // 0) | last | .url)
+                else empty end' piped.json)"
+              if [ -n "${STREAM_URL:-}" ] && [ "$STREAM_URL" != "null" ]; then
+                echo "Resolved audio stream"
+                break
+              fi
+            fi
+          done
+          test -n "${STREAM_URL:-}"
+          echo "$STREAM_URL" > audio_url.txt
+
+      - name: Download audio and convert
+        shell: bash
+        run: |
+          set -euo pipefail
+          AUDIO_URL="$(cat audio_url.txt)"
+          curl -L --retry 3 --connect-timeout 20 --max-time 900 "$AUDIO_URL" -o source_audio
+          ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 source_audio
+          ffmpeg -y -i source_audio -vn -ac 1 -ar 16000 marketpulse_video_audio.wav
 
       - name: Transcribe with Whisper
         run: |
@@ -41,7 +72,6 @@ jobs:
               beam_size=5,
               vad_filter=True,
               condition_on_previous_text=True,
-              word_timestamps=False,
           )
           with open("marketpulse_video_transcript.md","w",encoding="utf-8") as f:
               f.write("# Video transcript: H97QbGdCPa0\n")
@@ -59,5 +89,5 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add marketpulse_video_transcript.md
-          git commit -m "Transcribe requested YouTube video with Whisper" || exit 0
+          git commit -m "Transcribe requested YouTube video via public stream" || exit 0
           git push
