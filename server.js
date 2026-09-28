@@ -542,10 +542,32 @@ async function auditAdmin(req,action,category,targetUserId,metadata){
 async function securityEvent(severity,eventType,email,metadata){try{await storage.recordSecurityEvent(severity,eventType,email,metadata||{})}catch{}}
 
 function clientIp(req){return String(req.headers["x-forwarded-for"]||"").split(",")[0].trim()||String(req.socket?.remoteAddress||"unknown")}
-function rateRequest(req){
+function rateRequest(req,path){
+  const method=String(req.method||"GET").toUpperCase();
+  const route=String(path||"");
+  
+  // Normal dashboard delivery and live market transport must not be throttled
+  // by the heavy API limiter. The dashboard is intentionally chatty while
+  // maintaining a real-time market session.
+  if(method==="GET"&&(
+    route==="/" ||
+    route==="/api/live-sync" ||
+    route==="/api/fast-ticker" ||
+    route==="/api/market-state" ||
+    route==="/health" ||
+    route==="/api/chart" ||
+    route.startsWith("/assets/") ||
+    route==="/manifest.webmanifest" ||
+    route==="/sw.js"
+  ))return true;
+
   const key=clientIp(req),now=Date.now(),x=GLOBAL_RATE.get(key);
-  if(!x||now-x.started>GLOBAL_RATE_WINDOW_MS){GLOBAL_RATE.set(key,{started:now,count:1});return true}
-  x.count++;return x.count<=GLOBAL_RATE_LIMIT;
+  if(!x||now-x.started>GLOBAL_RATE_WINDOW_MS){
+    GLOBAL_RATE.set(key,{started:now,count:1});
+    return true;
+  }
+  x.count++;
+  return x.count<=GLOBAL_RATE_LIMIT;
 }
 function originAllowed(req){
   const origin=req.headers.origin;
@@ -1776,8 +1798,8 @@ const server=http.createServer(async(req,res)=>{
   SERVER_METRICS.routeCounts.set(rawPath,(SERVER_METRICS.routeCounts.get(rawPath)||0)+1);
   res.on("finish",()=>{const latency=Date.now()-started;const at=Date.now();SERVER_METRICS.totalLatencyMs+=latency;if(res.statusCode>=500)SERVER_METRICS.errors++;if(res.statusCode>=500)SERVER_METRICS.lastErrors.unshift({path:rawPath,status:res.statusCode,latencyMs:latency,at:new Date().toISOString()});if(SERVER_METRICS.lastErrors.length>50)SERVER_METRICS.lastErrors.length=50;SERVER_METRICS.recentRequests.push({at,path:rawPath,status:res.statusCode,latencyMs:latency});const cutoff=at-120000;while(SERVER_METRICS.recentRequests.length&&SERVER_METRICS.recentRequests[0].at<cutoff)SERVER_METRICS.recentRequests.shift()});
   try{
-    if(!rateRequest(req))return send(res,429,{ok:false,error:"Too many requests. Please slow down."});
     const u=new URL(req.url,'http://localhost');
+    if(!rateRequest(req,u.pathname))return send(res,429,{ok:false,error:"Too many requests. Please slow down."});
     if(u.pathname==='/api/watchdog/internal'){
       const watchdogExpected=String(process.env.MARKETPULSE_WATCHDOG_TOKEN||"");
       const autotraderExpected=String(process.env.MARKETPULSE_AUTOTRADER_TOKEN||"");
