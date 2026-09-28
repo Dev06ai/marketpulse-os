@@ -384,6 +384,12 @@ function summariseValidation(validation={}){
   };
 }
 
+function peekAdaptiveProfile(opts={}){
+  const key=[opts.symbol||"",opts.interval||""].join("|");
+  const hit=PROFILE_CACHE.get(key);
+  return hit&&Date.now()-hit.ts<PROFILE_CACHE_TTL?hit.profile:null;
+}
+
 async function getAdaptiveProfile(storage,opts={}){
   const now=Date.now(),symbol=opts.symbol||"",interval=opts.interval||"";
   const key=[symbol,interval].join("|");
@@ -439,4 +445,4 @@ function selfTest(){
   return {ok:intelligence.scoreAdjustment>0&&enriched.phase14?.intelligence?.setupKey==="SFP"&&enriched.score>=78,summary:{setup:intelligence.setupKey,adjustment:intelligence.scoreAdjustment,score:enriched.score}};
 }
 
-module.exports={VERSION,SETUPS,setupKey,buildSignalIntelligence,buildAdaptiveProfile,adaptiveForAnalysis,enrichAnalysis,aggregateSetupBuckets,aggregateRegimeBuckets,summariseValidation,getAdaptiveProfile,refreshAdaptiveState,shadowRecord,outcomeStats,selfTest};
+module.exports={VERSION,SETUPS,setupKey,buildSignalIntelligence,buildAdaptiveProfile,adaptiveForAnalysis,enrichAnalysis,aggregateSetupBuckets,aggregateRegimeBuckets,summariseValidation,getAdaptiveProfile,peekAdaptiveProfile,refreshAdaptiveState,shadowRecord,outcomeStats,selfTest};
