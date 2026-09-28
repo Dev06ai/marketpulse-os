@@ -1,0 +1,2 @@
+/** Phase 53 */
+const V="53.0.0";function combine(rows=[]){let l=0,s=0;for(const r of rows){const w=Math.max(0,Math.min(1,Number(r.weight||0)));if(r.side==="LONG")l+=w;if(r.side==="SHORT")s+=w;}const t=l+s||1;return {version:V,long:l/t*100,short:s/t*100,dominant:l>s?"LONG":s>l?"SHORT":"WAIT"};}function selfTest(){const x=combine([{side:"LONG",weight:2},{side:"SHORT",weight:1}]);return {ok:x.dominant==="LONG",version:V};}module.exports={VERSION:V,combine,selfTest};
