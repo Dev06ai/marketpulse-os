@@ -42,6 +42,22 @@ async function cycle(){
     if(!cfg.enabled||cfg.mode==="OFF"){record({ok:true,traded:false,reason:"disabled"});return}
     const telemetry=await fetchJson("/health",{timeout:5000}).catch(()=>null);
     if(telemetry?.ok===false){state.deferred++;record({ok:true,traded:false,reason:"main_health_blocked"});return}
+    if(cfg.mode==="PAPER"&&cfg.autoManage!==false){
+      const marks={};
+      await Promise.all((cfg.symbols?.length?cfg.symbols:["BTCUSDT"]).map(async sym=>{
+        try{
+          const t=await fetchJson("/api/fast-ticker?symbol="+encodeURIComponent(sym),5000);
+          if(Number.isFinite(Number(t?.price)))marks[sym]=Number(t.price);
+        }catch{}
+      }));
+      if(Object.keys(marks).length){
+        try{
+          const managed=await fetchJson("/api/watchdog/internal?action=autotrader-manage",{method:"POST",body:{markPrices:marks,options:{}},timeout:12000});
+          if(Number(managed?.closed||0)>0)record({ok:true,traded:false,reason:"paper_positions_managed",closed:managed.closed});
+        }catch(e){record({ok:false,traded:false,reason:"paper_manage_failed",error:String(e?.message||e)})}
+      }
+    }
+
     const due=Object.keys(BOT_INTERVALS).filter(k=>cfg.strategies?.[k]&&probeDue(k));
     if(!due.length){record({ok:true,traded:false,reason:"not_due"});return}
     const strategy=due.sort((a,b)=>Number(state.lastProbeAt[a]||0)-Number(state.lastProbeAt[b]||0))[0];
@@ -60,7 +76,7 @@ async function cycle(){
     const decision=radar.decision;
     const gate=autotrader.decisionEligible(decision,cfg);
     if(!gate.eligible){record({ok:true,traded:false,strategy,symbol,interval,reason:"gate_blocked",gates:gate.reasons,score:gate.score,radarStatus});return}
-    const executed=await fetchJson("/api/watchdog/internal?action=autotrader-execute",{method:"POST",body:{decision},timeout:20000});
+    const executed=await fetchJson("/api/watchdog/internal?action=autotrader-execute",{method:"POST",body:{decision,radar:radar.radar,marketState:radar.marketState,executionRoute:radar.executionRoute},timeout:20000});
     if(!executed?.ok){state.failures++;record({ok:false,traded:false,strategy,symbol,interval,reason:executed?.error||"execution_blocked",radarStatus});return}
     state.trades++;
     record({ok:true,traded:true,strategy,symbol,interval,side:decision.action,score:decision.market?.confluenceScore||0,orderStatus:executed?.order?.status||null,signalKey:executed?.signal?.id||null,radarStatus});
