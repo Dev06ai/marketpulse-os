@@ -32,6 +32,11 @@ jobs:
       - run: node --check prop-firm.js
       - run: node --check research-data.js
       - run: node --check data-fabric.js
+      - run: node --check phase18-market-state.js
+      - run: node --check phase18-opportunity.js
+      - run: node --check phase18-execution-router.js
+      - run: node --check marketpulse-autotrader.js
+      - run: node tests/phase18.js
       - run: node --check marketpulse-worker.js
       - run: node tests/marketpulse-worker.js
       - run: node tests/smoke.js
@@ -355,6 +360,20 @@ jobs:
           if bad:
             raise SystemExit("Raw renderMarket writes authoritative signal fields: "+", ".join(bad))
           print("Signal authority, race guards, candidate labeling and threshold alignment OK")
+          PY
+
+      - name: Check Phase 18 Trade Radar surface
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          html=Path("public/index.html").read_text()
+          server=Path("server.js").read_text()
+          for x in ['data-view="trade-radar"','id="view-trade-radar"','function loadTradeRadar','id="radarState"','id="radarTriggerRows"','id="radarVenueTable"']:
+              if x not in html: raise SystemExit("Missing Trade Radar UI: "+x)
+          for x in ['/api/market-state','/api/trade-radar','phase18-market-state','phase18-opportunity','phase18-execution-router']:
+              if x not in server and x not in Path("phase18-market-state.js").read_text()+Path("phase18-opportunity.js").read_text()+Path("phase18-execution-router.js").read_text():
+                  raise SystemExit("Missing Phase 18 integration: "+x)
+          print("Phase 18 Trade Radar surface OK")
           PY
 
       - name: Check Phase 2 feature surface
