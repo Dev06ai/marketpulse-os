@@ -6,6 +6,16 @@ const tradeLevels=require("./trade-levels");
 const decisionIntelligence=require("./decision-intelligence");
 const phase20=require("./phase20-scenario-matrix");
 const phase21=require("./phase21-state-contract");
+const phase22=require("./phase22-state-bus");
+const phase23=require("./phase23-signal-hysteresis");
+const phase24=require("./phase24-data-quality");
+const phase25=require("./phase25-flow-normalizer");
+const phase26=require("./phase26-regime-engine");
+const phase27=require("./phase27-structure-graph");
+const phase28=require("./phase28-confluence");
+const phase29=require("./phase29-calibration");
+const phase30=require("./phase30-risk-engine");
+
 
 function syntheticCandles(mode){
   const out=[],start=Date.UTC(2026,8,15,0,0,0),hour=60*60*1000;
@@ -60,6 +70,15 @@ assert(decisionIntelligence.selfTest(),"Decision Center strategy-intelligence se
 assert(phase20.selfTest().ok,"Phase 20 scenario-matrix self-test failed.");
 const phase21Result=phase21.selfTest();
 assert(phase21Result.ok,"Phase 21 canonical state self-test failed.");
+assert(phase22.selfTest().ok,"Phase 22 state-bus self-test failed.");
+assert(phase23.selfTest().ok,"Phase 23 hysteresis self-test failed.");
+assert(phase24.selfTest().ok,"Phase 24 data-quality self-test failed.");
+assert(phase25.selfTest().ok,"Phase 25 flow-normalizer self-test failed.");
+assert(phase26.selfTest().ok,"Phase 26 regime-engine self-test failed.");
+assert(phase27.selfTest().ok,"Phase 27 structure-graph self-test failed.");
+assert(phase28.selfTest().ok,"Phase 28 confluence self-test failed.");
+assert(phase29.selfTest().ok,"Phase 29 calibration self-test failed.");
+assert(phase30.selfTest().ok,"Phase 30 risk-engine self-test failed.");
 assert(tradeLevelResult.ok,"Conservative trade-level self-test failed.");
 assert(tradeLevelResult.long.rr>=1.5&&tradeLevelResult.short.rr>=1.5,"Trade-level builder must enforce minimum 1.5R.");
 assert(tradeLevelResult.long.stop<tradeLevelResult.long.entry&&tradeLevelResult.long.tp1>tradeLevelResult.long.entry,"LONG level geometry is invalid.");
