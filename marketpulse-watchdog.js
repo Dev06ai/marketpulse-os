@@ -16,6 +16,7 @@ const {execFile}=require("child_process");
 const {promisify}=require("util");
 const execFileAsync=promisify(execFile);
 const phase16=require("./phase16");
+const autotrader=require("./autotrader");
 
 const PORT=Number(process.env.PORT||3000);
 const BASE_URL=String(process.env.MARKETPULSE_WEB_URL||"").replace(/\/$/,"");
@@ -31,13 +32,16 @@ const LOAD_STRESS_REQUESTS_PER_MIN=Math.max(20,Number(process.env.MARKETPULSE_WA
 const LOAD_STRESS_LATENCY_MS=Math.max(1000,Number(process.env.MARKETPULSE_WATCHDOG_STRESS_LATENCY_MS||3500));
 const LOAD_STRESS_ERROR_PCT=Math.max(1,Number(process.env.MARKETPULSE_WATCHDOG_STRESS_ERROR_PCT||5));
 const CACHE_RESET_COOLDOWN_MS=Math.max(120000,Number(process.env.MARKETPULSE_WATCHDOG_CACHE_RESET_COOLDOWN_MS||600000));
+const BOT_SYMBOLS=String(process.env.MARKETPULSE_AUTOTRADER_SYMBOLS||"BTCUSDT").split(",").map(x=>x.trim().toUpperCase()).filter(Boolean);
+const BOT_STRATEGY_CADENCE_MS={SCALP:60000,INTRADAY:120000,SWING:300000,POSITION:900000};
+const BOT_INTERVALS={SCALP:"15m",INTRADAY:"1h",SWING:"4h",POSITION:"1d"};
 const DECISION_SYMBOLS=String(process.env.MARKETPULSE_WATCHDOG_SYMBOLS||"BTCUSDT,ETHUSDT,SOLUSDT").split(",").map(x=>x.trim()).filter(Boolean);
 const DECISION_INTERVALS=String(process.env.MARKETPULSE_WATCHDOG_INTERVALS||"15m,1h").split(",").map(x=>x.trim()).filter(Boolean);
 const MAX_INCIDENTS=phase16.MAX_INCIDENTS;
 
 const state={
   startedAt:Date.now(),lastRunAt:null,lastHealthyAt:null,consecutiveFailures:0,
-  checks:0,remediations:0,incidents:[],lastHealth:null,lastExecution:null,selfTest:null,lastSystemCheckAt:0,lastSelfTestAt:0,lastDecisionSpotAt:0,lastLoadStatusAt:0,lastLoad:null,loadStressed:false,lastCacheResetAt:0,cycleRunning:false,deferredChecks:0
+  checks:0,remediations:0,incidents:[],lastHealth:null,lastExecution:null,selfTest:null,lastSystemCheckAt:0,lastSelfTestAt:0,lastDecisionSpotAt:0,lastLoadStatusAt:0,lastLoad:null,loadStressed:false,lastCacheResetAt:0,cycleRunning:false,deferredChecks:0,botLastProbeAt:{},botLastResult:null,botRuns:0,botTrades:0
 };
 
 function sleep(ms){return new Promise(r=>setTimeout(r,ms))}
@@ -49,6 +53,48 @@ function loadStress(load){
     Number(recent.errorRatePct||0)>=LOAD_STRESS_ERROR_PCT
   );
 }
+function botProbeDue(strategy){
+  const now=Date.now(),last=Number(state.botLastProbeAt[strategy]||0),cadence=BOT_STRATEGY_CADENCE_MS[strategy]||300000;
+  return now-last>=cadence;
+}
+async function runAutoTraderCycle(){
+  try{
+    const snapshot=await fetchJson("/api/watchdog/internal?action=autotrader-status",{timeout:8000});
+    const cfg=autotrader.normalizeConfig(snapshot?.bot||{});
+    if(!cfg.enabled||cfg.mode==="OFF")return {ran:false,reason:"disabled"};
+    if(state.loadStressed)return {ran:false,reason:"load_stressed"};
+    const activeStrategies=Object.keys(BOT_INTERVALS).filter(k=>cfg.strategies?.[k]&&botProbeDue(k));
+    if(!activeStrategies.length)return {ran:false,reason:"not_due"};
+
+    const strategy=activeStrategies.sort((a,b)=>(Number(state.botLastProbeAt[a]||0)-Number(state.botLastProbeAt[b]||0)))[0];
+    const interval=BOT_INTERVALS[strategy];
+    const symbol=BOT_SYMBOLS[(state.botRuns||0)%Math.max(1,BOT_SYMBOLS.length)]||"BTCUSDT";
+    state.botLastProbeAt[strategy]=Date.now();
+    state.botRuns++;
+
+    const decision=await fetchJson("/api/decision?symbol="+encodeURIComponent(symbol)+"&interval="+encodeURIComponent(interval),{timeout:15000});
+    if(!decision?.ok){
+      state.botLastResult={ok:false,strategy,symbol,interval,error:"Decision response invalid",at:Date.now()};
+      return state.botLastResult;
+    }
+    const gate=autotrader.decisionEligible(decision,cfg);
+    if(!gate.eligible){
+      state.botLastResult={ok:true,traded:false,strategy,symbol,interval,reasons:gate.reasons,score:gate.score,at:Date.now()};
+      return state.botLastResult;
+    }
+    const executed=await fetchJson("/api/watchdog/internal?action=autotrader-execute",{method:"POST",body:{decision},timeout:20000});
+    const result={ok:Boolean(executed?.ok),traded:Boolean(executed?.ok),strategy,symbol,interval,side:decision.action,score:decision.market?.confluenceScore||0,orderStatus:executed?.order?.status||null,signalKey:executed?.signal?.id||null,at:Date.now(),error:executed?.error||null};
+    state.botLastResult=result;
+    if(result.traded)state.botTrades++;
+    return result;
+  }catch(e){
+    const result={ok:false,traded:false,error:String(e?.message||e),at:Date.now()};
+    state.botLastResult=result;
+    record("AUTOTRADER_CYCLE_FAILED","warning","AutoTrader cycle failed without changing strategy or risk rules.",result);
+    return result;
+  }
+}
+
 async function refreshLoadStatus(){
   const status=await fetchJson("/api/watchdog/internal?action=status",{timeout:10000});
   state.lastLoad=status?.metrics||null;
@@ -169,6 +215,10 @@ async function cycle(){
     }
 
     const stressed=state.loadStressed;
+    if(!stressed && !ranSystemCheck){
+      const botResult=await runAutoTraderCycle();
+      if(botResult?.ran===false||botResult?.reason==="not_due"||botResult?.reason==="disabled"||botResult?.reason==="load_stressed"){}
+    }
     if(!stressed &&
        String(process.env.MARKETPULSE_WATCHDOG_ONESHOT||"false").toLowerCase()!=="true" &&
        Date.now()-state.lastSelfTestAt>=SELF_TEST_INTERVAL_MS &&
@@ -244,7 +294,10 @@ async function cycle(){
       lastHealthyAt:state.lastHealthyAt,
       nextSystemCheckInMs:Math.max(0,SYSTEM_CHECK_INTERVAL_MS-(Date.now()-state.lastSystemCheckAt)),
       nextSelfTestInMs:Math.max(0,SELF_TEST_INTERVAL_MS-(Date.now()-state.lastSelfTestAt)),
-      nextDecisionSpotInMs:Math.max(0,DECISION_SPOT_INTERVAL_MS-(Date.now()-state.lastDecisionSpotAt))
+      nextDecisionSpotInMs:Math.max(0,DECISION_SPOT_INTERVAL_MS-(Date.now()-state.lastDecisionSpotAt)),
+      botRuns:state.botRuns,
+      botTrades:state.botTrades,
+      botLastResult:state.botLastResult
     }));
   }finally{
     state.cycleRunning=false;
