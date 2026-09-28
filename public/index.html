@@ -1012,6 +1012,27 @@ linear-gradient(180deg,#0c0e11 0%,#101214 48%,#0a0b0d 100%);box-shadow:0 -20px 7
 .mpdc-logic.mpdc-exit.mpdc-neutral{border-color:rgba(192,132,252,.14)!important;background:rgba(192,132,252,.018)!important}
 .mpdc-logic.mpdc-exit.mpdc-active{border-color:rgba(248,113,133,.16)!important;background:rgba(248,113,133,.022)!important}
 @media(max-width:720px){.mpdc-intel-grid{grid-template-columns:1fr 1fr}.mpdc-intel-columns{grid-template-columns:1fr}}
+.mpdc-phase20{
+  margin-top:10px;padding:13px;border:1px solid rgba(255,255,255,.065);border-radius:14px;
+  background:linear-gradient(180deg,rgba(103,232,255,.018),rgba(255,255,255,.008))
+}
+.mp20-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
+.mp20-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:9px}
+.mp20-card{min-width:0;padding:10px;border:1px solid rgba(255,255,255,.06);border-radius:11px;background:rgba(0,0,0,.13)}
+.mp20-card.long{border-color:rgba(74,222,128,.13)}.mp20-card.short{border-color:rgba(248,113,133,.13)}.mp20-card.wait{border-color:rgba(192,132,252,.13)}
+.mp20-card .k{display:flex;justify-content:space-between;gap:8px;font-size:8px;font-weight:950;letter-spacing:.10em;color:#7f8fa4}
+.mp20-card .score{font-size:9px;color:#e6eef6}
+.mp20-status{margin-top:5px;font-size:10px;font-weight:950}
+.mp20-card.long .mp20-status{color:#73efaa}.mp20-card.short .mp20-status{color:#ff91a4}.mp20-card.wait .mp20-status{color:#d6b8ff}
+.mp20-list{margin-top:6px;color:#bac7d5;font-size:8.5px;line-height:1.45}
+.mp20-list span{display:block}.mp20-list span+span{margin-top:3px}
+.mp20-foot{display:grid;grid-template-columns:1fr auto;gap:8px;margin-top:8px}
+.mp20-integrity,.mp20-transition{padding:9px 10px;border:1px solid rgba(255,255,255,.055);border-radius:10px;background:rgba(0,0,0,.10)}
+.mp20-integrity .k,.mp20-transition .k{display:block;font-size:7px;font-weight:950;letter-spacing:.1em;color:#718198}
+.mp20-integrity .v,.mp20-transition .v{margin-top:4px;font-size:8.5px;line-height:1.4;color:#dbe4ee}
+.mp20-id{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;color:#bfe9ff!important;letter-spacing:.06em}
+@media(max-width:900px){.mp20-grid{grid-template-columns:1fr}.mp20-foot{grid-template-columns:1fr}}
+
 
 .mpdc-hidden-compat{display:none!important}
 .mpdc-shell .livePlanSide{min-width:56px}
@@ -1297,6 +1318,27 @@ linear-gradient(180deg,#0c0e11 0%,#101214 48%,#0a0b0d 100%);box-shadow:0 -20px 7
             <div class="mpdc-intel-sub risk">
               <span class="k">INVALIDATION LOGIC</span>
               <div class="v" id="mpdcInvalidationLogic">Waiting for structural invalidation context…</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="mpdc-phase20" id="mpdcPhase20">
+          <div class="mp20-head">
+            <div>
+              <span class="mpdc-eyebrow">PHASE 20 · SCENARIO MATRIX</span>
+              <span class="mpdc-panel-sub">What must happen next for each side — without turning a candidate into an executable trade.</span>
+            </div>
+            <span class="livePlanSide mpdc-plan-side wait" id="mp20State">WAIT</span>
+          </div>
+          <div class="mp20-grid" id="mp20Grid"></div>
+          <div class="mp20-foot">
+            <div class="mp20-transition">
+              <span class="k">STATE TRANSITION</span>
+              <div class="v" id="mp20Transition">Waiting for the canonical decision snapshot…</div>
+            </div>
+            <div class="mp20-integrity">
+              <span class="k">SNAPSHOT INTEGRITY</span>
+              <div class="v mp20-id" id="mp20SnapshotId">—</div>
             </div>
           </div>
         </div>
@@ -5859,6 +5901,53 @@ function renderDecisionIntelligence(d){
 function setTextLocal(id,value){var el=$(id);if(el&&el.textContent!==String(value))el.textContent=String(value)}
 function safeHtmlLocal(value){return String(value==null?"":value).replace(/[&<>"']/g,function(ch){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[ch]||ch})}
 
+function renderPhase20(d){
+  var p20=d?.phase20||null,grid=$("mp20Grid"),state=$("mp20State");
+  if(!grid)return;
+  if(!p20){
+    grid.innerHTML='<div class="mp20-card wait"><div class="k"><span>SCENARIO MATRIX</span></div><div class="mp20-status">WAIT</div><div class="mp20-list"><span>Waiting for the canonical scenario snapshot…</span></div></div>';
+    setTextLocal("mp20Transition","Waiting for the canonical decision snapshot…");
+    setTextLocal("mp20SnapshotId","—");
+    if(state){state.textContent="WAIT";state.className="livePlanSide mpdc-plan-side wait"}
+    return;
+  }
+
+  var cards=[
+    ["LONG","long","LONG","long"],
+    ["SHORT","short","SHORT","short"],
+    ["WAIT","wait","WAIT","wait"]
+  ];
+  grid.innerHTML=cards.map(function(spec){
+    var label=spec[0],key=spec[1],sideClass=spec[2].toLowerCase(),obj=p20.scenarios?.[key]||{};
+    var evidence=Array.isArray(obj.evidence)?obj.evidence.slice(0,3):[];
+    var next=Array.isArray(obj.nextConfirmations)?obj.nextConfirmations.slice(0,2):[];
+    var lines=evidence.concat(next.map(function(x){return "NEXT · "+x;}));
+    if(!lines.length)lines=["No specialized evidence is active."];
+    var status=String(obj.status||"WATCH").toUpperCase();
+    var score=obj.alignmentScore!=null?String(obj.alignmentScore):"—";
+    return '<div class="mp20-card '+sideClass+'">'+
+      '<div class="k"><span>'+safeHtmlLocal(label)+' SCENARIO</span><span class="score">'+safeHtmlLocal(score)+'</span></div>'+
+      '<div class="mp20-status">'+safeHtmlLocal(status)+'</div>'+
+      '<div class="mp20-list">'+lines.map(function(x){return '<span>• '+safeHtmlLocal(x)+'</span>'}).join("")+'</div>'+
+    '</div>';
+  }).join("");
+
+  var active=String(p20.activeScenario?.side||"WAIT").toUpperCase();
+  var stateClass=active==="LONG"?"long":active==="SHORT"?"short":"wait";
+  if(state){
+    state.textContent=active;
+    state.className="livePlanSide mpdc-plan-side "+stateClass;
+  }
+
+  var tr=p20.transition||{};
+  var transitionText=String(tr.hardLock||"");
+  if(Array.isArray(tr.waitCondition)&&tr.waitCondition.length)transitionText+=" "+tr.waitCondition.slice(0,2).join(" ");
+  if(active==="LONG"&&Array.isArray(tr.longTrigger)&&tr.longTrigger.length)transitionText+=" LONG next: "+tr.longTrigger.slice(0,2).join(" ");
+  if(active==="SHORT"&&Array.isArray(tr.shortTrigger)&&tr.shortTrigger.length)transitionText+=" SHORT next: "+tr.shortTrigger.slice(0,2).join(" ");
+  setTextLocal("mp20Transition",transitionText||"No state transition guidance available.");
+  setTextLocal("mp20SnapshotId",String(p20.snapshotId||"—"));
+}
+
 function renderFinalDecision(d){
   if(!d)return;
 
@@ -5867,6 +5956,7 @@ function renderFinalDecision(d){
       stability=d.signalStability||{};
 
   renderDecisionIntelligence(d);
+  renderPhase20(d);
 
   // Probability context is live, but execution direction comes only from the
   // authoritative server decision after final confirmation and safety gates.
