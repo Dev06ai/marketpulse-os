@@ -694,6 +694,12 @@ async function buildDecisionSnapshot(symbol,interval,query,deviceId=null){
         interval,
         candleTs:candles?.[candles.length-1]?.t||null
       }).catch(()=>{}),0);
+      setTimeout(()=>signalNotifications.notifyAdminOpportunity(storage,{
+        decision:finalDecision,
+        symbol,
+        interval,
+        candleTs:candles?.[candles.length-1]?.t||null
+      }).catch(()=>{}),0);
     }catch{}
 
     try{
