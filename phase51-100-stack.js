@@ -125,9 +125,13 @@ function evaluate(input={}){
   const aged=Boolean(input.signalAgeExpired??ttlResult.expired);
   if(aged&&!q.blockers.includes("SIGNAL_EXPIRED"))q.blockers.push("SIGNAL_EXPIRED");
   const rawCalibration=Number(input.calibration?.probability);
-  const calibrated=Number.isFinite(rawCalibration)?u.probability(rawCalibration<=1?rawCalibration*100:rawCalibration):null;
+  const normalizedProbability=Number.isFinite(rawCalibration)?u.probability(rawCalibration<=1?rawCalibration*100:rawCalibration):null;
+  const calibrationSource=String(input.calibration?.source||"");
+  const calibrated=normalizedProbability!=null&&calibrationSource==="CALIBRATED"?normalizedProbability:null;
+  const empirical=normalizedProbability!=null&&calibrationSource==="WALK_FORWARD_EMPIRICAL"?normalizedProbability:null;
+  const probability=calibrated??empirical;
   const relative=u.probability(Math.max(0,Math.min(100,Math.max(q.dir.long,q.dir.short)*.75+q.coverage.coverage*.25)));
-  const confidence=calibrated??relative;
+  const confidence=probability??relative;
   const expectancy=p74.evaluate(input.expectancy||{});
   const expectancyProbability=calibrated==null?null:calibrated/100;
   const expectancyGate=p65.evaluate({
@@ -147,14 +151,14 @@ function evaluate(input={}){
     flow:Boolean(input.flowEvidence??(s.flow?.cvdState||s.flow?.takerImbalance!=null)),
     mtf:mtfAligned,trigger,invalidation,levels:levelsValid,risk:riskClear,
     anomaly:anomalyClear,exchange:exchange.healthy,portfolio:!portfolio.blocked,correlation:!correlation.highCorrelation,eventRisk:!eventRisk.blocked,leverage:!leverageResult.blocked,uncertainty:!uncertainty.uncertain,
-    calibrated:calibrated!=null,expectancy:expectancyGate.pass,publicReadiness:freeGate.ready
+    calibrated:probability!=null,expectancy:expectancyGate.pass,publicReadiness:freeGate.ready
   }});
   const leverageClear=!leverageResult.blocked;
-  const publicAllowed=qualification.eligible&&!aged&&Boolean(expectancyGate.pass)&&!uncertainty.uncertain&&!portfolio.blocked&&exchange.healthy&&leverageClear&&freeGate.ready;
+  const publicAllowed=qualification.eligible&&!aged&&probability!=null&&Boolean(expectancyGate.pass)&&!uncertainty.uncertain&&!portfolio.blocked&&exchange.healthy&&leverageClear&&freeGate.ready;
   const publicAction=publicAllowed?q.dominant:"WAIT";
   const publicBlockers=u.unique([
     ...q.blockers,
-    ...(calibrated==null?["CALIBRATION_NOT_AVAILABLE"]:[]),
+    ...(probability==null?["PROBABILITY_EVIDENCE_NOT_AVAILABLE"]:[]),
     ...(expectancyGate.pass?[]:["EXPECTANCY_GATE"]),
     ...(uncertainty.uncertain?uncertainty.reasons:[]),
     ...(portfolio.blocked?["PORTFOLIO_RISK"]:[]),
@@ -176,7 +180,7 @@ function evaluate(input={}){
       blockers:publicBlockers,ageMs,ttlMs,realMoneyUse:"DECISION_SUPPORT_ONLY",automaticExecutionEnabled:false
     },
     gate:{qualified:publicGate.publicSignalAllowed,candidateQualified:q.qualified&&!aged,blockers:u.unique(publicBlockers)},
-    diagnostics:{relativeConfidence:relative,calibratedConfidence:calibrated,expectancyProbability,
+    diagnostics:{relativeConfidence:relative,calibratedConfidence:calibrated,empiricalConfidence:empirical,expectancyProbability,
       mtf:mtfResult,trigger:triggerResult,invalidation:invalidationResult,levels:levelResult,
       leverage:leverageResult,ttl:ttlResult,chop:chopResult,expectancy,expectancyGate,uncertainty,correlation,portfolio,eventRisk,exchange,
       checklist,qualification,publicReadiness:freeGate,publicGate}
