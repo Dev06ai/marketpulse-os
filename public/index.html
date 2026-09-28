@@ -4141,9 +4141,20 @@ function canonicalFlowSnapshot(){
 }
 function queueLiveUiSync(){
   if(state.liveUiFrame)return;
+  var now=Date.now(),last=Number(state.liveUiLastPaintTs||0);
+  if(last&&now-last<180){
+    if(!state.liveUiDeferredTimer){
+      state.liveUiDeferredTimer=setTimeout(function(){
+        state.liveUiDeferredTimer=null;
+        queueLiveUiSync();
+      },Math.max(20,180-(now-last)));
+    }
+    return;
+  }
   state.liveUiFrame=requestAnimationFrame(function(){
     state.liveUiFrame=0;
     if(!state.canonicalMarket)return;
+    state.liveUiLastPaintTs=Date.now();
 
     var liveDecision=state.finalDecision;
     var model=null;
@@ -4324,11 +4335,14 @@ function runCanonicalSyncPulse(reason){
   cm.dataAgeMs=age;
   cm.freshnessMs=age;
 
-  // Keep only the tiny status indicator moving on the watchdog cadence.
+  // Do not rewrite the status label on every watchdog tick. The exchange
+  // stream already updates the canonical frame; changing this text every second
+  // causes unnecessary layout/paint work and visible flicker.
   var ds=$("dataState");
   if(ds){
-    var ageText=age==null?"WAITING":(age<1000?"<1s":Math.floor(age/1000)+"s");
-    ds.textContent="Live · synchronized · data "+ageText;
+    var transport=String(state.liveTransport||"").toUpperCase();
+    var liveText=transport==="DIRECT_BYBIT"?"Live · direct exchange":"Live · synchronized";
+    if(ds.textContent!==liveText)ds.textContent=liveText;
     ds.dataset.liveAgeMs=String(age==null?"":age);
     ds.dataset.liveSeq=String(Number(cm.seq||0));
   }
@@ -5356,7 +5370,7 @@ async function renderLiveSignalSummary(d,model){
 
   var meta=$("finalEngineMeta");
   if(meta){
-    var metaText="LIVE DIRECTION "+side+" "+confidence+"% · execution gate "+String(d.deploymentGate?.state||"PAPER_ONLY");
+    var metaText="LIVE DIRECTION "+side+" "+confidence+"% · synchronized to price action + flow";
     if(meta.textContent!==metaText)meta.textContent=metaText;
   }
 
@@ -5364,9 +5378,6 @@ async function renderLiveSignalSummary(d,model){
   if(thesis){
     var thesisText="Live directional model: "+side+" "+confidence+"%. "+
       "This direction is synchronized to the current price-action and live flow frame.";
-    if(d.deploymentGate?.state&&String(d.deploymentGate.state).toUpperCase()!=="READY"){
-      thesisText+=" Execution gate: "+String(d.deploymentGate.state)+".";
-    }
     if(thesis.textContent!==thesisText)thesis.textContent=thesisText;
   }
 
@@ -5405,15 +5416,16 @@ function renderFinalDecision(d){
   // Main signal/Decision presentation always comes from the same live snapshot.
   renderLiveSignalSummary(d,liveModel);
   renderLiveDirectionalModel(d,liveModel);
-  $("mScore").textContent=fmt(m.confluenceScore);
-  $("quality").textContent=fmt(m.confluenceScore)+"/100";
+  var liveScore=Math.round(displayConfidence);
+  $("mScore").textContent=String(liveScore);
+  $("quality").textContent=String(liveScore)+"/100";
   $("quality").style.color=accent;
 
   // Remove the old full-render trigger based on updatedAt. Only genuinely
   // structural decision changes are allowed to repaint the heavy DOM.
   var structuralKey=[
-    d.state,
-    d.action,
+    // Live direction/probabilities are rendered by the lightweight live model.
+    // They must not trigger a heavy Decision Center repaint on every tick.
     d.liveSignalEligible,
     m.type,
     m.regime,
@@ -5426,8 +5438,7 @@ function renderFinalDecision(d){
     lv.rr,
     d.tradeStyle,
     gate.state,
-    stability.state,
-    liveModel.candidate
+    stability.state
   ].map(function(x){return x==null?"":String(x)}).join("|");
 
   var structuralChanged=state._lastRenderedFinalStructuralKey!==structuralKey;
@@ -5446,11 +5457,11 @@ function renderFinalDecision(d){
   // Explain the distinction clearly in the Decision Center.
   $("thesisTitle").textContent=displaySide+" DIRECTIONAL LEAN";
   $("thesisState").textContent=(stability.state==="CONFIRMING"?"CONFIRMING · ":"")+
-    (d.state||"WAITING")+" · "+displaySide+" "+displayConfidence+"%";
+    "LIVE DIRECTION · "+displaySide+" "+displayConfidence+"%";
   $("thesisScore").textContent=fmt(m.confluenceScore)+"/100";
 
-  var thesisText=Array.isArray(ev.thesis)?ev.thesis.join(" "):"Live directional model is following the current market state.";
-  thesisText+=" Directional model: "+displaySide+" ("+displayConfidence+"%).";
+  var thesisText="Live directional model: "+displaySide+" ("+displayConfidence+"%). "+
+    "Synchronized to the current price-action and live flow frame.";
   if(stability.state==="CONFIRMING"){
     thesisText+=" Engine confirmation: "+Number(stability.confirmations||0)+"/"+Number(stability.required||2)+".";
   }
@@ -6307,16 +6318,21 @@ document.addEventListener("visibilitychange",function(){
 // All live surfaces render from the same canonical frame between deep decision refreshes.
 setInterval(function(){
   if(document.visibilityState!=="visible")return;
-  var stream=state.liveChartStream;
+  var now=Date.now(),stream=state.liveChartStream;
   var fresh=Boolean(stream&&stream.connected&&
     Number.isFinite(Number(stream.lastTickAt))&&
-    Date.now()-Number(stream.lastTickAt)<1500);
+    now-Number(stream.lastTickAt)<1500);
 
   if(fresh){
-    runCanonicalSyncPulse("one-second-watchdog");
+    runCanonicalSyncPulse("watchdog");
   }else{
-    loadFastTicker();
-    runCanonicalSyncPulse("one-second-recovery");
+    // Recovery requests are throttled so a dropped websocket cannot create a
+    // request/render storm or trigger the exchange/API rate limiter.
+    if(now-Number(state.lastFastTickerRecoveryAt||0)>=3000){
+      state.lastFastTickerRecoveryAt=now;
+      loadFastTicker();
+    }
+    runCanonicalSyncPulse("recovery");
   }
 
   if(!state.market&&!state.busy&&!initialBootTimer)scheduleInitialBoot(0);
@@ -6327,12 +6343,14 @@ setInterval(function(){
 setInterval(function(){
   if(document.visibilityState!=="visible")return;
   if(state.activeView==="overview"&&!state.busy)loadFinalDecision();
-},5000);
+},15000);
 
 setInterval(function(){
   if(document.visibilityState!=="visible")return;
+  // Core analysis is the slow/enrichment layer. The canonical exchange stream
+  // already owns the live price; do not rebuild the dashboard every 30 seconds.
   if(state.activeView==="overview"&&!state.busy)loadCore();
-},30000);
+},60000);
 
 setInterval(function(){if(document.visibilityState!=="visible")return; if((state.activeView==="overview"||state.activeView==="flow")&&!state.flowBusy)loadFlow(true); if(state.activeView==="scanner"&&(!state.scan||!state.scan.length))loadScan(true); if(state.activeView==="trade-radar")loadTradeRadar(); if(state.activeView==="autotrader"){loadAutoTrader();loadBotTradeHistory()} if(state.activeView==="execution")loadExecution(); if(state.activeView==="portfolio")loadPortfolio(); if(state.activeView==="edge")loadEdge(); if(state.activeView==="brain"){loadPhase7();loadPhase7Health()}},15000);
 
