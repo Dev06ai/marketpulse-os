@@ -5460,123 +5460,48 @@ function getLiveDirectionalSnapshot(d){
 }
 
 function getConditionalTradeLevels(d,p){
-  d=d||{};
-  p=p||{};
-  var usable=function(x){
-    return x&&typeof x==="object"&&(
-      Number.isFinite(Number(x.entry))||
-      Number.isFinite(Number(x.entryLow))||
-      Number.isFinite(Number(x.entryHigh))||
-      Number.isFinite(Number(x.stop))||
-      Number.isFinite(Number(x.tp1))||
-      Number.isFinite(Number(x.tp2))
-    );
-  };
-  var direct=usable(d.levels)?d.levels:null;
-  var conditional=usable(d.conditionalLevels)?d.conditionalLevels:null;
-  var evidence=usable(d.candidateEvidence?.levels)?d.candidateEvidence.levels:null;
-  var analysis=usable(d.analysis)?d.analysis:null;
-  // Existing levels are used only when they belong to the same stabilized side.
-  // Otherwise regenerate the conditional map for the displayed direction.
-  var existing=null;
+  d=d||{};p=p||{};
+  var action=String(d.action||"").toUpperCase();
+  var executionReady=Boolean(
+    d.liveSignalEligible===true &&
+    d.state==="READY" &&
+    (action==="LONG"||action==="SHORT") &&
+    String(d.signalStability?.state||"").toUpperCase()==="CONFIRMED"
+  );
+  var side=executionReady
+    ?action
+    :String(d.candidateEvidence?.action||d.rawAction||"WAIT").toUpperCase();
+  if(side!=="LONG"&&side!=="SHORT")return {valid:false,side:"WAIT",reason:"NO_DIRECTION"};
 
-  // Deterministic client-side fallback mirrors the market-engine's published
-  // level construction when the API response has a directional setup but its
-  // level object was stripped or only partially populated by the backend.
-  var side=String(p.stableSide||p.candidate||d.rawAction||d.analysis?.side||d.market?.side||"WAIT").toUpperCase();
-  if(side!=="LONG"&&side!=="SHORT")return {};
-  var sources=[direct,conditional,evidence,analysis].filter(Boolean);
-  existing=sources.find(function(x){
-    var sx=String(x?.side||"").toUpperCase();
-    return !sx||sx===side;
-  })||null;
-  var price=validLevel(p.livePrice)||validLevel(d.analysis?.price)||validLevel(d.market?.price);
-  if(price===null)return {};
+  // The server is authoritative. Do not reconstruct TP/SL from the live price
+  // or from raw analysis here: doing so was the source of inconsistent maps.
+  var source=executionReady
+    ?(d.levels&&typeof d.levels==="object"?d.levels:null)
+    :(d.conditionalLevels&&typeof d.conditionalLevels==="object"
+      ?d.conditionalLevels
+      :(d.candidateEvidence?.levels&&typeof d.candidateEvidence.levels==="object"?d.candidateEvidence.levels:null));
+  if(!source)return {valid:false,side,reason:"NO_SERVER_LEVEL_MAP"};
 
-  var atrPct=Number(d.analysis?.atrPct);
-  var atr=Number.isFinite(atrPct)&&atrPct>0?price*atrPct/100:price*.005;
-  atr=Math.max(atr,price*.0025);
+  var entryLow=validLevel(source.entryLow),entryHigh=validLevel(source.entryHigh);
+  var entry=validLevel(source.entry||(entryLow!==null&&entryHigh!==null?(entryLow+entryHigh)/2:null));
+  var stop=validLevel(source.stop),tp1=validLevel(source.tp1),tp2=validLevel(source.tp2);
+  if(entry===null||stop===null||tp1===null||tp2===null)return {valid:false,side,reason:"LEVELS_INCOMPLETE"};
 
-  var ms=d.analysis?.marketStructure||{};
-  var setup=ms.setup||ms.strategySetup||{};
-  var reaction=d.reactionMap?.active;
-  var reactionSide=String(reaction?.action||"").toUpperCase();
-  var rangeLow=validLevel(d.analysis?.rangeLow);
-  var rangeHigh=validLevel(d.analysis?.rangeHigh);
-  var resistance=validLevel(ms.nearestResistance);
-  var support=validLevel(ms.nearestSupport);
+  var risk=Math.abs(entry-stop),rr1=Math.abs(tp1-entry)/Math.max(risk,1e-9),rr2=Math.abs(tp2-entry)/Math.max(risk,1e-9);
+  var minRR=Number.isFinite(Number(d?.levelSafety?.minimumRR))
+    ?Number(d.levelSafety.minimumRR):1.5;
+  var valid=side==="LONG"
+    ?stop<entry&&tp1>entry&&tp2>tp1
+    :stop>entry&&tp1<entry&&tp2<tp1;
+  if(rr1+1e-9<minRR||rr2<=rr1)valid=false;
 
-  var entryLow=null,entryHigh=null,triggerStop=null,source="ENGINE FALLBACK";
-  if(reaction&&reactionSide===side){
-    var rlo=validLevel(reaction.low),rhi=validLevel(reaction.high);
-    if(rlo!==null&&rhi!==null){
-      entryLow=Math.min(rlo,rhi);entryHigh=Math.max(rlo,rhi);
-      triggerStop=validLevel(reaction.invalidation);
-      source="REACTION MAP";
-    }
-  }
-
-  if(entryLow===null||entryHigh===null){
-    if(side==="LONG"){entryLow=price-.25*atr;entryHigh=price+.10*atr}
-    else{entryLow=price-.10*atr;entryHigh=price+.25*atr}
-  }
-
-  var entry=(entryLow+entryHigh)/2;
-  var risk=1.15*atr;
-  var stop=triggerStop;
-  if(stop===null){
-    stop=side==="LONG"
-      ?Math.min(price-risk,rangeLow!==null?rangeLow-.15*atr:price-risk)
-      :Math.max(price+risk,rangeHigh!==null?rangeHigh+.15*atr:price+risk);
-  }
-
-  var actualRisk=Math.abs(entry-stop);
-  if(!Number.isFinite(actualRisk)||actualRisk<=0){
-    stop=side==="LONG"?price-risk:price+risk;
-    actualRisk=Math.abs(entry-stop);
-  }
-
-  var minTarget=actualRisk*1.6;
-  var levelTarget=side==="LONG"
-    ?(resistance!==null&&resistance>price?resistance:null)
-    :(support!==null&&support<price?support:null);
-
-  var tp1=levelTarget!==null&&Math.abs(levelTarget-entry)>=minTarget
-    ?levelTarget
-    :(side==="LONG"?price+minTarget:price-minTarget);
-
-  var tp2=side==="LONG"
-    ?price+Math.max(actualRisk*2.4,2.1*atr)
-    :price-Math.max(actualRisk*2.4,2.1*atr);
-
-  var fallback={
-    side,
-    entryLow,entryHigh,entry,
-    stop,tp1,tp2,
-    riskDistance:Math.abs(entry-stop),
-    target1Distance:Math.abs(tp1-entry),
-    rr:Math.abs(tp1-entry)/Math.max(Math.abs(entry-stop),1e-9),
-    source
-  };
-  // Prefer authoritative values field-by-field. An object can contain one
-  // valid field while leaving the others undefined; Object.assign() would
-  // otherwise overwrite valid fallback values with undefined.
-  var prefer=function(key,fallbackValue){
-    var n=Number(existing?.[key]);
-    return Number.isFinite(n)&&n>0?n:fallbackValue;
-  };
   return {
-    side:String(existing?.side||side).toUpperCase(),
-    entryLow:prefer("entryLow",fallback.entryLow),
-    entryHigh:prefer("entryHigh",fallback.entryHigh),
-    entry:prefer("entry",fallback.entry),
-    stop:prefer("stop",fallback.stop),
-    tp1:prefer("tp1",fallback.tp1),
-    tp2:prefer("tp2",fallback.tp2),
-    riskDistance:prefer("riskDistance",fallback.riskDistance),
-    target1Distance:prefer("target1Distance",fallback.target1Distance),
-    rr:prefer("rr",fallback.rr),
-    source:String(existing?.source||source)
+    valid,side,entryLow,entryHigh,entry,stop,tp1,tp2,
+    riskDistance:risk,target1Distance:Math.abs(tp1-entry),
+    rr:Number(rr1.toFixed(4)),rr1,rr2,
+    source:String(source.source||"CONSERVATIVE LEVEL BUILDER"),
+    executionReady,
+    reason:valid?null:"LEVEL_RISK_INVARIANT_FAILED"
   };
 }
 
@@ -5593,13 +5518,20 @@ function renderLiveDirectionalModel(d,model){
   setText("probLongBarValue",p.long+"%");setText("probShortBarValue",p.short+"%");setText("probWaitBarValue",p.wait+"%");
   setBar("probLongBar",p.long);setBar("probShortBar",p.short);setBar("probWaitBar",p.wait);
   var stableSide=String(p.stableSide||"").toUpperCase();
-  setText("probLongText",stableSide==="LONG"?"current stabilized direction":"secondary");
-  setText("probShortText",stableSide==="SHORT"?"current stabilized direction":"secondary");
-  setText("probWaitText",p.wait>=20?"high gate/uncertainty":"watch");
+  var finalAction=String(d?.action||"").toUpperCase();
+  var executionReady=Boolean(
+    d?.liveSignalEligible===true &&
+    d?.state==="READY" &&
+    (finalAction==="LONG"||finalAction==="SHORT") &&
+    String(d?.signalStability?.state||"").toUpperCase()==="CONFIRMED"
+  );
+  setText("probLongText",stableSide==="LONG"?"stabilized live bias":"secondary");
+  setText("probShortText",stableSide==="SHORT"?"stabilized live bias":"secondary");
+  setText("probWaitText",executionReady?"execution ready":"no-trade gate");
   var status=$("liveDecisionStatus");if(status){
-    var stxt=String(p.dominant||"");
+    var stxt=executionReady?finalAction:("WAIT · "+(String(d?.deploymentGate?.state||"BLOCKED").toUpperCase()));
     if(status.textContent!==stxt)status.textContent=stxt;
-    var scls="liveDecisionStatus "+(stableSide==="LONG"?"livePositive":stableSide==="SHORT"?"liveNegative":"");
+    var scls="liveDecisionStatus "+(executionReady?(finalAction==="LONG"?"livePositive":"liveNegative"):"");
     if(status.className!==scls)status.className=scls;
   }
   var flowItems=[
@@ -5625,8 +5557,12 @@ function renderLiveDirectionalModel(d,model){
 
   var candidate=String(p.stableSide||p.candidate||"WAIT").toUpperCase();
   var plan=getConditionalTradeLevels(d,p);
-  var sideClass=candidate==="LONG"?"long":candidate==="SHORT"?"short":"wait";
-  var ps=$("livePlanSide");if(ps){ps.textContent=candidate;ps.className="livePlanSide "+sideClass}
+  var planSide=executionReady?finalAction:"WAIT";
+  var planClass=planSide==="LONG"?"long":planSide==="SHORT"?"short":"wait";
+  var ps=$("livePlanSide");if(ps){
+    ps.textContent=planSide;
+    ps.className="livePlanSide "+planClass;
+  }
   setText("livePlanPrice",Number.isFinite(Number(p.livePrice))?fmt(p.livePrice):"—");
 
   var elo=validLevel(plan.entryLow),ehi=validLevel(plan.entryHigh),entry=validLevel(plan.entry);
@@ -5645,11 +5581,17 @@ function renderLiveDirectionalModel(d,model){
   setText("livePlanTp2",tp2!==null?fmt(tp2):"—");
   setText("livePlanRr",Number.isFinite(rr)&&rr>0?rr.toFixed(2)+"R":"—");
   var planStatus=$("livePlanStatus");
-  if(planStatus)planStatus.textContent=(candidate==="LONG"||candidate==="SHORT")
-    ?((elo!==null&&ehi!==null)
-      ?("CONDITIONAL ENTRY MAP · "+String(plan.source||"MODEL")+" · GATE "+String(d.deploymentGate?.state||"WAITING"))
-      :"LEVEL MAP UNAVAILABLE")
-    :"WAITING FOR DIRECTION";
+  if(planStatus){
+    if(executionReady){
+      planStatus.textContent=(elo!==null&&ehi!==null)
+        ?("CONFIRMED ENTRY MAP · "+String(plan.source||"MODEL")+" · READY")
+        :"LEVEL MAP UNAVAILABLE";
+    }else{
+      planStatus.textContent=(plan.valid&&candidate!=="WAIT")
+        ?("CONDITIONAL "+candidate+" · NOT EXECUTABLE · GATE "+String(d.deploymentGate?.state||"WAITING"))
+        :"WAITING FOR VALIDATED SETUP";
+    }
+  }
   var thesis=d?.evidence?.thesis;
   if(Array.isArray(thesis))thesis=thesis.join(" ");
   var thesisText="";
@@ -5660,7 +5602,7 @@ function renderLiveDirectionalModel(d,model){
   if(Number.isFinite(p.orderBookImbalance))flowBits.push("book "+(p.orderBookImbalance>=0?"bid":"ask")+" pressure");
   if(Number.isFinite(p.takerImbalance))flowBits.push("taker "+(p.takerImbalance>=0?"buy":"sell")+" pressure");
   if(hasConditionalLevels){
-    thesisText="Conditional "+candidate+" setup";
+    thesisText=(executionReady?"Confirmed "+finalAction:"Conditional "+candidate)+" setup";
     if(entryRef)thesisText+=" · Entry "+entryRef+".";
     else thesisText+=".";
     if(flowBits.length)thesisText+=" Why: "+flowBits.slice(0,3).join(" · ")+".";
@@ -5674,17 +5616,24 @@ function renderLiveDirectionalModel(d,model){
   setText("livePlanThesis",thesisText);
   var inv=Array.isArray(d?.evidence?.invalidationScenario)?d.evidence.invalidationScenario.join(" "):d?.evidence?.invalidationScenario;
   if(!inv)inv=String(candidate==="LONG"?"Break the bullish structure / stop zone.":candidate==="SHORT"?"Reclaim the bearish trigger / stop zone.":"A fresh directional setup plus final safety checks.");
+  if(!executionReady&&!inv.toLowerCase().startsWith("invalidation"))inv="Not executable while the final gate is blocked. "+inv;
   if(stop!==null)inv="Invalidation: "+fmt(stop)+(inv? " · "+inv:"");
   setText("livePlanInvalidation",inv);
 }
 async function renderLiveSignalSummary(d,model){
   if(!d||!model)return;
-  var side=model.stableSide||(
-    Number(model.long)>=Number(model.short)?"LONG":"SHORT"
+  var contextSide=String(model.stableSide||(Number(model.long)>=Number(model.short)?"LONG":"SHORT")).toUpperCase();
+  var action=String(d?.action||"").toUpperCase();
+  var executionReady=Boolean(
+    d?.liveSignalEligible===true &&
+    d?.state==="READY" &&
+    (action==="LONG"||action==="SHORT") &&
+    String(d?.signalStability?.state||"").toUpperCase()==="CONFIRMED"
   );
+  var side=executionReady?action:"WAIT";
   var confidence=liveDirectionalConfidence(model);
-  var accent=side==="LONG"?"#4ade80":"#f87171";
-  var glow=side==="LONG"?"rgba(74,222,128,.18)":"rgba(248,113,133,.18)";
+  var accent=side==="LONG"?"#4ade80":side==="SHORT"?"#f87171":"#d09aff";
+  var glow=side==="LONG"?"rgba(74,222,128,.18)":side==="SHORT"?"rgba(248,113,133,.18)":"rgba(192,132,252,.18)";
 
   var call=$("mCall");
   if(call){
@@ -5697,7 +5646,8 @@ async function renderLiveSignalSummary(d,model){
 
   var bias=$("mBias");
   if(bias){
-    var b=side==="LONG"?"Live bullish direction":"Live bearish direction";
+    var b=executionReady?(side==="LONG"?"Confirmed bullish setup":"Confirmed bearish setup")
+      :"WAIT — "+(contextSide==="LONG"?"long":"short")+" bias is informational until final gates clear";
     if(bias.textContent!==b)bias.textContent=b;
     if(bias.style.color!==accent)bias.style.color=accent;
   }
@@ -5715,7 +5665,7 @@ async function renderLiveSignalSummary(d,model){
 
   var title=$("thesisTitle");
   if(title){
-    var titleText=side+" DIRECTIONAL LEAN";
+    var titleText=executionReady?side+" CONFIRMED":"WAIT / NO TRADE";
     if(title.textContent!==titleText)title.textContent=titleText;
   }
   var mpdcDirection=$("mpdcDirectionText");
@@ -5736,9 +5686,11 @@ async function renderLiveSignalSummary(d,model){
     var conditionalPlan=getConditionalTradeLevels(d,model);
     var hasEntry=validLevel(conditionalPlan.entryLow)!==null||validLevel(conditionalPlan.entry)!==null;
     var hasRisk=validLevel(conditionalPlan.stop)!==null;
-    var st=(hasEntry||hasRisk)
-      ?("CONDITIONAL "+side)
-      :(d.state==="READY"&&d.liveSignalEligible===true?("READY "+side):("DIRECTIONAL "+side));
+    var st=executionReady
+      ?("READY "+side)
+      :(hasEntry||hasRisk
+        ?("CONDITIONAL "+contextSide+" · WAIT")
+        :"WAIT / NO TRADE");
     var t=st+" · "+confidence+"%";
     if(stateText.textContent!==t)stateText.textContent=t;
     stateText.dataset.executionGate=gate;
@@ -5747,7 +5699,7 @@ async function renderLiveSignalSummary(d,model){
   var chip=$("thesisChips");
   if(chip){
     var html=[
-      '<span class="chip c">Direction: '+side+" "+confidence+'%</span>',
+      '<span class="chip c">Bias: '+contextSide+" "+confidence+'%</span>',
       '<span class="chip c">Flow: '+(d.evidence?.flowScore!=null?fmt(d.evidence.flowScore)+"/100":"LIVE")+'</span>',
       '<span class="chip c">Data: '+(d.data?.score!=null?fmt(d.data.score)+"/100":"LIVE")+'</span>',
       '<span class="chip c">Execution gate: '+String(d.deploymentGate?.state||"PAPER_ONLY")+'</span>'
@@ -5757,14 +5709,17 @@ async function renderLiveSignalSummary(d,model){
 
   var meta=$("finalEngineMeta");
   if(meta){
-    var metaText="LIVE DIRECTION "+side+" "+confidence+"% · synchronized to price action + flow";
+    var metaText=executionReady
+      ?("CONFIRMED "+side+" "+confidence+"% · synchronized to price action + flow")
+      :("WAIT · "+contextSide+" bias "+confidence+"% · final execution gates not cleared");
     if(meta.textContent!==metaText)meta.textContent=metaText;
   }
 
   var thesis=$("thesis");
   if(thesis){
-    var thesisText="Live directional model: "+side+" "+confidence+"%. "+
-      "This direction is synchronized to the current price-action and live flow frame.";
+    var thesisText=executionReady
+      ?("Confirmed "+side+" setup at "+confidence+"% · synchronized to price action + live flow.")
+      :("Current "+contextSide.toLowerCase()+" bias is informational only. No trade is authorized until the server-side decision and safety gates confirm it.");
     if(thesis.textContent!==thesisText)thesis.textContent=thesisText;
   }
 
@@ -5772,18 +5727,24 @@ async function renderLiveSignalSummary(d,model){
   if(primary){
     var primaryPlan=getConditionalTradeLevels(d,model);
     var pLo=validLevel(primaryPlan.entryLow),pHi=validLevel(primaryPlan.entryHigh),pEntry=validLevel(primaryPlan.entry);
-    var primaryText=(pLo!==null&&pHi!==null)
-      ?("Enter "+side+" only inside "+fmt(pLo)+" → "+fmt(pHi)+" when the setup confirms.")
-      :(pEntry!==null?"Reference entry "+fmt(pEntry)+" for the "+side+" setup.":side+" directional context from the current synchronized market frame.");
+    var primaryText=executionReady
+      ?((pLo!==null&&pHi!==null)
+        ?("Enter "+side+" only inside "+fmt(pLo)+" → "+fmt(pHi)+" while the confirmed setup remains valid.")
+        :(pEntry!==null?"Reference entry "+fmt(pEntry)+" for the "+side+" setup.":"Confirmed direction; wait for its entry condition."))
+      :(pLo!==null&&pHi!==null
+        ?("Conditional "+contextSide+" map only: "+fmt(pLo)+" → "+fmt(pHi)+". Do not treat this as an entry authorization.")
+        :"No entry — final confirmation/gate is not cleared.");
     if(primary.textContent!==primaryText)primary.textContent=primaryText;
   }
 
   var alternate=$("alternate");
   if(alternate){
     var altPlan=getConditionalTradeLevels(d,model),altStop=validLevel(altPlan.stop);
-    var alternateText=altStop!==null
-      ?("Invalidate / exit the thesis if price reaches "+fmt(altStop)+" or the confirming structure/flow breaks.")
-      :"The "+side+" thesis changes when the synchronized price/flow structure breaks.";
+    var alternateText=executionReady
+      ?(altStop!==null
+        ?("Invalidate / exit the thesis if price reaches "+fmt(altStop)+" or the confirming structure/flow breaks.")
+        :"The "+side+" thesis changes when the synchronized price/flow structure breaks.")
+      :"No executable SL/TP is active while the final gate is blocked. Wait for a confirmed setup.";
     if(alternate.textContent!==alternateText)alternate.textContent=alternateText;
   }
 }
@@ -5795,17 +5756,22 @@ function renderFinalDecision(d){
       pg=d.propGate||{},v=d.phase11_13||{},gate=d.deploymentGate||{},
       stability=d.signalStability||{};
 
-  // The visible directional signal is driven by the same live model that reads
-  // the canonical price/flow state. It is intentionally separate from the
-  // execution/deployment gate: the UI can show LONG/SHORT directional context
-  // even when execution remains blocked.
+  // Probability context is live, but execution direction comes only from the
+  // authoritative server decision after final confirmation and safety gates.
   var liveModel=getLiveDirectionalSnapshot(d);
-  var displaySide=liveModel.stableSide||(liveModel.long>=liveModel.short?"LONG":"SHORT");
+  var contextSide=String(liveModel.stableSide||(liveModel.long>=liveModel.short?"LONG":"SHORT")).toUpperCase();
+  var executionReady=Boolean(
+    d.liveSignalEligible===true &&
+    d.state==="READY" &&
+    (String(d.action||"").toUpperCase()==="LONG"||String(d.action||"").toUpperCase()==="SHORT") &&
+    String(d.signalStability?.state||"").toUpperCase()==="CONFIRMED"
+  );
+  var displaySide=executionReady?String(d.action).toUpperCase():"WAIT";
   var displayConfidence=liveDirectionalConfidence(liveModel);
-  var directionalLabel=displaySide+" "+displayConfidence+"%";
+  var directionalLabel=executionReady?(displaySide+" "+displayConfidence+"%"):("WAIT · "+contextSide+" bias "+displayConfidence+"%");
 
-  var accent=displaySide==="LONG"?"#4ade80":"#f87171";
-  var glow=displaySide==="LONG"?"rgba(74,222,128,.18)":"rgba(248,113,133,.18)";
+  var accent=displaySide==="LONG"?"#4ade80":displaySide==="SHORT"?"#f87171":"#d09aff";
+  var glow=displaySide==="LONG"?"rgba(74,222,128,.18)":displaySide==="SHORT"?"rgba(248,113,133,.18)":"rgba(192,132,252,.18)";
 
   // Main signal/Decision presentation always comes from the same live snapshot.
   renderLiveSignalSummary(d,liveModel);
@@ -5849,42 +5815,55 @@ function renderFinalDecision(d){
   renderReactionMap(d.reactionMap||ev.reactionMap||{});
 
   // Explain the distinction clearly in the Decision Center.
-  $("thesisTitle").textContent=displaySide+" DIRECTIONAL LEAN";
+  $("thesisTitle").textContent=executionReady?displaySide+" CONFIRMED":"WAIT / NO TRADE";
   // thesisState/thesisScore are owned by renderLiveSignalSummary(), so the
   // structural render must not overwrite them with a different snapshot.
-  var thesisText="Live directional model: "+displaySide+" ("+displayConfidence+"%). "+
-    "Synchronized to the current price-action and live flow frame.";
+  var thesisText=executionReady
+    ?("Confirmed "+displaySide+" setup ("+displayConfidence+"%). Synchronized to the canonical price-action + flow frame.")
+    :("WAIT / NO TRADE. Current live bias is "+contextSide+" ("+displayConfidence+"%), but the server-side final gates have not authorized execution.");
   if(stability.state==="CONFIRMING"){
-    thesisText+=" Engine confirmation: "+Number(stability.confirmations||0)+"/"+Number(stability.required||2)+".";
+    thesisText+=" Engine confirmation: "+Number(stability.confirmations||0)+"/"+Number(stability.required||3)+".";
   }
-  if(d.stale)thesisText+=" Final execution decision is stale; the displayed direction is live context, not an execution authorization.";
+  if(stability.state==="HOLDING"){
+    thesisText+=" Previous "+String(stability.side||contextSide)+" context is being held only for display; execution remains blocked.";
+  }
+  if(d.stale)thesisText+=" Decision data is stale; no trade signal is authorized.";
   $("thesis").textContent=thesisText;
 
   var livePlanForDecision=getConditionalTradeLevels(d,liveModel);
   var liveEntryLow=validLevel(livePlanForDecision.entryLow),liveEntryHigh=validLevel(livePlanForDecision.entryHigh);
   var liveStop=validLevel(livePlanForDecision.stop);
-  $("primary").textContent=(liveEntryLow!==null&&liveEntryHigh!==null)
-    ?("Enter "+displaySide+" only inside "+fmt(liveEntryLow)+" → "+fmt(liveEntryHigh)+" when the setup confirms.")
-    :(ev.primaryScenario||displaySide+" directional setup");
-  $("alternate").textContent=liveStop!==null
-    ?("Invalidate / exit at "+fmt(liveStop)+" or when the confirming price/flow structure breaks.")
-    :(ev.invalidationScenario||"Direction changes when the synchronized price/flow structure changes.");
+  $("primary").textContent=executionReady
+    ?((liveEntryLow!==null&&liveEntryHigh!==null)
+      ?("Enter "+displaySide+" only inside "+fmt(liveEntryLow)+" → "+fmt(liveEntryHigh)+" while the confirmed setup remains valid.")
+      :(ev.primaryScenario||"Confirmed direction; wait for the entry trigger."))
+    :(liveEntryLow!==null&&liveEntryHigh!==null
+      ?("Conditional "+contextSide+" map only: "+fmt(liveEntryLow)+" → "+fmt(liveEntryHigh)+". Do not treat this as an entry authorization.")
+      :"No entry — final confirmation and safety gates are not clear.");
+  $("alternate").textContent=executionReady
+    ?(liveStop!==null
+      ?("Invalidate / exit at "+fmt(liveStop)+" or when the confirming price/flow structure breaks.")
+      :(ev.invalidationScenario||"Direction changes when the synchronized price/flow structure changes."))
+    :"No executable SL/TP is active while the final gate is blocked.";
 
   var propLabel=pg.decision==="DISABLED"?"INACTIVE":pg.decision==="BLOCKED"?"BLOCKED":(pg.decision||"NOT EVALUATED");
   $("thesisChips").innerHTML=[
     ["HTF",ev.mtfScore!=null?fmt(ev.mtfScore)+"/100":null],
     ["Flow",ev.flowScore!=null?fmt(ev.flowScore)+"/100":null],
     ["Data",data.score!=null?fmt(data.score)+"/100":null],
-    ["Direction",displaySide+" "+displayConfidence+"%"],
+    ["Bias",contextSide+" "+displayConfidence+"%"],
     ["Execution gate",propLabel]
   ].map(function(x){return'<span class="chip c">'+x[0]+": "+(x[1]||"—")+"</span>"}).join("");
 
   // Trade levels remain conditional. They are not fabricated merely to force a signal.
-  $("entry").textContent=(lv.entryLow!=null&&displaySide===String(lv.side||displaySide).toUpperCase())
-    ?fmt(lv.entryLow)+" → "+fmt(lv.entryHigh):"Conditional";
-  $("stop").textContent=displaySide===String(lv.side||displaySide).toUpperCase()&&Number.isFinite(Number(lv.stop))?fmt(lv.stop):"—";
-  $("target").textContent=displaySide===String(lv.side||displaySide).toUpperCase()&&Number.isFinite(Number(lv.tp1))?fmt(lv.tp1):"—";
-  $("rr").textContent=displaySide===String(lv.side||displaySide).toUpperCase()&&Number.isFinite(Number(lv.rr))?Number(lv.rr).toFixed(2)+"R":"—";
+  var safeDisplayPlan=getConditionalTradeLevels(d,liveModel);
+  var safeEntryLow=validLevel(safeDisplayPlan.entryLow),safeEntryHigh=validLevel(safeDisplayPlan.entryHigh);
+  $("entry").textContent=(safeEntryLow!==null&&safeEntryHigh!==null)
+    ?fmt(safeEntryLow)+" → "+fmt(safeEntryHigh):(executionReady?"Conditional":"WAIT");
+  $("stop").textContent=executionReady&&validLevel(safeDisplayPlan.stop)!==null?fmt(safeDisplayPlan.stop):"—";
+  $("target").textContent=executionReady&&validLevel(safeDisplayPlan.tp1)!==null?fmt(safeDisplayPlan.tp1):"—";
+  $("rr").textContent=validLevel(safeDisplayPlan.tp1)!==null&&Number.isFinite(Number(safeDisplayPlan.rr))
+    ?Number(safeDisplayPlan.rr).toFixed(2)+"R":"—";
   $("tradeStyle").textContent=d.tradeStyle?String(d.tradeStyle)+" · "+String(d.interval||"").toUpperCase():"LIVE DIRECTIONAL";
 
   var s=v.summary||{},p=v.adaptive||{},resolvedTrades=Number(s.trades||0),minTrades=Number(s.sample?.minTrades||80),sampleReady=Boolean(s.sufficient)||resolvedTrades>=minTrades;
@@ -5897,15 +5876,21 @@ function renderFinalDecision(d){
   var gs=gate.state||p.mode||"PAPER_ONLY";
   if($("deploymentGate"))$("deploymentGate").textContent=gs;
   if($("mpdcDeploymentGate"))$("mpdcDeploymentGate").textContent=gs;
-  var gateReason="Execution gate: "+gs+". Directional context remains synchronized to live market data.";
+  var gateReason=executionReady
+    ?("Execution gate: "+gs+". Confirmed direction and levels are synchronized to the canonical market snapshot.")
+    :("Execution gate: "+gs+". Bias may update live, but no executable direction or SL/TP is authorized until final confirmation.");
   if($("deploymentReason"))$("deploymentReason").textContent=gateReason;
   if($("mpdcDeploymentReason"))$("mpdcDeploymentReason").textContent=gateReason;
   if($("validationChip"))$("validationChip").textContent=gs;
   $("adaptiveChip").textContent=isAdminUser()?"Adaptive: "+(p.mode||"collecting"):"Model status: live";
 
   $("finalEngineMeta").textContent=isAdminUser()
-    ?"Phase 9/10/11-13 · LIVE DIRECTION "+displaySide+" "+displayConfidence+"% · execution gate "+gs
-    :"Market model · live directional context "+displaySide+" "+displayConfidence+"% · execution gate "+gs;
+    ?(executionReady
+      ?"Phase 9/10/11-13 · CONFIRMED "+displaySide+" "+displayConfidence+"% · execution gate "+gs
+      :"Phase 9/10/11-13 · WAIT · "+contextSide+" bias "+displayConfidence+"% · execution gate "+gs)
+    :(executionReady
+      ?"Market model · confirmed "+displaySide+" "+displayConfidence+"% · execution gate "+gs
+      :"Market model · WAIT · "+contextSide+" bias "+displayConfidence+"% · execution gate "+gs);
 
   // Heavy chart redraw only on structural changes.
   if(typeof drawMain==="function"&&state._chartNeedsFinalRedraw){
