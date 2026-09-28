@@ -297,8 +297,16 @@ function analyze(c,ctx={}){
     reactionSweepConfirmed &&
     reactionActive?.action===side &&
     (!deriv || (
-      ((side==="LONG"&&cvdState==="BUYERS CONFIRM")||(side==="SHORT"&&cvdState==="SELLERS CONFIRM")) ||
-      Number(takerImbalance)>=0.08 || Number(orderBookImbalance)>=0.12
+      (side==="LONG" && (
+        cvdState==="BUYERS CONFIRM" ||
+        Number(takerImbalance)>=0.08 ||
+        Number(orderBookImbalance)>=0.12
+      )) ||
+      (side==="SHORT" && (
+        cvdState==="SELLERS CONFIRM" ||
+        Number(takerImbalance)<=-0.08 ||
+        Number(orderBookImbalance)<=-0.12
+      ))
     ))
   );
   if((side==="LONG"&&mtf4==="DOWNTREND")||(side==="SHORT"&&mtf4==="UPTREND")){
