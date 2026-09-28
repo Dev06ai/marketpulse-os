@@ -246,6 +246,21 @@ const DECISION_JOBS=new Map();
 const TRADE_RADAR_CACHE=new Map();
 const TRADE_RADAR_JOBS=new Map();
 const TRADE_RADAR_TTL=10000;
+
+async function getDecisionSnapshotCached(symbol,interval,searchParams,device){
+  const jobKey=String(symbol)+"|"+String(interval)+"|"+String(searchParams?.toString?.()||"")+"|"+String(device||"");
+  let job=DECISION_JOBS.get(jobKey);
+  if(!job){
+    job=buildDecisionSnapshot(symbol,interval,searchParams||new URLSearchParams(),device).finally(()=>{
+      if(DECISION_JOBS.get(jobKey)===job)DECISION_JOBS.delete(jobKey);
+    });
+    DECISION_JOBS.set(jobKey,job);
+  }
+  return Promise.race([
+    job,
+    new Promise((_,reject)=>setTimeout(()=>reject(new Error("DECISION_ENGINE_TIMEOUT")),14000))
+  ]);
+}
 const SIGNAL_STABILITY=new Map();
 const SIGNAL_CONFIRMATIONS_REQUIRED=2;
 const SIGNAL_RELEASE_MISSES=2;
@@ -1968,7 +1983,7 @@ const server=http.createServer(async(req,res)=>{
       if(TRADE_RADAR_JOBS.has(key)&&cached)return send(res,200,{...cached.payload,cache:"stale",stale:true,cacheAgeMs:ts-cached.ts});
       const job=(async()=>{
         const [decision,marketState]=await Promise.all([
-          buildDecisionSnapshot(symbol,interval,u.searchParams,requestDevice(req)),
+          getDecisionSnapshotCached(symbol,interval,u.searchParams,requestDevice(req)),
           phase18MarketState.snapshot(symbol)
         ]);
         const radar=phase18Opportunity.evaluate(decision,marketState,{weekdayOnly:true,easyMode:true});
@@ -1991,18 +2006,7 @@ const server=http.createServer(async(req,res)=>{
       const symbol=(u.searchParams.get('symbol')||'BTCUSDT').toUpperCase(),interval=u.searchParams.get('interval')||'1h';
       if(!SYMBOLS.includes(symbol)||!['15m','30m','1h','4h','1d'].includes(interval))return send(res,400,{ok:false,error:'Unsupported symbol or interval'});
       try{
-        const jobKey=String(symbol)+"|"+String(interval)+"|"+u.searchParams.toString()+"|"+requestDevice(req);
-        let job=DECISION_JOBS.get(jobKey);
-        if(!job){
-          job=buildDecisionSnapshot(symbol,interval,u.searchParams,requestDevice(req)).finally(()=>{
-            if(DECISION_JOBS.get(jobKey)===job)DECISION_JOBS.delete(jobKey);
-          });
-          DECISION_JOBS.set(jobKey,job);
-        }
-        const payload=await Promise.race([
-          job,
-          new Promise((_,reject)=>setTimeout(()=>reject(new Error('DECISION_ENGINE_TIMEOUT')),14000))
-        ]);
+        const payload=await getDecisionSnapshotCached(symbol,interval,u.searchParams,requestDevice(req));
         return send(res,200,payload);
       }catch(e){return send(res,503,{ok:false,error:String(e.message||e),phase9:PHASE9_VERSION,phase10:PHASE10_VERSION})}
     }
