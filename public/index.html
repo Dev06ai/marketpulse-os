@@ -5125,7 +5125,7 @@ function buildGateDiagnostics(d){
   addGateDiag(rows,"Live directional context",(liveSide==="LONG"||liveSide==="SHORT")?"PASS":"INFO",
     (liveSide==="LONG"||liveSide==="SHORT")?liveSide+" "+liveConfidence+"% · synchronized to Decision Center":"WAIT",
     pendingSide&&pendingSide!==liveSide
-      ?("Watching "+pendingSide+" · "+pendingCount+"/8 confirmations before the displayed direction can flip.")
+      ?("Watching "+pendingSide+" · "+pendingCount+"/12 confirmations; 15s hold required before the displayed direction can flip.")
       :"This is the same stabilized live direction shown above.");
   addGateDiag(rows,"Final directional release",readySide?"PASS":"WAIT",
     readySide?side+" server decision is READY.":"Final server-gated direction is not released.",
@@ -5158,9 +5158,9 @@ function buildGateDiagnostics(d){
   var fresh=d.stale!==true;
   addGateDiag(rows,"Decision freshness",fresh?"PASS":"BLOCK",fresh?"Fresh decision":"Stale decision",
     fresh?"The latest decision was built from fresh data.":"A stale decision is intentionally suppressed until a fresh refresh succeeds.");
-  var stabilityState=pendingSide&&pendingSide!==liveSide?(pendingCount>=8?"PASS":"WAIT"):"PASS";
+  var stabilityState=pendingSide&&pendingSide!==liveSide?(pendingCount>=12?"PASS":"WAIT"):"PASS";
   addGateDiag(rows,"Live direction stability",stabilityState,
-    pendingSide&&pendingSide!==liveSide?(pendingSide+" pending · "+pendingCount+"/8"):(liveSide+" held"),
+    pendingSide&&pendingSide!==liveSide?(pendingSide+" pending · "+pendingCount+"/12 · 15s hold"):(liveSide+" held"),
     pendingSide&&pendingSide!==liveSide
       ?"The counter-direction must persist before the Decision Center changes direction."
       :"The displayed direction is held against micro-flips.");
@@ -5407,12 +5407,13 @@ function stabilizeLiveDirectionalModel(raw){
     if(pendingSide===rawSide)pendingCount++;
     else{pendingSide=rawSide;pendingCount=1;}
 
-    var lead=Math.abs(Number(raw.long)-Number(raw.short));
     var dwellElapsed=stableSince>0?now-stableSince:0;
-    var decisive=lead>=26;
-    var confirmationReady=pendingCount>=8&&dwellElapsed>=5000;
+    var confirmationReady=pendingCount>=12&&dwellElapsed>=15000;
 
-    if(decisive||confirmationReady){
+    // Never flip merely because one live tick has a large probability edge.
+    // The counter-direction must persist long enough to represent a genuine
+    // regime change rather than order-flow/microstructure noise.
+    if(confirmationReady){
       previousSide=rawSide;
       stableSince=now;
       pendingSide=null;
@@ -5433,7 +5434,7 @@ function stabilizeLiveDirectionalModel(raw){
     ?(stableConfidence>=60?"LONG LEAN":"LONG SLIGHT EDGE")
     :(stableConfidence>=60?"SHORT LEAN":"SHORT SLIGHT EDGE");
   model.wait=Math.max(0,100-Number(model.long)-Number(model.short));
-  model.stability={side:previousSide,pendingSide,pendingCount,required:8,dwellMs:stableSince?Math.max(0,now-stableSince):0};
+  model.stability={side:previousSide,pendingSide,pendingCount,required:12,minDwellMs:15000,dwellMs:stableSince?Math.max(0,now-stableSince):0};
   return model;
 }
 
@@ -5849,10 +5850,8 @@ function renderFinalDecision(d){
 
   // Explain the distinction clearly in the Decision Center.
   $("thesisTitle").textContent=displaySide+" DIRECTIONAL LEAN";
-  $("thesisState").textContent=(stability.state==="CONFIRMING"?"CONFIRMING · ":"")+
-    "LIVE DIRECTION · "+displaySide+" "+displayConfidence+"%";
-  $("thesisScore").textContent=String(liveScore)+"%";
-
+  // thesisState/thesisScore are owned by renderLiveSignalSummary(), so the
+  // structural render must not overwrite them with a different snapshot.
   var thesisText="Live directional model: "+displaySide+" ("+displayConfidence+"%). "+
     "Synchronized to the current price-action and live flow frame.";
   if(stability.state==="CONFIRMING"){
@@ -5861,8 +5860,15 @@ function renderFinalDecision(d){
   if(d.stale)thesisText+=" Final execution decision is stale; the displayed direction is live context, not an execution authorization.";
   $("thesis").textContent=thesisText;
 
-  $("primary").textContent=ev.primaryScenario||displaySide+" directional setup";
-  $("alternate").textContent=ev.invalidationScenario||"Direction changes when the synchronized price/flow structure changes.";
+  var livePlanForDecision=getConditionalTradeLevels(d,liveModel);
+  var liveEntryLow=validLevel(livePlanForDecision.entryLow),liveEntryHigh=validLevel(livePlanForDecision.entryHigh);
+  var liveStop=validLevel(livePlanForDecision.stop);
+  $("primary").textContent=(liveEntryLow!==null&&liveEntryHigh!==null)
+    ?("Enter "+displaySide+" only inside "+fmt(liveEntryLow)+" → "+fmt(liveEntryHigh)+" when the setup confirms.")
+    :(ev.primaryScenario||displaySide+" directional setup");
+  $("alternate").textContent=liveStop!==null
+    ?("Invalidate / exit at "+fmt(liveStop)+" or when the confirming price/flow structure breaks.")
+    :(ev.invalidationScenario||"Direction changes when the synchronized price/flow structure changes.");
 
   var propLabel=pg.decision==="DISABLED"?"INACTIVE":pg.decision==="BLOCKED"?"BLOCKED":(pg.decision||"NOT EVALUATED");
   $("thesisChips").innerHTML=[
