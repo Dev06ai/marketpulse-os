@@ -16,7 +16,9 @@ const p70=require("./phase70-anti-chop-cooldown");
 const p73=require("./phase73-uncertainty-coverage");
 const p74=require("./phase74-cost-aware-expectancy");
 const p80=require("./phase80-no-trade-quality");
+const p86=require("./phase86-symbol-correlation");
 const p87=require("./phase87-portfolio-risk");
+const p88=require("./phase88-event-risk");
 const p89=require("./phase89-exchange-health");
 const p90=require("./phase90-trader-checklist");
 const p99=require("./phase99-free-public-readiness");
@@ -134,7 +136,9 @@ function evaluate(input={}){
     costBps:input.costBps
   });
   const uncertainty=p73.evaluate(input.uncertainty||{});
+  const correlation=p86.evaluate(input.correlation||{});
   const portfolio=p87.evaluate(input.portfolio||{});
+  const eventRisk=p88.evaluate(input.eventRisk||{});
   const exchange=p89.evaluate(input.exchangeHealth||{});
   const checklist=p90.build(input.checklist||{});
   const freeGate=p99.gate(input.publicReadiness||{});
@@ -142,7 +146,7 @@ function evaluate(input={}){
     data:dataGood,structure:Boolean(input.setupEvidence??(s.analysis?.marketStructure?.setup||s.analysis?.setup)),
     flow:Boolean(input.flowEvidence??(s.flow?.cvdState||s.flow?.takerImbalance!=null)),
     mtf:mtfAligned,trigger,invalidation,levels:levelsValid,risk:riskClear,
-    anomaly:anomalyClear,exchange:exchange.healthy,portfolio:!portfolio.blocked,uncertainty:!uncertainty.uncertain,
+    anomaly:anomalyClear,exchange:exchange.healthy,portfolio:!portfolio.blocked,correlation:!correlation.highCorrelation,eventRisk:!eventRisk.blocked,leverage:!leverageResult.blocked,uncertainty:!uncertainty.uncertain,
     calibrated:calibrated!=null,expectancy:expectancyGate.pass,publicReadiness:freeGate.ready
   }});
   const leverageClear=!leverageResult.blocked;
@@ -174,7 +178,7 @@ function evaluate(input={}){
     gate:{qualified:publicGate.publicSignalAllowed,candidateQualified:q.qualified&&!aged,blockers:u.unique(publicBlockers)},
     diagnostics:{relativeConfidence:relative,calibratedConfidence:calibrated,expectancyProbability,
       mtf:mtfResult,trigger:triggerResult,invalidation:invalidationResult,levels:levelResult,
-      leverage:leverageResult,ttl:ttlResult,chop:chopResult,expectancy,expectancyGate,uncertainty,portfolio,exchange,
+      leverage:leverageResult,ttl:ttlResult,chop:chopResult,expectancy,expectancyGate,uncertainty,correlation,portfolio,eventRisk,exchange,
       checklist,qualification,publicReadiness:freeGate,publicGate}
   };
 }
