@@ -386,6 +386,25 @@ const CURRENT_VISUAL_PACK_20260927={
     {id:"DT_EXT_1382",label:"1.382 extension checkpoint",low:78830,high:78915,kind:"SUPPORT",sources:["1.382 = 78,872.8"],primaryAction:"LONG",primaryTrigger:"Confirmed reaction.",alternateAction:"SHORT",alternateTrigger:"Breakdown/retest failure.",invalidationText:"Acceptance below the extension."},
     {id:"DT_EXT_1618",label:"1.618 extension checkpoint",low:77755,high:77845,kind:"SUPPORT",sources:["1.618 = 77,800.7"],primaryAction:"LONG",primaryTrigger:"Confirmed reaction.",alternateAction:"SHORT",alternateTrigger:"Breakdown/retest failure.",invalidationText:"Acceptance below the extension."}
   ],
+  visualKnowledge:{
+    source:"2026-09-28 supplied screenshots",
+    modelRole:"TIME_BOUND_REFERENCE",
+    rules:[
+      "Use Daily/8H/2H/1H/weekly level confluence as location context; never treat any single level as an automatic signal.",
+      "The 2H OB / Range POC resistance around 85.6–86.0K is a reaction zone; bearish rejection requires current seller-side confirmation, while bullish acceptance requires a body-close and retest/hold.",
+      "The local Daily nPOC / bullish pivot around 84.0–84.4K is a reaction area; a sweep below followed by reclaim is a valid long-side reversal candidate for further live confirmation.",
+      "The marked 83.99–83.78K band is the local bullish invalidation region from the chart reference; sustained acceptance below it weakens that bullish scenario.",
+      "The 81.1K Daily OB and the 80.5–82.0K support cluster are major lower support references. The 75.5–77.0K green support / 8H OB region is a deeper support cluster if the corrective path extends.",
+      "For the ABC-down model, 0.618 and 0.786 are reaction checkpoints rather than assumed terminal targets; the chart marks the 1.0/C area near 80.6K as the common completion checkpoint, with 1.236/1.382/1.618 as sequential extension checkpoints if support fails.",
+      "A confirmed sweep/reclaim at a mapped support zone should be evaluated as a reversal setup even when the immediately preceding 15M trend is bearish; the prior trend is context, not an automatic veto.",
+      "A rising-channel / wave-4 support reaction can support a bullish continuation scenario, but it still requires current price structure, flow, data quality and risk confirmation."
+    ],
+    zones:[
+      {id:"DT_VISUAL_SUPPORT_80_82",label:"80.5–82.0K major support cluster",low:80500,high:82000,kind:"SUPPORT",sources:["green support box","Daily/8H context"],primaryAction:"LONG",primaryTrigger:"Sweep/reclaim and bullish displacement with constructive flow.",alternateAction:"SHORT",alternateTrigger:"Decisive breakdown and failed reclaim.",invalidationText:"Sustained acceptance below the cluster."},
+      {id:"DT_VISUAL_SUPPORT_75_77",label:"75.5–77.0K deeper support / 8H OB cluster",low:75500,high:77000,kind:"SUPPORT",sources:["green support box","8H OB"],primaryAction:"LONG",primaryTrigger:"Confirmed reaction at the cluster.",alternateAction:"SHORT",alternateTrigger:"Breakdown with failed retest.",invalidationText:"Sustained acceptance below the cluster."},
+      {id:"DT_VISUAL_2H_OB",label:"85.6–86.0K 2H OB / Range POC reaction zone",low:85600,high:86000,kind:"RESISTANCE",sources:["2H OB","Range POC"],primaryAction:"SHORT",primaryTrigger:"Sweep/rejection and bearish close with seller confirmation.",alternateAction:"LONG",alternateTrigger:"Acceptance above and bullish retest.",invalidationText:"Sustained acceptance above the zone."}
+    ]
+  },
   scenarios:[
     {id:"DT_ABC_DOWN",bias:"BEARISH",thesis:"The 1H chart explicitly labels an ABC Down structure with B near the 85.15K region and C projected toward 80.608K; the lower Fibonacci extensions are continuation checkpoints, not assumptions that every level must break.",confirmation:["rejection from the upper resistance/POC area","failure of the local bullish pivot","bearish body-close / failed retest","seller-side CVD/OI/order-flow confirmation"],invalidation:["clean acceptance back above the resistance confluence","local bullish structure reclaims and holds the marked invalidation band"],preferredZones:["DT_R1_2H_OB","DT_FIB_0618","DT_FIB_0786","DT_C_TARGET","DT_EXT_1236","DT_EXT_1382","DT_EXT_1618"]},
     {id:"DT_LOCAL_BULL_NESTED_12",bias:"BULLISH",thesis:"The 16m chart marks a local bullish option with nested 1,2s and a clear invalidation; the bullish interpretation requires the local pivot to hold and must be confirmed by current structure and flow.",confirmation:["support holds around the local pivot band","nested 1,2 structure remains intact","acceptance above 85,151 followed by the 85,820.7 Range POC","positive CVD/OI/order-book confirmation"],invalidation:["sustained acceptance below the 83,986.1–83,778.4 invalidation band"],preferredZones:["DT_LOCAL_BULL_PIVOT","DT_LOCAL_BULL_INVALIDATION","DT_R1_2H_OB","DT_R2_WEEKLY_NPOC"]}
