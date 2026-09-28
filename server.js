@@ -505,6 +505,7 @@ const ADMIN_ONLY_PATHS=new Set([
   '/api/execution/cancel',
   '/api/execution/close-sim',
   '/api/autotrader',
+  '/api/autotrader/history',
   '/api/autotrader/config',
   '/api/autotrader/arm',
   '/api/autotrader/pause',
