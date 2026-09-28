@@ -1529,7 +1529,7 @@ const server=http.createServer(async(req,res)=>{
             const cfg=autotrader.normalizeConfig(snap.bot);
             const gate=autotrader.botCycleGate(snap,cfg,body.decision||null);
             if(!gate.eligible)return send(res,409,{ok:false,error:"AUTOTRADER_BLOCKED",reasons:gate.reasons,strategy:gate.strategy,autotrader:snap});
-            const signal=autotrader.buildExecutionSignal(body.decision,{config:cfg});
+            const signal=autotrader.buildExecutionSignal(body.decision,{config:cfg,radar:body.radar||null,route:body.executionRoute||null});
             if(cfg.mode==="PAPER"&&snap.execution.mode!=="SIMULATION")return send(res,409,{ok:false,error:"BOT_EXECUTION_MODE_MISMATCH",expected:"SIMULATION",actual:snap.execution.mode});
             if(cfg.mode==="TESTNET"&&snap.execution.mode!=="TESTNET")return send(res,409,{ok:false,error:"BOT_EXECUTION_MODE_MISMATCH",expected:"TESTNET",actual:snap.execution.mode});
             if(cfg.mode==="LIVE"&&snap.execution.mode!=="LIVE")return send(res,409,{ok:false,error:"BOT_EXECUTION_MODE_MISMATCH",expected:"LIVE",actual:snap.execution.mode});
