@@ -2050,7 +2050,11 @@ var state={
   adminSignalPollTimer:null,
   pwaInstallPrompt:null,
   pwaInstalled:false,
-  flags:{}
+  flags:{},
+  canonicalMarket:null,
+  canonicalSyncSeq:0,
+  canonicalFlowRenderTimer:null,
+  canonicalLastRenderTs:0
 };
 
 function $(id){return document.getElementById(id)};
@@ -2369,6 +2373,11 @@ function installCriticalChartUI(){
 }
 installCriticalChartUI();
 setTimeout(function(){try{startLiveChartStream(state.symbol)}catch{}},50);
+setTimeout(function(){
+  if(state.market?.analysis?.price&& !state.canonicalMarket){
+    syncCanonicalMarketState({price:Number(state.market.analysis.price),ts:Number(state.market.updatedAt||Date.now()),change24h:state.market.analysis.change24h,candle:state.market.candles?.[state.market.candles.length-1],flow:state.market.derivatives||{},source:"INITIAL_SNAPSHOT"});
+  }
+},120);
 function fmt(x){var n=Number(x);return Number.isFinite(n)?n.toLocaleString(undefined,{maximumFractionDigits:2}):"—"}
 function pct(x){var n=Number(x);return Number.isFinite(n)?(n>=0?"+":"")+n.toFixed(2)+"%":"—"}
 function setStatus(text,kind){var el=$("statusBar");if(!el)return;el.textContent=text;el.className="statusBar"+(kind?" "+kind:"")}
@@ -4002,7 +4011,7 @@ function mergeFlowClient(primary,secondary){
 }
 
 function renderFlowView(data){
-  data=data||{};
+  data=mergeFlowClient(data,canonicalFlowSnapshot());
   var hist=Array.isArray(data.liveHistory)?data.liveHistory.filter(Boolean):[];
   var last=hist.length?hist[hist.length-1]:{},prev=hist.length>1?hist[hist.length-2]:{};
   var oi=data.oi!=null?Number(data.oi):(last.oi!=null?Number(last.oi):null);
@@ -4033,9 +4042,10 @@ async function loadFlow(force){
   try{
     var j=await api("/api/core-flow?symbol="+encodeURIComponent(state.symbol)+"&interval="+encodeURIComponent(state.interval),10000);
     if(j&&j.data){
-      state.market=state.market||{};state.market.derivatives=j.data;
-      writeViewCache(flowKey,{data:j.data});
-      renderMarketNoFlow();renderFlowView(j.data);drawFlowData(j.data);
+      state.market=state.market||{};
+      state.market.derivatives=mergeFlowClient(j.data,canonicalFlowSnapshot());
+      writeViewCache(flowKey,{data:state.market.derivatives});
+      renderMarketNoFlow();renderFlowView(state.market.derivatives);drawFlowData(state.market.derivatives);
       $("flowSource").textContent=j.data.available===false?"RETRYING":(j.data.provider||"LIVE");
       if(j.data.available===false)throw Error("Flow feed unavailable");
       state.flowAttempts=0;
@@ -4050,7 +4060,8 @@ async function loadFlow(force){
 }
 
 function renderMarketNoFlow(){
-  var d=state.market,der=d&&d.derivatives||{};if(!d)return;
+  var d=state.market; if(!d)return;
+  var der=canonicalFlowSnapshot();
   var hist=Array.isArray(der.liveHistory)?der.liveHistory.filter(Boolean):[],last=hist.length?hist[hist.length-1]:{},prev=hist.length>1?hist[hist.length-2]:{};
   var oi=der.oi!=null?Number(der.oi):(last.oi!=null?Number(last.oi):null);
   var cvd=der.cvdDelta!=null?Number(der.cvdDelta):(last.cvd!=null?Number(last.cvd):null);
@@ -4068,6 +4079,145 @@ function renderMarketNoFlow(){
   $("flowSource").textContent=der.provider?(String(der.provider).slice(0,44)+(der.livePointCount?" · LIVE":"")):(der.available?"LIVE":"CONNECTING");
 }
 
+function canonicalFlowSnapshot(){
+  var base=state.market&&state.market.derivatives&&typeof state.market.derivatives==="object"?state.market.derivatives:{};
+  var live=state.liveFlow&&typeof state.liveFlow==="object"?state.liveFlow:{};
+  var out=Object.assign({},base,live);
+  if(Number.isFinite(Number(live.cvd)))out.cvdDelta=Number(live.cvd);
+  if(Number.isFinite(Number(live.cvdRatio)))out.cvdRatio=Number(live.cvdRatio);
+  if(live.cvdState)out.cvdState=live.cvdState;
+  if(Number.isFinite(Number(state.canonicalMarket?.price)))out.price=Number(state.canonicalMarket.price);
+  if(Number.isFinite(Number(live.oi)))out.oi=Number(live.oi);
+  if(Number.isFinite(Number(live.fundingRate)))out.fundingRate=Number(live.fundingRate);
+  if(Number.isFinite(Number(live.liquidationTotal)))out.liquidationTotal=Number(live.liquidationTotal);
+  if(Number.isFinite(Number(live.longLiquidations)))out.longLiquidations=Number(live.longLiquidations);
+  if(Number.isFinite(Number(live.shortLiquidations)))out.shortLiquidations=Number(live.shortLiquidations);
+  if(live.liquidationBias)out.liquidationBias=live.liquidationBias;
+  if(Number.isFinite(Number(live.orderBookImbalance)))out.orderBookImbalance=Number(live.orderBookImbalance);
+  if(Number.isFinite(Number(live.takerImbalance)))out.takerImbalance=Number(live.takerImbalance);
+  out.marketSyncTs=Number(state.canonicalMarket?.ts||0)||null;
+  out.marketSyncSeq=Number(state.canonicalMarket?.seq||0)||0;
+  out.liveConnected=Boolean(state.liveChartStream?.connected);
+  out.syncSource="BYBIT_LIVE_CANONICAL";
+  return out;
+}
+function syncCanonicalMarketState(patch){
+  patch=patch||{};
+  var price=Number(patch.price);
+  var ts=Number(patch.ts||Date.now());
+  if(!Number.isFinite(price)||!Number.isFinite(ts))return null;
+  if(Number(state.canonicalMarket?.ts)>ts)return state.canonicalMarket;
+
+  var previous=state.canonicalMarket||{};
+  state.canonicalMarket={
+    seq:Number(previous.seq||0)+1,
+    symbol:state.symbol,
+    interval:state.interval,
+    chartInterval:state.chartInterval||state.interval,
+    price,
+    change24h:Number.isFinite(Number(patch.change24h))?Number(patch.change24h):previous.change24h,
+    ts,
+    candle:Object.assign({},patch.candle||previous.candle||{},{
+      t:Number(patch.candle?.t??previous.candle?.t??state.liveChartBucket??ts),
+      o:Number(patch.candle?.o??previous.candle?.o??price),
+      h:Number(patch.candle?.h??previous.candle?.h??price),
+      l:Number(patch.candle?.l??previous.candle?.l??price),
+      c:price,
+      v:Number(patch.candle?.v??previous.candle?.v??0)
+    }),
+    flow:Object.assign({},previous.flow||{},patch.flow||{}),
+    source:patch.source||previous.source||"BYBIT_LIVE",
+    freshnessMs:0
+  };
+
+  // Canonical price is authoritative for every selected-asset view.
+  state.liveChartPrice=price;
+  state.liveChartTs=ts;
+  state.liveMarketPrice=price;
+  state.liveMarketTs=ts;
+  if(Number.isFinite(Number(state.canonicalMarket.change24h)))state.liveMarketChange24h=Number(state.canonicalMarket.change24h);
+
+  state.market=state.market||{};
+  state.market.analysis=state.market.analysis||{};
+  state.market.analysis.price=price;
+  state.market.candles=Array.isArray(state.market.candles)?state.market.candles:[];
+  var mc=state.market.candles[state.market.candles.length-1];
+  if(mc&&chartBucketStart(mc.t,state.chartInterval||state.interval)===chartBucketStart(state.canonicalMarket.candle.t,state.chartInterval||state.interval)){
+    mc.c=price;
+    mc.h=Math.max(Number(mc.h)||price,Number(state.canonicalMarket.candle.h)||price);
+    mc.l=Math.min(Number(mc.l)||price,Number(state.canonicalMarket.candle.l)||price);
+    mc.v=Number(state.canonicalMarket.candle.v)||Number(mc.v)||0;
+  }
+
+  var flow=canonicalFlowSnapshot();
+  flow.price=price;
+  flow.lastPrice=price;
+  flow.updatedAt=ts;
+  flow.priceTs=ts;
+  state.liveFlow=Object.assign({},state.liveFlow||{},flow);
+  state.market.derivatives=flow;
+
+  // Keep the final decision's displayed market inputs synchronized without
+  // pretending that the decision itself was recomputed on every tick.
+  if(state.finalDecision){
+    state.finalDecision.market=Object.assign({},state.finalDecision.market||{},{
+      price,
+      livePrice:price,
+      marketSyncTs:ts
+    });
+    state.finalDecision.analysis=Object.assign({},state.finalDecision.analysis||{},{
+      price,
+      marketSyncTs:ts
+    });
+    state.finalDecision.derivatives=flow;
+    state.finalDecision.marketSyncTs=ts;
+  }
+
+  $("mPrice").textContent=fmt(price);
+  if(Number.isFinite(Number(state.canonicalMarket.change24h)))$("mChange").textContent=pct(Number(state.canonicalMarket.change24h))+" / 24h";
+  $("dataState").textContent="Live · synchronized";
+
+  renderMarketNoFlow();
+  renderFlowView(flow);
+
+  if(state.canonicalFlowRenderTimer)clearTimeout(state.canonicalFlowRenderTimer);
+  state.canonicalFlowRenderTimer=setTimeout(function(){
+    state.canonicalFlowRenderTimer=null;
+    drawFlowData(flow);
+  },120);
+
+  if(state.finalDecision){
+    renderLiveDirectionalModel(state.finalDecision);
+    scheduleLiveDecisionRender();
+  }
+  state.canonicalLastRenderTs=Date.now();
+  return state.canonicalMarket;
+}
+function reconcileServerMarketSnapshot(payload){
+  if(!payload||payload.symbol!==state.symbol)return;
+  var serverPrice=Number(payload.analysis?.price??payload.candles?.[payload.candles.length-1]?.c);
+  var serverTs=Number(payload.updatedAt||payload.candles?.[payload.candles.length-1]?.t||0);
+  var liveTs=Number(state.canonicalMarket?.ts||0);
+  if(Number.isFinite(serverPrice)&&(!liveTs||serverTs>liveTs)){
+    syncCanonicalMarketState({
+      price:serverPrice,
+      ts:Number.isFinite(serverTs)?serverTs:Date.now(),
+      change24h:payload.analysis?.change24h,
+      candle:payload.candles?.[payload.candles.length-1],
+      flow:payload.derivatives||{},
+      source:"SERVER_SNAPSHOT"
+    });
+  }else if(state.canonicalMarket){
+    // The server enriches structure/levels, but it never replaces a newer live tick.
+    state.market=Object.assign({},payload,state.market||{});
+    state.market.analysis=Object.assign({},payload.analysis||{},state.market.analysis||{},{
+      price:state.canonicalMarket.price,
+      marketSyncTs:state.canonicalMarket.ts
+    });
+    state.market.candles=state.chartCandles?.length?state.chartCandles:(payload.candles||[]);
+    state.market.derivatives=canonicalFlowSnapshot();
+  }
+}
 function chartIntervalMs(tf){
   return ({'15m':900000,'30m':1800000,'1h':3600000,'4h':14400000,'1d':86400000}[tf]||3600000);
 }
@@ -4107,22 +4257,17 @@ function updateLiveChartPrice(price,ts,symbol,change24h){
   state.liveChartPrice=price;
   state.liveChartTs=ts;
   state.liveChartBucket=bucket;
-  state.liveMarketPrice=price;
-  state.liveMarketTs=ts;
-  if(Number.isFinite(liveChange))state.liveMarketChange24h=liveChange;
-  // This exact tick is the canonical displayed price everywhere.
-  $("mPrice").textContent=fmt(price);
-  if(Number.isFinite(liveChange))$("mChange").textContent=pct(liveChange)+" / 24h";
-  $("dataState").textContent="Live";
-  if(state.market?.analysis)state.market.analysis.price=price;
-  if(state.market?.candles?.length){
-    var mc=state.market.candles[state.market.candles.length-1];
-    if(mc&&chartBucketStart(mc.t,tf)===bucket){
-      mc.c=price;mc.h=Math.max(Number(mc.h)||price,price);mc.l=Math.min(Number(mc.l)||price,price);
-    }
-  }
+  syncCanonicalMarketState({
+    price:price,
+    ts:ts,
+    change24h:Number.isFinite(liveChange)?liveChange:state.liveMarketChange24h,
+    candle:last&&lastBucket===bucket?last:{
+      t:bucket,o:last?.c||price,h:price,l:price,c:price,v:0
+    },
+    flow:state.liveFlow||{},
+    source:"BYBIT_TICKER"
+  });
   queueChartDraw();
-  if(state.finalDecision)renderLiveDirectionalModel(state.finalDecision);
 }
 function applyLiveKline(kline,symbol){
   if(!kline||symbol!==state.symbol)return;
@@ -4147,25 +4292,16 @@ function applyLiveKline(kline,symbol){
   }
   state.chartCandles=candles;
   state.liveChartBucket=start;
-  // Kline updates own candle OHLC/volume, but the faster ticker owns the
-  // displayed current price. Never let a slower candle close overwrite it.
-  if(!liveFresh){
-    state.liveChartPrice=close;
-    state.liveChartTs=Number(kline.timestamp)||Date.now();
-    state.liveMarketPrice=close;
-    state.liveMarketTs=state.liveChartTs;
-    $("mPrice").textContent=fmt(close);
-  }else{
-    var synced=candles[candles.length-1];
-    if(synced&&chartBucketStart(synced.t,tf)===chartBucketStart(Number(state.liveChartTs),tf)){
-      synced.c=livePrice;
-      synced.h=Math.max(Number(synced.h)||livePrice,livePrice);
-      synced.l=Math.min(Number(synced.l)||livePrice,livePrice);
-    }
-    $("mPrice").textContent=fmt(livePrice);
-    if(Number.isFinite(Number(state.liveMarketChange24h)))$("mChange").textContent=pct(Number(state.liveMarketChange24h))+" / 24h";
-  }
-  $("dataState").textContent="Live";
+  var canonicalPrice=Number(state.canonicalMarket?.price);
+  var canonicalTs=Number(state.canonicalMarket?.ts||0);
+  var kPrice=Number.isFinite(canonicalPrice)&&canonicalTs>=Number(kline.timestamp||0)?canonicalPrice:close;
+  syncCanonicalMarketState({
+    price:kPrice,
+    ts:Number.isFinite(canonicalTs)&&canonicalTs>0?canonicalTs:(Number(kline.timestamp)||Date.now()),
+    candle:Object.assign({},row,{c:kPrice}),
+    flow:state.liveFlow||{},
+    source:"BYBIT_KLINE+TICK"
+  });
   queueChartDraw();
 }
 function stopLiveChartStream(){
@@ -4231,6 +4367,9 @@ function startLiveChartStream(symbol){
             lf.cvdState=lf.cvdRatio>0.01?"BUYERS PRESSURE":lf.cvdRatio<-0.01?"SELLERS PRESSURE":"BALANCED";
           }
           session.liveFlow=lf;state.liveFlow=lf;
+          if(state.canonicalMarket){
+            syncCanonicalMarketState({price:state.canonicalMarket.price,ts:Date.now(),flow:lf,source:"BYBIT_TRADE_FLOW"});
+          }
           if(state.finalDecision)scheduleLiveDecisionRender();
         }else if(msg.topic&&String(msg.topic).indexOf("allLiquidation.")===0){
           var liqs=Array.isArray(msg.data)?msg.data:[msg.data],lf2=session.liveFlow||{};
@@ -4246,6 +4385,9 @@ function startLiveChartStream(symbol){
               (Number(lf2.shortLiquidations)||0)>(Number(lf2.longLiquidations)||0)?"SHORT LIQS DOMINANT":"LIQUIDATION ACTIVITY")
             :"NO LIQUIDATION ACTIVITY";
           session.liveFlow=lf2;state.liveFlow=lf2;
+          if(state.canonicalMarket){
+            syncCanonicalMarketState({price:state.canonicalMarket.price,ts:Date.now(),flow:lf2,source:"BYBIT_LIQUIDATION_FLOW"});
+          }
           if(state.finalDecision)scheduleLiveDecisionRender();
         }else if(msg.topic&&String(msg.topic).indexOf("orderbook.50.")===0){
           var obx=Array.isArray(msg.data)?msg.data[0]:msg.data,lf3=session.liveFlow||{},bids=Array.isArray(obx?.b)?obx.b:[],asks=Array.isArray(obx?.a)?obx.a:[];
@@ -4255,6 +4397,9 @@ function startLiveChartStream(symbol){
           lf3.takerImbalance=Number.isFinite(Number(lf3.cvdRatio))?Number(lf3.cvdRatio):lf3.takerImbalance;
           lf3.orderBookTs=Date.now();
           session.liveFlow=lf3;state.liveFlow=lf3;
+          if(state.canonicalMarket){
+            syncCanonicalMarketState({price:state.canonicalMarket.price,ts:Date.now(),flow:lf3,source:"BYBIT_ORDERBOOK_FLOW"});
+          }
           if(state.finalDecision)scheduleLiveDecisionRender();
         }else if(msg.topic&&String(msg.topic).indexOf("kline.")===0){
           var k=Array.isArray(msg.data)?msg.data[0]:msg.data;
@@ -4305,10 +4450,11 @@ async function loadCoreEnrichment(){
     var d=await api("/api/core-enrichment?"+q,6000);
     if(!d.ok)return;
     if(state.market&&state.market.symbol===d.symbol&&state.market.interval===d.interval){
-      if(d.analysis)state.market.analysis=d.analysis;
-      state.market.derivatives=mergeFlowClient(d.derivatives,state.market.derivatives);
+      if(d.analysis)state.market.analysis=Object.assign({},d.analysis,{price:state.canonicalMarket?.price??d.analysis.price});
+      state.market.derivatives=mergeFlowClient(d.derivatives,canonicalFlowSnapshot());
       if(d.learning)state.market.learning=d.learning;
       renderMarket();
+      renderFlowView(state.market.derivatives);
     }
   }catch{}
 }
@@ -4895,6 +5041,7 @@ async function loadCore(){
     if(requestedSymbol!==state.symbol||requestedInterval!==state.interval)return;
     state.market=d;
     writeViewCache("core-"+requestedSymbol+"-"+requestedInterval,d);
+    reconcileServerMarketSnapshot(d);
     if(!state.chartPinned||state.chartSymbol!==requestedSymbol||!state.chartCandles||!state.chartCandles.length){
       state.chartPinned=false;
       state.chartSymbol=requestedSymbol;
