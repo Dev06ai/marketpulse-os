@@ -10,6 +10,7 @@ const phase1113=require('./phase11-13');
 const phase14=require('./phase14-signal-intelligence');
 const phase15=require('./phase15');
 const phase16=require('./phase16');
+const autotrader=require('./autotrader');
 const signalNotifications=require('./signal-notifications');
 const propFirm=require('./prop-firm');
 const research=require('./research-data');
@@ -500,6 +501,11 @@ const ADMIN_ONLY_PATHS=new Set([
   '/api/execution/submit',
   '/api/execution/cancel',
   '/api/execution/close-sim',
+  '/api/autotrader',
+  '/api/autotrader/config',
+  '/api/autotrader/arm',
+  '/api/autotrader/pause',
+  '/api/autotrader/kill',
   '/api/portfolio/config',
   '/api/portfolio/health',
   '/api/system-check',
@@ -1486,6 +1492,32 @@ const server=http.createServer(async(req,res)=>{
           try{const st=phase1113.selfTest();checks.phase11_13=Boolean(st&&st.ok)}catch{}
           return send(res,200,{ok:Object.values(checks).every(Boolean),checks,marketError,derivativesError,phase16:phase16.VERSION,timestamp:Date.now()});
         }
+        if(action==="autotrader-status")return send(res,200,await execution.getBotSnapshot());
+        if(action==="autotrader-execute"){
+          let raw="";for await(const chunk of req)raw+=chunk;
+          let body={};try{body=JSON.parse(raw||"{}")}catch{return send(res,400,{ok:false,error:"Invalid JSON"})}
+          try{
+            const snap=await execution.getBotSnapshot();
+            const cfg=autotrader.normalizeConfig(snap.bot);
+            const gate=autotrader.botCycleGate(snap,cfg,body.decision||null);
+            if(!gate.eligible)return send(res,409,{ok:false,error:"AUTOTRADER_BLOCKED",reasons:gate.reasons,strategy:gate.strategy,autotrader:snap});
+            const signal=autotrader.buildExecutionSignal(body.decision,{config:cfg});
+            if(cfg.mode==="PAPER"&&snap.execution.mode!=="SIMULATION")return send(res,409,{ok:false,error:"BOT_EXECUTION_MODE_MISMATCH",expected:"SIMULATION",actual:snap.execution.mode});
+            if(cfg.mode==="TESTNET"&&snap.execution.mode!=="TESTNET")return send(res,409,{ok:false,error:"BOT_EXECUTION_MODE_MISMATCH",expected:"TESTNET",actual:snap.execution.mode});
+            if(cfg.mode==="LIVE"&&snap.execution.mode!=="LIVE")return send(res,409,{ok:false,error:"BOT_EXECUTION_MODE_MISMATCH",expected:"LIVE",actual:snap.execution.mode});
+            const intent=await execution.prepareFromSignal(signal);
+            const order=await execution.submitIntent(intent.id);
+            if(order?.status==="REJECTED"){
+              await execution.recordBotError(order.rejectReason||"Execution rejected");
+              return send(res,409,{ok:false,error:"AUTOTRADER_EXECUTION_REJECTED",intent,order,autotrader:await execution.getBotSnapshot()});
+            }
+            await execution.recordBotTradeMeta({signalKey:signal.id,decisionAt:signal.decisionAt,action:signal.side,strategy:signal.strategy,symbol:signal.symbol,interval:signal.interval});
+            return send(res,200,{ok:true,signal,intent,order,autotrader:await execution.getBotSnapshot()});
+          }catch(e){
+            await execution.recordBotError(e.message||String(e)).catch(()=>{});
+            return send(res,400,{ok:false,error:String(e.message||e),autotrader:await execution.getBotSnapshot().catch(()=>null)});
+          }
+        }
         if(action==="execution")return send(res,200,{ok:true,...await execution.snapshot()});
         if(action==="reconcile"){
           const snap=await execution.snapshot();
@@ -2175,6 +2207,51 @@ const server=http.createServer(async(req,res)=>{
       try{const x=await phase4.snapshot(requestDevice(req),null,null,null);return send(res,200,{ok:true,events:x.events||[],updatedAt:x.updatedAt})}catch(e){return send(res,503,{ok:false,error:e.message})}
     }
 
+    if(req.method==='GET'&&u.pathname==='/api/autotrader'){
+      try{return send(res,200,await execution.getBotSnapshot())}catch(e){return send(res,503,{ok:false,error:e.message})}
+    }
+    if(req.method==='POST'&&u.pathname==='/api/autotrader/config'){
+      let raw="";for await(const chunk of req)raw+=chunk;let body={};try{body=JSON.parse(raw||"{}")}catch{return send(res,400,{error:"Invalid JSON"})}
+      try{
+        const cfg=autotrader.normalizeConfig(body);
+        if(cfg.mode==="LIVE"&&String(process.env.LIVE_TRADING_ENABLED||"false").toLowerCase()!=="true")return send(res,400,{ok:false,error:"LIVE_TRADING_ENABLED is OFF"});
+        const execMode=cfg.mode==="PAPER"?"SIMULATION":cfg.mode;
+        const ex=await execution.snapshot();
+        if(ex.positions?.length&&String(ex.mode)!==execMode)return send(res,409,{ok:false,error:"Cannot change bot execution mode while positions are open."});
+        await execution.setConfig({mode:execMode});
+        return send(res,200,await execution.setBotConfig(cfg));
+      }catch(e){return send(res,400,{error:e.message})}
+    }
+    if(req.method==='POST'&&u.pathname==='/api/autotrader/arm'){
+      let raw="";for await(const chunk of req)raw+=chunk;let body={};try{body=JSON.parse(raw||"{}")}catch{return send(res,400,{error:"Invalid JSON"})}
+      try{
+        const mode=String(body.mode||"TESTNET").toUpperCase();
+        if(mode==="PAPER"){
+          await execution.killSwitch(false);
+          const bot=await execution.setBotConfig({mode:"PAPER",enabled:true});
+          return send(res,200,{ok:true,mode,autotrader:bot});
+        }
+        if(mode==="TESTNET"){
+          await execution.setConfig({mode:"TESTNET"});
+          await execution.armTestnet();
+          const bot=await execution.setBotConfig({mode:"TESTNET",enabled:true});
+          return send(res,200,{ok:true,mode,autotrader:bot});
+        }
+        if(mode==="LIVE"){
+          await execution.setConfig({mode:"LIVE"});
+          await execution.armLive();
+          const bot=await execution.setBotConfig({mode:"LIVE",enabled:true});
+          return send(res,200,{ok:true,mode,autotrader:bot});
+        }
+        throw new Error("Unsupported AutoTrader mode");
+      }catch(e){return send(res,400,{ok:false,error:e.message})}
+    }
+    if(req.method==='POST'&&u.pathname==='/api/autotrader/pause'){
+      try{return send(res,200,await execution.setBotConfig({enabled:false,lastAction:"PAUSED"}))}catch(e){return send(res,400,{error:e.message})}
+    }
+    if(req.method==='POST'&&u.pathname==='/api/autotrader/kill'){
+      try{await execution.setBotConfig({enabled:false,lastAction:"KILLED"});return send(res,200,await execution.killSwitch(true))}catch(e){return send(res,400,{error:e.message})}
+    }
     if(req.method==='GET'&&u.pathname==='/api/execution'){
       try{return send(res,200,await execution.snapshot())}catch(e){return send(res,503,{ok:false,error:e.message})}
     }
