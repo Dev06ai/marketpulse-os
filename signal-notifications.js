@@ -3,6 +3,11 @@ const ENABLED=String(process.env.MARKETPULSE_SIGNAL_ALERTS_ENABLED??"true").toLo
 const ENV_PUBLIC_KEY=String(process.env.MARKETPULSE_VAPID_PUBLIC_KEY||"").trim();
 const ENV_PRIVATE_KEY=String(process.env.MARKETPULSE_VAPID_PRIVATE_KEY||"").trim();
 const CONTACT_EMAIL=String(process.env.MARKETPULSE_ADMIN_EMAIL||"admin@marketpulse.local").trim();
+const OPPORTUNITY_ALERTS_ENABLED=String(process.env.MARKETPULSE_OPPORTUNITY_ALERTS_ENABLED??"true").toLowerCase()!=="false";
+const OPPORTUNITY_MIN_SCORE=Math.max(70,Math.min(90,Number(process.env.MARKETPULSE_OPPORTUNITY_MIN_SCORE||78)));
+const OPPORTUNITY_MIN_RR=Math.max(1.1,Math.min(2.5,Number(process.env.MARKETPULSE_OPPORTUNITY_MIN_RR||1.2)));
+const OPPORTUNITY_MIN_DATA=Math.max(65,Math.min(95,Number(process.env.MARKETPULSE_OPPORTUNITY_MIN_DATA||80)));
+
 
 let VAPID_PUBLIC_KEY="";
 let VAPID_PRIVATE_KEY="";
@@ -164,6 +169,98 @@ function buildSignalAlert({decision,symbol,interval,candleTs}){
   };
 }
 
+function isWeekday(ts){
+  const day=new Date(Number(ts||Date.now())).getUTCDay();
+  return day>=1&&day<=5;
+}
+
+function buildOpportunityAlert({decision,symbol,interval,candleTs}){
+  if(!OPPORTUNITY_ALERTS_ENABLED)return null;
+  if(symbol!=="BTCUSDT"||!["15m","1h","4h"].includes(interval))return null;
+  if(!isWeekday(candleTs||Date.now()))return null;
+  const side=String(decision?.action||"").toUpperCase();
+  if(!["LONG","SHORT"].includes(side))return null;
+  if(decision?.stale===true)return null;
+  const score=Number(decision?.market?.confluenceScore??0);
+  const rr=Number(decision?.levels?.rr??0);
+  const dataScore=Number(decision?.dataQuality?.score??decision?.dataQualityScore??decision?.analysis?.dataQualityScore??0);
+  const derivatives=decision?.derivatives||decision?.liveFlow||{};
+  if(Number.isFinite(score)===false||score<OPPORTUNITY_MIN_SCORE)return null;
+  if(Number.isFinite(rr)===false||rr<OPPORTUNITY_MIN_RR)return null;
+  if(Number.isFinite(dataScore)===false||dataScore<OPPORTUNITY_MIN_DATA)return null;
+  if(derivatives.available===false)return null;
+  const gate=String(decision?.deploymentGate?.state||"PAPER_ONLY").toUpperCase();
+  if(gate==="BLOCKED")return null;
+
+  const setup=normaliseSetup(decision);
+  const style=signalStyle(interval);
+  const levels=decision?.levels||{};
+  const candle=Number(candleTs||decision?.candleTs||Date.now());
+  const setupKey=String(decision?.phase14?.intelligence?.setupKey||"GENERIC").toUpperCase();
+  const key=["OPPORTUNITY",symbol,interval,candle,side,setupKey].join("|");
+  const scoreText=Math.round(score)+"/100";
+  const rrText=rr.toFixed(2);
+  const entryText=levels.entryLow!=null&&levels.entryHigh!=null
+    ?price(levels.entryLow)+" – "+price(levels.entryHigh)
+    :price(levels.entryLow??levels.entry);
+  const confirmed=decision?.state==="READY"&&decision?.liveSignalEligible===true&&String(decision?.signalStability?.state||"").toUpperCase()==="CONFIRMED";
+  const body=[
+    "WEEKDAY OPPORTUNITY • "+interval+" "+style,
+    "BTC "+side+" • Score "+scoreText+" • R:R "+rrText,
+    "Setup "+setup+" • Entry "+entryText,
+    "SL "+price(levels.stop)+" • TP1 "+price(levels.tp1),
+    confirmed?"Confirmed setup • revalidate now.":"Early directional setup • wait for final confirmation.",
+  ].join("\n");
+  return {
+    signalKey:key,symbol:"BTC",symbolCode:symbol,interval,style,side,setup,
+    title:"MARKETPULSE • BTC "+side+" • OPPORTUNITY",
+    body,score,rr,status:confirmed?"CONFIRMED":"EARLY",gate:gate==="PAPER_ONLY"?"PAPER-ONLY":"READY",
+    details:{timeframe:interval,style,setup,side,score,rr,dataScore,entry:levels.entry,stop:levels.stop,tp1:levels.tp1,tp2:levels.tp2,status:confirmed?"CONFIRMED":"EARLY",weekdayOnly:true},
+    candleTs:candle,createdAt:new Date().toISOString(),
+    url:"/?view=overview&symbol=BTCUSDT&interval="+encodeURIComponent(interval)
+  };
+}
+
+async function notifyAdminOpportunity(storage,context){
+  await ensureConfigured(storage);
+  const alert=buildOpportunityAlert(context);
+  if(!alert)return {sent:false,reason:"not_opportunity_eligible"};
+  try{
+    const claimed=await storage.claimAdminSignalAlert(alert.signalKey,alert);
+    if(claimed?.delivered)return {sent:false,duplicate:true,alreadyDelivered:true,alert};
+    let delivered=0,expired=0;
+    if(pushConfigured()){
+      const subs=await storage.listAdminPushSubscriptions(50);
+      for(const row of subs){
+        try{
+          await webpush.sendNotification(row.subscription,JSON.stringify({
+            type:"MARKETPULSE_OPPORTUNITY",
+            title:alert.title,
+            body:alert.body,
+            icon:"/marketpulse-icon.svg",
+            badge:"/marketpulse-icon.svg",
+            tag:"marketpulse-opportunity-"+alert.signalKey,
+            renotify:true,
+            requireInteraction:false,
+            data:{url:alert.url,signalKey:alert.signalKey,alert:alert}
+          }),{TTL:120,urgency:"normal"});
+          delivered++;
+        }catch(error){
+          const status=Number(error?.statusCode||error?.status||0);
+          if(status===404||status===410){
+            await storage.deleteAdminPushSubscription(row.endpoint).catch(()=>{});
+            expired++;
+          }
+        }
+      }
+    }
+    if(delivered>0)await storage.markAdminSignalAlertDelivered(alert.signalKey,delivered).catch(()=>{});
+    return {sent:delivered>0,delivered,expired,configured:pushConfigured(),alert};
+  }catch(error){
+    return {sent:false,error:String(error?.message||error),alert};
+  }
+}
+
 async function notifyAdminSignal(storage,context){
   await ensureConfigured(storage);
   const alert=buildSignalAlert(context);
@@ -247,4 +344,4 @@ function config(){
   };
 }
 
-module.exports={buildSignalAlert,notifyAdminSignal,sendAdminTest,ensureConfigured,config,pushConfigured,normaliseSetup,signalStyle};
+module.exports={buildSignalAlert,notifyAdminSignal,buildOpportunityAlert,notifyAdminOpportunity,sendAdminTest,ensureConfigured,config,pushConfigured,normaliseSetup,signalStyle};
