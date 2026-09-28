@@ -4105,6 +4105,30 @@ function canonicalFlowSnapshot(){
   out.serverDataAgeMs=Number(live.serverDataAgeMs||0)||null;
   return out;
 }
+function queueLiveUiSync(){
+  if(state.liveUiFrame)return;
+  state.liveUiFrame=requestAnimationFrame(function(){
+    state.liveUiFrame=0;
+    if(!state.canonicalMarket)return;
+    var liveDecision=state.finalDecision;
+    if(liveDecision){
+      liveDecision.market=Object.assign({},liveDecision.market||{},{
+        price:state.canonicalMarket.price,
+        livePrice:state.canonicalMarket.price,
+        marketSyncTs:state.canonicalMarket.ts
+      });
+      liveDecision.analysis=Object.assign({},liveDecision.analysis||{},{
+        price:state.canonicalMarket.price,
+        marketSyncTs:state.canonicalMarket.ts
+      });
+      liveDecision.derivatives=canonicalFlowSnapshot();
+    }
+    // Only one live DOM pass per animation frame.
+    renderMarketNoFlow();
+    if(liveDecision)renderLiveDirectionalModel(liveDecision);
+  });
+}
+
 function syncCanonicalMarketState(patch){
   patch=patch||{};
   var price=Number(patch.price);
@@ -4196,20 +4220,25 @@ function syncCanonicalMarketState(patch){
     state.finalDecision.marketSyncTs=receivedTs;
   }
 
-  $("mPrice").textContent=fmt(price);
-  if(Number.isFinite(Number(state.canonicalMarket.change24h)))$("mChange").textContent=pct(Number(state.canonicalMarket.change24h))+" / 24h";
+  // Data state is updated immediately; visual DOM work is coalesced below.
+  var priceText=fmt(price);
+  var priceEl=$("mPrice");
+  if(priceEl&&priceEl.textContent!==priceText)priceEl.textContent=priceText;
+
+  if(Number.isFinite(Number(state.canonicalMarket.change24h))){
+    var changeText=pct(Number(state.canonicalMarket.change24h))+" / 24h";
+    var changeEl=$("mChange");
+    if(changeEl&&changeEl.textContent!==changeText)changeEl.textContent=changeText;
+  }
+
   var ds=$("dataState");
   if(ds){
     var transport=String(state.liveTransport||"").toUpperCase();
-    ds.textContent=transport==="DIRECT_BYBIT"?"Live · direct exchange":
+    var liveText=transport==="DIRECT_BYBIT"?"Live · direct exchange":
       transport==="RECOVERING"?"Live · recovering":"Live · synchronized";
+    if(ds.textContent!==liveText)ds.textContent=liveText;
   }
 
-  renderMarketNoFlow();
-
-  // Coalesce all high-frequency live-flow paints to one browser frame.
-  // The data state still updates on every packet; only the canvas paint is
-  // merged when several packets arrive inside the same frame.
   if(!state.canonicalFlowRenderFrame){
     state.canonicalFlowRenderFrame=requestAnimationFrame(function(){
       state.canonicalFlowRenderFrame=0;
@@ -4217,9 +4246,7 @@ function syncCanonicalMarketState(patch){
     });
   }
 
-  if(state.finalDecision){
-    renderLiveDirectionalModel(state.finalDecision);
-  }
+  queueLiveUiSync();
   state.canonicalLastRenderTs=receivedTs;
   return state.canonicalMarket;
 }
@@ -5093,8 +5120,8 @@ function computeLiveDirectionalModel(d){
 }
 function renderLiveDirectionalModel(d){
   var p=computeLiveDirectionalModel(d);
-  var setText=function(id,v){var el=$(id);if(el)el.textContent=v};
-  var setBar=function(id,v){var el=$(id);if(el)el.style.width=String(v)+"%"};
+  var setText=function(id,v){var el=$(id);if(el&&el.textContent!==String(v))el.textContent=String(v)};
+  var setBar=function(id,v){var el=$(id),w=String(v)+"%";if(el&&el.style.width!==w)el.style.width=w};
   setText("probLong",p.long+"%");setText("probShort",p.short+"%");setText("probWait",p.wait+"%");
   setText("probLongBarValue",p.long+"%");setText("probShortBarValue",p.short+"%");setText("probWaitBarValue",p.wait+"%");
   setBar("probLongBar",p.long);setBar("probShortBar",p.short);setBar("probWaitBar",p.wait);
@@ -5102,8 +5129,10 @@ function renderLiveDirectionalModel(d){
   setText("probShortText",p.short>p.long?"current directional leader":"secondary");
   setText("probWaitText",p.wait>=20?"high gate/uncertainty":"watch");
   var status=$("liveDecisionStatus");if(status){
-    status.textContent=p.dominant;
-    status.className="liveDecisionStatus "+(p.long>p.short?"livePositive":p.short>p.long?"liveNegative":"");
+    var stxt=String(p.dominant||"");
+    if(status.textContent!==stxt)status.textContent=stxt;
+    var scls="liveDecisionStatus "+(p.long>p.short?"livePositive":p.short>p.long?"liveNegative":"");
+    if(status.className!==scls)status.className=scls;
   }
   var flowItems=[
     ["liveFlowCvd","CVD",p.cvdState],
@@ -5115,13 +5144,15 @@ function renderLiveDirectionalModel(d){
   ];
   flowItems.forEach(function(x){
     var el=$(x[0]);if(!el)return;
-    el.textContent=x[1]+" · "+x[2];
-    el.classList.remove("livePositive","liveNegative","liveNeutral");
+    var flowText=x[1]+" · "+x[2];
+    if(el.textContent!==flowText)el.textContent=flowText;
     var t=String(x[2]||"").toUpperCase();
-    el.classList.add(
-      /BUYERS|UPTREND|SHORT LIQS|BUY-DOMINANT|\+/.test(t)?"livePositive":
-      /SELLERS|DOWNTREND|LONG LIQS|SELL-DOMINANT|-/.test(t)?"liveNegative":"liveNeutral"
-    );
+    var flowClass=/BUYERS|UPTREND|SHORT LIQS|BUY-DOMINANT|\+/.test(t)?"livePositive":
+      /SELLERS|DOWNTREND|LONG LIQS|SELL-DOMINANT|-/.test(t)?"liveNegative":"liveNeutral";
+    var currentClasses=String(el.className||"").split(/\s+/).filter(Boolean).filter(function(z){return z!=="livePositive"&&z!=="liveNegative"&&z!=="liveNeutral"});
+    currentClasses.push(flowClass);
+    var baseClass=currentClasses.filter(function(z,i,a){return a.indexOf(z)===i}).join(" ");
+    if(el.className!==baseClass)el.className=baseClass;
   });
 
   var candidate=p.candidate;
@@ -5182,7 +5213,7 @@ async function renderFinalDecision(d){
     ds.classList.add(displaySide==="LONG"?"signal-long":"signal-short");
   }
 
-  renderLiveDirectionalModel(d);
+  queueLiveUiSync();
 
   // Remove the old full-render trigger based on updatedAt. Only genuinely
   // structural decision changes are allowed to repaint the heavy DOM.
