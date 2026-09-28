@@ -5423,16 +5423,21 @@ function getLiveDirectionalSnapshot(d){
 function getConditionalTradeLevels(d,p){
   d=d||{};
   p=p||{};
-  var direct=d.levels&&typeof d.levels==="object"?d.levels:null;
-  var conditional=d.conditionalLevels&&typeof d.conditionalLevels==="object"?d.conditionalLevels:null;
-  var evidence=d.candidateEvidence?.levels&&typeof d.candidateEvidence.levels==="object"?d.candidateEvidence.levels:null;
-  var analysis=d.analysis&&typeof d.analysis==="object"?d.analysis:null;
-  var plan=direct||conditional||evidence||(
-    analysis&&(Number.isFinite(Number(analysis.entry))||Number.isFinite(Number(analysis.entryLow))||
-      Number.isFinite(Number(analysis.stop))||Number.isFinite(Number(analysis.tp1)))
-      ?analysis:null
-  )||{};
-  return plan;
+  var usable=function(x){
+    return x&&typeof x==="object"&&(
+      Number.isFinite(Number(x.entry))||
+      Number.isFinite(Number(x.entryLow))||
+      Number.isFinite(Number(x.entryHigh))||
+      Number.isFinite(Number(x.stop))||
+      Number.isFinite(Number(x.tp1))||
+      Number.isFinite(Number(x.tp2))
+    );
+  };
+  var direct=usable(d.levels)?d.levels:null;
+  var conditional=usable(d.conditionalLevels)?d.conditionalLevels:null;
+  var evidence=usable(d.candidateEvidence?.levels)?d.candidateEvidence.levels:null;
+  var analysis=usable(d.analysis)?d.analysis:null;
+  return direct||conditional||evidence||analysis||{};
 }
 
 function validLevel(v){
