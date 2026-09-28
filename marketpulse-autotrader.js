@@ -7,7 +7,7 @@ const http=require("http");
 const autotrader=require("./autotrader");
 
 const PORT=Number(process.env.PORT||3000);
-const BASE_URL=String(process.env.MARKETPULSE_WEB_URL||"").replace(/\/$/,"");
+const BASE_URL=String(process.env.MARKETPULSE_WEB_URL||"https://marketpulse-os-d4p9.onrender.com").replace(/\/$/,"");
 const TOKEN=String(process.env.MARKETPULSE_AUTOTRADER_TOKEN||"");
 const INTERVAL_MS=Math.max(15000,Number(process.env.MARKETPULSE_AUTOTRADER_INTERVAL_MS||30000));
 const STRESS_HALT_ERROR_PCT=Math.max(1,Number(process.env.MARKETPULSE_AUTOTRADER_STRESS_ERROR_PCT||5));
