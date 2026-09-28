@@ -172,7 +172,8 @@ const base={
   leverage:{leverage:2,liquidationDistancePct:10}
 };
 const good=stack.evaluate(base);
-assert(good.signal.action==="LONG","qualified synchronized setup must produce LONG: "+JSON.stringify(good));
+assert(good.signal.confidenceSource==="CALIBRATED","calibration source must be honored by the public signal stack");
+assert(good.signal.action==="LONG","qualified synchronized setup must produce LONG");
 assert(good.gate.qualified===true,"qualified setup must open public signal gate");
 assert(good.signal.automaticExecutionEnabled===false,"automatic execution must remain disabled");
 
