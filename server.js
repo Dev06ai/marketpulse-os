@@ -481,6 +481,10 @@ function sanitizeFinalDecision(decision){
       ...(d.deploymentGate||{}),
       state:String(d.deploymentGate?.state||"PAPER_ONLY").toUpperCase()==="BLOCKED"?"BLOCKED":"PAPER_ONLY"
     },
+    // Preserve the model's computed trade map as read-only conditional context.
+    // It is intentionally separate from `levels`, which is blanked for non-eligible
+    // decisions and remains the only level set allowed by execution preparation.
+    conditionalLevels:candidate.levels||null,
     operational:{
       ...(d.operational||{}),
       liveUse:"PAPER_ONLY"
