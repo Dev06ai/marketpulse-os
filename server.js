@@ -962,7 +962,7 @@ function startBybitLiveFlow(){
 }
 startBybitLiveFlow();
 
-const DERIV_CACHE=new Map(); const DERIV_TTL=15000;
+const DERIV_CACHE=new Map(); const DERIV_INFLIGHT=new Map(); const DERIV_TTL=15000;
 const KRAKEN_FUTURES_PAIRS={BTCUSDT:"PF_XBTUSD",ETHUSDT:"PF_ETHUSD",SOLUSDT:"PF_SOLUSD",BNBUSDT:"PF_BNBUSD",XRPUSDT:"PF_XRPUSD",DOGEUSDT:"PF_DOGEUSD",ADAUSDT:"PF_ADAUSD"};
 const BYBIT_HOSTS=["https://api.bybit.com","https://api.bytick.com"];
 function bybitInterval(interval){return ({'15m':'15min','30m':'30min','1h':'1h','4h':'4h','1d':'1d'})[interval]||'1h'}
@@ -1105,7 +1105,10 @@ function mergeFlowSnapshot(symbol,base){
 async function derivatives(symbol,interval){
   const key=symbol+"|"+interval,hit=DERIV_CACHE.get(key);
   if(hit&&Date.now()-hit.ts<DERIV_TTL)return hit.data;
-  let data=null;
+  const existing=DERIV_INFLIGHT.get(key);
+  if(existing)return existing;
+  const job=(async()=>{async function derivatives(symbol,interval){
+  const key=symbol+"|  let data=null;
   try{data=await krakenAnalytics(symbol,interval)}
   catch(e){
     try{
@@ -1164,6 +1167,9 @@ async function derivatives(symbol,interval){
   data.livePointCount=live.points.length;
   data=mergeFlowSnapshot(symbol,data);
   DERIV_CACHE.set(key,{ts:Date.now(),data});return data;
+  })().finally(()=>DERIV_INFLIGHT.delete(key));
+  DERIV_INFLIGHT.set(key,job);
+  return job;
 }
 
 function send(res,code,p){
