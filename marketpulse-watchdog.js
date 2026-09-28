@@ -180,24 +180,32 @@ async function cycle(){
   }));
 }
 
-const server=http.createServer((req,res)=>{
-  if(req.url==="/health"||req.url==="/"){
-    const body=JSON.stringify({ok:true,service:"marketpulse-phase16-watchdog",version:phase16.VERSION,uptimeMs:Date.now()-state.startedAt,lastRunAt:state.lastRunAt,lastHealthyAt:state.lastHealthyAt,consecutiveFailures:state.consecutiveFailures});
-    res.writeHead(200,{"content-type":"application/json","cache-control":"no-store"});
-    return res.end(body);
-  }
-  if(req.url==="/status"){
-    const body=JSON.stringify({ok:true,version:phase16.VERSION,state});
-    res.writeHead(200,{"content-type":"application/json","cache-control":"no-store"});
-    return res.end(body);
-  }
-  res.writeHead(404);res.end();
-});
-server.listen(PORT,"0.0.0.0",()=>{
-  console.log(JSON.stringify({event:"phase16_watchdog_started",version:phase16.VERSION,port:PORT,intervalMs:INTERVAL_MS,baseUrl:BASE_URL,symbols:DECISION_SYMBOLS,intervals:DECISION_INTERVALS}));
-  cycle().catch(e=>record("WATCHDOG_CYCLE_FATAL","critical","Initial watchdog cycle failed.",{error:String(e?.stack||e)}));
-  setInterval(()=>cycle().catch(e=>record("WATCHDOG_CYCLE_FATAL","critical","Watchdog cycle failed.",{error:String(e?.stack||e)})),INTERVAL_MS);
-});
+function startWatchdogServer(){
+  const server=http.createServer((req,res)=>{
+    if(req.url==="/health"||req.url==="/"){
+      const body=JSON.stringify({ok:true,service:"marketpulse-phase16-watchdog",version:phase16.VERSION,uptimeMs:Date.now()-state.startedAt,lastRunAt:state.lastRunAt,lastHealthyAt:state.lastHealthyAt,consecutiveFailures:state.consecutiveFailures});
+      res.writeHead(200,{"content-type":"application/json","cache-control":"no-store"});
+      return res.end(body);
+    }
+    if(req.url==="/status"){
+      const body=JSON.stringify({ok:true,version:phase16.VERSION,state});
+      res.writeHead(200,{"content-type":"application/json","cache-control":"no-store"});
+      return res.end(body);
+    }
+    res.writeHead(404);res.end();
+  });
+  server.listen(PORT,"0.0.0.0",()=>{
+    console.log(JSON.stringify({event:"phase16_watchdog_started",version:phase16.VERSION,port:PORT,intervalMs:INTERVAL_MS,baseUrl:BASE_URL,symbols:DECISION_SYMBOLS,intervals:DECISION_INTERVALS}));
+    cycle().catch(e=>record("WATCHDOG_CYCLE_FATAL","critical","Initial watchdog cycle failed.",{error:String(e?.stack||e)}));
+    setInterval(()=>cycle().catch(e=>record("WATCHDOG_CYCLE_FATAL","critical","Watchdog cycle failed.",{error:String(e?.stack||e)})),INTERVAL_MS);
+  });
+  return server;
+}
+
+if(require.main===module){
+  startWatchdogServer();
+}
 process.on("unhandledRejection",e=>record("UNHANDLED_REJECTION","critical","Watchdog encountered an unhandled rejection.",{error:String(e)}));
 process.on("uncaughtException",e=>record("UNCAUGHT_EXCEPTION","critical","Watchdog encountered an uncaught exception.",{error:String(e?.stack||e)}));
 
+module.exports={cycle,state,startWatchdogServer};
