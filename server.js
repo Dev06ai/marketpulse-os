@@ -1060,8 +1060,10 @@ startBybitLiveFlow();
 
 function liveSyncSnapshot(symbol){
   const v=flowBucket(symbol), now=Date.now();
-  const price=Number.isFinite(Number(v.markPrice))?Number(v.markPrice):
-    (Number.isFinite(Number(v.lastPrice))?Number(v.lastPrice):null);
+  // Exchange-style visible price must follow the last traded price.
+  // Mark price remains available separately for derivatives/risk calculations.
+  const price=Number.isFinite(Number(v.lastPrice))?Number(v.lastPrice):
+    (Number.isFinite(Number(v.markPrice))?Number(v.markPrice):null);
   const dataTs=Number.isFinite(Number(v.lastTs))&&Number(v.lastTs)>0?Number(v.lastTs):null;
   const dataAgeMs=dataTs!==null?Math.max(0,now-dataTs):null;
   const cvdRatio=Number.isFinite(Number(v.cvdRatio))
