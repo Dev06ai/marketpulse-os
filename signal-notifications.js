@@ -183,7 +183,7 @@ function buildOpportunityAlert({decision,symbol,interval,candleTs}){
   if(decision?.stale===true)return null;
   const score=Number(decision?.market?.confluenceScore??0);
   const rr=Number(decision?.levels?.rr??0);
-  const dataScore=Number(decision?.dataQuality?.score??decision?.dataQualityScore??decision?.analysis?.dataQualityScore??0);
+  const dataScore=Number(decision?.data?.score??decision?.dataQuality?.score??decision?.dataQualityScore??decision?.analysis?.dataQualityScore??0);
   const derivatives=decision?.derivatives||decision?.liveFlow||{};
   if(Number.isFinite(score)===false||score<OPPORTUNITY_MIN_SCORE)return null;
   if(Number.isFinite(rr)===false||rr<OPPORTUNITY_MIN_RR)return null;
