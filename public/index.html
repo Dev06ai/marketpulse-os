@@ -4140,7 +4140,13 @@ function syncCanonicalMarketState(patch){
   state.market=state.market||{};
   state.market.analysis=state.market.analysis||{};
   state.market.analysis.price=price;
-  state.market.candles=Array.isArray(state.market.candles)?state.market.candles:[];
+  state.market.analysis.marketSyncTs=ts;
+  // The chart candle series is the canonical selected-market candle series.
+  if(Array.isArray(state.chartCandles)&&state.chartCandles.length){
+    state.market.candles=state.chartCandles;
+  }else{
+    state.market.candles=Array.isArray(state.market.candles)?state.market.candles:[];
+  }
   var mc=state.market.candles[state.market.candles.length-1];
   if(mc&&chartBucketStart(mc.t,state.chartInterval||state.interval)===chartBucketStart(state.canonicalMarket.candle.t,state.chartInterval||state.interval)){
     mc.c=price;
@@ -4977,6 +4983,47 @@ function suppressFinalSignal(reason){
   renderFinalDecision(d);
 }
 
+function reconcileServerDecisionSnapshot(d){
+  if(!d)return d;
+  var live=state.canonicalMarket;
+  if(!live)return d;
+
+  d.market=Object.assign({},d.market||{},{
+    price:live.price,
+    livePrice:live.price,
+    marketSyncTs:live.ts
+  });
+  d.analysis=Object.assign({},d.analysis||{},{
+    price:live.price,
+    marketSyncTs:live.ts
+  });
+  d.derivatives=canonicalFlowSnapshot();
+  d.livePrice=live.price;
+  d.livePriceTs=live.ts;
+  d.marketSyncTs=live.ts;
+
+  var rm=d.reactionMap;
+  if(rm&&typeof rm==="object"){
+    rm.price=live.price;
+    rm.marketSyncTs=live.ts;
+    var zones=Array.isArray(rm.zones)?rm.zones:[];
+    zones.forEach(function(z){
+      var center=Number(z.center),distance=Number.isFinite(center)?Math.abs(live.price-center):null;
+      z.price=live.price;
+      z.distance=distance;
+      z.near=Number.isFinite(distance)&&Number(z.atr)>0?distance<=Number(z.atr)*.9:z.near;
+    });
+    rm.zones=zones;
+    if(rm.active){
+      rm.active=Object.assign({},rm.active,{price:live.price,distance:Number.isFinite(Number(rm.active.center))?Math.abs(live.price-Number(rm.active.center)):rm.active.distance});
+    }
+  }
+  if(d.marketState&&typeof d.marketState==="object"){
+    d.marketState=Object.assign({},d.marketState,{price:live.price,marketSyncTs:live.ts});
+  }
+  return d;
+}
+
 async function loadFinalDecision(){
   var symbol=state.symbol,interval=state.interval,seq=++state.finalDecisionSeq;
   var hadDecision=Boolean(state.finalDecision);
@@ -4990,6 +5037,7 @@ async function loadFinalDecision(){
     var q="symbol="+encodeURIComponent(symbol)+"&interval="+encodeURIComponent(interval);
     var d=await api("/api/decision?"+q,9000);
     if(seq!==state.finalDecisionSeq||symbol!==state.symbol||interval!==state.interval)return;
+    d=reconcileServerDecisionSnapshot(d);
     state.finalDecision=d;state.finalDecisionTs=Date.now();renderFinalDecision(d);
   }catch(e){
     if(seq!==state.finalDecisionSeq||symbol!==state.symbol||interval!==state.interval)return;
@@ -5041,7 +5089,6 @@ async function loadCore(){
     if(requestedSymbol!==state.symbol||requestedInterval!==state.interval)return;
     state.market=d;
     writeViewCache("core-"+requestedSymbol+"-"+requestedInterval,d);
-    reconcileServerMarketSnapshot(d);
     if(!state.chartPinned||state.chartSymbol!==requestedSymbol||!state.chartCandles||!state.chartCandles.length){
       state.chartPinned=false;
       state.chartSymbol=requestedSymbol;
@@ -5049,8 +5096,10 @@ async function loadCore(){
       state.chartCandles=d.candles||[];
       markChartTimeframe(requestedInterval);
     }else if(state.chartInterval===requestedInterval){
-      state.chartCandles=d.candles||state.chartCandles;
+      // Preserve the live chart series; only replace it when no live series exists.
+      if(!state.canonicalMarket)state.chartCandles=d.candles||state.chartCandles;
     }
+    reconcileServerMarketSnapshot(d);
     state.bootRetry=0;var sb=$("statusBar");if(sb&&sb.textContent!=="Live market data connected")setStatus("Live market data connected","ok");$("dataState").textContent="Live";renderMarket();
 
     // First paint is now complete. Only after that do we fan out into
@@ -5086,7 +5135,7 @@ async function askAI(){
   var q=$("aiQ").value.trim();if(!q)return;
   $("aiStatus").textContent="Thinking…";$("aiOut").textContent="";
   var trade={asset:$("tAsset").value.trim(),side:$("tSide").value.trim(),entry:+$("tEntry").value||null,stop:+$("tStop").value||null,target:+$("tTarget").value||null,size:+$("tSize").value||null,notes:$("tNotes").value.trim()};
-  var marketForAi=state.market?Object.assign({},state.market.analysis,{symbol:state.symbol,interval:state.interval}):{status:"WAITING",symbol:state.symbol,interval:state.interval,note:"No live market payload"};
+  var marketForAi=state.market?Object.assign({},state.market.analysis,{symbol:state.symbol,interval:state.interval,price:state.canonicalMarket?.price??state.market.analysis?.price,marketSyncTs:state.canonicalMarket?.ts??null,derivatives:canonicalFlowSnapshot()}):{status:"WAITING",symbol:state.symbol,interval:state.interval,note:"No live market payload"};
   var payload={mode:state.aiMode,question:q,market:marketForAi,trade,traderProfile:{trades:state.journal.length,avgR:state.journal.length?state.journal.reduce(function(a,x){return a+(Number(x.r)||0)},0)/state.journal.length:0}};
   try{var r=await fetch("/api/ai",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)}),j=await r.json();if(!r.ok)throw Error(j.error||"AI failed");$("aiOut").textContent=j.text||"No response";$("aiStatus").textContent="Copilot ready"}catch(e){$("aiOut").textContent=e.message;$("aiStatus").textContent="Copilot unavailable"}
 }
