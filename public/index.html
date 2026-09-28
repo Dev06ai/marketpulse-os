@@ -5420,6 +5420,26 @@ function getLiveDirectionalSnapshot(d){
   return model;
 }
 
+function getConditionalTradeLevels(d,p){
+  d=d||{};
+  p=p||{};
+  var direct=d.levels&&typeof d.levels==="object"?d.levels:null;
+  var conditional=d.conditionalLevels&&typeof d.conditionalLevels==="object"?d.conditionalLevels:null;
+  var evidence=d.candidateEvidence?.levels&&typeof d.candidateEvidence.levels==="object"?d.candidateEvidence.levels:null;
+  var analysis=d.analysis&&typeof d.analysis==="object"?d.analysis:null;
+  var plan=direct||conditional||evidence||(
+    analysis&&(Number.isFinite(Number(analysis.entry))||Number.isFinite(Number(analysis.entryLow))||
+      Number.isFinite(Number(analysis.stop))||Number.isFinite(Number(analysis.tp1)))
+      ?analysis:null
+  )||{};
+  return plan;
+}
+
+function validLevel(v){
+  var n=Number(v);
+  return Number.isFinite(n)&&n>0?n:null;
+}
+
 function renderLiveDirectionalModel(d,model){
   var p=model||getLiveDirectionalSnapshot(d);
   var setText=function(id,v){var el=$(id);if(el&&el.textContent!==String(v))el.textContent=String(v)};
@@ -5459,19 +5479,22 @@ function renderLiveDirectionalModel(d,model){
   });
 
   var candidate=String(p.stableSide||p.candidate||"WAIT").toUpperCase();
-  var plan=p.plan||{};
+  var plan=getConditionalTradeLevels(d,p);
   var sideClass=candidate==="LONG"?"long":candidate==="SHORT"?"short":"wait";
   var ps=$("livePlanSide");if(ps){ps.textContent=candidate;ps.className="livePlanSide "+sideClass}
   setText("livePlanPrice",Number.isFinite(Number(p.livePrice))?fmt(p.livePrice):"—");
-  var entry=(Number.isFinite(Number(plan.entryLow))&&Number.isFinite(Number(plan.entryHigh)))?fmt(plan.entryLow)+" → "+fmt(plan.entryHigh):(Number.isFinite(Number(plan.entry))?fmt(plan.entry):"—");
-  setText("livePlanEntry",entry);
-  setText("livePlanSl",Number.isFinite(Number(plan.stop))?fmt(plan.stop):"—");
-  setText("livePlanTp1",Number.isFinite(Number(plan.tp1))?fmt(plan.tp1):"—");
-  setText("livePlanTp2",Number.isFinite(Number(plan.tp2))?fmt(plan.tp2):"—");
-  setText("livePlanRr",Number.isFinite(Number(plan.rr))?Number(plan.rr).toFixed(2)+"R":"—");
+
+  var elo=validLevel(plan.entryLow),ehi=validLevel(plan.entryHigh),entry=validLevel(plan.entry);
+  var stop=validLevel(plan.stop),tp1=validLevel(plan.tp1),tp2=validLevel(plan.tp2),rr=Number(plan.rr);
+  var entryText=(elo!==null&&ehi!==null)?fmt(elo)+" → "+fmt(ehi):(entry!==null?fmt(entry):"—");
+  setText("livePlanEntry",entryText);
+  setText("livePlanSl",stop!==null?fmt(stop):"—");
+  setText("livePlanTp1",tp1!==null?fmt(tp1):"—");
+  setText("livePlanTp2",tp2!==null?fmt(tp2):"—");
+  setText("livePlanRr",Number.isFinite(rr)&&rr>0?rr.toFixed(2)+"R":"—");
   var planStatus=$("livePlanStatus");
   if(planStatus)planStatus.textContent=(candidate==="LONG"||candidate==="SHORT")
-    ?(Number.isFinite(Number(plan.entryLow))&&Number.isFinite(Number(plan.entryHigh))
+    ?((elo!==null&&ehi!==null)
       ?("ENTRY ZONE "+(d.liveSignalEligible===true?"AVAILABLE":"CONDITIONAL")+" · GATE "+String(d.deploymentGate?.state||"WAITING"))
       :"DIRECTION ONLY · NO VALIDATED ENTRY")
     :"WAITING FOR DIRECTION";
@@ -5486,7 +5509,8 @@ function renderLiveDirectionalModel(d,model){
   }
   setText("livePlanThesis",thesisText);
   var inv=Array.isArray(d?.evidence?.invalidationScenario)?d.evidence.invalidationScenario.join(" "):d?.evidence?.invalidationScenario;
-  if(!inv)inv=String(p.candidate==="LONG"?"Break the bullish structure / stop zone.":p.candidate==="SHORT"?"Reclaim the bearish trigger / stop zone.":"A fresh directional setup plus final safety checks.");
+  if(!inv)inv=String(candidate==="LONG"?"Break the bullish structure / stop zone.":candidate==="SHORT"?"Reclaim the bearish trigger / stop zone.":"A fresh directional setup plus final safety checks.");
+  if(stop!==null)inv="Invalidation: "+fmt(stop)+(inv? " · "+inv:"");
   setText("livePlanInvalidation",inv);
 }
 async function renderLiveSignalSummary(d,model){
