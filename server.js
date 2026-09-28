@@ -1466,9 +1466,11 @@ const server=http.createServer(async(req,res)=>{
     if(!rateRequest(req))return send(res,429,{ok:false,error:"Too many requests. Please slow down."});
     const u=new URL(req.url,'http://localhost');
     if(u.pathname==='/api/watchdog/internal'){
-      const expected=String(process.env.MARKETPULSE_WATCHDOG_TOKEN||"");
+      const watchdogExpected=String(process.env.MARKETPULSE_WATCHDOG_TOKEN||"");
+      const autotraderExpected=String(process.env.MARKETPULSE_AUTOTRADER_TOKEN||"");
       const supplied=String(req.headers["x-marketpulse-watchdog-token"]||"");
-      if(!expected||supplied!==expected)return send(res,403,{ok:false,error:"WATCHDOG_UNAUTHORIZED"});
+      const authorized=Boolean(supplied&&((watchdogExpected&&supplied===watchdogExpected)||(autotraderExpected&&supplied===autotraderExpected)));
+      if(!authorized)return send(res,403,{ok:false,error:"WATCHDOG_UNAUTHORIZED"});
       const action=u.searchParams.get("action")||"status";
       try{
         if(action==="system-check"){
