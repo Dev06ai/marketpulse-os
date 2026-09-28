@@ -241,7 +241,7 @@ const CORE_ANALYTICS_JOBS=new Set();
 const CORE_ANALYTICS_TTL=120000;
 const PHASE2_VERSION=2; const PHASE3_VERSION=3; const PHASE4_VERSION=4; const PHASE5_VERSION=5; const PHASE6_VERSION=6; const PHASE7_VERSION=7; const PHASE7_DATA_VERSION=2;
 const PHASE9_VERSION=9; const PHASE10_VERSION=10; const PHASE11_VERSION=11; const PHASE12_VERSION=12; const PHASE13_VERSION=13;
-const DECISION_CACHE=new Map(); const DECISION_TTL=4000; const DECISION_LAST_GOOD=new Map();
+const DECISION_CACHE=new Map(); const DECISION_TTL=8000; const DECISION_LAST_GOOD=new Map();
 const DECISION_JOBS=new Map();
 const TRADE_RADAR_CACHE=new Map();
 const TRADE_RADAR_JOBS=new Map();
@@ -346,6 +346,11 @@ function applySignalStability(decision,symbol,interval){
       levels:{...(d.levels||{}),entryLow:null,entryHigh:null,entry:null,stop:null,tp1:null,tp2:null,rr:null},
       deploymentGate:{...(d.deploymentGate||{}),state:"CONFIRMING",reason:confirmingReason},
       operational:{...(d.operational||{}),liveUse:"PAPER_ONLY"},
+      candidateEvidence:{
+        action:candidate,state:d.state,market:d.market||null,levels:d.levels||null,
+        thesis:d.evidence?.thesis||null,type:d.market?.type||null,
+        strategyFamily:d.analysis?.strategyFamily||d.strategyFamily||"NONE"
+      },
       signalStability:{state:"CONFIRMING",side:candidate,confirmations:row.confirmations,required:SIGNAL_CONFIRMATIONS_REQUIRED,misses:0}
     };
   }
@@ -360,6 +365,11 @@ function applySignalStability(decision,symbol,interval){
     return {...d,action:"WAIT",state:"NO_TRADE",liveSignalEligible:false,
       market:{...(d.market||{}),side:"WAIT",status:"WAITING",type:"NO TRADE",bias:"Neutral",directionalLean:"NEUTRAL"},
       levels:{...(d.levels||{}),entryLow:null,entryHigh:null,entry:null,stop:null,tp1:null,tp2:null,rr:null},
+      candidateEvidence:d.candidateEvidence||{
+        action:d.rawAction||row.side,state:d.state,market:d.market||null,levels:d.levels||null,
+        thesis:d.evidence?.thesis||null,type:d.market?.type||null,
+        strategyFamily:d.analysis?.strategyFamily||d.strategyFamily||"NONE"
+      },
       deploymentGate:{...(d.deploymentGate||{}),state:"BLOCKED"},
       signalStability:{state:"RELEASED",side:row.side,confirmations:row.confirmations,required:SIGNAL_CONFIRMATIONS_REQUIRED,misses:SIGNAL_RELEASE_MISSES}};
   }
@@ -370,6 +380,11 @@ function applySignalStability(decision,symbol,interval){
       SIGNAL_STABILITY.set(key,row);
       return {...d,action:row.side,state:"READY",liveSignalEligible:true,
         market:{...(d.market||{}),side:row.side},
+        candidateEvidence:d.candidateEvidence||{
+          action:d.rawAction||row.side,state:d.state,market:d.market||null,levels:d.levels||null,
+          thesis:d.evidence?.thesis||null,type:d.market?.type||null,
+          strategyFamily:d.analysis?.strategyFamily||d.strategyFamily||"NONE"
+        },
         signalStability:{state:"HOLDING",side:row.side,confirmations:row.confirmations,required:SIGNAL_CONFIRMATIONS_REQUIRED,misses:row.misses,releaseAfter:SIGNAL_RELEASE_MISSES}};
     }
   }
@@ -386,15 +401,17 @@ function sanitizeFinalDecision(decision){
   const eligible=Boolean(d.liveSignalEligible===true&&d.state==="READY"&&["LONG","SHORT"].includes(String(d.action||"").toUpperCase()));
   if(eligible)return d;
 
-  const candidate={
-    action:d.rawAction||d.analysis?.side||d.market?.side||"WAIT",
-    state:d.state||"NO_TRADE",
-    market:d.market||null,
-    levels:d.levels||null,
-    thesis:d.evidence?.thesis||null,
-    type:d.market?.type||null,
-    strategyFamily:d.analysis?.strategyFamily||d.strategyFamily||"NONE"
-  };
+  const candidate=d.candidateEvidence&&typeof d.candidateEvidence==="object"
+    ?d.candidateEvidence
+    :{
+      action:d.rawAction||d.analysis?.side||d.market?.side||"WAIT",
+      state:d.state||"NO_TRADE",
+      market:d.market||null,
+      levels:d.levels||null,
+      thesis:d.evidence?.thesis||null,
+      type:d.market?.type||null,
+      strategyFamily:d.analysis?.strategyFamily||d.strategyFamily||"NONE"
+    };
 
   const neutral={
     ...d,
@@ -2014,9 +2031,16 @@ const server=http.createServer(async(req,res)=>{
       if(cached&&ts-cached.ts<TRADE_RADAR_TTL)return send(res,200,{...cached.payload,cache:"server",cacheAgeMs:ts-cached.ts});
       if(TRADE_RADAR_JOBS.has(key)&&cached)return send(res,200,{...cached.payload,cache:"stale",stale:true,cacheAgeMs:ts-cached.ts});
       const job=(async()=>{
+        const decisionKey=symbol+"|"+interval;
+        const decisionCached=DECISION_CACHE.get(decisionKey),decisionLast=DECISION_LAST_GOOD.get(decisionKey),nowRadar=Date.now();
+        const recentDecision=(decisionCached&&nowRadar-decisionCached.ts<=12000)
+          ?Object.assign({cache:"radar-reuse",cacheAgeMs:nowRadar-decisionCached.ts},decisionCached.payload)
+          :(decisionLast&&nowRadar-decisionLast.ts<=12000)
+            ?Object.assign({cache:"radar-last-good",cacheAgeMs:nowRadar-decisionLast.ts,stale:nowRadar-decisionLast.ts>DECISION_TTL},decisionLast.payload)
+            :await getDecisionSnapshotCached(symbol,interval,u.searchParams,requestDevice(req));
         const [decision,marketState]=await Promise.all([
-          getDecisionSnapshotCached(symbol,interval,u.searchParams,requestDevice(req)),
-          phase18MarketState.snapshot(symbol)
+          Promise.resolve(recentDecision),
+          phase18MarketState.snapshot(symbol,{fast:true})
         ]);
         const radar=phase18Opportunity.evaluate(decision,marketState,{weekdayOnly:true,easyMode:true});
         const twin=await phase18Opportunity.digitalTwin(storage,decision,marketState);
