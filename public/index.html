@@ -1060,7 +1060,41 @@ linear-gradient(180deg,#0c0e11 0%,#101214 48%,#0a0b0d 100%);box-shadow:0 -20px 7
   .mpdc-plan-grid{grid-template-columns:1fr 1fr}
   .mpdc-bottom{grid-template-columns:1fr}
 }
-</style></head>
+</style><style id="handheld-layout-style">
+html.handheld-layout .headerInner{width:calc(100% - 24px);grid-template-columns:1fr auto;min-height:68px}
+html.handheld-layout .headerInner>.nav{display:none}
+html.handheld-layout .logo{min-width:0}
+html.handheld-layout .logo .brandSub{display:none}
+html.handheld-layout .mobileMenuBtn{display:block}
+html.handheld-layout .headerTools{display:grid;grid-template-columns:auto 1fr 1fr 1fr;gap:6px;width:100%;margin-left:0}
+html.handheld-layout .dataState{justify-self:start}
+html.handheld-layout .hero{grid-template-columns:1fr 1fr}
+html.handheld-layout .grid2,
+html.handheld-layout .scannerGrid,
+html.handheld-layout .aiGrid{grid-template-columns:1fr}
+html.handheld-layout .overGrid,
+html.handheld-layout .calcGrid,
+html.handheld-layout .qualityGrid,
+html.handheld-layout .flowGrid{grid-template-columns:1fr}
+html.handheld-layout .levels,
+html.handheld-layout .scenario{grid-template-columns:1fr 1fr}
+html.handheld-layout .tape{grid-template-columns:1fr 1fr}
+html.handheld-layout .chartHeaderTools{width:100%;display:flex;flex-direction:column;align-items:stretch;gap:7px}
+html.handheld-layout .chartTimeframes{width:100%;display:grid;grid-template-columns:repeat(5,1fr);gap:4px}
+html.handheld-layout .chartTf{text-align:center;padding:7px 4px}
+html.handheld-layout .chartTools{width:100%;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:5px;justify-content:stretch}
+html.handheld-layout .chartTools button{width:100%;min-width:0;overflow:hidden;text-overflow:ellipsis}
+html.handheld-layout .chartTools .chartFocusBtn{display:none!important}
+html.handheld-layout .reactionList{grid-template-columns:1fr}
+html.handheld-layout .miniChart{height:220px}
+html.handheld-layout .flowChart{height:215px}
+html.handheld-layout .chartCanvas{height:300px}
+html.handheld-layout .brainStats{grid-template-columns:1fr 1fr}
+html.handheld-layout .wrap{width:calc(100% - 18px);padding-top:10px}
+html.handheld-layout .evolutionDesktop{display:none}
+html.handheld-layout .evolutionMobile{display:block}
+</style>
+</head>
 <body>
 <div id="mpLaunch" aria-hidden="true">
   <div class="mpLaunchNoise"></div><div class="mpLaunchOrb one"></div><div class="mpLaunchOrb two"></div>
@@ -7213,5 +7247,23 @@ setInterval(function(){if(document.visibilityState==="visible")loadPhase7()},600
       <div class="beginnerTerm"><b>Risk / reward</b><span>How much potential gain there is relative to the amount you plan to risk.</span></div>
     </div>
   </div>
-</div></body>
+</div><script>
+(function(){
+  function syncHandheldLayout(){
+    var touch=Number(navigator.maxTouchPoints||0)>0 || "ontouchstart" in window;
+    var coarse=false;
+    try{coarse=window.matchMedia&&window.matchMedia("(pointer:coarse)").matches}catch(e){}
+    var sw=Number(window.screen&&window.screen.width||0);
+    var sh=Number(window.screen&&window.screen.height||0);
+    var shortEdge=Math.min(sw||99999,sh||99999);
+    var dpr=Number(window.devicePixelRatio||1);
+    var handheld=Boolean(touch||coarse) && (shortEdge<=1400 || (window.innerWidth||99999)<=900 || dpr>=1.5);
+    document.documentElement.classList.toggle("handheld-layout",handheld);
+  }
+  syncHandheldLayout();
+  window.addEventListener("resize",syncHandheldLayout,{passive:true});
+  window.addEventListener("orientationchange",syncHandheldLayout,{passive:true});
+})();
+</script>
+</body>
 </html>
