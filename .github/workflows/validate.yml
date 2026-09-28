@@ -33,6 +33,7 @@ jobs:
       - run: node --check research-data.js
       - run: node --check data-fabric.js
       - run: node --check phase18-market-state.js
+      - run: node --check phase21-state-contract.js
       - run: node --check phase18-opportunity.js
       - run: node --check phase18-execution-router.js
       - run: node --check marketpulse-autotrader.js
