@@ -248,7 +248,7 @@ button,input,select,textarea{font:inherit}.wrap{width:min(1440px,calc(100% - 26p
 .navCategory{position:relative;flex:0 0 auto}
 .navChevron{font-size:11px;color:#9ba8ba;margin-left:4px;transition:transform .18s ease}
 .navCategoryBtn.open .navChevron{transform:rotate(180deg)}
-.navCategoryPanel{position:absolute;top:calc(100% + 10px);left:0;width:318px;padding:9px;border:1px solid rgba(255,255,255,.12);border-radius:16px;background:linear-gradient(180deg,rgba(20,20,25,.98),rgba(9,9,12,.98));box-shadow:0 24px 80px rgba(0,0,0,.55),0 0 28px rgba(192,132,252,.08);backdrop-filter:blur(22px);opacity:0;transform:translateY(-5px) scale(.98);pointer-events:none;transition:opacity .16s ease,transform .16s ease;z-index:70}
+.navCategoryPanel{position:absolute;top:calc(100% + 12px);left:0;width:360px;max-width:min(360px,calc(100vw - 30px));padding:11px;border:1px solid rgba(255,255,255,.13);border-radius:18px;background:linear-gradient(180deg,rgba(18,19,25,.985),rgba(7,8,11,.985));box-shadow:0 28px 90px rgba(0,0,0,.62),0 0 32px rgba(192,132,252,.10),inset 0 1px 0 rgba(255,255,255,.05);backdrop-filter:blur(24px);opacity:0;transform:translateY(-6px) scale(.985);pointer-events:none;transition:opacity .18s ease,transform .18s ease;z-index:70;overflow:hidden}
 .navCategoryPanel.open{opacity:1;transform:translateY(0) scale(1);pointer-events:auto}
 .navCategoryTitle{padding:5px 9px 8px;font-size:8px;letter-spacing:.12em;color:#78869a;font-weight:950}
 .navCategoryPanel button{width:100%;display:flex;align-items:center;gap:9px;border:1px solid transparent;background:transparent;color:#cfd7e2;text-align:left;border-radius:11px;padding:9px 10px;cursor:pointer}
@@ -275,6 +275,22 @@ button,input,select,textarea{font:inherit}.wrap{width:min(1440px,calc(100% - 26p
   .nav{display:none}
   .mobileMenuBtn{display:block}
 }
+
+.navCategoryPanel:before{content:"";position:absolute;left:0;right:0;top:0;height:2px;background:linear-gradient(90deg,#a7f3d0,#60a5fa,#c084fc,#f472b6);opacity:.9}
+.navSectionLabel{padding:8px 9px 5px;color:#66758a;font-size:7.5px;font-weight:950;letter-spacing:.13em;text-transform:uppercase}
+.navItem{position:relative}
+.navItem:after{content:"";position:absolute;left:10px;top:10px;width:3px;height:26px;border-radius:99px;background:var(--item-accent,rgba(255,255,255,.18));opacity:.9}
+.navItemIcon{width:30px;height:30px;flex:0 0 30px;border-radius:9px;background:linear-gradient(135deg,var(--icon-a,rgba(255,255,255,.10)),var(--icon-b,rgba(255,255,255,.05)));border:1px solid rgba(255,255,255,.09);color:var(--icon-color,#d8c4ff);box-shadow:inset 0 1px 0 rgba(255,255,255,.04),0 4px 18px rgba(0,0,0,.16);font-weight:950;font-size:12px}
+.navItem b{font-size:10.5px;letter-spacing:-.01em}.navItem small{font-size:8.3px;color:#8290a2}
+.navItem:hover .navItemIcon{transform:translateY(-1px);box-shadow:0 0 20px color-mix(in srgb,var(--item-accent,#c084fc) 25%, transparent)}
+.navItem.tone-green{--item-accent:#4ade80;--icon-a:rgba(74,222,128,.18);--icon-b:rgba(16,185,129,.06);--icon-color:#86efac}
+.navItem.tone-cyan{--item-accent:#22d3ee;--icon-a:rgba(34,211,238,.18);--icon-b:rgba(59,130,246,.06);--icon-color:#67e8f9}
+.navItem.tone-blue{--item-accent:#60a5fa;--icon-a:rgba(96,165,250,.18);--icon-b:rgba(37,99,235,.06);--icon-color:#93c5fd}
+.navItem.tone-violet{--item-accent:#a78bfa;--icon-a:rgba(167,139,250,.18);--icon-b:rgba(192,132,252,.06);--icon-color:#c4b5fd}
+.navItem.tone-pink{--item-accent:#f472b6;--icon-a:rgba(244,114,182,.18);--icon-b:rgba(236,72,153,.06);--icon-color:#f9a8d4}
+.navItem.tone-orange{--item-accent:#fb923c;--icon-a:rgba(251,146,60,.18);--icon-b:rgba(249,115,22,.06);--icon-color:#fdba74}
+.navItem.tone-yellow{--item-accent:#facc15;--icon-a:rgba(250,204,21,.18);--icon-b:rgba(234,179,8,.06);--icon-color:#fde047}
+.navItem.tone-red{--item-accent:#fb7185;--icon-a:rgba(251,113,133,.18);--icon-b:rgba(244,63,94,.06);--icon-color:#fda4af}
 </style><style id="guard-chart-style">
 .chartTools button.active{color:#fff;border-color:rgba(103,232,255,.35);background:rgba(103,232,255,.08);box-shadow:0 0 14px rgba(103,232,255,.08)}
 .chartTools button[data-active="true"]{color:#fff;border-color:rgba(103,232,255,.35);background:rgba(103,232,255,.08)}
@@ -857,11 +873,14 @@ linear-gradient(180deg,#0c0e11 0%,#101214 48%,#0a0b0d 100%);box-shadow:0 -20px 7
       <button class="navCategoryBtn" type="button" aria-expanded="false">Market <span class="navChevron">⌄</span></button>
       <div class="navCategoryPanel">
         <div class="navCategoryTitle">MARKET INTELLIGENCE</div>
-        <button data-view="scanner"><span class="navItemIcon">⌕</span><span><b>Market scanner</b><small>Compare coins and market regimes</small></span></button>
-        <button data-view="signals"><span class="navItemIcon">✦</span><span><b>Setups</b><small>Review directional opportunities</small></span></button>
-        <button data-view="flow"><span class="navItemIcon">≋</span><span><b>Market flow</b><small>OI, CVD, liquidity and positioning</small></span></button>
-        <button data-view="trade-radar"><span class="navItemIcon">◎</span><span><b>Trade Radar</b><small>Live opportunity lifecycle</small></span></button>
-        <button data-view="dna"><span class="navItemIcon">◈</span><span><b>Pattern DNA</b><small>Recurring setup patterns</small></span></button>
+        <div class="navSectionLabel">OVERVIEW</div>
+        <button data-view="scanner" class="navItem tone-green"><span class="navItemIcon">⌕</span><span><b>Market Scanner</b><small>Compare coins, trends and market regimes</small></span></button>
+        <button data-view="signals" class="navItem tone-violet"><span class="navItemIcon">✦</span><span><b>Setups</b><small>Review directional opportunities and confluence</small></span></button>
+        <div class="navSectionLabel">FLOW &amp; LIQUIDITY</div>
+        <button data-view="flow" class="navItem tone-cyan"><span class="navItemIcon">≋</span><span><b>Market Flow</b><small>OI, CVD, order flow, liquidity and positioning</small></span></button>
+        <button data-view="trade-radar" class="navItem tone-orange"><span class="navItemIcon">◎</span><span><b>Trade Radar</b><small>Track emerging opportunities through the lifecycle</small></span></button>
+        <div class="navSectionLabel">PATTERN INTELLIGENCE</div>
+        <button data-view="dna" class="navItem tone-pink"><span class="navItemIcon">◈</span><span><b>Pattern DNA</b><small>Discover recurring market structures and setups</small></span></button>
       </div>
     </div>
 
@@ -869,10 +888,12 @@ linear-gradient(180deg,#0c0e11 0%,#101214 48%,#0a0b0d 100%);box-shadow:0 -20px 7
       <button class="navCategoryBtn" type="button" aria-expanded="false">Research <span class="navChevron">⌄</span></button>
       <div class="navCategoryPanel">
         <div class="navCategoryTitle">RESEARCH &amp; ANALYTICS</div>
-        <button data-view="lab"><span class="navItemIcon">▦</span><span><b>Backtest</b><small>Test strategies on historical data</small></span></button>
-        <button data-view="replay"><span class="navItemIcon">↺</span><span><b>Replay</b><small>Revisit historical market conditions</small></span></button>
-        <button data-view="research"><span class="navItemIcon">⌁</span><span><b>Research</b><small>Explore historical evidence</small></span></button>
-        <button data-view="edge"><span class="navItemIcon">◒</span><span><b>Edge</b><small>Strategy statistics and evidence</small></span></button>
+        <div class="navSectionLabel">TEST &amp; REPLAY</div>
+        <button data-view="lab" class="navItem tone-blue"><span class="navItemIcon">▦</span><span><b>Backtest</b><small>Test strategies on historical data</small></span></button>
+        <button data-view="replay" class="navItem tone-cyan"><span class="navItemIcon">↺</span><span><b>Replay</b><small>Revisit historical market conditions bar by bar</small></span></button>
+        <div class="navSectionLabel">EVIDENCE</div>
+        <button data-view="research" class="navItem tone-yellow"><span class="navItemIcon">⌁</span><span><b>Research</b><small>Explore historical evidence and datasets</small></span></button>
+        <button data-view="edge" class="navItem tone-pink"><span class="navItemIcon">◒</span><span><b>Edge</b><small>Review strategy statistics and evidence</small></span></button>
       </div>
     </div>
 
@@ -880,10 +901,13 @@ linear-gradient(180deg,#0c0e11 0%,#101214 48%,#0a0b0d 100%);box-shadow:0 -20px 7
       <button class="navCategoryBtn" type="button" aria-expanded="false">Trading <span class="navChevron">⌄</span></button>
       <div class="navCategoryPanel">
         <div class="navCategoryTitle">TRADING &amp; EXECUTION</div>
-        <button data-view="portfolio"><span class="navItemIcon">▤</span><span><b>Portfolio</b><small>Exposure, positions and account risk</small></span></button>
-        <button data-view="risk"><span class="navItemIcon">△</span><span><b>Risk</b><small>Risk controls and limits</small></span></button>
-        <button id="executionNav" class="adminNav" data-view="execution"><span class="navItemIcon">↗</span><span><b>Execution</b><small>Advanced execution tools</small></span></button>
-        <button id="autotraderNav" class="adminNav" data-view="autotrader"><span class="navItemIcon">⚙</span><span><b>AutoTrader</b><small>Automated strategy execution</small></span></button>
+        <div class="navSectionLabel">ACCOUNT</div>
+        <button data-view="portfolio" class="navItem tone-green"><span class="navItemIcon">▤</span><span><b>Portfolio</b><small>Exposure, positions and account overview</small></span></button>
+        <div class="navSectionLabel">SAFETY</div>
+        <button data-view="risk" class="navItem tone-yellow"><span class="navItemIcon">△</span><span><b>Risk</b><small>Risk controls, limits and protection rules</small></span></button>
+        <div class="navSectionLabel">EXECUTION</div>
+        <button id="executionNav" class="adminNav navItem tone-orange" data-view="execution"><span class="navItemIcon">↗</span><span><b>Execution</b><small>Advanced execution controls and routing</small></span></button>
+        <button id="autotraderNav" class="adminNav navItem tone-pink" data-view="autotrader"><span class="navItemIcon">⚙</span><span><b>AutoTrader</b><small>Automated strategy execution and monitoring</small></span></button>
       </div>
     </div>
 
@@ -891,9 +915,11 @@ linear-gradient(180deg,#0c0e11 0%,#101214 48%,#0a0b0d 100%);box-shadow:0 -20px 7
       <button class="navCategoryBtn" type="button" aria-expanded="false">Workspace <span class="navChevron">⌄</span></button>
       <div class="navCategoryPanel">
         <div class="navCategoryTitle">WORKSPACE</div>
-        <button data-view="brain"><span class="navItemIcon">✎</span><span><b>Journal</b><small>Trading journal and history</small></span></button>
-        <button data-view="ai"><span class="navItemIcon">✦</span><span><b>Copilot</b><small>MarketPulse assistant</small></span></button>
-        <button data-view="alerts"><span class="navItemIcon">◉</span><span><b>Watchlist</b><small>Watch conditions and alerts</small></span></button>
+        <div class="navSectionLabel">PRODUCTIVITY</div>
+        <button data-view="brain" class="navItem tone-violet"><span class="navItemIcon">✎</span><span><b>Journal</b><small>Trading journal, notes and history</small></span></button>
+        <button data-view="ai" class="navItem tone-cyan"><span class="navItemIcon">✦</span><span><b>Copilot</b><small>Ask MarketPulse for context and explanations</small></span></button>
+        <div class="navSectionLabel">MONITORING</div>
+        <button data-view="alerts" class="navItem tone-green"><span class="navItemIcon">◉</span><span><b>Watchlist</b><small>Track conditions, alerts and watch items</small></span></button>
       </div>
     </div>
 
@@ -901,7 +927,8 @@ linear-gradient(180deg,#0c0e11 0%,#101214 48%,#0a0b0d 100%);box-shadow:0 -20px 7
       <button class="navCategoryBtn" type="button" aria-expanded="false">Admin <span class="navChevron">⌄</span></button>
       <div class="navCategoryPanel">
         <div class="navCategoryTitle">ADMINISTRATION</div>
-        <button id="adminNav" class="adminNav" data-view="admin"><span class="navItemIcon">◆</span><span><b>Admin console</b><small>Users, system checks and controls</small></span></button>
+        <div class="navSectionLabel">SYSTEM</div>
+        <button id="adminNav" class="adminNav navItem tone-red" data-view="admin"><span class="navItemIcon">◆</span><span><b>Admin Console</b><small>Users, system checks, access and controls</small></span></button>
       </div>
     </div>
   </nav>
