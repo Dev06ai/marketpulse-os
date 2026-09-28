@@ -3863,17 +3863,14 @@ async function loadCore(){
     }
     state.bootRetry=0;var sb=$("statusBar");if(sb&&sb.textContent!=="Live market data connected")setStatus("Live market data connected","ok");$("dataState").textContent="Live";renderMarket();
 
-    deferTask(loadCoreEnrichment,150);
-    if(isAdminUser())deferTask(loadDataFabric,800);
+    // First paint is now complete. Only after that do we fan out into
+    // scanner/flow/edge/analytics/research work.
+    if(!state.secondaryStarted)queueSecondaryBoot();
+    deferTask(loadCoreEnrichment,250);
+    if(isAdminUser())deferTask(loadDataFabric,1200);
     deferTask(loadCoreAnalytics,1800);
-    if(state.activeView==="overview"){
-      deferTask(loadCoreEnrichment,250);
-      deferTask(loadFinalDecision,700);
-      if(!state.scan||!state.scan.length)deferTask(loadScan,80);
-      if(!state.cycle)deferTask(loadCycle,350);
-      deferTask(loadCoreAnalytics,1200);
-      deferTask(function(){if(state.chartPinned&&state.chartInterval!==requestedInterval)refreshPinnedChart()},700);
-    }
+    deferTask(loadFinalDecision,700);
+    deferTask(function(){if(state.chartPinned&&state.chartInterval!==requestedInterval)refreshPinnedChart()},700);
   }catch(e){
     if(state.market&&state.market.analysis){
       // Background refresh failure: keep the last known-good state and wait for
@@ -3947,9 +3944,6 @@ $("refresh").addEventListener("click",loadCore);
       if(state.market||state.busy)return;
       watchdogTries++;
       if($("statusBar")&&watchdogTries===1)setStatus("Connecting to live market data…");
-      // Start secondary user-facing data in parallel with the dashboard core.
-      // A slow dashboard analysis must never block Scanner / Flow / Edge / Portfolio.
-      if(!state.secondaryStarted)queueSecondaryBoot();
       loadFastTicker();
       loadCore();
     }catch(e){
@@ -4502,15 +4496,15 @@ $("interval").value=state.interval;renderJournal();renderBrainInsights();renderA
 
 var initialBootTimer=null,initialBootAttempts=0;
 function scheduleInitialBoot(delay){
-  if(state.market)return;
+  if(state.market||state.busy)return;
   if(initialBootTimer)clearTimeout(initialBootTimer);
   initialBootTimer=setTimeout(function(){
     initialBootTimer=null;
-    if(state.market)return;
+    if(state.market||state.busy)return;
     initialBootAttempts++;
     loadFastTicker();
-    if(!state.busy)loadCore();
-    if(!state.market&&initialBootAttempts<10)scheduleInitialBoot(Math.min(3000,1100+initialBootAttempts*180));
+    loadCore();
+    if(!state.market&&initialBootAttempts<6)scheduleInitialBoot(Math.min(3000,1400+initialBootAttempts*250));
   },Math.max(0,delay||0));
 }
 
@@ -4530,7 +4524,7 @@ document.addEventListener("visibilitychange",function(){
 setInterval(function(){
   if(document.visibilityState==="visible"){
     loadFastTicker();
-    if(!state.market&&!state.busy)scheduleInitialBoot(0);
+    if(!state.market&&!state.busy&&!initialBootTimer)scheduleInitialBoot(0);
   }
 },5000);
 
