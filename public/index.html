@@ -2228,6 +2228,7 @@ function installCriticalChartUI(){
   }
 }
 installCriticalChartUI();
+setTimeout(function(){try{startLiveChartStream(state.symbol)}catch{}},50);
 function fmt(x){var n=Number(x);return Number.isFinite(n)?n.toLocaleString(undefined,{maximumFractionDigits:2}):"—"}
 function pct(x){var n=Number(x);return Number.isFinite(n)?(n>=0?"+":"")+n.toFixed(2)+"%":"—"}
 function setStatus(text,kind){var el=$("statusBar");if(!el)return;el.textContent=text;el.className="statusBar"+(kind?" "+kind:"")}
@@ -2523,6 +2524,7 @@ async function loadChartTimeframe(tf){
     if(!Array.isArray(d.candles)||!d.candles.length)throw Error("No candles returned");
     state.chartInterval=tf;state.chartCandles=d.candles;state.chartSymbol=state.symbol;
     state.chartVisible=Math.min(96,d.candles.length);state.chartOffset=0;state.chartYZoom=1;state.chartYShift=0;state.crossX=null;state.crossY=null;
+    startLiveChartStream(state.symbol);
     drawMain();
   }catch(e){
     $("ohlc").textContent="Chart data unavailable — retrying…";
@@ -3906,13 +3908,149 @@ function renderMarketNoFlow(){
   $("flowSource").textContent=der.provider?(String(der.provider).slice(0,44)+(der.livePointCount?" · LIVE":"")):(der.available?"LIVE":"CONNECTING");
 }
 
+function chartIntervalMs(tf){
+  return ({'15m':900000,'30m':1800000,'1h':3600000,'4h':14400000,'1d':86400000}[tf]||3600000);
+}
+function bybitKlineInterval(tf){
+  return ({'15m':'15','30m':'30','1h':'60','4h':'240','1d':'D'}[tf]||'60');
+}
+function chartBucketStart(ts,tf){
+  var ms=chartIntervalMs(tf),n=Number(ts)||Date.now();
+  return Math.floor(n/ms)*ms;
+}
+function updateLiveChartPrice(price,ts,symbol){
+  price=Number(price);ts=Number(ts)||Date.now();
+  if(!Number.isFinite(price)||symbol!==state.symbol)return;
+
+  var tf=state.chartInterval||state.interval||"1h";
+  var bucket=chartBucketStart(ts,tf);
+  var candles=getChartCandles().length?getChartCandles():[];
+  var last=candles.length?candles[candles.length-1]:null;
+  var lastBucket=last&&Number.isFinite(Number(last.t))?chartBucketStart(Number(last.t),tf):null;
+
+  if(!last||lastBucket<bucket){
+    var open=last&&Number.isFinite(Number(last.c))?Number(last.c):price;
+    candles=candles.slice();
+    candles.push({t:bucket,o:open,h:Math.max(open,price),l:Math.min(open,price),c:price,v:0,source:"bybit-live"});
+    if(candles.length>5000)candles=candles.slice(-5000);
+    state.chartCandles=candles;
+  }else{
+    if(lastBucket===bucket){
+      last.c=price;
+      last.h=Math.max(Number(last.h)||price,price);
+      last.l=Math.min(Number(last.l)||price,price);
+    }
+    state.chartCandles=candles;
+  }
+
+  state.liveChartPrice=price;
+  state.liveChartTs=ts;
+  state.liveChartBucket=bucket;
+  $("mPrice").textContent=fmt(price);
+  $("dataState").textContent="Live";
+  if(state.market?.analysis)state.market.analysis.price=price;
+  if(state.market?.candles?.length){
+    var mc=state.market.candles[state.market.candles.length-1];
+    if(mc&&chartBucketStart(mc.t,tf)===bucket){
+      mc.c=price;mc.h=Math.max(Number(mc.h)||price,price);mc.l=Math.min(Number(mc.l)||price,price);
+    }
+  }
+  queueChartDraw();
+}
+function applyLiveKline(kline,symbol){
+  if(!kline||symbol!==state.symbol)return;
+  var tf=state.chartInterval||state.interval||"1h";
+  var start=Number(kline.start),close=Number(kline.close),open=Number(kline.open),high=Number(kline.high),low=Number(kline.low),volume=Number(kline.volume);
+  if(!Number.isFinite(start)||!Number.isFinite(close)||!Number.isFinite(open)||!Number.isFinite(high)||!Number.isFinite(low))return;
+  var candles=getChartCandles().length?getChartCandles():[];
+  var idx=-1;
+  for(var i=candles.length-1;i>=0;i--){
+    if(Number(candles[i].t)===start){idx=i;break}
+    if(Number(candles[i].t)<start)break;
+  }
+  var row={t:start,o:open,h:high,l:low,c:close,v:Number.isFinite(volume)?volume:0,source:"bybit-kline"};
+  if(idx>=0)candles[idx]=Object.assign({},candles[idx],row);
+  else{
+    candles=candles.slice();
+    candles.push(row);
+    if(candles.length>5000)candles=candles.slice(-5000);
+  }
+  state.chartCandles=candles;
+  state.liveChartBucket=start;
+  state.liveChartPrice=close;
+  state.liveChartTs=Number(kline.timestamp)||Date.now();
+  $("mPrice").textContent=fmt(close);
+  $("dataState").textContent="Live";
+  queueChartDraw();
+}
+function stopLiveChartStream(){
+  var x=state.liveChartStream;
+  if(!x)return;
+  clearInterval(x.pingTimer);
+  clearTimeout(x.retryTimer);
+  try{x.ws&&x.ws.close()}catch{}
+  state.liveChartStream=null;
+}
+function startLiveChartStream(symbol){
+  symbol=symbol||state.symbol;
+  var tf=state.chartInterval||state.interval||"1h";
+  if(!symbol||typeof WebSocket==="undefined")return;
+  var current=state.liveChartStream;
+  if(current&&current.symbol===symbol&&current.tf===tf&&current.ws&&[WebSocket.OPEN,WebSocket.CONNECTING].includes(current.ws.readyState))return;
+  stopLiveChartStream();
+
+  var session={symbol,tf,ws:null,pingTimer:null,retryTimer:null,retries:0,connected:false};
+  state.liveChartStream=session;
+  var url="wss://stream.bybit.com/v5/public/linear";
+  try{
+    var ws=new WebSocket(url);session.ws=ws;
+    ws.onopen=function(){
+      if(state.liveChartStream!==session)return;
+      session.connected=true;session.retries=0;
+      var k=bybitKlineInterval(tf);
+      ws.send(JSON.stringify({op:"subscribe",args:["tickers."+symbol,"kline."+k+"."+symbol]}));
+      session.pingTimer=setInterval(function(){try{if(ws.readyState===WebSocket.OPEN)ws.send(JSON.stringify({op:"ping"}))}catch{}},20000);
+      $("dataState").textContent="Live stream";
+      var meta=$("ohlc");if(meta&&state.crossX==null)meta.textContent="LIVE STREAM · waiting for tick";
+    };
+    ws.onmessage=function(ev){
+      try{
+        var msg=JSON.parse(ev.data||"");
+        if(msg.topic&&String(msg.topic).indexOf("tickers.")===0){
+          var d=Array.isArray(msg.data)?msg.data[0]:msg.data;
+          var p=Number(d?.lastPrice);
+          if(Number.isFinite(p)){
+            session.lastTickAt=Date.now();
+            updateLiveChartPrice(p,Number(msg.ts)||Date.now(),symbol);
+          }
+        }else if(msg.topic&&String(msg.topic).indexOf("kline.")===0){
+          var k=Array.isArray(msg.data)?msg.data[0]:msg.data;
+          if(k)applyLiveKline(k,symbol);
+        }
+      }catch{}
+    };
+    ws.onerror=function(){session.connected=false;};
+    ws.onclose=function(){
+      if(state.liveChartStream!==session)return;
+      session.connected=false;clearInterval(session.pingTimer);session.pingTimer=null;
+      session.retryTimer=setTimeout(function(){
+        if(state.liveChartStream===session)startLiveChartStream(symbol);
+      },Math.min(5000,1000*Math.pow(2,Math.min(session.retries++,3))));
+    };
+  }catch{
+    session.connected=false;
+    session.retryTimer=setTimeout(function(){if(state.liveChartStream===session)startLiveChartStream(symbol)},2500);
+  }
+}
 async function loadFastTicker(){
   var symbol=state.symbol;
+  var stream=state.liveChartStream;
+  if(stream&&stream.symbol===symbol&&stream.connected&&Number.isFinite(Number(stream.lastTickAt))&&Date.now()-Number(stream.lastTickAt)<3000)return;
   try{
     var d=await api("/api/fast-ticker?symbol="+encodeURIComponent(symbol),5000);
     if(symbol!==state.symbol)return;
     if(Number.isFinite(Number(d.price))){
-      $("mPrice").textContent=fmt(d.price);
+      updateLiveChartPrice(Number(d.price),Date.now(),symbol);
       if(!state.market){
         $("mChange").textContent="LIVE · "+String(d.source||"market feed");
         $("mRegime").textContent="CONNECTING";
@@ -3922,9 +4060,9 @@ async function loadFastTicker(){
         $("mMom").textContent="—";
         $("mStructure").textContent="—";
       }
-      $("dataState").textContent="Live";
     }
   }catch{}
+  startLiveChartStream(symbol);
 }
 async function loadCoreEnrichment(){
   if(!state.market)return;
@@ -4393,8 +4531,8 @@ $("refresh").addEventListener("click",loadCore);
   setTimeout(wakeMarketCore,0);
 })();
 $("dcfRefresh").addEventListener("click",loadDataFabric);
-$("symbol").addEventListener("change",function(){state.symbol=this.value;state.chartPinned=false;state.chartSymbol=state.symbol;state.chartCandles=[];loadFastTicker();loadCore()});
-$("interval").addEventListener("change",function(){state.interval=this.value;loadCore()});
+$("symbol").addEventListener("change",function(){stopLiveChartStream();state.symbol=this.value;state.chartPinned=false;state.chartSymbol=state.symbol;state.chartCandles=[];loadFastTicker();loadCore()});
+$("interval").addEventListener("change",function(){state.interval=this.value;state.chartInterval=this.value;startLiveChartStream(state.symbol);loadCore()});
 function deviceId(){
   var k="mp-device-id",id=localStorage.getItem(k);
   var valid=/^[a-f0-9-]{16,128}$/i.test(String(id||""));
@@ -4956,10 +5094,12 @@ document.addEventListener("visibilitychange",function(){
 });
 setInterval(function(){
   if(document.visibilityState==="visible"){
+    // WebSocket supplies the live price/candle. The API is only a fallback if
+    // the stream is disconnected or stale.
     loadFastTicker();
     if(!state.market&&!state.busy&&!initialBootTimer)scheduleInitialBoot(0);
   }
-},5000);
+},1000);
 
 // Main live price-action cycle: refresh the visible market structure/chart snapshot every 12 seconds.
 // The busy guard prevents overlapping requests; the decision engine is refreshed by loadCore's
