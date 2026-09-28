@@ -25,6 +25,12 @@ const SETUPS={
     bonus:["support-resistance","derivatives","liquidation"],
     rr:3
   },
+  LIQUIDITY_SWEEP_RECLAIM:{
+    label:"Liquidity Sweep + Reclaim",
+    required:["market-structure","liquidity","multi-timeframe","order-flow","cvd","risk"],
+    bonus:["support-resistance","derivatives","liquidation","fibonacci"],
+    rr:1.8
+  },
   NPOC:{
     label:"Naked POC Reaction",
     required:["market-structure","liquidity","support-resistance","sfp","multi-timeframe","risk"],
@@ -90,6 +96,7 @@ function setupKey(analysis={}){
     analysis?.type||
     ""
   );
+  if(raw.includes("LIQUIDITY_SWEEP")||raw.includes("SWEEP_RECLAIM"))return "LIQUIDITY_SWEEP_RECLAIM";
   if(raw.includes("SFP"))return "SFP";
   if(raw.includes("NPOC"))return "NPOC";
   if(raw.includes("D_LINE"))return "D_LINE_BREAKOUT";
@@ -147,6 +154,20 @@ function setupSignals(setup,analysis){
     if(reaction?.action===analysis.side&&/CONFIRM|BREAKOUT|BREAKDOWN/.test(String(reaction.state||"")))out.push({key:"sfp_reaction",score:10,text:"Reaction map confirms the directional reaction."});
     else out.push({key:"sfp_reaction_missing",score:-6,text:"The reaction map does not yet confirm the SFP."});
   }
+  if(setup==="LIQUIDITY_SWEEP_RECLAIM"){
+    const confirmed=Boolean(
+      reaction?.action===analysis.side &&
+      /CONFIRM_LONG|CONFIRM_SHORT/.test(String(reaction?.state||"")) &&
+      /sweep|reclaim/i.test(String(reaction?.trigger||""))
+    );
+    out.push({
+      key:"liquidity_sweep_reclaim",
+      score:confirmed?12:-3,
+      text:confirmed
+        ?"Liquidity sweep/reclaim is confirmed at the mapped reaction zone."
+        :"Waiting for a confirmed liquidity sweep and reclaim."
+    });
+  }
   if(setup==="NPOC"){
     const ready=String(ms?.kind||"").toUpperCase()==="NPOC"&&n(ms?.score,0)>=80;
     out.push({key:"npoc_structure",score:ready?10:-5,text:ready?"NPOC sweep/reclaim structure is confirmed.":"NPOC reaction is not fully confirmed."});
@@ -180,7 +201,7 @@ function regimeSignals(side,analysis){
   if(regime==="UPTREND"&&side==="LONG")out.push({key:"regime_long",score:4,text:"Trend regime supports long continuation."});
   if(regime==="DOWNTREND"&&side==="SHORT")out.push({key:"regime_short",score:4,text:"Trend regime supports short continuation."});
   if(regime==="RANGE"){
-    if(["RANGE_REVERSION","SFP","NPOC"].includes(setup))out.push({key:"regime_range_fit",score:4,text:"Setup family is compatible with range conditions."});
+    if(["RANGE_REVERSION","SFP","NPOC","LIQUIDITY_SWEEP_RECLAIM"].includes(setup))out.push({key:"regime_range_fit",score:4,text:"Setup family is compatible with range conditions."});
     else out.push({key:"regime_range_conflict",score:-4,text:"Continuation setup is operating inside a range regime."});
   }
   if(regime==="HIGH VOLATILITY"){
@@ -219,7 +240,15 @@ function buildSignalIntelligence({analysis={},knowledgeContext={},derivatives={}
   const positiveCount=signals.filter(x=>Number(x.score)>0).length;
   let adjustment=clamp(rawSignalsScore*.35+coverageScore-((missing.length>=2)?4:0),-12,12);
   if(side==="WAIT")adjustment=0;
-  const hardConflicts=signals.filter(x=>["htf_conflict","cvd_conflict"].includes(x.key));
+  const confirmedSweep=Boolean(
+    setup==="LIQUIDITY_SWEEP_RECLAIM" &&
+    analysis?.reactionMap?.active?.action===side &&
+    /CONFIRM_LONG|CONFIRM_SHORT/.test(String(analysis?.reactionMap?.active?.state||""))
+  );
+  const hardConflicts=signals.filter(x=>
+    ["htf_conflict","cvd_conflict"].includes(x.key) &&
+    !(x.key==="htf_conflict"&&confirmedSweep)
+  );
   const blocks=[];
   if(hardConflicts.length)blocks.push(...hardConflicts.map(x=>x.text));
   if(profile.rr&&n(analysis.rr)!==null&&n(analysis.rr)<profile.rr)blocks.push("Setup-specific minimum R:R is not met.");
@@ -301,8 +330,14 @@ function enrichAnalysis(analysis,{knowledgeContext={},derivatives={},higher={},l
   const rr=n(a.rr);
   if(a.side!=="WAIT"){
     const hardHigher=(a.mtf?.higher==="DOWNTREND"&&a.side==="LONG")||(a.mtf?.higher==="UPTREND"&&a.side==="SHORT");
+    const confirmedSweep=Boolean(
+      intelligence.setupKey==="LIQUIDITY_SWEEP_RECLAIM" &&
+      a.reactionMap?.active?.action===a.side &&
+      /CONFIRM_LONG|CONFIRM_SHORT/.test(String(a.reactionMap?.active?.state||""))
+    );
     const setup=preferredSetup(intelligence.setupKey);
-    if(after>=72&&rr!==null&&rr>=setup.rr&&!hardHigher&&intelligence.blocks.length===0)a.status="READY";
+    const higherBlock=hardHigher&&!confirmedSweep;
+    if(after>=72&&rr!==null&&rr>=setup.rr&&!higherBlock&&intelligence.blocks.length===0)a.status="READY";
     else if(after>=55)a.status="WATCH";
     else a.status="WAITING";
   }
