@@ -4,7 +4,7 @@ const storage=require("./storage");
 const phase6=require("./phase6");
 
 const VERSION=1;
-const MODE_VALUES=["SIMULATION","TESTNET"];
+const MODE_VALUES=["SIMULATION","TESTNET","LIVE"];
 const MAX_ORDERS=300;
 const MAX_POSITIONS=50;
 const MAX_EVENTS=500;
@@ -118,13 +118,16 @@ function pushEvent(state,type,message,meta={}){
   return row;
 }
 
-function credentials(){
+function credentials(mode="TESTNET"){
+  const live=mode==="LIVE";
+  const apiKey=String(process.env[live?"BYBIT_LIVE_API_KEY":"BYBIT_API_KEY"]||"");
+  const apiSecret=String(process.env[live?"BYBIT_LIVE_API_SECRET":"BYBIT_API_SECRET"]||"");
   return {
-    apiKey:String(process.env.BYBIT_API_KEY||""),
-    apiSecret:String(process.env.BYBIT_API_SECRET||""),
-    configured:Boolean(process.env.BYBIT_API_KEY&&process.env.BYBIT_API_SECRET),
-    host:String(process.env.BYBIT_API_HOST||"https://api-testnet.bybit.com"),
-    ws:String(process.env.BYBIT_API_WS||"wss://stream-testnet.bybit.com/v5/private")
+    mode,
+    apiKey,apiSecret,
+    configured:Boolean(apiKey&&apiSecret),
+    host:String(process.env[live?"BYBIT_LIVE_API_HOST":"BYBIT_API_HOST"]||(live?"https://api.bybit.com":"https://api-testnet.bybit.com")),
+    ws:String(process.env[live?"BYBIT_LIVE_API_WS":"BYBIT_API_WS"]||(live?"wss://stream.bybit.com/v5/private":"wss://stream-testnet.bybit.com/v5/private"))
   };
 }
 
@@ -139,7 +142,7 @@ async function fetchJson(url,opts={}){
 }
 
 class BybitTestnetAdapter{
-  constructor(){this.c=credentials();this.recvWindow="5000"}
+  constructor(mode="TESTNET"){this.mode=mode;this.c=credentials(mode);this.recvWindow="5000"}
   configured(){return this.c.configured}
   sign(timestamp,payload){return crypto.createHmac("sha256",this.c.apiSecret).update(String(timestamp)+this.c.apiKey+this.recvWindow+payload).digest("hex")}
   async privateRequest(method,path,params={}){
@@ -205,7 +208,10 @@ class BybitTestnetAdapter{
   }
 }
 
-const adapter=new BybitTestnetAdapter();
+const testnetAdapter=new BybitTestnetAdapter("TESTNET");
+const liveAdapter=new BybitTestnetAdapter("LIVE");
+function adapterFor(state){return state?.config?.mode==="LIVE"?liveAdapter:testnetAdapter}
+
 
 function activeOrders(state){return state.orders.filter(o=>!["FILLED","CANCELLED","REJECTED","EXPIRED","CLOSED"].includes(o.status))}
 function activePositions(state){return state.positions.filter(p=>Math.abs(finite(p.qty,0)||0)>0)}
@@ -255,7 +261,9 @@ async function marketGate(plan,state){
   const tradeRiskCash=Math.abs(entry-stop)*qty;
   const tradeRiskPct=tradeRiskCash/Math.max(1,state.config.account)*100;
   if(tradeRiskCash>riskCash+1e-9)return {allowed:false,reason:"PER-TRADE RISK EXCEEDED",riskCash,tradeRiskCash,tradeRiskPct,allowedQty:riskDistance>0?riskCash/riskDistance:null};
-  if(state.config.mode==="TESTNET"&&!adapter.configured())return {allowed:false,reason:"TESTNET API CREDENTIALS NOT CONFIGURED"};
+  const exchangeAdapter=adapterFor(state);
+  if((state.config.mode==="TESTNET"||state.config.mode==="LIVE")&&!exchangeAdapter.configured())return {allowed:false,reason:state.config.mode+" API CREDENTIALS NOT CONFIGURED"};
+  if(state.config.mode==="LIVE"&&String(process.env.LIVE_TRADING_ENABLED||"false").toLowerCase()!=="true")return {allowed:false,reason:"LIVE TRADING FEATURE FLAG IS OFF"};
   if(state.control.killSwitch)return {allowed:false,reason:"KILL SWITCH ACTIVE"};
   if(state.config.mode==="TESTNET"&&!state.control.armed)return {allowed:false,reason:"TESTNET EXECUTION NOT ARMED"};
   if(state.config.requireReconciliation&&!state.control.reconciliation.ok)return {allowed:false,reason:"RECONCILIATION BLOCK"};
@@ -267,9 +275,9 @@ async function marketGate(plan,state){
   if(p.type==="MARKET"&&!state.config.allowMarketOrders)return {allowed:false,reason:"MARKET ORDERS DISABLED"};
   if(p.createdAt&&now()-Number(p.createdAt)>state.config.maxIntentAgeMs)return {allowed:false,reason:"INTENT EXPIRED"};
 
-  if(state.config.mode==="TESTNET"){
+  if(state.config.mode==="TESTNET"||state.config.mode==="LIVE"){
     try{
-      const [inst,t]=await Promise.all([adapter.instrument(symbol),adapter.ticker(symbol)]);
+      const [inst,t]=await Promise.all([exchangeAdapter.instrument(symbol),exchangeAdapter.ticker(symbol)]);
       const tick=inst.priceFilter?.tickSize||"0.01";
       const step=inst.lotSizeFilter?.qtyStep||"0.001";
       price=Number(formatPrice(entry,tick));qty=Number(formatQty(qty,step));
@@ -347,20 +355,20 @@ async function processWsMessage(state,msg){
   await save(state);
 }
 
-function connectPrivateWs(){
+function connectPrivateWs(adapterInstance=testnetAdapter){
   if(wsState.started)return;
   if(!WebSocket){wsState.lastError="ws dependency unavailable";wsState.started=false;return}
   wsState.started=true;
   const loop=()=>{
-    if(!adapter.configured()){wsState.connected=false;wsState.lastError="BYBIT credentials not configured";wsState.started=false;return}
-    const ws=new WebSocket(credentials().ws);
+    if(!adapterInstance.configured()){wsState.connected=false;wsState.lastError="BYBIT credentials not configured";wsState.started=false;return}
+    const ws=new WebSocket(adapterInstance.c.ws);
     wsState.ws=ws;
     let pingTimer=null;
     ws.on("open",()=>{
       wsState.connected=false;
       const expires=now()+10000;
-      const signature=crypto.createHmac("sha256",credentials().apiSecret).update("GET/realtime"+expires).digest("hex");
-      ws.send(JSON.stringify({op:"auth",args:[credentials().apiKey,expires,signature]}));
+      const signature=crypto.createHmac("sha256",adapterInstance.c.apiSecret).update("GET/realtime"+expires).digest("hex");
+      ws.send(JSON.stringify({op:"auth",args:[adapterInstance.c.apiKey,expires,signature]}));
       ws.send(JSON.stringify({op:"subscribe",args:["order","execution","position"]}));
       pingTimer=setInterval(()=>{try{ws.send(JSON.stringify({op:"ping"}))}catch{}},20000);
     });
@@ -377,7 +385,7 @@ function connectPrivateWs(){
   };
   loop();
 }
-if(adapter.configured())setTimeout(connectPrivateWs,1000);
+if(testnetAdapter.configured())setTimeout(()=>connectPrivateWs(testnetAdapter),1000);
 
 async function createIntent(plan){
   const loaded=await load(),state=loaded.state,p=plan||{};
@@ -397,7 +405,7 @@ async function createIntent(plan){
 }
 
 async function submitIntent(id){
-  const loaded=await load(),state=loaded.state,o=findOrder(state,id);
+  const loaded=await load(),state=loaded.state,o=findOrder(state,id),exchangeAdapter=adapterFor(state);
   if(!o)throw new Error("Execution intent not found");
   if(["SUBMITTED","ACKNOWLEDGED","OPEN","PARTIALLY_FILLED","FILLED"].includes(o.status))return clone(o);
   const plan={symbol:o.symbol,side:o.side,entry:o.entry,stop:o.stop,target:o.target,qty:o.qty,type:o.type,createdAt:o.createdAt};
@@ -419,10 +427,10 @@ async function submitIntent(id){
     addJournal(state,{id:"MP5J-"+o.id,ts:now(),type:"SIMULATION_FILLED",orderId:o.id,symbol:o.symbol,side:o.side,qty:o.qty,price:o.entry,resultR:0,pnl:0,message:"Simulation fill created; position remains open until explicitly closed."});
     pushEvent(state,"SIMULATION_FILLED",o.symbol+" "+o.side+" · "+o.qty+" @ "+o.entry,{orderId:o.id});
   }else{
-    const placed=await adapter.placeLimit({symbol:o.symbol,side:o.side==="LONG"?"Buy":"Sell",qty:o.qty,price:o.entry,stop:o.stop,target:o.target,orderLinkId:o.orderLinkId});
+    const placed=await exchangeAdapter.placeLimit({symbol:o.symbol,side:o.side==="LONG"?"Buy":"Sell",qty:o.qty,price:o.entry,stop:o.stop,target:o.target,orderLinkId:o.orderLinkId});
     o.externalOrderId=placed.orderId;o.orderLinkId=placed.orderLinkId;o.status="ACKNOWLEDGED";o.exchangeStatus="Created";o.updatedAt=now();
     state.control.reconciliation={ok:false,checkedAt:now(),detail:"Awaiting exchange websocket/reconciliation after order acknowledgement."};
-    pushEvent(state,"ORDER_ACKNOWLEDGED",o.symbol+" "+o.side+" accepted by Bybit testnet · waiting for private stream confirmation",{orderId:o.id,externalOrderId:o.externalOrderId});
+    pushEvent(state,"ORDER_ACKNOWLEDGED",o.symbol+" "+o.side+" accepted by Bybit "+String(state.config.mode).toLowerCase()+" · waiting for private stream confirmation",{orderId:o.id,externalOrderId:o.externalOrderId});
   }
   await save(state);return clone(o);
 }
@@ -435,7 +443,7 @@ async function cancelOrder(id){
     o.status="CANCELLED";o.updatedAt=now();pushEvent(state,"CANCELLED",o.symbol+" "+o.side+" simulation order cancelled",{orderId:o.id});await save(state);return clone(o);
   }
   if(!o.externalOrderId)throw new Error("Order has no exchange order id");
-  await adapter.cancel({symbol:o.symbol,orderId:o.externalOrderId});
+  await adapterFor(state).cancel({symbol:o.symbol,orderId:o.externalOrderId});
   o.status="CANCEL_REQUESTED";o.updatedAt=now();state.control.reconciliation={ok:false,checkedAt:now(),detail:"Cancel requested; waiting for websocket confirmation."};
   pushEvent(state,"CANCEL_REQUESTED",o.symbol+" "+o.side+" cancel sent",{orderId:o.id,externalOrderId:o.externalOrderId});
   await save(state);return clone(o);
@@ -460,7 +468,7 @@ async function killSwitch(enable=true){
   const loaded=await load(),state=loaded.state;
   state.control.killSwitch=Boolean(enable);
   if(enable)state.control.armed=false;
-  if(enable&&state.config.mode==="TESTNET"){
+  if(enable&&(state.config.mode==="TESTNET"||state.config.mode==="LIVE")){
     for(const o of activeOrders(state)){
       if(o.externalOrderId&&["ACKNOWLEDGED","OPEN","PARTIALLY_FILLED","SUBMITTED"].includes(o.status)){try{await adapter.cancel({symbol:o.symbol,orderId:o.externalOrderId});o.status="CANCEL_REQUESTED"}catch(e){state.health.lastError=e.message}}
     }
@@ -473,17 +481,31 @@ async function killSwitch(enable=true){
 async function armTestnet(){
   const loaded=await load(),state=loaded.state;
   if(state.config.mode!=="TESTNET")throw new Error("Set execution mode to TESTNET before arming");
-  if(!adapter.configured())throw new Error("BYBIT_API_KEY/BYBIT_API_SECRET are not configured on the server");
+  if(!testnetAdapter.configured())throw new Error("BYBIT_API_KEY/BYBIT_API_SECRET are not configured on the server");
   state.control.armed=true;state.control.killSwitch=false;
   state.control.reconciliation={ok:false,checkedAt:null,detail:"Reconciliation required before the first order."};
   pushEvent(state,"TESTNET_ARMED","Bybit testnet execution armed; reconciliation is still required.",{});
+  await save(state);return snapshot();
+}
+async function armLive(){
+  const loaded=await load(),state=loaded.state;
+  if(state.config.mode!=="LIVE")throw new Error("Set execution mode to LIVE before arming");
+  if(String(process.env.LIVE_TRADING_ENABLED||"false").toLowerCase()!=="true")throw new Error("LIVE_TRADING_ENABLED is not enabled");
+  if(!liveAdapter.configured())throw new Error("BYBIT_LIVE_API_KEY/BYBIT_LIVE_API_SECRET are not configured on the server");
+  state.control.armed=true;state.control.killSwitch=false;
+  state.control.reconciliation={ok:false,checkedAt:null,detail:"LIVE reconciliation required before the first real order."};
+  pushEvent(state,"LIVE_ARMED","Bybit live execution armed; reconciliation is still required before any real order.",{});
+  connectPrivateWs(liveAdapter);
   await save(state);return snapshot();
 }
 
 async function setConfig(patch){
   const loaded=await load(),state=loaded.state,next=Object.assign({},state.config,patch||{});
   next.mode=MODE_VALUES.includes(next.mode)?next.mode:state.config.mode;
-  if(next.mode!=="TESTNET"){state.control.armed=false;state.control.killSwitch=false;state.control.reconciliation={ok:true,checkedAt:now(),detail:"Simulation mode."}}
+  if(next.mode==="LIVE"&&!String(process.env.LIVE_TRADING_ENABLED||"false").toLowerCase().includes("true")){
+    throw new Error("LIVE_TRADING_ENABLED is OFF");
+  }
+  if(next.mode!=="TESTNET"&&next.mode!=="LIVE"){state.control.armed=false;state.control.killSwitch=false;state.control.reconciliation={ok:true,checkedAt:now(),detail:"Simulation mode."}}
   state.config=Object.assign({},state.config,next);
   if(state.config.account>0&&state.metrics.startingEquity<=0)state.metrics.startingEquity=state.config.account;
   pushEvent(state,"CONFIG_UPDATED","Execution risk controls updated",{mode:state.config.mode});
@@ -491,26 +513,26 @@ async function setConfig(patch){
 }
 
 async function reconcile(){
-  const loaded=await load(),state=loaded.state;
+  const loaded=await load(),state=loaded.state,exchangeAdapter=adapterFor(state);
   if(state.config.mode==="SIMULATION"){
     state.control.reconciliation={ok:true,checkedAt:now(),detail:"Simulation mode has no exchange state to reconcile."};
     await save(state);return snapshot();
   }
-  if(!adapter.configured())throw new Error("Bybit testnet credentials not configured");
+  if(!exchangeAdapter.configured())throw new Error("Bybit "+String(state.config.mode).toLowerCase()+" credentials not configured");
   const symbols=Array.from(new Set(activeOrders(state).concat(activePositions(state)).map(x=>x.symbol).filter(Boolean)));
-  const externalOrders=await adapter.openOrders();
+  const externalOrders=await exchangeAdapter.openOrders();
   const localOpen=activeOrders(state).filter(x=>x.externalOrderId);
   const openMismatch=localOpen.some(x=>!externalOrders.some(e=>e.orderId===x.externalOrderId)) || externalOrders.some(e=>!localOpen.some(x=>x.externalOrderId===e.orderId));
-  const externalPositions=await adapter.positions();
+  const externalPositions=await exchangeAdapter.positions();
   const extPosMap=new Map(externalPositions.map(p=>[String(p.symbol)+":"+String(p.positionIdx??0),Math.abs(finite(p.size,0)||0)]));
   const localPosMap=new Map(activePositions(state).map(p=>[String(p.symbol)+":"+String(p.positionIdx??0),Math.abs(finite(p.qty,0)||0)]));
   let positionMismatch=false;
   for(const [k,v] of extPosMap)if((v>0)!==(localPosMap.get(k)>0))positionMismatch=true;
   for(const [k,v] of localPosMap)if((v>0)!==(extPosMap.get(k)>0))positionMismatch=true;
   const ok=!openMismatch&&!positionMismatch;
-  state.control.reconciliation={ok,checkedAt:now(),detail:ok?"Local execution state matches testnet open orders/positions.":"Mismatch detected; new execution is blocked until state is reconciled.",openMismatch,positionMismatch,externalOrders:externalOrders.map(x=>({orderId:x.orderId,symbol:x.symbol,status:x.orderStatus})),externalPositions:externalPositions.map(x=>({symbol:x.symbol,positionIdx:x.positionIdx,size:x.size,side:x.side}))};
+  state.control.reconciliation={ok,checkedAt:now(),detail:ok?"Local execution state matches "+String(state.config.mode).toLowerCase()+" open orders/positions.":"Mismatch detected; new execution is blocked until state is reconciled.",openMismatch,positionMismatch,externalOrders:externalOrders.map(x=>({orderId:x.orderId,symbol:x.symbol,status:x.orderStatus})),externalPositions:externalPositions.map(x=>({symbol:x.symbol,positionIdx:x.positionIdx,size:x.size,side:x.side}))};
   if(!ok)state.health.lastError="RECONCILIATION_MISMATCH";
-  pushEvent(state,"RECONCILIATION",ok?"Testnet state reconciled":"Reconciliation mismatch — execution blocked",{ok,openMismatch,positionMismatch});
+  pushEvent(state,"RECONCILIATION",ok?String(state.config.mode)+" state reconciled":"Reconciliation mismatch — execution blocked",{ok,openMismatch,positionMismatch});
   await save(state);return snapshot();
 }
 
@@ -532,15 +554,17 @@ function snapshot(){
       orders:orders.slice(0,80),positions:active,fills:state.fills.slice(-40).reverse(),events:state.events.slice(-80).reverse(),
       journal:state.journal.slice(-40).reverse(),metrics:Object.assign({},state.metrics,{equity:state.config.account+pnl,dailyLossPct:dailyLossPct(state),openRiskPct:openRiskPct(state),activePositions:active.length,ordersLastMinute:ordersLastMinute(state)}),
       health:{
-        adapter:"Bybit Testnet adapter",
-        credentialsConfigured:adapter.configured(),
+        adapter:adapterFor(state).mode==="LIVE"?"Bybit Live adapter":"Bybit Testnet adapter",
+        credentialsConfigured:adapterFor(state).configured(),
         privateWsConnected:wsState.connected,
         privateWsLastMessageAt:wsState.lastMessageAt,
         privateWsLastError:wsState.lastError,
         lastError:state.health.lastError,
         reconciliation:state.control.reconciliation,
-        liveModeAvailable:false,
-        note:"Phase 5 intentionally exposes SIMULATION and TESTNET only. Production/live order routing is not enabled in this phase."
+        liveModeAvailable:Boolean(liveAdapter.configured()&&String(process.env.LIVE_TRADING_ENABLED||"false").toLowerCase()==="true"),
+        liveModeConfigured:Boolean(liveAdapter.configured()),
+        liveTradingEnabled:String(process.env.LIVE_TRADING_ENABLED||"false").toLowerCase()==="true",
+        note:"LIVE remains fail-closed until production credentials, LIVE_TRADING_ENABLED=true, reconciliation and explicit live arm are all present."
       },
       updatedAt:now()
     };
@@ -554,6 +578,7 @@ module.exports={
   snapshot,
   setConfig,
   armTestnet,
+  armLive,
   killSwitch,
   createIntent,
   submitIntent,
