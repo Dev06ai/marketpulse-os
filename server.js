@@ -15,6 +15,7 @@ const phase18MarketState=require('./phase18-market-state');
 const phase18Opportunity=require('./phase18-opportunity');
 const phase18ExecutionRouter=require('./phase18-execution-router');
 const {validateTradeLevels}=require("./trade-levels");
+const {buildDecisionIntelligence}=require("./decision-intelligence");
 const signalNotifications=require('./signal-notifications');
 const propFirm=require('./prop-firm');
 const research=require('./research-data');
@@ -879,6 +880,7 @@ async function buildDecisionSnapshot(symbol,interval,query,deviceId=null){
         reason:levelBlockReason,
         riskAtr:conditionalLevels?.riskAtr??null
       }
+    const decisionIntelligence=buildDecisionIntelligence({analysis,decision:finalDecision});
     };
     try{
       setTimeout(()=>signalNotifications.notifyAdminSignal(storage,{
@@ -918,7 +920,7 @@ async function buildDecisionSnapshot(symbol,interval,query,deviceId=null){
     try{learning.observeFinalDecision(symbol,interval,candles,finalDecision).catch(()=>{})}catch{}
     try{setTimeout(()=>phase14.refreshAdaptiveState(storage,{symbol,interval}).catch(()=>{}),250)}catch{}
     const payload={
-      ok:true,...finalDecision,analysis,derivatives:flow,consensus,
+      ok:true,...finalDecision,analysis,derivatives:flow,consensus,decisionIntelligence,
       learning:null,
       backtest:analytics?.backtest||null,validation:analytics?.validation||null,setupStats:analytics?.setupStats||null,
       phase11_13:validation1113,
