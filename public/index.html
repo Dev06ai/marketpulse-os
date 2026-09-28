@@ -280,7 +280,7 @@ button,input,select,textarea{font:inherit}.wrap{width:min(1440px,calc(100% - 26p
 .navSectionLabel{padding:8px 9px 5px;color:#66758a;font-size:7.5px;font-weight:950;letter-spacing:.13em;text-transform:uppercase}
 .navItem{position:relative}
 .navItem:after{content:"";position:absolute;left:10px;top:10px;width:3px;height:26px;border-radius:99px;background:var(--item-accent,rgba(255,255,255,.18));opacity:.9}
-.navItemIcon{width:30px;height:30px;flex:0 0 30px;border-radius:9px;background:linear-gradient(135deg,var(--icon-a,rgba(255,255,255,.10)),var(--icon-b,rgba(255,255,255,.05)));border:1px solid rgba(255,255,255,.09);color:var(--icon-color,#d8c4ff);box-shadow:inset 0 1px 0 rgba(255,255,255,.04),0 4px 18px rgba(0,0,0,.16);font-weight:950;font-size:12px}
+.navItemIcon{width:36px;height:36px;flex:0 0 36px;display:grid;place-items:center;position:relative;border-radius:11px;background:radial-gradient(circle at 30% 22%,rgba(255,255,255,.18),transparent 34%),linear-gradient(145deg,var(--icon-a,rgba(255,255,255,.12)),var(--icon-b,rgba(255,255,255,.035)));border:1px solid color-mix(in srgb,var(--item-accent,#c084fc) 34%,rgba(255,255,255,.10));color:var(--icon-color,#d8c4ff);box-shadow:inset 0 1px 0 rgba(255,255,255,.10),inset 0 -8px 16px rgba(0,0,0,.12),0 7px 22px rgba(0,0,0,.22),0 0 18px color-mix(in srgb,var(--item-accent,#c084fc) 16%,transparent);font-weight:950;font-size:12px;overflow:hidden;transition:transform .18s ease,box-shadow .18s ease,border-color .18s ease}
 .navItem b{font-size:10.5px;letter-spacing:-.01em}.navItem small{font-size:8.3px;color:#8290a2}
 .navItem:hover .navItemIcon{transform:translateY(-1px);box-shadow:0 0 20px color-mix(in srgb,var(--item-accent,#c084fc) 25%, transparent)}
 .navItem.tone-green{--item-accent:#4ade80;--icon-a:rgba(74,222,128,.18);--icon-b:rgba(16,185,129,.06);--icon-color:#86efac}
@@ -291,7 +291,14 @@ button,input,select,textarea{font:inherit}.wrap{width:min(1440px,calc(100% - 26p
 .navItem.tone-orange{--item-accent:#fb923c;--icon-a:rgba(251,146,60,.18);--icon-b:rgba(249,115,22,.06);--icon-color:#fdba74}
 .navItem.tone-yellow{--item-accent:#facc15;--icon-a:rgba(250,204,21,.18);--icon-b:rgba(234,179,8,.06);--icon-color:#fde047}
 .navItem.tone-red{--item-accent:#fb7185;--icon-a:rgba(251,113,133,.18);--icon-b:rgba(244,63,94,.06);--icon-color:#fda4af}
-</style><style id="guard-chart-style">
+</style>
+.navSvg{width:20px;height:20px;display:block;filter:drop-shadow(0 2px 6px rgba(0,0,0,.28))}
+.navItem:hover .navItemIcon,.navItem.active .navItemIcon{transform:translateY(-1px) scale(1.03);border-color:color-mix(in srgb,var(--item-accent,#c084fc) 55%,rgba(255,255,255,.18));box-shadow:inset 0 1px 0 rgba(255,255,255,.14),inset 0 -8px 16px rgba(0,0,0,.10),0 9px 26px rgba(0,0,0,.25),0 0 24px color-mix(in srgb,var(--item-accent,#c084fc) 24%,transparent)}
+.navItemIcon:after{content:"";position:absolute;inset:1px;border-radius:10px;background:linear-gradient(135deg,rgba(255,255,255,.10),transparent 45%,rgba(255,255,255,.02));pointer-events:none}
+.icon-scanner .navSvg{transform:rotate(-8deg)}
+.icon-flow .navSvg{transform:scaleX(1.02)}
+.icon-radar .navSvg{transform:scale(1.04)}
+<style id="guard-chart-style">
 .chartTools button.active{color:#fff;border-color:rgba(103,232,255,.35);background:rgba(103,232,255,.08);box-shadow:0 0 14px rgba(103,232,255,.08)}
 .chartTools button[data-active="true"]{color:#fff;border-color:rgba(103,232,255,.35);background:rgba(103,232,255,.08)}
 .chartWrap{user-select:none;overscroll-behavior:contain}
@@ -874,13 +881,13 @@ linear-gradient(180deg,#0c0e11 0%,#101214 48%,#0a0b0d 100%);box-shadow:0 -20px 7
       <div class="navCategoryPanel">
         <div class="navCategoryTitle">MARKET INTELLIGENCE</div>
         <div class="navSectionLabel">OVERVIEW</div>
-        <button data-view="scanner" class="navItem tone-green"><span class="navItemIcon">⌕</span><span><b>Market Scanner</b><small>Compare coins, trends and market regimes</small></span></button>
-        <button data-view="signals" class="navItem tone-violet"><span class="navItemIcon">✦</span><span><b>Setups</b><small>Review directional opportunities and confluence</small></span></button>
+        <button data-view="scanner" class="navItem tone-green"><span class="navItemIcon icon-scanner"><svg class="navSvg" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="11" cy="11" r="5.5" stroke="currentColor" stroke-width="1.8"/><path d="M15.2 15.2 20 20" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M8.5 11h5M11 8.5v5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" opacity=".7"/></svg></span><span><b>Market Scanner</b><small>Compare coins, trends and market regimes</small></span></button>
+        <button data-view="signals" class="navItem tone-violet"><span class="navItemIcon icon-setups"><svg class="navSvg" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m12 3 2.1 5.4L20 10.5l-5.9 2.1L12 18l-2.1-5.4L4 10.5l5.9-2.1L12 3Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M18.2 3.6v3.2M16.6 5.2h3.2" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" opacity=".75"/></svg></span><span><b>Setups</b><small>Review directional opportunities and confluence</small></span></button>
         <div class="navSectionLabel">FLOW &amp; LIQUIDITY</div>
-        <button data-view="flow" class="navItem tone-cyan"><span class="navItemIcon">≋</span><span><b>Market Flow</b><small>OI, CVD, order flow, liquidity and positioning</small></span></button>
-        <button data-view="trade-radar" class="navItem tone-orange"><span class="navItemIcon">◎</span><span><b>Trade Radar</b><small>Track emerging opportunities through the lifecycle</small></span></button>
+        <button data-view="flow" class="navItem tone-cyan"><span class="navItemIcon icon-flow"><svg class="navSvg" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 8c2.4-3 4.8-3 7.2 0s4.8 3 7.2 0" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M4 13c2.4-3 4.8-3 7.2 0s4.8 3 7.2 0" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" opacity=".8"/><path d="M4 18c2.4-3 4.8-3 7.2 0s4.8 3 7.2 0" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" opacity=".55"/></svg></span><span><b>Market Flow</b><small>OI, CVD, order flow, liquidity and positioning</small></span></button>
+        <button data-view="trade-radar" class="navItem tone-orange"><span class="navItemIcon icon-radar"><svg class="navSvg" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="7.5" stroke="currentColor" stroke-width="1.4" opacity=".55"/><circle cx="12" cy="12" r="4.5" stroke="currentColor" stroke-width="1.6" opacity=".8"/><path d="M12 12 18.3 8.3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="12" cy="12" r="1.8" fill="currentColor"/></svg></span><span><b>Trade Radar</b><small>Track emerging opportunities through the lifecycle</small></span></button>
         <div class="navSectionLabel">PATTERN INTELLIGENCE</div>
-        <button data-view="dna" class="navItem tone-pink"><span class="navItemIcon">◈</span><span><b>Pattern DNA</b><small>Discover recurring market structures and setups</small></span></button>
+        <button data-view="dna" class="navItem tone-pink"><span class="navItemIcon icon-dna"><svg class="navSvg" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M7 4c5 2 5 5 0 8s-5 6 0 8M17 4c-5 2-5 5 0 8s5 6 0 8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M8.4 7h7.2M8.2 12h7.6M8.4 17h7.2" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" opacity=".75"/></svg></span><span><b>Pattern DNA</b><small>Discover recurring market structures and setups</small></span></button>
       </div>
     </div>
 
@@ -889,11 +896,11 @@ linear-gradient(180deg,#0c0e11 0%,#101214 48%,#0a0b0d 100%);box-shadow:0 -20px 7
       <div class="navCategoryPanel">
         <div class="navCategoryTitle">RESEARCH &amp; ANALYTICS</div>
         <div class="navSectionLabel">TEST &amp; REPLAY</div>
-        <button data-view="lab" class="navItem tone-blue"><span class="navItemIcon">▦</span><span><b>Backtest</b><small>Test strategies on historical data</small></span></button>
-        <button data-view="replay" class="navItem tone-cyan"><span class="navItemIcon">↺</span><span><b>Replay</b><small>Revisit historical market conditions bar by bar</small></span></button>
+        <button data-view="lab" class="navItem tone-blue"><span class="navItemIcon icon-backtest"><svg class="navSvg" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 5.5h14v13H5z" stroke="currentColor" stroke-width="1.5" rx="2"/><path d="M8 14.5 10.5 12l2 2 3.5-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 8.5h8" stroke="currentColor" stroke-width="1.2" opacity=".55" stroke-linecap="round"/></svg></span><span><b>Backtest</b><small>Test strategies on historical data</small></span></button>
+        <button data-view="replay" class="navItem tone-cyan"><span class="navItemIcon icon-replay"><svg class="navSvg" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M6.2 9.2A7 7 0 1 1 6 15" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M6.2 5.4v3.8H10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M12 8v4l2.7 1.7" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg></span><span><b>Replay</b><small>Revisit historical market conditions bar by bar</small></span></button>
         <div class="navSectionLabel">EVIDENCE</div>
-        <button data-view="research" class="navItem tone-yellow"><span class="navItemIcon">⌁</span><span><b>Research</b><small>Explore historical evidence and datasets</small></span></button>
-        <button data-view="edge" class="navItem tone-pink"><span class="navItemIcon">◒</span><span><b>Edge</b><small>Review strategy statistics and evidence</small></span></button>
+        <button data-view="research" class="navItem tone-yellow"><span class="navItemIcon icon-research"><svg class="navSvg" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M6 18.5V10M12 18.5V5.5M18 18.5V13" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M4 18.5h16" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" opacity=".6"/><path d="M6 8.2 12 4l6 5.2" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" opacity=".65"/></svg></span><span><b>Research</b><small>Explore historical evidence and datasets</small></span></button>
+        <button data-view="edge" class="navItem tone-pink"><span class="navItemIcon icon-edge"><svg class="navSvg" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 17 9 13l3 2 6-7" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/><path d="M15 8h3v3" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><circle cx="6" cy="17" r="1.4" fill="currentColor"/><circle cx="18" cy="8" r="1.4" fill="currentColor"/></svg></span><span><b>Edge</b><small>Review strategy statistics and evidence</small></span></button>
       </div>
     </div>
 
@@ -902,12 +909,12 @@ linear-gradient(180deg,#0c0e11 0%,#101214 48%,#0a0b0d 100%);box-shadow:0 -20px 7
       <div class="navCategoryPanel">
         <div class="navCategoryTitle">TRADING &amp; EXECUTION</div>
         <div class="navSectionLabel">ACCOUNT</div>
-        <button data-view="portfolio" class="navItem tone-green"><span class="navItemIcon">▤</span><span><b>Portfolio</b><small>Exposure, positions and account overview</small></span></button>
+        <button data-view="portfolio" class="navItem tone-green"><span class="navItemIcon icon-portfolio"><svg class="navSvg" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4.5 7.2h15v11.3h-15z" stroke="currentColor" stroke-width="1.5" rx="2"/><path d="M8 7.2V5.8h8v1.4M4.5 11.8h15" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M10 14.5h4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></span><span><b>Portfolio</b><small>Exposure, positions and account overview</small></span></button>
         <div class="navSectionLabel">SAFETY</div>
-        <button data-view="risk" class="navItem tone-yellow"><span class="navItemIcon">△</span><span><b>Risk</b><small>Risk controls, limits and protection rules</small></span></button>
+        <button data-view="risk" class="navItem tone-yellow"><span class="navItemIcon icon-risk"><svg class="navSvg" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 4 19 7v5.3c0 4.1-2.5 6.6-7 8-4.5-1.4-7-3.9-7-8V7l7-3Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M12 8v4M12 15.5v.2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></span><span><b>Risk</b><small>Risk controls, limits and protection rules</small></span></button>
         <div class="navSectionLabel">EXECUTION</div>
-        <button id="executionNav" class="adminNav navItem tone-orange" data-view="execution"><span class="navItemIcon">↗</span><span><b>Execution</b><small>Advanced execution controls and routing</small></span></button>
-        <button id="autotraderNav" class="adminNav navItem tone-pink" data-view="autotrader"><span class="navItemIcon">⚙</span><span><b>AutoTrader</b><small>Automated strategy execution and monitoring</small></span></button>
+        <button id="executionNav" class="adminNav navItem tone-orange" data-view="execution"><span class="navItemIcon icon-execution"><svg class="navSvg" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m6 17 6-10 1.8 4.2L18 13" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M4.5 19.5h15" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" opacity=".55"/><circle cx="6" cy="17" r="1.4" fill="currentColor"/></svg></span><span><b>Execution</b><small>Advanced execution controls and routing</small></span></button>
+        <button id="autotraderNav" class="adminNav navItem tone-pink" data-view="autotrader"><span class="navItemIcon icon-autotrader"><svg class="navSvg" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M7 6.5h10v11H7z" stroke="currentColor" stroke-width="1.5" rx="2"/><path d="M9.5 4.5v4M14.5 4.5v4M5 9.5h14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M10 13h4M12 11v4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></span><span><b>AutoTrader</b><small>Automated strategy execution and monitoring</small></span></button>
       </div>
     </div>
 
@@ -916,10 +923,10 @@ linear-gradient(180deg,#0c0e11 0%,#101214 48%,#0a0b0d 100%);box-shadow:0 -20px 7
       <div class="navCategoryPanel">
         <div class="navCategoryTitle">WORKSPACE</div>
         <div class="navSectionLabel">PRODUCTIVITY</div>
-        <button data-view="brain" class="navItem tone-violet"><span class="navItemIcon">✎</span><span><b>Journal</b><small>Trading journal, notes and history</small></span></button>
-        <button data-view="ai" class="navItem tone-cyan"><span class="navItemIcon">✦</span><span><b>Copilot</b><small>Ask MarketPulse for context and explanations</small></span></button>
+        <button data-view="brain" class="navItem tone-violet"><span class="navItemIcon icon-journal"><svg class="navSvg" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M7 4.5h10v15H7z" stroke="currentColor" stroke-width="1.5" rx="2"/><path d="M9.5 8h5M9.5 11h5M9.5 14h3.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" opacity=".9"/><path d="M5 7.5h2M5 12h2M5 16.5h2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" opacity=".55"/></svg></span><span><b>Journal</b><small>Trading journal, notes and history</small></span></button>
+        <button data-view="ai" class="navItem tone-cyan"><span class="navItemIcon icon-copilot"><svg class="navSvg" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 4.2 13.6 8l3.8 1.6-3.8 1.6L12 15l-1.6-3.8-3.8-1.6L10.4 8 12 4.2Z" stroke="currentColor" stroke-width="1.45" stroke-linejoin="round"/><path d="m18 14 .9 2.1L21 17l-2.1.9L18 20l-.9-2.1L15 17l2.1-.9L18 14Z" fill="currentColor" opacity=".55"/></svg></span><span><b>Copilot</b><small>Ask MarketPulse for context and explanations</small></span></button>
         <div class="navSectionLabel">MONITORING</div>
-        <button data-view="alerts" class="navItem tone-green"><span class="navItemIcon">◉</span><span><b>Watchlist</b><small>Track conditions, alerts and watch items</small></span></button>
+        <button data-view="alerts" class="navItem tone-green"><span class="navItemIcon icon-watchlist"><svg class="navSvg" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 6.5A3.5 3.5 0 0 1 8.5 3h7A3.5 3.5 0 0 1 19 6.5v11A3.5 3.5 0 0 1 15.5 21h-7A3.5 3.5 0 0 1 5 17.5v-11Z" stroke="currentColor" stroke-width="1.5"/><path d="m8 9 3 3 5-5M8 16h6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" opacity=".8"/></svg></span><span><b>Watchlist</b><small>Track conditions, alerts and watch items</small></span></button>
       </div>
     </div>
 
@@ -928,7 +935,7 @@ linear-gradient(180deg,#0c0e11 0%,#101214 48%,#0a0b0d 100%);box-shadow:0 -20px 7
       <div class="navCategoryPanel">
         <div class="navCategoryTitle">ADMINISTRATION</div>
         <div class="navSectionLabel">SYSTEM</div>
-        <button id="adminNav" class="adminNav navItem tone-red" data-view="admin"><span class="navItemIcon">◆</span><span><b>Admin Console</b><small>Users, system checks, access and controls</small></span></button>
+        <button id="adminNav" class="adminNav navItem tone-red" data-view="admin"><span class="navItemIcon icon-admin"><svg class="navSvg" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 4 19 8v8l-7 4-7-4V8l7-4Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M12 8.2 15.5 10v4L12 15.8 8.5 14v-4L12 8.2Z" stroke="currentColor" stroke-width="1.3" opacity=".8"/></svg></span><span><b>Admin Console</b><small>Users, system checks, access and controls</small></span></button>
       </div>
     </div>
   </nav>
