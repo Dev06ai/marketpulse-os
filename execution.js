@@ -9,6 +9,8 @@ const MAX_ORDERS=300;
 const MAX_POSITIONS=50;
 const MAX_EVENTS=500;
 const MAX_JOURNAL=500;
+const BOT_STRATEGY_VALUES=["SCALP","INTRADAY","SWING","POSITION"];
+const BOT_MODE_VALUES=["OFF","PAPER","TESTNET","LIVE"];
 
 const DEFAULT_CONFIG={
   mode:"SIMULATION",
@@ -59,7 +61,27 @@ function defaultState(){
       dayKey:todayKey(),
       dayStartPnl:0
     },
-    health:{lastError:null,lastActionAt:null}
+    health:{lastError:null,lastActionAt:null},
+    bot:{
+      enabled:false,
+      mode:"PAPER",
+      symbols:["BTCUSDT"],
+      strategies:{SCALP:true,INTRADAY:true,SWING:true,POSITION:false},
+      riskByStrategy:{SCALP:0.25,INTRADAY:0.5,SWING:0.75,POSITION:1},
+      maxPositions:1,
+      maxDailyTrades:4,
+      cooldownMs:600000,
+      minScore:78,
+      minRR:1.5,
+      requireConfirmed:true,
+      lastTradeAt:null,
+      tradesToday:0,
+      dayKey:todayKey(),
+      lastSignalKey:null,
+      lastDecisionAt:null,
+      lastAction:"IDLE",
+      lastError:null
+    }
   };
 }
 
@@ -99,6 +121,22 @@ function ensureState(raw){
   }
   s.metrics.dayStartPnl=finite(s.metrics.dayStartPnl,s.metrics.realizedPnl);
   s.health=Object.assign({},d.health,s.health||{});
+  s.bot=Object.assign({},d.bot,s.bot||{});
+  s.bot.enabled=Boolean(s.bot.enabled);
+  s.bot.mode=BOT_MODE_VALUES.includes(s.bot.mode)?s.bot.mode:"PAPER";
+  s.bot.symbols=Array.isArray(s.bot.symbols)?Array.from(new Set(s.bot.symbols.map(x=>String(x).toUpperCase()).filter(Boolean))).slice(0,20):["BTCUSDT"];
+  s.bot.strategies=Object.assign({},d.bot.strategies,s.bot.strategies||{});
+  BOT_STRATEGY_VALUES.forEach(k=>{s.bot.strategies[k]=Boolean(s.bot.strategies[k])});
+  s.bot.riskByStrategy=Object.assign({},d.bot.riskByStrategy,s.bot.riskByStrategy||{});
+  BOT_STRATEGY_VALUES.forEach(k=>{s.bot.riskByStrategy[k]=clamp(finite(s.bot.riskByStrategy[k],d.bot.riskByStrategy[k]),0.05,2)});
+  s.bot.maxPositions=Math.round(clamp(finite(s.bot.maxPositions,1),1,10));
+  s.bot.maxDailyTrades=Math.round(clamp(finite(s.bot.maxDailyTrades,4),1,50));
+  s.bot.cooldownMs=Math.round(clamp(finite(s.bot.cooldownMs,600000),60000,86400000));
+  s.bot.minScore=clamp(finite(s.bot.minScore,78),70,100);
+  s.bot.minRR=clamp(finite(s.bot.minRR,1.5),1.5,5);
+  s.bot.requireConfirmed=s.bot.requireConfirmed!==false;
+  if(s.bot.dayKey!==todayKey()){s.bot.dayKey=todayKey();s.bot.tradesToday=0;s.bot.lastSignalKey=null}
+  s.bot.tradesToday=Math.max(0,Math.round(finite(s.bot.tradesToday,0)));
   return s;
 }
 
@@ -536,6 +574,58 @@ async function reconcile(){
   await save(state);return snapshot();
 }
 
+async function setBotConfig(patch={}){
+  const loaded=await load(),state=loaded.state;
+  const next=Object.assign({},state.bot||{},patch||{});
+  if(next.mode==="LIVE" && String(process.env.LIVE_TRADING_ENABLED||"false").toLowerCase()!=="true"){
+    throw new Error("LIVE_TRADING_ENABLED is OFF");
+  }
+  state.bot=ensureState(Object.assign({},state,{bot:next})).bot;
+  pushEvent(state,"BOT_CONFIG_UPDATED","AutoTrader configuration updated",{mode:state.bot.mode,enabled:state.bot.enabled,strategies:state.bot.strategies});
+  await save(state);
+  return botSnapshot(state);
+}
+function botSnapshot(rawState){
+  const state=rawState&&rawState.config?ensureState(rawState):rawState;
+  return {
+    ok:true,
+    bot:clone(state.bot),
+    execution:{
+      mode:state.config.mode,
+      armed:state.control.armed,
+      killSwitch:state.control.killSwitch,
+      reconciliation:state.control.reconciliation,
+      metrics:{dailyLossPct:dailyLossPct(state),openRiskPct:openRiskPct(state),activePositions:activePositions(state).length,ordersLastMinute:ordersLastMinute(state)}
+    },
+    health:{lastError:state.health.lastError,privateWsConnected:wsState.connected}
+  };
+}
+async function getBotSnapshot(){
+  const loaded=await load();
+  return botSnapshot(loaded.state);
+}
+function recordBotTradeMeta(meta={}){
+  return load().then(async({state})=>{
+    state.bot=ensureState(Object.assign({},state)).bot;
+    state.bot.lastTradeAt=now();
+    state.bot.tradesToday=(Number(state.bot.tradesToday)||0)+1;
+    state.bot.lastSignalKey=meta.signalKey||state.bot.lastSignalKey;
+    state.bot.lastDecisionAt=meta.decisionAt||state.bot.lastDecisionAt;
+    state.bot.lastAction=meta.action||"TRADE_SUBMITTED";
+    state.bot.lastError=null;
+    pushEvent(state,"BOT_TRADE_SUBMITTED","AutoTrader submitted a controlled execution intent",{signalKey:state.bot.lastSignalKey,strategy:meta.strategy||null,symbol:meta.symbol||null,interval:meta.interval||null});
+    await save(state);
+    return botSnapshot(state);
+  });
+}
+function recordBotError(message){
+  return load().then(async({state})=>{
+    state.bot.lastError=String(message||"Unknown AutoTrader error");
+    state.bot.lastAction="ERROR";
+    await save(state);
+    return botSnapshot(state);
+  });
+}
 async function prepareFromSignal(signal){
   if(!signal)throw new Error("No Phase 4 signal available");
   if(!["LONG","SHORT"].includes(signal.side)||signal.lifecycle==="CLOSED")throw new Error("Phase 4 has no executable open signal");
@@ -598,5 +688,9 @@ module.exports={
   reconcile,
   prepareFromSignal,
   autoSubmitFinalDecision,
+  setBotConfig,
+  getBotSnapshot,
+  recordBotTradeMeta,
+  recordBotError,
   marketGate
 };
