@@ -4210,6 +4210,11 @@ function startLiveChartStream(symbol){
           if(Number.isFinite(p)){
             session.lastTickAt=Date.now();
             var ch=Number(d?.price24hPcnt);
+            var lfTicker=session.liveFlow||{};
+            if(Number.isFinite(Number(d?.openInterest)))lfTicker.oi=Number(d.openInterest);
+            if(Number.isFinite(Number(d?.fundingRate)))lfTicker.fundingRate=Number(d.fundingRate);
+            lfTicker.available=true;
+            session.liveFlow=lfTicker;state.liveFlow=lfTicker;
             updateLiveChartPrice(p,Number(msg.ts)||Date.now(),symbol,Number.isFinite(ch)?ch*100:null);
           }
         }else if(msg.topic&&String(msg.topic).indexOf("publicTrade.")===0){
@@ -4720,7 +4725,7 @@ function renderLiveDirectionalModel(d){
     el.classList.remove("livePositive","liveNegative","liveNeutral");
     var t=String(x[2]||"").toUpperCase();
     el.classList.add(
-      /BUYERS|UPTREND|SHORT LIQS|BUY-DOMINANT|+/.test(t)?"livePositive":
+      /BUYERS|UPTREND|SHORT LIQS|BUY-DOMINANT|\+/.test(t)?"livePositive":
       /SELLERS|DOWNTREND|LONG LIQS|SELL-DOMINANT|-/.test(t)?"liveNegative":"liveNeutral"
     );
   });
