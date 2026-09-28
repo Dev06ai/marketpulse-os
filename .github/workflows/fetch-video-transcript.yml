@@ -1,4 +1,4 @@
-name: Fetch requested YouTube transcript
+name: Transcribe requested YouTube video audio
 
 on:
   push:
@@ -9,20 +9,55 @@ permissions:
   contents: write
 
 jobs:
-  fetch:
+  transcribe:
     if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
-      - name: Fetch transcript
+
+      - name: Install media tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+
+      - name: Install transcription tools
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -q yt-dlp faster-whisper
+
+      - name: Download video audio
         run: |
           set -euo pipefail
-          curl -fsSL "https://youtube-transcript.ai/transcript/H97QbGdCPa0.txt" -o marketpulse_video_transcript.md
+          yt-dlp --no-playlist --extract-audio --audio-format wav             --audio-quality 0             -o "marketpulse_video_audio.%(ext)s"             "https://www.youtube.com/watch?v=H97QbGdCPa0"
+
+      - name: Transcribe with Whisper
+        run: |
+          python - <<'PY'
+          from faster_whisper import WhisperModel
+          model = WhisperModel("small.en", device="cpu", compute_type="int8")
+          segments, info = model.transcribe(
+              "marketpulse_video_audio.wav",
+              beam_size=5,
+              vad_filter=True,
+              condition_on_previous_text=True,
+              word_timestamps=False,
+          )
+          with open("marketpulse_video_transcript.md","w",encoding="utf-8") as f:
+              f.write("# Video transcript: H97QbGdCPa0\n")
+              f.write(f"Language: {info.language}\n")
+              f.write(f"Duration: {info.duration:.1f}s\n\n")
+              for seg in segments:
+                  mins = int(seg.start//60)
+                  secs = int(seg.start%60)
+                  f.write(f"[{mins}:{secs:02d}] {seg.text.strip()}\n")
+          PY
           test -s marketpulse_video_transcript.md
+
       - name: Commit transcript
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add marketpulse_video_transcript.md
-          git commit -m "Ingest requested YouTube transcript" || exit 0
+          git commit -m "Transcribe requested YouTube video with Whisper" || exit 0
           git push
