@@ -34,7 +34,12 @@ function strictSignalChecks(a,side,higher,lower,flowScore,dataScore,levels,deriv
   const reactionMatches=reactionConfirmed&&String(reaction.action).toUpperCase()===side;
   if(reactionMatches&&flowScore<70)reasons.push("reaction confirmed but order-flow confirmation is below 70");
   if(reactionMatches&&dataScore<85)reasons.push("reaction confirmed but data quality is below 85");
-  const setupKind=String(ms.setup?.kind||"").toUpperCase();
+  const setupKind=String(a?.strategyFamily||ms.setup?.kind||"").toUpperCase();
+  const confirmedSweepReclaim=Boolean(
+    a?.reactionMap?.active?.action===side &&
+    /CONFIRM_LONG|CONFIRM_SHORT/.test(String(a?.reactionMap?.active?.state||"")) &&
+    /sweep|reclaim/i.test(String(a?.reactionMap?.active?.trigger||""))
+  );
   const setupScore=n(ms.setup?.score,0);
   const levelReversal=(setupKind==="SFP"||setupKind==="NPOC"||setupKind==="ORDER_BLOCK")&&setupScore>=85;
   const strongSfp=setupKind==="SFP"&&setupScore>=82;
@@ -50,13 +55,14 @@ function strictSignalChecks(a,side,higher,lower,flowScore,dataScore,levels,deriv
     if(!controlledReversal&&!controlledSfp&&!controlledReaction&&!controlledDline)reasons.push(higherMissing?"higher-timeframe trend unavailable":"higher-timeframe trend conflicts");
   }
   const sfpLowerConfirmed=strongSfp&&flowScore>=70&&dataScore>=85;
-  if(side==="LONG"&&l==="DOWNTREND"&&!sfpLowerConfirmed)reasons.push("15M trend conflicts");
-  if(side==="SHORT"&&l==="UPTREND"&&!sfpLowerConfirmed)reasons.push("15M trend conflicts");
+  const sweepOverride=confirmedSweepReclaim&&flowScore>=70&&dataScore>=85;
+  if(side==="LONG"&&l==="DOWNTREND"&&!sfpLowerConfirmed&&!sweepOverride)reasons.push("15M trend conflicts");
+  if(side==="SHORT"&&l==="UPTREND"&&!sfpLowerConfirmed&&!sweepOverride)reasons.push("15M trend conflicts");
   if(String(d.cvdState||"").toUpperCase().includes("DIVERGENCE"))reasons.push("CVD divergence");
   if(Number.isFinite(Number(levels?.rr))&&Number(levels.rr)<1.5)reasons.push("R:R below 1.5");
   if(setupKind==="D_LINE_BREAKOUT"&&(!Number.isFinite(Number(levels?.rr))||Number(levels.rr)<2))reasons.push("D-Line checklist requires 2:1+ R:R");
   const advancedExecutionSetup=["SFP","ORDER_BLOCK","BREAKOUT_RETEST"].includes(setupKind);
-  if(advancedExecutionSetup&&(!Number.isFinite(Number(levels?.rr))||Number(levels.rr)<3))reasons.push("Advanced price-action framework requires 3:1+ R:R");
+  if(advancedExecutionSetup&&(!Number.isFinite(Number(levels?.rr))||Number(levels.rr)<3)&&!(confirmedSweepReclaim&&Number(levels?.rr)>=1.8))reasons.push("Advanced price-action framework requires 3:1+ R:R");
   if(d.available===false)reasons.push("derivatives unavailable");
   const completeness=d.completeness&&typeof d.completeness==="object"
     ?Object.values(d.completeness).filter(Boolean).length
