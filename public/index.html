@@ -3221,12 +3221,13 @@ function renderTradeRadar(data){
   var order=["FORMING","ARMED","TRIGGERED","ENTERED","MANAGED","CLOSED"],at=order.indexOf(String(r.status||"FORMING"));
   order.forEach(function(k,i){var id="radarStep"+k.charAt(0)+k.slice(1).toLowerCase(),el=$(id);if(!el)return;el.classList.toggle("active",i===at);el.classList.toggle("done",i<at)});
   var tr=r.trigger||{};
+  var radarPrice=function(v){return Number.isFinite(Number(v))?fmt(Number(v)):"—"};
   $("radarTriggerRows").innerHTML=[
-    ["Current price",fmt(Number(r.currentPrice)||0)],
-    ["Entry band",r.entryBand?(fmt(r.entryBand.low)+" – "+fmt(r.entryBand.high)):"—"],
-    ["Stop",fmt(Number(r.stop)||0)],["TP1",fmt(Number(r.target)||0)],["TP2",fmt(Number(r.tp2)||0)],
+    ["Current price",radarPrice(r.currentPrice)],
+    ["Entry band",r.entryBand?(radarPrice(r.entryBand.low)+" – "+radarPrice(r.entryBand.high)):"—"],
+    ["Stop",radarPrice(r.stop)],["TP1",radarPrice(r.target)],["TP2",radarPrice(r.tp2)],
     ["Near entry",tr.nearEntry?"YES":"WAITING"],["Orderbook aligned",tr.orderbookAligned?"YES":"WAITING"],
-    ["CVD aligned",tr.cvdAligned?"YES":"WAITING"],["Cross-venue consensus",tr.marketConsensus!=null?Math.round(tr.marketConsensus)+"/100":"—"]
+    ["CVD aligned",tr.cvdAligned?"YES":"WAITING"],["Cross-venue consensus",r.marketConsensus!=null?Math.round(r.marketConsensus)+"/100":(tr.marketConsensus!=null?Math.round(tr.marketConsensus)+"/100":"—")]
   ].map(function(x){return'<div class="executionRow"><span>'+botEsc(x[0])+'</span><b class="executionOk">'+botEsc(x[1])+'</b><span></span></div>'}).join("");
   $("radarNextAction").textContent="Next action: "+String(r.nextAction||"WATCH").replace(/_/g," ")+" · "+((r.reasons||[]).join(", ")||"No blocking reason");
   $("radarTwinRows").innerHTML=[
