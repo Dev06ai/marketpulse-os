@@ -5437,7 +5437,82 @@ function getConditionalTradeLevels(d,p){
   var conditional=usable(d.conditionalLevels)?d.conditionalLevels:null;
   var evidence=usable(d.candidateEvidence?.levels)?d.candidateEvidence.levels:null;
   var analysis=usable(d.analysis)?d.analysis:null;
-  return direct||conditional||evidence||analysis||{};
+  var existing=direct||conditional||evidence||analysis;
+  if(existing)return existing;
+
+  // Deterministic client-side fallback mirrors the market-engine's published
+  // level construction when the API response has a directional setup but its
+  // level object was stripped by an older/stale backend response.
+  var side=String(p.stableSide||p.candidate||d.rawAction||d.analysis?.side||d.market?.side||"WAIT").toUpperCase();
+  if(side!=="LONG"&&side!=="SHORT")return {};
+  var price=validLevel(p.livePrice)||validLevel(d.analysis?.price)||validLevel(d.market?.price);
+  if(price===null)return {};
+
+  var atrPct=Number(d.analysis?.atrPct);
+  var atr=Number.isFinite(atrPct)&&atrPct>0?price*atrPct/100:price*.005;
+  atr=Math.max(atr,price*.0025);
+
+  var ms=d.analysis?.marketStructure||{};
+  var setup=ms.setup||ms.strategySetup||{};
+  var reaction=d.reactionMap?.active;
+  var reactionSide=String(reaction?.action||"").toUpperCase();
+  var rangeLow=validLevel(d.analysis?.rangeLow);
+  var rangeHigh=validLevel(d.analysis?.rangeHigh);
+  var resistance=validLevel(ms.nearestResistance);
+  var support=validLevel(ms.nearestSupport);
+
+  var entryLow=null,entryHigh=null,triggerStop=null,source="ENGINE FALLBACK";
+  if(reaction&&reactionSide===side){
+    var rlo=validLevel(reaction.low),rhi=validLevel(reaction.high);
+    if(rlo!==null&&rhi!==null){
+      entryLow=Math.min(rlo,rhi);entryHigh=Math.max(rlo,rhi);
+      triggerStop=validLevel(reaction.invalidation);
+      source="REACTION MAP";
+    }
+  }
+
+  if(entryLow===null||entryHigh===null){
+    if(side==="LONG"){entryLow=price-.25*atr;entryHigh=price+.10*atr}
+    else{entryLow=price-.10*atr;entryHigh=price+.25*atr}
+  }
+
+  var entry=(entryLow+entryHigh)/2;
+  var risk=1.15*atr;
+  var stop=triggerStop;
+  if(stop===null){
+    stop=side==="LONG"
+      ?Math.min(price-risk,rangeLow!==null?rangeLow-.15*atr:price-risk)
+      :Math.max(price+risk,rangeHigh!==null?rangeHigh+.15*atr:price+risk);
+  }
+
+  var actualRisk=Math.abs(entry-stop);
+  if(!Number.isFinite(actualRisk)||actualRisk<=0){
+    stop=side==="LONG"?price-risk:price+risk;
+    actualRisk=Math.abs(entry-stop);
+  }
+
+  var minTarget=actualRisk*1.6;
+  var levelTarget=side==="LONG"
+    ?(resistance!==null&&resistance>price?resistance:null)
+    :(support!==null&&support<price?support:null);
+
+  var tp1=levelTarget!==null&&Math.abs(levelTarget-entry)>=minTarget
+    ?levelTarget
+    :(side==="LONG"?price+minTarget:price-minTarget);
+
+  var tp2=side==="LONG"
+    ?price+Math.max(actualRisk*2.4,2.1*atr)
+    :price-Math.max(actualRisk*2.4,2.1*atr);
+
+  return {
+    side,
+    entryLow,entryHigh,entry,
+    stop,tp1,tp2,
+    riskDistance:Math.abs(entry-stop),
+    target1Distance:Math.abs(tp1-entry),
+    rr:Math.abs(tp1-entry)/Math.max(Math.abs(entry-stop),1e-9),
+    source
+  };
 }
 
 function validLevel(v){
@@ -5507,8 +5582,8 @@ function renderLiveDirectionalModel(d,model){
   var planStatus=$("livePlanStatus");
   if(planStatus)planStatus.textContent=(candidate==="LONG"||candidate==="SHORT")
     ?((elo!==null&&ehi!==null)
-      ?("ENTRY ZONE "+(d.liveSignalEligible===true?"AVAILABLE":"CONDITIONAL")+" · GATE "+String(d.deploymentGate?.state||"WAITING"))
-      :"DIRECTION ONLY · NO VALIDATED ENTRY")
+      ?("CONDITIONAL ENTRY MAP · "+String(plan.source||"MODEL")+" · GATE "+String(d.deploymentGate?.state||"WAITING"))
+      :"LEVEL MAP UNAVAILABLE")
     :"WAITING FOR DIRECTION";
   var thesis=d?.evidence?.thesis;
   if(Array.isArray(thesis))thesis=thesis.join(" ");
@@ -5524,7 +5599,7 @@ function renderLiveDirectionalModel(d,model){
     if(entryRef)thesisText+=" · Entry "+entryRef+".";
     else thesisText+=".";
     if(flowBits.length)thesisText+=" Why: "+flowBits.slice(0,3).join(" · ")+".";
-    thesisText+=" Wait for the setup condition at the entry zone; the execution gate still controls release.";
+    thesisText+=" Entry only after price reaches the mapped zone and the setup condition confirms; the execution gate still controls release.";
   }else{
     thesisText=String(thesis||"").trim();
     if(!thesisText||/^waiting for|^final decision unavailable|^no trade/i.test(thesisText)){
