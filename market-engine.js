@@ -194,17 +194,33 @@ function analyze(c,ctx={}){
     ["CONFIRM_LONG","CONFIRM_SHORT","BREAKOUT_LONG","BREAKDOWN_SHORT"].includes(String(reactionActive.state||""))
     && ["LONG","SHORT"].includes(String(reactionActive.action||""))
   );
+  const reactionSweepConfirmed=Boolean(
+    reactionConfirmed &&
+    /CONFIRM_LONG|CONFIRM_SHORT/.test(String(reactionActive?.state||"")) &&
+    /sweep|reclaim/i.test(String(reactionActive?.trigger||""))
+  );
 
   const trendLong=regime==="UPTREND"&&price>=E20[i]*.985&&price<=E20[i]*1.02&&rsiNow>=50&&rsiNow<=70;
   const trendShort=regime==="DOWNTREND"&&price<=E20[i]*1.015&&price>=E20[i]*.98&&rsiNow>=30&&rsiNow<=50;
   const rangeLong=regime==="RANGE"&&rsiNow<34&&rangePos<.32;
   const rangeShort=regime==="RANGE"&&rsiNow>66&&rangePos>.68;
-  const ms=marketStructure.setup;
+  const syntheticSweepSetup=reactionSweepConfirmed?{
+    kind:"LIQUIDITY_SWEEP_RECLAIM",
+    side:String(reactionActive.action||"").toUpperCase(),
+    score:Number(reactionActive.confidence)||84,
+    levelPrice:Number.isFinite(Number(reactionActive.center))?Number(reactionActive.center):price,
+    sweepPrice:Number.isFinite(Number(reactionActive.price))?Number(reactionActive.price):price,
+    low:Number.isFinite(Number(reactionActive.low))?Number(reactionActive.low):null,
+    high:Number.isFinite(Number(reactionActive.high))?Number(reactionActive.high):null,
+    invalidation:Number.isFinite(Number(reactionActive.invalidation))?Number(reactionActive.invalidation):null,
+    reason:reactionActive.trigger||"Confirmed liquidity sweep and reclaim."
+  }:null;
+  const ms=reactionSweepConfirmed?syntheticSweepSetup:marketStructure.setup;
   const msReady=Boolean(ms&&Number(ms.score)>=74);
   const strategyKind=String(ms?.kind||"").toUpperCase();
   const strategyReady=Boolean(ms&&(
     (strategyKind==="SFP"&&Number(ms.score)>=74) ||
-    (["ORDER_BLOCK","BREAKOUT_RETEST","NPOC","D_LINE_BREAKOUT"].includes(strategyKind)&&Number(ms.score)>=80)
+    (["ORDER_BLOCK","BREAKOUT_RETEST","NPOC","D_LINE_BREAKOUT","LIQUIDITY_SWEEP_RECLAIM"].includes(strategyKind)&&Number(ms.score)>=(strategyKind==="LIQUIDITY_SWEEP_RECLAIM"?74:80))
   ));
 
   const strategyType=(m,dir)=>{
@@ -214,6 +230,7 @@ function analyze(c,ctx={}){
     if(k==="BREAKOUT_RETEST")return String(m.timeframe||"KEY LEVEL")+" LEVEL RETEST "+dir;
     if(k==="D_LINE_BREAKOUT")return "D-LINE "+dir;
     if(k==="ORDER_BLOCK")return "ORDER BLOCK REJECTION "+dir;
+    if(k==="LIQUIDITY_SWEEP_RECLAIM")return "LIQUIDITY SWEEP + RECLAIM "+dir;
     return k+" "+dir;
   };
   if(reactionConfirmed){
@@ -276,19 +293,38 @@ function analyze(c,ctx={}){
   components.push({name:"Advanced price action",value:clamp(Math.round(5+advancedPA.score*.16),0,13),source:"HTF liquidity + premium/discount + FVG/breaker + source execution rules"});
   components.push({name:"Elliott Wave context",value:clamp(Math.round(5+elliottPA.score*.16),0,12),source:"Source-derived BTC Elliott structure + Fibonacci validation"});
   let score=components.reduce((sum,x)=>sum+x.value,0);
-  if((side==="LONG"&&mtf4==="DOWNTREND")||(side==="SHORT"&&mtf4==="UPTREND")){score-=20;contributors.push("4H conflict");reasons.push("The 4H trend directly conflicts with this direction");}
+  const reversalOverride=Boolean(
+    reactionSweepConfirmed &&
+    reactionActive?.action===side &&
+    (!deriv || (
+      ((side==="LONG"&&cvdState==="BUYERS CONFIRM")||(side==="SHORT"&&cvdState==="SELLERS CONFIRM")) ||
+      Number(takerImbalance)>=0.08 || Number(orderBookImbalance)>=0.12
+    ))
+  );
+  if((side==="LONG"&&mtf4==="DOWNTREND")||(side==="SHORT"&&mtf4==="UPTREND")){
+    if(reversalOverride){
+      score-=8;
+      contributors.push("4H conflict softened by confirmed sweep/reclaim");
+      reasons.push("The confirmed liquidity sweep/reclaim is being evaluated as a reversal rather than vetoed by the prior 4H trend.");
+    }else{
+      score-=20;
+      contributors.push("4H conflict");
+      reasons.push("The 4H trend directly conflicts with this direction");
+    }
+  }
   const strongSfp=Boolean(ms&&strategyKind==="SFP"&&Number(ms.score)>=82);
   const sfpFlowSupport=(
     (side==="LONG"&&cvdState==="BUYERS CONFIRM") ||
     (side==="SHORT"&&cvdState==="SELLERS CONFIRM")
   ) || (!deriv);
   const sfpDataReady=Boolean(deriv&&deriv.available!==false);
+  const strongReversal=strongSfp || (reactionSweepConfirmed && Number(reactionActive?.confidence||0)>=84);
   if((side==="LONG"&&mtf15==="DOWNTREND")||(side==="SHORT"&&mtf15==="UPTREND")){
-    if(!(strongSfp&&sfpFlowSupport&&sfpDataReady)){
+    if(!(strongReversal&&(sfpFlowSupport||reversalOverride)&&sfpDataReady)){
       score-=10;contributors.push("15M conflict");reasons.push("The 15M trend is working against this direction");
     }else{
-      contributors.push("SFP reversal overrides 15M conflict");
-      reasons.push("A strong SFP is reversing the local 15M trend; live confirmation is required.");
+      contributors.push("Liquidity sweep/reclaim overrides 15M conflict");
+      reasons.push("A confirmed sweep/reclaim is allowed to reverse the local 15M trend when current flow/data support the reaction.");
     }
   }
   if((side==="LONG"&&cvdState==="BEARISH DIVERGENCE")||(side==="SHORT"&&cvdState==="BULLISH DIVERGENCE")){score-=8;contributors.push("CVD divergence");reasons.push("Aggressive flow is diverging from price");}
@@ -356,7 +392,10 @@ function analyze(c,ctx={}){
 
   let status="WAITING";
   if(side!=="WAIT"){
-    const strongSfpReady=Boolean(ms&&strategyKind==="SFP"&&Number(ms.score)>=82&&sfpFlowSupport);
+    const strongSfpReady=Boolean(
+      (ms&&strategyKind==="SFP"&&Number(ms.score)>=82&&sfpFlowSupport) ||
+      (reactionSweepConfirmed&&reversalOverride)
+    );
     const higherConflict=(mtf4==="DOWNTREND"&&side==="LONG")||(mtf4==="UPTREND"&&side==="SHORT");
     if(score>=72&&rr>=1.5&&(!higherConflict||strongSfpReady))status="READY";
     else if(score>=55)status="WATCH";
