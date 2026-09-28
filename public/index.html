@@ -4108,11 +4108,18 @@ function canonicalFlowSnapshot(){
 function syncCanonicalMarketState(patch){
   patch=patch||{};
   var price=Number(patch.price);
-  var ts=Number(patch.ts||Date.now());
-  if(!Number.isFinite(price)||!Number.isFinite(ts))return null;
-  if(Number(state.canonicalMarket?.ts)>ts)return state.canonicalMarket;
+  var sourceTs=Number(patch.sourceTs??patch.ts);
+  var receivedTs=Number(patch.receivedTs||Date.now());
+  if(!Number.isFinite(price)||!Number.isFinite(receivedTs))return null;
 
   var previous=state.canonicalMarket||{};
+  var previousReceived=Number(previous.receivedTs||0);
+
+  // Live packets are ordered by browser receive time, not by exchange clocks.
+  // This prevents a local Date.now() flow packet or clock skew from rejecting
+  // a later price tick whose exchange timestamp is a few ms behind.
+  if(previousReceived>receivedTs)return previous;
+
   state.canonicalMarket={
     seq:Number(previous.seq||0)+1,
     symbol:state.symbol,
@@ -4120,9 +4127,11 @@ function syncCanonicalMarketState(patch){
     chartInterval:state.chartInterval||state.interval,
     price,
     change24h:Number.isFinite(Number(patch.change24h))?Number(patch.change24h):previous.change24h,
-    ts,
+    ts:receivedTs,
+    receivedTs,
+    sourceTs:Number.isFinite(sourceTs)?sourceTs:(Number(previous.sourceTs||0)||null),
     candle:Object.assign({},patch.candle||previous.candle||{},{
-      t:Number(patch.candle?.t??previous.candle?.t??state.liveChartBucket??ts),
+      t:Number(patch.candle?.t??previous.candle?.t??state.liveChartBucket??receivedTs),
       o:Number(patch.candle?.o??previous.candle?.o??price),
       h:Number(patch.candle?.h??previous.candle?.h??price),
       l:Number(patch.candle?.l??previous.candle?.l??price),
@@ -4131,26 +4140,28 @@ function syncCanonicalMarketState(patch){
     }),
     flow:Object.assign({},previous.flow||{},patch.flow||{}),
     source:patch.source||previous.source||"BYBIT_LIVE",
-    freshnessMs:Math.max(0,Date.now()-ts)
+    freshnessMs:0
   };
 
-  // Canonical price is authoritative for every selected-asset view.
   state.liveChartPrice=price;
-  state.liveChartTs=ts;
+  state.liveChartTs=receivedTs;
   state.liveMarketPrice=price;
-  state.liveMarketTs=ts;
+  state.liveMarketTs=receivedTs;
+  state.liveMarketSource=state.canonicalMarket.source;
   if(Number.isFinite(Number(state.canonicalMarket.change24h)))state.liveMarketChange24h=Number(state.canonicalMarket.change24h);
 
   state.market=state.market||{};
   state.market.analysis=state.market.analysis||{};
   state.market.analysis.price=price;
-  state.market.analysis.marketSyncTs=ts;
-  // The chart candle series is the canonical selected-market candle series.
+  state.market.analysis.marketSyncTs=receivedTs;
+  state.market.analysis.marketSourceTs=state.canonicalMarket.sourceTs;
+
   if(Array.isArray(state.chartCandles)&&state.chartCandles.length){
     state.market.candles=state.chartCandles;
   }else{
     state.market.candles=Array.isArray(state.market.candles)?state.market.candles:[];
   }
+
   var mc=state.market.candles[state.market.candles.length-1];
   if(mc&&chartBucketStart(mc.t,state.chartInterval||state.interval)===chartBucketStart(state.canonicalMarket.candle.t,state.chartInterval||state.interval)){
     mc.c=price;
@@ -4162,25 +4173,27 @@ function syncCanonicalMarketState(patch){
   var flow=canonicalFlowSnapshot();
   flow.price=price;
   flow.lastPrice=price;
-  flow.updatedAt=ts;
-  flow.priceTs=ts;
+  flow.updatedAt=receivedTs;
+  flow.priceTs=receivedTs;
+  flow.sourceTs=state.canonicalMarket.sourceTs;
+  flow.syncSource=state.canonicalMarket.source;
   state.liveFlow=Object.assign({},state.liveFlow||{},flow);
   state.market.derivatives=flow;
 
-  // Keep the final decision's displayed market inputs synchronized without
-  // pretending that the decision itself was recomputed on every tick.
   if(state.finalDecision){
     state.finalDecision.market=Object.assign({},state.finalDecision.market||{},{
       price,
       livePrice:price,
-      marketSyncTs:ts
+      marketSyncTs:receivedTs,
+      marketSourceTs:state.canonicalMarket.sourceTs
     });
     state.finalDecision.analysis=Object.assign({},state.finalDecision.analysis||{},{
       price,
-      marketSyncTs:ts
+      marketSyncTs:receivedTs,
+      marketSourceTs:state.canonicalMarket.sourceTs
     });
     state.finalDecision.derivatives=flow;
-    state.finalDecision.marketSyncTs=ts;
+    state.finalDecision.marketSyncTs=receivedTs;
   }
 
   $("mPrice").textContent=fmt(price);
@@ -4188,19 +4201,17 @@ function syncCanonicalMarketState(patch){
   $("dataState").textContent="Live · synchronized";
 
   renderMarketNoFlow();
-  renderFlowView(flow);
-
   if(state.canonicalFlowRenderTimer)clearTimeout(state.canonicalFlowRenderTimer);
   state.canonicalFlowRenderTimer=setTimeout(function(){
     state.canonicalFlowRenderTimer=null;
     drawFlowData(flow);
-  },120);
+  },40);
 
   if(state.finalDecision){
     renderLiveDirectionalModel(state.finalDecision);
     scheduleLiveDecisionRender();
   }
-  state.canonicalLastRenderTs=Date.now();
+  state.canonicalLastRenderTs=receivedTs;
   return state.canonicalMarket;
 }
 function runCanonicalSyncPulse(reason){
@@ -4401,11 +4412,14 @@ function startLiveChartStream(symbol){
 
   stopLiveChartStream();
 
-  var session={symbol,tf,ws:null,pingTimer:null,retryTimer:null,retries:0,connected:false,lastTickAt:0};
+  var session={
+    symbol,tf,ws:null,pingTimer:null,retryTimer:null,retries:0,
+    connected:false,lastTickAt:0,lastExchangeTs:0,lastMessageAt:0
+  };
   state.liveChartStream=session;
 
-  var protocol=location.protocol==="https:"?"wss":"ws";
-  var url=protocol+"://"+location.host+"/api/live-stream?symbol="+encodeURIComponent(symbol);
+  // Direct exchange WebSocket is the low-latency primary transport.
+  var url="wss://stream.bybit.com/v5/public/linear";
 
   try{
     var ws=new WebSocket(url);
@@ -4416,60 +4430,216 @@ function startLiveChartStream(symbol){
       session.connected=true;
       session.retries=0;
       session.lastTickAt=Date.now();
-      $("dataState").textContent="Live · server push";
+      session.lastMessageAt=Date.now();
+      state.liveTransport="DIRECT_BYBIT";
+      $("dataState").textContent="Live · direct exchange stream";
+
+      var k=bybitKlineInterval(tf);
+      ws.send(JSON.stringify({
+        op:"subscribe",
+        args:[
+          "tickers."+symbol,
+          "kline."+k+"."+symbol,
+          "publicTrade."+symbol,
+          "orderbook.50."+symbol,
+          "allLiquidation."+symbol
+        ]
+      }));
+
+      var baseFlow=(state.market&&state.market.derivatives)||
+        (state.finalDecision&&state.finalDecision.derivatives)||{};
+      session.liveFlow={
+        cvd:Number(baseFlow.cvdDelta)||0,
+        cvdNotional:Number(baseFlow.cvdRatio)?
+          Math.abs(Number(baseFlow.cvdDelta||0)/Number(baseFlow.cvdRatio)):0,
+        cvdRatio:Number.isFinite(Number(baseFlow.cvdRatio))?Number(baseFlow.cvdRatio):null,
+        cvdState:baseFlow.cvdState,
+        oi:Number(baseFlow.oi),
+        liquidationBias:baseFlow.liquidationBias,
+        liquidationTotal:Number(baseFlow.liquidationTotal)||0,
+        longLiquidations:Number(baseFlow.longLiquidations)||0,
+        shortLiquidations:Number(baseFlow.shortLiquidations)||0,
+        orderBookImbalance:Number(baseFlow.orderBookImbalance),
+        takerImbalance:Number(baseFlow.takerImbalance),
+        fundingRate:Number(baseFlow.fundingRate),
+        available:baseFlow.available!==false,
+        liveConnected:true,
+        syncSource:"BYBIT_DIRECT"
+      };
+      state.liveFlow=session.liveFlow;
+      state.liveFlow.liveTransport="DIRECT_BYBIT";
     };
 
     ws.onmessage=function(ev){
       try{
         var msg=JSON.parse(ev.data||"");
-        if(msg.type!=="market-sync"||String(msg.symbol)!==String(state.symbol))return;
+        var topic=String(msg.topic||"");
+        if(!topic)return;
 
-        var p=Number(msg.price??msg.markPrice??msg.lastPrice);
-        var dataTs=Number(msg.dataTs);
-        if(!Number.isFinite(p))return;
+        var receivedTs=Date.now();
+        session.lastMessageAt=receivedTs;
+        var data=Array.isArray(msg.data)?msg.data:[msg.data];
 
-        session.lastTickAt=Date.now();
-        state.liveFlow=mergeFlowClient(msg,canonicalFlowSnapshot());
-        state.liveFlow.serverSeq=Number(msg.seq||0);
-        state.liveFlow.serverDataTs=Number.isFinite(dataTs)?dataTs:null;
-        state.liveFlow.serverDataAgeMs=Number.isFinite(Number(msg.dataAgeMs))?Number(msg.dataAgeMs):0;
+        if(topic.indexOf("tickers.")===0){
+          var d=data[0]||{};
+          var p=Number(d.lastPrice);
+          if(!Number.isFinite(p))return;
 
-        updateLiveChartPrice(
-          p,
-          Number.isFinite(dataTs)&&dataTs>0?dataTs:Date.now(),
-          symbol,
-          Number.isFinite(Number(msg.change24h))?Number(msg.change24h):null
-        );
+          var exchangeTs=Number(msg.ts||d.ts||receivedTs);
+          session.lastTickAt=receivedTs;
+          session.lastExchangeTs=Number.isFinite(exchangeTs)?exchangeTs:receivedTs;
 
-        syncCanonicalMarketState({
-          price:p,
-          ts:Number.isFinite(dataTs)&&dataTs>0?dataTs:Date.now(),
-          change24h:Number.isFinite(Number(msg.change24h))?Number(msg.change24h):null,
-          flow:state.liveFlow,
-          source:"SERVER_PUSH_CANONICAL"
-        });
+          var lf=session.liveFlow||{};
+          if(Number.isFinite(Number(d.openInterest)))lf.oi=Number(d.openInterest);
+          if(Number.isFinite(Number(d.fundingRate)))lf.fundingRate=Number(d.fundingRate);
+          if(Number.isFinite(Number(d.markPrice)))lf.markPrice=Number(d.markPrice);
+          lf.lastPrice=p;
+          lf.price24hPcnt=Number.isFinite(Number(d.price24hPcnt))?Number(d.price24hPcnt)*100:lf.price24hPcnt;
+          lf.liveConnected=true;
+          lf.syncSource="BYBIT_DIRECT";
+          session.liveFlow=lf;state.liveFlow=lf;
 
-        runCanonicalSyncPulse("server-push");
+          updateLiveChartPrice(
+            p,
+            receivedTs,
+            symbol,
+            Number.isFinite(Number(d.price24hPcnt))?Number(d.price24hPcnt)*100:null
+          );
+
+          syncCanonicalMarketState({
+            price:p,
+            ts:receivedTs,
+            sourceTs:exchangeTs,
+            receivedTs,
+            change24h:Number.isFinite(Number(d.price24hPcnt))?Number(d.price24hPcnt)*100:null,
+            flow:lf,
+            source:"BYBIT_DIRECT_TICKER"
+          });
+          runCanonicalSyncPulse("direct-ticker");
+          return;
+        }
+
+        if(topic.indexOf("publicTrade.")===0){
+          var lfTrade=session.liveFlow||{};
+          for(var ti=0;ti<data.length;ti++){
+            var tr=data[ti]||{},q=Number(tr.v)*Number(tr.p);
+            if(!Number.isFinite(q)||q<=0)continue;
+            lfTrade.cvd=(Number(lfTrade.cvd)||0)+(String(tr.S)==="Buy"?q:-q);
+            lfTrade.cvdNotional=(Number(lfTrade.cvdNotional)||0)+q;
+          }
+          lfTrade.cvdRatio=Number(lfTrade.cvdNotional)>0?
+            Number(lfTrade.cvd)/Number(lfTrade.cvdNotional):null;
+          if(Number.isFinite(lfTrade.cvdRatio)){
+            lfTrade.cvdState=lfTrade.cvdRatio>0.01?
+              "BUYERS PRESSURE":lfTrade.cvdRatio<-0.01?
+              "SELLERS PRESSURE":"BALANCED";
+          }
+          lfTrade.liveConnected=true;
+          lfTrade.syncSource="BYBIT_DIRECT";
+          session.liveFlow=lfTrade;state.liveFlow=lfTrade;
+
+          if(state.canonicalMarket){
+            syncCanonicalMarketState({
+              price:Number(state.canonicalMarket.price),
+              ts:receivedTs,
+              sourceTs:receivedTs,
+              receivedTs,
+              flow:lfTrade,
+              source:"BYBIT_DIRECT_TRADE"
+            });
+          }
+          if(state.finalDecision)renderLiveDirectionalModel(state.finalDecision);
+          return;
+        }
+
+        if(topic.indexOf("allLiquidation.")===0){
+          var lfLiq=session.liveFlow||{};
+          for(var qi=0;qi<data.length;qi++){
+            var lx=data[qi]||{},q2=Number(lx.v)*Number(lx.p);
+            if(!Number.isFinite(q2)||q2<=0)continue;
+            if(String(lx.S)==="Buy")lfLiq.longLiquidations=(Number(lfLiq.longLiquidations)||0)+q2;
+            else if(String(lx.S)==="Sell")lfLiq.shortLiquidations=(Number(lfLiq.shortLiquidations)||0)+q2;
+          }
+          lfLiq.liquidationTotal=(Number(lfLiq.longLiquidations)||0)+(Number(lfLiq.shortLiquidations)||0);
+          lfLiq.liquidationBias=lfLiq.liquidationTotal>0
+            ?((Number(lfLiq.longLiquidations)||0)>(Number(lfLiq.shortLiquidations)||0)?
+              "LONG LIQS DOMINANT":
+              (Number(lfLiq.shortLiquidations)||0)>(Number(lfLiq.longLiquidations)||0)?
+              "SHORT LIQS DOMINANT":"LIQUIDATION ACTIVITY")
+            :"NO LIQUIDATION ACTIVITY";
+          lfLiq.liveConnected=true;
+          lfLiq.syncSource="BYBIT_DIRECT";
+          session.liveFlow=lfLiq;state.liveFlow=lfLiq;
+
+          if(state.canonicalMarket){
+            syncCanonicalMarketState({
+              price:Number(state.canonicalMarket.price),
+              ts:receivedTs,
+              sourceTs:receivedTs,
+              receivedTs,
+              flow:lfLiq,
+              source:"BYBIT_DIRECT_LIQUIDATION"
+            });
+          }
+          return;
+        }
+
+        if(topic.indexOf("orderbook.50.")===0){
+          var obx=data[0]||{};
+          var bids=Array.isArray(obx.b)?obx.b:[];
+          var asks=Array.isArray(obx.a)?obx.a:[];
+          var bq=bids.slice(0,10).reduce(function(n,r){return n+(Number(r?.[1])||0)},0);
+          var aq=asks.slice(0,10).reduce(function(n,r){return n+(Number(r?.[1])||0)},0);
+          var totalQ=bq+aq;
+          var lfBook=session.liveFlow||{};
+          lfBook.orderBookImbalance=totalQ>0?(bq-aq)/totalQ:null;
+          lfBook.takerImbalance=Number.isFinite(Number(lfBook.cvdRatio))?
+            Number(lfBook.cvdRatio):lfBook.takerImbalance;
+          lfBook.orderBookTs=receivedTs;
+          lfBook.liveConnected=true;
+          lfBook.syncSource="BYBIT_DIRECT";
+          session.liveFlow=lfBook;state.liveFlow=lfBook;
+
+          if(state.canonicalMarket){
+            syncCanonicalMarketState({
+              price:Number(state.canonicalMarket.price),
+              ts:receivedTs,
+              sourceTs:receivedTs,
+              receivedTs,
+              flow:lfBook,
+              source:"BYBIT_DIRECT_ORDERBOOK"
+            });
+          }
+          return;
+        }
+
+        if(topic.indexOf("kline.")===0){
+          var k=data[0];
+          if(k)applyLiveKline(k,symbol);
+        }
       }catch{}
     };
 
     ws.onerror=function(){
       session.connected=false;
+      state.liveTransport="RECOVERING";
     };
 
     ws.onclose=function(){
       if(state.liveChartStream!==session)return;
       session.connected=false;
+      state.liveTransport="RECOVERING";
       clearTimeout(session.retryTimer);
       session.retryTimer=setTimeout(function(){
         if(state.liveChartStream===session)startLiveChartStream(symbol);
-      },Math.min(3000,750*Math.pow(2,Math.min(session.retries++,3))));
+      },Math.min(2000,500*Math.pow(2,Math.min(session.retries++,3))));
     };
   }catch{
     session.connected=false;
+    state.liveTransport="RECOVERING";
     session.retryTimer=setTimeout(function(){
       if(state.liveChartStream===session)startLiveChartStream(symbol);
-    },1500);
+    },1000);
   }
 }
 
@@ -4477,16 +4647,14 @@ async function loadFastTicker(){
   var symbol=state.symbol;
   var stream=state.liveChartStream;
 
-  // Server push is the primary path. There is no extra HTTP round-trip while
-  // the push stream is healthy, so exchange updates reach the UI immediately.
   if(stream&&stream.symbol===symbol&&stream.connected&&
-     Number.isFinite(Number(stream.lastTickAt))&&Date.now()-Number(stream.lastTickAt)<2500){
-    runCanonicalSyncPulse("server-push-heartbeat");
+     Number.isFinite(Number(stream.lastTickAt))&&Date.now()-Number(stream.lastTickAt)<1500){
+    runCanonicalSyncPulse("direct-heartbeat");
     return;
   }
 
   if(state.liveSyncBusy){
-    runCanonicalSyncPulse("sync-request-busy");
+    runCanonicalSyncPulse("recovery-request-busy");
     return;
   }
 
@@ -4494,42 +4662,42 @@ async function loadFastTicker(){
   try{
     startLiveChartStream(symbol);
 
+    // Server canonical stream is the first fallback when the direct exchange
+    // socket is stale or reconnecting.
     try{
-      var d=await api("/api/live-sync?symbol="+encodeURIComponent(symbol),3500);
+      var d=await api("/api/live-sync?symbol="+encodeURIComponent(symbol),2500);
       if(symbol!==state.symbol)return;
 
       var price=Number(d.price??d.markPrice??d.lastPrice);
-      var dataTs=Number(d.dataTs);
-      var change24h=Number(d.change24h);
-
+      var sourceTs=Number(d.dataTs);
       if(Number.isFinite(price)){
         state.liveFlow=mergeFlowClient(d,canonicalFlowSnapshot());
         state.liveFlow.serverSeq=Number(d.seq||0);
-        state.liveFlow.serverDataTs=Number.isFinite(dataTs)?dataTs:null;
+        state.liveFlow.serverDataTs=Number.isFinite(sourceTs)?sourceTs:null;
         state.liveFlow.serverDataAgeMs=Number.isFinite(Number(d.dataAgeMs))?Number(d.dataAgeMs):null;
 
+        var receivedTs=Date.now();
         updateLiveChartPrice(
           price,
-          Number.isFinite(dataTs)&&dataTs>0?dataTs:Date.now(),
+          receivedTs,
           symbol,
-          Number.isFinite(change24h)?change24h:null
+          Number.isFinite(Number(d.change24h))?Number(d.change24h):null
         );
 
         syncCanonicalMarketState({
           price,
-          ts:Number.isFinite(dataTs)&&dataTs>0?dataTs:Date.now(),
-          change24h:Number.isFinite(change24h)?change24h:null,
+          ts:receivedTs,
+          sourceTs:Number.isFinite(sourceTs)?sourceTs:receivedTs,
+          receivedTs,
+          change24h:Number.isFinite(Number(d.change24h))?Number(d.change24h):null,
           flow:state.liveFlow,
-          source:"SERVER_HTTP_FALLBACK"
+          source:"SERVER_CANONICAL_FALLBACK"
         });
-
-        runCanonicalSyncPulse("http-fallback");
+        runCanonicalSyncPulse("server-fallback");
       }
     }catch{
-      runCanonicalSyncPulse("http-fallback-unavailable");
+      runCanonicalSyncPulse("recovery-unavailable");
     }
-
-    scheduleLiveDecisionRender();
   }finally{
     state.liveSyncBusy=false;
   }
@@ -5855,12 +6023,17 @@ document.addEventListener("visibilitychange",function(){
 setInterval(function(){
   if(document.visibilityState!=="visible")return;
   var stream=state.liveChartStream;
-  if(stream&&stream.connected&&Number.isFinite(Number(stream.lastTickAt))&&Date.now()-Number(stream.lastTickAt)<2500){
+  var fresh=Boolean(stream&&stream.connected&&
+    Number.isFinite(Number(stream.lastTickAt))&&
+    Date.now()-Number(stream.lastTickAt)<1500);
+
+  if(fresh){
     runCanonicalSyncPulse("one-second-watchdog");
   }else{
     loadFastTicker();
     runCanonicalSyncPulse("one-second-recovery");
   }
+
   if(!state.market&&!state.busy&&!initialBootTimer)scheduleInitialBoot(0);
 },1000);
 
