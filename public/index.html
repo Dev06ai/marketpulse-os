@@ -1145,13 +1145,16 @@ linear-gradient(180deg,#0c0e11 0%,#101214 48%,#0a0b0d 100%);box-shadow:0 -20px 7
         <div class="sectionHead"><div><div class="title">Bot controls</div><div class="sub">Changes are stored server-side. Exchange secrets never enter this browser.</div></div></div>
         <div class="autotraderControls">
           <label>Mode<select id="botModeSelect"><option value="PAPER">PAPER</option><option value="TESTNET">BYBIT TESTNET</option><option value="LIVE">LIVE</option></select></label>
+          <label>Trading style<select id="botEasyMode"><option value="true">EASY · MORE OPPORTUNITIES</option><option value="false">STRICT · CONFIRMED ONLY</option></select></label>
+          <label>Weekdays only<select id="botWeekdays"><option value="true">YES</option><option value="false">NO</option></select></label>
           <label>Max positions<input id="botMaxPositions" type="number" min="1" max="10" step="1" value="1"></label>
           <label>Max trades/day<input id="botMaxDailyTrades" type="number" min="1" max="50" step="1" value="4"></label>
-          <label>Cooldown (min)<input id="botCooldown" type="number" min="1" max="1440" step="1" value="10"></label>
-          <label>Min score<input id="botMinScore" type="number" min="70" max="100" step="1" value="78"></label>
-          <label>Min R:R<input id="botMinRR" type="number" min="1.5" max="5" step=".1" value="1.5"></label>
+          <label>Cooldown (min)<input id="botCooldown" type="number" min="1" max="1440" step="1" value="15"></label>
+          <label>Min score<input id="botMinScore" type="number" min="70" max="100" step="1" value="72"></label>
+          <label>Min R:R<input id="botMinRR" type="number" min="1.1" max="5" step=".1" value="1.2"></label>
+          <label>Min data quality<input id="botMinData" type="number" min="70" max="100" step="1" value="80"></label>
           <label>Symbols<input id="botSymbols" value="BTCUSDT"></label>
-          <label>Confirmed only<select id="botConfirmed"><option value="true">YES</option><option value="false">NO</option></select></label>
+          <label>Confirmed only<select id="botConfirmed"><option value="false">NO</option><option value="true">YES</option></select></label>
         </div>
         <div class="autotraderActions" style="margin-top:9px">
           <button id="botSave" class="btn primary">Save bot</button>
@@ -1172,6 +1175,13 @@ linear-gradient(180deg,#0c0e11 0%,#101214 48%,#0a0b0d 100%);box-shadow:0 -20px 7
     <div class="section autotraderPanel">
       <div class="sectionHead"><div><div class="title">Latest AutoTrader state</div><div class="sub">This panel reflects the server-side state used by the watchdog.</div></div><span class="botPill" id="botHealthPill">CHECKING</span></div>
       <div id="botHealthRows" class="executionRows"></div>
+      <div class="autotraderHero" style="margin-top:9px">
+        <div class="autotraderMetric"><div class="label">Bot learning</div><div class="v" id="botLearnState">COLLECTING</div><div class="subv" id="botLearnMeta">0 resolved outcomes</div></div>
+        <div class="autotraderMetric"><div class="label">Win rate</div><div class="v" id="botLearnWin">—</div><div class="subv">Resolved AutoTrader trades</div></div>
+        <div class="autotraderMetric"><div class="label">Net R</div><div class="v" id="botLearnR">0.00R</div><div class="subv">Paper/testnet learning ledger</div></div>
+        <div class="autotraderMetric"><div class="label">Model bias</div><div class="v" id="botLearnBias">0.00</div><div class="subv">Small adaptive adjustment</div></div>
+        <div class="autotraderMetric"><div class="label">Last outcome</div><div class="v" id="botLearnLast">—</div><div class="subv" id="botLearnLastMeta">Waiting for the first resolved trade</div></div>
+      </div>
     </div>
   </section>
 
@@ -2885,8 +2895,10 @@ function renderAutoTrader(data){
   $("botLastAction").textContent=String(b.lastAction||"IDLE").toUpperCase();
   $("botLastActionMeta").textContent=b.lastError||("Last trade "+(b.lastTradeAt?new Date(b.lastTradeAt).toLocaleTimeString():"none"));
   $("botModeSelect").value=mode;
+  $("botEasyMode").value=String(b.easyMode!==false);
+  $("botWeekdays").value=String(b.weekdayOnly!==false);
   $("botMaxPositions").value=b.maxPositions??1;$("botMaxDailyTrades").value=b.maxDailyTrades??4;$("botCooldown").value=Math.round(Number(b.cooldownMs||600000)/60000);
-  $("botMinScore").value=b.minScore??78;$("botMinRR").value=b.minRR??1.5;$("botSymbols").value=(b.symbols||["BTCUSDT"]).join(",");
+  $("botMinScore").value=b.minScore??72;$("botMinRR").value=b.minRR??1.2;$("botMinData").value=b.minDataScore??80;$("botSymbols").value=(b.symbols||["BTCUSDT"]).join(",");
   $("botConfirmed").value=String(b.requireConfirmed!==false);
   var map={SCALP:"botScalp",INTRADAY:"botIntraday",SWING:"botSwing",POSITION:"botPosition"};
   Object.keys(map).forEach(function(k){$(map[k]).classList.toggle("on",Boolean(b.strategies?.[k]));$("botRisk"+k.charAt(0)+k.slice(1).toLowerCase()).textContent=Number(b.riskByStrategy?.[k]||0).toFixed(2)+"%"});
@@ -2903,6 +2915,14 @@ function renderAutoTrader(data){
     ["Last bot error",b.lastError||"None"]
   ];
   $("botHealthRows").innerHTML=health.map(function(x){var bad=/BLOCKED|ON|OFFLINE|error/i.test(String(x[1]))&&x[1]!=="OFF"&&x[1]!=="NOT REQUIRED";var cls=bad?"executionBad":"executionOk";return'<div class="executionRow"><span>'+botEsc(x[0])+'</span><b class="'+cls+'">'+botEsc(x[1])+'</b><span></span></div>'}).join("");
+  var learn=data.learning||{};
+  $("botLearnState").textContent=(Number(learn.resolved||0)>=12)?"ADAPTIVE":"COLLECTING";
+  $("botLearnMeta").textContent=String(learn.resolved||0)+" resolved outcomes";
+  $("botLearnWin").textContent=learn.winRate==null?"—":Number(learn.winRate).toFixed(1)+"%";
+  $("botLearnR").textContent=(Number(learn.netR||0)>=0?"+":"")+Number(learn.netR||0).toFixed(2)+"R";
+  $("botLearnBias").textContent=(Number(learn.model?.bias||0)>=0?"+":"")+Number(learn.model?.bias||0).toFixed(2);
+  $("botLearnLast").textContent=String(learn.lastOutcome?.outcome||"—");
+  $("botLearnLastMeta").textContent=learn.lastOutcome?String(learn.lastOutcome.strategy||"AutoTrader")+" · "+Number(learn.lastOutcome.resultR||0).toFixed(2)+"R":"Waiting for the first resolved trade";
   $("botHealthPill").textContent=enabled?(e.killSwitch?"BLOCKED":(mode==="PAPER"?"PAPER ACTIVE":"ARMED / GATED")):"PAUSED";
   $("botHealthPill").className="botPill "+(enabled&&!e.killSwitch?(mode==="PAPER"?"ok":"warn"):"bad");
   $("botPause").disabled=!enabled;$("botKill").disabled=Boolean(e.killSwitch);
@@ -2930,8 +2950,8 @@ async function saveAutoTrader(){
     POSITION:$("botPosition").classList.contains("on")
   };
   var risk={SCALP:+$("botRiskScalp").textContent.replace("%","")||.25,INTRADAY:+$("botRiskIntraday").textContent.replace("%","")||.5,SWING:+$("botRiskSwing").textContent.replace("%","")||.75,POSITION:+$("botRiskPosition").textContent.replace("%","")||1};
-  var cfg={mode:$("botModeSelect").value,enabled:false,strategies,riskByStrategy:risk,maxPositions:+$("botMaxPositions").value||1,maxDailyTrades:+$("botMaxDailyTrades").value||4,cooldownMs:(+$("botCooldown").value||10)*60000,minScore:+$("botMinScore").value||78,minRR:+$("botMinRR").value||1.5,symbols:$("botSymbols").value.split(",").map(function(x){return x.trim().toUpperCase()}).filter(Boolean),requireConfirmed:$("botConfirmed").value==="true"};
-  try{var r=await fetch("/api/autotrader/config",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(cfg)}),j=await r.json();if(!r.ok)throw Error(j.error||"Save failed");renderAutoTrader(j);$("botControlNote").textContent="Bot configuration saved. It remains paused until Start / Arm."; }catch(e){$("botControlNote").textContent="Bot save failed: "+e.message}
+  var cfg={mode:$("botModeSelect").value,enabled:false,strategies,riskByStrategy:risk,maxPositions:+$("botMaxPositions").value||1,maxDailyTrades:+$("botMaxDailyTrades").value||4,cooldownMs:(+$("botCooldown").value||15)*60000,easyMode:$("botEasyMode").value==="true",weekdayOnly:$("botWeekdays").value==="true",autoManage:true,minScore:+$("botMinScore").value||72,minRR:+$("botMinRR").value||1.2,minDataScore:+$("botMinData").value||80,symbols:$("botSymbols").value.split(",").map(function(x){return x.trim().toUpperCase()}).filter(Boolean),requireConfirmed:$("botConfirmed").value==="true"};
+  try{var r=await fetch("/api/autotrader/config",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(cfg)}),j=await r.json();if(!r.ok)throw Error(j.error||"Save failed");renderAutoTrader(j);$("botControlNote").textContent=cfg.easyMode?"Easy Mode saved: the bot can act on developing BTC setups with the lightweight rules shown above.":"Strict Mode saved: only fully confirmed setups are eligible."; }catch(e){$("botControlNote").textContent="Bot save failed: "+e.message}
 }
 async function armAutoTrader(){
   try{var r=await fetch("/api/autotrader/arm",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({mode:$("botModeSelect").value})}),j=await r.json();if(!r.ok)throw Error(j.error||"Arm failed");renderAutoTrader(j.autotrader);$("botControlNote").textContent=(j.mode||"PAPER")+" AutoTrader enabled. Watchdog will manage the cycle automatically."}catch(e){$("botControlNote").textContent="AutoTrader blocked: "+e.message}
