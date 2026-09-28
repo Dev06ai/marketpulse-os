@@ -5519,9 +5519,26 @@ function getConditionalTradeLevels(d,p){
     rr:Math.abs(tp1-entry)/Math.max(Math.abs(entry-stop),1e-9),
     source
   };
-  // Prefer authoritative server/model values, but fill any missing pieces
-  // from the deterministic fallback so the UI never shows a blank trade map.
-  return Object.assign({},fallback,existing||{});
+  // Prefer authoritative values field-by-field. An object can contain one
+  // valid field while leaving the others undefined; Object.assign() would
+  // otherwise overwrite valid fallback values with undefined.
+  var prefer=function(key,fallbackValue){
+    var n=Number(existing?.[key]);
+    return Number.isFinite(n)&&n>0?n:fallbackValue;
+  };
+  return {
+    side:String(existing?.side||side).toUpperCase(),
+    entryLow:prefer("entryLow",fallback.entryLow),
+    entryHigh:prefer("entryHigh",fallback.entryHigh),
+    entry:prefer("entry",fallback.entry),
+    stop:prefer("stop",fallback.stop),
+    tp1:prefer("tp1",fallback.tp1),
+    tp2:prefer("tp2",fallback.tp2),
+    riskDistance:prefer("riskDistance",fallback.riskDistance),
+    target1Distance:prefer("target1Distance",fallback.target1Distance),
+    rr:prefer("rr",fallback.rr),
+    source:String(existing?.source||source)
+  };
 }
 
 function validLevel(v){
