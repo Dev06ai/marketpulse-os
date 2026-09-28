@@ -691,6 +691,19 @@ async function buildDecisionSnapshot(symbol,interval,query,deviceId=null){
         symbol,interval,candleTs:Number(candleTs),decision:finalDecision,analysis
       }).catch(()=>{}),0);
     }catch{}
+
+    try{
+      const autoEnabled=String(process.env.LIVE_AUTO_EXECUTION_ENABLED||"false").toLowerCase()==="true";
+      if(autoEnabled&&finalDecision?.liveSignalEligible&&finalDecision?.state==="READY"&&["LONG","SHORT"].includes(String(finalDecision?.action||"").toUpperCase())){
+        const signal={
+          id:["LIVE_AUTO",symbol,interval,candles?.[candles.length-1]?.t,finalDecision.action].join("|"),
+          symbol,interval,side:String(finalDecision.action).toUpperCase(),status:"READY",score:finalDecision.market?.confluenceScore||0,
+          entry:finalDecision.levels?.entry,stop:finalDecision.levels?.stop,target:finalDecision.levels?.tp1,tp2:finalDecision.levels?.tp2,
+          rr:finalDecision.levels?.rr,type:finalDecision.market?.type,regime:finalDecision.market?.regime,tradeStyle:finalDecision.tradeStyle
+        };
+        setTimeout(()=>execution.autoSubmitFinalDecision(signal).catch(()=>{}),0);
+      }
+    }catch{}
     try{phase4.updateFinalDecision(deviceId||"00000000-0000-0000-0000-000000000000",symbol,interval,finalDecision,candles).catch(()=>{})}catch{}
     try{learning.observeFinalDecision(symbol,interval,candles,finalDecision).catch(()=>{})}catch{}
     try{setTimeout(()=>phase14.refreshAdaptiveState(storage,{symbol,interval}).catch(()=>{}),250)}catch{}
