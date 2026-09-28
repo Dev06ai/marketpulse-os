@@ -880,8 +880,8 @@ async function buildDecisionSnapshot(symbol,interval,query,deviceId=null){
         reason:levelBlockReason,
         riskAtr:conditionalLevels?.riskAtr??null
       }
-    const decisionIntelligence=buildDecisionIntelligence({analysis,decision:finalDecision});
     };
+    const decisionIntelligence=buildDecisionIntelligence({analysis,decision:finalDecision});
     try{
       setTimeout(()=>signalNotifications.notifyAdminSignal(storage,{
         decision:finalDecision,
