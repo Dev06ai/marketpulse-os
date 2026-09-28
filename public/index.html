@@ -2921,11 +2921,15 @@ function renderMarket(){
   // whenever a fresh final decision exists. This prevents the hero price from
   // disagreeing with the reaction map / decision center during overlapping refreshes.
   var fd=state.finalDecision, finalMarket=fd&&fd.stale!==true?fd.market:null;
-  var heroPrice=finalMarket&&Number.isFinite(Number(finalMarket.price))?Number(finalMarket.price):Number(a.price);
+  var snapshotPrice=finalMarket&&Number.isFinite(Number(finalMarket.price))?Number(finalMarket.price):Number(a.price);
+  var livePrice=Number(state.liveChartPrice);
+  var liveFresh=Number.isFinite(livePrice)&&Number.isFinite(Number(state.liveChartTs))&&(Date.now()-Number(state.liveChartTs)<15000);
+  var heroPrice=liveFresh?livePrice:snapshotPrice;
   var heroChange=finalMarket&&Number.isFinite(Number(finalMarket.change24h))?Number(finalMarket.change24h):Number(a.change24h);
 
-  // Raw/core analysis updates market context only. The final gated decision
-  // engine is the sole authority for Signal + Decision Center UI.
+  // The live ticker is the single source of truth for the displayed price.
+  // Slower analysis/final-decision refreshes must never overwrite it with a
+  // stale snapshot while the exchange stream is healthy.
   $("mPrice").textContent=fmt(heroPrice);$("mChange").textContent=pct(heroChange)+" / 24h";
   $("mRegime").textContent=a.regime||"—";$("mMood").textContent="Mood: "+(a.mood||"—");
   $("mMom").textContent=fmt(a.rsi)+" / "+fmt(a.adx);$("mStructure").textContent=a.structure||"—";
@@ -3946,6 +3950,7 @@ function updateLiveChartPrice(price,ts,symbol){
   state.liveChartPrice=price;
   state.liveChartTs=ts;
   state.liveChartBucket=bucket;
+  // This exact tick is the canonical displayed price everywhere.
   $("mPrice").textContent=fmt(price);
   $("dataState").textContent="Live";
   if(state.market?.analysis)state.market.analysis.price=price;
@@ -3968,7 +3973,10 @@ function applyLiveKline(kline,symbol){
     if(Number(candles[i].t)===start){idx=i;break}
     if(Number(candles[i].t)<start)break;
   }
-  var row={t:start,o:open,h:high,l:low,c:close,v:Number.isFinite(volume)?volume:0,source:"bybit-kline"};
+  var livePrice=Number(state.liveChartPrice);
+  var liveFresh=Number.isFinite(livePrice)&&Number.isFinite(Number(state.liveChartTs))&&(Date.now()-Number(state.liveChartTs)<15000);
+  var displayClose=liveFresh?livePrice:close;
+  var row={t:start,o:open,h:Math.max(high,displayClose),l:Math.min(low,displayClose),c:displayClose,v:Number.isFinite(volume)?volume:0,source:"bybit-kline"};
   if(idx>=0)candles[idx]=Object.assign({},candles[idx],row);
   else{
     candles=candles.slice();
@@ -3977,9 +3985,21 @@ function applyLiveKline(kline,symbol){
   }
   state.chartCandles=candles;
   state.liveChartBucket=start;
-  state.liveChartPrice=close;
-  state.liveChartTs=Number(kline.timestamp)||Date.now();
-  $("mPrice").textContent=fmt(close);
+  // Do not replace a newer ticker timestamp/price with the slower kline close.
+  if(!liveFresh){
+    state.liveChartPrice=close;
+    state.liveChartTs=Date.now();
+    $("mPrice").textContent=fmt(close);
+  }else{
+    // Keep the current candle anchored to the exact same live tick shown above.
+    var synced=candles[candles.length-1];
+    if(synced&&chartBucketStart(synced.t,tf)===chartBucketStart(Number(state.liveChartTs),tf)){
+      synced.c=livePrice;
+      synced.h=Math.max(Number(synced.h)||livePrice,livePrice);
+      synced.l=Math.min(Number(synced.l)||livePrice,livePrice);
+    }
+    $("mPrice").textContent=fmt(livePrice);
+  }
   $("dataState").textContent="Live";
   queueChartDraw();
 }
