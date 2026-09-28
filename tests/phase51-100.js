@@ -55,6 +55,8 @@ const live=stack.evaluate({
  exchangeHealth:{reliabilityPct:100},portfolio:{positions:[]}
 });
 assert(live.signal.action==="LONG"&&live.gate.qualified,"51-100 stack did not publish eligible signal");
+assert(live.diagnostics.expectancyProbability===0.72,"Calibrated probability must remain 0–1 inside expectancy math");
+assert(live.diagnostics.expectancyGate.expectancy<2,"Expectancy gate probability unit regression");
 assert(live.signal.automaticExecutionEnabled===false,"51-100 auto execution");
 const blocked=stack.evaluate({dataQualityOk:false,triggerConfirmed:false,mtfAligned:false,calibration:{probability:null}});
 assert(blocked.signal.action==="WAIT","51-100 must fail safe to WAIT");
