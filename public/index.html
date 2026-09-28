@@ -241,6 +241,40 @@ button,input,select,textarea{font:inherit}.wrap{width:min(1440px,calc(100% - 26p
   .nav button[data-view="lab"],.nav button[data-view="edge"],.nav button[data-view="brain"]{margin-left:3px}
 }
 #mp7-panel{margin-top:12px}
+</style><style id="category-nav-style">
+.nav{overflow:visible;justify-content:flex-start;gap:6px;min-width:0;flex-wrap:nowrap}
+.navHome,.navCategoryBtn{border:1px solid transparent;background:transparent;color:#8797ab;padding:9px 11px;border-radius:10px;cursor:pointer;font-size:10px;font-weight:850;white-space:nowrap}
+.navHome:hover,.navHome.active,.navCategoryBtn:hover,.navCategoryBtn.open{color:#fff;background:rgba(255,255,255,.055);border-color:rgba(255,255,255,.11)}
+.navCategory{position:relative;flex:0 0 auto}
+.navChevron{font-size:11px;color:#9ba8ba;margin-left:4px;transition:transform .18s ease}
+.navCategoryBtn.open .navChevron{transform:rotate(180deg)}
+.navCategoryPanel{position:absolute;top:calc(100% + 10px);left:0;width:318px;padding:9px;border:1px solid rgba(255,255,255,.12);border-radius:16px;background:linear-gradient(180deg,rgba(20,20,25,.98),rgba(9,9,12,.98));box-shadow:0 24px 80px rgba(0,0,0,.55),0 0 28px rgba(192,132,252,.08);backdrop-filter:blur(22px);opacity:0;transform:translateY(-5px) scale(.98);pointer-events:none;transition:opacity .16s ease,transform .16s ease;z-index:70}
+.navCategoryPanel.open{opacity:1;transform:translateY(0) scale(1);pointer-events:auto}
+.navCategoryTitle{padding:5px 9px 8px;font-size:8px;letter-spacing:.12em;color:#78869a;font-weight:950}
+.navCategoryPanel button{width:100%;display:flex;align-items:center;gap:9px;border:1px solid transparent;background:transparent;color:#cfd7e2;text-align:left;border-radius:11px;padding:9px 10px;cursor:pointer}
+.navCategoryPanel button:hover,.navCategoryPanel button.active{background:rgba(255,255,255,.055);border-color:rgba(192,132,252,.14);color:#fff}
+.navCategoryPanel button span:not(.navItemIcon){min-width:0;display:grid;gap:2px}
+.navCategoryPanel button b{font-size:10px;font-weight:900;line-height:1.2}
+.navCategoryPanel button small{font-size:8px;color:#78879a;line-height:1.3}
+.navItemIcon{width:26px;height:26px;flex:0 0 26px;display:grid;place-items:center;border-radius:8px;background:linear-gradient(135deg,rgba(167,243,208,.10),rgba(192,132,252,.13));border:1px solid rgba(255,255,255,.08);color:#d8c4ff;font-weight:900;font-size:12px}
+.navCategory.hidden{display:none}
+.mobileMenu{padding:10px;display:none;grid-template-columns:1fr;gap:8px;max-height:calc(100vh - 90px);overflow:auto}
+.mobileMenu.open{display:grid}
+.mobileHomeBtn{margin-bottom:2px}
+.mobileMenuSection{padding-top:4px;border-top:1px solid rgba(255,255,255,.07)}
+.mobileMenuSection:first-of-type{border-top:0}
+.mobileMenuSectionTitle{padding:7px 7px 5px;font-size:8px;letter-spacing:.12em;color:#78869a;font-weight:950}
+.mobileMenuSection button{width:100%;padding:9px 10px}
+@media(max-width:1200px){
+  .nav{gap:3px}
+  .navHome,.navCategoryBtn{padding:8px 8px;font-size:9px}
+  .navCategoryPanel{width:295px}
+}
+@media(max-width:900px){
+  .headerInner{grid-template-columns:1fr auto}
+  .nav{display:none}
+  .mobileMenuBtn{display:block}
+}
 </style><style id="guard-chart-style">
 .chartTools button.active{color:#fff;border-color:rgba(103,232,255,.35);background:rgba(103,232,255,.08);box-shadow:0 0 14px rgba(103,232,255,.08)}
 .chartTools button[data-active="true"]{color:#fff;border-color:rgba(103,232,255,.35);background:rgba(103,232,255,.08)}
@@ -815,9 +849,73 @@ linear-gradient(180deg,#0c0e11 0%,#101214 48%,#0a0b0d 100%);box-shadow:0 -20px 7
 </script>
 <header class="header"><div class="headerInner">
   <div class="logo" id="marketpulseHome" role="button" tabindex="0" aria-label="Go to MarketPulse Dashboard" title="Go to Dashboard"><div class="mark" aria-label="MarketPulse logo"></div><div><div class="brandK">CRYPTO MARKET INTELLIGENCE</div><div class="brandName">MarketPulse</div><div class="brandSub">Less noise. More signal. Better decisions.</div></div></div>
-  <nav class="nav" id="nav"><button class="active" data-view="overview" title="Main dashboard and current market picture">Dashboard</button><button data-view="scanner" title="Compare many coins">Market scanner</button><button data-view="signals" title="Review possible setups">Setups</button><button data-view="flow" title="Futures flow and positioning">Market flow</button><button data-view="lab" title="Test a strategy on past data">Backtest</button><button data-view="replay" title="Replay past market conditions">Replay</button><button data-view="dna" title="Review recurring setup patterns">Pattern DNA</button><button data-view="research" title="Explore historical research">Research</button><button data-view="edge" title="Review strategy statistics">Edge</button><button data-view="portfolio" title="Portfolio risk and exposure">Portfolio</button><button data-view="trade-radar" title="Live opportunity lifecycle">Trade Radar</button><button id="autotraderNav" class="adminNav" data-view="autotrader" title="Automated strategy execution">AutoTrader</button><button id="executionNav" class="adminNav" data-view="execution" title="Advanced execution tools">Execution</button><button data-view="brain" title="Trading journal">Journal</button><button data-view="ai" title="MarketPulse copilot">Copilot</button><button data-view="alerts" title="Watchlist conditions">Watchlist</button><button data-view="risk" title="Risk controls">Risk</button><button id="adminNav" class="adminNav" data-view="admin" title="Administrator controls">Admin</button></nav>
+
+  <nav class="nav" id="nav" aria-label="MarketPulse navigation">
+    <button class="navHome active" data-view="overview" title="Main dashboard and current market picture">Dashboard</button>
+
+    <div class="navCategory" data-category="market">
+      <button class="navCategoryBtn" type="button" aria-expanded="false">Market <span class="navChevron">⌄</span></button>
+      <div class="navCategoryPanel">
+        <div class="navCategoryTitle">MARKET INTELLIGENCE</div>
+        <button data-view="scanner"><span class="navItemIcon">⌕</span><span><b>Market scanner</b><small>Compare coins and market regimes</small></span></button>
+        <button data-view="signals"><span class="navItemIcon">✦</span><span><b>Setups</b><small>Review directional opportunities</small></span></button>
+        <button data-view="flow"><span class="navItemIcon">≋</span><span><b>Market flow</b><small>OI, CVD, liquidity and positioning</small></span></button>
+        <button data-view="trade-radar"><span class="navItemIcon">◎</span><span><b>Trade Radar</b><small>Live opportunity lifecycle</small></span></button>
+        <button data-view="dna"><span class="navItemIcon">◈</span><span><b>Pattern DNA</b><small>Recurring setup patterns</small></span></button>
+      </div>
+    </div>
+
+    <div class="navCategory" data-category="research">
+      <button class="navCategoryBtn" type="button" aria-expanded="false">Research <span class="navChevron">⌄</span></button>
+      <div class="navCategoryPanel">
+        <div class="navCategoryTitle">RESEARCH &amp; ANALYTICS</div>
+        <button data-view="lab"><span class="navItemIcon">▦</span><span><b>Backtest</b><small>Test strategies on historical data</small></span></button>
+        <button data-view="replay"><span class="navItemIcon">↺</span><span><b>Replay</b><small>Revisit historical market conditions</small></span></button>
+        <button data-view="research"><span class="navItemIcon">⌁</span><span><b>Research</b><small>Explore historical evidence</small></span></button>
+        <button data-view="edge"><span class="navItemIcon">◒</span><span><b>Edge</b><small>Strategy statistics and evidence</small></span></button>
+      </div>
+    </div>
+
+    <div class="navCategory" data-category="trading">
+      <button class="navCategoryBtn" type="button" aria-expanded="false">Trading <span class="navChevron">⌄</span></button>
+      <div class="navCategoryPanel">
+        <div class="navCategoryTitle">TRADING &amp; EXECUTION</div>
+        <button data-view="portfolio"><span class="navItemIcon">▤</span><span><b>Portfolio</b><small>Exposure, positions and account risk</small></span></button>
+        <button data-view="risk"><span class="navItemIcon">△</span><span><b>Risk</b><small>Risk controls and limits</small></span></button>
+        <button id="executionNav" class="adminNav" data-view="execution"><span class="navItemIcon">↗</span><span><b>Execution</b><small>Advanced execution tools</small></span></button>
+        <button id="autotraderNav" class="adminNav" data-view="autotrader"><span class="navItemIcon">⚙</span><span><b>AutoTrader</b><small>Automated strategy execution</small></span></button>
+      </div>
+    </div>
+
+    <div class="navCategory" data-category="workspace">
+      <button class="navCategoryBtn" type="button" aria-expanded="false">Workspace <span class="navChevron">⌄</span></button>
+      <div class="navCategoryPanel">
+        <div class="navCategoryTitle">WORKSPACE</div>
+        <button data-view="brain"><span class="navItemIcon">✎</span><span><b>Journal</b><small>Trading journal and history</small></span></button>
+        <button data-view="ai"><span class="navItemIcon">✦</span><span><b>Copilot</b><small>MarketPulse assistant</small></span></button>
+        <button data-view="alerts"><span class="navItemIcon">◉</span><span><b>Watchlist</b><small>Watch conditions and alerts</small></span></button>
+      </div>
+    </div>
+
+    <div class="navCategory navAdminCategory" data-category="admin">
+      <button class="navCategoryBtn" type="button" aria-expanded="false">Admin <span class="navChevron">⌄</span></button>
+      <div class="navCategoryPanel">
+        <div class="navCategoryTitle">ADMINISTRATION</div>
+        <button id="adminNav" class="adminNav" data-view="admin"><span class="navItemIcon">◆</span><span><b>Admin console</b><small>Users, system checks and controls</small></span></button>
+      </div>
+    </div>
+  </nav>
+
   <button id="mobileMenuBtn" class="mobileMenuBtn" aria-label="Open MarketPulse menu" aria-expanded="false">☰</button>
-  <div id="mobileMenu" class="mobileMenu" aria-hidden="true"><button data-view="overview">Dashboard</button><button data-view="scanner">Market scanner</button><button data-view="signals">Setups</button><button data-view="flow">Market flow</button><button data-view="lab">Backtest</button><button data-view="replay">Replay</button><button data-view="dna">Pattern DNA</button><button data-view="research">Research</button><button data-view="edge">Edge</button><button data-view="portfolio">Portfolio</button><button data-view="trade-radar">Trade Radar</button><button class="adminNav" data-view="autotrader">AutoTrader</button><button class="adminNav" data-view="execution">Execution</button><button data-view="brain">Journal</button><button data-view="ai">Copilot</button><button data-view="alerts">Watchlist</button><button data-view="risk">Risk</button><button id="adminNavMobile" class="adminNav" data-view="admin">Admin</button></div>
+  <div id="mobileMenu" class="mobileMenu" aria-hidden="true">
+    <button class="mobileHomeBtn" data-view="overview">Dashboard</button>
+    <div class="mobileMenuSection"><div class="mobileMenuSectionTitle">MARKET</div><button data-view="scanner">Market scanner</button><button data-view="signals">Setups</button><button data-view="flow">Market flow</button><button data-view="trade-radar">Trade Radar</button><button data-view="dna">Pattern DNA</button></div>
+    <div class="mobileMenuSection"><div class="mobileMenuSectionTitle">RESEARCH &amp; ANALYTICS</div><button data-view="lab">Backtest</button><button data-view="replay">Replay</button><button data-view="research">Research</button><button data-view="edge">Edge</button></div>
+    <div class="mobileMenuSection"><div class="mobileMenuSectionTitle">TRADING &amp; EXECUTION</div><button data-view="portfolio">Portfolio</button><button data-view="risk">Risk</button><button class="adminNav" data-view="execution">Execution</button><button class="adminNav" data-view="autotrader">AutoTrader</button></div>
+    <div class="mobileMenuSection"><div class="mobileMenuSectionTitle">WORKSPACE</div><button data-view="brain">Journal</button><button data-view="ai">Copilot</button><button data-view="alerts">Watchlist</button></div>
+    <div class="mobileMenuSection adminMobileSection" data-admin-category="true"><div class="mobileMenuSectionTitle">ADMINISTRATION</div><button id="adminNavMobile" class="adminNav" data-view="admin">Admin console</button></div>
+  </div>
+
   <div class="headerTools"><button id="beginnerGuideBtn" class="btn beginnerGuideBtn" title="Open the beginner guide">Guide</button><button id="accountBtn" class="btn">Guest</button><span class="dataState"><i class="liveDot"></i><span id="dataState">Connecting</span></span><select id="symbol" class="select"></select><select id="interval" class="select"><option>15m</option><option selected>1h</option><option>4h</option><option>1d</option></select><button id="refresh" class="btn primary">Refresh</button></div>
 </div></header>
 
@@ -2185,6 +2283,15 @@ function syncRoleVisibility(){
     var allowed=admin||USER_VIEW_IDS.indexOf(String(b.dataset.view))>=0;
     b.hidden=!allowed;b.setAttribute("aria-hidden",String(!allowed));
   });
+  document.querySelectorAll(".navCategory").forEach(function(group){
+    var visibleItems=[].slice.call(group.querySelectorAll(".navCategoryPanel button[data-view]")).some(function(b){return !b.hidden});
+    group.classList.toggle("hidden",!visibleItems);
+  });
+  document.querySelectorAll(".mobileMenuSection").forEach(function(section){
+    var items=[].slice.call(section.querySelectorAll("button[data-view]"));
+    if(!items.length)return;
+    section.hidden=!items.some(function(b){return !b.hidden});
+  });
   document.querySelectorAll("[data-admin-only='true']").forEach(function(el){
     el.hidden=!admin;el.setAttribute("aria-hidden",String(!admin));
   });
@@ -2212,6 +2319,11 @@ function setView(name){
   if(name==="brain"){deferTask(function(){loadPhase7();loadPhase7Health()},40)}
   if(name==="admin"&&state.account?.isAdmin){deferTask(loadAdminConsole,20);deferTask(loadAdminUsers,40)}
   if(name==="research"&&state.account?.isAdmin){deferTask(loadResearchCatalog,80)}
+  document.querySelectorAll(".navCategoryBtn.open").forEach(function(btn){
+    btn.classList.remove("open");btn.setAttribute("aria-expanded","false");
+    var panel=btn.closest(".navCategory")?.querySelector(".navCategoryPanel");if(panel)panel.classList.remove("open");
+  });
+  document.querySelectorAll(".navCategoryPanel button[data-view]").forEach(function(b){b.classList.toggle("active",b.dataset.view===name)});
   updateViewHelper(name);
   syncRoleVisibility();
   if(name==="overview"&&state.market){queueChartDraw()}
@@ -2221,14 +2333,44 @@ document.querySelectorAll("[data-view]").forEach(function(b){
 });
 (function(){
   var home=$("marketpulseHome"),nav=$("nav");
-  if(!home)return;
-  function goHome(){
-    if(nav)nav.scrollLeft=0;
-    setView("overview");
+  if(home){
+    function goHome(){
+      if(nav)nav.scrollLeft=0;
+      setView("overview");
+    }
+    home.addEventListener("click",goHome);
+    home.addEventListener("keydown",function(e){
+      if(e.key==="Enter"||e.key===" "){e.preventDefault();goHome();}
+    });
   }
-  home.addEventListener("click",goHome);
-  home.addEventListener("keydown",function(e){
-    if(e.key==="Enter"||e.key===" "){e.preventDefault();goHome();}
+  document.querySelectorAll(".navCategoryBtn").forEach(function(btn){
+    btn.addEventListener("click",function(e){
+      e.stopPropagation();
+      var group=btn.closest(".navCategory"),panel=group&&group.querySelector(".navCategoryPanel"),isOpen=btn.classList.contains("open");
+      document.querySelectorAll(".navCategoryBtn.open").forEach(function(other){
+        other.classList.remove("open");other.setAttribute("aria-expanded","false");
+        var p=other.closest(".navCategory")?.querySelector(".navCategoryPanel");if(p)p.classList.remove("open");
+      });
+      if(!isOpen&&panel){
+        btn.classList.add("open");btn.setAttribute("aria-expanded","true");panel.classList.add("open");
+      }
+    });
+  });
+  document.addEventListener("click",function(e){
+    if(!e.target.closest(".navCategory")){
+      document.querySelectorAll(".navCategoryBtn.open").forEach(function(btn){
+        btn.classList.remove("open");btn.setAttribute("aria-expanded","false");
+        var panel=btn.closest(".navCategory")?.querySelector(".navCategoryPanel");if(panel)panel.classList.remove("open");
+      });
+    }
+  });
+  document.addEventListener("keydown",function(e){
+    if(e.key==="Escape"){
+      document.querySelectorAll(".navCategoryBtn.open").forEach(function(btn){
+        btn.classList.remove("open");btn.setAttribute("aria-expanded","false");
+        var panel=btn.closest(".navCategory")?.querySelector(".navCategoryPanel");if(panel)panel.classList.remove("open");
+      });
+    }
   });
 })();
 if($("botSave"))$("botSave").addEventListener("click",saveAutoTrader);
