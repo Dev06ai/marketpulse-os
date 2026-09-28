@@ -2903,7 +2903,34 @@ const server=http.createServer(async(req,res)=>{
   }catch(e){return send(res,500,{error:e.message||'Server error'})}
 });
 storage.init().catch(()=>{});learning.init().catch(()=>{});
+async function ingestVideoTranscriptAtStartup(){
+  const videoId=String(process.env.VIDEO_INGEST_ON_START||'').trim();
+  if(!videoId)return;
+  if(!/^[A-Za-z0-9_-]{11}$/.test(videoId)){
+    console.error('[VIDEO_INGEST] invalid video id');
+    return;
+  }
+  try{
+    const url='https://youtube-transcript.ai/transcript/'+videoId+'.txt';
+    const resp=await fetch(url);
+    const text=await resp.text();
+    if(!resp.ok){
+      console.error('[VIDEO_INGEST] provider status '+resp.status+' '+text.slice(0,500));
+      return;
+    }
+    console.log('[VIDEO_INGEST] START '+videoId+' chars='+text.length);
+    const chunkSize=6000;
+    for(let i=0;i<text.length;i+=chunkSize){
+      console.log('[VIDEO_TRANSCRIPT_CHUNK '+Math.floor(i/chunkSize+1)+'] '+text.slice(i,i+chunkSize));
+    }
+    console.log('[VIDEO_INGEST] END '+videoId);
+  }catch(e){
+    console.error('[VIDEO_INGEST] failed '+String(e?.message||e));
+  }
+}
+
 server.listen(PORT,()=>{
   console.log('MarketPulse OS listening on :'+PORT);
   setTimeout(()=>{runResearchWarmup().catch(()=>{})},12000);
+  setTimeout(()=>{ingestVideoTranscriptAtStartup().catch(()=>{})},3500);
 });
