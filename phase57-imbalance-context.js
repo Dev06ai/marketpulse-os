@@ -1,0 +1,2 @@
+/** Phase 57 */
+const V="57.0.0";function score(i={}){let s=50;if(i.fresh)s+=15;if(i.unfilled)s+=10;if(i.mitigated)s-=20;if(i.overlapsStructure)s+=15;return {version:V,score:Math.max(0,Math.min(100,s)),fresh:Boolean(i.fresh),mitigated:Boolean(i.mitigated)};}function selfTest(){const x=score({fresh:true,overlapsStructure:true});return {ok:x.score===80,version:V};}module.exports={VERSION:V,score,selfTest};
