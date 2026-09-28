@@ -191,4 +191,7 @@ assert(mtfConflict.signal.action==="WAIT","multi-timeframe conflict must force W
 const riskBlocked=stack.evaluate({...base,phaseStack:{data:{quality:{liveEligible:true}},risk:{blocked:true},anomaly:{anomalous:false}}});
 assert(riskBlocked.signal.action==="WAIT","risk blocker must force WAIT");
 
+const unknownExchange=stack.evaluate({...base,exchangeHealth:{}});
+assert(unknownExchange.signal.action==="WAIT"&&unknownExchange.gate.qualified===false,"unknown exchange health must force WAIT");
+
 console.log(JSON.stringify({ok:true,phases:50,version:stack.VERSION}));
