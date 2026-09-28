@@ -970,8 +970,8 @@ async function buildDecisionSnapshot(symbol,interval,query,deviceId=null){
       },
       calibration:{probability:null},
       uncertainty:{coveragePct:phaseStackState?.data?.quality?.score||0,calibrationSamples:analytics?.validation?.sampleCount||0,disagreementPct:0},
-      expectancy:{winProbability:0.5,averageWinR:Number(conditionalLevels?.rr)||1.5,averageLossR:1,costR:0},
-      expectancyGate:{probability:0.5,rr:Number(conditionalLevels?.rr)||0,costBps:10}
+      expectancy:{winProbability:null,averageWinR:Number(conditionalLevels?.rr)||1.5,averageLossR:1,costR:0},
+      expectancyGate:{probability:null,rr:Number(conditionalLevels?.rr)||0,costBps:10}
     });
     try{
       setTimeout(()=>signalNotifications.notifyAdminSignal(storage,{
