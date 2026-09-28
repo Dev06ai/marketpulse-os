@@ -4198,18 +4198,27 @@ function syncCanonicalMarketState(patch){
 
   $("mPrice").textContent=fmt(price);
   if(Number.isFinite(Number(state.canonicalMarket.change24h)))$("mChange").textContent=pct(Number(state.canonicalMarket.change24h))+" / 24h";
-  $("dataState").textContent="Live · synchronized";
+  var ds=$("dataState");
+  if(ds){
+    var transport=String(state.liveTransport||"").toUpperCase();
+    ds.textContent=transport==="DIRECT_BYBIT"?"Live · direct exchange":
+      transport==="RECOVERING"?"Live · recovering":"Live · synchronized";
+  }
 
   renderMarketNoFlow();
-  if(state.canonicalFlowRenderTimer)clearTimeout(state.canonicalFlowRenderTimer);
-  state.canonicalFlowRenderTimer=setTimeout(function(){
-    state.canonicalFlowRenderTimer=null;
-    drawFlowData(flow);
-  },40);
+
+  // Coalesce all high-frequency live-flow paints to one browser frame.
+  // The data state still updates on every packet; only the canvas paint is
+  // merged when several packets arrive inside the same frame.
+  if(!state.canonicalFlowRenderFrame){
+    state.canonicalFlowRenderFrame=requestAnimationFrame(function(){
+      state.canonicalFlowRenderFrame=0;
+      if(typeof drawFlowData==="function")drawFlowData(canonicalFlowSnapshot());
+    });
+  }
 
   if(state.finalDecision){
     renderLiveDirectionalModel(state.finalDecision);
-    scheduleLiveDecisionRender();
   }
   state.canonicalLastRenderTs=receivedTs;
   return state.canonicalMarket;
