@@ -799,8 +799,33 @@ async function buildDecisionSnapshot(symbol,interval,query,deviceId=null){
     // Preserve the engine's calculated setup before deployment gating can blank
     // executable levels. This remains conditional context only; execution still
     // requires the final gated READY decision.
-    const conditionalLevels=decision?.levels&&typeof decision.levels==="object"
-      ?{...decision.levels}:null;
+    const decisionLevels=decision?.levels&&typeof decision.levels==="object"?decision.levels:{};
+    const analysisLevels={
+      side:analysis?.side||decisionLevels.side||"WAIT",
+      entryLow:analysis?.entryLow??null,
+      entryHigh:analysis?.entryHigh??null,
+      entry:analysis?.entry??null,
+      stop:analysis?.stop??null,
+      tp1:analysis?.tp1??null,
+      tp2:analysis?.tp2??null,
+      rr:analysis?.rr??null,
+      riskDistance:analysis?.riskDistance??null,
+      target1Distance:analysis?.target1Distance??null
+    };
+    const finitePositive=(v)=>Number.isFinite(Number(v))&&Number(v)>0?v:null;
+    const conditionalLevels={
+      side:String(decisionLevels.side||analysisLevels.side||"WAIT").toUpperCase(),
+      entryLow:finitePositive(decisionLevels.entryLow)??finitePositive(analysisLevels.entryLow),
+      entryHigh:finitePositive(decisionLevels.entryHigh)??finitePositive(analysisLevels.entryHigh),
+      entry:finitePositive(decisionLevels.entry)??finitePositive(analysisLevels.entry),
+      stop:finitePositive(decisionLevels.stop)??finitePositive(analysisLevels.stop),
+      tp1:finitePositive(decisionLevels.tp1)??finitePositive(analysisLevels.tp1),
+      tp2:finitePositive(decisionLevels.tp2)??finitePositive(analysisLevels.tp2),
+      rr:finitePositive(decisionLevels.rr)??finitePositive(analysisLevels.rr),
+      riskDistance:finitePositive(decisionLevels.riskDistance)??finitePositive(analysisLevels.riskDistance),
+      target1Distance:finitePositive(decisionLevels.target1Distance)??finitePositive(analysisLevels.target1Distance),
+      source:decisionLevels.entryLow!=null||decisionLevels.stop!=null?"DECISION ENGINE":"MARKET ANALYSIS"
+    };
     const gatedDecision=phase1113.applyDeploymentGate(decision,validation1113,{basePolicy:signalPolicy});
     const stableDecision=applySignalStability(gatedDecision,symbol,interval);
     let finalDecision=sanitizeFinalDecision(stableDecision);
