@@ -5530,6 +5530,11 @@ async function renderLiveSignalSummary(d,model){
     var titleText=side+" DIRECTIONAL LEAN";
     if(title.textContent!==titleText)title.textContent=titleText;
   }
+  var mpdcDirection=$("mpdcDirectionText");
+  if(mpdcDirection){
+    if(mpdcDirection.textContent!==side)mpdcDirection.textContent=side;
+    mpdcDirection.dataset.direction=side;
+  }
 
   var score=$("thesisScore");
   if(score){
