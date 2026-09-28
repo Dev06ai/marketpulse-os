@@ -125,7 +125,6 @@ function evaluate(input={}){
   const calibrated=u.probability(input.calibration?.probability);
   const relative=u.probability(Math.max(0,Math.min(100,Math.max(q.dir.long,q.dir.short)*.75+q.coverage.coverage*.25)));
   const confidence=calibrated??relative;
-  const action=(!aged&&q.qualified)?q.dominant:"WAIT";
   const expectancy=p74.evaluate(input.expectancy||{});
   const expectancyGate=p65.evaluate({
     probability:calibrated,
@@ -168,7 +167,7 @@ function evaluate(input={}){
       invalidation:invalidation?String(input.invalidationText||"Structural invalidation is defined."):null,
       blockers:publicBlockers,ageMs,ttlMs,realMoneyUse:"DECISION_SUPPORT_ONLY",automaticExecutionEnabled:false
     },
-    gate:{qualified:q.qualified&&!aged,blockers:u.unique(q.blockers)},
+    gate:{qualified:publicGate.publicSignalAllowed,candidateQualified:q.qualified&&!aged,blockers:u.unique(publicBlockers)},
     diagnostics:{relativeConfidence:relative,calibratedConfidence:calibrated,
       mtf:mtfResult,trigger:triggerResult,invalidation:invalidationResult,levels:levelResult,
       leverage:leverageResult,ttl:ttlResult,chop:chopResult,expectancy,expectancyGate,uncertainty,portfolio,exchange,
