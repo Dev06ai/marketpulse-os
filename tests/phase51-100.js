@@ -59,3 +59,16 @@ assert(live.signal.automaticExecutionEnabled===false,"51-100 auto execution");
 const blocked=stack.evaluate({dataQualityOk:false,triggerConfirmed:false,mtfAligned:false,calibration:{probability:null}});
 assert(blocked.signal.action==="WAIT","51-100 must fail safe to WAIT");
 console.log("phase51-100 tests: ok");
+
+// Every Phase 51–100 module must load and expose a self-test.
+const fs=require("fs");
+const phaseFiles=fs.readdirSync(__dirname+"/..").filter(x=>/^phase(?:5[1-9]|[6-9][0-9]|100)-.*\\.js$/.test(x)).sort((a,b)=>{
+  const pa=Number(a.match(/^phase(\\d+)/)[1]),pb=Number(b.match(/^phase(\\d+)/)[1]); return pa-pb;
+});
+assert(phaseFiles.length===50,"Expected exactly 50 Phase 51–100 modules, found "+phaseFiles.length);
+for(const file of phaseFiles){
+  const mod=require("../"+file);
+  assert(typeof mod.selfTest==="function",file+" missing selfTest");
+  assert(mod.selfTest().ok===true,file+" selfTest failed");
+}
+assert(phaseFiles.every((f,i)=>Number(f.match(/^phase(\\d+)/)[1])===i+51),"Phase module coverage has a gap");
