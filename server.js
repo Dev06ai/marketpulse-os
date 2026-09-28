@@ -950,7 +950,8 @@ async function buildDecisionSnapshot(symbol,interval,query,deviceId=null){
     }catch{}
 
     try{
-      const autoEnabled=String(process.env.LIVE_AUTO_EXECUTION_ENABLED||"false").toLowerCase()==="true";
+      const legacyAutoEnabled=String(process.env.LIVE_AUTO_EXECUTION_ENABLED||"false").toLowerCase()==="true";
+      const autoEnabled=false && legacyAutoEnabled && Boolean(phaseStackState?.liveController?.automaticExecutionEnabled);
       if(autoEnabled&&finalDecision?.liveSignalEligible&&finalDecision?.state==="READY"&&["LONG","SHORT"].includes(String(finalDecision?.action||"").toUpperCase())){
         const signal={
           id:["LIVE_AUTO",symbol,interval,candles?.[candles.length-1]?.t,finalDecision.action].join("|"),
