@@ -202,7 +202,10 @@ assert(/^Naked (DAILY|WEEKLY) POC/.test(String(npoc.setup?.reason||"")),"Naked P
 
 
 const phase51to100=require("./phase51-100-stack");
+const phase51to100Regression=require("./phase51-100-selftest");
 assert(phase51to100.selfTest().ok,"Phase 51–100 stack self-test failed.");
+// Run the dedicated Phase 51–100 regression suite as part of the canonical validation command.
+assert(typeof phase51to100Regression==="object","Phase 51–100 regression suite did not load.");
 const phase51to100Files=fs.readdirSync(".").filter(function(name){
   return /^(?:phase(?:5[1-9]|[6-9][0-9])-.*|phase100-.*)\.js$/.test(name) && name!=="phase51-100-stack.js" && name!=="phase51-100-utils.js";
 });
