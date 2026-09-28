@@ -796,9 +796,24 @@ async function buildDecisionSnapshot(symbol,interval,query,deviceId=null){
       dataQuality:{candleAgeMs:liveMarketAgeMs},
       liveFlow:flow,validation:analytics?.validation||null,propGate:gate
     });
+    // Preserve the engine's calculated setup before deployment gating can blank
+    // executable levels. This remains conditional context only; execution still
+    // requires the final gated READY decision.
+    const conditionalLevels=decision?.levels&&typeof decision.levels==="object"
+      ?{...decision.levels}:null;
     const gatedDecision=phase1113.applyDeploymentGate(decision,validation1113,{basePolicy:signalPolicy});
     const stableDecision=applySignalStability(gatedDecision,symbol,interval);
-    const finalDecision=sanitizeFinalDecision(stableDecision);
+    let finalDecision=sanitizeFinalDecision(stableDecision);
+    if(conditionalLevels){
+      finalDecision={
+        ...finalDecision,
+        conditionalLevels:{...conditionalLevels},
+        candidateEvidence:{
+          ...(finalDecision.candidateEvidence||{}),
+          levels:finalDecision.candidateEvidence?.levels||{...conditionalLevels}
+        }
+      };
+    }
     try{
       setTimeout(()=>signalNotifications.notifyAdminSignal(storage,{
         decision:finalDecision,
