@@ -39,6 +39,7 @@ assert(p80.evaluate({blockers:["DATA_QUALITY"],dataQuality:40,directionalEdge:5}
 assert(p82.compare({championExpectancy:1,challengerExpectancy:1.2,minimumImprovementR:.1,challengerSamples:500}).promote,"82 challenger");
 assert(p87.evaluate({positions:[{riskPct:1},{riskPct:1}],maxTotalRiskPct:1.5}).blocked,"87 portfolio");
 assert(p89.evaluate({reliabilityPct:80}).healthy===false,"89 exchange");
+assert(p89.evaluate({}).healthy===false&&p89.evaluate({}).blockers.includes("RELIABILITY_UNKNOWN"),"89 unknown exchange health must fail closed");
 assert(p90.build({side:"LONG",entry:100,invalidation:98}).items.length===8,"90 checklist");
 assert(p99.gate({data:true,validation:true,calibration:true,risk:true,security:true,observability:true,operations:true}).ready,"99 readiness");
 assert(p100.evaluate({readiness:true,action:"LONG",blockers:[]}).publicSignalAllowed===true,"100 gate");
