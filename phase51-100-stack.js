@@ -127,7 +127,11 @@ function evaluate(input={}){
   const confidence=calibrated??relative;
   const action=(!aged&&q.qualified)?q.dominant:"WAIT";
   const expectancy=p74.evaluate(input.expectancy||{});
-  const expectancyGate=p65.evaluate(input.expectancyGate||{probability:confidenceToProb(confidence),rr:s.levels?.rr??levelResult.rr,costBps:input.costBps});
+  const expectancyGate=p65.evaluate({
+    probability:calibrated,
+    rr:s.levels?.rr??levelResult.rr,
+    costBps:input.costBps
+  });
   const uncertainty=p73.evaluate(input.uncertainty||{});
   const portfolio=p87.evaluate(input.portfolio||{});
   const exchange=p89.evaluate(input.exchangeHealth||{});
@@ -137,19 +141,32 @@ function evaluate(input={}){
     data:dataGood,structure:Boolean(input.setupEvidence??(s.analysis?.marketStructure?.setup||s.analysis?.setup)),
     flow:Boolean(input.flowEvidence??(s.flow?.cvdState||s.flow?.takerImbalance!=null)),
     mtf:mtfAligned,trigger,invalidation,levels:levelsValid,risk:riskClear,
-    anomaly:anomalyClear,exchange:exchange.healthy,portfolio:!portfolio.blocked,uncertainty:!uncertainty.uncertain
+    anomaly:anomalyClear,exchange:exchange.healthy,portfolio:!portfolio.blocked,uncertainty:!uncertainty.uncertain,
+    calibrated:calibrated!=null,expectancy:expectancyGate.pass,publicReadiness:freeGate.ready
   }});
-  const publicGate=p100.evaluate({readiness:Boolean(freeGate.ready),action,blockers:q.blockers,automaticExecutionEnabled:false});
+  const publicAllowed=qualification.eligible&&!aged&&Boolean(expectancyGate.pass)&&!uncertainty.uncertain&&!portfolio.blocked&&exchange.healthy&&freeGate.ready;
+  const publicAction=publicAllowed?q.dominant:"WAIT";
+  const publicBlockers=u.unique([
+    ...q.blockers,
+    ...(calibrated==null?["CALIBRATION_NOT_AVAILABLE"]:[]),
+    ...(expectancyGate.pass?[]:["EXPECTANCY_GATE"]),
+    ...(uncertainty.uncertain?uncertainty.reasons:[]),
+    ...(portfolio.blocked?["PORTFOLIO_RISK"]:[]),
+    ...(exchange.healthy?[]:exchange.blockers),
+    ...(freeGate.ready?[]:freeGate.missing)
+  ]);
+  const publicGate=p100.evaluate({readiness:publicAllowed,action:publicAction,blockers:publicBlockers,automaticExecutionEnabled:false});
+  const action=publicGate.publicSignalAllowed?publicAction:"WAIT";
   return {
     version:VERSION,
     signal:{
-      symbol:s.symbol,interval:s.interval,timestamp:Date.now(),action,status:action==="WAIT"?"WAIT":"QUALIFIED_CANDIDATE",
+      symbol:s.symbol,interval:s.interval,timestamp:Date.now(),action,candidateAction:q.dominant,status:action==="WAIT"?"WAIT":"QUALIFIED_CANDIDATE",
       price:s.price,confidence,confidenceSource:calibrated!=null?"CALIBRATED":"RELATIVE_EVIDENCE_ONLY",calibrated:calibrated!=null,
       evidence:evidence(s),direction:q.dir,coverage:q.coverage,
       entry:s.levels?.entry??levelResult.entry??s.levels?.entryLow??null,entryHigh:s.levels?.entryHigh??levelResult.entryHigh??null,
       stop:s.levels?.stop??levelResult.stop??null,tp1:s.levels?.tp1??levelResult.tp1??null,tp2:s.levels?.tp2??levelResult.tp2??null,rr:s.levels?.rr??levelResult.rr??null,
       invalidation:invalidation?String(input.invalidationText||"Structural invalidation is defined."):null,
-      blockers:u.unique(q.blockers),ageMs,ttlMs,realMoneyUse:"DECISION_SUPPORT_ONLY",automaticExecutionEnabled:false
+      blockers:publicBlockers,ageMs,ttlMs,realMoneyUse:"DECISION_SUPPORT_ONLY",automaticExecutionEnabled:false
     },
     gate:{qualified:q.qualified&&!aged,blockers:u.unique(q.blockers)},
     diagnostics:{relativeConfidence:relative,calibratedConfidence:calibrated,
@@ -167,7 +184,13 @@ function selfTest(){
     analysis:{side:"LONG",regime:{trend:"UP"},confluenceScore:85,marketStructure:{setup:{side:"LONG"}}},
     derivatives:{cvdState:"BUYERS CONFIRM",takerImbalance:.12,oiChangePct:2,orderBook:{imbalance:.1}},
     phaseStack:{data:{quality:{liveEligible:true}},risk:{blocked:false},anomaly:{anomalous:false}},
-    triggerConfirmed:true,mtfAligned:true,setupEvidence:true,flowEvidence:true,invalidation:true,levelsValid:true
+    triggerConfirmed:true,mtfAligned:true,setupEvidence:true,flowEvidence:true,invalidation:true,levelsValid:true,
+    calibration:{probability:.72},
+    uncertainty:{coveragePct:95,calibrationSamples:500,disagreementPct:5},
+    publicReadiness:{data:true,validation:true,calibration:true,risk:true,security:true,observability:true,operations:true},
+    expectancy:{winProbability:.72,averageWinR:2,averageLossR:1,costR:.05},
+    exchangeHealth:{reliabilityPct:100},
+    portfolio:{positions:[]}
   });
   const y=evaluate({dataQualityOk:false,triggerConfirmed:false,mtfAligned:false});
   return {ok:x.signal.action==="LONG"&&x.gate.qualified&&x.signal.automaticExecutionEnabled===false&&y.signal.action==="WAIT",version:VERSION};
