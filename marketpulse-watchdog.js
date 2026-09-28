@@ -21,13 +21,16 @@ const PORT=Number(process.env.PORT||3000);
 const BASE_URL=String(process.env.MARKETPULSE_WEB_URL||"").replace(/\/$/,"");
 const TOKEN=String(process.env.MARKETPULSE_WATCHDOG_TOKEN||"");
 const INTERVAL_MS=Math.max(15000,Number(process.env.MARKETPULSE_WATCHDOG_INTERVAL_MS||30000));
+const SYSTEM_CHECK_INTERVAL_MS=Math.max(120000,Number(process.env.MARKETPULSE_WATCHDOG_SYSTEM_CHECK_INTERVAL_MS||300000));
+const SELF_TEST_INTERVAL_MS=Math.max(300000,Number(process.env.MARKETPULSE_WATCHDOG_SELF_TEST_INTERVAL_MS||900000));
+const DECISION_SPOT_INTERVAL_MS=Math.max(60000,Number(process.env.MARKETPULSE_WATCHDOG_DECISION_SPOT_INTERVAL_MS||120000));
 const DECISION_SYMBOLS=String(process.env.MARKETPULSE_WATCHDOG_SYMBOLS||"BTCUSDT,ETHUSDT,SOLUSDT").split(",").map(x=>x.trim()).filter(Boolean);
 const DECISION_INTERVALS=String(process.env.MARKETPULSE_WATCHDOG_INTERVALS||"15m,1h").split(",").map(x=>x.trim()).filter(Boolean);
 const MAX_INCIDENTS=phase16.MAX_INCIDENTS;
 
 const state={
   startedAt:Date.now(),lastRunAt:null,lastHealthyAt:null,consecutiveFailures:0,
-  checks:0,remediations:0,incidents:[],lastHealth:null,lastExecution:null,selfTest:null
+  checks:0,remediations:0,incidents:[],lastHealth:null,lastExecution:null,selfTest:null,lastSystemCheckAt:0,lastSelfTestAt:0,lastDecisionSpotAt:0
 };
 
 function sleep(ms){return new Promise(r=>setTimeout(r,ms))}
@@ -105,59 +108,75 @@ async function cycle(){
   state.checks++;
   state.lastRunAt=Date.now();
 
-  const selfTest=await runSelfTest();
-  state.selfTest=selfTest;
-  if(!selfTest.ok)record("SELF_TEST_FAILED","critical","Repository self-test failed; no strategy or risk rules were modified.",{error:selfTest.error});
-
-  let health=null,execution=null;
   try{
-    health=await fetchJson("/api/watchdog/internal?action=system-check");
-    state.lastHealth=health;
+    await fetchJson("/health",{timeout:6000});
   }catch(e){
     state.consecutiveFailures++;
-    record("SYSTEM_CHECK_UNAVAILABLE","critical","Main MarketPulse system-check endpoint is unavailable.",{error:String(e?.message||e),consecutiveFailures:state.consecutiveFailures});
-    await safeRemediation({checks:{execution:false}},execution);
+    record("MAIN_HEALTH_UNAVAILABLE","critical","Main MarketPulse health endpoint is unavailable.",{error:String(e?.message||e),consecutiveFailures:state.consecutiveFailures});
     return;
   }
 
-  try{
-    execution=await fetchJson("/api/watchdog/internal?action=execution");
-    state.lastExecution=execution;
-  }catch(e){
-    state.consecutiveFailures++;
-    record("EXECUTION_HEALTH_UNAVAILABLE","critical","Execution health endpoint is unavailable.",{error:String(e?.message||e),consecutiveFailures:state.consecutiveFailures});
+  if(Date.now()-state.lastSelfTestAt>=SELF_TEST_INTERVAL_MS){
+    state.lastSelfTestAt=Date.now();
+    const selfTest=await runSelfTest();
+    state.selfTest=selfTest;
+    if(!selfTest.ok)record("SELF_TEST_FAILED","critical","Repository self-test failed; no strategy or risk rules were modified.",{error:selfTest.error});
   }
 
-  const classification=phase16.classifySystemCheck(health?.checks||{});
-  if(classification.healthy && (!execution||execution.ok!==false)){
-    state.consecutiveFailures=0;state.lastHealthyAt=Date.now();
-  }else{
-    state.consecutiveFailures++;
-    record("SYSTEM_HEALTH_DEGRADED",classification.executionCritical.length?"critical":"warning","MarketPulse health checks are not fully green.",classification);
+  let health=state.lastHealth,execution=state.lastExecution;
+  if(Date.now()-state.lastSystemCheckAt>=SYSTEM_CHECK_INTERVAL_MS){
+    state.lastSystemCheckAt=Date.now();
+    try{
+      health=await fetchJson("/api/watchdog/internal?action=system-check",{timeout:20000});
+      state.lastHealth=health;
+    }catch(e){
+      state.consecutiveFailures++;
+      record("SYSTEM_CHECK_UNAVAILABLE","critical","Main MarketPulse system-check endpoint is unavailable.",{error:String(e?.message||e),consecutiveFailures:state.consecutiveFailures});
+      return;
+    }
+    try{
+      execution=await fetchJson("/api/watchdog/internal?action=execution",{timeout:10000});
+      state.lastExecution=execution;
+    }catch(e){
+      state.consecutiveFailures++;
+      record("EXECUTION_HEALTH_UNAVAILABLE","critical","Execution health endpoint is unavailable.",{error:String(e?.message||e),consecutiveFailures:state.consecutiveFailures});
+    }
+
+    const classification=phase16.classifySystemCheck(health?.checks||{});
+    if(classification.healthy && (!execution||execution.ok!==false)){
+      state.consecutiveFailures=0;state.lastHealthyAt=Date.now();
+    }else{
+      state.consecutiveFailures++;
+      record("SYSTEM_HEALTH_DEGRADED",classification.executionCritical.length?"critical":"warning","MarketPulse health checks are not fully green.",classification);
+    }
+    await safeRemediation(health,execution);
   }
 
-  // Spot-check current decisions to catch a decision engine outage that
-  // the broad system check may not reveal.
-  for(const symbol of DECISION_SYMBOLS){
-    for(const interval of DECISION_INTERVALS){
-      try{
-        const d=await fetchJson("/api/decision?symbol="+encodeURIComponent(symbol)+"&interval="+encodeURIComponent(interval),{timeout:15000});
-        if(!d?.ok)throw new Error("Decision response invalid");
-      }catch(e){
-        state.consecutiveFailures++;
-        record("DECISION_SPOT_CHECK_FAILED","warning","Decision engine spot-check failed.",{symbol,interval,error:String(e?.message||e)});
-      }
+  if(Date.now()-state.lastDecisionSpotAt>=DECISION_SPOT_INTERVAL_MS){
+    state.lastDecisionSpotAt=Date.now();
+    const slots=Math.max(1,DECISION_SYMBOLS.length*DECISION_INTERVALS.length);
+    const index=Math.floor(state.checks/Math.max(1,Math.round(DECISION_SPOT_INTERVAL_MS/INTERVAL_MS)))%slots;
+    const symbol=DECISION_SYMBOLS[Math.floor(index/Math.max(1,DECISION_INTERVALS.length))%Math.max(1,DECISION_SYMBOLS.length)];
+    const interval=DECISION_INTERVALS[index%Math.max(1,DECISION_INTERVALS.length)];
+    try{
+      const d=await fetchJson("/api/decision?symbol="+encodeURIComponent(symbol)+"&interval="+encodeURIComponent(interval),{timeout:15000});
+      if(!d?.ok)throw new Error("Decision response invalid");
+    }catch(e){
+      state.consecutiveFailures++;
+      record("DECISION_SPOT_CHECK_FAILED","warning","Decision engine spot-check failed.",{symbol,interval,error:String(e?.message||e)});
     }
   }
 
-  await safeRemediation(health,execution);
+  if(state.consecutiveFailures===0)state.lastHealthyAt=Date.now();
   console.log(JSON.stringify({
     event:"phase16_watchdog_cycle",
     checks:state.checks,
-    healthy:classification.healthy,
+    healthy:state.consecutiveFailures===0,
     consecutiveFailures:state.consecutiveFailures,
     remediations:state.remediations,
-    lastHealthyAt:state.lastHealthyAt
+    lastHealthyAt:state.lastHealthyAt,
+    nextSystemCheckInMs:Math.max(0,SYSTEM_CHECK_INTERVAL_MS-(Date.now()-state.lastSystemCheckAt)),
+    nextSelfTestInMs:Math.max(0,SELF_TEST_INTERVAL_MS-(Date.now()-state.lastSelfTestAt))
   }));
 }
 
