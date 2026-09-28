@@ -5491,6 +5491,13 @@ function renderLiveDirectionalModel(d,model){
 
   var elo=validLevel(plan.entryLow),ehi=validLevel(plan.entryHigh),entry=validLevel(plan.entry);
   var stop=validLevel(plan.stop),tp1=validLevel(plan.tp1),tp2=validLevel(plan.tp2),rr=Number(plan.rr);
+  var hasConditionalLevels=(elo!==null||ehi!==null||entry!==null||stop!==null||tp1!==null);
+  if(!hasConditionalLevels&&d.candidateEvidence?.levels&&typeof d.candidateEvidence.levels==="object"){
+    plan=d.candidateEvidence.levels;
+    elo=validLevel(plan.entryLow);ehi=validLevel(plan.entryHigh);entry=validLevel(plan.entry);
+    stop=validLevel(plan.stop);tp1=validLevel(plan.tp1);tp2=validLevel(plan.tp2);rr=Number(plan.rr);
+    hasConditionalLevels=(elo!==null||ehi!==null||entry!==null||stop!==null||tp1!==null);
+  }
   var entryText=(elo!==null&&ehi!==null)?fmt(elo)+" → "+fmt(ehi):(entry!==null?fmt(entry):"—");
   setText("livePlanEntry",entryText);
   setText("livePlanSl",stop!==null?fmt(stop):"—");
@@ -5505,12 +5512,24 @@ function renderLiveDirectionalModel(d,model){
     :"WAITING FOR DIRECTION";
   var thesis=d?.evidence?.thesis;
   if(Array.isArray(thesis))thesis=thesis.join(" ");
-  var thesisText=String(thesis||"").trim();
-  if(!thesisText||/^waiting for|^final decision unavailable/i.test(thesisText)){
-    thesisText=String(d?.analysis?.thesis||"").trim();
-  }
-  if(!thesisText||/^waiting for|^final decision unavailable/i.test(thesisText)){
-    thesisText=(Array.isArray(p.reasons)&&p.reasons.length)?p.reasons.slice(0,3).join(" · "):"Live direction is being formed from the synchronized price and flow frame.";
+  var thesisText="";
+  var entryRef=(elo!==null&&ehi!==null)?(fmt(elo)+" → "+fmt(ehi)):(entry!==null?fmt(entry):"");
+  var flowBits=[];
+  if(p.cvdState)flowBits.push("CVD "+String(p.cvdState).toLowerCase());
+  if(p.liquidationBias&&String(p.liquidationBias).toUpperCase()!=="UNKNOWN")flowBits.push("liquidations "+String(p.liquidationBias).toLowerCase());
+  if(Number.isFinite(p.orderBookImbalance))flowBits.push("book "+(p.orderBookImbalance>=0?"bid":"ask")+" pressure");
+  if(Number.isFinite(p.takerImbalance))flowBits.push("taker "+(p.takerImbalance>=0?"buy":"sell")+" pressure");
+  if(hasConditionalLevels){
+    thesisText="Conditional "+candidate+" setup";
+    if(entryRef)thesisText+=" · Entry "+entryRef+".";
+    else thesisText+=".";
+    if(flowBits.length)thesisText+=" Why: "+flowBits.slice(0,3).join(" · ")+".";
+    thesisText+=" Wait for the setup condition at the entry zone; the execution gate still controls release.";
+  }else{
+    thesisText=String(thesis||"").trim();
+    if(!thesisText||/^waiting for|^final decision unavailable|^no trade/i.test(thesisText)){
+      thesisText=(Array.isArray(p.reasons)&&p.reasons.length)?p.reasons.slice(0,3).join(" · "):"Live direction is forming from the synchronized price and flow frame.";
+    }
   }
   setText("livePlanThesis",thesisText);
   var inv=Array.isArray(d?.evidence?.invalidationScenario)?d.evidence.invalidationScenario.join(" "):d?.evidence?.invalidationScenario;
@@ -5574,8 +5593,13 @@ async function renderLiveSignalSummary(d,model){
   var stateText=$("thesisState");
   if(stateText){
     var gate=String(d.deploymentGate?.state||"PAPER_ONLY");
-    var st=String(d.state||"LIVE");
-    var t=st+" · "+side+" "+confidence+"%";
+    var conditionalPlan=getConditionalTradeLevels(d,model);
+    var hasEntry=validLevel(conditionalPlan.entryLow)!==null||validLevel(conditionalPlan.entry)!==null;
+    var hasRisk=validLevel(conditionalPlan.stop)!==null;
+    var st=(hasEntry||hasRisk)
+      ?("CONDITIONAL "+side)
+      :(d.state==="READY"&&d.liveSignalEligible===true?("READY "+side):("DIRECTIONAL "+side));
+    var t=st+" · "+confidence+"%";
     if(stateText.textContent!==t)stateText.textContent=t;
     stateText.dataset.executionGate=gate;
   }
@@ -5606,13 +5630,20 @@ async function renderLiveSignalSummary(d,model){
 
   var primary=$("primary");
   if(primary){
-    var primaryText=side+" directional context from the current synchronized market frame.";
+    var primaryPlan=getConditionalTradeLevels(d,model);
+    var pLo=validLevel(primaryPlan.entryLow),pHi=validLevel(primaryPlan.entryHigh),pEntry=validLevel(primaryPlan.entry);
+    var primaryText=(pLo!==null&&pHi!==null)
+      ?("Enter "+side+" only inside "+fmt(pLo)+" → "+fmt(pHi)+" when the setup confirms.")
+      :(pEntry!==null?"Reference entry "+fmt(pEntry)+" for the "+side+" setup.":side+" directional context from the current synchronized market frame.");
     if(primary.textContent!==primaryText)primary.textContent=primaryText;
   }
 
   var alternate=$("alternate");
   if(alternate){
-    var alternateText="The live direction changes when the synchronized price/flow structure changes.";
+    var altPlan=getConditionalTradeLevels(d,model),altStop=validLevel(altPlan.stop);
+    var alternateText=altStop!==null
+      ?("Invalidate / exit the thesis if price reaches "+fmt(altStop)+" or the confirming structure/flow breaks.")
+      :"The "+side+" thesis changes when the synchronized price/flow structure breaks.";
     if(alternate.textContent!==alternateText)alternate.textContent=alternateText;
   }
 }
