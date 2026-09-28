@@ -4,9 +4,25 @@
  */
 const VERSION="50.0.0";
 function state(input={}){
-  const ready=input.readiness===true,shadow=input.shadow!==false,operator=input.operatorApproved===true;
-  const liveEnabled=ready&&operator&&!shadow;
-  return {version:VERSION,mode:liveEnabled?"LIVE_GATED":shadow?"SHADOW":"BLOCKED",liveEnabled};
+  const ready=input.readiness===true;
+  const shadow=input.shadow!==false;
+  const operator=input.operatorApproved===true;
+  const signalGateOpen=ready&&operator;
+  const automaticExecutionEnabled=false;
+  return {
+    version:VERSION,
+    mode:signalGateOpen?(shadow?"SHADOW_READY":"MANUAL_SIGNAL_GATE_OPEN"):"BLOCKED",
+    signalGateOpen,
+    manualSignalUseAllowed:signalGateOpen,
+    automaticExecutionEnabled,
+    liveEnabled:false,
+    blockers:signalGateOpen?[]:["READINESS_OR_OPERATOR_ACK"]
+  };
 }
-function selfTest(){const s=state({readiness:true,shadow:true,operatorApproved:true}),l=state({readiness:true,shadow:false,operatorApproved:true});return {ok:s.mode==="SHADOW"&&!s.liveEnabled&&l.liveEnabled,version:VERSION};}
+function selfTest(){
+  const s=state({readiness:true,shadow:true,operatorApproved:true});
+  const l=state({readiness:true,shadow:false,operatorApproved:true});
+  const b=state({readiness:false,shadow:false,operatorApproved:true});
+  return {ok:s.mode==="SHADOW_READY"&&s.manualSignalUseAllowed&&!s.automaticExecutionEnabled&&l.mode==="MANUAL_SIGNAL_GATE_OPEN"&&b.mode==="BLOCKED",version:VERSION};
+}
 module.exports={VERSION,state,selfTest};
