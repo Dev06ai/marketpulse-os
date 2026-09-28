@@ -2372,7 +2372,7 @@ function installCriticalChartUI(){
   }
 }
 installCriticalChartUI();
-setTimeout(function(){try{startLiveChartStream(state.symbol)}catch{}},50);
+setTimeout(function(){try{loadFastTicker()}catch{}},50);
 setTimeout(function(){
   if(state.market?.analysis?.price&& !state.canonicalMarket){
     syncCanonicalMarketState({price:Number(state.market.analysis.price),ts:Number(state.market.updatedAt||Date.now()),change24h:state.market.analysis.change24h,candle:state.market.candles?.[state.market.candles.length-1],flow:state.market.derivatives||{},source:"INITIAL_SNAPSHOT"});
@@ -2673,7 +2673,7 @@ async function loadChartTimeframe(tf){
     if(!Array.isArray(d.candles)||!d.candles.length)throw Error("No candles returned");
     state.chartInterval=tf;state.chartCandles=d.candles;state.chartSymbol=state.symbol;
     state.chartVisible=Math.min(96,d.candles.length);state.chartOffset=0;state.chartYZoom=1;state.chartYShift=0;state.crossX=null;state.crossY=null;
-    startLiveChartStream(state.symbol);
+    loadFastTicker();
     drawMain();
   }catch(e){
     $("ohlc").textContent="Chart data unavailable — retrying…";
@@ -4499,6 +4499,12 @@ function startLiveChartStream(symbol){
 }
 async function loadFastTicker(){
   var symbol=state.symbol;
+  if(state.liveSyncBusy){
+    runCanonicalSyncPulse("one-second-heartbeat-busy");
+    return;
+  }
+  state.liveSyncBusy=true;
+  try{
   try{
     // The browser consumes the same server-side Bybit stream that powers the
     // decision engine. This removes the old dual-feed race between browser
@@ -4538,6 +4544,7 @@ async function loadFastTicker(){
         $("mMom").textContent="—";
         $("mStructure").textContent="—";
       }
+      scheduleLiveDecisionRender();
       return;
     }
   }catch{}
@@ -4561,6 +4568,9 @@ async function loadFastTicker(){
     }catch{}
   }
   scheduleLiveDecisionRender();
+  }finally{
+    state.liveSyncBusy=false;
+  }
 }
 async function loadCoreEnrichment(){
   if(!state.market)return;
@@ -5317,7 +5327,7 @@ $("refresh").addEventListener("click",loadCore);
   setTimeout(wakeMarketCore,0);
 })();
 $("dcfRefresh").addEventListener("click",loadDataFabric);
-$("symbol").addEventListener("change",function(){stopLiveChartStream();state.symbol=this.value;state.chartPinned=false;state.chartSymbol=state.symbol;state.chartCandles=[];loadFastTicker();loadCore()});
+$("symbol").addEventListener("change",function(){state.symbol=this.value;state.chartPinned=false;state.chartSymbol=state.symbol;state.chartCandles=[];loadFastTicker();loadCore()});
 $("interval").addEventListener("change",function(){state.interval=this.value;state.chartInterval=this.value;loadFastTicker();loadCore()});
 function deviceId(){
   var k="mp-device-id",id=localStorage.getItem(k);
