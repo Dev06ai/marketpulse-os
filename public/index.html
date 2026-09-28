@@ -876,6 +876,136 @@ linear-gradient(180deg,#0c0e11 0%,#101214 48%,#0a0b0d 100%);box-shadow:0 -20px 7
 </style><style id="market-board-responsive">
 @media(max-width:900px){.scannerGrid{grid-template-columns:1fr}}
 @media(max-width:700px){.scanTableWrap{overflow-x:auto}.marketBoard,.marketBoardHead{min-width:760px}}
+</style><style id="decision-center-v2-style">
+/* MarketPulse Decision Center v2 — execution-first, low-noise design */
+.decisionSection{
+  --mpdc-accent:#a78bfa;
+  --mpdc-soft:rgba(167,139,250,.075);
+  --mpdc-border:rgba(167,139,250,.20);
+}
+.decisionSection.signal-long{--mpdc-accent:#4ade80;--mpdc-soft:rgba(74,222,128,.075);--mpdc-border:rgba(74,222,128,.23)}
+.decisionSection.signal-short{--mpdc-accent:#fb7185;--mpdc-soft:rgba(251,113,133,.075);--mpdc-border:rgba(251,113,133,.23)}
+.decisionSection.signal-wait{--mpdc-accent:#c084fc;--mpdc-soft:rgba(192,132,252,.07);--mpdc-border:rgba(192,132,252,.20)}
+.mpdc-shell{
+  position:relative;overflow:hidden;padding:16px;border:1px solid rgba(255,255,255,.085);border-radius:22px;
+  background:
+    radial-gradient(circle at 96% 0%,color-mix(in srgb,var(--mpdc-accent) 9%,transparent),transparent 34%),
+    linear-gradient(180deg,rgba(17,18,23,.97),rgba(6,7,10,.985));
+  box-shadow:0 22px 65px rgba(0,0,0,.34),inset 0 1px 0 rgba(255,255,255,.035);
+}
+.mpdc-shell:before{
+  content:"";position:absolute;left:0;top:0;bottom:0;width:2px;background:linear-gradient(180deg,var(--mpdc-accent),transparent 78%);
+  opacity:.8;
+}
+.mpdc-top{
+  display:flex;align-items:flex-start;justify-content:space-between;gap:18px;padding:2px 2px 14px;
+  border-bottom:1px solid rgba(255,255,255,.065)
+}
+.mpdc-kicker,.mpdc-eyebrow{
+  display:block;font-size:8px;letter-spacing:.17em;text-transform:uppercase;font-weight:950;color:#8291a4
+}
+.mpdc-title-row{display:flex;align-items:baseline;gap:11px;margin-top:5px}
+.mpdc-direction{
+  font-size:32px;line-height:1;font-weight:1000;letter-spacing:-.055em;color:var(--mpdc-accent);
+  text-shadow:0 0 22px color-mix(in srgb,var(--mpdc-accent) 24%,transparent)
+}
+.mpdc-confidence{font-size:16px;font-weight:900;color:#eef2f7}
+.mpdc-state{margin-top:5px;font-size:10px;color:#c5ced9}
+.mpdc-meta{margin-top:4px;font-size:9px;color:#69778a}
+.mpdc-gate-wrap{display:grid;justify-items:end;gap:6px;min-width:130px}
+.mpdc-gate-label{font-size:8px;letter-spacing:.14em;font-weight:900;color:#6d7c90}
+.mpdc-gate,.mpdc-live-status{
+  display:inline-flex;align-items:center;justify-content:center;min-height:28px;padding:5px 10px;border-radius:999px;
+  font-size:9px;font-weight:950;letter-spacing:.06em;border:1px solid rgba(255,255,255,.10);background:rgba(255,255,255,.025);color:#d6dee8
+}
+.mpdc-gate{color:var(--mpdc-accent);border-color:var(--mpdc-border);background:var(--mpdc-soft)}
+.mpdc-main-grid{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(340px,.95fr);gap:10px;margin-top:10px}
+.mpdc-panel{
+  min-width:0;border:1px solid rgba(255,255,255,.07);border-radius:17px;background:rgba(255,255,255,.018);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.02)
+}
+.mpdc-thesis-panel{padding:14px}
+.mpdc-execution-panel{padding:14px;background:linear-gradient(180deg,var(--mpdc-soft),rgba(255,255,255,.012))}
+.mpdc-panel-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
+.mpdc-panel-head.compact{margin-bottom:8px}
+.mpdc-panel-sub{display:block;margin-top:3px;font-size:9px;color:#77869a;line-height:1.35}
+.mpdc-direction-pair{display:flex;gap:5px}
+.mpdc-side-badge{
+  display:grid;grid-template-columns:auto auto;align-items:center;gap:5px;padding:7px 9px;border-radius:10px;
+  border:1px solid rgba(255,255,255,.07);background:rgba(0,0,0,.16)
+}
+.mpdc-side-badge span{font-size:7px;font-weight:950;letter-spacing:.11em;color:#75859a}
+.mpdc-side-badge strong{font-size:12px;line-height:1}
+.mpdc-side-badge.longProb strong{color:#72f2ab}
+.mpdc-side-badge.shortProb strong{color:#ff8da2}
+.mpdc-thesis-copy{
+  margin-top:13px;padding:13px 14px;border:1px solid color-mix(in srgb,var(--mpdc-accent) 16%,transparent);border-radius:13px;
+  background:linear-gradient(135deg,rgba(255,255,255,.028),rgba(255,255,255,.012));
+  color:#e7edf4;font-size:12px;line-height:1.6
+}
+.mpdc-logic-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}
+.mpdc-logic{
+  min-width:0;padding:10px 11px;border:1px solid rgba(74,222,128,.12);border-radius:11px;background:rgba(74,222,128,.025)
+}
+.mpdc-logic.mpdc-exit{border-color:rgba(248,113,133,.13);background:rgba(248,113,133,.025)}
+.mpdc-logic>div{margin-top:5px;font-size:9.5px;line-height:1.5;color:#d2dae4}
+.mpdc-flow-block{margin-top:12px;padding-top:11px;border-top:1px solid rgba(255,255,255,.055)}
+.mpdc-flow-grid{grid-template-columns:repeat(3,minmax(0,1fr));margin-top:8px}
+.mpdc-flow-grid span{padding:8px 9px;font-size:8px;border-radius:9px}
+.mpdc-current{
+  margin-top:13px;padding:11px 12px;border-radius:12px;border:1px solid rgba(255,255,255,.07);
+  background:rgba(0,0,0,.16)
+}
+.mpdc-current strong{display:block;margin-top:3px;font-size:22px;letter-spacing:-.035em;color:#f1f5f9}
+.mpdc-plan-grid{grid-template-columns:1fr 1fr;margin-top:8px}
+.mpdc-plan-grid>div{padding:10px 11px;border-radius:10px;background:rgba(0,0,0,.15);border-color:rgba(255,255,255,.065)}
+.mpdc-plan-grid>div span{font-size:7px;color:#738398}
+.mpdc-plan-grid>div b{font-size:11px;margin-top:4px}
+.mpdc-plan-entry{border-color:rgba(103,232,255,.16)!important}
+.mpdc-plan-entry b{color:#d7f8ff!important}
+.mpdc-plan-stop{border-color:rgba(248,113,133,.16)!important}
+.mpdc-plan-stop b{color:#ff9bad!important}
+.mpdc-plan-target{border-color:rgba(74,222,128,.15)!important}
+.mpdc-plan-target b{color:#80f2b0!important}
+.mpdc-entry-note{
+  margin-top:8px;padding:11px 12px;border-radius:11px;border:1px solid rgba(255,255,255,.065);background:rgba(0,0,0,.12)
+}
+.mpdc-entry-note>div{margin-top:5px;color:#d8e0e9;font-size:9px;line-height:1.5}
+.mpdc-entry-note .mpdc-invalidation{display:flex;justify-content:space-between;gap:10px;padding-top:8px;margin-top:8px;border-top:1px solid rgba(255,255,255,.055)}
+.mpdc-entry-note .mpdc-invalidation span{font-size:7px;color:#77879a;font-weight:950;letter-spacing:.09em}
+.mpdc-entry-note .mpdc-invalidation b{font-size:8.5px;color:#ff9cab;text-align:right}
+.mpdc-gate-note{margin-top:8px;font-size:8px;line-height:1.45;color:#738196}
+.mpdc-bottom{
+  display:grid;grid-template-columns:minmax(0,1fr) minmax(250px,.55fr);gap:10px;margin-top:10px;padding-top:10px;border-top:1px solid rgba(255,255,255,.055)
+}
+.mpdc-bars{margin-top:7px;max-width:680px}
+.mpdc-bars .probabilityBarRow{grid-template-columns:42px minmax(0,1fr) 38px;gap:7px}
+.mpdc-bars .probabilityBarRow>div{height:4px}
+.mpdc-wait-row{opacity:.35}
+.mpdc-footnote{
+  align-self:end;padding:9px 10px;border:1px solid rgba(255,255,255,.06);border-radius:10px;color:#738196;font-size:8px;line-height:1.45;background:rgba(255,255,255,.012)
+}
+.mpdc-hidden-compat{display:none!important}
+.mpdc-shell .livePlanSide{min-width:56px}
+.mpdc-shell .livePlanSide.long{color:#72f2ab;background:rgba(74,222,128,.07);border-color:rgba(74,222,128,.20)}
+.mpdc-shell .livePlanSide.short{color:#ff879f;background:rgba(248,113,133,.07);border-color:rgba(248,113,133,.20)}
+.mpdc-shell .livePlanSide.wait{color:#d8c4ff;background:rgba(192,132,252,.07);border-color:rgba(192,132,252,.20)}
+@media(max-width:980px){
+  .mpdc-main-grid{grid-template-columns:1fr}
+}
+@media(max-width:720px){
+  .mpdc-shell{padding:12px;border-radius:17px}
+  .mpdc-top{flex-direction:column}
+  .mpdc-gate-wrap{width:100%;grid-template-columns:auto auto auto;justify-content:start;align-items:center}
+  .mpdc-main-grid{gap:8px}
+  .mpdc-direction{font-size:27px}
+  .mpdc-direction-pair{gap:4px}
+  .mpdc-side-badge{padding:6px 8px}
+  .mpdc-logic-grid{grid-template-columns:1fr}
+  .mpdc-flow-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .mpdc-plan-grid{grid-template-columns:1fr 1fr}
+  .mpdc-bottom{grid-template-columns:1fr}
+}
 </style></head>
 <body>
 <div id="mpLaunch" aria-hidden="true">
@@ -1019,93 +1149,132 @@ linear-gradient(180deg,#0c0e11 0%,#101214 48%,#0a0b0d 100%);box-shadow:0 -20px 7
     </div>
 
     <div class="section decisionSection">
-      <div class="sectionHead"><div><div class="title">Decision Center</div><div class="sub">A simple summary of what the market is doing and what would change the view.</div></div><span class="chip" id="adaptiveChip">Adaptive: collecting</span></div>
-      <div class="grid2">
-            <div class="section grid2">
-      <div class="card decisionStateCard">
-  <div class="sectionHead">
-    <div><div class="title" id="thesisTitle">Loading market context…</div><div class="sub" id="thesisState">—</div></div>
-    <div class="value" id="thesisScore">—</div>
-  </div>
-  <div class="small" id="finalEngineMeta" style="margin-bottom:7px">Phase 9/10 engine warming…</div>
-  <div id="thesis" class="thesis">Waiting for the live model.</div>
-  <div class="chips" id="thesisChips"></div>
-
-  <div class="liveDecisionModel" id="liveDecisionModel">
-    <div class="liveDecisionHead">
-      <div>
-        <div class="liveDecisionEyebrow">LIVE DIRECTIONAL MODEL</div>
-        <div class="liveDecisionHint">Model estimate · synchronized to the live chart and current flow</div>
+      <div class="sectionHead">
+        <div>
+          <div class="title">Decision Center</div>
+          <div class="sub">The live setup in one place — direction, why, entry, risk, targets and market flow.</div>
+        </div>
+        <span class="chip" id="adaptiveChip">LIVE</span>
       </div>
-      <span class="liveDecisionStatus" id="liveDecisionStatus">WAITING</span>
-    </div>
 
-    <div class="directionProbGrid">
-      <div class="directionProb longProb">
-        <span class="directionProbLabel">LONG</span>
-        <strong id="probLong">—%</strong>
-        <span id="probLongText">directional estimate</span>
+      <div class="mpdc-shell" id="mpDecisionCenter">
+        <div class="mpdc-top">
+          <div class="mpdc-heading">
+            <div class="mpdc-kicker">LIVE TRADE DECISION</div>
+            <div class="mpdc-title-row">
+              <div class="mpdc-direction" id="mpdcDirectionText">WAIT</div>
+              <div class="mpdc-confidence" id="thesisScore">—/100</div>
+            </div>
+            <div class="mpdc-state" id="thesisState">Waiting for synchronized market data…</div>
+            <div class="mpdc-meta" id="finalEngineMeta">Live directional engine warming…</div>
+          </div>
+          <div class="mpdc-gate-wrap">
+            <span class="mpdc-gate-label">EXECUTION</span>
+            <span class="mpdc-gate" id="deploymentGate">PAPER ONLY</span>
+            <span class="mpdc-live-status liveDecisionStatus" id="liveDecisionStatus">WAITING</span>
+          </div>
+        </div>
+
+        <div class="mpdc-main-grid">
+          <section class="mpdc-panel mpdc-thesis-panel">
+            <div class="mpdc-panel-head">
+              <div>
+                <span class="mpdc-eyebrow">WHY THIS DIRECTION</span>
+                <span class="mpdc-panel-sub">The reasoning behind the current setup.</span>
+              </div>
+              <div class="mpdc-direction-pair">
+                <div class="mpdc-side-badge longProb"><span>LONG</span><strong id="probLong">—%</strong></div>
+                <div class="mpdc-side-badge shortProb"><span>SHORT</span><strong id="probShort">—%</strong></div>
+              </div>
+            </div>
+
+            <div class="mpdc-thesis-copy" id="thesis">Waiting for the live directional model.</div>
+
+            <div class="mpdc-logic-grid">
+              <div class="mpdc-logic">
+                <span class="mpdc-eyebrow">ENTER WHEN</span>
+                <div id="primary">Wait for the live model to produce a valid entry condition.</div>
+              </div>
+              <div class="mpdc-logic mpdc-exit">
+                <span class="mpdc-eyebrow">EXIT / INVALIDATION</span>
+                <div id="alternate">Exit or invalidate when the setup structure breaks.</div>
+              </div>
+            </div>
+
+            <div class="mpdc-flow-block">
+              <div class="mpdc-panel-head compact">
+                <div>
+                  <span class="mpdc-eyebrow">MARKET FLOW</span>
+                  <span class="mpdc-panel-sub">Only the live inputs relevant to the decision.</span>
+                </div>
+              </div>
+              <div class="liveEvidenceGrid mpdc-flow-grid">
+                <span id="liveFlowCvd">CVD · —</span>
+                <span id="liveFlowOi">OI · —</span>
+                <span id="liveFlowLiq">LIQ · —</span>
+                <span id="liveFlowBook">BOOK · —</span>
+                <span id="liveFlowTaker">TAKER · —</span>
+                <span id="liveFlowMtf">HTF · —</span>
+              </div>
+            </div>
+          </section>
+
+          <section class="mpdc-panel mpdc-execution-panel">
+            <div class="mpdc-panel-head">
+              <div>
+                <span class="mpdc-eyebrow">EXECUTION MAP</span>
+                <span class="mpdc-panel-sub" id="livePlanStatus">Waiting for a validated directional setup</span>
+              </div>
+              <span class="livePlanSide mpdc-plan-side" id="livePlanSide">WAIT</span>
+            </div>
+
+            <div class="mpdc-current">
+              <span class="mpdc-eyebrow">LIVE PRICE</span>
+              <strong id="livePlanPrice">—</strong>
+            </div>
+
+            <div class="livePlanGrid mpdc-plan-grid">
+              <div class="mpdc-plan-entry"><span>ENTRY ZONE</span><b id="livePlanEntry">—</b></div>
+              <div class="mpdc-plan-stop"><span>SL / INVALIDATION</span><b id="livePlanSl">—</b></div>
+              <div class="mpdc-plan-target"><span>TP1</span><b id="livePlanTp1">—</b></div>
+              <div class="mpdc-plan-target"><span>TP2</span><b id="livePlanTp2">—</b></div>
+              <div><span>R:R</span><b id="livePlanRr">—</b></div>
+              <div><span>SETUP</span><b id="tradeStyle">—</b></div>
+            </div>
+
+            <div class="mpdc-entry-note">
+              <span class="mpdc-eyebrow">ENTRY THESIS</span>
+              <div id="livePlanThesis">Waiting for the live directional model.</div>
+              <div class="livePlanInvalidation mpdc-invalidation"><span>EXIT / INVALIDATION</span><b id="livePlanInvalidation">—</b></div>
+            </div>
+
+            <div class="mpdc-gate-note" id="deploymentReason">Execution gate remains authoritative.</div>
+          </section>
+        </div>
+
+        <div class="mpdc-bottom">
+          <div class="mpdc-direction-readout">
+            <span class="mpdc-eyebrow">DIRECTIONAL BALANCE</span>
+            <div class="probabilityBars mpdc-bars">
+              <div class="probabilityBarRow"><span>LONG</span><div><i id="probLongBar"></i></div><b id="probLongBarValue">—</b></div>
+              <div class="probabilityBarRow"><span>SHORT</span><div><i id="probShortBar"></i></div><b id="probShortBarValue">—</b></div>
+              <div class="probabilityBarRow mpdc-wait-row"><span>WAIT</span><div><i id="probWaitBar"></i></div><b id="probWaitBarValue">—</b></div>
+            </div>
+          </div>
+          <div class="mpdc-footnote" id="liveDecisionFootnote">
+            Model percentages are directional estimates, not guaranteed outcomes. No entry is implied unless the execution conditions are actually present.
+          </div>
+        </div>
+
+        <!-- Compatibility nodes kept hidden so the existing engine can continue updating without adding clutter. -->
+        <div class="mpdc-hidden-compat">
+          <span id="thesisTitle">WAIT</span><span id="quality">—</span>
+          <span id="probWait">—%</span><span id="probLongText">secondary</span><span id="probShortText">secondary</span><span id="probWaitText">watch</span>
+          <span id="thesisChips"></span><div id="components"></div>
+        </div>
       </div>
-      <div class="directionProb shortProb">
-        <span class="directionProbLabel">SHORT</span>
-        <strong id="probShort">—%</strong>
-        <span id="probShortText">directional estimate</span>
-      </div>
-      <div class="directionProb waitProb">
-        <span class="directionProbLabel">WAIT</span>
-        <strong id="probWait">—%</strong>
-        <span id="probWaitText">no-trade pressure</span>
-      </div>
     </div>
 
-    <div class="probabilityBars">
-      <div class="probabilityBarRow"><span>LONG</span><div><i id="probLongBar"></i></div><b id="probLongBarValue">—</b></div>
-      <div class="probabilityBarRow"><span>SHORT</span><div><i id="probShortBar"></i></div><b id="probShortBarValue">—</b></div>
-      <div class="probabilityBarRow"><span>WAIT</span><div><i id="probWaitBar"></i></div><b id="probWaitBarValue">—</b></div>
-    </div>
-
-    <div class="liveEvidenceGrid">
-      <span id="liveFlowCvd">CVD · —</span>
-      <span id="liveFlowOi">OI · —</span>
-      <span id="liveFlowLiq">LIQ · —</span>
-      <span id="liveFlowBook">BOOK · —</span>
-      <span id="liveFlowTaker">TAKER · —</span>
-      <span id="liveFlowMtf">HTF · —</span>
-    </div>
-
-    <div class="livePlanHead">
-      <div>
-        <div class="liveDecisionEyebrow">CONDITIONAL TRADE PLAN</div>
-        <div class="liveDecisionHint" id="livePlanStatus">Waiting for a validated directional setup</div>
-      </div>
-      <span class="livePlanSide" id="livePlanSide">WAIT</span>
-    </div>
-
-    <div class="livePlanGrid">
-      <div><span>LIVE PRICE</span><b id="livePlanPrice">—</b></div>
-      <div><span>ENTRY</span><b id="livePlanEntry">—</b></div>
-      <div><span>SL</span><b id="livePlanSl">—</b></div>
-      <div><span>TP1</span><b id="livePlanTp1">—</b></div>
-      <div><span>TP2</span><b id="livePlanTp2">—</b></div>
-      <div><span>R:R</span><b id="livePlanRr">—</b></div>
-    </div>
-
-    <div class="livePlanThesis">
-      <div class="liveDecisionEyebrow">THESIS</div>
-      <div id="livePlanThesis">Waiting for the live directional model.</div>
-      <div class="livePlanInvalidation"><span>INVALIDATION</span><b id="livePlanInvalidation">—</b></div>
-    </div>
-
-    <div class="liveDecisionFootnote" id="liveDecisionFootnote">
-      Percentages are MarketPulse model estimates, not guaranteed win probabilities. The execution/safety gate remains authoritative.
-    </div>
-  </div>
-
-  <div class="scenario"><div class="mini"><div class="k">Primary scenario</div><div class="v" id="primary">—</div></div><div class="mini"><div class="k">What would break it</div><div class="v" id="alternate">—</div></div></div>
-</div>
-      <div class="card signalQualityCard"><div class="sectionHead"><div><div class="title">Why the signal looks this way</div><div class="sub">See which parts of the market are helping or weakening the setup.</div></div><span class="value" id="quality">—</span></div><div id="components" class="list"></div></div>
-    </div>
-      </div>
       <div class="card" id="reactionOpportunityCard" style="margin-top:10px">
         <div class="sectionHead">
           <div><div class="title">Reaction Opportunities</div><div class="sub">Conditional setups around high-confluence zones. Wait for the reaction before acting.</div></div>
@@ -5289,7 +5458,7 @@ function renderLiveDirectionalModel(d,model){
     if(el.className!==baseClass)el.className=baseClass;
   });
 
-  var candidate=p.candidate;
+  var candidate=String(p.stableSide||p.candidate||"WAIT").toUpperCase();
   var plan=p.plan||{};
   var sideClass=candidate==="LONG"?"long":candidate==="SHORT"?"short":"wait";
   var ps=$("livePlanSide");if(ps){ps.textContent=candidate;ps.className="livePlanSide "+sideClass}
@@ -5302,12 +5471,20 @@ function renderLiveDirectionalModel(d,model){
   setText("livePlanRr",Number.isFinite(Number(plan.rr))?Number(plan.rr).toFixed(2)+"R":"—");
   var planStatus=$("livePlanStatus");
   if(planStatus)planStatus.textContent=(candidate==="LONG"||candidate==="SHORT")
-    ?(d.liveSignalEligible===true?"CONFIRMED DIRECTION · GATE PASSED":"CONDITIONAL · "+(d.deploymentGate?.state||"WAITING"))
-    :"WAITING FOR DIRECTIONAL CANDIDATE";
+    ?(Number.isFinite(Number(plan.entryLow))&&Number.isFinite(Number(plan.entryHigh))
+      ?("ENTRY ZONE "+(d.liveSignalEligible===true?"AVAILABLE":"CONDITIONAL")+" · GATE "+String(d.deploymentGate?.state||"WAITING"))
+      :"DIRECTION ONLY · NO VALIDATED ENTRY")
+    :"WAITING FOR DIRECTION";
   var thesis=d?.evidence?.thesis;
   if(Array.isArray(thesis))thesis=thesis.join(" ");
-  if(!thesis)thesis=d?.analysis?.thesis||"Waiting for the live directional model.";
-  setText("livePlanThesis",thesis);
+  var thesisText=String(thesis||"").trim();
+  if(!thesisText||/^waiting for|^final decision unavailable/i.test(thesisText)){
+    thesisText=String(d?.analysis?.thesis||"").trim();
+  }
+  if(!thesisText||/^waiting for|^final decision unavailable/i.test(thesisText)){
+    thesisText=(Array.isArray(p.reasons)&&p.reasons.length)?p.reasons.slice(0,3).join(" · "):"Live direction is being formed from the synchronized price and flow frame.";
+  }
+  setText("livePlanThesis",thesisText);
   var inv=Array.isArray(d?.evidence?.invalidationScenario)?d.evidence.invalidationScenario.join(" "):d?.evidence?.invalidationScenario;
   if(!inv)inv=String(p.candidate==="LONG"?"Break the bullish structure / stop zone.":p.candidate==="SHORT"?"Reclaim the bearish trigger / stop zone.":"A fresh directional setup plus final safety checks.");
   setText("livePlanInvalidation",inv);
