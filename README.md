@@ -133,3 +133,11 @@ The GitHub Actions fallback is intentionally execution-free and does not require
 
 ### 24/7 scheduler hardening
 The no-cost scheduler runs every five minutes at minute offsets that avoid GitHub's top-of-hour load window. Each decision refresh uses a 30-second request timeout, bounded retries with exponential backoff for transient failures (timeouts, rate limits and server errors), and bounded concurrency for the multi-symbol sweeps. This is designed to survive Render cold starts and short-lived provider/network errors without requiring an open browser.
+
+
+## Phase 20 — Scenario Matrix & Decision Forensics (20.0.0)
+- Adds a deterministic scenario matrix that separately evaluates LONG, SHORT and WAIT evidence using the same authoritative Decision Center snapshot.
+- Shows what evidence supports or conflicts with each scenario, what confirmation must happen next, and what structural condition invalidates the thesis.
+- Adds a canonical snapshot ID/hash so Decision Center surfaces can verify they are rendering one shared market/decision context.
+- WAIT is structurally prevented from inheriting an executable LONG/SHORT map; Phase 20 is explanatory and cannot bypass validation, risk, paper-only or execution gates.
+- The Phase 20 state is exposed on the authoritative /api/decision payload and rendered in the Decision Center as the Scenario Matrix and Snapshot Integrity surfaces.
