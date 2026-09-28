@@ -2225,6 +2225,7 @@ if($("botPause"))$("botPause").addEventListener("click",pauseAutoTrader);
 if($("botKill"))$("botKill").addEventListener("click",killAutoTrader);
 if($("botRefresh"))$("botRefresh").addEventListener("click",loadAutoTrader);
 if($("botHistoryRefresh"))$("botHistoryRefresh").addEventListener("click",loadBotTradeHistory);
+if($("radarRefresh"))$("radarRefresh").addEventListener("click",loadTradeRadar);
 ["SCALP","INTRADAY","SWING","POSITION"].forEach(function(k){var id={SCALP:"botScalp",INTRADAY:"botIntraday",SWING:"botSwing",POSITION:"botPosition"}[k];if($(id))$(id).addEventListener("click",function(){$(id).classList.toggle("on")})});
 if($("adminEnableSignalPush"))$("adminEnableSignalPush").addEventListener("click",enableAdminSignalPush);
 if($("adminTestSignalPush"))$("adminTestSignalPush").addEventListener("click",testAdminSignalPush);
