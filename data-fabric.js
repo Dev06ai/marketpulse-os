@@ -11,6 +11,7 @@ const KRAKEN_SPOT_PAIRS = {
 };
 
 const DATA_FABRIC_CACHE=new Map();
+const DATA_FABRIC_INFLIGHT=new Map();
 const DATA_FABRIC_TTL=5000;
 
 const COINBASE_PRODUCTS = {
@@ -138,6 +139,12 @@ async function assess(symbol,interval="1h",context={}){
   const key=String(symbol)+"|"+String(interval);
   const cached=DATA_FABRIC_CACHE.get(key);
   if(cached&&Date.now()-cached.ts<DATA_FABRIC_TTL)return Object.assign({},cached.data,{cached:true,cacheAgeMs:Date.now()-cached.ts});
+  const existing=DATA_FABRIC_INFLIGHT.get(key);
+  if(existing)return existing;
+  const job=(async()=>{
+  const key=String(symbol)+"|"+String(interval);
+  const cached=DATA_FABRIC_CACHE.get(key);
+  if(cached&&Date.now()-cached.ts<DATA_FABRIC_TTL)return Object.assign({},cached.data,{cached:true,cacheAgeMs:Date.now()-cached.ts});
   const started=Date.now();
   const settled=await Promise.all([
     coinbaseSnapshot(symbol).catch(e=>({name:"Coinbase Spot",role:"spot-price-cross-check",status:"error",price:null,error:String(e.message||e)})),
@@ -166,6 +173,9 @@ async function assess(symbol,interval="1h",context={}){
   });
   DATA_FABRIC_CACHE.set(key,{ts:Date.now(),data:result});
   return result;
+  })().finally(()=>DATA_FABRIC_INFLIGHT.delete(key));
+  DATA_FABRIC_INFLIGHT.set(key,job);
+  return job;
 }
 
 module.exports={VERSION,KRAKEN_SPOT_PAIRS,COINBASE_PRODUCTS,coinbaseSnapshot,krakenSnapshot,binanceSnapshot,summarizeSources,assess};
