@@ -142,9 +142,6 @@ async function assess(symbol,interval="1h",context={}){
   const existing=DATA_FABRIC_INFLIGHT.get(key);
   if(existing)return existing;
   const job=(async()=>{
-  const key=String(symbol)+"|"+String(interval);
-  const cached=DATA_FABRIC_CACHE.get(key);
-  if(cached&&Date.now()-cached.ts<DATA_FABRIC_TTL)return Object.assign({},cached.data,{cached:true,cacheAgeMs:Date.now()-cached.ts});
   const started=Date.now();
   const settled=await Promise.all([
     coinbaseSnapshot(symbol).catch(e=>({name:"Coinbase Spot",role:"spot-price-cross-check",status:"error",price:null,error:String(e.message||e)})),
