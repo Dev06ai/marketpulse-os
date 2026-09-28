@@ -1,0 +1,2 @@
+/** Phase 52 */
+const V="52.0.0";function evaluate(i={}){const b=[];for(const [k,v] of Object.entries(i.gates||{}))if(v!==true)b.push(String(k));return {version:V,eligible:b.length===0,blockers:b};}function selfTest(){const x=evaluate({gates:{data:true,structure:true,flow:true,risk:true}}),y=evaluate({gates:{data:true,risk:false}});return {ok:x.eligible&&!y.eligible&&y.blockers.includes("risk"),version:V};}module.exports={VERSION:V,evaluate,selfTest};
