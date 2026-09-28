@@ -67,9 +67,13 @@ console.log(JSON.stringify({
 
 const phase4=require("./phase4");
 const phase910=require("./phase9-10");
+const autotrader=require("./autotrader");
 const learning=require("./learning");
 assert(typeof learning.observeFinalDecision==="function","Final-gated adaptive learning observer is not exported.");
 assert(typeof phase4.updateFinalDecision==="function","Phase 4 final-signal learner is not exported.");
+assert(autotrader.VERSION==="17.0.0","Phase 17 AutoTrader module version mismatch.");
+assert(autotrader.strategyForInterval("15m",{SCALP:true,INTRADAY:true,SWING:false,POSITION:false})==="SCALP","Phase 17 scalp router failed.");
+assert(autotrader.strategyForInterval("4h",{SCALP:true,INTRADAY:true,SWING:true,POSITION:false})==="SWING","Phase 17 swing router failed.");
 const styleCheck=phase910.evaluate({
   interval:"15m",
   analysis:{side:"LONG",status:"WAITING",score:80,price:100,entryLow:99,entryHigh:100,stop:97,tp1:104,tp2:108},
