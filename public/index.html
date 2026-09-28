@@ -757,7 +757,7 @@ body.admin-mode .nav button.adminNav,body.admin-mode .mobileMenu button.adminNav
 .adminBadgeSmall.warn{color:#fde68a;background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.14)}
 .adminBadgeSmall.bad{color:#fda4af;background:rgba(248,113,113,.08);border:1px solid rgba(248,113,113,.14)}
 .adminTableWrap{overflow:auto;border:1px solid rgba(255,255,255,.07);border-radius:10px}
-.adminCompactTable{width:100%;border-collapse:collapse;min-width:650px}.adminCompactTable th,.adminCompactTable td{padding:7px 8px;border-bottom:1px solid rgba(255,255,255,.05);font-size:8px;text-align:left;vertical-align:top}.adminCompactTable th{color:#8394aa;text-transform:uppercase;letter-spacing:.07em}.adminCompactTable tr:last-child td{border-bottom:0}
+.adminCompactTable{width:100%;border-collapse:collapse;min-width:650px}.adminCompactTable th,.adminCompactTable td{padding:7px 8px;border-bottom:1px solid rgba(255,255,255,.05);font-size:8px;text-align:left;vertical-align:top}.adminCompactTable th{color:#8394aa;text-transform:uppercase;letter-spacing:.07em}.adminCompactTable tr:last-child td{border-bottom:0}.evolutionProgress{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;margin:0 0 10px}.evolutionStep{display:flex;align-items:center;gap:7px;padding:8px 9px;border:1px solid rgba(255,255,255,.07);border-radius:10px;background:rgba(255,255,255,.018);min-width:0}.evolutionStep .dot{width:7px;height:7px;border-radius:50%;background:#6b7280;flex:0 0 7px}.evolutionStep b{display:block;font-size:9px}.evolutionStep span{display:block;color:#7f90a6;font-size:8px;margin-top:2px}.evolutionStep.implemented .dot{background:var(--amber);box-shadow:0 0 10px rgba(251,191,36,.35)}.evolutionStep.validated .dot{background:var(--blue);box-shadow:0 0 10px rgba(96,165,250,.35)}.evolutionStep.ready .dot{background:var(--violet);box-shadow:0 0 10px rgba(192,132,252,.35)}.evolutionStep.complete .dot{background:var(--green);box-shadow:0 0 10px rgba(74,222,128,.35)}.evolutionMobile{display:none}.evolutionMobileCard{border:1px solid rgba(255,255,255,.07);border-radius:12px;background:rgba(255,255,255,.018);padding:11px;margin-bottom:7px}.evolutionMobileTop{display:flex;align-items:center;justify-content:space-between;gap:8px}.evolutionPhase{font-size:9px;font-weight:950;letter-spacing:.08em;color:#98a8ba}.evolutionTitle{font-size:13px;font-weight:900;margin-top:5px}.evolutionDesc{font-size:9.5px;line-height:1.45;color:#aab5c4;margin-top:6px}.evolutionStatus{display:inline-flex;align-items:center;gap:5px;padding:5px 7px;border-radius:999px;font-size:7.5px;font-weight:950;letter-spacing:.05em;border:1px solid rgba(255,255,255,.08);white-space:nowrap}.evolutionStatus .dot{width:6px;height:6px;border-radius:50%;background:#6b7280}.evolutionStatus.implemented{color:#fcd34d;border-color:rgba(251,191,36,.22);background:rgba(251,191,36,.06)}.evolutionStatus.implemented .dot{background:var(--amber)}.evolutionStatus.validated{color:#93c5fd;border-color:rgba(96,165,250,.22);background:rgba(96,165,250,.06)}.evolutionStatus.validated .dot{background:var(--blue)}.evolutionStatus.ready{color:#d8b4fe;border-color:rgba(192,132,252,.22);background:rgba(192,132,252,.06)}.evolutionStatus.ready .dot{background:var(--violet)}.evolutionStatus.complete{color:#86efac;border-color:rgba(74,222,128,.22);background:rgba(74,222,128,.06)}.evolutionStatus.complete .dot{background:var(--green)}.evolutionStatus.planned{color:#a1a1aa}.evolutionMobileNote{font-size:8.5px;line-height:1.4;color:#727f8e;margin-top:8px}
 .adminFlagRow{display:grid;grid-template-columns:1.2fr 70px 76px 1fr 72px;gap:7px;align-items:center;padding:7px 0;border-bottom:1px solid rgba(255,255,255,.05)}
 .adminFlagRow:last-child{border-bottom:0}.adminFlagRow input,.adminFlagRow select{background:#111116;border:1px solid rgba(255,255,255,.08);color:#e8edf4;border-radius:7px;padding:6px;font-size:8px}.adminFlagRow .flagName{font-size:9px;font-weight:850}.adminFlagRow .flagDesc{font-size:8px;color:#7f90a6}
 .adminToggle{width:38px;height:20px;border-radius:999px;border:1px solid rgba(255,255,255,.09);background:#151519;position:relative;cursor:pointer}.adminToggle:after{content:"";position:absolute;width:14px;height:14px;top:2px;left:2px;border-radius:50%;background:#6b7280;transition:.18s}.adminToggle.on{background:rgba(167,243,208,.15);border-color:rgba(167,243,208,.28)}.adminToggle.on:after{left:20px;background:#a7f3d0;box-shadow:0 0 10px rgba(167,243,208,.35)}
@@ -797,6 +797,10 @@ body.admin-mode .nav button.adminNav,body.admin-mode .mobileMenu button.adminNav
 .broadcastBar b{font-size:11px}
 .broadcastBar p{font-size:10px}
 @media(max-width:700px){
+  .evolutionProgress{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .evolutionStep{padding:7px 8px}.evolutionStep b{font-size:8.5px}.evolutionStep span{font-size:7px}
+  .evolutionDesktop{display:none}.evolutionMobile{display:block}
+  .evolutionMobileCard{padding:10px}.evolutionTitle{font-size:12.5px}.evolutionDesc{font-size:9px}.evolutionStatus{font-size:7px;padding:4px 6px}
   .adminCommandKpi .k{font-size:9px}
   .adminCommandKpi .v{font-size:21px}
   .adminLine b{font-size:10px}
@@ -2055,17 +2059,24 @@ linear-gradient(180deg,#0c0e11 0%,#101214 48%,#0a0b0d 100%);box-shadow:0 -20px 7
     </div>
   </div>
 
-  <div class="card adminPanelSmall" style="margin-top:10px">
+  <div class="card adminPanelSmall evolutionLedger" style="margin-top:10px">
     <div class="sectionHead">
-      <div><div class="title">MarketPulse Evolution</div><div class="sub">Owner-only Phase 1 → current upgrade ledger. Each completed phase is recorded with its purpose and future phases stay explicitly marked as planned until validated.</div></div>
+      <div><div class="title">MarketPulse Evolution</div><div class="sub">Owner-only Phase 1 → current upgrade ledger. A phase is promoted only when the evidence supports that promotion.</div></div>
       <span id="phaseHistoryCurrent" class="chip">CURRENT —</span>
     </div>
-    <div class="adminTableWrap">
+    <div class="evolutionProgress" aria-label="Phase status progression">
+      <div class="evolutionStep implemented"><span class="dot"></span><div><b>IMPLEMENTED</b><span>Code exists</span></div></div>
+      <div class="evolutionStep validated"><span class="dot"></span><div><b>VALIDATED</b><span>Checks + evidence</span></div></div>
+      <div class="evolutionStep ready"><span class="dot"></span><div><b>READY</b><span>Runtime gate</span></div></div>
+      <div class="evolutionStep complete"><span class="dot"></span><div><b>COMPLETE</b><span>Phase promoted</span></div></div>
+    </div>
+    <div class="adminTableWrap evolutionDesktop">
       <table class="adminCompactTable">
         <thead><tr><th>Phase</th><th>Upgrade</th><th>Description</th><th>Status</th></tr></thead>
         <tbody id="phaseHistoryBody"><tr><td colspan="4" class="userMuted">Loading phase history…</td></tr></tbody>
       </table>
     </div>
+    <div class="evolutionMobile" id="phaseHistoryMobile"><div class="evolutionMobileNote">Loading phase history…</div></div>
   </div>
 
   <div class="card adminPanelSmall" style="margin-top:10px">
@@ -6544,19 +6555,34 @@ async function apiPost(url,body){
 }
 async function loadAdminPhaseHistory(){
   if(!state.account?.isAdmin)return;
-  var body=$("phaseHistoryBody"),badge=$("phaseHistoryCurrent");
+  var body=$("phaseHistoryBody"),mobile=$("phaseHistoryMobile"),badge=$("phaseHistoryCurrent");
+  function phaseStatus(raw){
+    var s=String(raw||"PLANNED").toUpperCase();
+    if(s==="COMPLETE")return {key:"complete",label:"COMPLETE"};
+    if(s==="IMPLEMENTED_PENDING_VALIDATION")return {key:"implemented",label:"IMPLEMENTED · VALIDATION PENDING"};
+    if(s==="VALIDATED"||s==="VALIDATED_PENDING_READINESS")return {key:"validated",label:"VALIDATED"};
+    if(s==="READY"||s==="READY_PENDING_PROMOTION")return {key:"ready",label:"READY"};
+    return {key:"planned",label:"PLANNED"};
+  }
   try{
     var d=await api("/api/admin/phase-history",8000),rows=Array.isArray(d.phases)?d.phases:[];
     if(badge)badge.textContent="CURRENT PHASE "+String(d.currentPhase||0);
-    if(!body)return;
-    body.innerHTML=rows.map(function(p){
-      var status=String(p.status||"PLANNED").toUpperCase();
-      var cls=status==="COMPLETE"?"healthDot ok":"healthDot";
-      return '<tr><td><b>PHASE '+safeHtmlLocal(p.phase)+'</b></td><td>'+safeHtmlLocal(p.title)+'</td><td>'+safeHtmlLocal(p.description)+'</td><td><span class="'+cls+'"></span>'+safeHtmlLocal(status)+'</td></tr>';
-    }).join("")||'<tr><td colspan="4" class="userMuted">No phase history available.</td></tr>';
+    var html=rows.map(function(p){
+      var st=phaseStatus(p.status);
+      return '<tr><td><b>PHASE '+safeHtmlLocal(p.phase)+'</b></td><td>'+safeHtmlLocal(p.title)+'</td><td>'+safeHtmlLocal(p.description)+'</td><td><span class="evolutionStatus '+st.key+'"><span class="dot"></span>'+safeHtmlLocal(st.label)+'</span></td></tr>';
+    }).join("");
+    if(body)body.innerHTML=html||'<tr><td colspan="4" class="userMuted">No phase history available.</td></tr>';
+    if(mobile){
+      mobile.innerHTML=rows.map(function(p){
+        var st=phaseStatus(p.status);
+        return '<article class="evolutionMobileCard"><div class="evolutionMobileTop"><span class="evolutionPhase">PHASE '+safeHtmlLocal(p.phase)+'</span><span class="evolutionStatus '+st.key+'"><span class="dot"></span>'+safeHtmlLocal(st.label)+'</span></div><div class="evolutionTitle">'+safeHtmlLocal(p.title)+'</div><div class="evolutionDesc">'+safeHtmlLocal(p.description)+'</div></article>';
+      }).join("")||'<div class="evolutionMobileNote">No phase history available.</div>';
+    }
   }catch(e){
     if(badge)badge.textContent="PHASE HISTORY ERROR";
-    if(body)body.innerHTML='<tr><td colspan="4" class="userMuted">'+safeHtmlLocal(e.message||"Could not load phase history.")+'</td></tr>';
+    var msg=safeHtmlLocal(e.message||"Could not load phase history.");
+    if(body)body.innerHTML='<tr><td colspan="4" class="userMuted">'+msg+'</td></tr>';
+    if(mobile)mobile.innerHTML='<div class="evolutionMobileNote">'+msg+'</div>';
   }
 }
 async function loadAdminConsole(){
