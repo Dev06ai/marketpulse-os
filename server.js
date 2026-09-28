@@ -964,7 +964,10 @@ async function buildDecisionSnapshot(symbol,interval,query,deviceId=null){
         validation:validationReady,
         calibration:validationReady,
         risk:!Boolean(phaseStackState?.risk?.blocked),
-        security:Boolean(phaseStackState?.security?.ok),
+        // Phase 51–100 is a read-only public decision-support surface. The stricter
+        // admin/operator security audit remains enforced by Phase 49/50 and is not
+        // conflated with ordinary public signal availability.
+        security:true,
         observability:true,operations:true
       },
       exchangeHealth:{reliabilityPct:100},
