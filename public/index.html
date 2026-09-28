@@ -5344,7 +5344,7 @@ async function renderLiveSignalSummary(d,model){
 
   var score=$("thesisScore");
   if(score){
-    var scoreText=fmt(Number(d.market?.confluenceScore)||0)+"/100";
+    var scoreText=Math.round(confidence)+"/100";
     if(score.textContent!==scoreText)score.textContent=scoreText;
   }
 
@@ -5458,7 +5458,7 @@ function renderFinalDecision(d){
   $("thesisTitle").textContent=displaySide+" DIRECTIONAL LEAN";
   $("thesisState").textContent=(stability.state==="CONFIRMING"?"CONFIRMING · ":"")+
     "LIVE DIRECTION · "+displaySide+" "+displayConfidence+"%";
-  $("thesisScore").textContent=fmt(m.confluenceScore)+"/100";
+  $("thesisScore").textContent=String(liveScore)+"/100";
 
   var thesisText="Live directional model: "+displaySide+" ("+displayConfidence+"%). "+
     "Synchronized to the current price-action and live flow frame.";
