@@ -4,6 +4,23 @@
  * evidence-gated LONG / SHORT / WAIT package. It never submits orders.
  */
 const u=require("./phase51-100-utils");
+const p52=require("./phase52-signal-qualification-gate");
+const p54=require("./phase54-multi-timeframe-alignment");
+const p62=require("./phase62-trigger-quality");
+const p63=require("./phase63-invalidation-engine");
+const p64=require("./phase64-adaptive-levels");
+const p65=require("./phase65-expectancy-gate");
+const p67=require("./phase67-leverage-safety");
+const p68=require("./phase68-signal-ttl");
+const p70=require("./phase70-anti-chop-cooldown");
+const p73=require("./phase73-uncertainty-coverage");
+const p74=require("./phase74-cost-aware-expectancy");
+const p80=require("./phase80-no-trade-quality");
+const p87=require("./phase87-portfolio-risk");
+const p89=require("./phase89-exchange-health");
+const p90=require("./phase90-trader-checklist");
+const p99=require("./phase99-free-public-readiness");
+const p100=require("./phase100-public-signal-gate");
 const VERSION="51-100.0.0";
 
 function norm(input={}){
@@ -85,39 +102,64 @@ function evaluate(input={}){
   const dataGood=Boolean(ps?.data?.quality?.liveEligible ?? input.dataQualityOk);
   const riskClear=!Boolean(ps?.risk?.blocked||input.riskBlocked);
   const anomalyClear=!Boolean(ps?.anomaly?.anomalous||input.anomalyBlocked);
-  const invalidation=Boolean(input.invalidation??s.levels?.stop!=null);
-  const levelsValid=Boolean(input.levelsValid??(s.levels?.entry!=null||s.levels?.entryLow!=null));
-  const trigger=Boolean(input.triggerConfirmed);
-  const mtfAligned=Boolean(input.mtfAligned);
+  const mtfResult=p54.align(input.mtf||{higher:input.mtfHigher,execution:input.mtfExecution,lower:input.mtfLower});
+  const triggerResult=p62.evaluate(input.trigger||{direction:s.candidate,closeConfirmation:input.triggerConfirmed});
+  const levelResult=p64.build(input.levelContext||{side:s.candidate,price:s.price,entryLow:s.levels?.entryLow??s.levels?.entry,entryHigh:s.levels?.entryHigh??s.levels?.entry,atr:input.atr});
+  const invalidationResult=p63.evaluate({side:s.candidate,entry:s.levels?.entry??levelResult.entry,stop:s.levels?.stop??levelResult.stop});
+  const leverageResult=p67.evaluate(input.leverage||{});
+  const ttlResult=p68.evaluate({ageMs:input.signalAgeMs,ttlMs:input.signalTtlMs});
+  const chopResult=p70.evaluate(input.chop||{});
+  const mtfAligned=Boolean(input.mtfAligned??mtfResult.aligned);
+  const invalidation=Boolean(input.invalidation??invalidationResult.valid);
+  const levelsValid=Boolean(input.levelsValid??(s.levels?.entry!=null||s.levels?.entryLow!=null||levelResult.valid));
+  const trigger=Boolean(input.triggerConfirmed??triggerResult.confirmed);
   const q=qualify(s,{dataQualityOk:dataGood,riskClear,anomalyClear,invalidation,levelsValid,trigger,mtfAligned,
     structureEvidence:Boolean(input.setupEvidence??(s.analysis?.marketStructure?.setup||s.analysis?.setup)),
     flowEvidence:Boolean(input.flowEvidence??(s.flow?.cvdState||s.flow?.takerImbalance!=null)),
-    cooldown:Boolean(input.cooldown)
+    cooldown:Boolean(input.cooldown??chopResult.blocked)
   });
   const ageMs=u.n(input.signalAgeMs,0);
   const ttlMs=Math.max(60000,u.n(input.signalTtlMs,15*60*1000));
-  const aged=ageMs>ttlMs;
+  const aged=Boolean(input.signalAgeExpired??ttlResult.expired);
   if(aged&&!q.blockers.includes("SIGNAL_EXPIRED"))q.blockers.push("SIGNAL_EXPIRED");
   const calibrated=u.probability(input.calibration?.probability);
   const relative=u.probability(Math.max(0,Math.min(100,Math.max(q.dir.long,q.dir.short)*.75+q.coverage.coverage*.25)));
   const confidence=calibrated??relative;
   const action=(!aged&&q.qualified)?q.dominant:"WAIT";
+  const expectancy=p74.evaluate(input.expectancy||{});
+  const expectancyGate=p65.evaluate(input.expectancyGate||{probability:confidenceToProb(confidence),rr:s.levels?.rr??levelResult.rr,costBps:input.costBps});
+  const uncertainty=p73.evaluate(input.uncertainty||{});
+  const portfolio=p87.evaluate(input.portfolio||{});
+  const exchange=p89.evaluate(input.exchangeHealth||{});
+  const checklist=p90.build(input.checklist||{});
+  const freeGate=p99.gate(input.publicReadiness||{});
+  const qualification=p52.evaluate({gates:{
+    data:dataGood,structure:Boolean(input.setupEvidence??(s.analysis?.marketStructure?.setup||s.analysis?.setup)),
+    flow:Boolean(input.flowEvidence??(s.flow?.cvdState||s.flow?.takerImbalance!=null)),
+    mtf:mtfAligned,trigger,invalidation,levels:levelsValid,risk:riskClear,
+    anomaly:anomalyClear,exchange:exchange.healthy,portfolio:!portfolio.blocked,uncertainty:!uncertainty.uncertain
+  }});
+  const publicGate=p100.evaluate({readiness:Boolean(freeGate.ready),action,blockers:q.blockers,automaticExecutionEnabled:false});
   return {
     version:VERSION,
     signal:{
       symbol:s.symbol,interval:s.interval,timestamp:Date.now(),action,status:action==="WAIT"?"WAIT":"QUALIFIED_CANDIDATE",
       price:s.price,confidence,confidenceSource:calibrated!=null?"CALIBRATED":"RELATIVE_EVIDENCE_ONLY",calibrated:calibrated!=null,
       evidence:evidence(s),direction:q.dir,coverage:q.coverage,
-      entry:s.levels?.entry??s.levels?.entryLow??null,entryHigh:s.levels?.entryHigh??null,
-      stop:s.levels?.stop??null,tp1:s.levels?.tp1??null,tp2:s.levels?.tp2??null,rr:s.levels?.rr??null,
+      entry:s.levels?.entry??levelResult.entry??s.levels?.entryLow??null,entryHigh:s.levels?.entryHigh??levelResult.entryHigh??null,
+      stop:s.levels?.stop??levelResult.stop??null,tp1:s.levels?.tp1??levelResult.tp1??null,tp2:s.levels?.tp2??levelResult.tp2??null,rr:s.levels?.rr??levelResult.rr??null,
       invalidation:invalidation?String(input.invalidationText||"Structural invalidation is defined."):null,
       blockers:u.unique(q.blockers),ageMs,ttlMs,realMoneyUse:"DECISION_SUPPORT_ONLY",automaticExecutionEnabled:false
     },
     gate:{qualified:q.qualified&&!aged,blockers:u.unique(q.blockers)},
-    diagnostics:{relativeConfidence:relative,calibratedConfidence:calibrated}
+    diagnostics:{relativeConfidence:relative,calibratedConfidence:calibrated,
+      mtf:mtfResult,trigger:triggerResult,invalidation:invalidationResult,levels:levelResult,
+      leverage:leverageResult,ttl:ttlResult,chop:chopResult,expectancy,expectancyGate,uncertainty,portfolio,exchange,
+      checklist,qualification,publicReadiness:freeGate,publicGate}
   };
 }
 
+function confidenceToProb(x){const n=Number(x);return Number.isFinite(n)?Math.max(0,Math.min(100,n))/100:null}
 function selfTest(){
   const x=evaluate({
     symbol:"BTCUSDT",interval:"15m",price:100,
