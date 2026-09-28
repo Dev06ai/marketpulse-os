@@ -1107,8 +1107,8 @@ async function derivatives(symbol,interval){
   if(hit&&Date.now()-hit.ts<DERIV_TTL)return hit.data;
   const existing=DERIV_INFLIGHT.get(key);
   if(existing)return existing;
-  const job=(async()=>{async function derivatives(symbol,interval){
-  const key=symbol+"|  let data=null;
+  const job=(async()=>{
+  let data=null;
   try{data=await krakenAnalytics(symbol,interval)}
   catch(e){
     try{
