@@ -1012,6 +1012,7 @@ linear-gradient(180deg,#0c0e11 0%,#101214 48%,#0a0b0d 100%);box-shadow:0 -20px 7
 .mpdc-logic.mpdc-exit.mpdc-neutral{border-color:rgba(192,132,252,.14)!important;background:rgba(192,132,252,.018)!important}
 .mpdc-logic.mpdc-exit.mpdc-active{border-color:rgba(248,113,133,.16)!important;background:rgba(248,113,133,.022)!important}
 @media(max-width:720px){.mpdc-intel-grid{grid-template-columns:1fr 1fr}.mpdc-intel-columns{grid-template-columns:1fr}}
+.mpdc-phase50{margin-top:10px}.mpdc-phase50 .mp20-card{min-height:108px}.mpdc-phase50 .mp20-status{font-size:12px;font-weight:800;letter-spacing:.04em}.mpdc-phase50 .mp20-list span{display:block;margin-top:5px;color:rgba(255,255,255,.65);font-size:11px}
 .mpdc-phase20{
   margin-top:10px;padding:13px;border:1px solid rgba(255,255,255,.065);border-radius:14px;
   background:linear-gradient(180deg,rgba(103,232,255,.018),rgba(255,255,255,.008))
@@ -1340,6 +1341,25 @@ linear-gradient(180deg,#0c0e11 0%,#101214 48%,#0a0b0d 100%);box-shadow:0 -20px 7
               <span class="k">SNAPSHOT INTEGRITY</span>
               <div class="v mp20-id" id="mp20SnapshotId">—</div>
             </div>
+          </div>
+        </div>
+
+        <div class="mpdc-phase20 mpdc-phase50" id="mpdcPhase50">
+          <div class="mp20-head">
+            <div>
+              <span class="mpdc-eyebrow">PHASE 21–50 · LIVE SIGNAL SAFETY STACK</span>
+              <span class="mpdc-panel-sub">The final stack can open a manual signal gate only after data, validation, robustness, risk, security and operational checks pass. Automatic order execution remains disabled.</span>
+            </div>
+            <span class="livePlanSide mpdc-plan-side wait" id="mp50GateState">BLOCKED</span>
+          </div>
+          <div class="mp20-grid">
+            <div class="mp20-card"><div class="k"><span>DATA QUALITY</span><span class="score" id="mp50DataScore">—</span></div><div class="mp20-status" id="mp50DataState">—</div><div class="mp20-list" id="mp50DataBlockers"><span>Waiting for stack…</span></div></div>
+            <div class="mp20-card"><div class="k"><span>RISK / SHOCK</span><span class="score" id="mp50RiskState">—</span></div><div class="mp20-status" id="mp50RiskBlockers">—</div><div class="mp20-list" id="mp50RiskList"><span>Waiting for stack…</span></div></div>
+            <div class="mp20-card"><div class="k"><span>READINESS</span><span class="score" id="mp50ReadyState">—</span></div><div class="mp20-status" id="mp50ReadyBlockers">—</div><div class="mp20-list" id="mp50ReadyList"><span>Waiting for stack…</span></div></div>
+          </div>
+          <div class="mp20-foot">
+            <div class="mp20-transition"><span class="k">SIGNAL GATE</span><div class="v" id="mp50GateText">Waiting for the Phase 21–50 stack.</div></div>
+            <div class="mp20-integrity"><span class="k">AUTOMATIC EXECUTION</span><div class="v" id="mp50AutoState">DISABLED</div></div>
           </div>
         </div>
 
@@ -5961,6 +5981,26 @@ function renderPhase20(d){
   setTextLocal("mp20SnapshotId",String(p20.snapshotId||"—"));
 }
 
+function renderPhase21to50(d){
+  var p=d?.phaseStack||null;
+  if(!p)return;
+  var gate=p.liveController||{},q=p.data?.quality||{},risk=p.risk||{},an=p.anomaly||{},ready=p.readiness||{};
+  var gateOpen=Boolean(gate.manualSignalUseAllowed);
+  var gateEl=$("mp50GateState");
+  if(gateEl){gateEl.textContent=gateOpen?"MANUAL SIGNAL GATE":"BLOCKED";gateEl.className="livePlanSide mpdc-plan-side "+(gateOpen?"long":"wait")}
+  setTextLocal("mp50DataScore",q.score!=null?String(q.score):"—");
+  setTextLocal("mp50DataState",String(q.quality||"UNKNOWN"));
+  setTextLocal("mp50DataBlockers",Array.isArray(q.blockers)&&q.blockers.length?q.blockers.join(" · "):"No data blockers.");
+  var riskBlocked=Boolean(risk.blocked||an.anomalous);
+  setTextLocal("mp50RiskState",riskBlocked?"BLOCKED":"CLEAR");
+  setTextLocal("mp50RiskBlockers",riskBlocked?"BLOCKERS ACTIVE":"CLEAR");
+  setTextLocal("mp50RiskList",(Array.isArray(risk.reasons)?risk.reasons:[]).concat(Array.isArray(an.blockers)?an.blockers:[]).join(" · ")||"No risk/shock blockers.");
+  setTextLocal("mp50ReadyState",ready.ready?"READY":"NOT READY");
+  setTextLocal("mp50ReadyBlockers",ready.ready?"ALL REQUIRED GATES PASS":"BLOCKED");
+  setTextLocal("mp50ReadyList",Array.isArray(ready.blockers)&&ready.blockers.length?ready.blockers.join(" · "):"All readiness gates passed.");
+  setTextLocal("mp50GateText",gateOpen?"Manual signal consumption is permitted by the Phase 50 controller.":"Manual signal gate remains closed until readiness and operator acknowledgement pass.");
+  setTextLocal("mp50AutoState",gate.automaticExecutionEnabled?"ENABLED":"DISABLED");
+}
 function renderFinalDecision(d){
   if(!d)return;
 
@@ -5970,6 +6010,7 @@ function renderFinalDecision(d){
 
   renderDecisionIntelligence(d);
   renderPhase20(d);
+  renderPhase21to50(d);
 
   // Probability context is live, but execution direction comes only from the
   // authoritative server decision after final confirmation and safety gates.
