@@ -1183,6 +1183,28 @@ linear-gradient(180deg,#0c0e11 0%,#101214 48%,#0a0b0d 100%);box-shadow:0 -20px 7
         <div class="autotraderMetric"><div class="label">Last outcome</div><div class="v" id="botLearnLast">—</div><div class="subv" id="botLearnLastMeta">Waiting for the first resolved trade</div></div>
       </div>
     </div>
+
+    <div class="section autotraderPanel" id="botTradeHistoryPanel">
+      <div class="sectionHead">
+        <div>
+          <div class="title">AutoTrader trading history</div>
+          <div class="sub">Every completed bot trade is recorded with entry, stop, targets, exit, P&amp;L, R result, timing, setup and exit reason.</div>
+        </div>
+        <div class="autotraderActions"><button id="botHistoryRefresh" class="btn">Refresh history</button></div>
+      </div>
+      <div class="executionNote" id="botHistoryNote">No completed AutoTrader trades yet.</div>
+      <div style="overflow:auto;margin-top:10px">
+        <table class="executionTable" style="min-width:1200px;width:100%">
+          <thead><tr>
+            <th>Closed</th><th>Asset</th><th>Side</th><th>Strategy</th><th>Setup</th>
+            <th>Entry</th><th>SL</th><th>TP1</th><th>TP2</th><th>Exit</th>
+            <th>P&amp;L</th><th>R</th><th>Score</th><th>Duration</th><th>Reason</th><th>Status</th>
+          </tr></thead>
+          <tbody id="botTradeHistoryRows"><tr><td colspan="16" class="executionSmall">Loading history…</td></tr></tbody>
+        </table>
+      </div>
+      <div class="executionNote" id="botTradeDetail" style="margin-top:10px">Tap a trade row to see the full execution record.</div>
+    </div>
   </section>
 
   <section id="view-execution" class="view">
@@ -2149,6 +2171,7 @@ if($("botArm"))$("botArm").addEventListener("click",armAutoTrader);
 if($("botPause"))$("botPause").addEventListener("click",pauseAutoTrader);
 if($("botKill"))$("botKill").addEventListener("click",killAutoTrader);
 if($("botRefresh"))$("botRefresh").addEventListener("click",loadAutoTrader);
+if($("botHistoryRefresh"))$("botHistoryRefresh").addEventListener("click",loadBotTradeHistory);
 ["SCALP","INTRADAY","SWING","POSITION"].forEach(function(k){var id={SCALP:"botScalp",INTRADAY:"botIntraday",SWING:"botSwing",POSITION:"botPosition"}[k];if($(id))$(id).addEventListener("click",function(){$(id).classList.toggle("on")})});
 if($("adminEnableSignalPush"))$("adminEnableSignalPush").addEventListener("click",enableAdminSignalPush);
 if($("adminTestSignalPush"))$("adminTestSignalPush").addEventListener("click",testAdminSignalPush);
@@ -2927,12 +2950,68 @@ function renderAutoTrader(data){
   $("botHealthPill").className="botPill "+(enabled&&!e.killSwitch?(mode==="PAPER"?"ok":"warn"):"bad");
   $("botPause").disabled=!enabled;$("botKill").disabled=Boolean(e.killSwitch);
 }
+function botHistPrice(v){
+  var n=Number(v);return Number.isFinite(n)?n.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}):"—";
+}
+function botHistTime(ts){
+  var n=Number(ts);if(!Number.isFinite(n)||!n)return"—";
+  return new Date(n).toLocaleString(undefined,{month:"short",day:"2-digit",hour:"2-digit",minute:"2-digit"});
+}
+function botHistDuration(ms){
+  var n=Number(ms);if(!Number.isFinite(n)||n<0)return"—";
+  var m=Math.round(n/60000),h=Math.floor(m/60);
+  return h?String(h)+"h "+String(m%60)+"m":String(m)+"m";
+}
+function renderBotTradeHistory(data){
+  var rows=Array.isArray(data?.trades)?data.trades:[],note=$("botHistoryNote"),tbody=$("botTradeHistoryRows");
+  if(!tbody)return;
+  note.textContent=rows.length?(String(rows.length)+" completed AutoTrader trade"+(rows.length===1?"":"s")+" recorded."):"No completed AutoTrader trades yet.";
+  if(!rows.length){tbody.innerHTML='<tr><td colspan="16" class="executionSmall">No completed AutoTrader trades yet. Paper trades will appear here automatically after TP, SL or time-stop closure.</td></tr>';return;}
+  tbody.innerHTML=rows.map(function(x,idx){
+    var rr=Number(x.resultR),p=Number(x.pnl),cls=rr>0?"botHistoryWin":rr<0?"botHistoryLoss":"botHistoryFlat";
+    return '<tr class="botHistoryRow" data-trade-index="'+idx+'">'+
+      '<td>'+botEsc(botHistTime(x.closedAt||x.openedAt))+'</td><td>'+botEsc(x.symbol||"—")+'</td><td>'+botEsc(x.side||"—")+'</td>'+
+      '<td>'+botEsc(x.strategy||"—")+'</td><td>'+botEsc(x.setup||"—")+'</td><td>'+botEsc(botHistPrice(x.entry))+'</td>'+
+      '<td>'+botEsc(botHistPrice(x.stop))+'</td><td>'+botEsc(botHistPrice(x.target))+'</td><td>'+botEsc(botHistPrice(x.tp2))+'</td>'+
+      '<td>'+botEsc(botHistPrice(x.exitPrice))+'</td><td class="'+cls+'">'+(Number.isFinite(p)?(p>=0?"+":"")+p.toFixed(2):"—")+'</td>'+
+      '<td class="'+cls+'">'+(Number.isFinite(rr)?(rr>=0?"+":"")+rr.toFixed(2)+"R":"—")+'</td><td>'+botEsc(x.score??"—")+'</td>'+
+      '<td>'+botEsc(botHistDuration(x.durationMs))+'</td><td>'+botEsc(x.exitReason||"—")+'</td><td>'+botEsc(x.status||"CLOSED")+'</td></tr>';
+  }).join("");
+  Array.from(document.querySelectorAll(".botHistoryRow")).forEach(function(row){
+    row.addEventListener("click",function(){
+      var x=rows[Number(row.dataset.tradeIndex)],detail=$("botTradeDetail");if(!x||!detail)return;
+      detail.innerHTML='<b>'+botEsc(x.symbol||"—")+' '+botEsc(x.side||"—")+' · '+botEsc(x.strategy||"—")+'</b> · '+
+        'Setup: '+botEsc(x.setup||"—")+' · Regime: '+botEsc(x.regime||"—")+' · Score: '+botEsc(x.score??"—")+
+        ' · Risk: '+(Number.isFinite(Number(x.riskPct))?Number(x.riskPct).toFixed(2)+"%":"—")+
+        ' · Qty: '+botEsc(x.qty??"—")+' · Planned entry: '+botEsc(botHistPrice(x.plannedEntry))+
+        ' · Actual entry: '+botEsc(botHistPrice(x.entry))+' · SL: '+botEsc(botHistPrice(x.stop))+
+        ' · TP1: '+botEsc(botHistPrice(x.target))+' · TP2: '+botEsc(botHistPrice(x.tp2))+
+        ' · Exit: '+botEsc(botHistPrice(x.exitPrice))+' · Opened: '+botEsc(botHistTime(x.openedAt))+
+        ' · Closed: '+botEsc(botHistTime(x.closedAt))+' · Duration: '+botEsc(botHistDuration(x.durationMs))+
+        ' · P&amp;L: '+botEsc(Number.isFinite(Number(x.pnl))?Number(x.pnl).toFixed(2):"—")+
+        ' · Result: '+botEsc(Number.isFinite(Number(x.resultR))?Number(x.resultR).toFixed(2)+"R":"—")+
+        ' · Exit reason: '+botEsc(x.exitReason||"—")+' · Order: '+botEsc(x.orderId||"—")+
+        ' · External: '+botEsc(x.externalOrderId||"—");
+    });
+  });
+}
+async function loadBotTradeHistory(){
+  var cached=readViewCache("mp-autotrader-history");
+  if(cached?.trades)renderBotTradeHistory(cached);
+  try{
+    var d=await api("/api/autotrader/history?limit=150",10000);
+    writeViewCache("mp-autotrader-history",d);renderBotTradeHistory(d);
+  }catch(e){
+    if(cached?.trades){$("botHistoryNote").textContent="History refresh delayed — showing the last known record.";}
+    else if($("botHistoryNote"))$("botHistoryNote").textContent="Trade history unavailable: "+e.message;
+  }
+}
 async function loadAutoTrader(){
   var cacheKey="mp-autotrader-status",cached=readViewCache(cacheKey);
   if(cached&&cached.bot){renderAutoTrader(cached)}
   try{
     var d=await api("/api/autotrader",12000);
-    if(d?.bot){writeViewCache(cacheKey,d);renderAutoTrader(d);$("botControlNote").textContent=d.degraded?"Connection briefly delayed — showing the last known safe bot state.":"AutoTrader status synchronized."}
+    if(d?.bot){writeViewCache(cacheKey,d);renderAutoTrader(d);loadBotTradeHistory();$("botControlNote").textContent=d.degraded?"Connection briefly delayed — showing the last known safe bot state.":"AutoTrader status synchronized."}
   }catch(e){
     if(cached&&cached.bot){
       renderAutoTrader(cached);
@@ -4556,7 +4635,7 @@ setInterval(function(){
   if(state.activeView==="overview"&&!state.busy)loadCore();
 },12000);
 
-setInterval(function(){if(document.visibilityState!=="visible")return; if((state.activeView==="overview"||state.activeView==="flow")&&!state.flowBusy)loadFlow(true); if(state.activeView==="scanner"&&(!state.scan||!state.scan.length))loadScan(true); if(state.activeView==="autotrader")loadAutoTrader(); if(state.activeView==="execution")loadExecution(); if(state.activeView==="portfolio")loadPortfolio(); if(state.activeView==="edge")loadEdge(); if(state.activeView==="brain"){loadPhase7();loadPhase7Health()}},15000);
+setInterval(function(){if(document.visibilityState!=="visible")return; if((state.activeView==="overview"||state.activeView==="flow")&&!state.flowBusy)loadFlow(true); if(state.activeView==="scanner"&&(!state.scan||!state.scan.length))loadScan(true); if(state.activeView==="autotrader"){loadAutoTrader();loadBotTradeHistory()} if(state.activeView==="execution")loadExecution(); if(state.activeView==="portfolio")loadPortfolio(); if(state.activeView==="edge")loadEdge(); if(state.activeView==="brain"){loadPhase7();loadPhase7Health()}},15000);
 
 function mp7FmtR(v){var n=Number(v);return Number.isFinite(n)?(n>0?"+":"")+n.toFixed(2)+"R":"—"}
 function mp7FmtPct(v){var n=Number(v);return Number.isFinite(n)?n.toFixed(1)+"%":"—"}
