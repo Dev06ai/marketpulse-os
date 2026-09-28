@@ -2547,6 +2547,9 @@ async function refreshPinnedChart(){
     }
   }catch{}
 }
+function chartLivePriceFreshForRange(){
+  return Number.isFinite(Number(state.liveChartPrice))&&Number.isFinite(Number(state.liveChartTs))&&(Date.now()-Number(state.liveChartTs)<5000);
+}
 function drawMain(){
   if(!state.market)return;
   var c=$("mainChart");if(!c)return;
@@ -2557,7 +2560,12 @@ function drawMain(){
   var offset=Math.max(0,Math.min(Math.max(0,total-visible),Math.round(state.chartOffset||0)));
   var end=total-offset,start=Math.max(0,end-visible),data=dataAll.slice(start,end);
   var vals=data.flatMap(function(x){return[Number(x.h),Number(x.l)]});
-  var dataHi=Math.max.apply(null,vals),dataLo=Math.min.apply(null,vals),dataRange=(dataHi-dataLo)||1;
+  var dataHi=Math.max.apply(null,vals),dataLo=Math.min.apply(null,vals);
+  if(chartLivePriceFreshForRange()){
+    dataHi=Math.max(dataHi,Number(state.liveChartPrice));
+    dataLo=Math.min(dataLo,Number(state.liveChartPrice));
+  }
+  var dataRange=(dataHi-dataLo)||1;
   var yZoom=Math.max(.35,Math.min(3.2,state.chartYZoom||1)),range=dataRange/yZoom;
   var center=(dataHi+dataLo)/2-(state.chartYShift||0)*dataRange,hi=center+range/2,lo=center-range/2;
   var left=14,right=72,top=14,bottom=30,volumeHeight=Math.max(42,Math.min(76,Math.round(H*.18))),priceBottom=H-bottom-volumeHeight,pw=W-left-right,ph=priceBottom-top,xstep=pw/Math.max(1,data.length-1);
@@ -2634,7 +2642,8 @@ function drawMain(){
   }
   ctx.restore();
 
-  var current=dataAll[dataAll.length-1].c,cy=scale(current);
+  var chartLiveFresh=Number.isFinite(Number(state.liveChartPrice))&&Number.isFinite(Number(state.liveChartTs))&&(Date.now()-Number(state.liveChartTs)<5000);
+  var current=chartLiveFresh?Number(state.liveChartPrice):Number(dataAll[dataAll.length-1].c),cy=scale(current);
   var final=state.finalDecision;
   var finalEligible=Boolean(final&&final.liveSignalEligible===true&&final.state==="READY"&&(final.action==="LONG"||final.action==="SHORT"));
   var model=finalEligible?final.levels:null;
@@ -2922,10 +2931,13 @@ function renderMarket(){
   // disagreeing with the reaction map / decision center during overlapping refreshes.
   var fd=state.finalDecision, finalMarket=fd&&fd.stale!==true?fd.market:null;
   var snapshotPrice=finalMarket&&Number.isFinite(Number(finalMarket.price))?Number(finalMarket.price):Number(a.price);
-  var livePrice=Number(state.liveChartPrice);
-  var liveFresh=Number.isFinite(livePrice)&&Number.isFinite(Number(state.liveChartTs))&&(Date.now()-Number(state.liveChartTs)<15000);
+  var livePrice=Number(state.liveMarketPrice||state.liveChartPrice);
+  var liveTs=Number(state.liveMarketTs||state.liveChartTs);
+  var liveFresh=Number.isFinite(livePrice)&&Number.isFinite(liveTs)&&(Date.now()-liveTs<5000);
   var heroPrice=liveFresh?livePrice:snapshotPrice;
-  var heroChange=finalMarket&&Number.isFinite(Number(finalMarket.change24h))?Number(finalMarket.change24h):Number(a.change24h);
+  var heroChange=liveFresh&&Number.isFinite(Number(state.liveMarketChange24h))
+    ?Number(state.liveMarketChange24h)
+    :(finalMarket&&Number.isFinite(Number(finalMarket.change24h))?Number(finalMarket.change24h):Number(a.change24h));
 
   // The live ticker is the single source of truth for the displayed price.
   // Slower analysis/final-decision refreshes must never overwrite it with a
@@ -2939,6 +2951,10 @@ function renderMarket(){
   $("learnState").textContent=d.learning&&d.learning.state?d.learning.state:"COLLECTING";$("learnN").textContent=d.learning&&d.learning.resolved!=null?d.learning.resolved:0;$("learnWin").textContent=d.learning&&d.learning.winRate!=null?Number(d.learning.winRate).toFixed(1)+"%":"—";$("learnAdj").textContent=d.learning&&d.learning.lastAdjustment!=null?Number(d.learning.lastAdjustment).toFixed(1):"0.0";$("learnPersist").textContent=d.learning&&d.learning.durable?"Postgres cloud":(d.learning?"Local fallback":"—");$("learnNote").textContent=d.learning&&d.learning.state==="ADAPTIVE"?"Adaptive calibration active. Historical outcomes are influencing confluence.":"Collecting resolved outcomes before calibration.";
   state.validation={backtest:d.backtest,validation:d.validation,setupStats:d.setupStats,learning:d.learning};renderLab();renderBrainInsights();
   recordSignal(a);
+  if(liveFresh){
+    $("mPrice").textContent=fmt(heroPrice);
+    if(Number.isFinite(Number(state.liveMarketChange24h)))$("mChange").textContent=pct(Number(state.liveMarketChange24h))+" / 24h";
+  }
   // When a custom chart timeframe is pinned, refreshPinnedChart owns the redraw.
   if(!state.chartPinned)drawMain();
 }
@@ -3922,9 +3938,10 @@ function chartBucketStart(ts,tf){
   var ms=chartIntervalMs(tf),n=Number(ts)||Date.now();
   return Math.floor(n/ms)*ms;
 }
-function updateLiveChartPrice(price,ts,symbol){
+function updateLiveChartPrice(price,ts,symbol,change24h){
   price=Number(price);ts=Number(ts)||Date.now();
   if(!Number.isFinite(price)||symbol!==state.symbol)return;
+  var liveChange=Number(change24h);
 
   var tf=state.chartInterval||state.interval||"1h";
   var bucket=chartBucketStart(ts,tf);
@@ -3950,8 +3967,12 @@ function updateLiveChartPrice(price,ts,symbol){
   state.liveChartPrice=price;
   state.liveChartTs=ts;
   state.liveChartBucket=bucket;
+  state.liveMarketPrice=price;
+  state.liveMarketTs=ts;
+  if(Number.isFinite(liveChange))state.liveMarketChange24h=liveChange;
   // This exact tick is the canonical displayed price everywhere.
   $("mPrice").textContent=fmt(price);
+  if(Number.isFinite(liveChange))$("mChange").textContent=pct(liveChange)+" / 24h";
   $("dataState").textContent="Live";
   if(state.market?.analysis)state.market.analysis.price=price;
   if(state.market?.candles?.length){
@@ -3985,13 +4006,15 @@ function applyLiveKline(kline,symbol){
   }
   state.chartCandles=candles;
   state.liveChartBucket=start;
-  // Do not replace a newer ticker timestamp/price with the slower kline close.
+  // Kline updates own candle OHLC/volume, but the faster ticker owns the
+  // displayed current price. Never let a slower candle close overwrite it.
   if(!liveFresh){
     state.liveChartPrice=close;
-    state.liveChartTs=Date.now();
+    state.liveChartTs=Number(kline.timestamp)||Date.now();
+    state.liveMarketPrice=close;
+    state.liveMarketTs=state.liveChartTs;
     $("mPrice").textContent=fmt(close);
   }else{
-    // Keep the current candle anchored to the exact same live tick shown above.
     var synced=candles[candles.length-1];
     if(synced&&chartBucketStart(synced.t,tf)===chartBucketStart(Number(state.liveChartTs),tf)){
       synced.c=livePrice;
@@ -3999,6 +4022,7 @@ function applyLiveKline(kline,symbol){
       synced.l=Math.min(Number(synced.l)||livePrice,livePrice);
     }
     $("mPrice").textContent=fmt(livePrice);
+    if(Number.isFinite(Number(state.liveMarketChange24h)))$("mChange").textContent=pct(Number(state.liveMarketChange24h))+" / 24h";
   }
   $("dataState").textContent="Live";
   queueChartDraw();
@@ -4041,7 +4065,8 @@ function startLiveChartStream(symbol){
           var p=Number(d?.lastPrice);
           if(Number.isFinite(p)){
             session.lastTickAt=Date.now();
-            updateLiveChartPrice(p,Number(msg.ts)||Date.now(),symbol);
+            var ch=Number(d?.price24hPcnt);
+            updateLiveChartPrice(p,Number(msg.ts)||Date.now(),symbol,Number.isFinite(ch)?ch*100:null);
           }
         }else if(msg.topic&&String(msg.topic).indexOf("kline.")===0){
           var k=Array.isArray(msg.data)?msg.data[0]:msg.data;
@@ -4070,7 +4095,7 @@ async function loadFastTicker(){
     var d=await api("/api/fast-ticker?symbol="+encodeURIComponent(symbol),5000);
     if(symbol!==state.symbol)return;
     if(Number.isFinite(Number(d.price))){
-      updateLiveChartPrice(Number(d.price),Date.now(),symbol);
+      updateLiveChartPrice(Number(d.price),Date.now(),symbol,Number.isFinite(Number(d.change24h))?Number(d.change24h):null);
       if(!state.market){
         $("mChange").textContent="LIVE · "+String(d.source||"market feed");
         $("mRegime").textContent="CONNECTING";
