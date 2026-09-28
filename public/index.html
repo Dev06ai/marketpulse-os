@@ -4254,8 +4254,13 @@ async function loadCore(){
       return;
     }
     state.bootRetry=Math.min((state.bootRetry||0)+1,5);
-    setStatus("Market source is waking up — price feed stays active and will retry automatically…","warn");$("dataState").textContent="Retrying";
-    suppressFinalSignal("Market refresh failed; waiting for the first usable market snapshot.");
+    // A cold-start/refresh retry is an expected transient state. Keep the UI neutral
+    // instead of flashing a warning/error banner for a moment.
+    setStatus("Connecting to live market data…");
+    $("dataState").textContent="Connecting";
+    if(!state.finalDecision){
+      suppressFinalSignal("Waiting for the first confirmed final decision.");
+    }
     var delay=Math.min(6500,Math.max(1200,Math.pow(2,state.bootRetry-1)*1200));
     state.bootRetryTimer=setTimeout(function(){state.bootRetryTimer=null;loadCore()},delay);
   }finally{state.busy=false}
