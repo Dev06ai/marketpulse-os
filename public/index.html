@@ -4080,6 +4080,40 @@ function renderMarketNoFlow(){
   $("flowSource").textContent=der.provider?(String(der.provider).slice(0,44)+(der.livePointCount?" · LIVE":"")):(der.available?"LIVE":"CONNECTING");
 }
 
+function updateLiveFlowCards(){
+  var d=state.market; if(!d)return;
+  var der=canonicalFlowSnapshot();
+  var hist=Array.isArray(der.liveHistory)?der.liveHistory.filter(Boolean):[];
+  var last=hist.length?hist[hist.length-1]:{},prev=hist.length>1?hist[hist.length-2]:{};
+  var oi=der.oi!=null?Number(der.oi):(last.oi!=null?Number(last.oi):null);
+  var cvd=der.cvdDelta!=null?Number(der.cvdDelta):(last.cvd!=null?Number(last.cvd):null);
+  var liq=der.liquidationTotal!=null?Number(der.liquidationTotal):(last.liqTotal!=null?Number(last.liqTotal):null);
+  var oiChange=der.oiChangePct;
+  if(oiChange==null&&Number.isFinite(oi)&&Number.isFinite(Number(prev.oi))&&Number(prev.oi)!==0){
+    oiChange=((oi-Number(prev.oi))/Math.abs(Number(prev.oi)))*100;
+  }
+  var cvdState=der.cvdState||(Number.isFinite(cvd)?(cvd>0?"BUYERS PRESSURE":cvd<0?"SELLERS PRESSURE":"BALANCED"):"WAITING");
+  var pos=der.positioning||(Number.isFinite(Number(oiChange))?(Number(oiChange)>1?"OI RISING":Number(oiChange)<-1?"OI FALLING":"OI FLAT"):"WAITING");
+  var liqBias=der.liquidationBias&&der.liquidationBias!=="UNKNOWN"?der.liquidationBias:null;
+  if(!liqBias&&Number.isFinite(liq)&&liq>0){
+    var ll=Number(der.longLiquidations||last.liqLong||0),sl=Number(der.shortLiquidations||last.liqShort||0);
+    liqBias=ll>sl?"LONG LIQS DOMINANT":sl>ll?"SHORT LIQS DOMINANT":"LIQUIDATION ACTIVITY";
+  }
+  var set=function(id,v){
+    var el=$(id),text=String(v);
+    if(el&&el.textContent!==text)el.textContent=text;
+  };
+  set("oi",Number.isFinite(oi)?fmt(oi):"WAITING");
+  set("oiS",Number.isFinite(Number(oiChange))?pct(Number(oiChange))+" recent":"Live snapshot");
+  set("cvd",cvdState);
+  set("cvdS",Number.isFinite(cvd)?"Δ "+fmt(cvd):"Live flow warming");
+  set("pos",pos);
+  set("fund",der.fundingRate!=null?"Funding "+(Number(der.fundingRate)*100).toFixed(4)+"%":"Funding warming");
+  set("liq",liqBias||"NO LIQUIDATION ACTIVITY");
+  set("liqS",Number.isFinite(liq)?"Total "+fmt(liq):"Live liquidation stream warming");
+  set("flowSource",der.provider?(String(der.provider).slice(0,44)+(der.livePointCount?" · LIVE":"")):(der.available?"LIVE":"CONNECTING"));
+}
+
 function canonicalFlowSnapshot(){
   var base=state.market&&state.market.derivatives&&typeof state.market.derivatives==="object"?state.market.derivatives:{};
   var live=state.liveFlow&&typeof state.liveFlow==="object"?state.liveFlow:{};
@@ -4126,7 +4160,6 @@ function queueLiveUiSync(){
       });
       liveDecision.derivatives=canonicalFlowSnapshot();
 
-      // ONE directional calculation for the whole visible frame.
       state.liveDirectionalSnapshot={
         seq:Number(state.canonicalMarket.seq||0),
         decision:liveDecision,
@@ -4135,7 +4168,8 @@ function queueLiveUiSync(){
       model=state.liveDirectionalSnapshot.model;
     }
 
-    renderMarketNoFlow();
+    // Only mutate live-value nodes; do NOT rebuild dashboard sections.
+    updateLiveFlowCards();
     if(liveDecision)renderLiveDirectionalModel(liveDecision,model);
     if(model)renderLiveSignalSummary(liveDecision,model);
   });
@@ -5325,6 +5359,28 @@ async function renderLiveSignalSummary(d,model){
     var metaText="LIVE DIRECTION "+side+" "+confidence+"% · execution gate "+String(d.deploymentGate?.state||"PAPER_ONLY");
     if(meta.textContent!==metaText)meta.textContent=metaText;
   }
+
+  var thesis=$("thesis");
+  if(thesis){
+    var thesisText="Live directional model: "+side+" "+confidence+"%. "+
+      "This direction is synchronized to the current price-action and live flow frame.";
+    if(d.deploymentGate?.state&&String(d.deploymentGate.state).toUpperCase()!=="READY"){
+      thesisText+=" Execution gate: "+String(d.deploymentGate.state)+".";
+    }
+    if(thesis.textContent!==thesisText)thesis.textContent=thesisText;
+  }
+
+  var primary=$("primary");
+  if(primary){
+    var primaryText=side+" directional context from the current synchronized market frame.";
+    if(primary.textContent!==primaryText)primary.textContent=primaryText;
+  }
+
+  var alternate=$("alternate");
+  if(alternate){
+    var alternateText="The live direction changes when the synchronized price/flow structure changes.";
+    if(alternate.textContent!==alternateText)alternate.textContent=alternateText;
+  }
 }
 
 function renderFinalDecision(d){
@@ -6270,8 +6326,13 @@ setInterval(function(){
 // does not race the one-second live UI heartbeat.
 setInterval(function(){
   if(document.visibilityState!=="visible")return;
-  if(state.activeView==="overview"&&!state.busy)loadCore();
+  if(state.activeView==="overview"&&!state.busy)loadFinalDecision();
 },5000);
+
+setInterval(function(){
+  if(document.visibilityState!=="visible")return;
+  if(state.activeView==="overview"&&!state.busy)loadCore();
+},30000);
 
 setInterval(function(){if(document.visibilityState!=="visible")return; if((state.activeView==="overview"||state.activeView==="flow")&&!state.flowBusy)loadFlow(true); if(state.activeView==="scanner"&&(!state.scan||!state.scan.length))loadScan(true); if(state.activeView==="trade-radar")loadTradeRadar(); if(state.activeView==="autotrader"){loadAutoTrader();loadBotTradeHistory()} if(state.activeView==="execution")loadExecution(); if(state.activeView==="portfolio")loadPortfolio(); if(state.activeView==="edge")loadEdge(); if(state.activeView==="brain"){loadPhase7();loadPhase7Health()}},15000);
 
