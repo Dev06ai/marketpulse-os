@@ -179,7 +179,7 @@ function confidenceToProb(x){const n=Number(x);return Number.isFinite(n)?Math.ma
 function selfTest(){
   const x=evaluate({
     symbol:"BTCUSDT",interval:"15m",price:100,
-    decision:{action:"LONG",market:{side:"LONG",confluenceScore:85}},
+    decision:{action:"LONG",market:{side:"LONG",confluenceScore:85},levels:{entry:100,stop:98,tp1:103,tp2:105,rr:1.5}},
     analysis:{side:"LONG",regime:{trend:"UP"},confluenceScore:85,marketStructure:{setup:{side:"LONG"}}},
     derivatives:{cvdState:"BUYERS CONFIRM",takerImbalance:.12,oiChangePct:2,orderBook:{imbalance:.1}},
     phaseStack:{data:{quality:{liveEligible:true}},risk:{blocked:false},anomaly:{anomalous:false}},
