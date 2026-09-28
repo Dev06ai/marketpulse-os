@@ -138,7 +138,7 @@ function median(a){const x=a.filter(Number.isFinite).sort((p,q)=>p-q);return x.l
 function summarize(venues,history){
   const valid=venues.filter(v=>Number.isFinite(v.price));
   const perp=valid.filter(v=>v.venueType==="perp");
-  const px=median(perp.map(v=>v.price)),spread=px?((Math.max(...perp.map(v=>v.price))-Math.min(...perp.map(v=>v.price))/px)*10000):null;
+  const px=median(perp.map(v=>v.price));
   const dispersion=px?((Math.max(...perp.map(v=>v.price))-Math.min(...perp.map(v=>v.price))/px)*10000):null;
   const imbalances=perp.map(v=>v.imbalance).filter(Number.isFinite);
   const avgImb=imbalances.length?imbalances.reduce((a,b)=>a+b,0)/imbalances.length:null;
