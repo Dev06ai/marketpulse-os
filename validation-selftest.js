@@ -62,6 +62,14 @@ assert(tradeLevelResult.short.stop>tradeLevelResult.short.entry&&tradeLevelResul
 
 const serverSource=fs.readFileSync("./server.js","utf8");
 new Function(serverSource);
+const waitVisualChecks=[
+  'var cls=side==="LONG"?"signal-long":side==="SHORT"?"signal-short":"signal-wait";',
+  'if(!executionReady)return {',
+  'reason:"FINAL_DECISION_NOT_EXECUTABLE"',
+  'No active invalidation level — final trade gate is blocked.',
+  'decisionSection.signal-wait .mpdc-execution-panel'
+];
+for(const x of waitVisualChecks)assert(htmlSource.includes(x),"WAIT/execution-map regression missing: "+x);
 const htmlSource=fs.readFileSync("./public/index.html","utf8");
 const inlineScripts=[...htmlSource.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi)].map(m=>m[1]).filter(Boolean);
 for(const script of inlineScripts)new Function(script);
