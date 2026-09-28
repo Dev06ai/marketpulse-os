@@ -2966,8 +2966,9 @@ function drawMain(){
   var final=state.finalDecision;
   var finalEligible=Boolean(final&&final.liveSignalEligible===true&&final.state==="READY"&&(final.action==="LONG"||final.action==="SHORT"));
   var livePlan=final?getConditionalTradeLevels(final,getLiveDirectionalSnapshot(final)):null;
-  var model=finalEligible?final.levels:livePlan;
+  var model=finalEligible?final.levels:null;
   var modelIsConditional=!finalEligible;
+  if(!finalEligible)model=livePlan;
   if(model){
     var elo=Number(model.entryLow),ehi=Number(model.entryHigh);
     if(Number.isFinite(elo)&&Number.isFinite(ehi)){
