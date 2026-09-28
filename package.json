@@ -8,7 +8,8 @@
     "test": "node validation-selftest.js",
     "worker": "node marketpulse-worker.js",
     "worker:once": "node marketpulse-worker-once.js",
-    "test:signal-notifications": "node tests/admin-signal-notifications.js"
+    "test:signal-notifications": "node tests/admin-signal-notifications.js",
+    "watchdog": "node marketpulse-watchdog.js"
   },
   "engines": {
     "node": ">=20"
