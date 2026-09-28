@@ -122,7 +122,8 @@ function evaluate(input={}){
   const ttlMs=Math.max(60000,u.n(input.signalTtlMs,15*60*1000));
   const aged=Boolean(input.signalAgeExpired??ttlResult.expired);
   if(aged&&!q.blockers.includes("SIGNAL_EXPIRED"))q.blockers.push("SIGNAL_EXPIRED");
-  const calibrated=u.probability(input.calibration?.probability);
+  const rawCalibration=Number(input.calibration?.probability);
+  const calibrated=Number.isFinite(rawCalibration)?u.probability(rawCalibration<=1?rawCalibration*100:rawCalibration):null;
   const relative=u.probability(Math.max(0,Math.min(100,Math.max(q.dir.long,q.dir.short)*.75+q.coverage.coverage*.25)));
   const confidence=calibrated??relative;
   const expectancy=p74.evaluate(input.expectancy||{});
