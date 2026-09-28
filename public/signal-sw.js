@@ -1,4 +1,4 @@
-const CACHE_NAME="marketpulse-shell-v6";
+const CACHE_NAME="marketpulse-shell-v7";
 const SHELL_ASSETS=["/","/manifest.json","/marketpulse-icon-v4.svg","/marketpulse-icon-maskable-v4.svg"];
 
 self.addEventListener("install",event=>{

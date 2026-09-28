@@ -10,7 +10,17 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="MarketPulse">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="application-name" content="MarketPulse">
+<meta name="application-name" content="MarketPulse"><script>
+(function(){
+  var ua=String(navigator.userAgent||"");
+  var mobileUA=/Android|iPhone|iPad|iPod|Mobile/i.test(ua);
+  var touch=Number(navigator.maxTouchPoints||0)>0||"ontouchstart" in window;
+  var sw=Number(window.screen&&window.screen.width||0),sh=Number(window.screen&&window.screen.height||0);
+  var shortEdge=Math.min(sw||99999,sh||99999),longEdge=Math.max(sw||0,sh||0);
+  var phoneShape=shortEdge>0&&longEdge/shortEdge>=1.5&&shortEdge<=1600;
+  if(mobileUA||((touch||phoneShape)&&shortEdge<=1600))document.documentElement.classList.add("handheld-layout");
+})();
+</script>
 <meta name="theme-color" content="#050507">
 <title>MarketPulse — Crypto Intelligence</title>
 <style>
@@ -2425,7 +2435,7 @@ function adminSignalToast(alert){
 async function ensureMarketPulseServiceWorker(){
   if(!("serviceWorker"in navigator))return null;
   try{
-    var registration=await navigator.serviceWorker.register("/signal-sw.js",{scope:"/"});
+    var registration=await navigator.serviceWorker.register("/signal-sw.js",{scope:"/",updateViaCache:"none"});
     await navigator.serviceWorker.ready;
     return registration;
   }catch(error){
