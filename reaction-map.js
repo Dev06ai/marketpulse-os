@@ -359,4 +359,4 @@ function buildReactionMap(c,{interval="1h",marketStructure=null,strategySetups=n
   };
 }
 
-module.exports={buildReactionMap};
+module.exports={buildReactionMap,reactionForZone};
