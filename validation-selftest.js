@@ -2,6 +2,7 @@ const fs=require("fs");
 const phase=require("./phase11-13");
 const {detectMarketStructure}=require("./market-structure");
 const {analyze}=require("./market-engine");
+const tradeLevels=require("./trade-levels");
 
 function syntheticCandles(mode){
   const out=[],start=Date.UTC(2026,8,15,0,0,0),hour=60*60*1000;
@@ -51,9 +52,18 @@ function assert(condition,message){
 
 const phaseResult=phase.selfTest();
 assert(phaseResult.ok,"Phase 11-13 self-test failed");
+const tradeLevelResult=tradeLevels.selfTest();
+assert(tradeLevelResult.ok,"Conservative trade-level self-test failed.");
+assert(tradeLevelResult.long.rr>=1.5&&tradeLevelResult.short.rr>=1.5,"Trade-level builder must enforce minimum 1.5R.");
+assert(tradeLevelResult.long.stop<tradeLevelResult.long.entry&&tradeLevelResult.long.tp1>tradeLevelResult.long.entry,"LONG level geometry is invalid.");
+assert(tradeLevelResult.short.stop>tradeLevelResult.short.entry&&tradeLevelResult.short.tp1<tradeLevelResult.short.entry,"SHORT level geometry is invalid.");
 
 const serverSource=fs.readFileSync("./server.js","utf8");
 new Function(serverSource);
+const htmlSource=fs.readFileSync("./public/index.html","utf8");
+const inlineScripts=[...htmlSource.matchAll(/<script\\b[^>]*>([\\s\\S]*?)<\\/script>/gi)].map(m=>m[1]).filter(Boolean);
+for(const script of inlineScripts)new Function(script);
+assert(inlineScripts.length>0,"Dashboard inline JavaScript was not found for syntax validation.");
 
 console.log(JSON.stringify({
   ok:true,
