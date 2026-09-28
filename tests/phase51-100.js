@@ -65,7 +65,7 @@ console.log("phase51-100 tests: ok");
 // Every Phase 51–100 module must load and expose a self-test.
 const fs=require("fs");
 const phaseFiles=fs.readdirSync(__dirname+"/..").filter(x=>/^phase(?:5[1-9]|[6-9][0-9]|100)-.*\.js$/.test(x)&&!["phase51-100-stack.js","phase51-100-utils.js","phase51-100-selftest.js"].includes(x)).sort((a,b)=>{
-  const pa=Number(a.match(/^phase(\d+)/)[1]),pb=Number(b.match(/^phase(\\d+)/)[1]); return pa-pb;
+  const pa=Number(a.match(/^phase(\d+)/)[1]),pb=Number(b.match(/^phase(\d+)/)[1]); return pa-pb;
 });
 assert(phaseFiles.length===50,"Expected exactly 50 Phase 51–100 modules, found "+phaseFiles.length);
 for(const file of phaseFiles){
