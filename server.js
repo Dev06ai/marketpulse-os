@@ -594,7 +594,10 @@ async function buildDecisionSnapshot(symbol,interval,query,deviceId=null){
     const rawCandles=await getFastKlines(symbol,interval);
     const candles=closedCandles(rawCandles,interval,now);
     if(!candles||candles.length<220)throw Error("Insufficient closed candles");
-    const phase14Profile=await phase14.getAdaptiveProfile(storage,{symbol,interval}).catch(()=>null);
+    const phase14Profile=phase14.peekAdaptiveProfile({symbol,interval})||null;
+    if(!phase14Profile){
+      setTimeout(()=>phase14.getAdaptiveProfile(storage,{symbol,interval}).catch(()=>null),0);
+    }
     const lowerInterval=interval==="15m"?null:"15m";
     const higherInterval=interval==="4h"?"1d":interval==="1d"?null:"4h";
     const dlineHigherInterval=interval==="15m"?"8h":null;
@@ -1879,7 +1882,7 @@ const server=http.createServer(async(req,res)=>{
       try{
         const payload=await Promise.race([
           buildDecisionSnapshot(symbol,interval,u.searchParams,requestDevice(req)),
-          new Promise((_,reject)=>setTimeout(()=>reject(new Error('DECISION_ENGINE_TIMEOUT')),8200))
+          new Promise((_,reject)=>setTimeout(()=>reject(new Error('DECISION_ENGINE_TIMEOUT')),14000))
         ]);
         return send(res,200,payload);
       }catch(e){return send(res,503,{ok:false,error:String(e.message||e),phase9:PHASE9_VERSION,phase10:PHASE10_VERSION})}
