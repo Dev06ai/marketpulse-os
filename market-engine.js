@@ -7,6 +7,7 @@ const {buildAdvancedContext,advancedConfluence}=require("./advanced-price-action
 const {buildKnowledgeContext}=require("./mindpillar-knowledge");
 const phase14=require("./phase14-signal-intelligence");
 const {buildElliottContext,elliottConfluence}=require("./advanced-elliott-wave");
+const {buildTradeLevels}=require("./trade-levels");
 const finiteOr=(v,fallback)=>Number.isFinite(v)?v:fallback;
 
 function sma(v,p){const o=[];let s=0;for(let i=0;i<v.length;i++){s+=v[i];if(i>=p)s-=v[i-p];o.push(i+1>=p?s/p:NaN)}return o}
@@ -370,32 +371,31 @@ function analyze(c,ctx={}){
   score=clamp(Math.round(score),0,92);
 
   let el=null,eh=null,stop=null,tp1=null,tp2=null,rr=null;
+  let levelBuild=null;
   if(side!=="WAIT"){
-    const risk=1.15*atrNow;
-    if(msReady&&ms.side===side){
-      const buffer=Math.max(.18*atrNow,price*.00035);
-      el=side==="LONG"?price-.08*atrNow:price-.04*atrNow;
-      eh=side==="LONG"?price+.04*atrNow:price+.08*atrNow;
-      const triggerBase=Number.isFinite(ms?.sweepPrice)?ms.sweepPrice:
-        (Number.isFinite(ms?.lineNow)?ms.lineNow:(Number.isFinite(ms?.levelPrice)?ms.levelPrice:null));
-      const structuralStop=side==="LONG"
-        ?(ms.kind==="SFP"||ms.kind==="NPOC"||ms.kind==="ORDER_BLOCK"?triggerBase??ms.low:(Number.isFinite(triggerBase)?Math.min(triggerBase,rangeLow):rangeLow))-buffer
-        :(ms.kind==="SFP"||ms.kind==="NPOC"||ms.kind==="ORDER_BLOCK"?triggerBase??ms.high:(Number.isFinite(triggerBase)?Math.max(triggerBase,rangeHigh):rangeHigh))+buffer;
-      stop=side==="LONG"?Math.min(price-risk,Number.isFinite(structuralStop)?structuralStop:price-risk):Math.max(price+risk,Number.isFinite(structuralStop)?structuralStop:price+risk);
-      const actualRisk=Math.abs(price-stop);
-      const nextLevel=side==="LONG"?marketStructure.nearestResistance:marketStructure.nearestSupport;
-      const minimumTarget=actualRisk*1.6;
-      const levelTarget=Number.isFinite(nextLevel)&&(side==="LONG"?nextLevel>price:nextLevel<price)?nextLevel:null;
-      if(side==="LONG"){
-        tp1=levelTarget&&levelTarget-price>=minimumTarget?levelTarget:price+minimumTarget;
-        tp2=price+Math.max(actualRisk*2.4,2.1*atrNow);
-      }else{
-        tp1=levelTarget&&price-levelTarget>=minimumTarget?levelTarget:price-minimumTarget;
-        tp2=price-Math.max(actualRisk*2.4,2.1*atrNow);
-      }
-    }else if(side==="LONG"){el=price-.25*atrNow;eh=price+.10*atrNow;stop=Math.min(price-risk,rangeLow-.15*atrNow);tp1=price+1.15*atrNow;tp2=price+2.15*atrNow;}
-    else {el=price-.10*atrNow;eh=price+.25*atrNow;stop=Math.max(price+risk,rangeHigh+.15*atrNow);tp1=price-1.15*atrNow;tp2=price-2.15*atrNow;}
-    rr=Math.abs(tp1-price)/Math.abs(price-stop);
+    const reactionForLevels=reactionActive&&String(reactionActive.action||"").toUpperCase()===side?reactionActive:null;
+    levelBuild=buildTradeLevels({
+      side,
+      price,
+      atr:atrNow,
+      rangeLow,
+      rangeHigh,
+      nearestSupport:marketStructure.nearestSupport,
+      nearestResistance:marketStructure.nearestResistance,
+      reaction:reactionForLevels,
+      minRR:Number(process.env.MP_MIN_RR||1.5),
+      maxRiskAtr:Number(process.env.MP_MAX_STOP_ATR||2.25)
+    });
+    if(levelBuild?.entryLow!=null){
+      el=levelBuild.entryLow;
+      eh=levelBuild.entryHigh;
+      stop=levelBuild.stop;
+      tp1=levelBuild.tp1;
+      tp2=levelBuild.tp2;
+      rr=levelBuild.rr;
+    }else{
+      reasons.push("Trade-level builder blocked the setup: "+String(levelBuild?.reason||"invalid trade levels"));
+    }
   }
 
   let status="WAITING";
@@ -506,7 +506,7 @@ function analyze(c,ctx={}){
     knowledgeContext,
     phase14:phase14Meta,
     primaryScenario,alternateScenario,
-    mtf:{lower:mtf15,higher:mtf4},stop,tp1,tp2,entryLow:el,entryHigh:eh,rr,
+    mtf:{lower:mtf15,higher:mtf4},stop,tp1,tp2,entryLow:el,entryHigh:eh,rr,tradeLevels:levelBuild||null,
     rangeHigh,rangeLow,rangePosition:rangePos,priorHigh,priorLow,reactionMap,reactionConfirmed,advancedPriceAction:advancedContext,advancedConfluence:advancedPA,elliottWave:elliottContext,elliottConfluence:elliottPA,updatedAt:Date.now()
   };
 }
