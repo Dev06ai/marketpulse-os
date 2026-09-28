@@ -235,6 +235,7 @@ const CORE_ANALYTICS_TTL=120000;
 const PHASE2_VERSION=2; const PHASE3_VERSION=3; const PHASE4_VERSION=4; const PHASE5_VERSION=5; const PHASE6_VERSION=6; const PHASE7_VERSION=7; const PHASE7_DATA_VERSION=2;
 const PHASE9_VERSION=9; const PHASE10_VERSION=10; const PHASE11_VERSION=11; const PHASE12_VERSION=12; const PHASE13_VERSION=13;
 const DECISION_CACHE=new Map(); const DECISION_TTL=4000; const DECISION_LAST_GOOD=new Map();
+const DECISION_JOBS=new Map();
 const SIGNAL_STABILITY=new Map();
 const SIGNAL_CONFIRMATIONS_REQUIRED=2;
 const SIGNAL_RELEASE_MISSES=2;
@@ -409,7 +410,7 @@ const GLOBAL_RATE=new Map();
 const FAST_PUBLIC_PATHS=new Set(["/api/core","/api/chart","/api/fast-ticker","/api/core-enrichment","/api/core-analytics","/api/decision","/api/validation","/api/data-fabric","/api/config","/health","/"]);
 const FAST_TICKER_CACHE=new Map();
 const CSRF_COOKIE="mp_csrf";
-const SERVER_METRICS={startedAt:Date.now(),requests:0,errors:0,totalLatencyMs:0,routeCounts:new Map(),lastErrors:[]};
+const SERVER_METRICS={startedAt:Date.now(),requests:0,errors:0,totalLatencyMs:0,routeCounts:new Map(),lastErrors:[],recentRequests:[]};
 let RESEARCH_JOB={running:false,startedAt:null,finishedAt:null,error:null,symbol:null,interval:null,bars:0,records:0,trained:0,skipped:0,progress:{processed:0,total:0,pct:0}};
 async function runResearchWarmup(){
   if(RESEARCH_JOB.running)return {skipped:true,reason:"job_running"};
@@ -1454,7 +1455,7 @@ const server=http.createServer(async(req,res)=>{
   const started=Date.now();SERVER_METRICS.requests++;
   const rawPath=String(req.url||"").split("?")[0];
   SERVER_METRICS.routeCounts.set(rawPath,(SERVER_METRICS.routeCounts.get(rawPath)||0)+1);
-  res.on("finish",()=>{const latency=Date.now()-started;SERVER_METRICS.totalLatencyMs+=latency;if(res.statusCode>=500)SERVER_METRICS.errors++;if(res.statusCode>=500)SERVER_METRICS.lastErrors.unshift({path:rawPath,status:res.statusCode,latencyMs:latency,at:new Date().toISOString()});if(SERVER_METRICS.lastErrors.length>50)SERVER_METRICS.lastErrors.length=50});
+  res.on("finish",()=>{const latency=Date.now()-started;const at=Date.now();SERVER_METRICS.totalLatencyMs+=latency;if(res.statusCode>=500)SERVER_METRICS.errors++;if(res.statusCode>=500)SERVER_METRICS.lastErrors.unshift({path:rawPath,status:res.statusCode,latencyMs:latency,at:new Date().toISOString()});if(SERVER_METRICS.lastErrors.length>50)SERVER_METRICS.lastErrors.length=50;SERVER_METRICS.recentRequests.push({at,path:rawPath,status:res.statusCode,latencyMs:latency});const cutoff=at-120000;while(SERVER_METRICS.recentRequests.length&&SERVER_METRICS.recentRequests[0].at<cutoff)SERVER_METRICS.recentRequests.shift()});
   try{
     if(!rateRequest(req))return send(res,429,{ok:false,error:"Too many requests. Please slow down."});
     const u=new URL(req.url,'http://localhost');
@@ -1499,7 +1500,22 @@ const server=http.createServer(async(req,res)=>{
           return send(res,200,{ok:true,action:"reset-caches",at:Date.now()});
         }
         if(action==="status"){
-          return send(res,200,{ok:true,phase16:phase16.VERSION,uptimeMs:Date.now()-SERVER_METRICS.startedAt,metrics:SERVER_METRICS});
+          const now=Date.now(),cutoff=now-60000,recent=SERVER_METRICS.recentRequests.filter(x=>x.at>=cutoff);
+          const recentCount=recent.length;
+          const recent5xx=recent.filter(x=>x.status>=500).length;
+          const recentAvgLatencyMs=recentCount?Math.round(recent.reduce((sum,x)=>sum+x.latencyMs,0)/recentCount):0;
+          const recentErrorRatePct=recentCount?Number(((recent5xx/recentCount)*100).toFixed(2)):0;
+          const routeCounts=Object.fromEntries(SERVER_METRICS.routeCounts.entries());
+          const hotRoutes=recent.reduce((acc,x)=>{acc[x.path]=(acc[x.path]||0)+1;return acc},{}); 
+          return send(res,200,{ok:true,phase16:phase16.VERSION,uptimeMs:now-SERVER_METRICS.startedAt,metrics:{
+            requests:SERVER_METRICS.requests,
+            errors:SERVER_METRICS.errors,
+            totalLatencyMs:SERVER_METRICS.totalLatencyMs,
+            avgLatencyMs:SERVER_METRICS.requests?Math.round(SERVER_METRICS.totalLatencyMs/SERVER_METRICS.requests):0,
+            recent60s:{requests:recentCount,errors5xx:recent5xx,avgLatencyMs:recentAvgLatencyMs,errorRatePct:recentErrorRatePct,routeCounts:hotRoutes},
+            routeCounts,
+            lastErrors:SERVER_METRICS.lastErrors.slice(0,20)
+          }});
         }
         return send(res,400,{ok:false,error:"UNKNOWN_WATCHDOG_ACTION"});
       }catch(e){return send(res,503,{ok:false,error:String(e.message||e)})}
@@ -1880,8 +1896,16 @@ const server=http.createServer(async(req,res)=>{
       const symbol=(u.searchParams.get('symbol')||'BTCUSDT').toUpperCase(),interval=u.searchParams.get('interval')||'1h';
       if(!SYMBOLS.includes(symbol)||!['15m','30m','1h','4h','1d'].includes(interval))return send(res,400,{ok:false,error:'Unsupported symbol or interval'});
       try{
+        const jobKey=String(symbol)+"|"+String(interval)+"|"+u.searchParams.toString()+"|"+requestDevice(req);
+        let job=DECISION_JOBS.get(jobKey);
+        if(!job){
+          job=buildDecisionSnapshot(symbol,interval,u.searchParams,requestDevice(req)).finally(()=>{
+            if(DECISION_JOBS.get(jobKey)===job)DECISION_JOBS.delete(jobKey);
+          });
+          DECISION_JOBS.set(jobKey,job);
+        }
         const payload=await Promise.race([
-          buildDecisionSnapshot(symbol,interval,u.searchParams,requestDevice(req)),
+          job,
           new Promise((_,reject)=>setTimeout(()=>reject(new Error('DECISION_ENGINE_TIMEOUT')),14000))
         ]);
         return send(res,200,payload);
