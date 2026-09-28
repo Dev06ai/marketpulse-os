@@ -930,6 +930,15 @@ async function buildDecisionSnapshot(symbol,interval,query,deviceId=null){
       operatorApproved:String(process.env.MARKETPULSE_PHASE50_OPERATOR_ACK||"false").toLowerCase()==="true",
       shadow:String(process.env.MARKETPULSE_PHASE50_SHADOW_MODE||"true").toLowerCase()!=="false"
     });
+    const validationEvidence=analytics?.validation||null;
+    const validationReady=Boolean(validationEvidence?.adaptive?.signalGateReady);
+    const candidateSideForValidation=String(finalDecision?.action||analysis?.side||"").toUpperCase();
+    const directionalValidation=validationEvidence?.directional?.[candidateSideForValidation.toLowerCase()]||null;
+    const empiricalWinRate=validationReady
+      ? (Number.isFinite(Number(directionalValidation?.trades))&&Number(directionalValidation.trades)>=20&&Number.isFinite(Number(directionalValidation?.winRate))
+          ? Number(directionalValidation.winRate)
+          : Number.isFinite(Number(validationEvidence?.summary?.winRate))?Number(validationEvidence.summary.winRate):null)
+      : null;
     const phase51to100State=phase51to100.evaluate({
       symbol,interval,
       price:Number(finalDecision?.market?.price??analysis?.price??candles?.at(-1)?.c),
@@ -952,8 +961,8 @@ async function buildDecisionSnapshot(symbol,interval,query,deviceId=null){
       anomalyBlocked:Boolean(phaseStackState?.anomaly?.anomalous),
       publicReadiness:{
         data:Boolean(phaseStackState?.data?.quality?.liveEligible),
-        validation:Boolean(phaseStackState?.deployment?.pass||validation1113?.gate==="PASS"),
-        calibration:Boolean(analytics?.validation?.sampleCount>=50||analytics?.validation?.calibrationSampleCount>=50),
+        validation:validationReady,
+        calibration:validationReady,
         risk:!Boolean(phaseStackState?.risk?.blocked),
         security:Boolean(phaseStackState?.security?.ok),
         observability:true,operations:true
@@ -968,9 +977,9 @@ async function buildDecisionSnapshot(symbol,interval,query,deviceId=null){
         risk:finalDecision?.risk?.riskPct,venue:"USER_SELECTED_EXCHANGE",
         cancelIf:phaseStackState?.hardBlockers?.join(", ")||"ANY HARD BLOCKER"
       },
-      calibration:{probability:null},
+      calibration:{probability:empiricalWinRate,source:empiricalWinRate!=null?"WALK_FORWARD_EMPIRICAL":"UNAVAILABLE"},
       uncertainty:{coveragePct:phaseStackState?.data?.quality?.score||0,calibrationSamples:analytics?.validation?.sampleCount||0,disagreementPct:0},
-      expectancy:{winProbability:null,averageWinR:Number(conditionalLevels?.rr)||1.5,averageLossR:1,costR:0},
+      expectancy:{winProbability:empiricalWinRate!=null?empiricalWinRate/100:null,averageWinR:Number(conditionalLevels?.rr)||1.5,averageLossR:1,costR:0.05},
       expectancyGate:{probability:null,rr:Number(conditionalLevels?.rr)||0,costBps:10}
     });
     try{
