@@ -69,7 +69,8 @@ function decisionFresh(decision,maxAgeMs=30000){
 }
 
 function isWeekday(ts=Date.now()){
-  const day=Number(new Intl.DateTimeFormat("en-US",{timeZone:"Asia/Kolkata",weekday:"short"}).format(new Date(Number(ts))));
+  const local=new Date(new Date(Number(ts)).toLocaleString("en-US",{timeZone:"Asia/Kolkata"}));
+  const day=local.getDay();
   return day>=1&&day<=5;
 }
 function effectiveDecision(decision){
