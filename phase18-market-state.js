@@ -221,6 +221,36 @@ async function snapshot(symbol="BTCUSDT",opts={}){
   const job=(async()=>{
     const results=await Promise.all(venuesFns.map(([name,fn])=>safe(name,fn)));
     const venues=results;
+
+    // When exchange REST is restricted or unavailable, the existing public
+    // Bybit websocket flow can still provide a fresh derivatives mark/book
+    // observation. Treat it as a supplemental venue rather than declaring the
+    // whole cross-venue layer empty.
+    const lf=opts?.liveFlow||null;
+    const livePrice=n(lf?.markPrice);
+    const liveTs=n(lf?.lastTs);
+    const liveFresh=Number.isFinite(livePrice)&&Number.isFinite(liveTs)&&now()-liveTs<45000;
+    const hasHealthyBybit=venues.some(v=>v?.name==="Bybit"&&v.status==="healthy"&&Number.isFinite(v.price));
+    if(liveFresh&&!hasHealthyBybit){
+      const ob=lf?.orderBook||{};
+      venues.push({
+        name:"Bybit Live Flow",
+        exchange:"BYBIT LIVE",
+        status:"healthy",
+        latencyMs:0,
+        price:livePrice,
+        markPrice:livePrice,
+        venueType:"perp",
+        role:"live-public-websocket",
+        fundingRate:n(lf?.fundingRate),
+        openInterest:n(lf?.oi),
+        spreadBps:n(ob?.spreadBps),
+        imbalance:n(ob?.imbalance),
+        sourceTs:liveTs,
+        source:"bybit-public-websocket"
+      });
+    }
+
     const history=recentHistory(symbol);
     const summary=summarize(venues,history);
     const regime=classify(summary,venues);
@@ -228,8 +258,8 @@ async function snapshot(symbol="BTCUSDT",opts={}){
       ok:summary.venueCount>0,version:VERSION,symbol,generatedAt:now(),
       venues,summary,regime,history:history.slice(-20),
       method:fast
-        ?"REST fast cross-exchange snapshot; Bybit/Binance/Hyperliquid/Coinbase."
-        :"REST full cross-exchange snapshot; streaming lead/lag is progressively learned from repeated samples"
+        ?"REST fast cross-exchange snapshot with live-public-websocket fallback."
+        :"REST full cross-exchange snapshot with live-public-websocket fallback; streaming lead/lag is progressively learned from repeated samples"
     };
     pushHistory(symbol,venues);
     SNAPSHOT_CACHE.set(key,{ts:now(),payload});
