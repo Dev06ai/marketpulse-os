@@ -527,8 +527,6 @@ const ADMIN_ONLY_PATHS=new Set([
   '/api/execution/close-sim',
   '/api/autotrader',
   '/api/autotrader/history',
-  '/api/market-state',
-  '/api/trade-radar',
   '/api/autotrader/config',
   '/api/autotrader/arm',
   '/api/autotrader/pause',
