@@ -4942,11 +4942,12 @@ function modelFlowTag(el,label,value){
   return {cls:cls,text:label+" · "+txt};
 }
 function scheduleLiveDecisionRender(){
-  if(state.liveDecisionRenderTimer)return;
-  state.liveDecisionRenderTimer=setTimeout(function(){
-    state.liveDecisionRenderTimer=null;
+  if(!state.finalDecision)return;
+  if(state.liveDecisionRenderFrame)return;
+  state.liveDecisionRenderFrame=requestAnimationFrame(function(){
+    state.liveDecisionRenderFrame=0;
     if(state.finalDecision)renderLiveDirectionalModel(state.finalDecision);
-  },220);
+  });
 }
 function computeLiveDirectionalModel(d){
   d=d||{};
@@ -5148,62 +5149,133 @@ function renderLiveDirectionalModel(d){
 }
 async function renderFinalDecision(d){
   if(!d)return;
-  var m=d.market||{},ev=d.evidence||{},lv=d.levels||{},data=d.data||{},pg=d.propGate||{},v=d.phase11_13||{},gate=d.deploymentGate||{},stability=d.signalStability||{};
+
+  var m=d.market||{},ev=d.evidence||{},lv=d.levels||{},data=d.data||{},
+      pg=d.propGate||{},v=d.phase11_13||{},gate=d.deploymentGate||{},
+      stability=d.signalStability||{};
+
+  // The visible directional signal is driven by the same live model that reads
+  // the canonical price/flow state. It is intentionally separate from the
+  // execution/deployment gate: the UI can show LONG/SHORT directional context
+  // even when execution remains blocked.
+  var liveModel=computeLiveDirectionalModel(d);
+  var displaySide=liveModel.long>=liveModel.short?"LONG":"SHORT";
+  var displayConfidence=Math.max(Number(liveModel.long)||0,Number(liveModel.short)||0);
+  var directionalLabel=displaySide+" "+displayConfidence+"%";
+
+  var accent=displaySide==="LONG"?"#4ade80":"#f87171";
+  var glow=displaySide==="LONG"?"rgba(74,222,128,.18)":"rgba(248,113,133,.18)";
+
+  // Always update lightweight live values without rebuilding the whole section.
+  $("mCall").textContent=displaySide;
+  $("mCall").style.color=accent;
+  $("mCall").style.textShadow="0 0 20px "+glow;
+  $("mBias").textContent=displaySide==="LONG"?"Live bullish direction":"Live bearish direction";
+  $("mBias").style.color=accent;
+  $("mScore").textContent=fmt(m.confluenceScore);
+  $("quality").textContent=fmt(m.confluenceScore)+"/100";
+  $("quality").style.color=accent;
+
+  var ds=document.querySelector(".decisionSection");
+  if(ds){
+    ds.classList.remove("signal-long","signal-short","signal-wait");
+    ds.classList.add(displaySide==="LONG"?"signal-long":"signal-short");
+  }
+
+  renderLiveDirectionalModel(d);
+
+  // Remove the old full-render trigger based on updatedAt. Only genuinely
+  // structural decision changes are allowed to repaint the heavy DOM.
+  var structuralKey=[
+    d.state,
+    d.action,
+    d.liveSignalEligible,
+    m.type,
+    m.regime,
+    m.confluenceLabel,
+    lv.entryLow,
+    lv.entryHigh,
+    lv.stop,
+    lv.tp1,
+    lv.tp2,
+    lv.rr,
+    d.tradeStyle,
+    gate.state,
+    stability.state,
+    liveModel.candidate
+  ].map(function(x){return x==null?"":String(x)}).join("|");
+
+  var structuralChanged=state._lastRenderedFinalStructuralKey!==structuralKey;
+  state._lastRenderedFinalStructuralKey=structuralKey;
+
+  if(!structuralChanged){
+    // Lightweight live update only — prevents the large panel from flickering
+    // every time the same decision snapshot gets refreshed.
+    $("mCall").title="Live directional model: "+directionalLabel+" · execution gate: "+String(gate.state||"PAPER_ONLY");
+    return;
+  }
+
   renderGateDiagnostics(d);
   renderReactionMap(d.reactionMap||ev.reactionMap||{});
-  renderLiveDirectionalModel(d);
-  // The UI must never present a directional trade unless the server explicitly confirms it.
-  var side=d.liveSignalEligible===true&&d.state==="READY"&&(d.action==="LONG"||d.action==="SHORT")
-    ?String(d.action).toUpperCase():"WAIT";
-  var accent=side==="LONG"?"#4ade80":side==="SHORT"?"#f87171":"#c084fc";
-  var glow=side==="LONG"?"rgba(74,222,128,.18)":side==="SHORT"?"rgba(248,113,133,.18)":"rgba(192,132,252,.20)";
-  $("mCall").textContent=side==="WAIT"?"NO TRADE":side;
-  $("mCall").style.color=accent;$("mCall").style.textShadow="0 0 20px "+glow;
-  $("mBias").textContent=side==="LONG"?"Bullish setup":side==="SHORT"?"Bearish setup":"Neutral / waiting";$("mBias").style.color=accent;
-  $("mScore").textContent=fmt(m.confluenceScore);
-  $("thesisTitle").textContent=side==="WAIT"
-    ?(stability.state==="CONFIRMING"?"CONFIRMING SETUP":(gate.state==="BLOCKED"?"NO TRADE":"NO TRADE"))
-    :(m.type||"Market context");
-  $("thesisState").textContent=(stability.state==="CONFIRMING"?"CONFIRMING · ":"")+(d.state||"WAITING")+" · "+(m.confluenceLabel||"");
+
+  // Explain the distinction clearly in the Decision Center.
+  $("thesisTitle").textContent=displaySide+" DIRECTIONAL LEAN";
+  $("thesisState").textContent=(stability.state==="CONFIRMING"?"CONFIRMING · ":"")+
+    (d.state||"WAITING")+" · "+displaySide+" "+displayConfidence+"%";
   $("thesisScore").textContent=fmt(m.confluenceScore)+"/100";
-  var thesisText=Array.isArray(ev.thesis)?ev.thesis.join(" "):"Decision engine context available.";
-  if(side!=="WAIT")thesisText+=" Trade style: "+(d.tradeStyle||m.tradeStyle||"INTRADAY")+" · signal timeframe: "+String(d.interval||"").toUpperCase()+".";
-  if(stability.state==="CONFIRMING")thesisText+=" Signal confirmation: "+Number(stability.confirmations||0)+"/"+Number(stability.required||2)+" consecutive live checks.";
-  if(d.stale)thesisText+=" Final decision refresh is delayed; directional output is intentionally suppressed until a fresh decision returns.";
+
+  var thesisText=Array.isArray(ev.thesis)?ev.thesis.join(" "):"Live directional model is following the current market state.";
+  thesisText+=" Directional model: "+displaySide+" ("+displayConfidence+"%).";
+  if(stability.state==="CONFIRMING"){
+    thesisText+=" Engine confirmation: "+Number(stability.confirmations||0)+"/"+Number(stability.required||2)+".";
+  }
+  if(d.stale)thesisText+=" Final execution decision is stale; the displayed direction is live context, not an execution authorization.";
   $("thesis").textContent=thesisText;
-  $("primary").textContent=ev.primaryScenario||"—";$("alternate").textContent=ev.invalidationScenario||"—";
+
+  $("primary").textContent=ev.primaryScenario||displaySide+" directional setup";
+  $("alternate").textContent=ev.invalidationScenario||"Direction changes when the synchronized price/flow structure changes.";
+
   var propLabel=pg.decision==="DISABLED"?"INACTIVE":pg.decision==="BLOCKED"?"BLOCKED":(pg.decision||"NOT EVALUATED");
-  $("thesisChips").innerHTML=[["HTF",ev.mtfScore!=null?fmt(ev.mtfScore)+"/100":null],["Flow",ev.flowScore!=null?fmt(ev.flowScore)+"/100":null],["Data",data.score!=null?fmt(data.score)+"/100":null],["Style",side!=="WAIT"?(d.tradeStyle||m.tradeStyle||"—"):null],["Prop gate",propLabel]].map(function(x){return'<span class="chip c">'+x[0]+": "+(x[1]||"—")+"</span>"}).join("");
-  $("quality").textContent=fmt(m.confluenceScore)+"/100";$("quality").style.color=accent;
-  $("components").innerHTML=(ev.components||[]).map(function(x){return'<div class="rowLine"><span class="small">'+safeHtml(x.name)+'</span><b style="font-size:9px;text-align:right">'+fmt(x.score)+'/100</b><div class="bar"><i style="width:'+Math.max(0,Math.min(100,Number(x.score)||0))+'%"></i></div></div>'}).join("");
-  $("entry").textContent=side!=="WAIT"&&lv.entryLow!=null?fmt(lv.entryLow)+" → "+fmt(lv.entryHigh):"Wait";$("stop").textContent=side!=="WAIT"?fmt(lv.stop):"—";$("target").textContent=side!=="WAIT"?fmt(lv.tp1):"—";$("rr").textContent=side!=="WAIT"&&lv.rr?Number(lv.rr).toFixed(2)+"R":"—";$("tradeStyle").textContent=side!=="WAIT"?((d.tradeStyle||m.tradeStyle||"—")+" · "+String(d.interval||"").toUpperCase()):"—";
+  $("thesisChips").innerHTML=[
+    ["HTF",ev.mtfScore!=null?fmt(ev.mtfScore)+"/100":null],
+    ["Flow",ev.flowScore!=null?fmt(ev.flowScore)+"/100":null],
+    ["Data",data.score!=null?fmt(data.score)+"/100":null],
+    ["Direction",displaySide+" "+displayConfidence+"%"],
+    ["Execution gate",propLabel]
+  ].map(function(x){return'<span class="chip c">'+x[0]+": "+(x[1]||"—")+"</span>"}).join("");
+
+  // Trade levels remain conditional. They are not fabricated merely to force a signal.
+  $("entry").textContent=(lv.entryLow!=null&&displaySide===String(lv.side||displaySide).toUpperCase())
+    ?fmt(lv.entryLow)+" → "+fmt(lv.entryHigh):"Conditional";
+  $("stop").textContent=displaySide===String(lv.side||displaySide).toUpperCase()&&Number.isFinite(Number(lv.stop))?fmt(lv.stop):"—";
+  $("target").textContent=displaySide===String(lv.side||displaySide).toUpperCase()&&Number.isFinite(Number(lv.tp1))?fmt(lv.tp1):"—";
+  $("rr").textContent=displaySide===String(lv.side||displaySide).toUpperCase()&&Number.isFinite(Number(lv.rr))?Number(lv.rr).toFixed(2)+"R":"—";
+  $("tradeStyle").textContent=d.tradeStyle?String(d.tradeStyle)+" · "+String(d.interval||"").toUpperCase():"LIVE DIRECTIONAL";
+
   var s=v.summary||{},p=v.adaptive||{},resolvedTrades=Number(s.trades||0),minTrades=Number(s.sample?.minTrades||80),sampleReady=Boolean(s.sufficient)||resolvedTrades>=minTrades;
-  var evidence=sampleReady
-    ?("Sufficient sample · "+resolvedTrades+" resolved setups")
-    :("Collecting · "+resolvedTrades+" / "+minTrades+" resolved setups");
+  var evidence=sampleReady?("Sufficient sample · "+resolvedTrades+" resolved setups"):("Collecting · "+resolvedTrades+" / "+minTrades+" resolved setups");
   if($("validationEvidence"))$("validationEvidence").textContent=evidence;
   if($("validationDetail"))$("validationDetail").textContent=sampleReady
     ?("Win rate "+Number(s.winRate||0).toFixed(1)+"% · expectancy "+Number(s.expectancyR||0).toFixed(3)+"R · PF "+(s.profitFactor==null?"—":Number(s.profitFactor).toFixed(2)))
     :"Insufficient sample · performance statistics are intentionally withheld until the walk-forward minimum is reached.";
+
   var gs=gate.state||p.mode||"PAPER_ONLY";
   if($("deploymentGate"))$("deploymentGate").textContent=gs;
-  if($("deploymentReason"))$("deploymentReason").textContent=gate.reason||"Signals remain decision-support only until the validation and live-data gates pass.";
+  if($("deploymentReason"))$("deploymentReason").textContent="Execution gate: "+gs+". Directional context remains synchronized to live market data.";
   if($("validationChip"))$("validationChip").textContent=gs;
   $("adaptiveChip").textContent=isAdminUser()?"Adaptive: "+(p.mode||"collecting"):"Model status: live";
+
   $("finalEngineMeta").textContent=isAdminUser()
-    ?"Phase 9/10/11-13 · "+(d.stale?"STALE / DIRECTION SUPPRESSED · ":"LIVE · ")+(d.state||"WAITING")+" · data "+fmt(data.score)+"/100 · risk "+(pg.decision||"NOT EVALUATED")+" · live gate "+gs
-    :"Market model · "+(d.stale?"stale data":"live data")+" · signal state "+(d.state||"WAITING");
-  var ds=document.querySelector(".decisionSection");if(ds){ds.classList.remove("signal-long","signal-short","signal-wait");ds.classList.add(side==="LONG"?"signal-long":side==="SHORT"?"signal-short":"signal-wait")}
-  var prev=state._lastRenderedFinalKey, nextKey=[
-    d.state,d.action,d.liveSignalEligible,m.confluenceScore,lv.entryLow,lv.entryHigh,lv.stop,lv.tp1,d.tradeStyle,d.updatedAt
-  ].map(function(x){return x==null?"":String(x)}).join("|");
-  state._lastRenderedFinalKey=nextKey;
-  if(typeof drawMain==="function" && (!prev || prev!==nextKey || state._chartNeedsFinalRedraw)) {
+    ?"Phase 9/10/11-13 · LIVE DIRECTION "+displaySide+" "+displayConfidence+"% · execution gate "+gs
+    :"Market model · live directional context "+displaySide+" "+displayConfidence+"% · execution gate "+gs;
+
+  // Heavy chart redraw only on structural changes.
+  if(typeof drawMain==="function"&&state._chartNeedsFinalRedraw){
     state._chartNeedsFinalRedraw=false;
     drawMain();
   }
-  renderLiveDirectionalModel(d);
 }
+
 function suppressFinalSignal(reason){
   state.finalDecisionSeq++;
   var d={
