@@ -67,7 +67,8 @@ async function cycle(){
     const interval=BOT_INTERVALS[strategy];
     const radar=await fetchJson("/api/trade-radar?symbol="+encodeURIComponent(symbol)+"&interval="+encodeURIComponent(interval),{timeout:25000});
     state.lastRadar=radar?.radar||null;
-    if(!radar?.ok){state.failures++;record({ok:false,traded:false,strategy,symbol,interval,reason:"trade_radar_invalid"});return}
+    if(!radar?.ok){state.deferred++;record({ok:true,traded:false,strategy,symbol,interval,reason:"trade_radar_invalid_deferred"});return}
+    if(radar?.warming===true){state.deferred++;record({ok:true,traded:false,strategy,symbol,interval,reason:"radar_warming",reasons:radar?.radar?.reasons||[]});return}
     const radarStatus=String(radar?.radar?.status||"FORMING");
     if(radarStatus!=="TRIGGERED"){
       record({ok:true,traded:false,strategy,symbol,interval,reason:"radar_"+radarStatus.toLowerCase(),score:radar?.radar?.score||0,reasons:radar?.radar?.reasons||[],digitalTwin:radar?.digitalTwin||null});
@@ -81,8 +82,11 @@ async function cycle(){
     state.trades++;
     record({ok:true,traded:true,strategy,symbol,interval,side:decision.action,score:decision.market?.confluenceScore||0,orderStatus:executed?.order?.status||null,signalKey:executed?.signal?.id||null,radarStatus});
   }catch(e){
-    state.failures++;
-    record({ok:false,traded:false,error:String(e?.message||e)});
+    const msg=String(e?.message||e);
+    const transient=/aborted|timeout|warming|temporar|503|502/i.test(msg);
+    if(transient)state.deferred++;
+    else state.failures++;
+    record({ok:transient,traded:false,error:msg,transient});
   }finally{state.running=false}
 }
 const server=http.createServer((req,res)=>{
