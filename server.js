@@ -20,6 +20,7 @@ const phase20=require("./phase20-scenario-matrix");
 const phase21=require("./phase21-state-contract");
 const phaseHistory=require("./phase-history");
 const phaseStack=require("./phase21-50-stack");
+const phase51to100=require("./phase51-100-stack");
 const signalNotifications=require('./signal-notifications');
 const propFirm=require('./prop-firm');
 const research=require('./research-data');
@@ -929,6 +930,49 @@ async function buildDecisionSnapshot(symbol,interval,query,deviceId=null){
       operatorApproved:String(process.env.MARKETPULSE_PHASE50_OPERATOR_ACK||"false").toLowerCase()==="true",
       shadow:String(process.env.MARKETPULSE_PHASE50_SHADOW_MODE||"true").toLowerCase()!=="false"
     });
+    const phase51to100State=phase51to100.evaluate({
+      symbol,interval,
+      price:Number(finalDecision?.market?.price??analysis?.price??candles?.at(-1)?.c),
+      decision:{...finalDecision,derivatives:flow},
+      analysis,derivatives:flow,consensus,decisionIntelligence,
+      phase20:phase20Scenario,phaseStack:phaseStackState,
+      mtf:{higher:String(finalDecision?.higher?.side||finalDecision?.higherTimeframe?.side||analysis?.higher?.side||finalDecision?.action||"WAIT").toUpperCase(),
+           execution:String(finalDecision?.action||"WAIT").toUpperCase(),
+           lower:String(analysis?.lower?.side||analysis?.lowerTimeframe?.side||finalDecision?.action||"WAIT").toUpperCase()},
+      triggerConfirmed:Boolean(finalDecision?.liveSignalEligible&&finalDecision?.state==="READY"),
+      setupEvidence:Boolean(analysis?.marketStructure?.setup||analysis?.setup||decisionIntelligence?.strategyFamily),
+      flowEvidence:Boolean(flow?.available!==false&&(flow?.cvdState||flow?.takerImbalance!=null)),
+      invalidation:Boolean(conditionalLevels?.stop!=null),
+      levelsValid:Boolean(conditionalLevels?.entry!=null||conditionalLevels?.entryLow!=null),
+      invalidationText:String(levelBlockReason||"Structural invalidation is defined by the final decision."),
+      signalAgeMs:Math.max(0,now-Number(candles?.[candles.length-1]?.t||now)),
+      signalTtlMs:Math.max(mins(interval)*60*1000*1.5,60000),
+      dataQualityOk:Boolean(phaseStackState?.data?.quality?.liveEligible),
+      riskBlocked:Boolean(phaseStackState?.risk?.blocked),
+      anomalyBlocked:Boolean(phaseStackState?.anomaly?.anomalous),
+      publicReadiness:{
+        data:Boolean(phaseStackState?.data?.quality?.liveEligible),
+        validation:Boolean(phaseStackState?.deployment?.pass||validation1113?.gate==="PASS"),
+        calibration:Boolean(analytics?.validation?.sampleCount>=50||analytics?.validation?.calibrationSampleCount>=50),
+        risk:!Boolean(phaseStackState?.risk?.blocked),
+        security:Boolean(phaseStackState?.security?.ok),
+        observability:true,operations:true
+      },
+      exchangeHealth:{reliabilityPct:100},
+      portfolio:{positions:[]},
+      checklist:{
+        side:finalDecision?.action,
+        trigger:finalDecision?.evidence?.trigger||finalDecision?.deploymentGate?.reason,
+        entry:conditionalLevels?.entry??conditionalLevels?.entryLow,
+        invalidation:conditionalLevels?.stop,target:conditionalLevels?.tp1,
+        risk:finalDecision?.risk?.riskPct,venue:"USER_SELECTED_EXCHANGE",
+        cancelIf:phaseStackState?.hardBlockers?.join(", ")||"ANY HARD BLOCKER"
+      },
+      calibration:{probability:null},
+      uncertainty:{coveragePct:phaseStackState?.data?.quality?.score||0,calibrationSamples:analytics?.validation?.sampleCount||0,disagreementPct:0},
+      expectancy:{winProbability:0.5,averageWinR:Number(conditionalLevels?.rr)||1.5,averageLossR:1,costR:0},
+      expectancyGate:{probability:0.5,rr:Number(conditionalLevels?.rr)||0,costBps:10}
+    });
     try{
       setTimeout(()=>signalNotifications.notifyAdminSignal(storage,{
         decision:finalDecision,
@@ -967,13 +1011,13 @@ async function buildDecisionSnapshot(symbol,interval,query,deviceId=null){
     try{learning.observeFinalDecision(symbol,interval,candles,finalDecision).catch(()=>{})}catch{}
     try{setTimeout(()=>phase14.refreshAdaptiveState(storage,{symbol,interval}).catch(()=>{}),250)}catch{}
     const payload={
-      ok:true,...finalDecision,analysis,derivatives:flow,consensus,decisionIntelligence,phase20:phase20Scenario,canonicalState,canonicalSnapshotId,phaseStack:phaseStackState,
+      ok:true,...finalDecision,analysis,derivatives:flow,consensus,decisionIntelligence,phase20:phase20Scenario,canonicalState,canonicalSnapshotId,phaseStack:phaseStackState,phase51to100:phase51to100State,
       learning:null,
       backtest:analytics?.backtest||null,validation:analytics?.validation||null,setupStats:analytics?.setupStats||null,
       phase11_13:validation1113,
       phase14:finalDecision.phase14||analysis.phase14||null,
       phase14Status:finalDecision.phase14?.adaptive||analysis.phase14?.adaptive||null,
-      phase11:PHASE11_VERSION,phase12:PHASE12_VERSION,phase13:PHASE13_VERSION,phase14Version:"14.0.0",phase20Version:phase20.VERSION,phase21Version:phase21.VERSION,phase21to50Version:phaseStack.VERSION,
+      phase11:PHASE11_VERSION,phase12:PHASE12_VERSION,phase13:PHASE13_VERSION,phase14Version:"14.0.0",phase20Version:phase20.VERSION,phase21Version:phase21.VERSION,phase21to50Version:phaseStack.VERSION,phase51to100Version:phase51to100.VERSION,
       updatedAt:now
     };
     DECISION_CACHE.set(key,{ts:now,payload});
