@@ -492,7 +492,7 @@ async function createIntent(plan){
   if(duplicate)return clone(duplicate);
   const id=intentId();
   const riskPct=clamp(finite(p.riskPct,state.config.riskPct),0.05,5);
-  const order={id,orderLinkId:linkId(id),intentKey:[symbol,side,entry,stop,target,p.signalId||""].join("|"),signalId:p.signalId||null,symbol,interval:p.interval||"1h",side,type:"LIMIT",status:"INTENT",entry,stop,target,tp2:finite(p.tp2),qty:finite(p.qty),rr:reward/riskDistance,riskPct,riskCash:state.config.account*riskPct/100,createdAt:now(),updatedAt:now(),externalOrderId:null,avgPrice:null,cumExecQty:0,leavesQty:null,source:p.source||"PHASE4",note:p.note||"",easyMode:Boolean(p.easyMode),strategy:p.strategy||null,setup:p.setup||null,regime:p.regime||null,score:Number(p.score)||0,maxHoldMs:Number(p.maxHoldMs)||0};
+  const order={id,orderLinkId:linkId(id),intentKey:[symbol,side,entry,stop,target,p.signalId||""].join("|"),signalId:p.signalId||null,symbol,interval:p.interval||"1h",side,type:"LIMIT",status:"INTENT",entry,stop,target,tp2:finite(p.tp2),qty:finite(p.qty),rr:reward/riskDistance,riskPct,riskCash:state.config.account*riskPct/100,createdAt:now(),updatedAt:now(),externalOrderId:null,avgPrice:null,cumExecQty:0,leavesQty:null,source:p.source||"PHASE4",note:p.note||"",easyMode:Boolean(p.easyMode),strategy:p.strategy||null,setup:p.setup||null,regime:p.regime||null,score:Number(p.score)||0,maxHoldMs:Number(p.maxHoldMs)||0,radarStatus:p.radarStatus||null,triggerContext:p.triggerContext||null,executionVenue:p.executionVenue||"PAPER"};
   state.orders.push(order);state.orders=state.orders.slice(-MAX_ORDERS);pushEvent(state,"INTENT_CREATED",symbol+" "+side+" execution intent created",{orderId:order.id,signalId:order.signalId});
   await save(state);return clone(order);
 }
@@ -501,7 +501,7 @@ async function submitIntent(id){
   const loaded=await load(),state=loaded.state,o=findOrder(state,id),exchangeAdapter=adapterFor(state);
   if(!o)throw new Error("Execution intent not found");
   if(["SUBMITTED","ACKNOWLEDGED","OPEN","PARTIALLY_FILLED","FILLED"].includes(o.status))return clone(o);
-  const plan={symbol:o.symbol,side:o.side,entry:o.entry,stop:o.stop,target:o.target,qty:o.qty,type:o.type,riskPct:o.riskPct,easyMode:o.easyMode,strategy:o.strategy,setup:o.setup,regime:o.regime,score:o.score,createdAt:o.createdAt};
+  const plan={symbol:o.symbol,side:o.side,entry:o.entry,stop:o.stop,target:o.target,qty:o.qty,type:o.type,riskPct:o.riskPct,easyMode:o.easyMode,strategy:o.strategy,setup:o.setup,regime:o.regime,score:o.score,radarStatus:o.radarStatus,triggerContext:o.triggerContext,executionVenue:o.executionVenue,createdAt:o.createdAt};
   o.status="VALIDATING";o.updatedAt=now();
   let gate;
   try{gate=await marketGate(plan,state)}catch(e){gate={allowed:false,reason:e.message}}
@@ -514,7 +514,7 @@ async function submitIntent(id){
   if(state.config.mode==="SIMULATION"){
     o.status="SUBMITTED";o.externalOrderId="SIM-"+o.id;o.exchangeStatus="Simulated";
     o.status="ACKNOWLEDGED";o.status="FILLED";o.avgPrice=o.entry;o.cumExecQty=o.qty;o.leavesQty=0;o.filledAt=now();o.updatedAt=now();
-    const position={id:"MP5P-"+o.id,orderId:o.id,externalKey:"SIM:"+o.id,symbol:o.symbol,interval:o.interval,side:o.side,qty:o.qty,entry:o.entry,stop:o.stop,target:o.target,tp2:o.tp2??null,riskCash:o.riskCash,openedAt:now(),markPrice:o.entry,source:"SIMULATION",strategy:o.strategy||null,setup:o.setup||o.type||null,regime:o.regime||null,score:Number(o.score)||0,rr:Number(o.rr)||0,easyMode:Boolean(o.easyMode),maxHoldMs:Number(o.maxHoldMs||0)};
+    const position={id:"MP5P-"+o.id,orderId:o.id,externalKey:"SIM:"+o.id,symbol:o.symbol,interval:o.interval,side:o.side,qty:o.qty,entry:o.entry,stop:o.stop,target:o.target,tp2:o.tp2??null,riskCash:o.riskCash,openedAt:now(),markPrice:o.entry,source:"SIMULATION",strategy:o.strategy||null,setup:o.setup||o.type||null,regime:o.regime||null,score:Number(o.score)||0,rr:Number(o.rr)||0,easyMode:Boolean(o.easyMode),maxHoldMs:Number(o.maxHoldMs||0),radarStatus:o.radarStatus||null,triggerContext:o.triggerContext||null,executionVenue:o.executionVenue||"PAPER"};
     state.positions.push(position);state.positions=state.positions.slice(-MAX_POSITIONS);
     state.control.reconciliation={ok:true,checkedAt:now(),detail:"Simulation mode"};
     addJournal(state,{id:"MP5J-"+o.id,ts:now(),type:"SIMULATION_FILLED",orderId:o.id,symbol:o.symbol,side:o.side,qty:o.qty,price:o.entry,resultR:0,pnl:0,message:"Simulation fill created; position remains open until explicitly closed."});
