@@ -2722,6 +2722,21 @@ const server=http.createServer(async(req,res)=>{
       }
     }
 
+    if(req.method==='GET'&&u.pathname==='/api/admin/video-transcript'){
+      const token=u.searchParams.get('token')||'';
+      if(!process.env.VIDEO_INGEST_TOKEN||token!==process.env.VIDEO_INGEST_TOKEN)return send(res,403,{ok:false,error:'Forbidden'});
+      const videoId=(u.searchParams.get('video_id')||'').trim();
+      if(!/^[A-Za-z0-9_-]{11}$/.test(videoId))return send(res,400,{ok:false,error:'Invalid video id'});
+      try{
+        const upstream=await fetch('https://youtube-transcript.ai/transcript/'+encodeURIComponent(videoId)+'.txt');
+        const text=await upstream.text();
+        if(!upstream.ok)return send(res,502,{ok:false,error:'Transcript provider returned '+upstream.status,detail:text.slice(0,500)});
+        return send(res,200,{ok:true,videoId,transcript:text});
+      }catch(e){
+        return send(res,502,{ok:false,error:'Transcript fetch failed',detail:String(e?.message||e)});
+      }
+    }
+
     if(req.method==='GET'&&u.pathname==='/api/system-check'){
       const checks={server:true,marketEngine:true,learning:false,memory:false,marketData:false,derivatives:false,oi:false,cvd:false,liquidations:false,execution:false,portfolio:false,phase7:false,coreAnalytics:true,decisionEngine:false,phase11_13:false};
       const bounded=async(fn,ms)=>{
