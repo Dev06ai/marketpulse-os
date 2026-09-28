@@ -8,6 +8,7 @@ const phase7=require('./phase7');
 const phase910=require('./phase9-10');
 const phase1113=require('./phase11-13');
 const phase14=require('./phase14-signal-intelligence');
+const phase15=require('./phase15');
 const signalNotifications=require('./signal-notifications');
 const propFirm=require('./prop-firm');
 const research=require('./research-data');
@@ -505,7 +506,10 @@ const ADMIN_ONLY_PATHS=new Set([
   '/api/research/train',
   '/api/phase14',
   '/api/phase14/validation',
-  '/api/phase14/calibrate'
+  '/api/phase14/calibrate',
+  '/api/phase15',
+  '/api/phase15/calibrate',
+  '/api/phase15/audit'
 ]);
 function normalizeFundingRate(value){
   const n=Number(value);
@@ -678,6 +682,13 @@ async function buildDecisionSnapshot(symbol,interval,query,deviceId=null){
         symbol,
         interval,
         candleTs:candles?.[candles.length-1]?.t||null
+      }).catch(()=>{}),0);
+    }catch{}
+
+    try{
+      const candleTs=candles?.[candles.length-1]?.t;
+      if(Number.isFinite(Number(candleTs)))setTimeout(()=>phase15.recordDecision({
+        symbol,interval,candleTs:Number(candleTs),decision:finalDecision,analysis
       }).catch(()=>{}),0);
     }catch{}
     try{phase4.updateFinalDecision(deviceId||"00000000-0000-0000-0000-000000000000",symbol,interval,finalDecision,candles).catch(()=>{})}catch{}
@@ -1891,6 +1902,24 @@ const server=http.createServer(async(req,res)=>{
         const state=await storage.getLearningState();
         return send(res,200,{ok:true,version:"14.0.0",symbol,interval,adaptive:profile,stored:state?.payload?.phase14||null,updatedAt:Date.now()});
       }catch(e){return send(res,503,{ok:false,error:String(e.message||e),version:"14.0.0"})}
+    }
+    if(req.method==='GET'&&u.pathname==='/api/phase15'){
+      try{
+        const symbol=u.searchParams.get('symbol')||null,interval=u.searchParams.get('interval')||null;
+        return send(res,200,{ok:true,...await phase15.snapshot({symbol,interval,limit:5000})});
+      }catch(e){return send(res,503,{ok:false,error:e.message})}
+    }
+    if(req.method==='GET'&&u.pathname==='/api/phase15/audit'){
+      try{
+        const symbol=u.searchParams.get('symbol')||null,interval=u.searchParams.get('interval')||null,limit=Number(u.searchParams.get('limit')||200);
+        return send(res,200,{ok:true,rows:await phase15.audit({symbol,interval,limit})});
+      }catch(e){return send(res,503,{ok:false,error:e.message})}
+    }
+    if(req.method==='POST'&&u.pathname==='/api/phase15/calibrate'){
+      try{
+        const symbol=u.searchParams.get('symbol')||null,interval=u.searchParams.get('interval')||null;
+        return send(res,200,{ok:true,...await phase15.calibration({symbol,interval,limit:5000})});
+      }catch(e){return send(res,503,{ok:false,error:e.message})}
     }
     if(req.method==='GET'&&u.pathname==='/api/phase14/validation'){
       const symbol=(u.searchParams.get('symbol')||'BTCUSDT').toUpperCase(),interval=u.searchParams.get('interval')||'1h';
