@@ -1,0 +1,2 @@
+/** Phase 59 */
+const V="59.0.0";function analyze(i={}){const f=Math.abs(Number(i.funding||0)),oi=Math.abs(Number(i.oiChange||0)),liq=Math.abs(Number(i.liquidationSkew||0));const crowded=f>.03||oi>5;return {version:V,funding:f,oiChange:oi,liquidationSkew:liq,crowded,warning:crowded?"CROWDED":"NORMAL"};}function selfTest(){const x=analyze({funding:.05});return {ok:x.crowded,version:V};}module.exports={VERSION:V,analyze,selfTest};

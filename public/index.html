@@ -1127,6 +1127,25 @@ html.handheld-layout .wrap{width:calc(100% - 18px);padding-top:10px}\nhtml.handh
 html.handheld-layout .evolutionDesktop{display:none}
 html.handheld-layout .evolutionMobile{display:block}
 </style>
+<style id="mp51-public-signal-style">
+#mp51-public-signal{margin-top:10px;border:1px solid rgba(167,243,208,.13);border-radius:14px;background:linear-gradient(180deg,rgba(167,243,208,.025),rgba(192,132,252,.018));box-shadow:inset 0 1px 0 rgba(255,255,255,.025)}
+#mp51-public-signal .mp51-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+#mp51-public-signal .mp51-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px;margin-top:10px}
+#mp51-public-signal .mp51-kpi{padding:9px;border:1px solid rgba(255,255,255,.07);border-radius:10px;background:rgba(255,255,255,.018);min-width:0}
+#mp51-public-signal .mp51-kpi span{display:block;font-size:7px;color:#73859a;letter-spacing:.08em;font-weight:900}
+#mp51-public-signal .mp51-kpi b{display:block;margin-top:4px;font-size:12px}
+#mp51-public-signal .mp51-body{display:grid;grid-template-columns:1.1fr .9fr;gap:8px;margin-top:8px}
+#mp51-public-signal .mp51-box{padding:10px;border:1px solid rgba(255,255,255,.07);border-radius:10px;background:rgba(255,255,255,.016);min-width:0}
+#mp51-public-signal .mp51-lines{display:grid;gap:5px;margin-top:6px}
+#mp51-public-signal .mp51-line{display:flex;justify-content:space-between;gap:8px;font-size:8px;color:#98a6b7}
+#mp51-public-signal .mp51-line b{color:#eef4f8;font-size:9px}
+#mp51-public-signal .mp51-blockers{margin-top:7px;font-size:8px;line-height:1.45;color:#f6c76c}
+#mp51-public-signal .mp51-foot{margin-top:8px;color:#7c8c9e;font-size:8px;line-height:1.4}
+@media(max-width:700px){
+  #mp51-public-signal .mp51-kpis{grid-template-columns:1fr 1fr}
+  #mp51-public-signal .mp51-body{grid-template-columns:1fr}
+}
+</style>
 </head>
 <body>
 <div id="mpLaunch" aria-hidden="true">
@@ -1432,6 +1451,39 @@ html.handheld-layout .evolutionMobile{display:block}
             <div class="mp20-transition"><span class="k">SIGNAL GATE</span><div class="v" id="mp50GateText">Waiting for the Phase 21–50 stack.</div></div>
             <div class="mp20-integrity"><span class="k">AUTOMATIC EXECUTION</span><div class="v" id="mp50AutoState">DISABLED</div></div>
           </div>
+        </div>
+
+        <div class="mp20-phase mpdc-public-signal" id="mp51-public-signal">
+          <div class="mp51-head">
+            <div>
+              <span class="mpdc-eyebrow">PHASE 51–100 · PUBLIC SIGNAL ENGINE</span>
+              <span class="mpdc-panel-sub">Trader-facing signal quality, evidence coverage, levels, uncertainty and blockers. Decision support only — users place trades themselves on their chosen exchange.</span>
+            </div>
+            <span class="livePlanSide mpdc-plan-side wait" id="mp51Action">WAIT</span>
+          </div>
+          <div class="mp51-kpis">
+            <div class="mp51-kpi"><span>CONFIDENCE</span><b id="mp51Confidence">—</b></div>
+            <div class="mp51-kpi"><span>EVIDENCE COVERAGE</span><b id="mp51Coverage">—</b></div>
+            <div class="mp51-kpi"><span>ENTRY</span><b id="mp51Entry">—</b></div>
+            <div class="mp51-kpi"><span>INVALIDATION</span><b id="mp51Stop">—</b></div>
+          </div>
+          <div class="mp51-body">
+            <div class="mp51-box">
+              <div class="k">SIGNAL THESIS</div>
+              <div class="mp51-lines">
+                <div class="mp51-line"><span>Setup</span><b id="mp51Setup">—</b></div>
+                <div class="mp51-line"><span>Target 1</span><b id="mp51Tp1">—</b></div>
+                <div class="mp51-line"><span>Target 2</span><b id="mp51Tp2">—</b></div>
+                <div class="mp51-line"><span>R:R</span><b id="mp51Rr">—</b></div>
+                <div class="mp51-line"><span>Confidence source</span><b id="mp51ConfidenceSource">—</b></div>
+              </div>
+            </div>
+            <div class="mp51-box">
+              <div class="k">WHY WAIT / WHAT MUST CHANGE</div>
+              <div class="mp20-list" id="mp51Blockers"><span>Waiting for the Phase 51–100 stack…</span></div>
+            </div>
+          </div>
+          <div class="mp51-foot" id="mp51Foot">The public signal gate remains conservative. No automatic order execution is enabled.</div>
         </div>
 
         <div class="mpdc-bottom">
@@ -6079,6 +6131,30 @@ function renderPhase21to50(d){
   setTextLocal("mp50GateText",gateOpen?"Manual signal consumption is permitted by the Phase 50 controller.":"Manual signal gate remains closed until readiness and operator acknowledgement pass.");
   setTextLocal("mp50AutoState",gate.automaticExecutionEnabled?"ENABLED":"DISABLED");
 }
+function renderPhase51to100(d){
+  var p=d?.phase51to100||null;
+  if(!p)return;
+  var s=p.signal||{},g=p.gate||{},diag=p.diagnostics||{};
+  var side=String(s.action||"WAIT").toUpperCase();
+  var el=$("mp51Action");
+  if(el){el.textContent=side;el.className="livePlanSide mpdc-plan-side "+(side==="LONG"?"long":side==="SHORT"?"short":"wait");}
+  setTextLocal("mp51Confidence",s.confidence!=null?(String(s.confidence)+"%"):"—");
+  setTextLocal("mp51Coverage",s.coverage?.coverage!=null?(String(s.coverage.coverage)+"%"):"—");
+  setTextLocal("mp51Entry",s.entry!=null?String(s.entry):"—");
+  setTextLocal("mp51Stop",s.stop!=null?String(s.stop):"—");
+  setTextLocal("mp51Setup",Array.isArray(s.evidence)&&s.evidence.length?s.evidence.map(function(x){return x.key+":"+x.side}).slice(0,3).join(" · "):"WAIT / NO ACTIVE SETUP");
+  setTextLocal("mp51Tp1",s.tp1!=null?String(s.tp1):"—");
+  setTextLocal("mp51Tp2",s.tp2!=null?String(s.tp2):"—");
+  setTextLocal("mp51Rr",s.rr!=null?String(s.rr):"—");
+  setTextLocal("mp51ConfidenceSource",String(s.confidenceSource||"—"));
+  var blockers=Array.isArray(s.blockers)&&s.blockers.length?s.blockers:(Array.isArray(g.blockers)?g.blockers:[]);
+  var b=$("mp51Blockers");
+  if(b)b.innerHTML=blockers.length?blockers.slice(0,8).map(function(x){return "<span>• "+safeHtmlLocal(x)+"</span>"}).join(""):"<span>• All Phase 51–100 signal gates cleared.</span>";
+  var foot=side==="WAIT"
+    ?"WAIT is intentional: the system is refusing to publish a directional signal until the missing evidence is present."
+    :("Qualified "+side+" candidate. Verify the entry trigger, invalidation, risk and chosen exchange conditions yourself before placing any manual trade.");
+  setTextLocal("mp51Foot",foot+" Automatic order execution remains disabled.");
+}
 function renderFinalDecision(d){
   if(!d)return;
 
@@ -6089,6 +6165,7 @@ function renderFinalDecision(d){
   renderDecisionIntelligence(d);
   renderPhase20(d);
   renderPhase21to50(d);
+  renderPhase51to100(d);
 
   // Probability context is live, but execution direction comes only from the
   // authoritative server decision after final confirmation and safety gates.

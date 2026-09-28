@@ -1,0 +1,2 @@
+/** Phase 54 */
+const V="54.0.0";function align(i={}){const xs=[i.higher,i.execution,i.lower].map(x=>String(x||"WAIT").toUpperCase()),known=xs.filter(x=>x==="LONG"||x==="SHORT"),side=known.length===3&&known.every(x=>x===known[0])?known[0]:"WAIT";return {version:V,frames:xs,side,aligned:known.length===3&&side!=="WAIT",conflict:known.length>1&&new Set(known).size>1};}function selfTest(){const x=align({higher:"LONG",execution:"LONG",lower:"LONG"});return {ok:x.aligned&&!x.conflict,version:V};}module.exports={VERSION:V,align,selfTest};
