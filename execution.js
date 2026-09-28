@@ -265,7 +265,7 @@ async function marketGate(plan,state){
   if((state.config.mode==="TESTNET"||state.config.mode==="LIVE")&&!exchangeAdapter.configured())return {allowed:false,reason:state.config.mode+" API CREDENTIALS NOT CONFIGURED"};
   if(state.config.mode==="LIVE"&&String(process.env.LIVE_TRADING_ENABLED||"false").toLowerCase()!=="true")return {allowed:false,reason:"LIVE TRADING FEATURE FLAG IS OFF"};
   if(state.control.killSwitch)return {allowed:false,reason:"KILL SWITCH ACTIVE"};
-  if(state.config.mode==="TESTNET"&&!state.control.armed)return {allowed:false,reason:"TESTNET EXECUTION NOT ARMED"};
+  if((state.config.mode==="TESTNET"||state.config.mode==="LIVE")&&!state.control.armed)return {allowed:false,reason:state.config.mode+" EXECUTION NOT ARMED"};
   if(state.config.requireReconciliation&&!state.control.reconciliation.ok)return {allowed:false,reason:"RECONCILIATION BLOCK"};
   if(activePositions(state).length>=state.config.maxPositions)return {allowed:false,reason:"MAX POSITIONS"};
   if(openRiskPct(state)+state.config.riskPct>state.config.maxOpenRiskPct+1e-9)return {allowed:false,reason:"MAX OPEN RISK"};
