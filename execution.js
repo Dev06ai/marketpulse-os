@@ -486,12 +486,13 @@ async function createIntent(plan){
   if(!symbol||entry===null||stop===null||target===null)throw new Error("Symbol, entry, stop and target are required");
   const riskDistance=Math.abs(entry-stop),reward=Math.abs(target-entry);
   if(riskDistance<=0)throw new Error("Stop must be different from entry");
-  if(reward/riskDistance<1.5)throw new Error("Intent blocked: minimum R:R is 1.50");
+  const minRR=p.easyMode?1.2:1.5;
+  if(reward/riskDistance<minRR)throw new Error("Intent blocked: minimum R:R is "+minRR.toFixed(2));
   const duplicate=state.orders.find(o=>o.intentKey===[symbol,side,entry,stop,target,p.signalId||""].join("|")&&["INTENT","VALIDATING","APPROVED","SUBMITTED","ACKNOWLEDGED","OPEN","PARTIALLY_FILLED"].includes(o.status));
   if(duplicate)return clone(duplicate);
   const id=intentId();
   const riskPct=clamp(finite(p.riskPct,state.config.riskPct),0.05,5);
-  const order={id,orderLinkId:linkId(id),intentKey:[symbol,side,entry,stop,target,p.signalId||""].join("|"),signalId:p.signalId||null,symbol,interval:p.interval||"1h",side,type:"LIMIT",status:"INTENT",entry,stop,target,qty:finite(p.qty),rr:reward/riskDistance,riskPct,riskCash:state.config.account*riskPct/100,createdAt:now(),updatedAt:now(),externalOrderId:null,avgPrice:null,cumExecQty:0,leavesQty:null,source:p.source||"PHASE4",note:p.note||"",easyMode:Boolean(p.easyMode),strategy:p.strategy||null,setup:p.setup||null,regime:p.regime||null,score:Number(p.score)||0,maxHoldMs:Number(p.maxHoldMs)||0};
+  const order={id,orderLinkId:linkId(id),intentKey:[symbol,side,entry,stop,target,p.signalId||""].join("|"),signalId:p.signalId||null,symbol,interval:p.interval||"1h",side,type:"LIMIT",status:"INTENT",entry,stop,target,tp2:finite(p.tp2),qty:finite(p.qty),rr:reward/riskDistance,riskPct,riskCash:state.config.account*riskPct/100,createdAt:now(),updatedAt:now(),externalOrderId:null,avgPrice:null,cumExecQty:0,leavesQty:null,source:p.source||"PHASE4",note:p.note||"",easyMode:Boolean(p.easyMode),strategy:p.strategy||null,setup:p.setup||null,regime:p.regime||null,score:Number(p.score)||0,maxHoldMs:Number(p.maxHoldMs)||0};
   state.orders.push(order);state.orders=state.orders.slice(-MAX_ORDERS);pushEvent(state,"INTENT_CREATED",symbol+" "+side+" execution intent created",{orderId:order.id,signalId:order.signalId});
   await save(state);return clone(order);
 }
@@ -513,7 +514,7 @@ async function submitIntent(id){
   if(state.config.mode==="SIMULATION"){
     o.status="SUBMITTED";o.externalOrderId="SIM-"+o.id;o.exchangeStatus="Simulated";
     o.status="ACKNOWLEDGED";o.status="FILLED";o.avgPrice=o.entry;o.cumExecQty=o.qty;o.leavesQty=0;o.filledAt=now();o.updatedAt=now();
-    const position={id:"MP5P-"+o.id,externalKey:"SIM:"+o.id,symbol:o.symbol,interval:o.interval,side:o.side,qty:o.qty,entry:o.entry,stop:o.stop,target:o.target,riskCash:o.riskCash,openedAt:now(),markPrice:o.entry,source:"SIMULATION",strategy:o.strategy||p.strategy||null,setup:o.setup||p.setup||p.type||null,regime:o.regime||p.regime||null,score:Number(o.score||p.score)||0,maxHoldMs:Number(o.maxHoldMs||p.maxHoldMs||0)};
+    const position={id:"MP5P-"+o.id,orderId:o.id,externalKey:"SIM:"+o.id,symbol:o.symbol,interval:o.interval,side:o.side,qty:o.qty,entry:o.entry,stop:o.stop,target:o.target,tp2:o.tp2??null,riskCash:o.riskCash,openedAt:now(),markPrice:o.entry,source:"SIMULATION",strategy:o.strategy||null,setup:o.setup||o.type||null,regime:o.regime||null,score:Number(o.score)||0,rr:Number(o.rr)||0,easyMode:Boolean(o.easyMode),maxHoldMs:Number(o.maxHoldMs||0)};
     state.positions.push(position);state.positions=state.positions.slice(-MAX_POSITIONS);
     state.control.reconciliation={ok:true,checkedAt:now(),detail:"Simulation mode"};
     addJournal(state,{id:"MP5J-"+o.id,ts:now(),type:"SIMULATION_FILLED",orderId:o.id,symbol:o.symbol,side:o.side,qty:o.qty,price:o.entry,resultR:0,pnl:0,message:"Simulation fill created; position remains open until explicitly closed."});
@@ -574,9 +575,18 @@ async function closeSimulationPosition(positionId,exitPrice,meta={}){
   const r=p.riskCash?((pnl)/p.riskCash):0;
   state.metrics.realizedPnl+=pnl;state.metrics.realizedR+=r;state.positions=state.positions.filter(x=>x.id!==positionId);
   const o=p.orderId?findOrder(state,p.orderId):state.orders.find(x=>x.externalOrderId==="SIM-"+String(p.id).replace("MP5P-",""));
-  if(o){o.status="CLOSED";o.closedAt=now();o.updatedAt=now()}
+  if(o){
+    o.status="CLOSED";
+    o.closedAt=now();
+    o.updatedAt=now();
+    o.exitPrice=exit;
+    o.exitReason=reason;
+    o.pnl=pnl;
+    o.resultR=r;
+    o.durationMs=Math.max(0,Number(o.closedAt)-Number(o.filledAt||o.createdAt||o.closedAt));
+  }
   const reason=String(meta.reason||"MANUAL").toUpperCase();
-  addJournal(state,{id:"MP5J-C-"+positionId,ts:now(),type:"SIMULATION_CLOSED",positionId,symbol:p.symbol,side:p.side,qty:p.qty,entry:p.entry,exit,resultR:r,pnl,message:"Simulation position closed · "+reason});
+  addJournal(state,{id:"MP5J-C-"+positionId,ts:now(),type:"SIMULATION_CLOSED",positionId,orderId:p.orderId||o?.id||null,symbol:p.symbol,interval:p.interval||null,side:p.side,qty:p.qty,entry:p.entry,stop:p.stop,target:p.target,tp2:p.tp2??null,exit,resultR:r,pnl,openedAt:p.openedAt,closedAt:now(),durationMs:Math.max(0,now()-Number(p.openedAt||now())),strategy:p.strategy||null,setup:p.setup||null,regime:p.regime||null,score:Number(p.score)||0,rr:Number(p.rr)||0,easyMode:Boolean(p.easyMode),message:"Simulation trade closed · "+reason});
   pushEvent(state,"POSITION_CLOSED",p.symbol+" "+p.side+" closed · "+r.toFixed(2)+"R",{positionId,pnl,r,reason});
   if(String(p.source||"")==="SIMULATION"&&p.strategy){
     const outcome=r>0.05?"WIN":r<-0.05?"LOSS":"TIMEOUT";
@@ -592,6 +602,47 @@ async function closeSimulationPosition(positionId,exitPrice,meta={}){
   await save(state);return snapshot();
 }
 
+async function getBotTradeHistory(limit=100){
+  const loaded=await load(),state=loaded.state,rows=[],seen=new Set();
+  const push=row=>{
+    const id=String(row.id||row.orderId||row.positionId||"");
+    if(!id||seen.has(id))return;
+    seen.add(id);rows.push(row);
+  };
+  // Closed paper/testnet/live orders
+  for(const o of state.orders.slice().reverse()){
+    const botOrder=String(o.source||"").startsWith("PHASE17_")||Boolean(o.strategy&&o.signalId);
+    if(!botOrder)continue;
+    const closed=String(o.status||"").toUpperCase()==="CLOSED"||Number.isFinite(Number(o.exitPrice))||Number.isFinite(Number(o.resultR));
+    if(!closed)continue;
+    push({
+      id:o.id,orderId:o.id,externalOrderId:o.externalOrderId||null,symbol:o.symbol,interval:o.interval,side:o.side,
+      strategy:o.strategy||null,setup:o.setup||o.type||null,regime:o.regime||null,score:Number(o.score)||0,
+      rr:Number(o.rr)||0,riskPct:Number(o.riskPct)||0,riskCash:Number(o.riskCash)||0,qty:Number(o.qty)||0,
+      entry:Number(o.avgPrice??o.entry)||null,plannedEntry:Number(o.entry)||null,stop:Number(o.stop)||null,
+      target:Number(o.target)||null,tp2:Number(o.tp2)||null,exitPrice:Number(o.exitPrice)||null,
+      pnl:Number(o.pnl)||0,resultR:Number(o.resultR)||0,outcome:o.resultR>0?"WIN":o.resultR<0?"LOSS":"FLAT",
+      openedAt:Number(o.filledAt??o.createdAt)||null,closedAt:Number(o.closedAt??o.updatedAt)||null,
+      durationMs:Number(o.durationMs)||null,exitReason:o.exitReason||null,status:o.status,
+      source:o.source||null,note:o.note||null
+    });
+  }
+  // Closed paper trades recorded in the journal.
+  for(const j of state.journal.slice().reverse()){
+    if(j.type!=="SIMULATION_CLOSED")continue;
+    push({
+      id:j.id,orderId:j.orderId||null,externalOrderId:null,symbol:j.symbol,interval:j.interval||null,side:j.side,
+      strategy:j.strategy||null,setup:j.setup||null,regime:j.regime||null,score:Number(j.score)||0,rr:Number(j.rr)||0,
+      riskPct:null,riskCash:null,qty:Number(j.qty)||0,entry:Number(j.entry)||null,plannedEntry:Number(j.entry)||null,
+      stop:Number(j.stop)||null,target:Number(j.target)||null,tp2:Number(j.tp2)||null,exitPrice:Number(j.exit)||null,
+      pnl:Number(j.pnl)||0,resultR:Number(j.resultR)||0,outcome:j.resultR>0?"WIN":j.resultR<0?"LOSS":"FLAT",
+      openedAt:Number(j.openedAt)||null,closedAt:Number(j.closedAt||j.ts)||null,durationMs:Number(j.durationMs)||null,
+      exitReason:String(j.message||"").split("·").pop().trim()||"UNKNOWN",status:"CLOSED",source:"JOURNAL",note:null
+    });
+  }
+  rows.sort((a,b)=>Number(b.closedAt||b.openedAt||0)-Number(a.closedAt||a.openedAt||0));
+  return {ok:true,version:VERSION,count:rows.length,trades:rows.slice(0,Math.max(1,Math.min(Number(limit)||100,500))),updatedAt:now()};
+}
 async function killSwitch(enable=true){
   const loaded=await load(),state=loaded.state;
   state.control.killSwitch=Boolean(enable);
@@ -789,7 +840,7 @@ async function prepareFromSignal(signal){
   const stop=finite(signal.stop);
   const target=finite(signal.target);
   if(entry===null||stop===null||target===null)throw new Error("Signal is missing executable levels");
-  return createIntent({symbol:signal.symbol,interval:signal.interval,side:signal.side,entry,stop,target,qty:null,riskPct:signal.riskPct,rr:signal.rr,signalId:signal.id,source:signal.source||"PHASE4_SIGNAL",note:signal.note||"Prepared from tracked signal."});
+  return createIntent({symbol:signal.symbol,interval:signal.interval,side:signal.side,entry,stop,target,tp2:signal.tp2,qty:null,riskPct:signal.riskPct,rr:signal.rr,signalId:signal.id,source:signal.source||"PHASE4_SIGNAL",note:signal.note||"Prepared from tracked signal.",easyMode:Boolean(signal.easyMode),strategy:signal.strategy||null,setup:signal.setup||signal.type||null,regime:signal.regime||null,score:Number(signal.score)||0,maxHoldMs:Number(signal.maxHoldMs)||0});
 }
 
 async function autoSubmitFinalDecision(signal){
@@ -845,6 +896,7 @@ module.exports={
   prepareFromSignal,
   autoSubmitFinalDecision,
   manageSimulationPositions,
+  getBotTradeHistory,
   recordBotOutcome,
   setBotConfig,
   getBotSnapshot,
