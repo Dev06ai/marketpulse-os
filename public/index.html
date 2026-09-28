@@ -2965,24 +2965,31 @@ function drawMain(){
   var current=chartLiveFresh?Number(state.liveChartPrice):Number(dataAll[dataAll.length-1].c),cy=scale(current);
   var final=state.finalDecision;
   var finalEligible=Boolean(final&&final.liveSignalEligible===true&&final.state==="READY"&&(final.action==="LONG"||final.action==="SHORT"));
-  var model=finalEligible?final.levels:null;
+  var livePlan=final?getConditionalTradeLevels(final,getLiveDirectionalSnapshot(final)):null;
+  var model=finalEligible?final.levels:livePlan;
+  var modelIsConditional=!finalEligible;
   if(model){
     var elo=Number(model.entryLow),ehi=Number(model.entryHigh);
     if(Number.isFinite(elo)&&Number.isFinite(ehi)){
       var eTop=scale(Math.max(elo,ehi)),eBot=scale(Math.min(elo,ehi));
       var bandTop=Math.max(top,Math.min(top+ph,eTop)),bandBot=Math.max(top,Math.min(top+ph,eBot));
       ctx.save();
-      ctx.fillStyle=theme.ema;ctx.globalAlpha=.08;ctx.fillRect(left,bandTop,pw,Math.max(2,bandBot-bandTop));
-      ctx.setLineDash([5,5]);ctx.strokeStyle=theme.ema;ctx.globalAlpha=.72;ctx.lineWidth=1;
+      ctx.fillStyle=theme.ema;ctx.globalAlpha=modelIsConditional?.055:.08;ctx.fillRect(left,bandTop,pw,Math.max(2,bandBot-bandTop));
+      ctx.setLineDash([5,5]);ctx.strokeStyle=theme.ema;ctx.globalAlpha=modelIsConditional?.48:.72;ctx.lineWidth=1;
       ctx.beginPath();ctx.moveTo(left,bandTop);ctx.lineTo(left+pw,bandTop);ctx.moveTo(left,bandBot);ctx.lineTo(left+pw,bandBot);ctx.stroke();
       ctx.restore();
-      ctx.fillStyle=theme.ema;ctx.font="700 8px system-ui";ctx.fillText("ENTRY ZONE",left+5,Math.min(top+ph-5,Math.max(top+9,bandTop+11)));
+      ctx.fillStyle=theme.ema;ctx.font="700 8px system-ui";
+      ctx.fillText(modelIsConditional?"COND. ENTRY":"ENTRY ZONE",left+5,Math.min(top+ph-5,Math.max(top+9,bandTop+11)));
     }
 
-    [{name:"STOP",value:model.stop,color:theme.bear},{name:"TP1",value:model.tp1,color:theme.bull}].forEach(function(z){
+    [
+      {name:modelIsConditional?"COND. STOP":"STOP",value:model.stop,color:theme.bear},
+      {name:modelIsConditional?"COND. TP1":"TP1",value:model.tp1,color:theme.bull},
+      {name:modelIsConditional?"COND. TP2":"TP2",value:model.tp2,color:theme.bull}
+    ].forEach(function(z){
       if(!Number.isFinite(Number(z.value)))return;
       var yy=scale(Number(z.value));if(yy<top||yy>top+ph)return;
-      ctx.save();ctx.setLineDash([5,5]);ctx.strokeStyle=z.color;ctx.globalAlpha=.62;ctx.beginPath();ctx.moveTo(left,yy);ctx.lineTo(left+pw,yy);ctx.stroke();ctx.restore();
+      ctx.save();ctx.setLineDash([5,5]);ctx.strokeStyle=z.color;ctx.globalAlpha=modelIsConditional?.46:.62;ctx.beginPath();ctx.moveTo(left,yy);ctx.lineTo(left+pw,yy);ctx.stroke();ctx.restore();
       ctx.fillStyle=z.color;ctx.font="700 8px system-ui";ctx.fillText(z.name,left+5,yy-4);
     });
   }
@@ -5661,7 +5668,7 @@ async function renderLiveSignalSummary(d,model){
 
   var score=$("thesisScore");
   if(score){
-    var scoreText=Math.round(confidence)+"/100";
+    var scoreText=Math.round(confidence)+"%";
     if(score.textContent!==scoreText)score.textContent=scoreText;
   }
 
@@ -5787,7 +5794,7 @@ function renderFinalDecision(d){
   $("thesisTitle").textContent=displaySide+" DIRECTIONAL LEAN";
   $("thesisState").textContent=(stability.state==="CONFIRMING"?"CONFIRMING · ":"")+
     "LIVE DIRECTION · "+displaySide+" "+displayConfidence+"%";
-  $("thesisScore").textContent=String(liveScore)+"/100";
+  $("thesisScore").textContent=String(liveScore)+"%";
 
   var thesisText="Live directional model: "+displaySide+" ("+displayConfidence+"%). "+
     "Synchronized to the current price-action and live flow frame.";
