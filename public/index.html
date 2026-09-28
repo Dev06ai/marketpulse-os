@@ -2899,16 +2899,28 @@ function renderAutoTrader(data){
     ["Reconciliation",e.reconciliation?.ok?"PASS":"BLOCKED"],
     ["Open risk",Number(m.openRiskPct||0).toFixed(2)+"%"],
     ["Daily loss",Number(m.dailyLossPct||0).toFixed(2)+"%"],
-    ["Private WebSocket",h.privateWsConnected?"CONNECTED":"OFFLINE"],
+    ["Private WebSocket",mode==="PAPER"?"NOT REQUIRED":(h.privateWsConnected?"CONNECTED":"OFFLINE")],
     ["Last bot error",b.lastError||"None"]
   ];
-  $("botHealthRows").innerHTML=health.map(function(x){var bad=/BLOCKED|ON|OFFLINE|error/i.test(String(x[1]))&&x[1]!=="OFF";var cls=bad?"executionBad":"executionOk";return'<div class="executionRow"><span>'+botEsc(x[0])+'</span><b class="'+cls+'">'+botEsc(x[1])+'</b><span></span></div>'}).join("");
+  $("botHealthRows").innerHTML=health.map(function(x){var bad=/BLOCKED|ON|OFFLINE|error/i.test(String(x[1]))&&x[1]!=="OFF"&&x[1]!=="NOT REQUIRED";var cls=bad?"executionBad":"executionOk";return'<div class="executionRow"><span>'+botEsc(x[0])+'</span><b class="'+cls+'">'+botEsc(x[1])+'</b><span></span></div>'}).join("");
   $("botHealthPill").textContent=enabled?(e.killSwitch?"BLOCKED":(mode==="PAPER"?"PAPER ACTIVE":"ARMED / GATED")):"PAUSED";
   $("botHealthPill").className="botPill "+(enabled&&!e.killSwitch?(mode==="PAPER"?"ok":"warn"):"bad");
   $("botPause").disabled=!enabled;$("botKill").disabled=Boolean(e.killSwitch);
 }
 async function loadAutoTrader(){
-  try{renderAutoTrader(await api("/api/autotrader",5000))}catch(e){$("botControlNote").textContent="AutoTrader status unavailable: "+e.message}
+  var cacheKey="mp-autotrader-status",cached=readViewCache(cacheKey);
+  if(cached&&cached.bot){renderAutoTrader(cached)}
+  try{
+    var d=await api("/api/autotrader",12000);
+    if(d?.bot){writeViewCache(cacheKey,d);renderAutoTrader(d);$("botControlNote").textContent=d.degraded?"Connection briefly delayed — showing the last known safe bot state.":"AutoTrader status synchronized."}
+  }catch(e){
+    if(cached&&cached.bot){
+      renderAutoTrader(cached);
+      $("botControlNote").textContent="Connection delayed — showing the last known safe AutoTrader state.";
+    }else{
+      $("botControlNote").textContent="AutoTrader is starting up — retrying automatically.";
+    }
+  }
 }
 async function saveAutoTrader(){
   var strategies={
