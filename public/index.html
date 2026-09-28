@@ -2036,6 +2036,19 @@ linear-gradient(180deg,#0c0e11 0%,#101214 48%,#0a0b0d 100%);box-shadow:0 -20px 7
   </div>
 
   <div class="card adminPanelSmall" style="margin-top:10px">
+    <div class="sectionHead">
+      <div><div class="title">MarketPulse Evolution</div><div class="sub">Owner-only Phase 1 → current upgrade ledger. Each completed phase is recorded with its purpose and future phases stay explicitly marked as planned until validated.</div></div>
+      <span id="phaseHistoryCurrent" class="chip">CURRENT —</span>
+    </div>
+    <div class="adminTableWrap">
+      <table class="adminCompactTable">
+        <thead><tr><th>Phase</th><th>Upgrade</th><th>Description</th><th>Status</th></tr></thead>
+        <tbody id="phaseHistoryBody"><tr><td colspan="4" class="userMuted">Loading phase history…</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card adminPanelSmall" style="margin-top:10px">
     <div class="sectionHead"><div><div class="title">Owner configuration</div><div class="sub">Runtime controls and incident messaging.</div></div><button id="acSaveConfig" class="btn primary">Save configuration</button></div>
     <div class="inputs">
       <input id="acMaintenanceMessage" placeholder="Maintenance message">
@@ -6488,6 +6501,23 @@ async function apiPost(url,body){
   var r=await fetch(url,{method:"POST",headers:{"Content-Type":"application/json","x-marketpulse-device":deviceId()},body:JSON.stringify(body||{})});
   var text=await r.text(),j={};try{j=JSON.parse(text)}catch{}if(!r.ok)throw Error(j.error||"Request failed");return j;
 }
+async function loadAdminPhaseHistory(){
+  if(!state.account?.isAdmin)return;
+  var body=$("phaseHistoryBody"),badge=$("phaseHistoryCurrent");
+  try{
+    var d=await api("/api/admin/phase-history",8000),rows=Array.isArray(d.phases)?d.phases:[];
+    if(badge)badge.textContent="CURRENT PHASE "+String(d.currentPhase||0);
+    if(!body)return;
+    body.innerHTML=rows.map(function(p){
+      var status=String(p.status||"PLANNED").toUpperCase();
+      var cls=status==="COMPLETE"?"healthDot ok":"healthDot";
+      return '<tr><td><b>PHASE '+safeHtmlLocal(p.phase)+'</b></td><td>'+safeHtmlLocal(p.title)+'</td><td>'+safeHtmlLocal(p.description)+'</td><td><span class="'+cls+'"></span>'+safeHtmlLocal(status)+'</td></tr>';
+    }).join("")||'<tr><td colspan="4" class="userMuted">No phase history available.</td></tr>';
+  }catch(e){
+    if(badge)badge.textContent="PHASE HISTORY ERROR";
+    if(body)body.innerHTML='<tr><td colspan="4" class="userMuted">'+safeHtmlLocal(e.message||"Could not load phase history.")+'</td></tr>';
+  }
+}
 async function loadAdminConsole(){
   if(!state.account?.isAdmin)return;
   if($("adminIdentity"))$("adminIdentity").textContent=state.account.email;
@@ -6497,7 +6527,7 @@ async function loadAdminConsole(){
     var r=await api("/api/admin/storage-health",7000);
     if($("adminStorage"))$("adminStorage").textContent=r.connected?"Postgres":"Local fallback";if($("adminStorageDetail"))$("adminStorageDetail").textContent=r.connected?"Live database connection verified":"Running on local fallback storage";
   }catch(e){if($("adminStorage"))$("adminStorage").textContent="Unavailable";if($("adminStorageDetail"))$("adminStorageDetail").textContent=e.message||"Storage health check failed"}
-  loadAdminUsers();loadAdminCenter();loadAdminSignalAlerts(true);startAdminSignalPolling();
+  loadAdminUsers();loadAdminCenter();loadAdminPhaseHistory();loadAdminSignalAlerts(true);startAdminSignalPolling();
 }
 function adminDate(v){
   if(!v)return "—";
