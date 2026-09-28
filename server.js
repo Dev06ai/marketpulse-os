@@ -401,13 +401,33 @@ function sanitizeFinalDecision(decision){
   const eligible=Boolean(d.liveSignalEligible===true&&d.state==="READY"&&["LONG","SHORT"].includes(String(d.action||"").toUpperCase()));
   if(eligible)return d;
 
+  const rawSide=["LONG","SHORT"].includes(String(d.rawAction||"").toUpperCase())?String(d.rawAction).toUpperCase():null;
+  const analysisSide=["LONG","SHORT"].includes(String(d.analysis?.side||"").toUpperCase())?String(d.analysis.side).toUpperCase():null;
+  const existingLevels=d.levels&&Number.isFinite(Number(d.levels.entry))?d.levels:null;
+  const analysisLevels=d.analysis&&(Number.isFinite(Number(d.analysis.entry))||Number.isFinite(Number(d.analysis.entryLow)))?{
+    side:analysisSide||String(d.analysis.side||"WAIT").toUpperCase(),
+    entryLow:d.analysis.entryLow??d.analysis.entry??null,
+    entryHigh:d.analysis.entryHigh??d.analysis.entry??null,
+    entry:d.analysis.entry??null,
+    stop:d.analysis.stop??null,
+    tp1:d.analysis.tp1??null,
+    tp2:d.analysis.tp2??null,
+    rr:d.analysis.rr??null,
+    riskDistance:d.analysis.riskDistance??null,
+    target1Distance:d.analysis.target1Distance??null
+  }:null;
   const candidate=d.candidateEvidence&&typeof d.candidateEvidence==="object"
-    ?d.candidateEvidence
+    ?{
+      ...d.candidateEvidence,
+      action:["LONG","SHORT"].includes(String(d.candidateEvidence.action||"").toUpperCase())?String(d.candidateEvidence.action).toUpperCase():(rawSide||analysisSide||"WAIT"),
+      levels:d.candidateEvidence.levels&&Number.isFinite(Number(d.candidateEvidence.levels.entry))
+        ?d.candidateEvidence.levels:(existingLevels||analysisLevels)
+    }
     :{
-      action:d.rawAction||d.analysis?.side||d.market?.side||"WAIT",
+      action:rawSide||analysisSide||String(d.market?.side||"WAIT").toUpperCase(),
       state:d.state||"NO_TRADE",
       market:d.market||null,
-      levels:d.levels||null,
+      levels:existingLevels||analysisLevels,
       thesis:d.evidence?.thesis||null,
       type:d.market?.type||null,
       strategyFamily:d.analysis?.strategyFamily||d.strategyFamily||"NONE"
