@@ -16,5 +16,5 @@ function calibrate(rows=[]){
   const ece=used.reduce((sum,x)=>sum+x.error*(x.n/(rows.length||1)),0);
   return {version:VERSION,reliability,ece};
 }
-function selfTest(){const x=calibrate([{probability:.8,outcome:1},{probability:.8,outcome:0},{probability:.2,outcome:0},{probability:.2,outcome:0}]);return {ok=x.ece>0&&x.reliability[8].n===2,version:VERSION};}
+function selfTest(){const x=calibrate([{probability:.8,outcome:1},{probability:.8,outcome:0},{probability:.2,outcome:0},{probability:.2,outcome:0}]);return {ok:x.ece>0&&x.reliability[8].n===2,version:VERSION};}
 module.exports={VERSION,calibrate,selfTest};
