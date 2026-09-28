@@ -92,11 +92,11 @@ function compare(a,b){
 }
 
 function selfTest(){
-  const a=normalize({symbol:"BTCUSDT",interval:"15m",price:100,decision:{action:"LONG",state:"READY",executable:true,market:{price:100},derivatives:{cvdState:"BUYERS",takerImbalance:.2}}});
-  const b=JSON.parse(JSON.stringify(a));
-  const same=compare(a,b);
-  b.flow.takerImbalance=.1;
-  const changed=compare(a,b);
-  return {ok:same.same&&!changed.same&&changed.mismatches.includes("flow"),version:VERSION,snapshotId:hash(a)};
+  const input={symbol:"BTCUSDT",interval:"15m",price:100,decision:{action:"LONG",state:"READY",executable:true,market:{price:100},derivatives:{cvdState:"BUYERS",takerImbalance:.2}}};
+  const same=compare(input,JSON.parse(JSON.stringify(input)));
+  const changedInput=JSON.parse(JSON.stringify(input));
+  changedInput.decision.derivatives.takerImbalance=.1;
+  const changed=compare(input,changedInput);
+  return {ok:same.same&&!changed.same&&changed.mismatches.includes("flow"),version:VERSION,snapshotId:hash(input)};
 }
 module.exports={VERSION,normalize,hash,compare,selfTest};
