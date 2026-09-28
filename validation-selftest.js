@@ -5,6 +5,7 @@ const {analyze}=require("./market-engine");
 const tradeLevels=require("./trade-levels");
 const decisionIntelligence=require("./decision-intelligence");
 const phase20=require("./phase20-scenario-matrix");
+const phase21=require("./phase21-state-contract");
 
 function syntheticCandles(mode){
   const out=[],start=Date.UTC(2026,8,15,0,0,0),hour=60*60*1000;
@@ -57,6 +58,8 @@ assert(phaseResult.ok,"Phase 11-13 self-test failed");
 const tradeLevelResult=tradeLevels.selfTest();
 assert(decisionIntelligence.selfTest(),"Decision Center strategy-intelligence self-test failed.");
 assert(phase20.selfTest().ok,"Phase 20 scenario-matrix self-test failed.");
+const phase21Result=phase21.selfTest();
+assert(phase21Result.ok,"Phase 21 canonical state self-test failed.");
 assert(tradeLevelResult.ok,"Conservative trade-level self-test failed.");
 assert(tradeLevelResult.long.rr>=1.5&&tradeLevelResult.short.rr>=1.5,"Trade-level builder must enforce minimum 1.5R.");
 assert(tradeLevelResult.long.stop<tradeLevelResult.long.entry&&tradeLevelResult.long.tp1>tradeLevelResult.long.entry,"LONG level geometry is invalid.");
