@@ -205,7 +205,7 @@ button,input,select,textarea{font:inherit}.wrap{width:min(1440px,calc(100% - 26p
 .probabilityBars{display:grid;gap:5px;margin-top:8px}
 .probabilityBarRow{display:grid;grid-template-columns:38px minmax(0,1fr) 34px;gap:6px;align-items:center;font-size:7px;font-weight:900;color:#8395aa}
 .probabilityBarRow>div{height:5px;border-radius:999px;background:rgba(255,255,255,.055);overflow:hidden}
-.probabilityBarRow i{display:block;height:100%;width:0;border-radius:999px;transition:width .18s ease}
+.probabilityBarRow i{display:block;height:100%;width:0;border-radius:999px;transition:none}
 .probabilityBarRow:nth-child(1) i{background:linear-gradient(90deg,#36d886,#77f2b0)}
 .probabilityBarRow:nth-child(2) i{background:linear-gradient(90deg,#ef5d79,#ff9cae)}
 .probabilityBarRow:nth-child(3) i{background:linear-gradient(90deg,#9770d8,#d3a3ff)}
@@ -391,7 +391,7 @@ button,input,select,textarea{font:inherit}.wrap{width:min(1440px,calc(100% - 26p
 .executionActions button:disabled{opacity:.38;cursor:not-allowed;filter:saturate(.5)}
 @media(max-width:700px){.executionSteps{grid-template-columns:1fr 1fr}}
 </style><style id="signal-state-style">
-#callMetric,#callMetric .value,.decisionStateCard,.signalQualityCard{transition:color .25s ease,border-color .25s ease,box-shadow .25s ease,background .25s ease}
+#callMetric,#callMetric .value,.decisionStateCard,.signalQualityCard{transition:none}
 .decisionSection{--signal-accent:#a78bfa;--signal-soft:rgba(167,139,250,.10);--signal-border:rgba(167,139,250,.28)}
 .decisionSection.signal-long{--signal-accent:#4ade80;--signal-soft:rgba(74,222,128,.10);--signal-border:rgba(74,222,128,.30)}
 .decisionSection.signal-short{--signal-accent:#fb7185;--signal-soft:rgba(251,113,133,.10);--signal-border:rgba(251,113,133,.30)}
@@ -456,7 +456,7 @@ body{font-size:14px}
 .signal-short #callMetric .value{color:#f87171!important}
 .signal-wait #callMetric .value{color:#c084fc!important}
 .signal-long #mBias{color:#86efac!important}.signal-short #mBias{color:#fda4af!important}.signal-wait #mBias{color:#d8b4fe!important}
-.decisionSection.signal-long,.decisionSection.signal-short,.decisionSection.signal-wait{transition:border-color .2s,box-shadow .2s}
+.decisionSection.signal-long,.decisionSection.signal-short,.decisionSection.signal-wait{transition:none}
 .decisionSection.signal-long .decisionStateCard,.decisionSection.signal-long .signalQualityCard{border-color:rgba(74,222,128,.38)!important;box-shadow:0 0 0 1px rgba(74,222,128,.08),0 0 26px rgba(74,222,128,.14),inset 0 1px 0 rgba(255,255,255,.04),var(--shadow)!important}
 .decisionSection.signal-short .decisionStateCard,.decisionSection.signal-short .signalQualityCard{border-color:rgba(248,113,113,.38)!important;box-shadow:0 0 0 1px rgba(248,113,113,.08),0 0 26px rgba(248,113,113,.14),inset 0 1px 0 rgba(255,255,255,.04),var(--shadow)!important}
 .decisionSection.signal-wait .decisionStateCard,.decisionSection.signal-wait .signalQualityCard{border-color:rgba(192,132,252,.42)!important;box-shadow:0 0 0 1px rgba(192,132,252,.09),0 0 26px rgba(192,132,252,.16),inset 0 1px 0 rgba(255,255,255,.04),var(--shadow)!important}
@@ -4110,7 +4110,10 @@ function queueLiveUiSync(){
   state.liveUiFrame=requestAnimationFrame(function(){
     state.liveUiFrame=0;
     if(!state.canonicalMarket)return;
+
     var liveDecision=state.finalDecision;
+    var model=null;
+
     if(liveDecision){
       liveDecision.market=Object.assign({},liveDecision.market||{},{
         price:state.canonicalMarket.price,
@@ -4122,10 +4125,19 @@ function queueLiveUiSync(){
         marketSyncTs:state.canonicalMarket.ts
       });
       liveDecision.derivatives=canonicalFlowSnapshot();
+
+      // ONE directional calculation for the whole visible frame.
+      state.liveDirectionalSnapshot={
+        seq:Number(state.canonicalMarket.seq||0),
+        decision:liveDecision,
+        model:stabilizeLiveDirectionalModel(computeLiveDirectionalModel(liveDecision))
+      };
+      model=state.liveDirectionalSnapshot.model;
     }
-    // Only one live DOM pass per animation frame.
+
     renderMarketNoFlow();
-    if(liveDecision)renderLiveDirectionalModel(liveDecision);
+    if(liveDecision)renderLiveDirectionalModel(liveDecision,model);
+    if(model)renderLiveSignalSummary(liveDecision,model);
   });
 }
 
@@ -5118,8 +5130,70 @@ function computeLiveDirectionalModel(d){
     candidate,plan,pm,flowReady,dataFresh,gateState,reasons
   };
 }
-function renderLiveDirectionalModel(d){
-  var p=computeLiveDirectionalModel(d);
+function stabilizeLiveDirectionalModel(raw){
+  raw=raw||{};
+  var rawSide=Number(raw.long)>=Number(raw.short)?"LONG":"SHORT";
+  var previous=state.liveDirectionalSnapshot;
+  var previousSide=previous?.side||null;
+
+  // Hysteresis: do not visually flip the dashboard on a single micro-tick.
+  // The underlying raw probabilities remain available, but the displayed
+  // directional side changes only after two consecutive frames support it,
+  // or when the lead is decisively large.
+  var pendingSide=state.liveDirectionalPendingSide||null;
+  var pendingCount=Number(state.liveDirectionalPendingCount||0);
+
+  if(previousSide&&rawSide!==previousSide){
+    if(pendingSide===rawSide)pendingCount++;
+    else{pendingSide=rawSide;pendingCount=1;}
+
+    var decisive=Math.abs(Number(raw.long)-Number(raw.short))>=18;
+    if(pendingCount<2&&!decisive){
+      rawSide=previousSide;
+    }else{
+      pendingSide=null;pendingCount=0;
+    }
+  }else{
+    pendingSide=null;pendingCount=0;
+  }
+
+  state.liveDirectionalPendingSide=pendingSide;
+  state.liveDirectionalPendingCount=pendingCount;
+
+  var model=Object.assign({},raw,{
+    stableSide:rawSide,
+    dominant:rawSide==="LONG"
+      ?(Number(raw.long)>=60?"LONG LEAN":"LONG SLIGHT EDGE")
+      :(Number(raw.short)>=60?"SHORT LEAN":"SHORT SLIGHT EDGE")
+  });
+
+  // When stabilization holds the side, expose a small stable lead adjustment
+  // so every visible section remains internally consistent.
+  if(rawSide==="LONG"&&Number(model.long)<Number(model.short)){
+    model.long=model.short;
+  }else if(rawSide==="SHORT"&&Number(model.short)<Number(model.long)){
+    model.short=model.long;
+  }
+
+  model.wait=Math.max(0,100-Number(model.long)-Number(model.short));
+  return model;
+}
+
+function getLiveDirectionalSnapshot(d){
+  d=d||state.finalDecision||{};
+  var seq=Number(state.canonicalMarket?.seq||0);
+  if(state.liveDirectionalSnapshot&&
+     state.liveDirectionalSnapshot.seq===seq&&
+     state.liveDirectionalSnapshot.decision===d){
+    return state.liveDirectionalSnapshot.model;
+  }
+  var model=stabilizeLiveDirectionalModel(computeLiveDirectionalModel(d));
+  state.liveDirectionalSnapshot={seq:seq,decision:d,model:model};
+  return model;
+}
+
+function renderLiveDirectionalModel(d,model){
+  var p=model||getLiveDirectionalSnapshot(d);
   var setText=function(id,v){var el=$(id);if(el&&el.textContent!==String(v))el.textContent=String(v)};
   var setBar=function(id,v){var el=$(id),w=String(v)+"%";if(el&&el.style.width!==w)el.style.width=w};
   setText("probLong",p.long+"%");setText("probShort",p.short+"%");setText("probWait",p.wait+"%");
@@ -5178,7 +5252,82 @@ function renderLiveDirectionalModel(d){
   if(!inv)inv=String(p.candidate==="LONG"?"Break the bullish structure / stop zone.":p.candidate==="SHORT"?"Reclaim the bearish trigger / stop zone.":"A fresh directional setup plus final safety checks.");
   setText("livePlanInvalidation",inv);
 }
-async function renderFinalDecision(d){
+async function renderLiveSignalSummary(d,model){
+  if(!d||!model)return;
+  var side=model.stableSide||(
+    Number(model.long)>=Number(model.short)?"LONG":"SHORT"
+  );
+  var confidence=Math.max(Number(model.long)||0,Number(model.short)||0);
+  var accent=side==="LONG"?"#4ade80":"#f87171";
+  var glow=side==="LONG"?"rgba(74,222,128,.18)":"rgba(248,113,133,.18)";
+
+  var call=$("mCall");
+  if(call){
+    var text=side;
+    if(call.textContent!==text)call.textContent=text;
+    if(call.style.color!==accent)call.style.color=accent;
+    var shadow="0 0 20px "+glow;
+    if(call.style.textShadow!==shadow)call.style.textShadow=shadow;
+  }
+
+  var bias=$("mBias");
+  if(bias){
+    var b=side==="LONG"?"Live bullish direction":"Live bearish direction";
+    if(bias.textContent!==b)bias.textContent=b;
+    if(bias.style.color!==accent)bias.style.color=accent;
+  }
+
+  var section=document.querySelector(".decisionSection");
+  if(section){
+    var cls=side==="LONG"?"signal-long":"signal-short";
+    var keep=Array.from(section.classList).filter(function(x){
+      return x!=="signal-long"&&x!=="signal-short"&&x!=="signal-wait";
+    });
+    keep.push(cls);
+    var finalClass=keep.join(" ");
+    if(section.className!==finalClass)section.className=finalClass;
+  }
+
+  var title=$("thesisTitle");
+  if(title){
+    var titleText=side+" DIRECTIONAL LEAN";
+    if(title.textContent!==titleText)title.textContent=titleText;
+  }
+
+  var score=$("thesisScore");
+  if(score){
+    var scoreText=fmt(Number(d.market?.confluenceScore)||0)+"/100";
+    if(score.textContent!==scoreText)score.textContent=scoreText;
+  }
+
+  var stateText=$("thesisState");
+  if(stateText){
+    var gate=String(d.deploymentGate?.state||"PAPER_ONLY");
+    var st=String(d.state||"LIVE");
+    var t=st+" · "+side+" "+confidence+"%";
+    if(stateText.textContent!==t)stateText.textContent=t;
+    stateText.dataset.executionGate=gate;
+  }
+
+  var chip=$("thesisChips");
+  if(chip){
+    var html=[
+      '<span class="chip c">Direction: '+side+" "+confidence+'%</span>',
+      '<span class="chip c">Flow: '+(d.evidence?.flowScore!=null?fmt(d.evidence.flowScore)+"/100":"LIVE")+'</span>',
+      '<span class="chip c">Data: '+(d.data?.score!=null?fmt(d.data.score)+"/100":"LIVE")+'</span>',
+      '<span class="chip c">Execution gate: '+String(d.deploymentGate?.state||"PAPER_ONLY")+'</span>'
+    ].join("");
+    if(chip.innerHTML!==html)chip.innerHTML=html;
+  }
+
+  var meta=$("finalEngineMeta");
+  if(meta){
+    var metaText="LIVE DIRECTION "+side+" "+confidence+"% · execution gate "+String(d.deploymentGate?.state||"PAPER_ONLY");
+    if(meta.textContent!==metaText)meta.textContent=metaText;
+  }
+}
+
+function renderFinalDecision(d){
   if(!d)return;
 
   var m=d.market||{},ev=d.evidence||{},lv=d.levels||{},data=d.data||{},
@@ -5189,31 +5338,20 @@ async function renderFinalDecision(d){
   // the canonical price/flow state. It is intentionally separate from the
   // execution/deployment gate: the UI can show LONG/SHORT directional context
   // even when execution remains blocked.
-  var liveModel=computeLiveDirectionalModel(d);
-  var displaySide=liveModel.long>=liveModel.short?"LONG":"SHORT";
+  var liveModel=getLiveDirectionalSnapshot(d);
+  var displaySide=liveModel.stableSide||(liveModel.long>=liveModel.short?"LONG":"SHORT");
   var displayConfidence=Math.max(Number(liveModel.long)||0,Number(liveModel.short)||0);
   var directionalLabel=displaySide+" "+displayConfidence+"%";
 
   var accent=displaySide==="LONG"?"#4ade80":"#f87171";
   var glow=displaySide==="LONG"?"rgba(74,222,128,.18)":"rgba(248,113,133,.18)";
 
-  // Always update lightweight live values without rebuilding the whole section.
-  $("mCall").textContent=displaySide;
-  $("mCall").style.color=accent;
-  $("mCall").style.textShadow="0 0 20px "+glow;
-  $("mBias").textContent=displaySide==="LONG"?"Live bullish direction":"Live bearish direction";
-  $("mBias").style.color=accent;
+  // Main signal/Decision presentation always comes from the same live snapshot.
+  renderLiveSignalSummary(d,liveModel);
+  renderLiveDirectionalModel(d,liveModel);
   $("mScore").textContent=fmt(m.confluenceScore);
   $("quality").textContent=fmt(m.confluenceScore)+"/100";
   $("quality").style.color=accent;
-
-  var ds=document.querySelector(".decisionSection");
-  if(ds){
-    ds.classList.remove("signal-long","signal-short","signal-wait");
-    ds.classList.add(displaySide==="LONG"?"signal-long":"signal-short");
-  }
-
-  queueLiveUiSync();
 
   // Remove the old full-render trigger based on updatedAt. Only genuinely
   // structural decision changes are allowed to repaint the heavy DOM.
@@ -5240,8 +5378,8 @@ async function renderFinalDecision(d){
   state._lastRenderedFinalStructuralKey=structuralKey;
 
   if(!structuralChanged){
-    // Lightweight live update only — prevents the large panel from flickering
-    // every time the same decision snapshot gets refreshed.
+    // Lightweight live update only — the unified snapshot has already updated
+    // all user-visible directional wording consistently.
     $("mCall").title="Live directional model: "+directionalLabel+" · execution gate: "+String(gate.state||"PAPER_ONLY");
     return;
   }
