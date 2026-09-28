@@ -144,7 +144,8 @@ function evaluate(input={}){
     anomaly:anomalyClear,exchange:exchange.healthy,portfolio:!portfolio.blocked,uncertainty:!uncertainty.uncertain,
     calibrated:calibrated!=null,expectancy:expectancyGate.pass,publicReadiness:freeGate.ready
   }});
-  const publicAllowed=qualification.eligible&&!aged&&Boolean(expectancyGate.pass)&&!uncertainty.uncertain&&!portfolio.blocked&&exchange.healthy&&freeGate.ready;
+  const leverageClear=!leverageResult.blocked;
+  const publicAllowed=qualification.eligible&&!aged&&Boolean(expectancyGate.pass)&&!uncertainty.uncertain&&!portfolio.blocked&&exchange.healthy&&leverageClear&&freeGate.ready;
   const publicAction=publicAllowed?q.dominant:"WAIT";
   const publicBlockers=u.unique([
     ...q.blockers,
@@ -153,6 +154,7 @@ function evaluate(input={}){
     ...(uncertainty.uncertain?uncertainty.reasons:[]),
     ...(portfolio.blocked?["PORTFOLIO_RISK"]:[]),
     ...(exchange.healthy?[]:exchange.blockers),
+    ...(leverageClear?[]:leverageResult.blockers),
     ...(freeGate.ready?[]:freeGate.missing)
   ]);
   const publicGate=p100.evaluate({readiness:publicAllowed,action:publicAction,blockers:publicBlockers,automaticExecutionEnabled:false});
