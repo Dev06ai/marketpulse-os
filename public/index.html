@@ -6551,19 +6551,34 @@ async function apiPost(url,body){
 }
 async function loadAdminPhaseHistory(){
   if(!state.account?.isAdmin)return;
-  var body=$("phaseHistoryBody"),badge=$("phaseHistoryCurrent");
+  var body=$("phaseHistoryBody"),mobile=$("phaseHistoryMobile"),badge=$("phaseHistoryCurrent");
+  function phaseStatus(raw){
+    var s=String(raw||"PLANNED").toUpperCase();
+    if(s==="COMPLETE")return {key:"complete",label:"COMPLETE"};
+    if(s==="IMPLEMENTED_PENDING_VALIDATION")return {key:"implemented",label:"IMPLEMENTED · VALIDATION PENDING"};
+    if(s==="VALIDATED"||s==="VALIDATED_PENDING_READINESS")return {key:"validated",label:"VALIDATED"};
+    if(s==="READY"||s==="READY_PENDING_PROMOTION")return {key:"ready",label:"READY"};
+    return {key:"planned",label:"PLANNED"};
+  }
   try{
     var d=await api("/api/admin/phase-history",8000),rows=Array.isArray(d.phases)?d.phases:[];
     if(badge)badge.textContent="CURRENT PHASE "+String(d.currentPhase||0);
-    if(!body)return;
-    body.innerHTML=rows.map(function(p){
-      var status=String(p.status||"PLANNED").toUpperCase();
-      var cls=status==="COMPLETE"?"healthDot ok":"healthDot";
-      return '<tr><td><b>PHASE '+safeHtmlLocal(p.phase)+'</b></td><td>'+safeHtmlLocal(p.title)+'</td><td>'+safeHtmlLocal(p.description)+'</td><td><span class="'+cls+'"></span>'+safeHtmlLocal(status)+'</td></tr>';
-    }).join("")||'<tr><td colspan="4" class="userMuted">No phase history available.</td></tr>';
+    var html=rows.map(function(p){
+      var st=phaseStatus(p.status);
+      return '<tr><td><b>PHASE '+safeHtmlLocal(p.phase)+'</b></td><td>'+safeHtmlLocal(p.title)+'</td><td>'+safeHtmlLocal(p.description)+'</td><td><span class="evolutionStatus '+st.key+'"><span class="dot"></span>'+safeHtmlLocal(st.label)+'</span></td></tr>';
+    }).join("");
+    if(body)body.innerHTML=html||'<tr><td colspan="4" class="userMuted">No phase history available.</td></tr>';
+    if(mobile){
+      mobile.innerHTML=rows.map(function(p){
+        var st=phaseStatus(p.status);
+        return '<article class="evolutionMobileCard"><div class="evolutionMobileTop"><span class="evolutionPhase">PHASE '+safeHtmlLocal(p.phase)+'</span><span class="evolutionStatus '+st.key+'"><span class="dot"></span>'+safeHtmlLocal(st.label)+'</span></div><div class="evolutionTitle">'+safeHtmlLocal(p.title)+'</div><div class="evolutionDesc">'+safeHtmlLocal(p.description)+'</div></article>';
+      }).join("")||'<div class="evolutionMobileNote">No phase history available.</div>';
+    }
   }catch(e){
     if(badge)badge.textContent="PHASE HISTORY ERROR";
-    if(body)body.innerHTML='<tr><td colspan="4" class="userMuted">'+safeHtmlLocal(e.message||"Could not load phase history.")+'</td></tr>';
+    var msg=safeHtmlLocal(e.message||"Could not load phase history.");
+    if(body)body.innerHTML='<tr><td colspan="4" class="userMuted">'+msg+'</td></tr>';
+    if(mobile)mobile.innerHTML='<div class="evolutionMobileNote">'+msg+'</div>';
   }
 }
 async function loadAdminConsole(){
