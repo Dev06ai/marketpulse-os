@@ -5761,13 +5761,14 @@ function renderFinalDecision(d){
   // authoritative server decision after final confirmation and safety gates.
   var liveModel=getLiveDirectionalSnapshot(d);
   var contextSide=String(liveModel.stableSide||(liveModel.long>=liveModel.short?"LONG":"SHORT")).toUpperCase();
+  var side=d.liveSignalEligible===true&&d.state==="READY"?(String(d.action||"").toUpperCase()):"WAIT";
   var executionReady=Boolean(
     d.liveSignalEligible===true &&
     d.state==="READY" &&
     (String(d.action||"").toUpperCase()==="LONG"||String(d.action||"").toUpperCase()==="SHORT") &&
     String(d.signalStability?.state||"").toUpperCase()==="CONFIRMED"
   );
-  var displaySide=executionReady?String(d.action).toUpperCase():"WAIT";
+  var displaySide=side;
   var displayConfidence=liveDirectionalConfidence(liveModel);
   var directionalLabel=executionReady?(displaySide+" "+displayConfidence+"%"):("WAIT · "+contextSide+" bias "+displayConfidence+"%");
 
