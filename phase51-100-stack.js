@@ -192,7 +192,8 @@ function selfTest(){
     publicReadiness:{data:true,validation:true,calibration:true,risk:true,security:true,observability:true,operations:true},
     expectancy:{winProbability:.72,averageWinR:2,averageLossR:1,costR:.05},
     exchangeHealth:{reliabilityPct:100},
-    portfolio:{positions:[]}
+    portfolio:{positions:[]},
+    leverage:{leverage:2,liquidationDistancePct:10}
   });
   const y=evaluate({dataQualityOk:false,triggerConfirmed:false,mtfAligned:false});
   return {ok:x.signal.action==="LONG"&&x.gate.qualified&&x.signal.automaticExecutionEnabled===false&&y.signal.action==="WAIT",version:VERSION};
