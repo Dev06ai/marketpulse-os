@@ -28,5 +28,5 @@ function run(candles=[],strategy={},opts={}){
   }
   return {version:VERSION,trades,equity,maxDrawdown:maxDd};
 }
-function selfTest(){const c=[{o:100,h:101,l:99,c:100},{o:100,h:105,l:99,c:104},{o:104,h:106,l:103,c:105}];const x=run(c,()=>({side:"LONG",entry:100,stop:98,target:104}),{});return {ok:x.trades.length===1&&x.trades[0].outcome==="TARGET",version:VERSION};}
+function selfTest(){const c=[{o:100,h:101,l:99,c:100},{o:100,h:105,l:99,c:104},{o:104,h:106,l:103,c:105}];const x=run(c,(candle,i)=>i===0?({side:"LONG",entry:100,stop:98,target:104}):null,{});return {ok:x.trades.length===1&&x.trades[0].outcome==="TARGET",version:VERSION};}
 module.exports={VERSION,run,selfTest};
