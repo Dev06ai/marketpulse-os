@@ -141,6 +141,7 @@ function ensureState(raw){
   s.bot.maxPositions=Math.round(clamp(finite(s.bot.maxPositions,1),1,10));
   s.bot.maxDailyTrades=Math.round(clamp(finite(s.bot.maxDailyTrades,4),1,50));
   s.bot.cooldownMs=Math.round(clamp(finite(s.bot.cooldownMs,900000),60000,86400000));
+  const hadLegacyBotThresholds=(!Object.prototype.hasOwnProperty.call(s.bot,"easyMode")||s.bot.easyMode===true)&&Number(s.bot.minScore)===78&&Number(s.bot.minRR)===1.5;
   s.bot.easyMode=s.bot.easyMode!==false;
   s.bot.weekdayOnly=s.bot.weekdayOnly!==false;
   s.bot.autoManage=s.bot.autoManage!==false;
@@ -148,6 +149,11 @@ function ensureState(raw){
   s.bot.minRR=clamp(finite(s.bot.minRR,1.2),1.1,5);
   s.bot.minDataScore=clamp(finite(s.bot.minDataScore,80),70,100);
   s.bot.requireConfirmed=Boolean(s.bot.requireConfirmed);
+  if(hadLegacyBotThresholds&&s.bot.easyMode){
+    s.bot.minScore=72;
+    s.bot.minRR=1.2;
+    s.bot.requireConfirmed=false;
+  }
   s.bot.learning=Object.assign({},d.bot.learning,s.bot.learning||{});
   s.bot.learning.resolved=Math.max(0,Math.round(finite(s.bot.learning.resolved,0)));
   s.bot.learning.wins=Math.max(0,Math.round(finite(s.bot.learning.wins,0)));
