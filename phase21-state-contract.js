@@ -76,8 +76,13 @@ function normalize(input={}){
   return canonical;
 }
 
+function canonicalForHash(state){
+  return state&&state.version===VERSION&&state.flow&&state.market&&state.structure&&state.validation
+    ?state
+    :normalize(state);
+}
 function hash(state){
-  return crypto.createHash("sha256").update(JSON.stringify(normalize(state))).digest("hex").slice(0,24).toUpperCase();
+  return crypto.createHash("sha256").update(JSON.stringify(canonicalForHash(state))).digest("hex").slice(0,24).toUpperCase();
 }
 
 function compare(a,b){
