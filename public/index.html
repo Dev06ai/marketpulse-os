@@ -4357,10 +4357,30 @@ function queueLiveUiSync(){
       model=state.liveDirectionalSnapshot.model;
     }
 
-    // Only mutate live-value nodes; do NOT rebuild dashboard sections.
+    // Only mutate live-value nodes; do NOT rebuild the full dashboard.
     updateLiveFlowCards();
     if(liveDecision)renderLiveDirectionalModel(liveDecision,model);
     if(model)renderLiveSignalSummary(liveDecision,model);
+
+    // Keep the "Why no trade right now" diagnostic tied to the same live
+    // directional snapshot and execution gate. Rebuild it only when a value
+    // that matters to the diagnostic actually changes.
+    if(liveDecision&&typeof renderGateDiagnostics==="function"){
+      var dgKey=[
+        model.stableSide,
+        liveDirectionalConfidence(model),
+        state.liveDirectionalPendingSide||"",
+        Number(state.liveDirectionalPendingCount||0),
+        String(liveDecision.deploymentGate?.state||""),
+        String(liveDecision.state||""),
+        String(liveDecision.stale||false),
+        Number(liveDecision.market?.confluenceScore||0)
+      ].join("|");
+      if(state._lastLiveGateDiagKey!==dgKey){
+        state._lastLiveGateDiagKey=dgKey;
+        renderGateDiagnostics(liveDecision);
+      }
+    }
   });
 }
 
