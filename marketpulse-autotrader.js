@@ -9,7 +9,7 @@ const autotrader=require("./autotrader");
 const PORT=Number(process.env.PORT||3000);
 const BASE_URL=String(process.env.MARKETPULSE_WEB_URL||"https://marketpulse-os-d4p9.onrender.com").replace(/\/$/,"");
 const TOKEN=String(process.env.MARKETPULSE_AUTOTRADER_TOKEN||"");
-const INTERVAL_MS=Math.max(15000,Number(process.env.MARKETPULSE_AUTOTRADER_INTERVAL_MS||30000));
+const INTERVAL_MS=Math.max(30000,Number(process.env.MARKETPULSE_AUTOTRADER_INTERVAL_MS||30000));
 const STRESS_HALT_ERROR_PCT=Math.max(1,Number(process.env.MARKETPULSE_AUTOTRADER_STRESS_ERROR_PCT||5));
 const STRESS_HALT_LATENCY_MS=Math.max(1000,Number(process.env.MARKETPULSE_AUTOTRADER_STRESS_HALT_LATENCY_MS||3500));
 const BOT_INTERVALS={SCALP:"15m",INTRADAY:"1h",SWING:"4h",POSITION:"1d"};
@@ -37,11 +37,11 @@ async function cycle(){
   if(state.running)return;
   state.running=true;state.checks++;state.lastRunAt=Date.now();
   try{
-    const bot=await fetchJson("/api/watchdog/internal?action=autotrader-status",{timeout:8000});
+    const bot=await fetchJson("/api/watchdog/internal?action=autotrader-status",{timeout:15000});
     const cfg=autotrader.normalizeConfig(bot?.bot||{});
     if(!cfg.enabled||cfg.mode==="OFF"){record({ok:true,traded:false,reason:"disabled"});return}
-    const telemetry=await fetchJson("/api/watchdog/internal?action=status",{timeout:8000}).catch(()=>null);
-    if(loadStressed(telemetry?.metrics)){state.deferred++;record({ok:true,traded:false,reason:"load_stressed"});return}
+    const telemetry=await fetchJson("/health",{timeout:5000}).catch(()=>null);
+    if(telemetry?.ok===false){state.deferred++;record({ok:true,traded:false,reason:"main_health_blocked"});return}
     const due=Object.keys(BOT_INTERVALS).filter(k=>cfg.strategies?.[k]&&probeDue(k));
     if(!due.length){record({ok:true,traded:false,reason:"not_due"});return}
     const strategy=due.sort((a,b)=>Number(state.lastProbeAt[a]||0)-Number(state.lastProbeAt[b]||0))[0];
