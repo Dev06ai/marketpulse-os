@@ -937,7 +937,15 @@ const LIVE_FLOW=new Map();
 const LIVE_FLOW_LIMIT=900;
 const LIVE_SYMBOLS=SYMBOLS.filter(s=>["BTCUSDT","ETHUSDT","SOLUSDT","BNBUSDT","XRPUSDT","DOGEUSDT","ADAUSDT"].includes(s));
 function flowBucket(symbol){
-  let v=LIVE_FLOW.get(symbol);if(!v){v={liqLong:0,liqShort:0,cvd:0,cvdNotional:0,lastTs:0,lastPrice:null,price24hPcnt:null,oi:null,fundingRate:null,markPrice:null,orderBook:null,points:[]};LIVE_FLOW.set(symbol,v)}
+  let v=LIVE_FLOW.get(symbol);
+  if(!v){
+    v={
+      liqLong:0,liqShort:0,cvd:0,cvdNotional:0,lastTs:0,lastPrice:null,
+      price24hPcnt:null,oi:null,fundingRate:null,markPrice:null,orderBook:null,
+      points:[],liveSeq:0,wsConnected:false
+    };
+    LIVE_FLOW.set(symbol,v)
+  }
   return v;
 }
 function recordFlowPoint(symbol){
@@ -1014,6 +1022,8 @@ function startBybitLiveFlow(){
           };
           v.lastTs=Number(msg.ts)||Date.now();
         }
+        v.liveSeq = Number(v.liveSeq||0)+1;
+        v.lastEventAt = Date.now();
         recordFlowPoint(symbol);
       }catch{}
     });
@@ -1028,6 +1038,53 @@ function startBybitLiveFlow(){
   process.on("SIGTERM",()=>{stopped=true;clearTimeout(timer);clearInterval(heartbeat);try{ws?.close()}catch{}});
 }
 startBybitLiveFlow();
+
+function liveSyncSnapshot(symbol){
+  const v=flowBucket(symbol), now=Date.now();
+  const price=Number.isFinite(Number(v.markPrice))?Number(v.markPrice):
+    (Number.isFinite(Number(v.lastPrice))?Number(v.lastPrice):null);
+  const dataTs=Number.isFinite(Number(v.lastTs))&&Number(v.lastTs)>0?Number(v.lastTs):null;
+  const dataAgeMs=dataTs!==null?Math.max(0,now-dataTs):null;
+  const cvdRatio=Number.isFinite(Number(v.cvdRatio))
+    ?Number(v.cvdRatio)
+    :(Number(v.cvdNotional)>0?Number(v.cvd)/Number(v.cvdNotional):null);
+  const cvdState=Number.isFinite(cvdRatio)
+    ?(cvdRatio>0.01?"BUYERS PRESSURE":cvdRatio<-0.01?"SELLERS PRESSURE":"BALANCED")
+    :"WAITING";
+  const liqLong=Number(v.liqLong)||0, liqShort=Number(v.liqShort)||0, liqTotal=liqLong+liqShort;
+  const liquidationBias=liqTotal>0
+    ?(liqLong>liqShort?"LONG LIQS DOMINANT":liqShort>liqLong?"SHORT LIQS DOMINANT":"LIQUIDATION ACTIVITY")
+    :"NO LIQUIDATION ACTIVITY";
+  return {
+    ok:true,
+    symbol,
+    source:"SERVER_BYBIT_CANONICAL",
+    seq:Number(v.liveSeq||0),
+    liveConnected:Boolean(v.wsConnected),
+    updatedAt:now,
+    dataTs,
+    dataAgeMs,
+    price,
+    lastPrice:Number.isFinite(Number(v.lastPrice))?Number(v.lastPrice):null,
+    markPrice:Number.isFinite(Number(v.markPrice))?Number(v.markPrice):null,
+    change24h:Number.isFinite(Number(v.price24hPcnt))?Number(v.price24hPcnt):null,
+    oi:Number.isFinite(Number(v.oi))?Number(v.oi):null,
+    fundingRate:Number.isFinite(Number(v.fundingRate))?Number(v.fundingRate):null,
+    cvd:Number.isFinite(Number(v.cvd))?Number(v.cvd):null,
+    cvdDelta:Number.isFinite(Number(v.cvd))?Number(v.cvd):null,
+    cvdRatio,
+    cvdState,
+    longLiquidations:liqLong,
+    shortLiquidations:liqShort,
+    liquidationTotal:liqTotal,
+    liquidationBias,
+    orderBook:v.orderBook||null,
+    takerImbalance:Number.isFinite(cvdRatio)?cvdRatio:null,
+    positioning:Number.isFinite(Number(v.oi))?"OI LIVE":"WAITING",
+    livePointCount:Array.isArray(v.points)?v.points.length:0,
+    liveHistory:Array.isArray(v.points)?v.points.slice(-180):[]
+  };
+}
 
 const DERIV_CACHE=new Map(); const DERIV_INFLIGHT=new Map(); const DERIV_TTL=15000;
 const KRAKEN_FUTURES_PAIRS={BTCUSDT:"PF_XBTUSD",ETHUSDT:"PF_ETHUSD",SOLUSDT:"PF_SOLUSD",BNBUSDT:"PF_BNBUSD",XRPUSDT:"PF_XRPUSD",DOGEUSDT:"PF_DOGEUSD",ADAUSDT:"PF_ADAUSD"};
@@ -2149,6 +2206,12 @@ const server=http.createServer(async(req,res)=>{
       }
     }
     
+    if(req.method==='GET'&&u.pathname==='/api/live-sync'){
+      const symbol=(u.searchParams.get('symbol')||'BTCUSDT').toUpperCase();
+      if(!SYMBOLS.includes(symbol))return send(res,400,{ok:false,error:'Unsupported symbol'});
+      return send(res,200,liveSyncSnapshot(symbol),{"cache-control":"no-store, max-age=0"});
+    }
+
     if(req.method==='GET'&&u.pathname==='/api/fast-ticker'){
       const symbol=(u.searchParams.get('symbol')||'BTCUSDT').toUpperCase();
       if(!SYMBOLS.includes(symbol))return send(res,400,{ok:false,error:'Unsupported symbol'});
