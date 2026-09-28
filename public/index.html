@@ -5096,10 +5096,20 @@ function addGateDiag(rows,name,state,detail,hint){
 function buildGateDiagnostics(d){
   var m=d.market||{},ev=d.evidence||{},data=d.data||{},pg=d.propGate||{},v=d.phase11_13||{},gate=d.deploymentGate||{},st=d.signalStability||{},p14=d.phase14||{};
   var rows=[],side=String(d.action||m.side||"WAIT").toUpperCase(),policy=v.adaptive||{},summary=v.summary||{},intel=p14.intelligence||{},adaptive=p14.adaptive||{};
+  var liveModel=state.liveDirectionalSnapshot?.model||getLiveDirectionalSnapshot(d);
+  var liveSide=String(liveModel?.stableSide||side||"WAIT").toUpperCase();
+  var liveConfidence=liveDirectionalConfidence(liveModel);
+  var pendingSide=String(state.liveDirectionalPendingSide||"").toUpperCase();
+  var pendingCount=Number(state.liveDirectionalPendingCount||0);
   var readySide=["LONG","SHORT"].includes(side)&&d.state==="READY";
-  addGateDiag(rows,"Directional setup",readySide?"PASS":"WAIT",
-    readySide?side+" setup is currently directional and READY.":"No final directional setup is currently released.",
-    readySide?"The system can still block later on risk, validation or stability gates.":"A large price move alone does not satisfy the directional setup requirement.");
+  addGateDiag(rows,"Live directional context",(liveSide==="LONG"||liveSide==="SHORT")?"PASS":"INFO",
+    (liveSide==="LONG"||liveSide==="SHORT")?liveSide+" "+liveConfidence+"% · synchronized to Decision Center":"WAIT",
+    pendingSide&&pendingSide!==liveSide
+      ?("Watching "+pendingSide+" · "+pendingCount+"/8 confirmations before the displayed direction can flip.")
+      :"This is the same stabilized live direction shown above.");
+  addGateDiag(rows,"Final directional release",readySide?"PASS":"WAIT",
+    readySide?side+" server decision is READY.":"Final server-gated direction is not released.",
+    readySide?"Execution can still be blocked by validation, risk or deployment gates.":"Directional context can still be visible while the final safety gates remain unreleased.");
   var propReasons=Array.isArray(pg.reasons)?pg.reasons:[];
   var propWarnings=Array.isArray(pg.warnings)?pg.warnings:[];
   var propState=pg.decision==="BLOCKED"?"BLOCK":(pg.decision==="ELIGIBLE_WITH_WARNINGS"?"PASS":pg.decision==="DISABLED"?"INFO":"PASS");
@@ -5120,18 +5130,20 @@ function buildGateDiagnostics(d){
     summary.sufficient?(trades+" resolved setups · evidence sufficient"):(trades+" resolved setups · collecting"),
     evidencePass?"Walk-forward evidence currently satisfies the deployment policy.":"Current sample is below the configured evidence requirement; more resolved final-gated outcomes are needed.");
   var currentScore=Number(m.confluenceScore||0),minScore=Number(policy.minScore||pg.config?.minSignalScore||78);
-  addGateDiag(rows,"Confluence threshold",currentScore>=minScore?"PASS":"WAIT",
+  addGateDiag(rows,"Final confluence threshold",currentScore>=minScore?"PASS":"WAIT",
     fmt(currentScore)+"/100 vs "+fmt(minScore)+" required",
-    currentScore>=minScore?"Current score clears the adaptive minimum.":"Score must reach the current adaptive minimum without a conflicting hard gate.");
+    currentScore>=minScore
+      ?"Server confluence clears the adaptive minimum; the Decision Center percentage above is the live directional model."
+      :"Server confluence must reach the current adaptive minimum before final release.");
   var fresh=d.stale!==true;
   addGateDiag(rows,"Decision freshness",fresh?"PASS":"BLOCK",fresh?"Fresh decision":"Stale decision",
     fresh?"The latest decision was built from fresh data.":"A stale decision is intentionally suppressed until a fresh refresh succeeds.");
-  var stable=st.state==="CONFIRMED"||st.state==="HOLDING";
-  var confirms=Number(st.confirmations||0),required=Number(st.required||2);
-  var stabilityState=stable?(st.state==="CONFIRMED"?"PASS":"WAIT"):(st.state==="CONFIRMING"?"WAIT":"INFO");
-  addGateDiag(rows,"Signal stability",stabilityState,
-    st.state==="CONFIRMING"?(confirms+"/"+required+" confirmations"):st.state||"NONE",
-    st.state==="CONFIRMED"?"Confirmation requirement is satisfied.":st.state==="CONFIRMING"?"The directional candidate must persist across another live refresh.":"No active stability confirmation is currently being held.");
+  var stabilityState=pendingSide&&pendingSide!==liveSide?(pendingCount>=8?"PASS":"WAIT"):"PASS";
+  addGateDiag(rows,"Live direction stability",stabilityState,
+    pendingSide&&pendingSide!==liveSide?(pendingSide+" pending · "+pendingCount+"/8"):(liveSide+" held"),
+    pendingSide&&pendingSide!==liveSide
+      ?"The counter-direction must persist before the Decision Center changes direction."
+      :"The displayed direction is held against micro-flips.");
   var p14State=intel.status==="ALIGNED"?"PASS":(intel.status==="CAUTION"?"WAIT":"INFO");
   var conflicts=Number(intel.conflictCount||0),coverage=Number(intel.domainCoveragePct);
   var missingDomains=Array.isArray(intel.missingDomains)?intel.missingDomains:[];
@@ -5360,49 +5372,48 @@ function stabilizeLiveDirectionalModel(raw){
   raw=raw||{};
   var rawSide=Number(raw.long)>=Number(raw.short)?"LONG":"SHORT";
   var previous=state.liveDirectionalSnapshot;
-  // The snapshot stores the model under .model. Reading .side here was a
-  // stale reference and meant the intended hysteresis was never actually
-  // applied.
-  var previousSide=previous?.model?.stableSide||previous?.side||null;
-
-  // Hysteresis: do not visually flip the dashboard on a single micro-tick.
-  // The underlying raw probabilities remain available, but the displayed
-  // directional side changes only after two consecutive frames support it,
-  // or when the lead is decisively large.
-  var pendingSide=state.liveDirectionalPendingSide||null;
+  var previousSide=String(previous?.model?.stableSide||previous?.side||"").toUpperCase()||null;
+  var now=Date.now();
+  var pendingSide=String(state.liveDirectionalPendingSide||"").toUpperCase()||null;
   var pendingCount=Number(state.liveDirectionalPendingCount||0);
+  var stableSince=Number(state.liveDirectionalStableSince||0);
 
-  if(previousSide&&rawSide!==previousSide){
+  if(!previousSide){
+    previousSide=rawSide;
+    stableSince=now;
+    pendingSide=null;
+    pendingCount=0;
+  }else if(rawSide!==previousSide){
     if(pendingSide===rawSide)pendingCount++;
     else{pendingSide=rawSide;pendingCount=1;}
 
-    var decisive=Math.abs(Number(raw.long)-Number(raw.short))>=18;
-    if(pendingCount<2&&!decisive){
-      rawSide=previousSide;
-    }else{
-      pendingSide=null;pendingCount=0;
+    var lead=Math.abs(Number(raw.long)-Number(raw.short));
+    var dwellElapsed=stableSince>0?now-stableSince:0;
+    var decisive=lead>=26;
+    var confirmationReady=pendingCount>=8&&dwellElapsed>=5000;
+
+    if(decisive||confirmationReady){
+      previousSide=rawSide;
+      stableSince=now;
+      pendingSide=null;
+      pendingCount=0;
     }
   }else{
-    pendingSide=null;pendingCount=0;
+    pendingSide=null;
+    pendingCount=0;
   }
 
   state.liveDirectionalPendingSide=pendingSide;
   state.liveDirectionalPendingCount=pendingCount;
+  state.liveDirectionalStableSince=stableSince;
 
-  var model=Object.assign({},raw,{
-    stableSide:rawSide
-  });
-
-  // Keep the raw probabilities intact. The stabilized side is a presentation
-  // guard against micro-flips; changing the probabilities to force the side
-  // to "win" creates impossible/tied values and can make the signal percentage
-  // disagree with the probability bars.
-  var stableConfidence=rawSide==="LONG"?Number(model.long):Number(model.short);
-  model.dominant=rawSide==="LONG"
+  var model=Object.assign({},raw,{stableSide:previousSide});
+  var stableConfidence=previousSide==="LONG"?Number(model.long):Number(model.short);
+  model.dominant=previousSide==="LONG"
     ?(stableConfidence>=60?"LONG LEAN":"LONG SLIGHT EDGE")
     :(stableConfidence>=60?"SHORT LEAN":"SHORT SLIGHT EDGE");
-
   model.wait=Math.max(0,100-Number(model.long)-Number(model.short));
+  model.stability={side:previousSide,pendingSide,pendingCount,required:8,dwellMs:stableSince?Math.max(0,now-stableSince):0};
   return model;
 }
 
@@ -5444,13 +5455,20 @@ function getConditionalTradeLevels(d,p){
   var conditional=usable(d.conditionalLevels)?d.conditionalLevels:null;
   var evidence=usable(d.candidateEvidence?.levels)?d.candidateEvidence.levels:null;
   var analysis=usable(d.analysis)?d.analysis:null;
-  var existing=direct||conditional||evidence||analysis;
+  // Existing levels are used only when they belong to the same stabilized side.
+  // Otherwise regenerate the conditional map for the displayed direction.
+  var existing=null;
 
   // Deterministic client-side fallback mirrors the market-engine's published
   // level construction when the API response has a directional setup but its
   // level object was stripped or only partially populated by the backend.
   var side=String(p.stableSide||p.candidate||d.rawAction||d.analysis?.side||d.market?.side||"WAIT").toUpperCase();
   if(side!=="LONG"&&side!=="SHORT")return {};
+  var sources=[direct,conditional,evidence,analysis].filter(Boolean);
+  existing=sources.find(function(x){
+    var sx=String(x?.side||"").toUpperCase();
+    return !sx||sx===side;
+  })||null;
   var price=validLevel(p.livePrice)||validLevel(d.analysis?.price)||validLevel(d.market?.price);
   if(price===null)return {};
 
