@@ -108,6 +108,7 @@ function buildExecutionSignal(decision,meta={}){
     target:levels.tp1,
     tp2:levels.tp2,
     rr:check.rr,
+    riskPct:Number(meta.config?.riskByStrategy?.[check.strategy]||STRATEGIES[check.strategy].riskPct),
     type:d.market?.type||"AUTOTRADER",
     regime:d.market?.regime||"UNKNOWN",
     tradeStyle:d.tradeStyle||check.strategy,
