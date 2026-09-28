@@ -4097,8 +4097,11 @@ function canonicalFlowSnapshot(){
   if(Number.isFinite(Number(live.takerImbalance)))out.takerImbalance=Number(live.takerImbalance);
   out.marketSyncTs=Number(state.canonicalMarket?.ts||0)||null;
   out.marketSyncSeq=Number(state.canonicalMarket?.seq||0)||0;
-  out.liveConnected=Boolean(state.liveChartStream?.connected);
-  out.syncSource="BYBIT_LIVE_CANONICAL";
+  out.liveConnected=Boolean(live.liveConnected||state.liveChartStream?.connected);
+  out.syncSource=String(live.syncSource||"SERVER_BYBIT_CANONICAL");
+  out.serverSeq=Number(live.serverSeq||0)||0;
+  out.serverDataTs=Number(live.serverDataTs||0)||null;
+  out.serverDataAgeMs=Number(live.serverDataAgeMs||0)||null;
   return out;
 }
 function syncCanonicalMarketState(patch){
@@ -4127,7 +4130,7 @@ function syncCanonicalMarketState(patch){
     }),
     flow:Object.assign({},previous.flow||{},patch.flow||{}),
     source:patch.source||previous.source||"BYBIT_LIVE",
-    freshnessMs:0
+    freshnessMs:Math.max(0,Date.now()-ts)
   };
 
   // Canonical price is authoritative for every selected-asset view.
@@ -4199,6 +4202,74 @@ function syncCanonicalMarketState(patch){
   state.canonicalLastRenderTs=Date.now();
   return state.canonicalMarket;
 }
+function runCanonicalSyncPulse(reason){
+  if(document.visibilityState!=="visible"||!state.canonicalMarket)return null;
+  var now=Date.now(),cm=state.canonicalMarket;
+  var dataTs=Number(cm.ts||0)||null;
+  var age=dataTs!==null?Math.max(0,now-dataTs):null;
+  var flow=canonicalFlowSnapshot();
+
+  // One live frame feeds the chart, flow cards, Decision Center and the
+  // live fields of Signal Center. Deep gated signal generation stays server-side.
+  state.liveSyncFrame={
+    seq:Number(cm.seq||0),
+    symbol:state.symbol,
+    interval:state.interval,
+    price:Number(cm.price),
+    dataTs,
+    syncTs:now,
+    dataAgeMs:age,
+    source:cm.source||"SERVER_BYBIT_CANONICAL",
+    flow
+  };
+  state.canonicalMarket.syncTs=now;
+  state.canonicalMarket.dataAgeMs=age;
+  state.canonicalMarket.freshnessMs=age;
+
+  state.market=state.market||{};
+  state.market.analysis=Object.assign({},state.market.analysis||{},{
+    price:Number(cm.price),
+    marketSyncTs:dataTs,
+    liveSyncTs:now,
+    liveDataAgeMs:age
+  });
+  state.market.derivatives=flow;
+
+  if(state.finalDecision){
+    state.finalDecision.market=Object.assign({},state.finalDecision.market||{},{
+      price:Number(cm.price),
+      livePrice:Number(cm.price),
+      marketSyncTs:dataTs,
+      liveSyncTs:now,
+      liveDataAgeMs:age
+    });
+    state.finalDecision.analysis=Object.assign({},state.finalDecision.analysis||{},{
+      price:Number(cm.price),
+      marketSyncTs:dataTs,
+      liveSyncTs:now,
+      liveDataAgeMs:age
+    });
+    state.finalDecision.derivatives=flow;
+    state.finalDecision.livePrice=Number(cm.price);
+    state.finalDecision.livePriceTs=dataTs;
+    state.finalDecision.marketSyncTs=dataTs;
+  }
+
+  renderMarketNoFlow();
+  renderFlowView(flow);
+  if(state.finalDecision)renderLiveDirectionalModel(state.finalDecision);
+  if(typeof drawFlowData==="function")drawFlowData(flow);
+  if(typeof queueChartDraw==="function")queueChartDraw();
+
+  var ageText=age==null?"WAITING":(age<1000?"<1s":Math.floor(age/1000)+"s");
+  var ds=$("dataState");
+  if(ds)ds.textContent="Live · synchronized · data "+ageText;
+  var syncEl=$("liveDecisionStatus");
+  if(syncEl&&state.finalDecision)syncEl.title="Canonical live frame "+String(Number(cm.seq||0))+" · "+ageText+" old · "+String(reason||"sync");
+  state.canonicalLastRenderTs=now;
+  return state.liveSyncFrame;
+}
+
 function reconcileServerMarketSnapshot(payload){
   if(!payload||payload.symbol!==state.symbol)return;
   var serverPrice=Number(payload.analysis?.price??payload.candles?.[payload.candles.length-1]?.c);
@@ -4428,15 +4499,38 @@ function startLiveChartStream(symbol){
 }
 async function loadFastTicker(){
   var symbol=state.symbol;
-  var stream=state.liveChartStream;
-  if(stream&&stream.symbol===symbol&&stream.connected&&Number.isFinite(Number(stream.lastTickAt))&&Date.now()-Number(stream.lastTickAt)<3000)return;
   try{
-    var d=await api("/api/fast-ticker?symbol="+encodeURIComponent(symbol),5000);
+    // The browser consumes the same server-side Bybit stream that powers the
+    // decision engine. This removes the old dual-feed race between browser
+    // websocket data and the server decision snapshot.
+    var d=await api("/api/live-sync?symbol="+encodeURIComponent(symbol),3500);
     if(symbol!==state.symbol)return;
-    if(Number.isFinite(Number(d.price))){
-      updateLiveChartPrice(Number(d.price),Date.now(),symbol,Number.isFinite(Number(d.change24h))?Number(d.change24h):null);
+    var price=Number(d.price??d.markPrice??d.lastPrice);
+    var dataTs=Number(d.dataTs);
+    var change24h=Number(d.change24h);
+    var flow=d&&typeof d==="object"?d:{};
+
+    if(Number.isFinite(price)){
+      state.liveFlow=mergeFlowClient(flow,canonicalFlowSnapshot());
+      state.liveFlow.serverSeq=Number(d.seq||0);
+      state.liveFlow.serverDataTs=Number.isFinite(dataTs)?dataTs:null;
+      state.liveFlow.serverDataAgeMs=Number.isFinite(Number(d.dataAgeMs))?Number(d.dataAgeMs):null;
+      updateLiveChartPrice(
+        price,
+        Number.isFinite(dataTs)&&dataTs>0?dataTs:Date.now(),
+        symbol,
+        Number.isFinite(change24h)?change24h:null
+      );
+      syncCanonicalMarketState({
+        price,
+        ts:Number.isFinite(dataTs)&&dataTs>0?dataTs:Date.now(),
+        change24h:Number.isFinite(change24h)?change24h:null,
+        flow:state.liveFlow,
+        source:"SERVER_BYBIT_CANONICAL"
+      });
+      runCanonicalSyncPulse("server-live-sync");
       if(!state.market){
-        $("mChange").textContent="LIVE · "+String(d.source||"market feed");
+        $("mChange").textContent="LIVE · SERVER CANONICAL";
         $("mRegime").textContent="CONNECTING";
         $("mCall").textContent="WAIT";
         $("mBias").textContent="Waiting for full market context";
@@ -4444,9 +4538,28 @@ async function loadFastTicker(){
         $("mMom").textContent="—";
         $("mStructure").textContent="—";
       }
+      return;
     }
   }catch{}
-  startLiveChartStream(symbol);
+
+  // During a transient sync outage, keep rendering the last canonical frame.
+  // We deliberately do not reconnect a second external data feed here.
+  if(state.canonicalMarket){
+    runCanonicalSyncPulse("server-live-sync-fallback");
+  }else{
+    try{
+      var fallback=await api("/api/fast-ticker?symbol="+encodeURIComponent(symbol),2500);
+      if(symbol!==state.symbol)return;
+      if(Number.isFinite(Number(fallback.price))){
+        syncCanonicalMarketState({
+          price:Number(fallback.price),
+          ts:Date.now(),
+          change24h:Number.isFinite(Number(fallback.change24h))?Number(fallback.change24h):null,
+          source:"SERVER_TICKER_FALLBACK"
+        });
+      }
+    }catch{}
+  }
   scheduleLiveDecisionRender();
 }
 async function loadCoreEnrichment(){
@@ -5205,7 +5318,7 @@ $("refresh").addEventListener("click",loadCore);
 })();
 $("dcfRefresh").addEventListener("click",loadDataFabric);
 $("symbol").addEventListener("change",function(){stopLiveChartStream();state.symbol=this.value;state.chartPinned=false;state.chartSymbol=state.symbol;state.chartCandles=[];loadFastTicker();loadCore()});
-$("interval").addEventListener("change",function(){state.interval=this.value;state.chartInterval=this.value;startLiveChartStream(state.symbol);loadCore()});
+$("interval").addEventListener("change",function(){state.interval=this.value;state.chartInterval=this.value;loadFastTicker();loadCore()});
 function deviceId(){
   var k="mp-device-id",id=localStorage.getItem(k);
   var valid=/^[a-f0-9-]{16,128}$/i.test(String(id||""));
@@ -5765,22 +5878,21 @@ window.addEventListener("pageshow",function(e){
 document.addEventListener("visibilitychange",function(){
   if(document.visibilityState==="visible"&&!state.market)scheduleInitialBoot(0);
 });
+// Canonical market synchronization heartbeat: one fresh server snapshot every second.
+// All live surfaces render from the same canonical frame between deep decision refreshes.
 setInterval(function(){
-  if(document.visibilityState==="visible"){
-    // WebSocket supplies the live price/candle. The API is only a fallback if
-    // the stream is disconnected or stale.
-    loadFastTicker();
-    if(!state.market&&!state.busy&&!initialBootTimer)scheduleInitialBoot(0);
-  }
+  if(document.visibilityState!=="visible")return;
+  loadFastTicker();
+  runCanonicalSyncPulse("one-second-heartbeat");
+  if(!state.market&&!state.busy&&!initialBootTimer)scheduleInitialBoot(0);
 },1000);
 
-// Main live price-action cycle: refresh the visible market structure/chart snapshot every 12 seconds.
-// The busy guard prevents overlapping requests; the decision engine is refreshed by loadCore's
-// normal background sequence so expensive validation work remains cached.
+// Deep market / gated-signal refresh stays guarded so expensive multi-provider analysis
+// does not race the one-second live UI heartbeat.
 setInterval(function(){
   if(document.visibilityState!=="visible")return;
   if(state.activeView==="overview"&&!state.busy)loadCore();
-},12000);
+},5000);
 
 setInterval(function(){if(document.visibilityState!=="visible")return; if((state.activeView==="overview"||state.activeView==="flow")&&!state.flowBusy)loadFlow(true); if(state.activeView==="scanner"&&(!state.scan||!state.scan.length))loadScan(true); if(state.activeView==="trade-radar")loadTradeRadar(); if(state.activeView==="autotrader"){loadAutoTrader();loadBotTradeHistory()} if(state.activeView==="execution")loadExecution(); if(state.activeView==="portfolio")loadPortfolio(); if(state.activeView==="edge")loadEdge(); if(state.activeView==="brain"){loadPhase7();loadPhase7Health()}},15000);
 
