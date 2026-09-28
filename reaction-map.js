@@ -285,7 +285,16 @@ function reactionForZone(c,zone,atrNow,ctx={}){
   const near=distance<=Math.max(atrNow*.9,Math.abs(x.c)*.006);
   if(state==="WATCH_ZONE"&&!near)confidence=Math.max(0,confidence-18);
 
-  const invalidation=zone.side==="SUPPORT"?zone.low-atrNow*.22:zone.high+atrNow*.22;
+  // Numeric invalidation is determined by the *scenario direction*, not merely
+  // by whether the underlying zone is support/resistance.
+  // LONG scenarios need invalidation below the zone; SHORT scenarios need it above.
+  const invalidation=action==="LONG"
+    ?zone.low-atrNow*.22
+    :action==="SHORT"
+      ?zone.high+atrNow*.22
+      :zone.side==="SUPPORT"
+        ?zone.low-atrNow*.22
+        :zone.high+atrNow*.22;
   const analystPrimary=zone.analyst?.primaryAction||"WAIT";
   const analystMatch=action!=="WAIT"&&analystPrimary===action;
   return {
