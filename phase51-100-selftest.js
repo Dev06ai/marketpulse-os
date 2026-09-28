@@ -184,7 +184,8 @@ const noData=stack.evaluate({...base,phaseStack:{data:{quality:{liveEligible:fal
 assert(noData.signal.action==="WAIT","bad data must force WAIT");
 
 const noLeverage=stack.evaluate({...base,leverage:{}});
-assert(noLeverage.signal.action==="WAIT"&&noLeverage.gate.qualified===false,"undefined leverage safety must block public signal");
+assert(noLeverage.signal.action==="LONG"&&noLeverage.gate.qualified===true,"missing leverage context must not invalidate a market signal");
+assert(noLeverage.diagnostics.leverage.contextComplete===false&&noLeverage.diagnostics.leverage.warnings.includes("LEVERAGE_CONTEXT_MISSING"),"missing leverage context must be surfaced as a safety warning");
 
 const mtfConflict=stack.evaluate({...base,mtf:{higher:"LONG",execution:"SHORT",lower:"LONG"},mtfAligned:false});
 assert(mtfConflict.signal.action==="WAIT","multi-timeframe conflict must force WAIT");
