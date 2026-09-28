@@ -937,14 +937,14 @@ const LIVE_FLOW=new Map();
 const LIVE_FLOW_LIMIT=900;
 const LIVE_SYMBOLS=SYMBOLS.filter(s=>["BTCUSDT","ETHUSDT","SOLUSDT","BNBUSDT","XRPUSDT","DOGEUSDT","ADAUSDT"].includes(s));
 function flowBucket(symbol){
-  let v=LIVE_FLOW.get(symbol);if(!v){v={liqLong:0,liqShort:0,cvd:0,cvdNotional:0,lastTs:0,oi:null,fundingRate:null,markPrice:null,orderBook:null,points:[]};LIVE_FLOW.set(symbol,v)}
+  let v=LIVE_FLOW.get(symbol);if(!v){v={liqLong:0,liqShort:0,cvd:0,cvdNotional:0,lastTs:0,lastPrice:null,price24hPcnt:null,oi:null,fundingRate:null,markPrice:null,orderBook:null,points:[]};LIVE_FLOW.set(symbol,v)}
   return v;
 }
 function recordFlowPoint(symbol){
   const v=flowBucket(symbol),now=Date.now();
   if(v.lastPointAt&&now-v.lastPointAt<1500)return;
   v.lastPointAt=now;
-  v.points.push({ts:now,liqLong:v.liqLong,liqShort:v.liqShort,liqTotal:v.liqLong+v.liqShort,cvd:v.cvd,cvdRatio:v.cvdNotional?v.cvd/v.cvdNotional:null,oi:v.oi,fundingRate:v.fundingRate,markPrice:v.markPrice,orderBook:v.orderBook});
+  v.points.push({ts:now,liqLong:v.liqLong,liqShort:v.liqShort,liqTotal:v.liqLong+v.liqShort,cvd:v.cvd,cvdRatio:v.cvdNotional?v.cvd/v.cvdNotional:null,oi:v.oi,fundingRate:v.fundingRate,markPrice:v.markPrice,lastPrice:v.lastPrice,price24hPcnt:v.price24hPcnt,orderBook:v.orderBook});
   if(v.points.length>LIVE_FLOW_LIMIT)v.points.shift();
 }
 function startBybitLiveFlow(){
@@ -991,6 +991,8 @@ function startBybitLiveFlow(){
           }
         }else if(topic.startsWith("tickers.")){
           const x=data[0]||{};
+          if(Number.isFinite(+x.lastPrice))v.lastPrice=+x.lastPrice;
+          if(Number.isFinite(+x.price24hPcnt))v.price24hPcnt=+x.price24hPcnt*100;
           if(Number.isFinite(+x.openInterest))v.oi=+x.openInterest;
           if(Number.isFinite(+x.fundingRate))v.fundingRate=normalizeFundingRate(x.fundingRate);
           if(Number.isFinite(+x.markPrice))v.markPrice=+x.markPrice;
@@ -2154,8 +2156,8 @@ const server=http.createServer(async(req,res)=>{
       if(cached&&now-cached.ts<3000)return send(res,200,{ok:true,...cached.payload,cached:true,cacheAgeMs:now-cached.ts});
       try{
         const live=flowBucket(symbol);
-        if(Number.isFinite(Number(live.markPrice))&&now-Number(live.lastTs||0)<10000){
-          const payload={symbol,price:Number(live.markPrice),source:"Bybit live flow",updatedAt:now};
+        if(Number.isFinite(Number(live.lastPrice))&&now-Number(live.lastTs||0)<10000){
+          const payload={symbol,price:Number(live.lastPrice),change24h:Number.isFinite(Number(live.price24hPcnt))?Number(live.price24hPcnt):null,source:"Bybit live flow",updatedAt:now};
           FAST_TICKER_CACHE.set(symbol,{ts:now,payload});
           return send(res,200,{ok:true,...payload});
         }
@@ -2163,7 +2165,7 @@ const server=http.createServer(async(req,res)=>{
           dataFabric.krakenSnapshot(symbol),
           dataFabric.coinbaseSnapshot(symbol)
         ]);
-        const payload={symbol,price:Number(snapshot.price),source:snapshot.name,updatedAt:now};
+        const payload={symbol,price:Number(snapshot.price),change24h:Number(snapshot.change24h),source:snapshot.name,updatedAt:now};
         FAST_TICKER_CACHE.set(symbol,{ts:now,payload});
         return send(res,200,{ok:true,...payload});
       }catch(e){
