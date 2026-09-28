@@ -45,6 +45,30 @@ const resistance=buildReactionMap(candles("resistance"),{
 assert(resistance.zones.some(x=>x.side==="RESISTANCE"),"resistance zone should be represented");
 assert(resistance.opportunities.some(x=>x.action==="SHORT"&&x.state==="CONFIRM_SHORT"),"resistance sweep/rejection should confirm SHORT");
 
+
+const priorNotAccepted=[
+  {o:101.5,c:101.8,h:102.0,l:101.2,v:900},
+  {o:102.1,c:102.3,h:102.5,l:101.9,v:1400}
+];
+const falseRetest=reactionForZone(
+  priorNotAccepted,
+  {id:"RESISTANCE",low:100,high:102,center:101,side:"RESISTANCE",confluence:2,evidence:["Resistance"],evidenceSources:["Test"]},
+  2,
+  {volumeZ:0,cvdState:"BUYERS CONFIRM",oiChangePct:2,positioning:"LONG PARTICIPATION"}
+);
+assert(falseRetest.state!=="CONFIRM_LONG","a single candle above resistance must not be called a retest without prior acceptance");
+
+const validRetest=[
+  {o:102.4,c:102.5,h:102.8,l:102.3,v:1100},
+  {o:102.1,c:102.3,h:102.5,l:101.9,v:1400}
+];
+const trueRetest=reactionForZone(
+  validRetest,
+  {id:"RESISTANCE",low:100,high:102,center:101,side:"RESISTANCE",confluence:2,evidence:["Resistance"],evidenceSources:["Test"]},
+  2,
+  {volumeZ:0,cvdState:"BUYERS CONFIRM",oiChangePct:2,positioning:"LONG PARTICIPATION"}
+);
+assert(trueRetest.state==="CONFIRM_LONG","a prior accepted breakout followed by a hold should confirm the LONG retest");
 const breakdownCandles=[
   {o:100.8,c:100.2,h:101.2,l:99.8,v:1000},
   {o:100.5,c:100.4,h:100.9,l:99.9,v:1100},
