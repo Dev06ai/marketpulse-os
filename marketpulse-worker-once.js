@@ -17,7 +17,7 @@
 const {buildRuntimeConfig,requestDecisionWithRetry,summarizeDecision}=require("./marketpulse-worker");
 
 const SCHEDULE_OFFSET_MINUTE=2;
-const MAX_CONCURRENCY=3;
+const MAX_CONCURRENCY=2;
 
 function dueIntervals(date=new Date()){
   const minute=date.getUTCMinutes();
@@ -71,6 +71,8 @@ async function runSweep(config=buildRuntimeConfig(),{now=new Date()}={}){
     }
   },MAX_CONCURRENCY);
   const failures=results.filter(x=>!x.ok).length;
+  const partialFailure=failures>0&&failures<results.length;
+  const totalFailure=results.length>0&&failures===results.length;
   console.log(JSON.stringify({
     event:"worker_sweep_complete",
     mode:"cron_sweep",
@@ -78,9 +80,15 @@ async function runSweep(config=buildRuntimeConfig(),{now=new Date()}={}){
     symbols:config.symbols,
     attempted:results.length,
     failures,
+    partialFailure,
+    totalFailure,
     execution:"disabled"
   }));
-  return {ok:failures===0,disabled:false,results};
+  // A single slow/temporarily unavailable symbol must not turn the entire
+  // scheduled intelligence workflow red and generate an email every 5 minutes.
+  // Keep the run green for partial failures while retaining the detailed error
+  // logs above. Only an all-symbol failure is treated as a workflow failure.
+  return {ok:!totalFailure,disabled:false,partialFailure,totalFailure,results};
 }
 
 if(require.main===module){
