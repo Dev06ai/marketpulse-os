@@ -1090,7 +1090,7 @@ html.handheld-layout .miniChart{height:220px}
 html.handheld-layout .flowChart{height:215px}
 html.handheld-layout .chartCanvas{height:300px}
 html.handheld-layout .brainStats{grid-template-columns:1fr 1fr}
-html.handheld-layout .wrap{width:calc(100% - 18px);padding-top:10px}
+html.handheld-layout .wrap{width:calc(100% - 18px);padding-top:10px}\nhtml.handheld-layout,html.handheld-layout body{overflow-x:hidden;max-width:100vw}\nhtml.handheld-layout .wrap{max-width:100%;overflow:hidden}\nhtml.handheld-layout .card,html.handheld-layout .metric{min-width:0}
 html.handheld-layout .evolutionDesktop{display:none}
 html.handheld-layout .evolutionMobile{display:block}
 </style>
@@ -7256,8 +7256,21 @@ setInterval(function(){if(document.visibilityState==="visible")loadPhase7()},600
     var sw=Number(window.screen&&window.screen.width||0);
     var sh=Number(window.screen&&window.screen.height||0);
     var shortEdge=Math.min(sw||99999,sh||99999);
+    var longEdge=Math.max(sw||0,sh||0);
+    var portraitRatio=shortEdge>0?longEdge/shortEdge:0;
+    var viewportW=Number(window.innerWidth||99999);
+    var viewportH=Number(window.innerHeight||0);
+    var viewportRatio=viewportW>0?viewportH/viewportW:0;
     var dpr=Number(window.devicePixelRatio||1);
-    var handheld=Boolean(touch||coarse) && (shortEdge<=1400 || (window.innerWidth||99999)<=900 || dpr>=1.5);
+    var tallPortraitScreen=portraitRatio>=1.65 && longEdge>=1200;
+    var tallPortraitViewport=viewportRatio>=1.65 && viewportH>=1200;
+    var mobileHint=/Android|iPhone|iPad|iPod|Mobile/i.test(String(navigator.userAgent||""));
+    var handheld=Boolean(
+      (touch||coarse) && (shortEdge<=1400 || viewportW<=900 || dpr>=1.5) ||
+      tallPortraitScreen ||
+      tallPortraitViewport ||
+      (mobileHint && shortEdge<=1600)
+    );
     document.documentElement.classList.toggle("handheld-layout",handheld);
   }
   syncHandheldLayout();
