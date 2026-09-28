@@ -17,6 +17,9 @@ const phase18ExecutionRouter=require('./phase18-execution-router');
 const {validateTradeLevels}=require("./trade-levels");
 const {buildDecisionIntelligence}=require("./decision-intelligence");
 const phase20=require("./phase20-scenario-matrix");
+const phase21=require("./phase21-state-contract");
+const phaseHistory=require("./phase-history");
+const phaseStack=require("./phase21-50-stack");
 const signalNotifications=require('./signal-notifications');
 const propFirm=require('./prop-firm');
 const research=require('./research-data');
@@ -900,6 +903,32 @@ async function buildDecisionSnapshot(symbol,interval,query,deviceId=null){
       marketState:phase18State,
       ts:now
     });
+    const canonicalState=phase21.normalize({
+      symbol,
+      interval,
+      ts:now,
+      price:Number(finalDecision?.market?.price??analysis?.price??candles?.at(-1)?.c),
+      decision:{...finalDecision,derivatives:flow},
+      structure:analysis?.marketStructure||{},
+      liquidity:analysis?.liquidity||flow?.liquidity||{}
+    });
+    const canonicalSnapshotId=phase21.hash(canonicalState);
+    const phaseStackState=phaseStack.evaluate({
+      symbol,
+      interval,
+      ts:now,
+      price:Number(finalDecision?.market?.price??analysis?.price??candles?.at(-1)?.c),
+      decision:{...finalDecision,derivatives:flow},
+      analysis,
+      derivatives:flow,
+      consensus,
+      validation:validation1113,
+      decisionIntelligence,
+      marketState:phase18State||{},
+      priorDirection:String(finalDecision?.action||"WAIT").toUpperCase(),
+      operatorApproved:String(process.env.MARKETPULSE_PHASE50_OPERATOR_ACK||"false").toLowerCase()==="true",
+      shadow:String(process.env.MARKETPULSE_PHASE50_SHADOW_MODE||"true").toLowerCase()!=="false"
+    });
     try{
       setTimeout(()=>signalNotifications.notifyAdminSignal(storage,{
         decision:finalDecision,
@@ -923,7 +952,7 @@ async function buildDecisionSnapshot(symbol,interval,query,deviceId=null){
     }catch{}
 
     try{
-      const autoEnabled=String(process.env.LIVE_AUTO_EXECUTION_ENABLED||"false").toLowerCase()==="true";
+      const autoEnabled=false;
       if(autoEnabled&&finalDecision?.liveSignalEligible&&finalDecision?.state==="READY"&&["LONG","SHORT"].includes(String(finalDecision?.action||"").toUpperCase())){
         const signal={
           id:["LIVE_AUTO",symbol,interval,candles?.[candles.length-1]?.t,finalDecision.action].join("|"),
@@ -938,13 +967,13 @@ async function buildDecisionSnapshot(symbol,interval,query,deviceId=null){
     try{learning.observeFinalDecision(symbol,interval,candles,finalDecision).catch(()=>{})}catch{}
     try{setTimeout(()=>phase14.refreshAdaptiveState(storage,{symbol,interval}).catch(()=>{}),250)}catch{}
     const payload={
-      ok:true,...finalDecision,analysis,derivatives:flow,consensus,decisionIntelligence,phase20:phase20Scenario,
+      ok:true,...finalDecision,analysis,derivatives:flow,consensus,decisionIntelligence,phase20:phase20Scenario,canonicalState,canonicalSnapshotId,phaseStack:phaseStackState,
       learning:null,
       backtest:analytics?.backtest||null,validation:analytics?.validation||null,setupStats:analytics?.setupStats||null,
       phase11_13:validation1113,
       phase14:finalDecision.phase14||analysis.phase14||null,
       phase14Status:finalDecision.phase14?.adaptive||analysis.phase14?.adaptive||null,
-      phase11:PHASE11_VERSION,phase12:PHASE12_VERSION,phase13:PHASE13_VERSION,phase14Version:"14.0.0",phase20Version:phase20.VERSION,
+      phase11:PHASE11_VERSION,phase12:PHASE12_VERSION,phase13:PHASE13_VERSION,phase14Version:"14.0.0",phase20Version:phase20.VERSION,phase21Version:phase21.VERSION,phase21to50Version:phaseStack.VERSION,
       updatedAt:now
     };
     DECISION_CACHE.set(key,{ts:now,payload});
@@ -2319,6 +2348,13 @@ const server=http.createServer(async(req,res)=>{
       }catch(e){return send(res,400,{ok:false,error:String(e.message||e)})}
     }
     if(req.method==='GET'&&u.pathname==='/api/admin/config')return send(res,200,{ok:true,config:await getAdminRuntime(true)});
+    if(req.method==='GET'&&u.pathname==='/api/admin/phase-history'){
+      try{
+        const guard=await auth.requireAdmin(req);
+        if(!guard.ok)return send(res,guard.status,{ok:false,error:guard.error});
+        return send(res,200,{ok:true,currentPhase:phaseHistory.getCurrentPhase(),phases:phaseHistory.getPhaseHistory()});
+      }catch(e){return send(res,503,{ok:false,error:String(e.message||e)})}
+    }
     if(req.method==='POST'&&u.pathname==='/api/admin/config'){
       let raw="";for await(const chunk of req)raw+=chunk;let body={};try{body=JSON.parse(raw||"{}")}catch{return send(res,400,{ok:false,error:"Invalid JSON"})}
       const current=await getAdminRuntime(true),next=Object.assign({},current,body);const saved=await storage.saveAdminConfig(next);setAdminRuntime(saved);await auditAdmin(req,"Updated Admin runtime controls","configuration",null,{changed:Object.keys(body)});return send(res,200,{ok:true,config:saved});

@@ -33,6 +33,37 @@ jobs:
       - run: node --check research-data.js
       - run: node --check data-fabric.js
       - run: node --check phase18-market-state.js
+      - run: node --check phase21-state-contract.js
+      - run: node --check phase22-state-bus.js
+      - run: node --check phase23-signal-hysteresis.js
+      - run: node --check phase24-data-quality.js
+      - run: node --check phase25-flow-normalizer.js
+      - run: node --check phase26-regime-engine.js
+      - run: node --check phase27-structure-graph.js
+      - run: node --check phase28-confluence.js
+      - run: node --check phase29-calibration.js
+      - run: node --check phase30-risk-engine.js
+      - run: node --check phase31-backtest-engine.js
+      - run: node --check phase32-walk-forward.js
+      - run: node --check phase33-monte-carlo.js
+      - run: node --check phase34-paper-broker.js
+      - run: node --check phase35-execution-model.js
+      - run: node --check phase36-forensics.js
+      - run: node --check phase37-learning-guardrails.js
+      - run: node --check phase38-drift-detection.js
+      - run: node --check phase39-calibration-audit.js
+      - run: node --check phase40-anomaly-detector.js
+      - run: node --check phase41-kill-switch.js
+      - run: node --check phase42-observability.js
+      - run: node --check phase43-phase-ledger.js
+      - run: node --check phase44-explainability.js
+      - run: node --check phase45-security-review.js
+      - run: node --check phase46-deployment-gate.js
+      - run: node --check phase47-recovery.js
+      - run: node --check phase48-performance-budget.js
+      - run: node --check phase49-live-readiness.js
+      - run: node --check phase50-shadow-controller.js
+      - run: node --check phase21-50-stack.js
       - run: node --check phase18-opportunity.js
       - run: node --check phase18-execution-router.js
       - run: node --check marketpulse-autotrader.js
@@ -475,3 +506,13 @@ jobs:
           if dup: raise SystemExit("Duplicate static HTML ids: "+", ".join(dup))
           print("Data Fabric/research feature surface OK; static HTML ids unique")
           PY
+
+
+      - name: Check phase registry
+        run: |
+          node - <<'NODE'
+          const h=require('./phase-history');
+          if(h.getPhaseHistory().length!==50)throw new Error('Phase registry must contain exactly 50 phases');
+          if(h.getCurrentPhase()!==20)throw new Error('Only validated historical phases 1-20 may be marked complete on this branch');
+          console.log('Phase registry OK');
+          NODE
