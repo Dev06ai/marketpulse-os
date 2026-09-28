@@ -245,7 +245,7 @@ const DECISION_CACHE=new Map(); const DECISION_TTL=8000; const DECISION_LAST_GOO
 const DECISION_JOBS=new Map();
 const TRADE_RADAR_CACHE=new Map();
 const TRADE_RADAR_JOBS=new Map();
-const TRADE_RADAR_TTL=10000;
+const TRADE_RADAR_TTL=15000;
 
 async function getDecisionSnapshotCached(symbol,interval,searchParams,device){
   const jobKey=String(symbol)+"|"+String(interval)+"|"+String(searchParams?.toString?.()||"")+"|"+String(device||"");
@@ -2043,7 +2043,11 @@ const server=http.createServer(async(req,res)=>{
           phase18MarketState.snapshot(symbol,{fast:true})
         ]);
         const radar=phase18Opportunity.evaluate(decision,marketState,{weekdayOnly:true,easyMode:true});
-        const twin=await phase18Opportunity.digitalTwin(storage,decision,marketState);
+        const twinPromise=phase18Opportunity.digitalTwin(storage,decision,marketState);
+        const twin=await Promise.race([
+          twinPromise,
+          new Promise(resolve=>setTimeout(()=>resolve({matchedStates:0,wins:0,losses:0,winRate:null,expectancyR:null,similarityTop:0,ready:false,cache:"deferred"}),700))
+        ]);
         const route=phase18ExecutionRouter.choose(marketState,radar.side,"PAPER");
         return {ok:true,phase18:phase18Opportunity.VERSION,symbol,interval,generatedAt:Date.now(),decision,marketState,radar,digitalTwin:twin,executionRoute:route};
       })().finally(()=>TRADE_RADAR_JOBS.delete(key));
@@ -2052,7 +2056,14 @@ const server=http.createServer(async(req,res)=>{
         const payload=await Promise.race([job,new Promise(resolve=>setTimeout(()=>resolve(null),12000))]);
         if(payload){TRADE_RADAR_CACHE.set(key,{ts:Date.now(),payload});return send(res,200,payload)}
         if(cached)return send(res,200,{...cached.payload,cache:"stale",stale:true,cacheAgeMs:ts-cached.ts});
-        return send(res,503,{ok:false,error:"TRADE_RADAR_WARMING",retryAfterMs:1200,phase18:phase18Opportunity.VERSION});
+        return send(res,200,{
+          ok:true,warming:true,phase18:phase18Opportunity.VERSION,symbol,interval,generatedAt:Date.now(),
+          decision:{ok:true,warming:true,symbol,interval,action:"WAIT",state:"NO_TRADE",liveSignalEligible:false,market:{side:"WAIT",status:"WARMING",type:"ENGINE WARMING / NO TRADE",confluenceScore:0},levels:{entry:null,entryLow:null,entryHigh:null,stop:null,tp1:null,tp2:null,rr:null}},
+          marketState:{ok:false,version:phase18MarketState.VERSION,symbol,summary:{venueCount:0,consensusQuality:0,dispersionBps:null,avgOrderbookImbalance:null},venues:[]},
+          radar:{ok:true,status:"FORMING",side:"WAIT",score:0,rr:0,dataQuality:0,reasons:["RADAR_WARMING"],hardBlocks:["RADAR_WARMING"],nextAction:"WATCH",generatedAt:Date.now()},
+          digitalTwin:{matchedStates:0,wins:0,losses:0,winRate:null,expectancyR:null,similarityTop:0,ready:false,cache:"deferred"},
+          executionRoute:{ok:true,venue:"PAPER",reason:"Radar is warming."}
+        });
       }catch(e){
         if(cached)return send(res,200,{...cached.payload,cache:"stale",stale:true,cacheAgeMs:ts-cached.ts});
         return send(res,503,{ok:false,error:String(e.message||e),phase18:phase18Opportunity.VERSION});
