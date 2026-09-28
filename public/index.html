@@ -985,6 +985,26 @@ linear-gradient(180deg,#0c0e11 0%,#101214 48%,#0a0b0d 100%);box-shadow:0 -20px 7
 .mpdc-footnote{
   align-self:end;padding:9px 10px;border:1px solid rgba(255,255,255,.06);border-radius:10px;color:#738196;font-size:8px;line-height:1.45;background:rgba(255,255,255,.012)
 }
+.mpdc-intel{margin-top:10px;padding:13px;border:1px solid rgba(255,255,255,.065);border-radius:14px;background:linear-gradient(180deg,rgba(255,255,255,.018),rgba(255,255,255,.008))}
+.mpdc-intel-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
+.mpdc-intel-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:9px}
+.mpdc-intel-card{min-width:0;padding:9px 10px;border-radius:10px;border:1px solid rgba(255,255,255,.06);background:rgba(0,0,0,.12)}
+.mpdc-intel-card[data-state="ACTIVE"]{border-color:rgba(103,232,255,.18);background:rgba(103,232,255,.025)}
+.mpdc-intel-card[data-state="CONTEXT"]{border-color:rgba(192,132,252,.15);background:rgba(192,132,252,.018)}
+.mpdc-intel-card[data-state="NONE"]{opacity:.58}
+.mpdc-intel-card .k{display:block;font-size:7px;font-weight:950;letter-spacing:.10em;color:#718198}
+.mpdc-intel-card .v{display:block;margin-top:4px;font-size:9px;font-weight:850;color:#e7eef6;line-height:1.35}
+.mpdc-intel-detail{margin-top:9px;padding:10px;border-radius:10px;border:1px solid rgba(255,255,255,.055);background:rgba(0,0,0,.11);color:#cdd7e3;font-size:9px;line-height:1.55}
+.mpdc-intel-columns{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}
+.mpdc-intel-sub{padding:9px 10px;border:1px solid rgba(255,255,255,.055);border-radius:10px;background:rgba(0,0,0,.10)}
+.mpdc-intel-sub .k{display:block;font-size:7px;font-weight:950;letter-spacing:.10em;color:#718198}
+.mpdc-intel-sub .v{margin-top:5px;color:#dbe4ee;font-size:9px;line-height:1.5}
+.mpdc-intel-sub.warn{border-color:rgba(192,132,252,.16)}
+.mpdc-intel-sub.risk{border-color:rgba(248,113,133,.12)}
+.mpdc-logic.mpdc-exit.mpdc-neutral{border-color:rgba(192,132,252,.14)!important;background:rgba(192,132,252,.018)!important}
+.mpdc-logic.mpdc-exit.mpdc-active{border-color:rgba(248,113,133,.16)!important;background:rgba(248,113,133,.022)!important}
+@media(max-width:720px){.mpdc-intel-grid{grid-template-columns:1fr 1fr}.mpdc-intel-columns{grid-template-columns:1fr}}
+
 .mpdc-hidden-compat{display:none!important}
 .mpdc-shell .livePlanSide{min-width:56px}
 .mpdc-shell .livePlanSide.long{color:#72f2ab;background:rgba(74,222,128,.07);border-color:rgba(74,222,128,.20)}
@@ -1195,7 +1215,7 @@ linear-gradient(180deg,#0c0e11 0%,#101214 48%,#0a0b0d 100%);box-shadow:0 -20px 7
                 <span class="mpdc-eyebrow">ENTER WHEN</span>
                 <div id="primary">Wait for the live model to produce a valid entry condition.</div>
               </div>
-              <div class="mpdc-logic mpdc-exit">
+              <div class="mpdc-logic mpdc-exit mpdc-neutral" id="mpdcExitLogic">
                 <span class="mpdc-eyebrow">EXIT / INVALIDATION</span>
                 <div id="alternate">Exit or invalidate when the setup structure breaks.</div>
               </div>
@@ -1250,6 +1270,27 @@ linear-gradient(180deg,#0c0e11 0%,#101214 48%,#0a0b0d 100%);box-shadow:0 -20px 7
 
             <div class="mpdc-gate-note" id="mpdcDeploymentReason">Execution gate remains authoritative.</div>
           </section>
+        </div>
+
+        <div class="mpdc-intel" id="mpdcStrategyIntelligence">
+          <div class="mpdc-intel-head">
+            <div>
+              <span class="mpdc-eyebrow">STRATEGY INTELLIGENCE</span>
+              <span class="mpdc-panel-sub">The setup modules the engine is currently seeing — and the rules they require.</span>
+            </div>
+            <span class="livePlanSide mpdc-plan-side" id="mpdcSetupState">WAIT</span>
+          </div>
+          <div class="mpdc-intel-grid" id="mpdcIntelGrid"></div>
+          <div class="mpdc-intel-columns">
+            <div class="mpdc-intel-sub warn">
+              <span class="k">SETUP LOGIC</span>
+              <div class="v" id="mpdcSetupLogic">Waiting for strategy context…</div>
+            </div>
+            <div class="mpdc-intel-sub risk">
+              <span class="k">INVALIDATION LOGIC</span>
+              <div class="v" id="mpdcInvalidationLogic">Waiting for structural invalidation context…</div>
+            </div>
+          </div>
         </div>
 
         <div class="mpdc-bottom">
@@ -5664,6 +5705,12 @@ async function renderLiveSignalSummary(d,model){
     if(section.className!==finalClass)section.className=finalClass;
   }
 
+  var exitLogic=$("mpdcExitLogic");
+  if(exitLogic){
+    exitLogic.classList.toggle("mpdc-neutral",!executionReady);
+    exitLogic.classList.toggle("mpdc-active",executionReady);
+  }
+
   var title=$("thesisTitle");
   if(title){
     var titleText=executionReady?side+" CONFIRMED":"WAIT / NO TRADE";
@@ -5750,12 +5797,60 @@ async function renderLiveSignalSummary(d,model){
   }
 }
 
+function renderDecisionIntelligence(d){
+  var info=d?.decisionIntelligence||null;
+  var grid=$("mpdcIntelGrid"),setupState=$("mpdcSetupState");
+  if(!grid)return;
+
+  if(!info){
+    grid.innerHTML='<div class="mpdc-intel-card" data-state="NONE"><span class="k">INTELLIGENCE</span><span class="v">Waiting for synchronized strategy context…</span></div>';
+    setTextLocal("mpdcSetupLogic","Waiting for strategy context…");
+    setTextLocal("mpdcInvalidationLogic","Waiting for structural invalidation context…");
+    if(setupState){setupState.textContent="WAIT";setupState.className="livePlanSide mpdc-plan-side wait"}
+    return;
+  }
+
+  var items=Array.isArray(info.confluence)?info.confluence:[];
+  grid.innerHTML=items.map(function(item){
+    var state=String(item.status||"NONE").toUpperCase();
+    return '<div class="mpdc-intel-card" data-state="'+safeHtmlLocal(state)+'">'+
+      '<span class="k">'+safeHtmlLocal(item.key||"MODULE")+'</span>'+
+      '<span class="v">'+safeHtmlLocal(item.value||"—")+'</span>'+
+    '</div>';
+  }).join("")||'<div class="mpdc-intel-card" data-state="NONE"><span class="k">INTELLIGENCE</span><span class="v">No specialized module is active.</span></div>';
+
+  var kind=String(info.setup?.label||"NO ACTIVE SETUP");
+  var side=String(info.setup?.side||info.informationalBias||"WAIT").toUpperCase();
+  var concepts=Array.isArray(info.activeConcepts)?info.activeConcepts:[];
+  var setupText=info.explanation||"No specialized setup module is currently active.";
+  if(concepts.length)setupText+=" Active concepts: "+concepts.join(" · ")+".";
+  if(side==="LONG"||side==="SHORT")setupText+=" Base setup: "+kind+" / "+side+".";
+  setTextLocal("mpdcSetupLogic",setupText);
+
+  var inv=info.invalidation||{};
+  var invText=inv.details||"No directional invalidation is active.";
+  if(inv.primary!=null)invText+=" Primary level: "+fmt(inv.primary)+".";
+  invText+=" Source: "+String(inv.source||"STRUCTURE")+".";
+  setTextLocal("mpdcInvalidationLogic",invText);
+
+  if(setupState){
+    var s=info.executable?String(info.setup?.side||"WAIT").toUpperCase():"WAIT";
+    var cls=s==="LONG"?"long":s==="SHORT"?"short":"wait";
+    setupState.textContent=s;
+    setupState.className="livePlanSide mpdc-plan-side "+cls;
+  }
+}
+function setTextLocal(id,value){var el=$(id);if(el&&el.textContent!==String(value))el.textContent=String(value)}
+function safeHtmlLocal(value){return String(value==null?"":value).replace(/[&<>"']/g,function(ch){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[ch]||ch})}
+
 function renderFinalDecision(d){
   if(!d)return;
 
   var m=d.market||{},ev=d.evidence||{},lv=d.levels||{},data=d.data||{},
       pg=d.propGate||{},v=d.phase11_13||{},gate=d.deploymentGate||{},
       stability=d.signalStability||{};
+
+  renderDecisionIntelligence(d);
 
   // Probability context is live, but execution direction comes only from the
   // authoritative server decision after final confirmation and safety gates.
