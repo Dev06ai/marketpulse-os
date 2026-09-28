@@ -2055,17 +2055,24 @@ linear-gradient(180deg,#0c0e11 0%,#101214 48%,#0a0b0d 100%);box-shadow:0 -20px 7
     </div>
   </div>
 
-  <div class="card adminPanelSmall" style="margin-top:10px">
+  <div class="card adminPanelSmall evolutionLedger" style="margin-top:10px">
     <div class="sectionHead">
-      <div><div class="title">MarketPulse Evolution</div><div class="sub">Owner-only Phase 1 → current upgrade ledger. Each completed phase is recorded with its purpose and future phases stay explicitly marked as planned until validated.</div></div>
+      <div><div class="title">MarketPulse Evolution</div><div class="sub">Owner-only Phase 1 → current upgrade ledger. A phase is promoted only when the evidence supports that promotion.</div></div>
       <span id="phaseHistoryCurrent" class="chip">CURRENT —</span>
     </div>
-    <div class="adminTableWrap">
+    <div class="evolutionProgress" aria-label="Phase status progression">
+      <div class="evolutionStep implemented"><span class="dot"></span><div><b>IMPLEMENTED</b><span>Code exists</span></div></div>
+      <div class="evolutionStep validated"><span class="dot"></span><div><b>VALIDATED</b><span>Checks + evidence</span></div></div>
+      <div class="evolutionStep ready"><span class="dot"></span><div><b>READY</b><span>Runtime gate</span></div></div>
+      <div class="evolutionStep complete"><span class="dot"></span><div><b>COMPLETE</b><span>Phase promoted</span></div></div>
+    </div>
+    <div class="adminTableWrap evolutionDesktop">
       <table class="adminCompactTable">
         <thead><tr><th>Phase</th><th>Upgrade</th><th>Description</th><th>Status</th></tr></thead>
         <tbody id="phaseHistoryBody"><tr><td colspan="4" class="userMuted">Loading phase history…</td></tr></tbody>
       </table>
     </div>
+    <div class="evolutionMobile" id="phaseHistoryMobile"><div class="evolutionMobileNote">Loading phase history…</div></div>
   </div>
 
   <div class="card adminPanelSmall" style="margin-top:10px">
