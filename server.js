@@ -2096,7 +2096,11 @@ const server=http.createServer(async(req,res)=>{
       try{return send(res,200,await execution.setConfig({mode:body.mode,account:body.account,riskPct:body.riskPct,maxOpenRiskPct:body.maxOpenRiskPct,maxDailyLossPct:body.maxDailyLossPct,maxPositions:body.maxPositions,maxSymbolExposurePct:body.maxSymbolExposurePct,maxOrdersPerMinute:body.maxOrdersPerMinute,maxSlippageBps:body.maxSlippageBps,maxIntentAgeMs:body.maxIntentAgeMs,allowMarketOrders:false,requireReconciliation:true}))}catch(e){return send(res,400,{error:e.message})}
     }
     if(req.method==='POST'&&u.pathname==='/api/execution/arm'){
-      try{return send(res,200,await execution.armTestnet())}catch(e){return send(res,400,{error:e.message})}
+      let raw="";for await(const chunk of req)raw+=chunk;let body={};try{body=JSON.parse(raw||"{}")}catch{return send(res,400,{error:"Invalid JSON"})}
+      try{
+        const mode=String(body.mode||"TESTNET").toUpperCase();
+        return send(res,200,{ok:true,mode,execution:mode==="LIVE"?await execution.armLive():await execution.armTestnet()});
+      }catch(e){return send(res,400,{error:e.message})}
     }
     if(req.method==='POST'&&u.pathname==='/api/execution/kill'){
       try{return send(res,200,await execution.killSwitch(true))}catch(e){return send(res,400,{error:e.message})}
