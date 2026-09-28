@@ -1518,7 +1518,7 @@ const server=http.createServer(async(req,res)=>{
           let marketRows=null;
           try{marketRows=await klines('BTCUSDT','1h');checks.marketData=Boolean(marketRows&&marketRows.length>=50)}catch(e){marketError=e.message}
           try{
-            const d=await Promise.race([derivatives('BTCUSDT','15m'),new Promise(resolve=>setTimeout(()=>resolve(null),6500))]);
+            const d=await Promise.race([derivatives('BTCUSDT','15m'),new Promise(resolve=>setTimeout(()=>resolve(null),2500))]);
             checks.derivatives=Boolean(d&&d.available);checks.oi=Boolean(Number.isFinite(Number(d?.oi)));
             checks.cvd=Boolean(Number.isFinite(Number(d?.cvdDelta))||["BUYERS PRESSURE","SELLERS PRESSURE","BALANCED"].includes(d?.cvdState));
             checks.liquidations=Boolean(d&&(d.liveConnected||Number(d.livePointCount)>0||Array.isArray(d?.series?.liq)&&d.series.liq.length>1));
@@ -2501,7 +2501,7 @@ const server=http.createServer(async(req,res)=>{
       let marketRows=null;
       try{marketRows=await klines('BTCUSDT','1h');checks.marketData=Boolean(marketRows&&marketRows.length>=50)}catch(e){marketError=e.message}
       try{
-        const d=await Promise.race([derivatives('BTCUSDT','15m'),new Promise(resolve=>setTimeout(()=>resolve(null),6500))]);
+        const d=await Promise.race([derivatives('BTCUSDT','15m'),new Promise(resolve=>setTimeout(()=>resolve(null),2500))]);
         checks.derivatives=Boolean(d&&d.available);checks.oi=Boolean(Number.isFinite(Number(d?.oi)));
         checks.cvd=Boolean(Number.isFinite(Number(d?.cvdDelta))||["BUYERS PRESSURE","SELLERS PRESSURE","BALANCED"].includes(d?.cvdState));
         checks.liquidations=Boolean(d&&(d.liveConnected||Number(d.livePointCount)>0||Array.isArray(d?.series?.liq)&&d.series.liq.length>1));
