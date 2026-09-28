@@ -127,8 +127,9 @@ function evaluate(input={}){
   const relative=u.probability(Math.max(0,Math.min(100,Math.max(q.dir.long,q.dir.short)*.75+q.coverage.coverage*.25)));
   const confidence=calibrated??relative;
   const expectancy=p74.evaluate(input.expectancy||{});
+  const expectancyProbability=calibrated==null?null:calibrated/100;
   const expectancyGate=p65.evaluate({
-    probability:calibrated,
+    probability:expectancyProbability,
     rr:s.levels?.rr??levelResult.rr,
     costBps:input.costBps
   });
@@ -171,7 +172,7 @@ function evaluate(input={}){
       blockers:publicBlockers,ageMs,ttlMs,realMoneyUse:"DECISION_SUPPORT_ONLY",automaticExecutionEnabled:false
     },
     gate:{qualified:publicGate.publicSignalAllowed,candidateQualified:q.qualified&&!aged,blockers:u.unique(publicBlockers)},
-    diagnostics:{relativeConfidence:relative,calibratedConfidence:calibrated,
+    diagnostics:{relativeConfidence:relative,calibratedConfidence:calibrated,expectancyProbability,
       mtf:mtfResult,trigger:triggerResult,invalidation:invalidationResult,levels:levelResult,
       leverage:leverageResult,ttl:ttlResult,chop:chopResult,expectancy,expectancyGate,uncertainty,portfolio,exchange,
       checklist,qualification,publicReadiness:freeGate,publicGate}
