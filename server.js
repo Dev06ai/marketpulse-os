@@ -16,6 +16,7 @@ const phase18Opportunity=require('./phase18-opportunity');
 const phase18ExecutionRouter=require('./phase18-execution-router');
 const {validateTradeLevels}=require("./trade-levels");
 const {buildDecisionIntelligence}=require("./decision-intelligence");
+const phase20=require("./phase20-scenario-matrix");
 const signalNotifications=require('./signal-notifications');
 const propFirm=require('./prop-firm');
 const research=require('./research-data');
@@ -882,6 +883,23 @@ async function buildDecisionSnapshot(symbol,interval,query,deviceId=null){
       }
     };
     const decisionIntelligence=buildDecisionIntelligence({analysis,decision:finalDecision});
+    let phase18State=null;
+    try{
+      phase18State=await Promise.race([
+        phase18MarketState.snapshot(symbol,{fast:true,liveFlow:flow}),
+        new Promise(resolve=>setTimeout(()=>resolve(null),1400))
+      ]);
+    }catch{}
+    const phase20Scenario=phase20.buildScenarioMatrix({
+      symbol,
+      interval,
+      price:Number(finalDecision?.market?.price??analysis?.price??candles?.at(-1)?.c),
+      decision:{...finalDecision,derivatives:flow},
+      analysis,
+      decisionIntelligence,
+      marketState:phase18State,
+      ts:now
+    });
     try{
       setTimeout(()=>signalNotifications.notifyAdminSignal(storage,{
         decision:finalDecision,
@@ -920,13 +938,13 @@ async function buildDecisionSnapshot(symbol,interval,query,deviceId=null){
     try{learning.observeFinalDecision(symbol,interval,candles,finalDecision).catch(()=>{})}catch{}
     try{setTimeout(()=>phase14.refreshAdaptiveState(storage,{symbol,interval}).catch(()=>{}),250)}catch{}
     const payload={
-      ok:true,...finalDecision,analysis,derivatives:flow,consensus,decisionIntelligence,
+      ok:true,...finalDecision,analysis,derivatives:flow,consensus,decisionIntelligence,phase20:phase20Scenario,
       learning:null,
       backtest:analytics?.backtest||null,validation:analytics?.validation||null,setupStats:analytics?.setupStats||null,
       phase11_13:validation1113,
       phase14:finalDecision.phase14||analysis.phase14||null,
       phase14Status:finalDecision.phase14?.adaptive||analysis.phase14?.adaptive||null,
-      phase11:PHASE11_VERSION,phase12:PHASE12_VERSION,phase13:PHASE13_VERSION,phase14Version:"14.0.0",
+      phase11:PHASE11_VERSION,phase12:PHASE12_VERSION,phase13:PHASE13_VERSION,phase14Version:"14.0.0",phase20Version:phase20.VERSION,
       updatedAt:now
     };
     DECISION_CACHE.set(key,{ts:now,payload});
