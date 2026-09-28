@@ -34,6 +34,15 @@ jobs:
       - run: node --check data-fabric.js
       - run: node --check phase18-market-state.js
       - run: node --check phase21-state-contract.js
+      - run: node --check phase22-state-bus.js
+      - run: node --check phase23-signal-hysteresis.js
+      - run: node --check phase24-data-quality.js
+      - run: node --check phase25-flow-normalizer.js
+      - run: node --check phase26-regime-engine.js
+      - run: node --check phase27-structure-graph.js
+      - run: node --check phase28-confluence.js
+      - run: node --check phase29-calibration.js
+      - run: node --check phase30-risk-engine.js
       - run: node --check phase18-opportunity.js
       - run: node --check phase18-execution-router.js
       - run: node --check marketpulse-autotrader.js
