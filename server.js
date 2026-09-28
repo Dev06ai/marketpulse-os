@@ -2722,21 +2722,6 @@ const server=http.createServer(async(req,res)=>{
       }
     }
 
-    if(req.method==='GET'&&u.pathname==='/api/admin/video-transcript'){
-      const token=u.searchParams.get('token')||'';
-      if(!process.env.VIDEO_INGEST_TOKEN||token!==process.env.VIDEO_INGEST_TOKEN)return send(res,403,{ok:false,error:'Forbidden'});
-      const videoId=(u.searchParams.get('video_id')||'').trim();
-      if(!/^[A-Za-z0-9_-]{11}$/.test(videoId))return send(res,400,{ok:false,error:'Invalid video id'});
-      try{
-        const upstream=await fetch('https://youtube-transcript.ai/transcript/'+encodeURIComponent(videoId)+'.txt');
-        const text=await upstream.text();
-        if(!upstream.ok)return send(res,502,{ok:false,error:'Transcript provider returned '+upstream.status,detail:text.slice(0,500)});
-        return send(res,200,{ok:true,videoId,transcript:text});
-      }catch(e){
-        return send(res,502,{ok:false,error:'Transcript fetch failed',detail:String(e?.message||e)});
-      }
-    }
-
     if(req.method==='GET'&&u.pathname==='/api/system-check'){
       const checks={server:true,marketEngine:true,learning:false,memory:false,marketData:false,derivatives:false,oi:false,cvd:false,liquidations:false,execution:false,portfolio:false,phase7:false,coreAnalytics:true,decisionEngine:false,phase11_13:false};
       const bounded=async(fn,ms)=>{
@@ -2903,34 +2888,7 @@ const server=http.createServer(async(req,res)=>{
   }catch(e){return send(res,500,{error:e.message||'Server error'})}
 });
 storage.init().catch(()=>{});learning.init().catch(()=>{});
-async function ingestVideoTranscriptAtStartup(){
-  const videoId=String(process.env.VIDEO_INGEST_ON_START||'').trim();
-  if(!videoId)return;
-  if(!/^[A-Za-z0-9_-]{11}$/.test(videoId)){
-    console.error('[VIDEO_INGEST] invalid video id');
-    return;
-  }
-  try{
-    const url='https://youtube-transcript.ai/transcript/'+videoId+'.txt';
-    const resp=await fetch(url);
-    const text=await resp.text();
-    if(!resp.ok){
-      console.error('[VIDEO_INGEST] provider status '+resp.status+' '+text.slice(0,500));
-      return;
-    }
-    console.log('[VIDEO_INGEST] START '+videoId+' chars='+text.length);
-    const chunkSize=6000;
-    for(let i=0;i<text.length;i+=chunkSize){
-      console.log('[VIDEO_TRANSCRIPT_CHUNK '+Math.floor(i/chunkSize+1)+'] '+text.slice(i,i+chunkSize));
-    }
-    console.log('[VIDEO_INGEST] END '+videoId);
-  }catch(e){
-    console.error('[VIDEO_INGEST] failed '+String(e?.message||e));
-  }
-}
-
 server.listen(PORT,()=>{
   console.log('MarketPulse OS listening on :'+PORT);
   setTimeout(()=>{runResearchWarmup().catch(()=>{})},12000);
-  setTimeout(()=>{ingestVideoTranscriptAtStartup().catch(()=>{})},3500);
 });
