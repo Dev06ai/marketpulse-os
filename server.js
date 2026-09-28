@@ -11,6 +11,9 @@ const phase14=require('./phase14-signal-intelligence');
 const phase15=require('./phase15');
 const phase16=require('./phase16');
 const autotrader=require('./autotrader');
+const phase18MarketState=require('./phase18-market-state');
+const phase18Opportunity=require('./phase18-opportunity');
+const phase18ExecutionRouter=require('./phase18-execution-router');
 const signalNotifications=require('./signal-notifications');
 const propFirm=require('./prop-firm');
 const research=require('./research-data');
@@ -240,6 +243,9 @@ const PHASE2_VERSION=2; const PHASE3_VERSION=3; const PHASE4_VERSION=4; const PH
 const PHASE9_VERSION=9; const PHASE10_VERSION=10; const PHASE11_VERSION=11; const PHASE12_VERSION=12; const PHASE13_VERSION=13;
 const DECISION_CACHE=new Map(); const DECISION_TTL=4000; const DECISION_LAST_GOOD=new Map();
 const DECISION_JOBS=new Map();
+const TRADE_RADAR_CACHE=new Map();
+const TRADE_RADAR_JOBS=new Map();
+const TRADE_RADAR_TTL=10000;
 const SIGNAL_STABILITY=new Map();
 const SIGNAL_CONFIRMATIONS_REQUIRED=2;
 const SIGNAL_RELEASE_MISSES=2;
@@ -506,6 +512,8 @@ const ADMIN_ONLY_PATHS=new Set([
   '/api/execution/close-sim',
   '/api/autotrader',
   '/api/autotrader/history',
+  '/api/market-state',
+  '/api/trade-radar',
   '/api/autotrader/config',
   '/api/autotrader/arm',
   '/api/autotrader/pause',
@@ -1942,6 +1950,41 @@ const server=http.createServer(async(req,res)=>{
       }catch(e){
         if(cached)return send(res,200,{ok:true,...cached.payload,stale:true,cacheAgeMs:now-cached.ts});
         return send(res,503,{ok:false,error:String(e.message||e)});
+      }
+    }
+    if(req.method==='GET'&&u.pathname==='/api/market-state'){
+      const symbol=(u.searchParams.get('symbol')||'BTCUSDT').toUpperCase();
+      if(!SYMBOLS.includes(symbol))return send(res,400,{ok:false,error:'Unsupported symbol'});
+      try{
+        const snapshot=await phase18MarketState.snapshot(symbol);
+        return send(res,200,{...snapshot,health:phase18MarketState.health(snapshot),phase18:phase18MarketState.VERSION});
+      }catch(e){return send(res,503,{ok:false,error:String(e.message||e),phase18:phase18MarketState.VERSION})}
+    }
+    if(req.method==='GET'&&u.pathname==='/api/trade-radar'){
+      const symbol=(u.searchParams.get('symbol')||'BTCUSDT').toUpperCase(),interval=u.searchParams.get('interval')||'15m';
+      if(!SYMBOLS.includes(symbol)||!['15m','30m','1h','4h','1d'].includes(interval))return send(res,400,{ok:false,error:'Unsupported symbol or interval'});
+      const key=symbol+"|"+interval,ts=Date.now(),cached=TRADE_RADAR_CACHE.get(key);
+      if(cached&&ts-cached.ts<TRADE_RADAR_TTL)return send(res,200,{...cached.payload,cache:"server",cacheAgeMs:ts-cached.ts});
+      if(TRADE_RADAR_JOBS.has(key)&&cached)return send(res,200,{...cached.payload,cache:"stale",stale:true,cacheAgeMs:ts-cached.ts});
+      const job=(async()=>{
+        const [decision,marketState]=await Promise.all([
+          buildDecisionSnapshot(symbol,interval,u.searchParams,requestDevice(req)),
+          phase18MarketState.snapshot(symbol)
+        ]);
+        const radar=phase18Opportunity.evaluate(decision,marketState,{weekdayOnly:true,easyMode:true});
+        const twin=await phase18Opportunity.digitalTwin(storage,decision,marketState);
+        const route=phase18ExecutionRouter.choose(marketState,radar.side,"PAPER");
+        return {ok:true,phase18:phase18Opportunity.VERSION,symbol,interval,generatedAt:Date.now(),decision,marketState,radar,digitalTwin:twin,executionRoute:route};
+      })().finally(()=>TRADE_RADAR_JOBS.delete(key));
+      TRADE_RADAR_JOBS.set(key,job);
+      try{
+        const payload=await Promise.race([job,new Promise(resolve=>setTimeout(()=>resolve(null),12000))]);
+        if(payload){TRADE_RADAR_CACHE.set(key,{ts:Date.now(),payload});return send(res,200,payload)}
+        if(cached)return send(res,200,{...cached.payload,cache:"stale",stale:true,cacheAgeMs:ts-cached.ts});
+        return send(res,503,{ok:false,error:"TRADE_RADAR_WARMING",retryAfterMs:1200,phase18:phase18Opportunity.VERSION});
+      }catch(e){
+        if(cached)return send(res,200,{...cached.payload,cache:"stale",stale:true,cacheAgeMs:ts-cached.ts});
+        return send(res,503,{ok:false,error:String(e.message||e),phase18:phase18Opportunity.VERSION});
       }
     }
     if(req.method==='GET'&&u.pathname==='/api/decision'){
