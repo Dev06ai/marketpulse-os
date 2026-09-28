@@ -925,7 +925,9 @@ async function buildDecisionSnapshot(symbol,interval,query,deviceId=null){
       validation:validation1113,
       decisionIntelligence,
       marketState:phase18State||{},
-      priorDirection:String(finalDecision?.action||"WAIT").toUpperCase()
+      priorDirection:String(finalDecision?.action||"WAIT").toUpperCase(),
+      operatorApproved:String(process.env.MARKETPULSE_PHASE50_OPERATOR_ACK||"false").toLowerCase()==="true",
+      shadow:String(process.env.MARKETPULSE_PHASE50_SHADOW_MODE||"true").toLowerCase()!=="false"
     });
     try{
       setTimeout(()=>signalNotifications.notifyAdminSignal(storage,{
@@ -950,8 +952,7 @@ async function buildDecisionSnapshot(symbol,interval,query,deviceId=null){
     }catch{}
 
     try{
-      const legacyAutoEnabled=String(process.env.LIVE_AUTO_EXECUTION_ENABLED||"false").toLowerCase()==="true";
-      const autoEnabled=false && legacyAutoEnabled && Boolean(phaseStackState?.liveController?.automaticExecutionEnabled);
+      const autoEnabled=false;
       if(autoEnabled&&finalDecision?.liveSignalEligible&&finalDecision?.state==="READY"&&["LONG","SHORT"].includes(String(finalDecision?.action||"").toUpperCase())){
         const signal={
           id:["LIVE_AUTO",symbol,interval,candles?.[candles.length-1]?.t,finalDecision.action].join("|"),
