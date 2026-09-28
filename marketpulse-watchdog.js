@@ -116,7 +116,8 @@ async function cycle(){
     return;
   }
 
-  if(Date.now()-state.lastSelfTestAt>=SELF_TEST_INTERVAL_MS){
+  if(String(process.env.MARKETPULSE_WATCHDOG_ONESHOT||"false").toLowerCase()!=="true" &&
+     Date.now()-state.lastSelfTestAt>=SELF_TEST_INTERVAL_MS){
     state.lastSelfTestAt=Date.now();
     const selfTest=await runSelfTest();
     state.selfTest=selfTest;
