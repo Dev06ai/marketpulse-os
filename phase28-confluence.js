@@ -5,7 +5,7 @@ const VERSION="28.0.0";
 const n=(x,d=0)=>Number.isFinite(Number(x))?Number(x):d;
 function score(evidence=[]){
   let raw=50,reasons=[],conflicts=0;
-  for(const e of Array.isArray(evidence)?e:[]){
+  for(const e of Array.isArray(evidence)?evidence:[]){
     const w=Math.max(-30,Math.min(30,n(e.weight,0)));
     raw+=w;
     if(w>0)reasons.push(String(e.label||e.key||"evidence"));
