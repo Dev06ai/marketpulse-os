@@ -925,7 +925,7 @@ async function buildDecisionSnapshot(symbol,interval,query,deviceId=null){
       validation:validation1113,
       decisionIntelligence,
       marketState:phase18State||{},
-      priorDirection:signalStabilityState?.side||"WAIT"
+      priorDirection:String(finalDecision?.action||"WAIT").toUpperCase()
     });
     try{
       setTimeout(()=>signalNotifications.notifyAdminSignal(storage,{
