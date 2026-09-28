@@ -71,17 +71,25 @@ function defaultState(){
       riskByStrategy:{SCALP:0.25,INTRADAY:0.5,SWING:0.75,POSITION:1},
       maxPositions:1,
       maxDailyTrades:4,
-      cooldownMs:600000,
-      minScore:78,
-      minRR:1.5,
-      requireConfirmed:true,
+      cooldownMs:900000,
+      easyMode:true,
+      weekdayOnly:true,
+      autoManage:true,
+      minScore:72,
+      minRR:1.2,
+      minDataScore:80,
+      requireConfirmed:false,
       lastTradeAt:null,
       tradesToday:0,
       dayKey:todayKey(),
       lastSignalKey:null,
       lastDecisionAt:null,
       lastAction:"IDLE",
-      lastError:null
+      lastError:null,
+      learning:{
+        resolved:0,wins:0,losses:0,netR:0,lastOutcomeAt:null,lastOutcome:null,
+        byStrategy:{},bySetup:{},byRegime:{},recent:[],model:{bias:0,updates:0,learningRate:0.08}
+      }
     }
   };
 }
@@ -132,10 +140,24 @@ function ensureState(raw){
   BOT_STRATEGY_VALUES.forEach(k=>{s.bot.riskByStrategy[k]=clamp(finite(s.bot.riskByStrategy[k],d.bot.riskByStrategy[k]),0.05,2)});
   s.bot.maxPositions=Math.round(clamp(finite(s.bot.maxPositions,1),1,10));
   s.bot.maxDailyTrades=Math.round(clamp(finite(s.bot.maxDailyTrades,4),1,50));
-  s.bot.cooldownMs=Math.round(clamp(finite(s.bot.cooldownMs,600000),60000,86400000));
-  s.bot.minScore=clamp(finite(s.bot.minScore,78),70,100);
-  s.bot.minRR=clamp(finite(s.bot.minRR,1.5),1.5,5);
-  s.bot.requireConfirmed=s.bot.requireConfirmed!==false;
+  s.bot.cooldownMs=Math.round(clamp(finite(s.bot.cooldownMs,900000),60000,86400000));
+  s.bot.easyMode=s.bot.easyMode!==false;
+  s.bot.weekdayOnly=s.bot.weekdayOnly!==false;
+  s.bot.autoManage=s.bot.autoManage!==false;
+  s.bot.minScore=clamp(finite(s.bot.minScore,72),70,100);
+  s.bot.minRR=clamp(finite(s.bot.minRR,1.2),1.1,5);
+  s.bot.minDataScore=clamp(finite(s.bot.minDataScore,80),70,100);
+  s.bot.requireConfirmed=Boolean(s.bot.requireConfirmed);
+  s.bot.learning=Object.assign({},d.bot.learning,s.bot.learning||{});
+  s.bot.learning.resolved=Math.max(0,Math.round(finite(s.bot.learning.resolved,0)));
+  s.bot.learning.wins=Math.max(0,Math.round(finite(s.bot.learning.wins,0)));
+  s.bot.learning.losses=Math.max(0,Math.round(finite(s.bot.learning.losses,0)));
+  s.bot.learning.netR=finite(s.bot.learning.netR,0);
+  s.bot.learning.recent=Array.isArray(s.bot.learning.recent)?s.bot.learning.recent.slice(-50):[];
+  s.bot.learning.byStrategy=Object.assign({},d.bot.learning.byStrategy,s.bot.learning.byStrategy||{});
+  s.bot.learning.bySetup=Object.assign({},d.bot.learning.bySetup,s.bot.learning.bySetup||{});
+  s.bot.learning.byRegime=Object.assign({},d.bot.learning.byRegime,s.bot.learning.byRegime||{});
+  s.bot.learning.model=Object.assign({},d.bot.learning.model,s.bot.learning.model||{});
   if(s.bot.dayKey!==todayKey()){s.bot.dayKey=todayKey();s.bot.tradesToday=0;s.bot.lastSignalKey=null}
   s.bot.tradesToday=Math.max(0,Math.round(finite(s.bot.tradesToday,0)));
   return s;
@@ -296,7 +318,8 @@ async function marketGate(plan,state){
   const symbol=String(p.symbol||"").toUpperCase();
   if(!symbol)return {allowed:false,reason:"SYMBOL REQUIRED"};
   if(entry===null||stop===null||target===null||riskDistance<=0)return {allowed:false,reason:"INVALID LEVELS"};
-  if(rr<1.5)return {allowed:false,reason:"R:R BELOW 1.50"};
+  const minRR=p.easyMode?1.2:1.5;
+  if(rr<minRR)return {allowed:false,reason:"R:R BELOW "+minRR.toFixed(2)};
   if(!Number.isFinite(qty)||qty<=0)return {allowed:false,reason:"INVALID POSITION SIZE"};
   const tradeRiskCash=Math.abs(entry-stop)*qty;
   const tradeRiskPct=tradeRiskCash/Math.max(1,state.config.account)*100;
@@ -441,7 +464,7 @@ async function createIntent(plan){
   if(duplicate)return clone(duplicate);
   const id=intentId();
   const riskPct=clamp(finite(p.riskPct,state.config.riskPct),0.05,5);
-  const order={id,orderLinkId:linkId(id),intentKey:[symbol,side,entry,stop,target,p.signalId||""].join("|"),signalId:p.signalId||null,symbol,interval:p.interval||"1h",side,type:"LIMIT",status:"INTENT",entry,stop,target,qty:finite(p.qty),rr:reward/riskDistance,riskPct,riskCash:state.config.account*riskPct/100,createdAt:now(),updatedAt:now(),externalOrderId:null,avgPrice:null,cumExecQty:0,leavesQty:null,source:p.source||"PHASE4",note:p.note||""};
+  const order={id,orderLinkId:linkId(id),intentKey:[symbol,side,entry,stop,target,p.signalId||""].join("|"),signalId:p.signalId||null,symbol,interval:p.interval||"1h",side,type:"LIMIT",status:"INTENT",entry,stop,target,qty:finite(p.qty),rr:reward/riskDistance,riskPct,riskCash:state.config.account*riskPct/100,createdAt:now(),updatedAt:now(),externalOrderId:null,avgPrice:null,cumExecQty:0,leavesQty:null,source:p.source||"PHASE4",note:p.note||"",easyMode:Boolean(p.easyMode),strategy:p.strategy||null,setup:p.setup||null,regime:p.regime||null,score:Number(p.score)||0,maxHoldMs:Number(p.maxHoldMs)||0};
   state.orders.push(order);state.orders=state.orders.slice(-MAX_ORDERS);pushEvent(state,"INTENT_CREATED",symbol+" "+side+" execution intent created",{orderId:order.id,signalId:order.signalId});
   await save(state);return clone(order);
 }
@@ -450,7 +473,7 @@ async function submitIntent(id){
   const loaded=await load(),state=loaded.state,o=findOrder(state,id),exchangeAdapter=adapterFor(state);
   if(!o)throw new Error("Execution intent not found");
   if(["SUBMITTED","ACKNOWLEDGED","OPEN","PARTIALLY_FILLED","FILLED"].includes(o.status))return clone(o);
-  const plan={symbol:o.symbol,side:o.side,entry:o.entry,stop:o.stop,target:o.target,qty:o.qty,type:o.type,riskPct:o.riskPct,createdAt:o.createdAt};
+  const plan={symbol:o.symbol,side:o.side,entry:o.entry,stop:o.stop,target:o.target,qty:o.qty,type:o.type,riskPct:o.riskPct,easyMode:o.easyMode,strategy:o.strategy,setup:o.setup,regime:o.regime,score:o.score,createdAt:o.createdAt};
   o.status="VALIDATING";o.updatedAt=now();
   let gate;
   try{gate=await marketGate(plan,state)}catch(e){gate={allowed:false,reason:e.message}}
@@ -463,7 +486,7 @@ async function submitIntent(id){
   if(state.config.mode==="SIMULATION"){
     o.status="SUBMITTED";o.externalOrderId="SIM-"+o.id;o.exchangeStatus="Simulated";
     o.status="ACKNOWLEDGED";o.status="FILLED";o.avgPrice=o.entry;o.cumExecQty=o.qty;o.leavesQty=0;o.filledAt=now();o.updatedAt=now();
-    const position={id:"MP5P-"+o.id,externalKey:"SIM:"+o.id,symbol:o.symbol,interval:o.interval,side:o.side,qty:o.qty,entry:o.entry,stop:o.stop,target:o.target,riskCash:o.riskCash,openedAt:now(),markPrice:o.entry,source:"SIMULATION"};
+    const position={id:"MP5P-"+o.id,externalKey:"SIM:"+o.id,symbol:o.symbol,interval:o.interval,side:o.side,qty:o.qty,entry:o.entry,stop:o.stop,target:o.target,riskCash:o.riskCash,openedAt:now(),markPrice:o.entry,source:"SIMULATION",strategy:o.strategy||p.strategy||null,setup:o.setup||p.setup||p.type||null,regime:o.regime||p.regime||null,score:Number(o.score||p.score)||0,maxHoldMs:Number(o.maxHoldMs||p.maxHoldMs||0)};
     state.positions.push(position);state.positions=state.positions.slice(-MAX_POSITIONS);
     state.control.reconciliation={ok:true,checkedAt:now(),detail:"Simulation mode"};
     addJournal(state,{id:"MP5J-"+o.id,ts:now(),type:"SIMULATION_FILLED",orderId:o.id,symbol:o.symbol,side:o.side,qty:o.qty,price:o.entry,resultR:0,pnl:0,message:"Simulation fill created; position remains open until explicitly closed."});
@@ -491,7 +514,31 @@ async function cancelOrder(id){
   await save(state);return clone(o);
 }
 
-async function closeSimulationPosition(positionId,exitPrice){
+async function manageSimulationPositions(markPrices={},opts={}){
+  const loaded=await load(),state=loaded.state;
+  if(state.config.mode!=="SIMULATION")return {ok:true,closed:0,mode:state.config.mode};
+  let closed=0,results=[];
+  const nowTs=now();
+  for(const p of [...activePositions(state)]){
+    if(p.source!=="SIMULATION")continue;
+    const mark=finite(markPrices[p.symbol],p.markPrice);
+    if(mark===null)continue;
+    const age=nowTs-Number(p.openedAt||nowTs);
+    const maxHoldMs=Number(p.maxHoldMs||opts.maxHoldMs||0);
+    let exitReason=null,exitPrice=mark;
+    if(p.side==="LONG"&&mark<=Number(p.stop))exitReason="STOP";
+    else if(p.side==="LONG"&&mark>=Number(p.target))exitReason="TARGET";
+    else if(p.side==="SHORT"&&mark>=Number(p.stop))exitReason="STOP";
+    else if(p.side==="SHORT"&&mark<=Number(p.target))exitReason="TARGET";
+    else if(maxHoldMs>0&&age>=maxHoldMs)exitReason="TIMEOUT";
+    if(!exitReason)continue;
+    const result=await closeSimulationPosition(p.id,exitPrice,{reason:exitReason,markPrice:mark});
+    closed+=1;results.push({positionId:p.id,reason:exitReason,snapshot:result});
+  }
+  return {ok:true,closed,results};
+}
+
+async function closeSimulationPosition(positionId,exitPrice,meta={}){
   const loaded=await load(),state=loaded.state,p=state.positions.find(x=>x.id===positionId);
   if(!p)throw new Error("Position not found");
   if(state.config.mode!=="SIMULATION")throw new Error("Manual close is only available for simulation positions");
@@ -501,8 +548,20 @@ async function closeSimulationPosition(positionId,exitPrice){
   state.metrics.realizedPnl+=pnl;state.metrics.realizedR+=r;state.positions=state.positions.filter(x=>x.id!==positionId);
   const o=p.orderId?findOrder(state,p.orderId):state.orders.find(x=>x.externalOrderId==="SIM-"+String(p.id).replace("MP5P-",""));
   if(o){o.status="CLOSED";o.closedAt=now();o.updatedAt=now()}
-  addJournal(state,{id:"MP5J-C-"+positionId,ts:now(),type:"SIMULATION_CLOSED",positionId,symbol:p.symbol,side:p.side,qty:p.qty,entry:p.entry,exit,resultR:r,pnl,message:"Simulation position closed manually."});
-  pushEvent(state,"POSITION_CLOSED",p.symbol+" "+p.side+" closed · "+r.toFixed(2)+"R",{positionId,pnl,r});
+  const reason=String(meta.reason||"MANUAL").toUpperCase();
+  addJournal(state,{id:"MP5J-C-"+positionId,ts:now(),type:"SIMULATION_CLOSED",positionId,symbol:p.symbol,side:p.side,qty:p.qty,entry:p.entry,exit,resultR:r,pnl,message:"Simulation position closed · "+reason});
+  pushEvent(state,"POSITION_CLOSED",p.symbol+" "+p.side+" closed · "+r.toFixed(2)+"R",{positionId,pnl,r,reason});
+  if(String(p.source||"")==="SIMULATION"&&p.strategy){
+    const outcome=r>0.05?"WIN":r<-0.05?"LOSS":"TIMEOUT";
+    state.bot=ensureState(state).bot;
+    // update learning atomically with the same persisted state
+    const l=state.bot.learning;
+    if(outcome!=="TIMEOUT"){l.resolved+=1;if(outcome==="WIN")l.wins+=1;if(outcome==="LOSS")l.losses+=1}
+    l.netR+=r;l.lastOutcomeAt=now();l.lastOutcome={outcome,resultR:r,strategy:p.strategy,setup:p.setup||p.type,regime:p.regime,symbol:p.symbol,side:p.side};
+    updateBotBucket(l.byStrategy,p.strategy,outcome,r);updateBotBucket(l.bySetup,p.setup||p.type||"UNKNOWN",outcome,r);updateBotBucket(l.byRegime,p.regime||"UNKNOWN",outcome,r);
+    l.recent.push({ts:now(),outcome,resultR:r,strategy:p.strategy,setup:p.setup||p.type||"UNKNOWN",regime:p.regime||"UNKNOWN",symbol:p.symbol,side:p.side,score:Number(p.score)||0});
+    l.recent=l.recent.slice(-50);
+  }
   await save(state);return snapshot();
 }
 
@@ -580,16 +639,59 @@ async function reconcile(){
 
 async function setBotConfig(patch={}){
   const loaded=await load(),state=loaded.state;
+  const requested=Object.assign({},state.bot||{},patch||{});
+  if(String(requested.mode||"PAPER").toUpperCase()==="PAPER"){
+    requested.mode="PAPER";
+    await setConfig({mode:"SIMULATION"});
+    const refreshed=await load();state.bot=refreshed.state.bot;
+  }
+  const next=Object.assign({},state.bot||{},requested||{});
+
+  const loaded=await load(),state=loaded.state;
   const next=Object.assign({},state.bot||{},patch||{});
   if(next.mode==="LIVE" && String(process.env.LIVE_TRADING_ENABLED||"false").toLowerCase()!=="true"){
     throw new Error("LIVE_TRADING_ENABLED is OFF");
   }
   state.bot=ensureState(Object.assign({},state,{bot:next})).bot;
-  pushEvent(state,"BOT_CONFIG_UPDATED","AutoTrader configuration updated",{mode:state.bot.mode,enabled:state.bot.enabled,strategies:state.bot.strategies});
+  if(state.bot.mode==="PAPER"){
+    state.config.mode="SIMULATION";state.control.armed=false;state.control.killSwitch=false;
+    state.control.reconciliation={ok:true,checkedAt:now(),detail:"Paper mode auto-simulation."};
+  }
+  pushEvent(state,"BOT_CONFIG_UPDATED","AutoTrader configuration updated",{mode:state.bot.mode,enabled:state.bot.enabled,strategies:state.bot.strategies,easyMode:state.bot.easyMode});
   await save(state);
   const out=botSnapshot(state);
   AUTOTRADER_STATUS_CACHE.ts=now();AUTOTRADER_STATUS_CACHE.payload=out;
   return out;
+}
+function updateBotBucket(map,key,outcome,resultR){
+  const k=String(key||"UNKNOWN"),b=map[k]||{n:0,wins:0,losses:0,netR:0};
+  b.n+=1;if(outcome==="WIN")b.wins+=1;if(outcome==="LOSS")b.losses+=1;b.netR+=Number(resultR)||0;map[k]=b;
+}
+function recordBotOutcome(meta={}){
+  return load().then(async({state})=>{
+    state.bot=ensureState(Object.assign({},state)).bot;
+    const outcome=String(meta.outcome||"").toUpperCase(),resultR=Number(meta.resultR)||0;
+    if(!["WIN","LOSS","TIMEOUT"].includes(outcome))return botSnapshot(state);
+    const l=state.bot.learning;
+    if(outcome!=="TIMEOUT"){l.resolved+=1;if(outcome==="WIN")l.wins+=1;if(outcome==="LOSS")l.losses+=1}
+    l.netR+=resultR;
+    l.lastOutcomeAt=now();l.lastOutcome={outcome,resultR,strategy:meta.strategy||null,setup:meta.setup||null,regime:meta.regime||null,symbol:meta.symbol||null,side:meta.side||null};
+    updateBotBucket(l.byStrategy,meta.strategy||"UNKNOWN",outcome,resultR);
+    updateBotBucket(l.bySetup,meta.setup||"UNKNOWN",outcome,resultR);
+    updateBotBucket(l.byRegime,meta.regime||"UNKNOWN",outcome,resultR);
+    const rate=l.resolved?l.wins/l.resolved:0;
+    const model=l.model||{bias:0,updates:0,learningRate:.08};
+    if(outcome==="WIN")model.bias=Math.min(2,(Number(model.bias)||0)+model.learningRate);
+    if(outcome==="LOSS")model.bias=Math.max(-2,(Number(model.bias)||0)-model.learningRate);
+    model.updates=Number(model.updates||0)+(outcome==="TIMEOUT"?0:1);l.model=model;
+    l.recent.push({ts:now(),outcome,resultR,strategy:meta.strategy||null,setup:meta.setup||null,regime:meta.regime||null,symbol:meta.symbol||null,side:meta.side||null,score:Number(meta.score)||0});
+    l.recent=l.recent.slice(-50);
+    state.bot.lastAction=outcome==="WIN"?"AUTO_TRADE_WIN":outcome==="LOSS"?"AUTO_TRADE_LOSS":"AUTO_TRADE_TIMEOUT";
+    state.bot.lastError=null;
+    pushEvent(state,"BOT_LEARNING_UPDATE","AutoTrader learned from a resolved simulation outcome",{outcome,resultR,strategy:meta.strategy||null,setup:meta.setup||null,regime:meta.regime||null,score:Number(meta.score)||0,winRate:rate});
+    await save(state);
+    const out=botSnapshot(state);AUTOTRADER_STATUS_CACHE.ts=now();AUTOTRADER_STATUS_CACHE.payload=out;return out;
+  });
 }
 function botSnapshot(rawState){
   const state=rawState&&rawState.config?ensureState(rawState):rawState;
@@ -602,6 +704,18 @@ function botSnapshot(rawState){
       killSwitch:state.control.killSwitch,
       reconciliation:state.control.reconciliation,
       metrics:{dailyLossPct:dailyLossPct(state),openRiskPct:openRiskPct(state),activePositions:activePositions(state).length,ordersLastMinute:ordersLastMinute(state)}
+    },
+    learning:{
+      resolved:state.bot.learning?.resolved||0,
+      wins:state.bot.learning?.wins||0,
+      losses:state.bot.learning?.losses||0,
+      winRate:state.bot.learning?.resolved?Number(((state.bot.learning.wins/state.bot.learning.resolved)*100).toFixed(1)):null,
+      netR:Number(state.bot.learning?.netR||0),
+      model:state.bot.learning?.model||{},
+      lastOutcome:state.bot.learning?.lastOutcome||null,
+      byStrategy:state.bot.learning?.byStrategy||{},
+      bySetup:state.bot.learning?.bySetup||{},
+      byRegime:state.bot.learning?.byRegime||{}
     },
     health:{lastError:state.health.lastError,privateWsConnected:wsState.connected}
   };
@@ -705,6 +819,8 @@ module.exports={
   reconcile,
   prepareFromSignal,
   autoSubmitFinalDecision,
+  manageSimulationPositions,
+  recordBotOutcome,
   setBotConfig,
   getBotSnapshot,
   recordBotTradeMeta,
