@@ -2257,6 +2257,12 @@ const server=http.createServer(async(req,res)=>{
         return send(res,503,{ok:false,error:e.message,transient:true});
       }
     }
+    if(req.method==='GET'&&u.pathname==='/api/autotrader/history'){
+      try{
+        const limit=Math.max(1,Math.min(Number(u.searchParams.get("limit")||100),500));
+        return send(res,200,await execution.getBotTradeHistory(limit),{"cache-control":"no-store, max-age=0"});
+      }catch(e){return send(res,503,{ok:false,error:e.message})}
+    }
     if(req.method==='POST'&&u.pathname==='/api/autotrader/config'){
       let raw="";for await(const chunk of req)raw+=chunk;let body={};try{body=JSON.parse(raw||"{}")}catch{return send(res,400,{error:"Invalid JSON"})}
       try{
