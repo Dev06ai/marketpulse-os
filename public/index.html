@@ -1170,7 +1170,7 @@ linear-gradient(180deg,#0c0e11 0%,#101214 48%,#0a0b0d 100%);box-shadow:0 -20px 7
           </div>
           <div class="mpdc-gate-wrap">
             <span class="mpdc-gate-label">EXECUTION</span>
-            <span class="mpdc-gate" id="deploymentGate">PAPER ONLY</span>
+            <span class="mpdc-gate" id="mpdcDeploymentGate">PAPER ONLY</span>
             <span class="mpdc-live-status liveDecisionStatus" id="liveDecisionStatus">WAITING</span>
           </div>
         </div>
@@ -1248,7 +1248,7 @@ linear-gradient(180deg,#0c0e11 0%,#101214 48%,#0a0b0d 100%);box-shadow:0 -20px 7
               <div class="livePlanInvalidation mpdc-invalidation"><span>EXIT / INVALIDATION</span><b id="livePlanInvalidation">—</b></div>
             </div>
 
-            <div class="mpdc-gate-note" id="deploymentReason">Execution gate remains authoritative.</div>
+            <div class="mpdc-gate-note" id="mpdcDeploymentReason">Execution gate remains authoritative.</div>
           </section>
         </div>
 
@@ -5691,7 +5691,10 @@ function renderFinalDecision(d){
 
   var gs=gate.state||p.mode||"PAPER_ONLY";
   if($("deploymentGate"))$("deploymentGate").textContent=gs;
-  if($("deploymentReason"))$("deploymentReason").textContent="Execution gate: "+gs+". Directional context remains synchronized to live market data.";
+  if($("mpdcDeploymentGate"))$("mpdcDeploymentGate").textContent=gs;
+  var gateReason="Execution gate: "+gs+". Directional context remains synchronized to live market data.";
+  if($("deploymentReason"))$("deploymentReason").textContent=gateReason;
+  if($("mpdcDeploymentReason"))$("mpdcDeploymentReason").textContent=gateReason;
   if($("validationChip"))$("validationChip").textContent=gs;
   $("adaptiveChip").textContent=isAdminUser()?"Adaptive: "+(p.mode||"collecting"):"Model status: live";
 
