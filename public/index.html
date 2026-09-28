@@ -173,7 +173,67 @@ button,input,select,textarea{font:inherit}.wrap{width:min(1440px,calc(100% - 26p
 .quickCalculators .unitSettings{margin-top:10px;padding:10px;border:1px solid rgba(255,255,255,.065);border-radius:10px;background:#0b0c0f}.quickCalculators .unitSettingsTitle{font-size:9px;font-weight:900;letter-spacing:.08em;text-transform:uppercase;color:#788291;margin-bottom:9px}.quickCalculators .unitMode{position:relative;display:flex;align-items:flex-start;gap:9px;padding:8px 7px;border-radius:8px;cursor:pointer;color:#aeb6c2}.quickCalculators .unitMode:hover{background:rgba(255,255,255,.025)}.quickCalculators .unitMode input{position:absolute;opacity:0;pointer-events:none}.quickCalculators .unitRadio{width:14px;height:14px;margin-top:2px;border:1px solid #55606d;border-radius:50%;box-shadow:inset 0 0 0 3px #0b0c0f;flex:none}.quickCalculators .unitMode input:checked+.unitRadio{border-color:#a7f3d0;background:#a7f3d0}.quickCalculators .unitMode b{display:block;color:#e1e6ed;font-size:10px;font-weight:850}.quickCalculators .unitMode small{display:block;margin-top:3px;color:#697381;font-size:8px;line-height:1.35}.quickCalculators .unitChoices{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;padding:0 0 8px 23px}.quickCalculators .unitChoice{border:1px solid rgba(255,255,255,.07);background:#111217;color:#8f98a6;border-radius:8px;padding:8px 6px;font-size:9px;font-weight:850;cursor:pointer}.quickCalculators .unitChoice:hover{border-color:rgba(167,243,208,.22)}.quickCalculators .unitChoice:disabled{opacity:.42;cursor:not-allowed}.quickCalculators .unitChoice.active{border-color:rgba(103,232,255,.30);background:linear-gradient(100deg,rgba(103,232,255,.10),rgba(183,140,255,.08));color:#dceeff}.quickCalculators .contractSizeRow{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:end;padding:0 0 4px 23px}.quickCalculators .contractSizeRow>span{padding-bottom:10px;color:#677180;font-size:8px}.quickCalculators .contractSizeRow[hidden]{display:none}@media(max-width:700px){.quickCalculators .unitChoices{padding-left:21px}.quickCalculators .contractSizeRow{grid-template-columns:1fr;padding-left:21px}.quickCalculators .contractSizeRow>span{padding-bottom:0}}.quickCalculators .calcResult{transition:box-shadow .16s ease,border-color .16s ease,color .16s ease}.quickCalculators .calcResult.calc-profit{color:#75f0a7;border-color:rgba(92,240,163,.42);box-shadow:0 0 18px rgba(92,240,163,.10),inset 0 0 18px rgba(92,240,163,.035)}.quickCalculators .calcResult.calc-loss{color:#ff7897;border-color:rgba(255,88,124,.42);box-shadow:0 0 18px rgba(255,88,124,.12),inset 0 0 18px rgba(255,88,124,.035)}.quickCalculators .calcResult.calc-neutral{color:#aab2bf;border-color:rgba(255,255,255,.07);box-shadow:none}
 
 .quickCalculators .liqModeRow{display:grid;grid-template-columns:repeat(2,1fr);gap:6px;margin:8px 0}.quickCalculators .liqToggle{border:1px solid rgba(255,255,255,.07);background:#111217;color:#8f98a6;border-radius:8px;padding:9px 6px;font-size:9px;font-weight:850;cursor:pointer}.quickCalculators .liqToggle.active{border-color:rgba(103,232,255,.30);background:linear-gradient(100deg,rgba(103,232,255,.10),rgba(183,140,255,.08));color:#e5f7ff}.quickCalculators .calcResultsBlock{margin-top:11px;padding:11px 12px;border:1px solid rgba(255,255,255,.065);border-radius:10px;background:#0b0c0f}.quickCalculators .calcResultsTitle{margin-bottom:8px;font-size:10px;font-weight:900;color:#f0f2f5}.quickCalculators .calcResultRow{display:flex;justify-content:space-between;gap:12px;padding:8px 0;border-top:1px solid rgba(255,255,255,.045);color:#7f8997;font-size:9px}.quickCalculators .calcResultRow:first-of-type{border-top:0}.quickCalculators .calcResultRow b{color:#e9edf2;font-size:11px;font-weight:850}.quickCalculators .pnlValueRow.calc-profit b{color:#75f0a7;text-shadow:0 0 14px rgba(92,240,163,.18)}.quickCalculators .pnlValueRow.calc-loss b{color:#ff7897;text-shadow:0 0 14px rgba(255,88,124,.18)}.quickCalculators #liqResult{font-size:14px;font-weight:900;text-align:left}.quickCalculators .calcResult.calc-neutral{color:#aab2bf;border-color:rgba(255,255,255,.07);box-shadow:none}
-</style>
+<style>
+.liveDecisionModel{
+  margin-top:9px;
+  padding:10px;
+  border:1px solid rgba(130,110,190,.24);
+  border-radius:14px;
+  background:
+    linear-gradient(135deg,rgba(65,78,105,.18),rgba(10,12,18,.48)),
+    radial-gradient(circle at 10% 0%,rgba(103,232,255,.06),transparent 42%),
+    radial-gradient(circle at 90% 0%,rgba(244,114,182,.07),transparent 44%);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.025),0 10px 24px rgba(0,0,0,.10);
+}
+.liveDecisionHead,.livePlanHead{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.liveDecisionEyebrow{font-size:8px;letter-spacing:.16em;font-weight:900;color:#8fa4bb}
+.liveDecisionHint{font-size:8px;color:#6f8095;margin-top:3px}
+.liveDecisionStatus,.livePlanSide{
+  display:inline-flex;align-items:center;justify-content:center;min-width:58px;padding:5px 8px;
+  border-radius:999px;border:1px solid rgba(192,132,252,.22);background:rgba(192,132,252,.08);
+  color:#d9c4ff;font-size:8px;font-weight:900;letter-spacing:.08em
+}
+.livePlanSide.long{color:#72f2ab;background:rgba(74,222,128,.08);border-color:rgba(74,222,128,.24)}
+.livePlanSide.short{color:#ff879f;background:rgba(248,113,133,.08);border-color:rgba(248,113,133,.24)}
+.livePlanSide.wait{color:#d8c4ff;background:rgba(192,132,252,.08);border-color:rgba(192,132,252,.24)}
+.directionProbGrid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-top:9px}
+.directionProb{padding:8px 9px;border-radius:10px;border:1px solid rgba(255,255,255,.07);background:rgba(10,12,18,.26);display:flex;flex-direction:column;gap:2px}
+.directionProbLabel{font-size:8px;font-weight:900;letter-spacing:.13em}
+.directionProb strong{font-size:21px;line-height:1.05;letter-spacing:-.03em}
+.directionProb span:last-child{font-size:7px;color:#71839a}
+.longProb .directionProbLabel,.longProb strong{color:#6ff0aa}.shortProb .directionProbLabel,.shortProb strong{color:#ff8199}.waitProb .directionProbLabel,.waitProb strong{color:#d09aff}
+.probabilityBars{display:grid;gap:5px;margin-top:8px}
+.probabilityBarRow{display:grid;grid-template-columns:38px minmax(0,1fr) 34px;gap:6px;align-items:center;font-size:7px;font-weight:900;color:#8395aa}
+.probabilityBarRow>div{height:5px;border-radius:999px;background:rgba(255,255,255,.055);overflow:hidden}
+.probabilityBarRow i{display:block;height:100%;width:0;border-radius:999px;transition:width .18s ease}
+.probabilityBarRow:nth-child(1) i{background:linear-gradient(90deg,#36d886,#77f2b0)}
+.probabilityBarRow:nth-child(2) i{background:linear-gradient(90deg,#ef5d79,#ff9cae)}
+.probabilityBarRow:nth-child(3) i{background:linear-gradient(90deg,#9770d8,#d3a3ff)}
+.probabilityBarRow b{font-size:8px;text-align:right;color:#b7c3d1}
+.liveEvidenceGrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px;margin-top:8px}
+.liveEvidenceGrid span{
+  min-width:0;padding:5px 6px;border:1px solid rgba(255,255,255,.065);border-radius:8px;
+  background:rgba(255,255,255,.018);font-size:7px;font-weight:800;color:#95a6ba;white-space:nowrap;overflow:hidden;text-overflow:ellipsis
+}
+.liveEvidenceGrid span.livePositive{color:#71efaa;border-color:rgba(74,222,128,.18);background:rgba(74,222,128,.035)}
+.liveEvidenceGrid span.liveNegative{color:#ff889e;border-color:rgba(248,113,133,.18);background:rgba(248,113,133,.035)}
+.liveEvidenceGrid span.liveNeutral{color:#b59bd5}
+.livePlanHead{margin-top:10px;padding-top:8px;border-top:1px solid rgba(255,255,255,.055)}
+.livePlanGrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:5px;margin-top:7px}
+.livePlanGrid>div{padding:6px 7px;border:1px solid rgba(255,255,255,.06);border-radius:8px;background:rgba(255,255,255,.018)}
+.livePlanGrid span{display:block;font-size:7px;color:#73859a;font-weight:800;letter-spacing:.08em}
+.livePlanGrid b{display:block;margin-top:2px;font-size:10px;color:#e9f1f8}
+.livePlanThesis{margin-top:7px;padding:8px;border-radius:9px;background:rgba(255,255,255,.018);border:1px solid rgba(255,255,255,.06)}
+.livePlanThesis>div:nth-child(2){margin-top:4px;font-size:8px;line-height:1.45;color:#d6dde6}
+.livePlanInvalidation{display:flex;justify-content:space-between;gap:10px;margin-top:6px;padding-top:6px;border-top:1px solid rgba(255,255,255,.05)}
+.livePlanInvalidation span{font-size:7px;font-weight:900;color:#71839a;letter-spacing:.08em}.livePlanInvalidation b{font-size:8px;color:#ffb0bd}
+.liveDecisionFootnote{margin-top:7px;font-size:7px;line-height:1.35;color:#66788d}
+@media(max-width:720px){
+  .directionProbGrid{grid-template-columns:1fr 1fr}.directionProb.waitProb{grid-column:1/-1}
+  .liveEvidenceGrid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .livePlanGrid{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+</style></style>
 <style id="beginner-friendly-style">
 .beginnerGuideBtn{border-color:rgba(103,232,255,.22)!important;color:#bdefff!important}
 .termHint{display:inline-grid;place-items:center;width:13px;height:13px;margin-left:3px;border:1px solid rgba(103,232,255,.22);border-radius:50%;font-size:8px;color:#8fdff2;vertical-align:1px;cursor:help}
@@ -962,7 +1022,87 @@ linear-gradient(180deg,#0c0e11 0%,#101214 48%,#0a0b0d 100%);box-shadow:0 -20px 7
       <div class="sectionHead"><div><div class="title">Decision Center</div><div class="sub">A simple summary of what the market is doing and what would change the view.</div></div><span class="chip" id="adaptiveChip">Adaptive: collecting</span></div>
       <div class="grid2">
             <div class="section grid2">
-      <div class="card decisionStateCard"><div class="sectionHead"><div><div class="title" id="thesisTitle">Loading market context…</div><div class="sub" id="thesisState">—</div></div><div class="value" id="thesisScore">—</div></div><div class="small" id="finalEngineMeta" style="margin-bottom:7px">Phase 9/10 engine warming…</div><div id="thesis" class="thesis">Waiting for the live model.</div><div class="chips" id="thesisChips"></div><div class="scenario"><div class="mini"><div class="k">Primary scenario</div><div class="v" id="primary">—</div></div><div class="mini"><div class="k">What would break it</div><div class="v" id="alternate">—</div></div></div></div>
+      <div class="card decisionStateCard">
+  <div class="sectionHead">
+    <div><div class="title" id="thesisTitle">Loading market context…</div><div class="sub" id="thesisState">—</div></div>
+    <div class="value" id="thesisScore">—</div>
+  </div>
+  <div class="small" id="finalEngineMeta" style="margin-bottom:7px">Phase 9/10 engine warming…</div>
+  <div id="thesis" class="thesis">Waiting for the live model.</div>
+  <div class="chips" id="thesisChips"></div>
+
+  <div class="liveDecisionModel" id="liveDecisionModel">
+    <div class="liveDecisionHead">
+      <div>
+        <div class="liveDecisionEyebrow">LIVE DIRECTIONAL MODEL</div>
+        <div class="liveDecisionHint">Model estimate · synchronized to the live chart and current flow</div>
+      </div>
+      <span class="liveDecisionStatus" id="liveDecisionStatus">WAITING</span>
+    </div>
+
+    <div class="directionProbGrid">
+      <div class="directionProb longProb">
+        <span class="directionProbLabel">LONG</span>
+        <strong id="probLong">—%</strong>
+        <span id="probLongText">directional estimate</span>
+      </div>
+      <div class="directionProb shortProb">
+        <span class="directionProbLabel">SHORT</span>
+        <strong id="probShort">—%</strong>
+        <span id="probShortText">directional estimate</span>
+      </div>
+      <div class="directionProb waitProb">
+        <span class="directionProbLabel">WAIT</span>
+        <strong id="probWait">—%</strong>
+        <span id="probWaitText">no-trade pressure</span>
+      </div>
+    </div>
+
+    <div class="probabilityBars">
+      <div class="probabilityBarRow"><span>LONG</span><div><i id="probLongBar"></i></div><b id="probLongBarValue">—</b></div>
+      <div class="probabilityBarRow"><span>SHORT</span><div><i id="probShortBar"></i></div><b id="probShortBarValue">—</b></div>
+      <div class="probabilityBarRow"><span>WAIT</span><div><i id="probWaitBar"></i></div><b id="probWaitBarValue">—</b></div>
+    </div>
+
+    <div class="liveEvidenceGrid">
+      <span id="liveFlowCvd">CVD · —</span>
+      <span id="liveFlowOi">OI · —</span>
+      <span id="liveFlowLiq">LIQ · —</span>
+      <span id="liveFlowBook">BOOK · —</span>
+      <span id="liveFlowTaker">TAKER · —</span>
+      <span id="liveFlowMtf">HTF · —</span>
+    </div>
+
+    <div class="livePlanHead">
+      <div>
+        <div class="liveDecisionEyebrow">CONDITIONAL TRADE PLAN</div>
+        <div class="liveDecisionHint" id="livePlanStatus">Waiting for a validated directional setup</div>
+      </div>
+      <span class="livePlanSide" id="livePlanSide">WAIT</span>
+    </div>
+
+    <div class="livePlanGrid">
+      <div><span>LIVE PRICE</span><b id="livePlanPrice">—</b></div>
+      <div><span>ENTRY</span><b id="livePlanEntry">—</b></div>
+      <div><span>SL</span><b id="livePlanSl">—</b></div>
+      <div><span>TP1</span><b id="livePlanTp1">—</b></div>
+      <div><span>TP2</span><b id="livePlanTp2">—</b></div>
+      <div><span>R:R</span><b id="livePlanRr">—</b></div>
+    </div>
+
+    <div class="livePlanThesis">
+      <div class="liveDecisionEyebrow">THESIS</div>
+      <div id="livePlanThesis">Waiting for the live directional model.</div>
+      <div class="livePlanInvalidation"><span>INVALIDATION</span><b id="livePlanInvalidation">—</b></div>
+    </div>
+
+    <div class="liveDecisionFootnote" id="liveDecisionFootnote">
+      Percentages are MarketPulse model estimates, not guaranteed win probabilities. The execution/safety gate remains authoritative.
+    </div>
+  </div>
+
+  <div class="scenario"><div class="mini"><div class="k">Primary scenario</div><div class="v" id="primary">—</div></div><div class="mini"><div class="k">What would break it</div><div class="v" id="alternate">—</div></div></div>
+</div>
       <div class="card signalQualityCard"><div class="sectionHead"><div><div class="title">Why the signal looks this way</div><div class="sub">See which parts of the market are helping or weakening the setup.</div></div><span class="value" id="quality">—</span></div><div id="components" class="list"></div></div>
     </div>
       </div>
@@ -3982,6 +4122,7 @@ function updateLiveChartPrice(price,ts,symbol,change24h){
     }
   }
   queueChartDraw();
+  if(state.finalDecision)renderLiveDirectionalModel(state.finalDecision);
 }
 function applyLiveKline(kline,symbol){
   if(!kline||symbol!==state.symbol)return;
@@ -4052,7 +4193,10 @@ function startLiveChartStream(symbol){
       if(state.liveChartStream!==session)return;
       session.connected=true;session.retries=0;
       var k=bybitKlineInterval(tf);
-      ws.send(JSON.stringify({op:"subscribe",args:["tickers."+symbol,"kline."+k+"."+symbol]}));
+      ws.send(JSON.stringify({op:"subscribe",args:["tickers."+symbol,"kline."+k+"."+symbol,"publicTrade."+symbol,"orderbook.50."+symbol,"allLiquidation."+symbol]}));
+      var baseFlow=(state.market&&state.market.derivatives)||(state.finalDecision&&state.finalDecision.derivatives)||{};
+      session.liveFlow={cvd:Number(baseFlow.cvdDelta)||0,cvdNotional:Number(baseFlow.cvdRatio)?Math.abs(Number(baseFlow.cvdDelta||0)/Number(baseFlow.cvdRatio)):0,cvdRatio:Number(baseFlow.cvdRatio),oi:Number(baseFlow.oi),liquidationBias:baseFlow.liquidationBias,liquidationTotal:Number(baseFlow.liquidationTotal)||0,longLiquidations:Number(baseFlow.longLiquidations)||0,shortLiquidations:Number(baseFlow.shortLiquidations)||0,orderBookImbalance:Number(baseFlow.orderBookImbalance),takerImbalance:Number(baseFlow.takerImbalance),fundingRate:Number(baseFlow.fundingRate),available:baseFlow.available!==false};
+      state.liveFlow=session.liveFlow;
       session.pingTimer=setInterval(function(){try{if(ws.readyState===WebSocket.OPEN)ws.send(JSON.stringify({op:"ping"}))}catch{}},20000);
       $("dataState").textContent="Live stream";
       var meta=$("ohlc");if(meta&&state.crossX==null)meta.textContent="LIVE STREAM · waiting for tick";
@@ -4068,6 +4212,45 @@ function startLiveChartStream(symbol){
             var ch=Number(d?.price24hPcnt);
             updateLiveChartPrice(p,Number(msg.ts)||Date.now(),symbol,Number.isFinite(ch)?ch*100:null);
           }
+        }else if(msg.topic&&String(msg.topic).indexOf("publicTrade.")===0){
+          var flowTrades=Array.isArray(msg.data)?msg.data:[msg.data];
+          var lf=session.liveFlow||{};
+          for(var ti=0;ti<flowTrades.length;ti++){
+            var tr=flowTrades[ti],q=Number(tr?.v)*Number(tr?.p);
+            if(!Number.isFinite(q)||q<=0)continue;
+            lf.cvd=(Number(lf.cvd)||0)+(String(tr.S)==="Buy"?q:-q);
+            lf.cvdNotional=(Number(lf.cvdNotional)||0)+q;
+          }
+          lf.cvdRatio=Number(lf.cvdNotional)>0?Number(lf.cvd)/Number(lf.cvdNotional):null;
+          if(Number.isFinite(lf.cvdRatio)){
+            lf.cvdState=lf.cvdRatio>0.01?"BUYERS PRESSURE":lf.cvdRatio<-0.01?"SELLERS PRESSURE":"BALANCED";
+          }
+          session.liveFlow=lf;state.liveFlow=lf;
+          if(state.finalDecision)scheduleLiveDecisionRender();
+        }else if(msg.topic&&String(msg.topic).indexOf("allLiquidation.")===0){
+          var liqs=Array.isArray(msg.data)?msg.data:[msg.data],lf2=session.liveFlow||{};
+          for(var qi=0;qi<liqs.length;qi++){
+            var lx=liqs[qi],q2=Number(lx?.v)*Number(lx?.p);
+            if(!Number.isFinite(q2)||q2<=0)continue;
+            if(String(lx.S)==="Buy")lf2.longLiquidations=(Number(lf2.longLiquidations)||0)+q2;
+            else if(String(lx.S)==="Sell")lf2.shortLiquidations=(Number(lf2.shortLiquidations)||0)+q2;
+          }
+          lf2.liquidationTotal=(Number(lf2.longLiquidations)||0)+(Number(lf2.shortLiquidations)||0);
+          lf2.liquidationBias=lf2.liquidationTotal>0
+            ?((Number(lf2.longLiquidations)||0)>(Number(lf2.shortLiquidations)||0)?"LONG LIQS DOMINANT":
+              (Number(lf2.shortLiquidations)||0)>(Number(lf2.longLiquidations)||0)?"SHORT LIQS DOMINANT":"LIQUIDATION ACTIVITY")
+            :"NO LIQUIDATION ACTIVITY";
+          session.liveFlow=lf2;state.liveFlow=lf2;
+          if(state.finalDecision)scheduleLiveDecisionRender();
+        }else if(msg.topic&&String(msg.topic).indexOf("orderbook.50.")===0){
+          var obx=Array.isArray(msg.data)?msg.data[0]:msg.data,lf3=session.liveFlow||{},bids=Array.isArray(obx?.b)?obx.b:[],asks=Array.isArray(obx?.a)?obx.a:[];
+          var bq=bids.slice(0,10).reduce(function(n,r){return n+(Number(r?.[1])||0)},0),aq=asks.slice(0,10).reduce(function(n,r){return n+(Number(r?.[1])||0)},0);
+          var totalQ=bq+aq;
+          lf3.orderBookImbalance=totalQ>0?(bq-aq)/totalQ:null;
+          lf3.takerImbalance=Number.isFinite(Number(lf3.cvdRatio))?Number(lf3.cvdRatio):lf3.takerImbalance;
+          lf3.orderBookTs=Date.now();
+          session.liveFlow=lf3;state.liveFlow=lf3;
+          if(state.finalDecision)scheduleLiveDecisionRender();
         }else if(msg.topic&&String(msg.topic).indexOf("kline.")===0){
           var k=Array.isArray(msg.data)?msg.data[0]:msg.data;
           if(k)applyLiveKline(k,symbol);
@@ -4108,6 +4291,7 @@ async function loadFastTicker(){
     }
   }catch{}
   startLiveChartStream(symbol);
+  scheduleLiveDecisionRender();
 }
 async function loadCoreEnrichment(){
   if(!state.market)return;
@@ -4323,11 +4507,253 @@ function renderGateDiagnostics(d){
   }).join("");
 }
 
+function clampModel(x,a,b){return Math.max(a,Math.min(b,x))}
+function numModel(v,fallback=null){var n=Number(v);return Number.isFinite(n)?n:fallback}
+function liveFlowSnapshotForDecision(d){
+  var base=d&&d.derivatives&&typeof d.derivatives==="object"?d.derivatives:
+    (d&&d.analysis&&d.analysis.derivatives?d.analysis.derivatives:(state.market&&state.market.derivatives)||{});
+  var live=state.liveFlow&&typeof state.liveFlow==="object"?state.liveFlow:{};
+  var out=Object.assign({},base);
+  if(Number.isFinite(Number(live.oi)))out.oi=Number(live.oi);
+  if(Number.isFinite(Number(live.cvdRatio)))out.cvdRatio=Number(live.cvdRatio);
+  if(Number.isFinite(Number(live.cvdDelta)))out.cvdDelta=Number(live.cvdDelta);
+  if(live.cvdState)out.cvdState=live.cvdState;
+  if(live.positioning)out.positioning=live.positioning;
+  if(live.liquidationBias)out.liquidationBias=live.liquidationBias;
+  if(Number.isFinite(Number(live.liquidationTotal)))out.liquidationTotal=Number(live.liquidationTotal);
+  if(Number.isFinite(Number(live.orderBookImbalance)))out.orderBookImbalance=Number(live.orderBookImbalance);
+  if(Number.isFinite(Number(live.takerImbalance)))out.takerImbalance=Number(live.takerImbalance);
+  if(Number.isFinite(Number(live.fundingRate)))out.fundingRate=Number(live.fundingRate);
+  if(live.available===false)out.available=false;
+  return out;
+}
+function livePriceMomentum(){
+  var h=Array.isArray(state.livePriceHistory)?state.livePriceHistory:[];
+  if(h.length<2)return null;
+  var now=Date.now(),latest=h[h.length-1].price,ref=null;
+  for(var i=h.length-2;i>=0;i--){if(now-h[i].ts>=15000){ref=h[i].price;break}}
+  if(!Number.isFinite(ref)||!Number.isFinite(latest)||ref===0)return null;
+  return ((latest-ref)/ref)*100;
+}
+function modelFlowTag(el,label,value){
+  var n=Number(value),cls="liveNeutral",txt="—";
+  if(Number.isFinite(n)){
+    cls=n>0?"livePositive":n<0?"liveNegative":"liveNeutral";
+    txt=(n>0?"+":"")+n.toFixed(Math.abs(n)<1?2:1)+"%";
+  }else if(value!=null){txt=String(value)}
+  return {cls:cls,text:label+" · "+txt};
+}
+function scheduleLiveDecisionRender(){
+  if(state.liveDecisionRenderTimer)return;
+  state.liveDecisionRenderTimer=setTimeout(function(){
+    state.liveDecisionRenderTimer=null;
+    if(state.finalDecision)renderLiveDirectionalModel(state.finalDecision);
+  },220);
+}
+function computeLiveDirectionalModel(d){
+  d=d||{};
+  var a=d.analysis||{};
+  var der=liveFlowSnapshotForDecision(d);
+  var livePrice=numModel(state.liveChartPrice,numModel(a.price));
+  var candidate=String(
+    d.rawAction||d.candidateEvidence?.action||a.side||d.market?.side||"WAIT"
+  ).toUpperCase();
+  if(candidate!=="LONG"&&candidate!=="SHORT")candidate="WAIT";
+
+  var longScore=50,shortScore=50,wait=5;
+  var reasons=[];
+  var score=clampModel(numModel(a.score,numModel(d.market?.confluenceScore,0)),0,92);
+
+  // Existing MarketPulse confluence is the base directional evidence.
+  if(candidate==="LONG"){longScore+=12+Math.max(0,(score-50))*.55;shortScore-=Math.max(0,(score-50))*.18}
+  else if(candidate==="SHORT"){shortScore+=12+Math.max(0,(score-50))*.55;longScore-=Math.max(0,(score-50))*.18}
+  else{
+    longScore+=Math.max(0,(score-50))*.18;
+    shortScore+=Math.max(0,(score-50))*.18;
+    wait+=6;
+  }
+
+  var rsi=numModel(a.rsi),price=numModel(livePrice),e20=numModel(a.ema20),e50=numModel(a.ema50),e200=numModel(a.ema200);
+  if(Number.isFinite(price)&&Number.isFinite(e50)){
+    if(price>e50)longScore+=5;else if(price<e50)shortScore+=5;
+  }
+  if(Number.isFinite(price)&&Number.isFinite(e200)){
+    if(price>e200)longScore+=4;else if(price<e200)shortScore+=4;
+  }
+  if(Number.isFinite(rsi)){
+    if(rsi>=58)longScore+=5;else if(rsi<=42)shortScore+=5;
+    if(rsi>=72)wait+=2;if(rsi<=28)wait+=2;
+  }
+
+  var mtf=a.mtf||{};
+  if(String(mtf.higher||"").toUpperCase()==="UPTREND")longScore+=8;
+  if(String(mtf.higher||"").toUpperCase()==="DOWNTREND")shortScore+=8;
+  if(String(mtf.lower||"").toUpperCase()==="UPTREND")longScore+=5;
+  if(String(mtf.lower||"").toUpperCase()==="DOWNTREND")shortScore+=5;
+
+  var structure=String(a.structure||"").toUpperCase();
+  if(/HIGHER HIGHS|BULLISH BREAK/.test(structure))longScore+=6;
+  if(/LOWER LOWS|BEARISH BREAK/.test(structure))shortScore+=6;
+
+  // Live CVD / OI / liquidation / book / taker flow.
+  var cvdState=String(der.cvdState||"").toUpperCase();
+  var cvdRatio=numModel(der.cvdRatio);
+  if(cvdRatio!=null){
+    if(cvdRatio>=0.08)longScore+=9;
+    else if(cvdRatio<=-0.08)shortScore+=9;
+    if(Math.abs(cvdRatio)>=0.18)wait+=1;
+  }
+  if(cvdState==="BUYERS CONFIRM"||cvdState==="BUYERS PRESSURE")longScore+=8;
+  if(cvdState==="SELLERS CONFIRM"||cvdState==="SELLERS PRESSURE")shortScore+=8;
+  if(cvdState==="BEARISH DIVERGENCE"){longScore-=8;shortScore+=4;wait+=2}
+  if(cvdState==="BULLISH DIVERGENCE"){shortScore-=8;longScore+=4;wait+=2}
+
+  var pos=String(der.positioning||"").toUpperCase();
+  if(pos.includes("LONG PARTICIPATION")||pos.includes("SHORT COVERING"))longScore+=6;
+  if(pos.includes("SHORT PARTICIPATION")||pos.includes("LONG LIQUIDATION"))shortScore+=6;
+  if(pos.includes("MIXED"))wait+=2;
+
+  var liq=String(der.liquidationBias||"").toUpperCase();
+  if(liq==="SHORT LIQS DOMINANT")longScore+=5;
+  if(liq==="LONG LIQS DOMINANT")shortScore+=5;
+  if(liq==="LIQUIDATION ACTIVITY")wait+=1;
+
+  var ob=numModel(der.orderBookImbalance);
+  if(ob!=null){
+    if(ob>=0.12)longScore+=6;
+    if(ob<=-0.12)shortScore+=6;
+  }
+  var taker=numModel(der.takerImbalance);
+  if(taker!=null){
+    if(taker>=0.08)longScore+=5;
+    if(taker<=-0.08)shortScore+=5;
+  }
+
+  var reaction=d.reactionMap||a.reactionMap||{},active=reaction.active||null;
+  var reactionSide=String(active?.action||"").toUpperCase();
+  var reactionState=String(active?.state||"").toUpperCase();
+  var reactionConfidence=numModel(active?.confidence,0);
+  if(reactionSide==="LONG"&&reactionConfidence>=70)longScore+=Math.min(10,reactionConfidence*.1);
+  if(reactionSide==="SHORT"&&reactionConfidence>=70)shortScore+=Math.min(10,reactionConfidence*.1);
+  if(/CONFIRM|BREAKOUT|BREAKDOWN/.test(reactionState))wait-=2;
+
+  var setupSide=String(a.strategyFamily||a.marketStructure?.setup?.side||"").toUpperCase();
+  var setupScore=numModel(a.marketStructure?.setup?.score,0);
+  if(setupSide==="LONG")longScore+=Math.min(8,setupScore*.09);
+  if(setupSide==="SHORT")shortScore+=Math.min(8,setupScore*.09);
+
+  var plan=d.levels&&typeof d.levels==="object"?d.levels:(d.candidateEvidence?.levels||{});
+  var rr=numModel(plan.rr,numModel(a.rr));
+  if(rr!=null&&rr>=1.5){if(candidate==="LONG")longScore+=4;if(candidate==="SHORT")shortScore+=4}
+  else if(rr!=null&&rr<1.5)wait+=4;
+
+  var pm=livePriceMomentum();
+  if(pm!=null){
+    if(pm>0.12)longScore+=4;
+    if(pm<-0.12)shortScore+=4;
+    if(Math.abs(pm)>0.8)wait+=2;
+  }
+
+  var dataFresh=Number.isFinite(Number(state.liveChartTs))&&(Date.now()-Number(state.liveChartTs)<5000);
+  if(!dataFresh)wait+=8;
+  var flowReady=Boolean(
+    der.available!==false ||
+    cvdRatio!=null ||
+    ob!=null ||
+    taker!=null ||
+    liq!==""
+  );
+  if(!flowReady)wait+=10;
+  if(d.stale||d.warming)wait+=12;
+  var gateState=String(d.deploymentGate?.state||"").toUpperCase();
+  if(gateState==="BLOCKED")wait+=8;
+  if(gateState==="CONFIRMING")wait+=4;
+
+  // Keep the three displayed values summing exactly to 100.
+  var edge=clampModel(longScore-shortScore,-34,34);
+  wait=clampModel(wait,5,32);
+  var pair=100-wait;
+  var share=clampModel(.5+edge/100,.08,.92);
+  var longPct=Math.round(pair*share),shortPct=Math.round(pair-longPct);
+  wait=100-longPct-shortPct;
+
+  if(candidate==="LONG")reasons.push("Current engine candidate: LONG");
+  if(candidate==="SHORT")reasons.push("Current engine candidate: SHORT");
+  if(cvdState)reasons.push("CVD: "+cvdState.toLowerCase());
+  if(liq&&liq!=="UNKNOWN")reasons.push("Liquidity: "+liq.toLowerCase());
+  if(mtf.higher)reasons.push("Higher timeframe: "+String(mtf.higher).toLowerCase());
+
+  var dominant=longPct>shortPct?(longPct>=60?"LONG LEAN":"LONG SLIGHT EDGE"):(shortPct>=60?"SHORT LEAN":"SHORT SLIGHT EDGE");
+  return {
+    long:longPct,short:shortPct,wait,
+    dominant,edge,
+    livePrice,cvdState,cvdRatio,oi:numModel(der.oi),liquidationBias:liq,orderBookImbalance:ob,takerImbalance:taker,
+    mtfHigher:String(mtf.higher||"—").toUpperCase(),mtfLower:String(mtf.lower||"—").toUpperCase(),
+    candidate,plan,pm,flowReady,dataFresh,gateState,reasons
+  };
+}
+function renderLiveDirectionalModel(d){
+  var p=computeLiveDirectionalModel(d);
+  var setText=function(id,v){var el=$(id);if(el)el.textContent=v};
+  var setBar=function(id,v){var el=$(id);if(el)el.style.width=String(v)+"%"};
+  setText("probLong",p.long+"%");setText("probShort",p.short+"%");setText("probWait",p.wait+"%");
+  setText("probLongBarValue",p.long+"%");setText("probShortBarValue",p.short+"%");setText("probWaitBarValue",p.wait+"%");
+  setBar("probLongBar",p.long);setBar("probShortBar",p.short);setBar("probWaitBar",p.wait);
+  setText("probLongText",p.long>p.short?"current directional leader":"secondary");
+  setText("probShortText",p.short>p.long?"current directional leader":"secondary");
+  setText("probWaitText",p.wait>=20?"high gate/uncertainty":"watch");
+  var status=$("liveDecisionStatus");if(status){
+    status.textContent=p.dominant;
+    status.className="liveDecisionStatus "+(p.long>p.short?"livePositive":p.short>p.long?"liveNegative":"");
+  }
+  var flowItems=[
+    ["liveFlowCvd","CVD",p.cvdState],
+    ["liveFlowOi","OI",Number.isFinite(p.oi)?fmt(p.oi):"—"],
+    ["liveFlowLiq","LIQ",p.liquidationBias||"—"],
+    ["liveFlowBook","BOOK",Number.isFinite(p.orderBookImbalance)?((p.orderBookImbalance>=0?"+":"")+ (p.orderBookImbalance*100).toFixed(1)+"%"):"—"],
+    ["liveFlowTaker","TAKER",Number.isFinite(p.takerImbalance)?((p.takerImbalance>=0?"+":"")+(p.takerImbalance*100).toFixed(1)+"%"):"—"],
+    ["liveFlowMtf","HTF",p.mtfHigher]
+  ];
+  flowItems.forEach(function(x){
+    var el=$(x[0]);if(!el)return;
+    el.textContent=x[1]+" · "+x[2];
+    el.classList.remove("livePositive","liveNegative","liveNeutral");
+    var t=String(x[2]||"").toUpperCase();
+    el.classList.add(
+      /BUYERS|UPTREND|SHORT LIQS|BUY-DOMINANT|+/.test(t)?"livePositive":
+      /SELLERS|DOWNTREND|LONG LIQS|SELL-DOMINANT|-/.test(t)?"liveNegative":"liveNeutral"
+    );
+  });
+
+  var candidate=p.candidate;
+  var plan=p.plan||{};
+  var sideClass=candidate==="LONG"?"long":candidate==="SHORT"?"short":"wait";
+  var ps=$("livePlanSide");if(ps){ps.textContent=candidate;ps.className="livePlanSide "+sideClass}
+  setText("livePlanPrice",Number.isFinite(Number(p.livePrice))?fmt(p.livePrice):"—");
+  var entry=(Number.isFinite(Number(plan.entryLow))&&Number.isFinite(Number(plan.entryHigh)))?fmt(plan.entryLow)+" → "+fmt(plan.entryHigh):(Number.isFinite(Number(plan.entry))?fmt(plan.entry):"—");
+  setText("livePlanEntry",entry);
+  setText("livePlanSl",Number.isFinite(Number(plan.stop))?fmt(plan.stop):"—");
+  setText("livePlanTp1",Number.isFinite(Number(plan.tp1))?fmt(plan.tp1):"—");
+  setText("livePlanTp2",Number.isFinite(Number(plan.tp2))?fmt(plan.tp2):"—");
+  setText("livePlanRr",Number.isFinite(Number(plan.rr))?Number(plan.rr).toFixed(2)+"R":"—");
+  var planStatus=$("livePlanStatus");
+  if(planStatus)planStatus.textContent=(candidate==="LONG"||candidate==="SHORT")
+    ?(d.liveSignalEligible===true?"CONFIRMED DIRECTION · GATE PASSED":"CONDITIONAL · "+(d.deploymentGate?.state||"WAITING"))
+    :"WAITING FOR DIRECTIONAL CANDIDATE";
+  var thesis=d?.evidence?.thesis;
+  if(Array.isArray(thesis))thesis=thesis.join(" ");
+  if(!thesis)thesis=d?.analysis?.thesis||"Waiting for the live directional model.";
+  setText("livePlanThesis",thesis);
+  var inv=Array.isArray(d?.evidence?.invalidationScenario)?d.evidence.invalidationScenario.join(" "):d?.evidence?.invalidationScenario;
+  if(!inv)inv=String(p.candidate==="LONG"?"Break the bullish structure / stop zone.":p.candidate==="SHORT"?"Reclaim the bearish trigger / stop zone.":"A fresh directional setup plus final safety checks.");
+  setText("livePlanInvalidation",inv);
+}
 async function renderFinalDecision(d){
   if(!d)return;
   var m=d.market||{},ev=d.evidence||{},lv=d.levels||{},data=d.data||{},pg=d.propGate||{},v=d.phase11_13||{},gate=d.deploymentGate||{},stability=d.signalStability||{};
   renderGateDiagnostics(d);
   renderReactionMap(d.reactionMap||ev.reactionMap||{});
+  renderLiveDirectionalModel(d);
   // The UI must never present a directional trade unless the server explicitly confirms it.
   var side=d.liveSignalEligible===true&&d.state==="READY"&&(d.action==="LONG"||d.action==="SHORT")
     ?String(d.action).toUpperCase():"WAIT";
@@ -4378,6 +4804,7 @@ async function renderFinalDecision(d){
     state._chartNeedsFinalRedraw=false;
     drawMain();
   }
+  renderLiveDirectionalModel(d);
 }
 function suppressFinalSignal(reason){
   state.finalDecisionSeq++;
