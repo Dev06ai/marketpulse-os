@@ -11,6 +11,7 @@ const MAX_EVENTS=500;
 const MAX_JOURNAL=500;
 const BOT_STRATEGY_VALUES=["SCALP","INTRADAY","SWING","POSITION"];
 const BOT_MODE_VALUES=["OFF","PAPER","TESTNET","LIVE"];
+const AUTOTRADER_STATUS_CACHE={ts:0,payload:null,ttl:3000};
 
 const DEFAULT_CONFIG={
   mode:"SIMULATION",
@@ -586,7 +587,9 @@ async function setBotConfig(patch={}){
   state.bot=ensureState(Object.assign({},state,{bot:next})).bot;
   pushEvent(state,"BOT_CONFIG_UPDATED","AutoTrader configuration updated",{mode:state.bot.mode,enabled:state.bot.enabled,strategies:state.bot.strategies});
   await save(state);
-  return botSnapshot(state);
+  const out=botSnapshot(state);
+  AUTOTRADER_STATUS_CACHE.ts=now();AUTOTRADER_STATUS_CACHE.payload=out;
+  return out;
 }
 function botSnapshot(rawState){
   const state=rawState&&rawState.config?ensureState(rawState):rawState;
@@ -604,8 +607,15 @@ function botSnapshot(rawState){
   };
 }
 async function getBotSnapshot(){
+  const nowTs=now();
+  if(AUTOTRADER_STATUS_CACHE.payload&&nowTs-AUTOTRADER_STATUS_CACHE.ts<AUTOTRADER_STATUS_CACHE.ttl){
+    return clone(AUTOTRADER_STATUS_CACHE.payload);
+  }
   const loaded=await load();
-  return botSnapshot(loaded.state);
+  const payload=botSnapshot(loaded.state);
+  AUTOTRADER_STATUS_CACHE.ts=nowTs;
+  AUTOTRADER_STATUS_CACHE.payload=payload;
+  return clone(payload);
 }
 function recordBotTradeMeta(meta={}){
   return load().then(async({state})=>{
@@ -618,7 +628,9 @@ function recordBotTradeMeta(meta={}){
     state.bot.lastError=null;
     pushEvent(state,"BOT_TRADE_SUBMITTED","AutoTrader submitted a controlled execution intent",{signalKey:state.bot.lastSignalKey,strategy:meta.strategy||null,symbol:meta.symbol||null,interval:meta.interval||null});
     await save(state);
-    return botSnapshot(state);
+    const out=botSnapshot(state);
+    AUTOTRADER_STATUS_CACHE.ts=now();AUTOTRADER_STATUS_CACHE.payload=out;
+    return out;
   });
 }
 function recordBotError(message){
@@ -626,7 +638,9 @@ function recordBotError(message){
     state.bot.lastError=String(message||"Unknown AutoTrader error");
     state.bot.lastAction="ERROR";
     await save(state);
-    return botSnapshot(state);
+    const out=botSnapshot(state);
+    AUTOTRADER_STATUS_CACHE.ts=now();AUTOTRADER_STATUS_CACHE.payload=out;
+    return out;
   });
 }
 async function prepareFromSignal(signal){
