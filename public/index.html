@@ -4033,7 +4033,7 @@ function renderReactionMap(map){
   box.className="reactionList";
   box.innerHTML=rows.slice(0,4).map(function(z){
     var action=z.action==="LONG"?"LONG":z.action==="SHORT"?"SHORT":"WAIT";
-    var stateLabel=z.state==="CONFIRM_LONG"||z.state==="CONFIRM_SHORT"?"CONFIRMED":z.state==="BREAKOUT_LONG"||z.state==="BREAKDOWN_SHORT"?"BREAK / RETEST":"WATCH";
+    var stateLabel=z.state==="CONFIRM_LONG"||z.state==="CONFIRM_SHORT"?"REACTION CONFIRMED":z.state==="BREAKOUT_LONG"||z.state==="BREAKDOWN_SHORT"?"BREAK / RETEST CANDIDATE":"WATCH";
     var distance=Number.isFinite(Number(z.distance))?fmt(Math.abs(Number(z.distance))):"—";
     var zoneLow=Number.isFinite(Number(z.low))?fmt(z.low):"—";
     var zoneHigh=Number.isFinite(Number(z.high))?fmt(z.high):"—";
@@ -4155,17 +4155,22 @@ async function renderFinalDecision(d){
   var thesisText=Array.isArray(ev.thesis)?ev.thesis.join(" "):"Decision engine context available.";
   if(side!=="WAIT")thesisText+=" Trade style: "+(d.tradeStyle||m.tradeStyle||"INTRADAY")+" · signal timeframe: "+String(d.interval||"").toUpperCase()+".";
   if(stability.state==="CONFIRMING")thesisText+=" Signal confirmation: "+Number(stability.confirmations||0)+"/"+Number(stability.required||2)+" consecutive live checks.";
-  if(d.stale)thesisText+=" Live decision refresh failed; directional output is intentionally suppressed until fresh data returns.";
+  if(d.stale)thesisText+=" Final decision refresh is delayed; directional output is intentionally suppressed until a fresh decision returns.";
   $("thesis").textContent=thesisText;
   $("primary").textContent=ev.primaryScenario||"—";$("alternate").textContent=ev.invalidationScenario||"—";
-  $("thesisChips").innerHTML=[["HTF",ev.mtfScore!=null?fmt(ev.mtfScore)+"/100":null],["Flow",ev.flowScore!=null?fmt(ev.flowScore)+"/100":null],["Data",data.score!=null?fmt(data.score)+"/100":null],["Style",side!=="WAIT"?(d.tradeStyle||m.tradeStyle||"—"):null],["Risk",pg.decision||"NOT EVALUATED"]].map(function(x){return'<span class="chip c">'+x[0]+": "+(x[1]||"—")+"</span>"}).join("");
+  var propLabel=pg.decision==="DISABLED"?"INACTIVE":pg.decision==="BLOCKED"?"BLOCKED":(pg.decision||"NOT EVALUATED");
+  $("thesisChips").innerHTML=[["HTF",ev.mtfScore!=null?fmt(ev.mtfScore)+"/100":null],["Flow",ev.flowScore!=null?fmt(ev.flowScore)+"/100":null],["Data",data.score!=null?fmt(data.score)+"/100":null],["Style",side!=="WAIT"?(d.tradeStyle||m.tradeStyle||"—"):null],["Prop gate",propLabel]].map(function(x){return'<span class="chip c">'+x[0]+": "+(x[1]||"—")+"</span>"}).join("");
   $("quality").textContent=fmt(m.confluenceScore)+"/100";$("quality").style.color=accent;
   $("components").innerHTML=(ev.components||[]).map(function(x){return'<div class="rowLine"><span class="small">'+safeHtml(x.name)+'</span><b style="font-size:9px;text-align:right">'+fmt(x.score)+'/100</b><div class="bar"><i style="width:'+Math.max(0,Math.min(100,Number(x.score)||0))+'%"></i></div></div>'}).join("");
   $("entry").textContent=side!=="WAIT"&&lv.entryLow!=null?fmt(lv.entryLow)+" → "+fmt(lv.entryHigh):"Wait";$("stop").textContent=side!=="WAIT"?fmt(lv.stop):"—";$("target").textContent=side!=="WAIT"?fmt(lv.tp1):"—";$("rr").textContent=side!=="WAIT"&&lv.rr?Number(lv.rr).toFixed(2)+"R":"—";$("tradeStyle").textContent=side!=="WAIT"?((d.tradeStyle||m.tradeStyle||"—")+" · "+String(d.interval||"").toUpperCase()):"—";
-  var s=v.summary||{},p=v.adaptive||{};
-  var evidence=s.sufficient?("Sufficient sample · "+Number(s.trades||0)+" resolved setups"):("Collecting · "+Number(s.trades||0)+" resolved setups");
+  var s=v.summary||{},p=v.adaptive||{},resolvedTrades=Number(s.trades||0),minTrades=Number(s.sample?.minTrades||80),sampleReady=Boolean(s.sufficient)||resolvedTrades>=minTrades;
+  var evidence=sampleReady
+    ?("Sufficient sample · "+resolvedTrades+" resolved setups")
+    :("Collecting · "+resolvedTrades+" / "+minTrades+" resolved setups");
   if($("validationEvidence"))$("validationEvidence").textContent=evidence;
-  if($("validationDetail"))$("validationDetail").textContent=s.trades?("Win rate "+Number(s.winRate||0).toFixed(1)+"% · expectancy "+Number(s.expectancyR||0).toFixed(3)+"R · PF "+(s.profitFactor==null?"—":Number(s.profitFactor).toFixed(2))):"Waiting for the walk-forward sample.";
+  if($("validationDetail"))$("validationDetail").textContent=sampleReady
+    ?("Win rate "+Number(s.winRate||0).toFixed(1)+"% · expectancy "+Number(s.expectancyR||0).toFixed(3)+"R · PF "+(s.profitFactor==null?"—":Number(s.profitFactor).toFixed(2)))
+    :"Insufficient sample · performance statistics are intentionally withheld until the walk-forward minimum is reached.";
   var gs=gate.state||p.mode||"PAPER_ONLY";
   if($("deploymentGate"))$("deploymentGate").textContent=gs;
   if($("deploymentReason"))$("deploymentReason").textContent=gate.reason||"Signals remain decision-support only until the validation and live-data gates pass.";
