@@ -117,6 +117,24 @@ async function okx(symbol){
     change24hPct:n(q?.sodUtc8)?null:null,...m,sourceTs:n(ob?.ts)||now()
   };
 }
+async function bitget(symbol){
+  const q=await fetchJson("https://api.bitget.com/api/v3/market/orderbook?category=USDT-FUTURES&symbol="+encodeURIComponent(symbol)+"&limit=50",{timeout:2500});
+  const m=bookMetrics(q?.data?.b,q?.data?.a,20);
+  return {exchange:"BITGET",venueType:"perp",price:m.mid,markPrice:m.mid,indexPrice:null,fundingRate:null,openInterest:null,change24hPct:null,...m,sourceTs:n(q?.data?.ts)||now()};
+}
+async function gate(symbol){
+  const contract=symbol.replace("USDT","_USDT");
+  const q=await fetchJson("https://api.gateio.ws/api/v4/futures/usdt/order_book?contract="+encodeURIComponent(contract)+"&limit=50",{timeout:2500});
+  const bids=(q?.bids||[]).map(x=>[x?.p,x?.s]),asks=(q?.asks||[]).map(x=>[x?.p,x?.s]);
+  const m=bookMetrics(bids,asks,20);
+  return {exchange:"GATE",venueType:"perp",price:m.mid,markPrice:m.mid,indexPrice:null,fundingRate:null,openInterest:null,change24hPct:null,...m,sourceTs:n(q?.current)||now()};
+}
+async function paradex(symbol){
+  const market=symbol.replace("USDT","")+"-USD-PERP";
+  const q=await fetchJson("https://api.prod.paradex.trade/v1/orderbook/"+encodeURIComponent(market)+"?depth=20",{timeout:3000});
+  const m=bookMetrics(q?.bids,q?.asks,20);
+  return {exchange:"PARADEX",venueType:"perp",price:m.mid,markPrice:m.mid,indexPrice:null,fundingRate:null,openInterest:null,change24hPct:null,...m,sourceTs:n(q?.last_updated_at)||now()};
+}
 async function coinbase(symbol){
   const coin=symbol.replace("USDT","");
   const product=coin+"-USD";
@@ -185,6 +203,9 @@ async function snapshot(symbol="BTCUSDT"){
       safe("Binance",()=>binance(symbol)),
       safe("Hyperliquid",()=>hyperliquid(symbol)),
       safe("OKX",()=>okx(symbol)),
+      safe("Bitget",()=>bitget(symbol)),
+      safe("Gate",()=>gate(symbol)),
+      safe("Paradex",()=>paradex(symbol)),
       safe("Coinbase",()=>coinbase(symbol))
     ]);
     const venues=results;
