@@ -73,4 +73,4 @@ for(const file of phaseFiles){
   assert(typeof mod.selfTest==="function",file+" missing selfTest");
   assert(mod.selfTest().ok===true,file+" selfTest failed");
 }
-assert(phaseFiles.every((f,i)=>Number(f.match(/^phase(\\d+)/)[1])===i+51),"Phase module coverage has a gap");
+assert(phaseFiles.every((f,i)=>Number(f.match(/^phase(\d+)/)[1])===i+51),"Phase module coverage has a gap");
