@@ -1025,6 +1025,7 @@ function startBybitLiveFlow(){
         v.liveSeq = Number(v.liveSeq||0)+1;
         v.lastEventAt = Date.now();
         recordFlowPoint(symbol);
+        scheduleLiveSyncBroadcast(symbol);
       }catch{}
     });
     ws.on("close",()=>{
@@ -1712,6 +1713,63 @@ async function warmCoreScan(interval,force=false){
   SCAN_JOBS.set(interval,job);
   try{return await job}finally{SCAN_JOBS.delete(interval)}
 }
+const LIVE_SYNC_CLIENTS=new Set();
+const LIVE_SYNC_PUSH_TIMERS=new Map();
+const LIVE_SYNC_PUSH_MIN_MS=75;
+
+function liveSyncPushSnapshot(symbol){
+  const base=liveSyncSnapshot(symbol);
+  // Push only the current canonical frame. The browser already maintains its
+  // own history and can render the frame immediately without transferring 180
+  // historical points on every market event.
+  return {
+    type:"market-sync",
+    symbol:base.symbol,
+    seq:base.seq,
+    liveConnected:base.liveConnected,
+    updatedAt:base.updatedAt,
+    dataTs:base.dataTs,
+    dataAgeMs:base.dataAgeMs,
+    price:base.price,
+    lastPrice:base.lastPrice,
+    markPrice:base.markPrice,
+    change24h:base.change24h,
+    oi:base.oi,
+    fundingRate:base.fundingRate,
+    cvd:base.cvd,
+    cvdDelta:base.cvdDelta,
+    cvdRatio:base.cvdRatio,
+    cvdState:base.cvdState,
+    longLiquidations:base.longLiquidations,
+    shortLiquidations:base.shortLiquidations,
+    liquidationTotal:base.liquidationTotal,
+    liquidationBias:base.liquidationBias,
+    orderBook:base.orderBook,
+    takerImbalance:base.takerImbalance,
+    positioning:base.positioning,
+    serverTs:Date.now()
+  };
+}
+
+function broadcastLiveSync(symbol){
+  const payload=JSON.stringify(liveSyncPushSnapshot(symbol));
+  for(const client of LIVE_SYNC_CLIENTS){
+    try{
+      if(client.readyState===WebSocket.OPEN&&client.symbol===symbol){
+        client.send(payload);
+      }
+    }catch{}
+  }
+}
+
+function scheduleLiveSyncBroadcast(symbol){
+  if(LIVE_SYNC_PUSH_TIMERS.has(symbol))return;
+  LIVE_SYNC_PUSH_TIMERS.set(symbol,setTimeout(()=>{
+    LIVE_SYNC_PUSH_TIMERS.delete(symbol);
+    broadcastLiveSync(symbol);
+  },LIVE_SYNC_PUSH_MIN_MS));
+}
+
 const server=http.createServer(async(req,res)=>{
   const started=Date.now();SERVER_METRICS.requests++;
   const rawPath=String(req.url||"").split("?")[0];
@@ -2952,6 +3010,37 @@ const server=http.createServer(async(req,res)=>{
     return staticFile(req,res);
   }catch(e){return send(res,500,{error:e.message||'Server error'})}
 });
+const liveSyncWss=new WebSocket.Server({noServer:true});
+
+server.on("upgrade",(req,socket,head)=>{
+  try{
+    const u=new URL(req.url||"/","http://localhost");
+    if(u.pathname!=="/api/live-stream"){
+      socket.destroy();
+      return;
+    }
+    const symbol=(u.searchParams.get("symbol")||"BTCUSDT").toUpperCase();
+    if(!SYMBOLS.includes(symbol)){
+      socket.destroy();
+      return;
+    }
+
+    liveSyncWss.handleUpgrade(req,socket,head,(client)=>{
+      client.symbol=symbol;
+      client.connectedAt=Date.now();
+      LIVE_SYNC_CLIENTS.add(client);
+
+      try{client.send(JSON.stringify(liveSyncPushSnapshot(symbol)))}catch{}
+
+      client.on("close",()=>LIVE_SYNC_CLIENTS.delete(client));
+      client.on("error",()=>LIVE_SYNC_CLIENTS.delete(client));
+      client.on("message",()=>{});
+    });
+  }catch{
+    try{socket.destroy()}catch{}
+  }
+});
+
 storage.init().catch(()=>{});learning.init().catch(()=>{});
 server.listen(PORT,()=>{
   console.log('MarketPulse OS listening on :'+PORT);
