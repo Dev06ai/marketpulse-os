@@ -168,6 +168,9 @@ function buildExecutionSignal(decision,meta={}){
     tradeStyle:d.tradeStyle||check.strategy,
     strategy:check.strategy,
     decisionAt:Number(decision.updatedAt||Date.now()),
+    radarStatus:String(meta.radar?.status||"UNKNOWN"),
+    triggerContext:meta.radar?.trigger||null,
+    executionVenue:meta.route?.venue||"PAPER",
     source:cfg.easyMode?"PHASE17_EASY_AUTOTRADER":"PHASE17_AUTOTRADER"
   };
 }
