@@ -25,7 +25,10 @@ function effectiveDecision(decision={}){
   return {decision,fromCandidate:false,side:"WAIT"};
 }
 function dataQuality(decision){
-  return n(decision?.data?.score??decision?.dataQuality?.score??decision?.analysis?.dataQualityScore??decision?.market?.dataScore,75);
+  const value=decision?.data?.score??decision?.dataQuality?.score??decision?.analysis?.dataQualityScore??decision?.market?.dataScore;
+  if(Number.isFinite(Number(value)))return Number(value);
+  const fresh=Number(decision?.dataQuality?.candleAgeMs);
+  return Number.isFinite(fresh)&&fresh<90000?88:85;
 }
 function score(decision){return n(decision?.market?.confluenceScore??decision?.score,0)}
 function rr(decision){return n(decision?.levels?.rr,0)}
