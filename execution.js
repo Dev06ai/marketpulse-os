@@ -624,7 +624,8 @@ async function getBotTradeHistory(limit=100){
       pnl:Number(o.pnl)||0,resultR:Number(o.resultR)||0,outcome:o.resultR>0?"WIN":o.resultR<0?"LOSS":"FLAT",
       openedAt:Number(o.filledAt??o.createdAt)||null,closedAt:Number(o.closedAt??o.updatedAt)||null,
       durationMs:Number(o.durationMs)||null,exitReason:o.exitReason||null,status:o.status,
-      source:o.source||null,note:o.note||null
+      radarStatus:o.radarStatus||null,executionVenue:o.executionVenue||"PAPER",
+      triggerContext:o.triggerContext||null,source:o.source||null,note:o.note||null
     });
   }
   // Closed paper trades recorded in the journal.
