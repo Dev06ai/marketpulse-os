@@ -1172,67 +1172,161 @@ async function derivatives(symbol,interval){
   if(hit&&Date.now()-hit.ts<DERIV_TTL)return hit.data;
   const existing=DERIV_INFLIGHT.get(key);
   if(existing)return existing;
+
   const job=(async()=>{
-  let data=null;
-  try{data=await krakenAnalytics(symbol,interval)}
-  catch(e){
-    try{
-      const ticker=await fetchJson("https://futures.kraken.com/derivatives/api/v3/tickers");
-      const t=(ticker.tickers||[]).find(x=>String(x.symbol||"").toUpperCase()===KRAKEN_FUTURES_PAIRS[symbol]);
-      const cvd=await krakenRecentCvd(symbol).catch(()=>null);
-      if(!t&&!cvd)throw new Error("Kraken Futures public analytics unavailable");
-      data={available:true,provider:"Kraken Futures public API",symbol:KRAKEN_FUTURES_PAIRS[symbol],oi:t&&Number.isFinite(+t.openInterest)?+t.openInterest:null,oiChangePct:null,cvdDelta:cvd?.cvdDelta??null,cvdRatio:cvd?.cvdRatio??null,cvdState:"MIXED",positioning:"OI CHANGE NOT AVAILABLE",tradeCount:cvd?.tradeCount??0,fundingRate:t&&Number.isFinite(+t.fundingRate)?+t.fundingRate:null,markPrice:t&&Number.isFinite(+t.markPrice)?+t.markPrice:null,tradePriceChangePct:cvd?.tradePriceChangePct??null,errors:[e.message],updatedAt:Date.now()};
-    }catch(e2){
+    const live=flowBucket(symbol);
+    const now=Date.now();
+    const liveFresh=Boolean(
+      live.wsConnected &&
+      Number.isFinite(live.lastTs) &&
+      now-Number(live.lastTs||0) < 45000 &&
+      (Number.isFinite(live.oi) || live.cvdNotional>0 || live.liqLong>0 || live.liqShort>0 || live.orderBook)
+    );
+
+    let data=null;
+
+    // Prefer the existing live market-data stream when it is fresh. This avoids
+    // turning a temporary REST/provider restriction into a total derivatives outage.
+    if(liveFresh){
+      data={
+        available:true,
+        provider:"Bybit live stream",
+        symbol,
+        oi:Number.isFinite(live.oi)?live.oi:null,
+        oiChangePct:null,
+        cvdDelta:live.cvdNotional>0?live.cvd:null,
+        cvdRatio:live.cvdNotional>0?live.cvd/live.cvdNotional:null,
+        cvdState:live.cvd>0?"BUYERS PRESSURE":live.cvd<0?"SELLERS PRESSURE":"BALANCED",
+        positioning:Number.isFinite(live.oi)?"OI LIVE":"WAITING",
+        tradeCount:0,
+        fundingRate:Number.isFinite(live.fundingRate)?live.fundingRate:null,
+        markPrice:Number.isFinite(live.markPrice)?live.markPrice:null,
+        longLiquidations:Number(live.liqLong||0),
+        shortLiquidations:Number(live.liqShort||0),
+        liquidationTotal:Number(live.liqLong||0)+Number(live.liqShort||0),
+        liquidationBias:(live.liqLong||0)+(live.liqShort||0)
+          ?((live.liqLong||0)>(live.liqShort||0)?"LONG LIQS DOMINANT":(live.liqShort||0)>(live.liqLong||0)?"SHORT LIQS DOMINANT":"LIQUIDATION ACTIVITY")
+          :"NO LIQUIDATION ACTIVITY",
+        orderBook:live.orderBook||null,
+        liveConnected:true,
+        liveHost:live.wsHost||null,
+        livePointCount:Array.isArray(live.points)?live.points.length:0,
+        liveHistory:Array.isArray(live.points)?live.points.slice(-180):[],
+        errors:[],
+        updatedAt:now
+      };
+    }
+
+    // If the stream is not fresh enough, use the faster public Bybit REST API first.
+    if(!data){
       try{data=await bybitDerivatives(symbol,interval)}
-      catch(e3){data={available:false,provider:"No derivatives provider",oi:null,oiChangePct:null,cvdDelta:null,cvdRatio:null,cvdState:"UNAVAILABLE",positioning:"UNAVAILABLE",tradeCount:0,fundingRate:null,markPrice:null,errors:[e.message,e2.message,e3.message],updatedAt:Date.now()}}
+      catch(bybitErr){
+        // Kraken remains the historical/public analytics fallback.
+        try{data=await krakenAnalytics(symbol,interval)}
+        catch(krakenErr){
+          try{
+            const ticker=await fetchJson("https://futures.kraken.com/derivatives/api/v3/tickers");
+            const t=(ticker.tickers||[]).find(x=>String(x.symbol||"").toUpperCase()===KRAKEN_FUTURES_PAIRS[symbol]);
+            const cvd=await krakenRecentCvd(symbol).catch(()=>null);
+            if(!t&&!cvd)throw new Error("Kraken Futures public analytics unavailable");
+            data={
+              available:true,
+              provider:"Kraken Futures public API",
+              symbol:KRAKEN_FUTURES_PAIRS[symbol],
+              oi:t&&Number.isFinite(+t.openInterest)?+t.openInterest:null,
+              oiChangePct:null,
+              cvdDelta:cvd?.cvdDelta??null,
+              cvdRatio:cvd?.cvdRatio??null,
+              cvdState:"MIXED",
+              positioning:"OI CHANGE NOT AVAILABLE",
+              tradeCount:cvd?.tradeCount??0,
+              fundingRate:t&&Number.isFinite(+t.fundingRate)?+t.fundingRate:null,
+              markPrice:t&&Number.isFinite(+t.markPrice)?+t.markPrice:null,
+              tradePriceChangePct:cvd?.tradePriceChangePct??null,
+              errors:["Bybit: "+String(bybitErr?.message||bybitErr),"Kraken analytics: "+String(krakenErr?.message||krakenErr)],
+              updatedAt:now
+            };
+          }catch(fallbackErr){
+            data={
+              available:false,
+              provider:"No derivatives provider",
+              oi:null,oiChangePct:null,cvdDelta:null,cvdRatio:null,
+              cvdState:"UNAVAILABLE",positioning:"UNAVAILABLE",tradeCount:0,
+              fundingRate:null,markPrice:null,
+              errors:[
+                "Bybit: "+String(bybitErr?.message||bybitErr),
+                "Kraken analytics: "+String(krakenErr?.message||krakenErr),
+                "Kraken ticker/CVD fallback: "+String(fallbackErr?.message||fallbackErr)
+              ],
+              updatedAt:now
+            };
+          }
+        }
+      }
     }
-  }
-  const live=flowBucket(symbol);
-  if(Number.isFinite(data.oi))live.oi=data.oi;
-  if(Number.isFinite(data.fundingRate))live.fundingRate=data.fundingRate;
-  if(Number.isFinite(data.markPrice))live.markPrice=data.markPrice;
-  if(Number.isFinite(data.cvdDelta)&&!live.cvdNotional){live.cvd=data.cvdDelta;live.cvdNotional=1;}
-  if(Number.isFinite(data.cvdDelta)){
-    data.cvdState=data.cvdDelta>0?"BUYERS PRESSURE":data.cvdDelta<0?"SELLERS PRESSURE":"BALANCED";
-  }
-  if(Number.isFinite(data.oiChangePct)){
-    data.positioning=data.oiChangePct>1?"OI RISING":data.oiChangePct<-1?"OI FALLING":"OI FLAT";
-  }
-  if(Number.isFinite(data.longPercent)&&Number.isFinite(data.shortPercent)){
-    data.positioning=data.longPercent>data.shortPercent+2?"LONG BIAS":data.shortPercent>data.longPercent+2?"SHORT BIAS":"BALANCED";
-  }
-  if(live.liqLong||live.liqShort){
-    data.liveLiquidations={long:live.liqLong,short:live.liqShort,total:live.liqLong+live.liqShort,bias:live.liqLong>live.liqShort?"LONG LIQS DOMINANT":"SHORT LIQS DOMINANT"};
-    if(!Number(data.liquidationTotal) || data.liquidationTotal===0){
-      data.liquidationBias=data.liveLiquidations.bias;data.liquidationTotal=data.liveLiquidations.total;
-      data.longLiquidations=live.liqLong;data.shortLiquidations=live.liqShort;
+
+    const live2=flowBucket(symbol);
+    if(Number.isFinite(data.oi))live2.oi=data.oi;
+    if(Number.isFinite(data.fundingRate))live2.fundingRate=data.fundingRate;
+    if(Number.isFinite(data.markPrice))live2.markPrice=data.markPrice;
+
+    if(Number.isFinite(data.cvdDelta)&&!live2.cvdNotional){
+      live2.cvd=data.cvdDelta;live2.cvdNotional=1;
     }
-  }
-  recordFlowPoint(symbol);
-  if(live.cvdNotional>0){
-    data.cvdDelta=live.cvd;
-    data.cvdRatio=live.cvdNotional?live.cvd/live.cvdNotional:null;
-    data.cvdState=live.cvd>0?"BUYERS PRESSURE":live.cvd<0?"SELLERS PRESSURE":"BALANCED";
-  }
-  if(Number.isFinite(live.oi))data.oi=live.oi;
-  if(Number.isFinite(live.fundingRate))data.fundingRate=live.fundingRate;
-  if(Number.isFinite(live.markPrice))data.markPrice=live.markPrice;
-  if(live.orderBook)data.orderBook=live.orderBook;
-  if(live.liqLong||live.liqShort){
-    data.longLiquidations=live.liqLong;data.shortLiquidations=live.liqShort;
-    data.liquidationTotal=live.liqLong+live.liqShort;
-    data.liquidationBias=live.liqLong>live.liqShort?"LONG LIQS DOMINANT":"SHORT LIQS DOMINANT";
-  }
-  data.series=data.series||{};
-  if(!Array.isArray(data.series.cvd)||data.series.cvd.length<2)data.series.cvd=live.points.map(x=>x.cvdRatio??x.cvd).filter(Number.isFinite);
-  if(!Array.isArray(data.series.oi)||data.series.oi.length<2)data.series.oi=live.points.map(x=>x.oi).filter(Number.isFinite);
-  if(!Array.isArray(data.series.liq)||data.series.liq.length<2)data.series.liq=live.points.map(x=>x.liqTotal).filter(Number.isFinite);
-  data.provider=(data.provider||"Derivatives")+" · live flow";
-  data.liveHistory=live.points.slice(-180);
-  data.livePointCount=live.points.length;
-  data=mergeFlowSnapshot(symbol,data);
-  DERIV_CACHE.set(key,{ts:Date.now(),data});return data;
+
+    if(Number.isFinite(data.cvdDelta)){
+      data.cvdState=data.cvdDelta>0?"BUYERS PRESSURE":data.cvdDelta<0?"SELLERS PRESSURE":"BALANCED";
+    }
+    if(Number.isFinite(data.oiChangePct)){
+      data.positioning=data.oiChangePct>1?"OI RISING":data.oiChangePct<-1?"OI FALLING":"OI FLAT";
+    }
+    if(Number.isFinite(data.longPercent)&&Number.isFinite(data.shortPercent)){
+      data.positioning=data.longPercent>data.shortPercent+2?"LONG BIAS":data.shortPercent>data.longPercent+2?"SHORT BIAS":"BALANCED";
+    }
+
+    recordFlowPoint(symbol);
+
+    if(live2.cvdNotional>0){
+      data.cvdDelta=live2.cvd;
+      data.cvdRatio=live2.cvdNotional?live2.cvd/live2.cvdNotional:null;
+      data.cvdState=live2.cvd>0?"BUYERS PRESSURE":live2.cvd<0?"SELLERS PRESSURE":"BALANCED";
+    }
+    if(Number.isFinite(live2.oi))data.oi=live2.oi;
+    if(Number.isFinite(live2.fundingRate))data.fundingRate=live2.fundingRate;
+    if(Number.isFinite(live2.markPrice))data.markPrice=live2.markPrice;
+    if(live2.orderBook)data.orderBook=live2.orderBook;
+
+    if(live2.liqLong||live2.liqShort){
+      data.longLiquidations=live2.liqLong;data.shortLiquidations=live2.liqShort;
+      data.liquidationTotal=live2.liqLong+live2.liqShort;
+      data.liquidationBias=live2.liqLong>live2.liqShort?"LONG LIQS DOMINANT":live2.liqShort>live2.liqLong?"SHORT LIQS DOMINANT":"LIQUIDATION ACTIVITY";
+    }
+
+    data.series=data.series||{};
+    if(!Array.isArray(data.series.cvd)||data.series.cvd.length<2)data.series.cvd=live2.points.map(x=>x.cvdRatio??x.cvd).filter(Number.isFinite);
+    if(!Array.isArray(data.series.oi)||data.series.oi.length<2)data.series.oi=live2.points.map(x=>x.oi).filter(Number.isFinite);
+    if(!Array.isArray(data.series.liq)||data.series.liq.length<2)data.series.liq=live2.points.map(x=>x.liqTotal).filter(Number.isFinite);
+
+    data.provider=(data.provider||"Derivatives");
+    if(live2.wsConnected)data.provider+=" · live flow";
+    data.liveHistory=live2.points.slice(-180);
+    data.livePointCount=live2.points.length;
+    data.liveConnected=Boolean(live2.wsConnected);
+    data.liveHost=live2.wsHost||null;
+
+    // A provider being temporarily restricted is not itself a complete market-data outage
+    // when another usable provider/stream is active.
+    data.providerHealth={
+      liveStream:live2.wsConnected?"HEALTHY":"UNAVAILABLE",
+      restPrimary:["Bybit linear futures","Bybit live stream"].some(x=>String(data.provider).includes(x))?"HEALTHY":"DEGRADED",
+      historicalFallback:"Kraken Futures public API"
+    };
+
+    data=mergeFlowSnapshot(symbol,data);
+    DERIV_CACHE.set(key,{ts:Date.now(),data});
+    return data;
   })().finally(()=>DERIV_INFLIGHT.delete(key));
+
   DERIV_INFLIGHT.set(key,job);
   return job;
 }
