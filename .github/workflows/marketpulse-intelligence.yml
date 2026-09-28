@@ -37,5 +37,10 @@ jobs:
         with:
           node-version: "20"
 
+      - name: Keep Render services warm
+        run: |
+          curl -fsS --max-time 15 "https://marketpulse-os-d4p9.onrender.com/api/fast-ticker?symbol=BTCUSDT" >/dev/null || true
+          curl -fsS --max-time 15 "https://marketpulse-autotrader.onrender.com/health" >/dev/null || true
+
       - name: Run scheduled intelligence sweep
         run: node marketpulse-worker-once.js
