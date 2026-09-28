@@ -639,30 +639,28 @@ async function reconcile(){
 
 async function setBotConfig(patch={}){
   const loaded=await load(),state=loaded.state;
-  const requested=Object.assign({},state.bot||{},patch||{});
-  if(String(requested.mode||"PAPER").toUpperCase()==="PAPER"){
-    requested.mode="PAPER";
-    await setConfig({mode:"SIMULATION"});
-    const refreshed=await load();state.bot=refreshed.state.bot;
-  }
-  const next=Object.assign({},state.bot||{},requested||{});
-
-  const loaded=await load(),state=loaded.state;
   const next=Object.assign({},state.bot||{},patch||{});
-  if(next.mode==="LIVE" && String(process.env.LIVE_TRADING_ENABLED||"false").toLowerCase()!=="true"){
+  if(String(next.mode||"PAPER").toUpperCase()==="PAPER"){
+    next.mode="PAPER";
+    state.config.mode="SIMULATION";
+    state.control.armed=false;
+    state.control.killSwitch=false;
+    state.control.reconciliation={ok:true,checkedAt:now(),detail:"Paper mode auto-simulation."};
+  }
+  if(next.mode==="LIVE"&&String(process.env.LIVE_TRADING_ENABLED||"false").toLowerCase()!=="true"){
     throw new Error("LIVE_TRADING_ENABLED is OFF");
   }
   state.bot=ensureState(Object.assign({},state,{bot:next})).bot;
-  if(state.bot.mode==="PAPER"){
-    state.config.mode="SIMULATION";state.control.armed=false;state.control.killSwitch=false;
-    state.control.reconciliation={ok:true,checkedAt:now(),detail:"Paper mode auto-simulation."};
-  }
-  pushEvent(state,"BOT_CONFIG_UPDATED","AutoTrader configuration updated",{mode:state.bot.mode,enabled:state.bot.enabled,strategies:state.bot.strategies,easyMode:state.bot.easyMode});
+  pushEvent(state,"BOT_CONFIG_UPDATED","AutoTrader configuration updated",{
+    mode:state.bot.mode,enabled:state.bot.enabled,strategies:state.bot.strategies,easyMode:state.bot.easyMode
+  });
   await save(state);
   const out=botSnapshot(state);
-  AUTOTRADER_STATUS_CACHE.ts=now();AUTOTRADER_STATUS_CACHE.payload=out;
+  AUTOTRADER_STATUS_CACHE.ts=now();
+  AUTOTRADER_STATUS_CACHE.payload=out;
   return out;
 }
+
 function updateBotBucket(map,key,outcome,resultR){
   const k=String(key||"UNKNOWN"),b=map[k]||{n:0,wins:0,losses:0,netR:0};
   b.n+=1;if(outcome==="WIN")b.wins+=1;if(outcome==="LOSS")b.losses+=1;b.netR+=Number(resultR)||0;map[k]=b;
