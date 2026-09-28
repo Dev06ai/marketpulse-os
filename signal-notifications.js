@@ -129,16 +129,18 @@ function buildSignalAlert({decision,symbol,interval,candleTs}){
   const entryText=levels.entryLow!=null&&levels.entryHigh!=null
     ?price(levels.entryLow)+" – "+price(levels.entryHigh)
     :price(levels.entryLow??levels.entry);
+  const snapshotText=candleTs?new Date(Number(candleTs)).toISOString():"unknown";
   const body=[
-    interval+" "+style+" • "+setup,
-    "Score "+scoreText+" • R:R "+rrText,
+    "SIGNAL SNAPSHOT • "+interval+" "+style,
+    "BTC "+side+" • Score "+scoreText+" • R:R "+rrText,
     "Entry "+entryText+" • SL "+price(levels.stop),
     "TP1 "+price(levels.tp1)+" • TP2 "+price(levels.tp2),
-    "Confirmed • "+gateText
+    "Confirmed at candle "+snapshotText+" • "+gateText,
+    "Revalidate on MarketPulse before acting."
   ].join("\n");
   return {
     signalKey:key,symbol:"BTC",symbolCode:symbol,interval,style,side,setup,
-    title:"MARKETPULSE • BTC "+side,
+    title:"MARKETPULSE • BTC "+side+" • SIGNAL SNAPSHOT",
     body,score:Number.isFinite(score)?score:null,
     status:"CONFIRMED",
     gate:gateText,
