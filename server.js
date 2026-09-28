@@ -14,6 +14,7 @@ const autotrader=require('./autotrader');
 const phase18MarketState=require('./phase18-market-state');
 const phase18Opportunity=require('./phase18-opportunity');
 const phase18ExecutionRouter=require('./phase18-execution-router');
+const {validateTradeLevels}=require("./trade-levels");
 const signalNotifications=require('./signal-notifications');
 const propFirm=require('./prop-firm');
 const research=require('./research-data');
@@ -290,7 +291,7 @@ async function getDecisionSnapshotCached(symbol,interval,searchParams,device){
   }
 }
 const SIGNAL_STABILITY=new Map();
-const SIGNAL_CONFIRMATIONS_REQUIRED=2;
+const SIGNAL_CONFIRMATIONS_REQUIRED=3;
 const SIGNAL_RELEASE_MISSES=2;
 
 function signalStabilityKey(symbol,interval){return String(symbol)+"|"+String(interval)}
@@ -378,14 +379,27 @@ function applySignalStability(decision,symbol,interval){
     row.misses+=1; row.lastTs=now;
     if(row.misses<SIGNAL_RELEASE_MISSES){
       SIGNAL_STABILITY.set(key,row);
-      return {...d,action:row.side,state:"READY",liveSignalEligible:true,
-        market:{...(d.market||{}),side:row.side},
-        candidateEvidence:d.candidateEvidence||{
-          action:d.rawAction||row.side,state:d.state,market:d.market||null,levels:d.levels||null,
-          thesis:d.evidence?.thesis||null,type:d.market?.type||null,
+      return {
+        ...d,
+        action:"WAIT",
+        state:"NO_TRADE",
+        liveSignalEligible:false,
+        rawAction:d.rawAction||row.side,
+        market:{...(d.market||{}),side:"WAIT",status:"WAITING",type:"HOLDING PREVIOUS CONTEXT",bias:"Neutral",directionalLean:"NEUTRAL"},
+        levels:{...(d.levels||{}),side:"WAIT",entryLow:null,entryHigh:null,entry:null,stop:null,tp1:null,tp2:null,rr:null},
+        candidateEvidence:{
+          ...(d.candidateEvidence||{}),
+          action:row.side,
+          state:d.state,
+          market:d.market||null,
+          levels:d.candidateEvidence?.levels||null,
+          thesis:d.evidence?.thesis||null,
+          type:d.market?.type||null,
           strategyFamily:d.analysis?.strategyFamily||d.strategyFamily||"NONE"
         },
-        signalStability:{state:"HOLDING",side:row.side,confirmations:row.confirmations,required:SIGNAL_CONFIRMATIONS_REQUIRED,misses:row.misses,releaseAfter:SIGNAL_RELEASE_MISSES}};
+        deploymentGate:{...(d.deploymentGate||{}),state:String(d.deploymentGate?.state||"PAPER_ONLY").toUpperCase()},
+        signalStability:{state:"HOLDING",side:row.side,confirmations:row.confirmations,required:SIGNAL_CONFIRMATIONS_REQUIRED,misses:row.misses,releaseAfter:SIGNAL_RELEASE_MISSES}
+      };
     }
   }
 
@@ -813,32 +827,59 @@ async function buildDecisionSnapshot(symbol,interval,query,deviceId=null){
       target1Distance:analysis?.target1Distance??null
     };
     const finitePositive=(v)=>Number.isFinite(Number(v))&&Number(v)>0?v:null;
-    const conditionalLevels={
-      side:String(decisionLevels.side||analysisLevels.side||"WAIT").toUpperCase(),
-      entryLow:finitePositive(decisionLevels.entryLow)??finitePositive(analysisLevels.entryLow),
-      entryHigh:finitePositive(decisionLevels.entryHigh)??finitePositive(analysisLevels.entryHigh),
-      entry:finitePositive(decisionLevels.entry)??finitePositive(analysisLevels.entry),
-      stop:finitePositive(decisionLevels.stop)??finitePositive(analysisLevels.stop),
-      tp1:finitePositive(decisionLevels.tp1)??finitePositive(analysisLevels.tp1),
-      tp2:finitePositive(decisionLevels.tp2)??finitePositive(analysisLevels.tp2),
-      rr:finitePositive(decisionLevels.rr)??finitePositive(analysisLevels.rr),
-      riskDistance:finitePositive(decisionLevels.riskDistance)??finitePositive(analysisLevels.riskDistance),
-      target1Distance:finitePositive(decisionLevels.target1Distance)??finitePositive(analysisLevels.target1Distance),
-      source:decisionLevels.entryLow!=null||decisionLevels.stop!=null?"DECISION ENGINE":"MARKET ANALYSIS"
-    };
+    const candidateSource=(
+      decisionLevels && typeof decisionLevels==="object" &&
+      ["LONG","SHORT"].includes(String(decisionLevels.side||"").toUpperCase())
+    ) ? decisionLevels : (
+      analysis?.tradeLevels && typeof analysis.tradeLevels==="object" ? analysis.tradeLevels : null
+    );
+    const conditionalCheck=candidateSource
+      ? validateTradeLevels(candidateSource,{minRR:signalPolicy.minRR})
+      : {valid:false,reasons:["NO_TRADE_LEVELS"]};
+    const conditionalLevels=conditionalCheck.valid ? {
+      side:conditionalCheck.side,
+      entryLow:conditionalCheck.entryLow,
+      entryHigh:conditionalCheck.entryHigh,
+      entry:conditionalCheck.entry,
+      stop:conditionalCheck.stop,
+      tp1:conditionalCheck.tp1,
+      tp2:conditionalCheck.tp2,
+      rr:conditionalCheck.rr,
+      riskDistance:conditionalCheck.riskDistance,
+      target1Distance:conditionalCheck.target1Distance,
+      rr1:conditionalCheck.rr1,
+      rr2:conditionalCheck.rr2,
+      riskAtr:candidateSource.riskAtr??null,
+      source:candidateSource.source||"CONSERVATIVE LEVEL BUILDER",
+      valid:true
+    } : null;
+    const levelBlockReason=conditionalLevels?null:(
+      Array.isArray(conditionalCheck.reasons)&&conditionalCheck.reasons.length
+        ?conditionalCheck.reasons.join(", ")
+        :"NO_VALID_TRADE_LEVELS"
+    );
     const gatedDecision=phase1113.applyDeploymentGate(decision,validation1113,{basePolicy:signalPolicy});
     const stableDecision=applySignalStability(gatedDecision,symbol,interval);
     let finalDecision=sanitizeFinalDecision(stableDecision);
-    if(conditionalLevels){
-      finalDecision={
-        ...finalDecision,
-        conditionalLevels:{...conditionalLevels},
-        candidateEvidence:{
-          ...(finalDecision.candidateEvidence||{}),
-          levels:finalDecision.candidateEvidence?.levels||{...conditionalLevels}
+    finalDecision={
+      ...finalDecision,
+      conditionalLevels:conditionalLevels||null,
+      candidateEvidence:{
+        ...(finalDecision.candidateEvidence||{}),
+        levels:conditionalLevels||null,
+        levelValidation:{
+          valid:Boolean(conditionalLevels),
+          minimumRR:signalPolicy.minRR,
+          reason:levelBlockReason
         }
-      };
-    }
+      },
+      levelSafety:{
+        valid:Boolean(conditionalLevels),
+        minimumRR:signalPolicy.minRR,
+        reason:levelBlockReason,
+        riskAtr:conditionalLevels?.riskAtr??null
+      }
+    };
     try{
       setTimeout(()=>signalNotifications.notifyAdminSignal(storage,{
         decision:finalDecision,
