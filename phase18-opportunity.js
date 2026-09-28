@@ -8,6 +8,10 @@ const VERSION="18.0.0";
 
 function n(x,d=null){const v=Number(x);return Number.isFinite(v)?v:d}
 function clamp(x,a,b){return Math.max(a,Math.min(b,x))}
+function isWeekdayIndia(ts=Date.now()){
+  const d=new Date(new Date(Number(ts)).toLocaleString("en-US",{timeZone:"Asia/Kolkata"})).getDay();
+  return d>=1&&d<=5;
+}
 function sideOf(decision){
   const a=String(decision?.action||"").toUpperCase();
   if(a==="LONG"||a==="SHORT")return a;
@@ -100,6 +104,7 @@ function evaluate(decision,marketState,{weekdayOnly=true,easyMode=true}={}){
   const s=score(d),r=rr(d),dq=dataQuality(d),px=priceNow(marketState,d),band=entryBand(d);
   const gate=String(d?.deploymentGate?.state||"PAPER_ONLY").toUpperCase();
   const reasons=[];
+  if(weekdayOnly&&!isWeekdayIndia())reasons.push("WEEKEND_PAUSE");
   if(side==="WAIT")reasons.push("NO_DIRECTION");
   if(d?.stale===true)reasons.push("STALE_DECISION");
   if(gate==="BLOCKED")reasons.push("HARD_GATE_BLOCK");
