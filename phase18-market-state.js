@@ -13,11 +13,12 @@
  */
 
 const VERSION="18.0.0";
-const CACHE_TTL_MS=5000;
+const CACHE_TTL_MS=15000;
 const HISTORY_LIMIT=180;
 const HISTORY=new Map();
 const SNAPSHOT_CACHE=new Map();
 const INFLIGHT=new Map();
+const LAST_GOOD=new Map();
 
 function n(x,d=null){const v=Number(x);return Number.isFinite(v)?v:d}
 function clamp(x,a,b){return Math.max(a,Math.min(b,x))}
@@ -191,23 +192,34 @@ function classify(summary,venues){
   if(bias==="BUYERS"&&state!=="SHORT_CROWDED")state="BUYER_PRESSURE";
   return {state,bias};
 }
-async function snapshot(symbol="BTCUSDT"){
+async function snapshot(symbol="BTCUSDT",opts={}){
   symbol=String(symbol).toUpperCase();
   if(!symbolOk(symbol))throw new Error("Unsupported symbol");
-  const key=symbol,hit=SNAPSHOT_CACHE.get(key);
-  if(hit&&now()-hit.ts<CACHE_TTL_MS)return {...hit.payload,cache:"memory",cacheAgeMs:now()-hit.ts};
-  if(INFLIGHT.has(key))return await INFLIGHT.get(key);
+  const fast=Boolean(opts?.fast),key=symbol+"|"+(fast?"FAST":"FULL"),hit=SNAPSHOT_CACHE.get(key),ts=now();
+  if(hit&&ts-hit.ts<CACHE_TTL_MS)return {...hit.payload,cache:"memory",cacheAgeMs:ts-hit.ts};
+  if(INFLIGHT.has(key)){
+    if(hit)return {...hit.payload,cache:"stale-inflight",stale:true,cacheAgeMs:ts-hit.ts};
+    return await INFLIGHT.get(key);
+  }
+  const venuesFns=fast
+    ?[
+      ["Bybit",()=>bybit(symbol)],
+      ["Binance",()=>binance(symbol)],
+      ["Hyperliquid",()=>hyperliquid(symbol)],
+      ["Coinbase",()=>coinbase(symbol)]
+    ]
+    :[
+      ["Bybit",()=>bybit(symbol)],
+      ["Binance",()=>binance(symbol)],
+      ["Hyperliquid",()=>hyperliquid(symbol)],
+      ["OKX",()=>okx(symbol)],
+      ["Bitget",()=>bitget(symbol)],
+      ["Gate",()=>gate(symbol)],
+      ["Paradex",()=>paradex(symbol)],
+      ["Coinbase",()=>coinbase(symbol)]
+    ];
   const job=(async()=>{
-    const results=await Promise.all([
-      safe("Bybit",()=>bybit(symbol)),
-      safe("Binance",()=>binance(symbol)),
-      safe("Hyperliquid",()=>hyperliquid(symbol)),
-      safe("OKX",()=>okx(symbol)),
-      safe("Bitget",()=>bitget(symbol)),
-      safe("Gate",()=>gate(symbol)),
-      safe("Paradex",()=>paradex(symbol)),
-      safe("Coinbase",()=>coinbase(symbol))
-    ]);
+    const results=await Promise.all(venuesFns.map(([name,fn])=>safe(name,fn)));
     const venues=results;
     const history=recentHistory(symbol);
     const summary=summarize(venues,history);
@@ -215,14 +227,23 @@ async function snapshot(symbol="BTCUSDT"){
     const payload={
       ok:summary.venueCount>0,version:VERSION,symbol,generatedAt:now(),
       venues,summary,regime,history:history.slice(-20),
-      method:"REST cross-exchange snapshot; streaming lead/lag is progressively learned from repeated samples"
+      method:fast
+        ?"REST fast cross-exchange snapshot; Bybit/Binance/Hyperliquid/Coinbase."
+        :"REST full cross-exchange snapshot; streaming lead/lag is progressively learned from repeated samples"
     };
     pushHistory(symbol,venues);
     SNAPSHOT_CACHE.set(key,{ts:now(),payload});
+    LAST_GOOD.set(key,{ts:now(),payload});
     return payload;
   })().finally(()=>INFLIGHT.delete(key));
   INFLIGHT.set(key,job);
-  return await job;
+  try{
+    return await job;
+  }catch(e){
+    const last=LAST_GOOD.get(key);
+    if(last)return {...last.payload,cache:"last-good",stale:true,cacheAgeMs:ts-last.ts};
+    throw e;
+  }
 }
 function health(snapshot){
   const s=snapshot?.summary||{};
