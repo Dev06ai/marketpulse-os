@@ -2210,7 +2210,11 @@ const server=http.createServer(async(req,res)=>{
     }
 
     if(req.method==='GET'&&u.pathname==='/api/autotrader'){
-      try{return send(res,200,await execution.getBotSnapshot())}catch(e){return send(res,503,{ok:false,error:e.message})}
+      try{
+        return send(res,200,await execution.getBotSnapshot(),{"cache-control":"no-store, max-age=0"});
+      }catch(e){
+        return send(res,503,{ok:false,error:e.message,transient:true});
+      }
     }
     if(req.method==='POST'&&u.pathname==='/api/autotrader/config'){
       let raw="";for await(const chunk of req)raw+=chunk;let body={};try{body=JSON.parse(raw||"{}")}catch{return send(res,400,{error:"Invalid JSON"})}
