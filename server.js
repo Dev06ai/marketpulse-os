@@ -1017,7 +1017,7 @@ async function buildDecisionSnapshot(symbol,interval,query,deviceId=null){
       phase11_13:validation1113,
       phase14:finalDecision.phase14||analysis.phase14||null,
       phase14Status:finalDecision.phase14?.adaptive||analysis.phase14?.adaptive||null,
-      phase11:PHASE11_VERSION,phase12:PHASE12_VERSION,phase13:PHASE13_VERSION,phase14Version:"14.0.0",phase20Version:phase20.VERSION,phase21Version:phase21.VERSION,phase21to50Version:phaseStack.VERSION,phase51to100Version:phase51to100.VERSION,
+      phase11:PHASE11_VERSION,phase12:PHASE12_VERSION,phase13:PHASE13_VERSION,phase14Version:"14.0.0",phase20Version:phase20.VERSION,phase21Version:phase21.VERSION,phase21to50Version:phaseStack.VERSION,phase51to100Version:phase51100.VERSION,phase51100:phase51100State,phase51to100Version:phase51to100.VERSION,
       updatedAt:now
     };
     DECISION_CACHE.set(key,{ts:now,payload});
