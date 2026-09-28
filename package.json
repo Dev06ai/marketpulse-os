@@ -9,7 +9,8 @@
     "worker": "node marketpulse-worker.js",
     "worker:once": "node marketpulse-worker-once.js",
     "test:signal-notifications": "node tests/admin-signal-notifications.js",
-    "watchdog": "node marketpulse-watchdog.js"
+    "watchdog": "node marketpulse-watchdog.js",
+    "test:autotrader": "node tests/autotrader.js"
   },
   "engines": {
     "node": ">=20"
