@@ -35,6 +35,7 @@ const phase47=require("./phase47-recovery");
 const phase48=require("./phase48-performance-budget");
 const phase49=require("./phase49-live-readiness");
 const phase50=require("./phase50-shadow-controller");
+const phaseStack=require("./phase21-50-stack");
 
 
 
@@ -120,6 +121,7 @@ assert(phase47.selfTest().ok,"Phase 47 recovery self-test failed.");
 assert(phase48.selfTest().ok,"Phase 48 performance-budget self-test failed.");
 assert(phase49.selfTest().ok,"Phase 49 live-readiness self-test failed.");
 assert(phase50.selfTest().ok,"Phase 50 shadow-controller self-test failed.");
+assert(phaseStack.selfTest().ok,"Phase 21–50 stack self-test failed.");
 assert(tradeLevelResult.ok,"Conservative trade-level self-test failed.");
 assert(tradeLevelResult.long.rr>=1.5&&tradeLevelResult.short.rr>=1.5,"Trade-level builder must enforce minimum 1.5R.");
 assert(tradeLevelResult.long.stop<tradeLevelResult.long.entry&&tradeLevelResult.long.tp1>tradeLevelResult.long.entry,"LONG level geometry is invalid.");
