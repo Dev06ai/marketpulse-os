@@ -926,6 +926,14 @@ linear-gradient(180deg,#0c0e11 0%,#101214 48%,#0a0b0d 100%);box-shadow:0 -20px 7
 }
 .mpdc-thesis-panel{padding:14px}
 .mpdc-execution-panel{padding:14px;background:linear-gradient(180deg,var(--mpdc-soft),rgba(255,255,255,.012))}
+.decisionSection.signal-wait .mpdc-execution-panel{
+  background:linear-gradient(180deg,rgba(192,132,252,.055),rgba(255,255,255,.012))!important;
+  border-color:rgba(192,132,252,.18)!important;
+}
+.decisionSection.signal-wait .mpdc-plan-stop{border-color:rgba(255,255,255,.065)!important}
+.decisionSection.signal-wait .mpdc-plan-stop b{color:#d6dee8!important}
+.decisionSection.signal-wait .mpdc-plan-target b{color:#d6dee8!important}
+.decisionSection.signal-wait .mpdc-entry-note .mpdc-invalidation b{color:#d6c9e8!important}
 .mpdc-panel-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
 .mpdc-panel-head.compact{margin-bottom:8px}
 .mpdc-panel-sub{display:block;margin-top:3px;font-size:9px;color:#77869a;line-height:1.35}
@@ -5510,18 +5518,19 @@ function getConditionalTradeLevels(d,p){
     (action==="LONG"||action==="SHORT") &&
     String(d.signalStability?.state||"").toUpperCase()==="CONFIRMED"
   );
-  var side=executionReady
-    ?action
-    :String(d.candidateEvidence?.action||d.rawAction||"WAIT").toUpperCase();
+  // A WAIT decision is deliberately level-less. Candidate/conditional levels
+  // remain internal evidence and must never render as an executable LONG/SHORT map.
+  if(!executionReady)return {
+    valid:false,side:"WAIT",entryLow:null,entryHigh:null,entry:null,stop:null,tp1:null,tp2:null,rr:null,
+    executionReady:false,reason:"FINAL_DECISION_NOT_EXECUTABLE"
+  };
+
+  var side=action;
   if(side!=="LONG"&&side!=="SHORT")return {valid:false,side:"WAIT",reason:"NO_DIRECTION"};
 
   // The server is authoritative. Do not reconstruct TP/SL from the live price
   // or from raw analysis here: doing so was the source of inconsistent maps.
-  var source=executionReady
-    ?(d.levels&&typeof d.levels==="object"?d.levels:null)
-    :(d.conditionalLevels&&typeof d.conditionalLevels==="object"
-      ?d.conditionalLevels
-      :(d.candidateEvidence?.levels&&typeof d.candidateEvidence.levels==="object"?d.candidateEvidence.levels:null));
+  var source=d.levels&&typeof d.levels==="object"?d.levels:null;
   if(!source)return {valid:false,side,reason:"NO_SERVER_LEVEL_MAP"};
 
   var entryLow=validLevel(source.entryLow),entryHigh=validLevel(source.entryHigh);
@@ -5607,21 +5616,22 @@ function renderLiveDirectionalModel(d,model){
   }
   setText("livePlanPrice",Number.isFinite(Number(p.livePrice))?fmt(p.livePrice):"—");
 
-  var elo=validLevel(plan.entryLow),ehi=validLevel(plan.entryHigh),entry=validLevel(plan.entry);
-  var stop=validLevel(plan.stop),tp1=validLevel(plan.tp1),tp2=validLevel(plan.tp2),rr=Number(plan.rr);
-  var hasConditionalLevels=(elo!==null||ehi!==null||entry!==null||stop!==null||tp1!==null);
-  if(!hasConditionalLevels&&d.candidateEvidence?.levels&&typeof d.candidateEvidence.levels==="object"){
-    plan=d.candidateEvidence.levels;
-    elo=validLevel(plan.entryLow);ehi=validLevel(plan.entryHigh);entry=validLevel(plan.entry);
-    stop=validLevel(plan.stop);tp1=validLevel(plan.tp1);tp2=validLevel(plan.tp2);rr=Number(plan.rr);
-    hasConditionalLevels=(elo!==null||ehi!==null||entry!==null||stop!==null||tp1!==null);
-  }
-  var entryText=(elo!==null&&ehi!==null)?fmt(elo)+" → "+fmt(ehi):(entry!==null?fmt(entry):"—");
+  var elo=executionReady?validLevel(plan.entryLow):null;
+  var ehi=executionReady?validLevel(plan.entryHigh):null;
+  var entry=executionReady?validLevel(plan.entry):null;
+  var stop=executionReady?validLevel(plan.stop):null;
+  var tp1=executionReady?validLevel(plan.tp1):null;
+  var tp2=executionReady?validLevel(plan.tp2):null;
+  var rr=executionReady?Number(plan.rr):null;
+  var hasConditionalLevels=executionReady&&(elo!==null||ehi!==null||entry!==null||stop!==null||tp1!==null);
+  var entryText=executionReady
+    ?((elo!==null&&ehi!==null)?fmt(elo)+" → "+fmt(ehi):(entry!==null?fmt(entry):"—"))
+    :"—";
   setText("livePlanEntry",entryText);
   setText("livePlanSl",stop!==null?fmt(stop):"—");
   setText("livePlanTp1",tp1!==null?fmt(tp1):"—");
   setText("livePlanTp2",tp2!==null?fmt(tp2):"—");
-  setText("livePlanRr",Number.isFinite(rr)&&rr>0?rr.toFixed(2)+"R":"—");
+  setText("livePlanRr",executionReady&&Number.isFinite(rr)&&rr>0?rr.toFixed(2)+"R":"—");
   var planStatus=$("livePlanStatus");
   if(planStatus){
     if(executionReady){
@@ -5643,12 +5653,14 @@ function renderLiveDirectionalModel(d,model){
   if(p.liquidationBias&&String(p.liquidationBias).toUpperCase()!=="UNKNOWN")flowBits.push("liquidations "+String(p.liquidationBias).toLowerCase());
   if(Number.isFinite(p.orderBookImbalance))flowBits.push("book "+(p.orderBookImbalance>=0?"bid":"ask")+" pressure");
   if(Number.isFinite(p.takerImbalance))flowBits.push("taker "+(p.takerImbalance>=0?"buy":"sell")+" pressure");
-  if(hasConditionalLevels){
-    thesisText=(executionReady?"Confirmed "+finalAction:"Conditional "+candidate)+" setup";
+  if(executionReady&&hasConditionalLevels){
+    thesisText="Confirmed "+finalAction+" setup";
     if(entryRef)thesisText+=" · Entry "+entryRef+".";
     else thesisText+=".";
     if(flowBits.length)thesisText+=" Why: "+flowBits.slice(0,3).join(" · ")+".";
-    thesisText+=" Entry only after price reaches the mapped zone and the setup condition confirms; the execution gate still controls release.";
+    thesisText+=" Final execution gate is clear; maintain the confirmed setup conditions.";
+  }else if(!executionReady){
+    thesisText="WAIT / NO TRADE. A "+String(candidate||"UNKNOWN").toLowerCase()+" bias may be present, but it is informational only. No LONG/SHORT execution map is active.";
   }else{
     thesisText=String(thesis||"").trim();
     if(!thesisText||/^waiting for|^final decision unavailable|^no trade/i.test(thesisText)){
@@ -5658,8 +5670,12 @@ function renderLiveDirectionalModel(d,model){
   setText("livePlanThesis",thesisText);
   var inv=Array.isArray(d?.evidence?.invalidationScenario)?d.evidence.invalidationScenario.join(" "):d?.evidence?.invalidationScenario;
   if(!inv)inv=String(candidate==="LONG"?"Break the bullish structure / stop zone.":candidate==="SHORT"?"Reclaim the bearish trigger / stop zone.":"A fresh directional setup plus final safety checks.");
-  if(!executionReady&&!inv.toLowerCase().startsWith("invalidation"))inv="Not executable while the final gate is blocked. "+inv;
-  if(stop!==null)inv="Invalidation: "+fmt(stop)+(inv? " · "+inv:"");
+  if(!executionReady){
+    inv="No active invalidation level — final trade gate is blocked.";
+  }else{
+    if(!inv.toLowerCase().startsWith("invalidation"))inv="Structural thesis invalidation: "+inv;
+    if(stop!==null)inv="Invalidation: "+fmt(stop)+(inv? " · "+inv:"");
+  }
   setText("livePlanInvalidation",inv);
 }
 async function renderLiveSignalSummary(d,model){
@@ -5696,7 +5712,7 @@ async function renderLiveSignalSummary(d,model){
 
   var section=document.querySelector(".decisionSection");
   if(section){
-    var cls=side==="LONG"?"signal-long":"signal-short";
+    var cls=side==="LONG"?"signal-long":side==="SHORT"?"signal-short":"signal-wait";
     var keep=Array.from(section.classList).filter(function(x){
       return x!=="signal-long"&&x!=="signal-short"&&x!=="signal-wait";
     });
