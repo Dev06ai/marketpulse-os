@@ -1301,7 +1301,7 @@ linear-gradient(180deg,#0c0e11 0%,#101214 48%,#0a0b0d 100%);box-shadow:0 -20px 7
     </div>
     <div class="autotraderHero">
       <div class="autotraderMetric"><div class="label">Bot</div><div class="v" id="botStatus">OFF</div><div class="subv" id="botStatusMeta">Waiting for configuration</div></div>
-      <div class="autotraderMetric"><div class="label">Mode</div><div class="v" id="botMode">PAPER</div><div class="subv">Simulation / testnet / live gate</div></div>
+      <div class="autotraderMetric"><div class="label">Bot mode</div><div class="v" id="botMode">PAPER</div><div class="subv">Simulation / testnet / live gate</div></div>
       <div class="autotraderMetric"><div class="label">Positions</div><div class="v" id="botPositions">0 / 1</div><div class="subv">Bot exposure limit</div></div>
       <div class="autotraderMetric"><div class="label">Trades today</div><div class="v" id="botTradesToday">0 / 4</div><div class="subv">Automatic entries</div></div>
       <div class="autotraderMetric"><div class="label">Last action</div><div class="v" id="botLastAction">IDLE</div><div class="subv" id="botLastActionMeta">No automated trade yet</div></div>
@@ -2345,8 +2345,19 @@ function setView(name){
   if(name==="portfolio"){loadPortfolio()}
   if(name==="lab"&&state.account?.isAdmin){deferTask(runSystemCheck,60)}
   if(name==="brain"){deferTask(function(){loadPhase7();loadPhase7Health()},40)}
+  if(name==="dna"&&state.account?.isAdmin){
+    deferTask(function(){
+      loadDNA().then(function(){
+        var txt=$("dnaRows")?.textContent||"";
+        if(/No DNA dataset loaded|No signal DNA records|No DNA/i.test(txt))refreshDNA();
+      }).catch(function(){});
+    },60);
+  }
   if(name==="admin"&&state.account?.isAdmin){deferTask(loadAdminConsole,20);deferTask(loadAdminUsers,40)}
-  if(name==="research"&&state.account?.isAdmin){deferTask(loadResearchCatalog,80)}
+  if(name==="research"&&state.account?.isAdmin){
+    deferTask(loadResearchCatalog,80);
+    deferTask(runResearch,160);
+  }
   document.querySelectorAll(".navCategoryBtn.open").forEach(function(btn){
     btn.classList.remove("open");btn.setAttribute("aria-expanded","false");
     var panel=btn.closest(".navCategory")?.querySelector(".navCategoryPanel");if(panel)panel.classList.remove("open");
@@ -3145,8 +3156,16 @@ function renderAutoTrader(data){
   state.autotrader=data||null;if(!data?.bot)return;
   var b=data.bot||{},e=data.execution||{},m=e.metrics||{},h=data.health||{};
   var enabled=Boolean(b.enabled),mode=String(b.mode||"PAPER");
-  $("botStatus").textContent=enabled?"RUNNING":"OFF";
-  $("botStatusMeta").textContent=enabled?"Watchdog-managed automation active":"Waiting for start / arm";
+  var blockedByKill=Boolean(e.killSwitch);
+  var blockedByRecon=mode!=="PAPER"&&!e.reconciliation?.ok;
+  var botUiState=!enabled?"PAUSED":blockedByKill?"BLOCKED":blockedByRecon?"GATED":mode==="PAPER"?"WATCHING":"ARMED";
+  $("botStatus").textContent=botUiState;
+  $("botStatusMeta").textContent=
+    botUiState==="PAUSED"?"Waiting for start / arm":
+    botUiState==="BLOCKED"?"Kill switch is active · no automated execution":
+    botUiState==="GATED"?"Waiting for reconciliation · no automated execution":
+    botUiState==="WATCHING"?"Monitoring the market · paper execution only":
+    "Watchdog-managed automation armed";
   $("botMode").textContent=mode;
   $("botModeBadge").textContent=mode;
   $("botPositions").textContent=String(m.activePositions||0)+" / "+String(b.maxPositions||1);
@@ -3696,7 +3715,29 @@ function drawFlowChart(data){
     raw[2].values=history.map(function(x){return Number(x.liqTotal)}).filter(Number.isFinite);
   }
   raw=raw.filter(function(x){return x.values.length>=2});
-  if(!raw.length){drawBlankFlow();return}
+  if(!raw.length){
+    var snapshotSets=[
+      {name:"CVD",value:Number(data.cvdDelta),color:"#30DDEB"},
+      {name:"OI",value:Number(data.oi),color:"#B58CFF"},
+      {name:"Liquidations",value:Number(data.liquidationTotal),color:"#FF789D"}
+    ].filter(function(x){return Number.isFinite(x.value)});
+    if(snapshotSets.length){
+      ctx.clearRect(0,0,W,H);ctx.fillStyle="#07121d";ctx.fillRect(0,0,W,H);
+      ctx.fillStyle="#71879a";ctx.font="800 9px system-ui";ctx.textAlign="left";
+      ctx.fillText("LIVE SNAPSHOT · BUILDING HISTORY",14,24);
+      ctx.font="700 9px system-ui";ctx.fillStyle="#94a9bd";
+      snapshotSets.forEach(function(x,idx){
+        var xx=14+idx*Math.max(120,W/3),yy=58;
+        ctx.fillStyle=x.color;ctx.beginPath();ctx.roundRect(xx,yy-11,6,22,3);ctx.fill();
+        ctx.fillStyle="#a9b6c6";ctx.font="700 8px system-ui";ctx.fillText(x.name,xx+14,yy-1);
+        ctx.fillStyle="#f2f5f8";ctx.font="900 11px system-ui";ctx.fillText(fmt(x.value),xx+14,yy+14);
+      });
+      ctx.fillStyle="#71839a";ctx.font="700 8px system-ui";
+      ctx.fillText("Live metrics are available; the interactive history will populate as fresh points accumulate.",14,H-16);
+      return;
+    }
+    drawBlankFlow();return;
+  }
 
   var maxPts=Math.max(70,Math.min(220,Math.round(W/3)));
   raw.forEach(function(x){x.values=flowDownsample(flowSmooth(x.values,2),maxPts)});
@@ -3770,7 +3811,7 @@ function drawFlowChart(data){
 }
 function drawFlowData(data){
   if(!data){$("flowSource").textContent="UNAVAILABLE";drawBlankFlow();return}
-  $("flowSource").textContent=(data.provider||"LIVE")+" · interactive";
+  $("flowSource").textContent=(data.provider||"LIVE")+(data.livePointCount>1?" · LIVE":" · SNAPSHOT");
   drawFlowChart(data);
 }
 function mergeFlowClient(primary,secondary){
