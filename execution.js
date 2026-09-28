@@ -546,6 +546,17 @@ async function prepareFromSignal(signal){
   return createIntent({symbol:signal.symbol,interval:signal.interval,side:signal.side,entry,stop,target,qty:null,rr:signal.rr,signalId:signal.id,source:"PHASE4_SIGNAL",note:"Prepared from Phase 4 tracked signal."});
 }
 
+async function autoSubmitFinalDecision(signal){
+  const loaded=await load(),state=loaded.state;
+  if(state.config.mode!=="LIVE")return {ok:false,enabled:false,reason:"LIVE_MODE_REQUIRED"};
+  if(String(process.env.LIVE_AUTO_EXECUTION_ENABLED||"false").toLowerCase()!=="true")return {ok:false,enabled:false,reason:"LIVE_AUTO_EXECUTION_ENABLED_OFF"};
+  if(!state.control.armed)return {ok:false,enabled:true,reason:"LIVE_EXECUTION_NOT_ARMED"};
+  if(state.config.requireReconciliation&&!state.control.reconciliation.ok)return {ok:false,enabled:true,reason:"LIVE_RECONCILIATION_REQUIRED"};
+  const intent=await prepareFromSignal(signal);
+  const order=await submitIntent(intent.id);
+  return {ok:true,enabled:true,intent,order};
+}
+
 function snapshot(){
   return load().then(({state,storage:storageMode})=>{
     const active=activePositions(state),orders=state.orders.slice().reverse(),pnl=state.metrics.realizedPnl;
@@ -586,5 +597,6 @@ module.exports={
   closeSimulationPosition,
   reconcile,
   prepareFromSignal,
+  autoSubmitFinalDecision,
   marketGate
 };
