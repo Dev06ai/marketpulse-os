@@ -133,7 +133,7 @@ function evaluate(input={}){
   const relative=u.probability(Math.max(0,Math.min(100,Math.max(q.dir.long,q.dir.short)*.75+q.coverage.coverage*.25)));
   const confidence=probability??relative;
   const expectancy=p74.evaluate(input.expectancy||{});
-  const expectancyProbability=calibrated==null?null:calibrated/100;
+  const expectancyProbability=probability==null?null:probability/100;
   const expectancyGate=p65.evaluate({
     probability:expectancyProbability,
     rr:s.levels?.rr??levelResult.rr,
@@ -172,7 +172,7 @@ function evaluate(input={}){
     version:VERSION,
     signal:{
       symbol:s.symbol,interval:s.interval,timestamp:Date.now(),action,candidateAction:q.dominant,status:action==="WAIT"?"WAIT":"QUALIFIED_CANDIDATE",
-      price:s.price,confidence,confidenceSource:calibrated!=null?"CALIBRATED":"RELATIVE_EVIDENCE_ONLY",calibrated:calibrated!=null,
+      price:s.price,confidence,confidenceSource:calibrated!=null?"CALIBRATED":empirical!=null?"WALK_FORWARD_EMPIRICAL":"RELATIVE_EVIDENCE_ONLY",calibrated:calibrated!=null,
       evidence:evidence(s),direction:q.dir,coverage:q.coverage,
       entry:s.levels?.entry??levelResult.entry??s.levels?.entryLow??null,entryHigh:s.levels?.entryHigh??levelResult.entryHigh??null,
       stop:s.levels?.stop??levelResult.stop??null,tp1:s.levels?.tp1??levelResult.tp1??null,tp2:s.levels?.tp2??levelResult.tp2??null,rr:s.levels?.rr??levelResult.rr??null,
@@ -196,7 +196,7 @@ function selfTest(){
     derivatives:{cvdState:"BUYERS CONFIRM",takerImbalance:.12,oiChangePct:2,orderBook:{imbalance:.1}},
     phaseStack:{data:{quality:{liveEligible:true}},risk:{blocked:false},anomaly:{anomalous:false}},
     triggerConfirmed:true,mtfAligned:true,setupEvidence:true,flowEvidence:true,invalidation:true,levelsValid:true,
-    calibration:{probability:.72},
+    calibration:{probability:.72,source:"CALIBRATED"},
     uncertainty:{coveragePct:95,calibrationSamples:500,disagreementPct:5},
     publicReadiness:{data:true,validation:true,calibration:true,risk:true,security:true,observability:true,operations:true},
     expectancy:{winProbability:.72,averageWinR:2,averageLossR:1,costR:.05},
