@@ -288,7 +288,8 @@ async function marketGate(plan,state){
   const riskDistance=entry!==null&&stop!==null?Math.abs(entry-stop):NaN;
   const reward=entry!==null&&target!==null?Math.abs(target-entry):NaN;
   const rr=entry!==null&&stop!==null&&target!==null&&riskDistance>0?reward/riskDistance:NaN;
-  const riskCash=Math.max(0,finite(state.config.account,0)||0)*state.config.riskPct/100;
+  const riskPct=clamp(finite(p.riskPct,state.config.riskPct),0.05,5);
+  const riskCash=Math.max(0,finite(state.config.account,0)||0)*riskPct/100;
   const qtyRaw=finite(p.qty)||(riskDistance>0?riskCash/riskDistance:NaN);
   let qty=qtyRaw,price=entry;
   const symbol=String(p.symbol||"").toUpperCase();
@@ -306,7 +307,8 @@ async function marketGate(plan,state){
   if((state.config.mode==="TESTNET"||state.config.mode==="LIVE")&&!state.control.armed)return {allowed:false,reason:state.config.mode+" EXECUTION NOT ARMED"};
   if(state.config.requireReconciliation&&!state.control.reconciliation.ok)return {allowed:false,reason:"RECONCILIATION BLOCK"};
   if(activePositions(state).length>=state.config.maxPositions)return {allowed:false,reason:"MAX POSITIONS"};
-  if(openRiskPct(state)+state.config.riskPct>state.config.maxOpenRiskPct+1e-9)return {allowed:false,reason:"MAX OPEN RISK"};
+  const proposedRiskPct=tradeRiskPct;
+  if(openRiskPct(state)+proposedRiskPct>state.config.maxOpenRiskPct+1e-9)return {allowed:false,reason:"MAX OPEN RISK"};
   if(symbolExposurePct(state,symbol)+(Math.abs(entry*qty)/Math.max(1,state.config.account)*100)>state.config.maxSymbolExposurePct+1e-9)return {allowed:false,reason:"MAX SYMBOL EXPOSURE"};
   if(dailyLossPct(state)>=state.config.maxDailyLossPct-1e-9)return {allowed:false,reason:"MAX DAILY LOSS"};
   if(ordersLastMinute(state)>=state.config.maxOrdersPerMinute)return {allowed:false,reason:"ORDER RATE LIMIT"};
@@ -334,7 +336,7 @@ async function marketGate(plan,state){
   }
   const portfolioGate=await phase6.executionGate({symbol,side:p.side,entry,stop,target,qty,riskCash,intentId:p.id},state);
   if(!portfolioGate.allowed)return Object.assign({allowed:false},portfolioGate);
-  return {allowed:true,reason:"PASS",entry,stop,target,qty,riskCash,tradeRiskCash:Math.abs(entry-stop)*qty,tradeRiskPct:Math.abs(entry-stop)*qty/Math.max(1,state.config.account)*100,rr,markPrice:null,driftBps:null,portfolio:portfolioGate};
+  return {allowed:true,reason:"PASS",entry,stop,target,qty,riskCash,riskPct,tradeRiskCash:Math.abs(entry-stop)*qty,tradeRiskPct:Math.abs(entry-stop)*qty/Math.max(1,state.config.account)*100,rr,markPrice:null,driftBps:null,portfolio:portfolioGate};
 }
 
 function findOrder(state,id){
@@ -437,7 +439,8 @@ async function createIntent(plan){
   const duplicate=state.orders.find(o=>o.intentKey===[symbol,side,entry,stop,target,p.signalId||""].join("|")&&["INTENT","VALIDATING","APPROVED","SUBMITTED","ACKNOWLEDGED","OPEN","PARTIALLY_FILLED"].includes(o.status));
   if(duplicate)return clone(duplicate);
   const id=intentId();
-  const order={id,orderLinkId:linkId(id),intentKey:[symbol,side,entry,stop,target,p.signalId||""].join("|"),signalId:p.signalId||null,symbol,interval:p.interval||"1h",side,type:"LIMIT",status:"INTENT",entry,stop,target,qty:finite(p.qty),rr:reward/riskDistance,riskPct:state.config.riskPct,riskCash:state.config.account*state.config.riskPct/100,createdAt:now(),updatedAt:now(),externalOrderId:null,avgPrice:null,cumExecQty:0,leavesQty:null,source:p.source||"PHASE4",note:p.note||""};
+  const riskPct=clamp(finite(p.riskPct,state.config.riskPct),0.05,5);
+  const order={id,orderLinkId:linkId(id),intentKey:[symbol,side,entry,stop,target,p.signalId||""].join("|"),signalId:p.signalId||null,symbol,interval:p.interval||"1h",side,type:"LIMIT",status:"INTENT",entry,stop,target,qty:finite(p.qty),rr:reward/riskDistance,riskPct,riskCash:state.config.account*riskPct/100,createdAt:now(),updatedAt:now(),externalOrderId:null,avgPrice:null,cumExecQty:0,leavesQty:null,source:p.source||"PHASE4",note:p.note||""};
   state.orders.push(order);state.orders=state.orders.slice(-MAX_ORDERS);pushEvent(state,"INTENT_CREATED",symbol+" "+side+" execution intent created",{orderId:order.id,signalId:order.signalId});
   await save(state);return clone(order);
 }
@@ -446,7 +449,7 @@ async function submitIntent(id){
   const loaded=await load(),state=loaded.state,o=findOrder(state,id),exchangeAdapter=adapterFor(state);
   if(!o)throw new Error("Execution intent not found");
   if(["SUBMITTED","ACKNOWLEDGED","OPEN","PARTIALLY_FILLED","FILLED"].includes(o.status))return clone(o);
-  const plan={symbol:o.symbol,side:o.side,entry:o.entry,stop:o.stop,target:o.target,qty:o.qty,type:o.type,createdAt:o.createdAt};
+  const plan={symbol:o.symbol,side:o.side,entry:o.entry,stop:o.stop,target:o.target,qty:o.qty,type:o.type,riskPct:o.riskPct,createdAt:o.createdAt};
   o.status="VALIDATING";o.updatedAt=now();
   let gate;
   try{gate=await marketGate(plan,state)}catch(e){gate={allowed:false,reason:e.message}}
@@ -633,7 +636,7 @@ async function prepareFromSignal(signal){
   const stop=finite(signal.stop);
   const target=finite(signal.target);
   if(entry===null||stop===null||target===null)throw new Error("Signal is missing executable levels");
-  return createIntent({symbol:signal.symbol,interval:signal.interval,side:signal.side,entry,stop,target,qty:null,rr:signal.rr,signalId:signal.id,source:"PHASE4_SIGNAL",note:"Prepared from Phase 4 tracked signal."});
+  return createIntent({symbol:signal.symbol,interval:signal.interval,side:signal.side,entry,stop,target,qty:null,riskPct:signal.riskPct,rr:signal.rr,signalId:signal.id,source:signal.source||"PHASE4_SIGNAL",note:signal.note||"Prepared from tracked signal."});
 }
 
 async function autoSubmitFinalDecision(signal){
