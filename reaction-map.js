@@ -252,8 +252,21 @@ function reactionForZone(c,zone,atrNow,ctx={}){
   const bearishSweep=zone.side==="RESISTANCE"&&inside&&x.h>zone.high+buf*.25&&x.c<zone.low+buf*.35&&x.c<x.o&&w.upper>=Math.max(w.body*1.15,atrNow*.16);
   const bullishBreak=zone.side==="RESISTANCE"&&prev.c<=zone.high+buf&&x.c>zone.high+buf&&x.c>x.o&&(vz>=.8||flowLong);
   const bearishBreak=zone.side==="SUPPORT"&&prev.c>=zone.low-buf&&x.c<zone.low-buf&&x.c<x.o&&(vz>=.8||flowShort);
-  const bullishRetest=zone.side==="RESISTANCE"&&x.l<=zone.high+buf&&x.c>zone.high+buf*.10&&x.c>=x.o;
-  const bearishRetest=zone.side==="SUPPORT"&&x.h>=zone.low-buf&&x.c<zone.low-buf*.10&&x.c<=x.o;
+  // A retest is only valid when the prior candle had already accepted
+  // beyond the level. Without that predecessor condition, a single candle
+  // inside/above a zone could be mislabeled as a breakout retest.
+  const bullishRetest=
+    zone.side==="RESISTANCE" &&
+    prev.c>zone.high+buf*.10 &&
+    x.l<=zone.high+buf &&
+    x.c>zone.high+buf*.10 &&
+    x.c>=x.o;
+  const bearishRetest=
+    zone.side==="SUPPORT" &&
+    prev.c<zone.low-buf*.10 &&
+    x.h>=zone.low-buf &&
+    x.c<zone.low-buf*.10 &&
+    x.c<=x.o;
 
   let state="WATCH_ZONE",action="WAIT",confidence=0,trigger="Wait for price to enter and react inside the zone.";
   if(bullishSweep){
