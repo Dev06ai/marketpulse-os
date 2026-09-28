@@ -4171,10 +4171,12 @@ function queueLiveUiSync(){
       });
       liveDecision.derivatives=canonicalFlowSnapshot();
 
+      var liveModel=stabilizeLiveDirectionalModel(computeLiveDirectionalModel(liveDecision));
       state.liveDirectionalSnapshot={
         seq:Number(state.canonicalMarket.seq||0),
         decision:liveDecision,
-        model:stabilizeLiveDirectionalModel(computeLiveDirectionalModel(liveDecision))
+        side:liveModel.stableSide,
+        model:liveModel
       };
       model=state.liveDirectionalSnapshot.model;
     }
@@ -5182,7 +5184,10 @@ function stabilizeLiveDirectionalModel(raw){
   raw=raw||{};
   var rawSide=Number(raw.long)>=Number(raw.short)?"LONG":"SHORT";
   var previous=state.liveDirectionalSnapshot;
-  var previousSide=previous?.side||null;
+  // The snapshot stores the model under .model. Reading .side here was a
+  // stale reference and meant the intended hysteresis was never actually
+  // applied.
+  var previousSide=previous?.model?.stableSide||previous?.side||null;
 
   // Hysteresis: do not visually flip the dashboard on a single micro-tick.
   // The underlying raw probabilities remain available, but the displayed
@@ -5209,22 +5214,28 @@ function stabilizeLiveDirectionalModel(raw){
   state.liveDirectionalPendingCount=pendingCount;
 
   var model=Object.assign({},raw,{
-    stableSide:rawSide,
-    dominant:rawSide==="LONG"
-      ?(Number(raw.long)>=60?"LONG LEAN":"LONG SLIGHT EDGE")
-      :(Number(raw.short)>=60?"SHORT LEAN":"SHORT SLIGHT EDGE")
+    stableSide:rawSide
   });
 
-  // When stabilization holds the side, expose a small stable lead adjustment
-  // so every visible section remains internally consistent.
-  if(rawSide==="LONG"&&Number(model.long)<Number(model.short)){
-    model.long=model.short;
-  }else if(rawSide==="SHORT"&&Number(model.short)<Number(model.long)){
-    model.short=model.long;
-  }
+  // Keep the raw probabilities intact. The stabilized side is a presentation
+  // guard against micro-flips; changing the probabilities to force the side
+  // to "win" creates impossible/tied values and can make the signal percentage
+  // disagree with the probability bars.
+  var stableConfidence=rawSide==="LONG"?Number(model.long):Number(model.short);
+  model.dominant=rawSide==="LONG"
+    ?(stableConfidence>=60?"LONG LEAN":"LONG SLIGHT EDGE")
+    :(stableConfidence>=60?"SHORT LEAN":"SHORT SLIGHT EDGE");
 
   model.wait=Math.max(0,100-Number(model.long)-Number(model.short));
   return model;
+}
+
+function liveDirectionalConfidence(model){
+  model=model||{};
+  var side=String(model.stableSide||"").toUpperCase();
+  if(side==="LONG")return Math.round(Number(model.long)||0);
+  if(side==="SHORT")return Math.round(Number(model.short)||0);
+  return Math.round(Math.max(Number(model.long)||0,Number(model.short)||0));
 }
 
 function getLiveDirectionalSnapshot(d){
@@ -5247,13 +5258,14 @@ function renderLiveDirectionalModel(d,model){
   setText("probLong",p.long+"%");setText("probShort",p.short+"%");setText("probWait",p.wait+"%");
   setText("probLongBarValue",p.long+"%");setText("probShortBarValue",p.short+"%");setText("probWaitBarValue",p.wait+"%");
   setBar("probLongBar",p.long);setBar("probShortBar",p.short);setBar("probWaitBar",p.wait);
-  setText("probLongText",p.long>p.short?"current directional leader":"secondary");
-  setText("probShortText",p.short>p.long?"current directional leader":"secondary");
+  var stableSide=String(p.stableSide||"").toUpperCase();
+  setText("probLongText",stableSide==="LONG"?"current stabilized direction":"secondary");
+  setText("probShortText",stableSide==="SHORT"?"current stabilized direction":"secondary");
   setText("probWaitText",p.wait>=20?"high gate/uncertainty":"watch");
   var status=$("liveDecisionStatus");if(status){
     var stxt=String(p.dominant||"");
     if(status.textContent!==stxt)status.textContent=stxt;
-    var scls="liveDecisionStatus "+(p.long>p.short?"livePositive":p.short>p.long?"liveNegative":"");
+    var scls="liveDecisionStatus "+(stableSide==="LONG"?"livePositive":stableSide==="SHORT"?"liveNegative":"");
     if(status.className!==scls)status.className=scls;
   }
   var flowItems=[
@@ -5305,7 +5317,7 @@ async function renderLiveSignalSummary(d,model){
   var side=model.stableSide||(
     Number(model.long)>=Number(model.short)?"LONG":"SHORT"
   );
-  var confidence=Math.max(Number(model.long)||0,Number(model.short)||0);
+  var confidence=liveDirectionalConfidence(model);
   var accent=side==="LONG"?"#4ade80":"#f87171";
   var glow=side==="LONG"?"rgba(74,222,128,.18)":"rgba(248,113,133,.18)";
 
@@ -5407,7 +5419,7 @@ function renderFinalDecision(d){
   // even when execution remains blocked.
   var liveModel=getLiveDirectionalSnapshot(d);
   var displaySide=liveModel.stableSide||(liveModel.long>=liveModel.short?"LONG":"SHORT");
-  var displayConfidence=Math.max(Number(liveModel.long)||0,Number(liveModel.short)||0);
+  var displayConfidence=liveDirectionalConfidence(liveModel);
   var directionalLabel=displaySide+" "+displayConfidence+"%";
 
   var accent=displaySide==="LONG"?"#4ade80":"#f87171";
