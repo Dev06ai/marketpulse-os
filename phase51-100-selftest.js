@@ -164,7 +164,7 @@ const base={
   derivatives:{cvdState:"BUYERS CONFIRM",takerImbalance:.12,oiChangePct:2,orderBook:{imbalance:.1}},
   phaseStack:{data:{quality:{liveEligible:true}},risk:{blocked:false},anomaly:{anomalous:false}},
   triggerConfirmed:true,mtfAligned:true,setupEvidence:true,flowEvidence:true,invalidation:true,levelsValid:true,
-  calibration:{probability:.72},
+  calibration:{probability:.72,source:"CALIBRATED"},
   uncertainty:{coveragePct:95,calibrationSamples:500,disagreementPct:5},
   publicReadiness:{data:true,validation:true,calibration:true,risk:true,security:true,observability:true,operations:true},
   expectancy:{winProbability:.72,averageWinR:2,averageLossR:1,costR:.05},
