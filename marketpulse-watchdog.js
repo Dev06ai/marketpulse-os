@@ -35,6 +35,7 @@ const CACHE_RESET_COOLDOWN_MS=Math.max(120000,Number(process.env.MARKETPULSE_WAT
 const BOT_SYMBOLS=String(process.env.MARKETPULSE_AUTOTRADER_SYMBOLS||"BTCUSDT").split(",").map(x=>x.trim().toUpperCase()).filter(Boolean);
 const BOT_STRATEGY_CADENCE_MS={SCALP:60000,INTRADAY:120000,SWING:300000,POSITION:900000};
 const BOT_INTERVALS={SCALP:"15m",INTRADAY:"1h",SWING:"4h",POSITION:"1d"};
+const EXTERNAL_AUTOTRADER=String(process.env.MARKETPULSE_AUTOTRADER_EXTERNAL??"true").toLowerCase()==="true";
 const DECISION_SYMBOLS=String(process.env.MARKETPULSE_WATCHDOG_SYMBOLS||"BTCUSDT,ETHUSDT,SOLUSDT").split(",").map(x=>x.trim()).filter(Boolean);
 const DECISION_INTERVALS=String(process.env.MARKETPULSE_WATCHDOG_INTERVALS||"15m,1h").split(",").map(x=>x.trim()).filter(Boolean);
 const MAX_INCIDENTS=phase16.MAX_INCIDENTS;
@@ -57,7 +58,8 @@ function botProbeDue(strategy){
   const now=Date.now(),last=Number(state.botLastProbeAt[strategy]||0),cadence=BOT_STRATEGY_CADENCE_MS[strategy]||300000;
   return now-last>=cadence;
 }
-async function runAutoTraderCycle(){
+async function runAutoTraderCycle(){  if(EXTERNAL_AUTOTRADER)return {ran:false,reason:"external_autotrader"};
+
   try{
     const snapshot=await fetchJson("/api/watchdog/internal?action=autotrader-status",{timeout:8000});
     const cfg=autotrader.normalizeConfig(snapshot?.bot||{});
