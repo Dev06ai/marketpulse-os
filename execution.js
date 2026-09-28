@@ -416,8 +416,29 @@ async function processWsMessage(state,msg){
     msg.data.forEach(x=>updateOrderFromExchange(state,x));
   }else if(msg.topic==="execution"||msg.topic.startsWith("execution.")){
     for(const x of msg.data){
-      appendFill(state,{id:x.execId,orderId:x.orderId,orderLinkId:x.orderLinkId,symbol:x.symbol,side:x.side,qty:finite(x.execQty,0),price:finite(x.execPrice,0),fee:finite(x.execFee,0),execPnl:finite(x.execPnl,0),ts:finite(x.execTime,now())});
-      const o=findOrder(state,x.orderId||x.orderLinkId);if(o){o.avgPrice=finite(x.execPrice,o.avgPrice);o.cumExecQty=(finite(o.cumExecQty,0)||0)+(finite(x.execQty,0)||0);o.updatedAt=now();}
+      const execPnl=finite(x.execPnl,0)||0;
+      appendFill(state,{id:x.execId,orderId:x.orderId,orderLinkId:x.orderLinkId,symbol:x.symbol,side:x.side,qty:finite(x.execQty,0),price:finite(x.execPrice,0),fee:finite(x.execFee,0),execPnl,ts:finite(x.execTime,now())});
+      const o=findOrder(state,x.orderId||x.orderLinkId);
+      if(o){
+        o.avgPrice=finite(x.execPrice,o.avgPrice);o.cumExecQty=(finite(o.cumExecQty,0)||0)+(finite(x.execQty,0)||0);o.updatedAt=now();
+        if(o.source==="PHASE17_EASY_AUTOTRADER"||o.source==="PHASE17_AUTOTRADER"){
+          const risk=Math.max(0.000001,Number(o.riskCash||0));
+          const resultR=execPnl/risk;
+          if(Math.abs(resultR)>=0.05){
+            state.bot=ensureState(state).bot;
+            const l=state.bot.learning;
+            const outcome=resultR>0?"WIN":"LOSS";
+            l.resolved+=1;if(outcome==="WIN")l.wins+=1;if(outcome==="LOSS")l.losses+=1;l.netR+=resultR;
+            l.lastOutcomeAt=now();l.lastOutcome={outcome,resultR,strategy:o.strategy||null,setup:o.setup||null,regime:o.regime||null,symbol:o.symbol,side:o.side};
+            updateBotBucket(l.byStrategy,o.strategy||"UNKNOWN",outcome,resultR);
+            updateBotBucket(l.bySetup,o.setup||o.type||"UNKNOWN",outcome,resultR);
+            updateBotBucket(l.byRegime,o.regime||"UNKNOWN",outcome,resultR);
+            l.recent.push({ts:now(),outcome,resultR,strategy:o.strategy||null,setup:o.setup||o.type||null,regime:o.regime||null,symbol:o.symbol,side:o.side,score:Number(o.score)||0});
+            l.recent=l.recent.slice(-50);
+            pushEvent(state,"BOT_LEARNING_UPDATE","AutoTrader learned from exchange execution outcome",{outcome,resultR,strategy:o.strategy||null,setup:o.setup||null,regime:o.regime||null,score:Number(o.score)||0});
+          }
+        }
+      }
     }
   }else if(msg.topic==="position"||msg.topic.startsWith("position.")){
     msg.data.forEach(x=>upsertPosition(state,x));
