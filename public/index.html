@@ -2182,6 +2182,7 @@ html.handheld-layout .evolutionMobile{display:block}
     <div class="sectionHead">
       <div><div class="title">MarketPulse Evolution</div><div class="sub">Owner-only Phase 1 → current upgrade ledger. Engineering phases are promoted after implementation + automated validation; live-readiness remains a separate runtime gate.</div></div>
       <span id="phaseHistoryCurrent" class="chip">CURRENT —</span>
+      <span id="phaseHistoryPromotion" class="chip">ENGINEERING PROMOTION —</span>
     </div>
     <div class="evolutionProgress" aria-label="Phase status progression">
       <div class="evolutionStep implemented"><span class="dot"></span><div><b>IMPLEMENTED</b><span>Code exists</span></div></div>
@@ -6704,13 +6705,22 @@ async function loadAdminPhaseHistory(){
     var s=String(raw||"PLANNED").toUpperCase();
     if(s==="COMPLETE")return {key:"complete",label:"COMPLETE"};
     if(s==="IMPLEMENTED_PENDING_VALIDATION")return {key:"implemented",label:"IMPLEMENTED · VALIDATION PENDING"};
-    if(s==="VALIDATED"||s==="VALIDATED_PENDING_READINESS")return {key:"validated",label:"VALIDATED"};
+    if(s==="VALIDATED")return {key:"validated",label:"VALIDATED · AUTOMATED CHECKS PASS"};
+    if(s==="VALIDATED_PENDING_RUNTIME")return {key:"ready",label:"VALIDATED · RUNTIME GATE PENDING"};
+    if(s==="VALIDATED_PENDING_READINESS")return {key:"validated",label:"VALIDATED"};
     if(s==="READY"||s==="READY_PENDING_PROMOTION")return {key:"ready",label:"READY"};
     return {key:"planned",label:"PLANNED"};
   }
   try{
     var d=await api("/api/admin/phase-history",8000),rows=Array.isArray(d.phases)?d.phases:[];
     if(badge)badge.textContent="CURRENT PHASE "+String(d.currentPhase||0);
+    var promo=$("phaseHistoryPromotion"),ps=d.promotion||{};
+    if(promo){
+      var es=String(ps.engineeringStatus||"PENDING").toUpperCase();
+      var ep=Number(ps.engineeringPhase||0);
+      var vs=String(ps.liveReadinessStatus||"UNKNOWN").toUpperCase();
+      promo.textContent=(es==="PROMOTED"?"ENGINEERING → PHASE "+ep:"ENGINEERING → "+es)+" · LIVE GATE "+(vs==="PENDING_RUNTIME_EVIDENCE"?"PENDING":"READY");
+    }
     var html=rows.map(function(p){
       var st=phaseStatus(p.status);
       return '<tr><td><b>PHASE '+safeHtmlLocal(p.phase)+'</b></td><td>'+safeHtmlLocal(p.title)+'</td><td>'+safeHtmlLocal(p.description)+'</td><td><span class="evolutionStatus '+st.key+'"><span class="dot"></span>'+safeHtmlLocal(st.label)+'</span></td></tr>';
