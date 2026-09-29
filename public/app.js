@@ -8,7 +8,8 @@ const state={
   crosshair:null,selectedCandle:null,drag:null,chartUserInteracted:false,viewStart:0,viewCount:110,fullscreen:false,navFocusTimer:null,
   ws:null,wsConnected:false,wsReconnectTimer:null,wsRetryMs:1000,
   style:{up:"#37e6a2",down:"#ff5d77",bg:"#0b0d10",grid:"#2b3036"},
-  tickerTimer:null,flowTimer:null,chartTimer:null,decisionTimer:null
+  tickerTimer:null,flowTimer:null,chartTimer:null,decisionTimer:null,
+  chartDrawFrame:null,marketEpoch:0
 };
 
 function cacheKey(kind){return "mp-apex-"+kind+"-"+state.symbol+"-"+state.interval}
@@ -200,11 +201,16 @@ function rowTime(r){
   const v=safeNum(r?.t??r?.time??r?.timestamp??r?.openTime);
   return v===null?null:v<1e12?v*1000:v;
 }
-function drawChart(){
+function drawChartNow(){
   const c=$("chart");if(!c)return;
   const rect=c.getBoundingClientRect(),dpr=window.devicePixelRatio||1,w=Math.max(1,rect.width),h=Math.max(1,rect.height);
-  c.width=Math.floor(w*dpr);c.height=Math.floor(h*dpr);
-  const g=c.getContext("2d");g.setTransform(dpr,0,0,dpr,0,0);
+  const targetW=Math.max(1,Math.floor(w*dpr)),targetH=Math.max(1,Math.floor(h*dpr));
+  const resized=c.width!==targetW||c.height!==targetH;
+  if(resized){c.width=targetW;c.height=targetH;}
+  const g=c.getContext("2d");
+  g.setTransform(1,0,0,1,0,0);
+  if(resized||state.chartForceClear)g.clearRect(0,0,targetW,targetH);
+  g.setTransform(dpr,0,0,dpr,0,0);
   g.clearRect(0,0,w,h);g.fillStyle=state.style.bg;g.fillRect(0,0,w,h);
 
   const rows=normalizedRows();
@@ -293,6 +299,16 @@ function drawChart(){
     g.strokeStyle="rgba(225,235,245,.20)";g.setLineDash([3,3]);g.beginPath();g.moveTo(cx,T);g.lineTo(cx,T+priceH);g.moveTo(L,cy);g.lineTo(L+pw,cy);g.stroke();g.setLineDash([]);
     const hover=$("chartHover");hover.style.display="block";hover.style.left=Math.min(w-190,Math.max(8,cx+12))+"px";hover.style.top=Math.max(8,Math.min(h-54,cy+8))+"px";hover.textContent=(ts?new Date(ts).toLocaleString()+" · ":"")+fmt(cv,2)+" · "+fmt(hi-(cy-T)/priceH*range,2);
   }else $("chartHover").style.display="none";
+}
+function drawChart(){
+  if(state.chartDrawFrame!==null)return;
+  const run=()=>{
+    state.chartDrawFrame=null;
+    try{drawChartNow()}catch{}
+  };
+  state.chartDrawFrame=typeof requestAnimationFrame==="function"
+    ?requestAnimationFrame(run)
+    :setTimeout(run,0);
 }
 function decisionParts(d){
   const apex=d?.apex||d?.phase401to500?.apex||{},p=d?.probabilities||apex.probabilities||{},m=d?.market||{},lv=d?.levels||apex.executionGate||{},g=d?.deploymentGate||apex.executionGate||{};
@@ -469,6 +485,7 @@ function renderSystemChecks(checks){
   });
 }
 async function loadCore(){
+  const epoch=state.marketEpoch,symbol=state.symbol,interval=state.interval;
   runtime("Loading market state…","warn","First paint does not depend on analytics.");
   const cachedT=readCache(cacheKey("ticker")),cachedC=readCache(cacheKey("chart")),cachedD=readCache(cacheKey("decision"));
   if(cachedT){state.ticker=cachedT;state.livePrice=safeNum(cachedT.price);renderTicker()}
@@ -481,14 +498,17 @@ async function loadCore(){
     api("/api/live-sync?symbol="+encodeURIComponent(state.symbol),2500)
   ]);
   const [cfg,tick,chart,live]=tasks;
+  if(state.marketEpoch!==epoch||state.symbol!==symbol||state.interval!==interval)return;
   if(cfg.status==="fulfilled"){state.cfg=cfg.value;populateSymbols(cfg.value.symbols)}
   if(tick.status==="fulfilled"&&!state.wsConnected){state.ticker=tick.value;state.livePrice=safeNum(tick.value.price);state.lastLiveEventAt=Date.now();writeCache(cacheKey("ticker"),state.ticker);renderTicker()}
   if(chart.status==="fulfilled"&&Array.isArray(chart.value.candles)){state.chart=chart.value.candles;writeCache(cacheKey("chart"),chart.value);drawChart()}
   if(live.status==="fulfilled"){state.live=live.value||{};if(safeNum(live.value?.price)!==null)applyCanonicalMarket({...live.value,type:"market-sync",seq:live.value.seq||state.lastServerSeq})}
   const marketOk=tick.status==="fulfilled"||chart.status==="fulfilled";
   runtime(marketOk?"MarketPulse online":"UI online — market feed retrying",marketOk?"ok":"warn",marketOk?"Live terminal ready. Price transport updates every second; analytics refresh independently.":"No blocking UI dependency failed; retrying providers automatically.");
-  if(state.decision)renderDecision();
-  refreshDecision(false);
+  if(state.marketEpoch===epoch&&state.symbol===symbol&&state.interval===interval){
+    if(state.decision)renderDecision();
+    refreshDecision(false);
+  }
 }
 async function tickLoop(){
   if(state.wsConnected&&Date.now()-state.lastLiveEventAt<2500)return;
@@ -505,21 +525,26 @@ async function flowLoop(){
   }catch{}
 }
 async function chartLoop(){
+  const epoch=state.marketEpoch,symbol=state.symbol,interval=state.interval;
   try{
-    const c=await api("/api/chart?symbol="+encodeURIComponent(state.symbol)+"&interval="+encodeURIComponent(state.interval),4500);
+    const c=await api("/api/chart?symbol="+encodeURIComponent(symbol)+"&interval="+encodeURIComponent(interval),4500);
+    if(state.marketEpoch!==epoch||state.symbol!==symbol||state.interval!==interval)return;
     if(Array.isArray(c.candles)&&c.candles.length){state.chart=c.candles;writeCache(cacheKey("chart"),c);drawChart()}
   }catch{}
 }
 async function refreshDecision(showStatus=true){
+  const epoch=state.marketEpoch,symbol=state.symbol,interval=state.interval;
   if(showStatus)runtime("Refreshing decision engine…","warn","Last confirmed frame remains visible until a fresh result arrives.");
   try{
-    const d=await api("/api/decision?symbol="+encodeURIComponent(state.symbol)+"&interval="+encodeURIComponent(state.interval),6500);
+    const d=await api("/api/decision?symbol="+encodeURIComponent(symbol)+"&interval="+encodeURIComponent(interval),6500);
+    if(state.marketEpoch!==epoch||state.symbol!==symbol||state.interval!==interval)return;
     state.decision=d;writeCache(cacheKey("decision"),d);renderDecision();
     runtime("MarketPulse online","ok","Canonical market + decision surfaces are synchronized.");
   }catch{
     if(!state.decision){
       try{
-        const a=await api("/api/phase401-500?symbol="+encodeURIComponent(state.symbol)+"&interval="+encodeURIComponent(state.interval),7500);
+        const a=await api("/api/phase401-500?symbol="+encodeURIComponent(symbol)+"&interval="+encodeURIComponent(interval),7500);
+        if(state.marketEpoch!==epoch||state.symbol!==symbol||state.interval!==interval)return;
         state.decision=a;writeCache(cacheKey("decision"),a);renderDecision();runtime("MarketPulse online","ok","Apex engine connected.");
       }catch{runtime("UI online — decision engine retrying","warn","No decision payload was allowed to block the market screen.")}
     }
@@ -632,9 +657,15 @@ function bind(){
   window.addEventListener("resize",drawChart);
 }
 function refreshAll(){
+  state.marketEpoch++;
+  if(state.chartDrawFrame!==null){
+    if(typeof cancelAnimationFrame==="function"&&typeof state.chartDrawFrame==="number")cancelAnimationFrame(state.chartDrawFrame);
+    else clearTimeout(state.chartDrawFrame);
+    state.chartDrawFrame=null;
+  }
   clearInterval(state.tickerTimer);clearInterval(state.flowTimer);clearInterval(state.chartTimer);clearInterval(state.decisionTimer);
   closeLiveStream();
-  state.ticker=null;state.live=null;state.market=null;state.chart=null;state.decision=null;state.livePrice=null;state.previousPrice=null;state.phases=null;state.lastLiveEventAt=0;state.chartUserInteracted=false;state.selectedCandle=null;state.crosshair=null;
+  state.ticker=null;state.live=null;state.market=null;state.chart=null;state.decision=null;state.chartForceClear=true;state.livePrice=null;state.previousPrice=null;state.phases=null;state.lastLiveEventAt=0;state.chartUserInteracted=false;state.selectedCandle=null;state.crosshair=null;
   $("symbolName").textContent=displaySymbol(state.symbol);connectLiveStream();loadCore();startLoops();
 }
 function startLoops(){
