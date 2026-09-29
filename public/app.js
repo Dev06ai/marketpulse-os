@@ -88,7 +88,7 @@ function normalizedRows(){
   }
   return out;
 }
-function candleValue(r,k){return safeNum(r?.[k]??r?.({o:"open",h:"high",l:"low",c:"close",v:"volume"}[k]||k))}
+function candleValue(r,k){const map={o:"open",h:"high",l:"low",c:"close",v:"volume"};return safeNum(r?.[k]??r?.[map[k]])}
 function rowTime(r){
   const v=safeNum(r?.t??r?.time??r?.timestamp??r?.openTime);
   return v===null?null:v<1e12?v*1000:v;
