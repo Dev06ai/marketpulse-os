@@ -363,5 +363,5 @@ module.exports={
   addJournal,
   historicalEvidence,
   strategyHealth,
-  personalEdge
+  personalEdge,selfTest
 };
