@@ -367,6 +367,28 @@ function applySignalStability(decision,symbol,interval){
   }
 
   if(!row.confirmed){
+    const transientCandidate=["LONG","SHORT"].includes(String(
+      d?.rawAction||d?.candidateEvidence?.action||d?.market?.side||""
+    ).toUpperCase())?String(
+      d?.rawAction||d?.candidateEvidence?.action||d?.market?.side
+    ).toUpperCase():null;
+    const age=now-Number(row.lastTs||0);
+    const samePending=transientCandidate===row.side && age<=30000 && !hardSignalBlock(d);
+    if(samePending){
+      SIGNAL_STABILITY.set(key,row);
+      return {
+        ...d,
+        rawAction:d.rawAction||row.side,
+        action:"WAIT",
+        state:"NO_TRADE",
+        liveSignalEligible:false,
+        market:{...(d.market||{}),side:"WAIT",status:"WAITING",type:"PENDING CONFIRMATION",bias:"Neutral",directionalLean:"NEUTRAL"},
+        levels:{...(d.levels||{}),entryLow:null,entryHigh:null,entry:null,stop:null,tp1:null,tp2:null,rr:null},
+        candidateEvidence:{...(d.candidateEvidence||{}),action:row.side,levels:d.candidateEvidence?.levels||d.levels||null,market:d.market||null},
+        deploymentGate:{...(d.deploymentGate||{}),state:String(d.deploymentGate?.state||"PAPER_ONLY").toUpperCase()},
+        signalStability:{state:"CONFIRMING",side:row.side,confirmations:row.confirmations,required:SIGNAL_CONFIRMATIONS_REQUIRED,misses:row.misses,retainedAfterTransientGap:true}
+      };
+    }
     SIGNAL_STABILITY.delete(key);
     return {...d,signalStability:{state:"NONE",side:null,confirmations:0,required:SIGNAL_CONFIRMATIONS_REQUIRED,misses:0}};
   }
