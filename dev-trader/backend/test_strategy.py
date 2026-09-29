@@ -6,12 +6,14 @@ def c(i,o,h,l,cl,confirmed=True):
 
 def test_bearish_sfp():
     cs=[c(i,100,102+i%2,99,100+(i%3)) for i in range(12)]
+    cs[4]=c(4,100,102,80,100)
     cs[-2]=c(10,100,105,99,101)
     cs[-1]=c(11,104,106,98,100)
     state=MarketState(candles_15=cs)
     sig=detect_sfp(state)
     assert sig is not None
     assert sig.direction=="SHORT"
+    assert sig.rr >= 3.0
 
 def test_bullish_dline_smoke():
     cs=[]
@@ -23,6 +25,5 @@ def test_bullish_dline_smoke():
         cs.append(c(i,base+0.5,high,low,close))
     cs[-1]=c(23,107.0,111.0,106.8,110.5)
     state=MarketState(candles_15=cs,candles_60=cs[-12:])
-    # Rule-library smoke test: no exception and either a valid signal or clean rejection.
     sig=detect_dline(state)
     assert sig is None or sig.direction=="LONG"
