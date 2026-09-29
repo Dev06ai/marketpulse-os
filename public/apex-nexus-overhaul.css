@@ -1,0 +1,57 @@
+
+body.apexV2Active{background:#020307!important}
+#apexV2Root.nexusSkin{
+ --ns-line:rgba(122,154,190,.13);--ns-ink:#ecf6ff;--ns-muted:#73859a;--ns-cyan:#4ff0d1;--ns-purple:#9f7bff;
+ position:fixed;inset:0;overflow:auto;background:
+ radial-gradient(900px 500px at 12% -5%,rgba(79,240,209,.09),transparent 58%),
+ radial-gradient(900px 500px at 98% 4%,rgba(159,123,255,.08),transparent 54%),
+ linear-gradient(180deg,#03050a 0%,#05080e 50%,#020307 100%);color:#ecf6ff;
+}
+#apexV2Root.nexusSkin .apex-shell{width:100%;min-height:100%;padding:14px 18px 44px 104px}
+#apexV2Root.nexusSkin .apex-top{
+ position:sticky;top:10px;z-index:20;margin:0 0 10px;padding:10px 12px;min-height:58px;
+ grid-template-columns:260px 1fr auto;border:1px solid var(--ns-line);border-radius:10px;
+ background:rgba(4,8,14,.84);box-shadow:0 18px 60px rgba(0,0,0,.32);backdrop-filter:blur(20px)
+}
+#apexV2Root.nexusSkin .apex-nav{display:none}
+#apexV2Root.nexusSkin .apex-logo{width:34px;height:34px;border-radius:9px;background:linear-gradient(145deg,#4ff0d1,#9f7bff);color:#05110f;box-shadow:0 0 26px rgba(79,240,209,.18)}
+#apexV2Root.nexusSkin .apex-brand b{font-size:13px;letter-spacing:-.025em}
+#apexV2Root.nexusSkin .apex-brand small{font-size:7px;color:#607389;letter-spacing:.15em}
+#apexV2Root.nexusSkin .apex-select,#apexV2Root.nexusSkin .apex-btn{border-radius:6px;border-color:var(--ns-line);background:#070c12;color:#d8e6f2;padding:7px 9px}
+#apexV2Root.nexusSkin .apex-banner{margin:0 0 9px;padding:8px 10px;border-radius:7px;border-color:rgba(79,240,209,.11);background:linear-gradient(90deg,rgba(79,240,209,.035),rgba(159,123,255,.035));font-size:8px}
+#apexV2Root.nexusSkin .apex-banner b{letter-spacing:.12em}
+#apexV2Root.nexusSkin .apex-kpis{grid-template-columns:1.35fr repeat(6,1fr);gap:6px}
+#apexV2Root.nexusSkin .apex-kpi{border-radius:7px;border-color:var(--ns-line);background:linear-gradient(180deg,rgba(9,14,21,.96),rgba(5,9,14,.96));box-shadow:inset 0 1px 0 rgba(255,255,255,.025),0 15px 38px rgba(0,0,0,.18)}
+#apexV2Root.nexusSkin .apex-k{font-size:7px;letter-spacing:.11em;color:#586b7e}
+#apexV2Root.nexusSkin .apex-v{font-size:16px}
+#apexV2Root.nexusSkin .apex-layout{grid-template-columns:minmax(0,1.72fr) minmax(320px,.62fr);gap:8px}
+#apexV2Root.nexusSkin .apex-card,#apexV2Root.nexusSkin .apex-sidepanel{border-radius:7px;border-color:var(--ns-line);background:linear-gradient(180deg,rgba(8,13,20,.97),rgba(4,8,13,.98));box-shadow:0 18px 54px rgba(0,0,0,.20)}
+#apexV2Root.nexusSkin .apex-cardHead{padding:9px 10px;border-bottom-color:rgba(122,154,190,.07)}
+#apexV2Root.nexusSkin .apex-title{font-size:9px;letter-spacing:.10em}
+#apexV2Root.nexusSkin .apex-decision{padding:10px}
+#apexV2Root.nexusSkin .apex-signal{border-radius:7px;border-color:rgba(79,240,209,.14);background:linear-gradient(135deg,rgba(79,240,209,.04),rgba(159,123,255,.035))}
+#apexV2Root.nexusSkin .apex-signalState{font-size:31px}
+#apexV2Root.nexusSkin .apex-barRow{font-size:7.5px}
+#apexV2Root.nexusSkin .apex-track{height:5px}
+#apexV2Root.nexusSkin .apex-chartTools{padding:7px 9px;background:rgba(255,255,255,.008)}
+#apexV2Root.nexusSkin .apex-chartTools button{border-radius:5px;background:#070c12;padding:5px 7px;font-size:7.5px}
+#apexV2Root.nexusSkin .apex-chartWrap{height:560px;background:linear-gradient(180deg,#050812,#02050a)}
+#apexV2Root.nexusSkin .apex-chartWrap:after{content:"";position:absolute;inset:0;pointer-events:none;opacity:.34;background-image:linear-gradient(rgba(115,145,180,.025) 1px,transparent 1px),linear-gradient(90deg,rgba(115,145,180,.025) 1px,transparent 1px);background-size:34px 34px;mix-blend-mode:screen}
+#apexV2Root.nexusSkin .apex-grid{grid-template-columns:repeat(4,1fr);gap:6px}
+#apexV2Root.nexusSkin .apex-mini{border-radius:7px;min-height:145px}
+#apexV2Root.nexusSkin .apex-mini canvas{height:118px}
+#apexV2Root.nexusSkin .apex-plan div,#apexV2Root.nexusSkin .apex-integrity div,#apexV2Root.nexusSkin .apex-row,#apexV2Root.nexusSkin .apex-listItem,#apexV2Root.nexusSkin .apex-evi{border-radius:5px;border-color:rgba(122,154,190,.07);background:rgba(255,255,255,.009)}
+#apexV2Root.nexusSkin .apex-bottomGrid{grid-template-columns:1.1fr .9fr 1fr;gap:6px}
+#nexusSideRail{position:fixed;left:0;top:0;bottom:0;width:78px;z-index:20001;display:flex;flex-direction:column;align-items:center;padding:12px 9px;border-right:1px solid rgba(122,154,190,.10);background:rgba(3,6,11,.92);backdrop-filter:blur(22px)}
+#nexusSideRail .railLogo{width:40px;height:40px;border-radius:11px;display:grid;place-items:center;margin-bottom:18px;background:conic-gradient(from 210deg,#4ff0d1,#67a8ff,#9f7bff,#4ff0d1);color:#04110f;font-size:10px;font-weight:1000;box-shadow:0 0 28px rgba(79,240,209,.15)}
+#nexusSideRail button{width:100%;height:44px;margin:3px 0;border:1px solid transparent;border-radius:9px;background:transparent;color:#5f7287;font-size:7px;font-weight:950;letter-spacing:.10em;cursor:pointer}
+#nexusSideRail button:hover{color:#eaf4fb;background:rgba(255,255,255,.03);border-color:rgba(122,154,190,.08)}
+#nexusSideRail button.on{color:#04110f;background:linear-gradient(145deg,#4ff0d1,#9affed);box-shadow:0 8px 24px rgba(79,240,209,.13)}
+#nexusSideRail .railFoot{margin-top:auto;color:#344559;font-size:7px;text-align:center;line-height:1.5}
+#nexusTickerStrip{display:grid;grid-template-columns:1.5fr repeat(4,1fr);gap:6px;margin:9px 0}
+#nexusTickerStrip .tickerBox{padding:8px 10px;border:1px solid rgba(122,154,190,.09);background:rgba(7,11,17,.72);min-height:48px}
+#nexusTickerStrip .tickerBox:first-child{border-color:rgba(79,240,209,.13)}
+#nexusTickerStrip small{display:block;font-size:6.5px;color:#53667b;letter-spacing:.11em;text-transform:uppercase}
+#nexusTickerStrip b{display:block;margin-top:4px;font-size:12px;letter-spacing:-.02em}
+@media(max-width:1200px){#apexV2Root.nexusSkin .apex-kpis{grid-template-columns:repeat(4,1fr)}#apexV2Root.nexusSkin .apex-layout{grid-template-columns:1fr}#apexV2Root.nexusSkin .apex-chartWrap{height:510px}}
+@media(max-width:760px){#apexV2Root.nexusSkin .apex-shell{padding:8px 8px 74px 8px}#nexusSideRail{left:0;right:0;top:auto;bottom:0;width:100%;height:60px;flex-direction:row;padding:6px 8px;border-right:0;border-top:1px solid rgba(122,154,190,.10)}#nexusSideRail .railLogo,#nexusSideRail .railFoot{display:none}#nexusSideRail button{height:46px;margin:0 2px}#nexusTickerStrip{grid-template-columns:repeat(2,1fr)}#nexusTickerStrip .tickerBox:first-child{grid-column:1/-1}}
