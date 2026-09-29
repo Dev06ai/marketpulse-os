@@ -5,7 +5,7 @@ const $=id=>document.getElementById(id);
 const state={
   symbol:"BTCUSDT",interval:"1h",cfg:null,ticker:null,live:null,market:null,chart:null,decision:null,phases:null,
   livePrice:null,previousPrice:null,pricePulse:0,lastLiveEventAt:0,lastServerSeq:0,
-  crosshair:null,drag:null,chartUserInteracted:false,viewStart:0,viewCount:110,
+  crosshair:null,selectedCandle:null,drag:null,chartUserInteracted:false,viewStart:0,viewCount:110,fullscreen:false,
   ws:null,wsConnected:false,wsReconnectTimer:null,wsRetryMs:1000,
   style:{up:"#37e6a2",down:"#ff5d77",bg:"#07090f",grid:"#2b3040"},
   tickerTimer:null,flowTimer:null,chartTimer:null,decisionTimer:null
@@ -70,7 +70,7 @@ function renderTicker(){
   $("age").textContent=tickAge(state.market?.dataTs??t.updatedAt);
   $("lastTrade").textContent="LAST "+fmt(p,2);
   $("dataBadge").textContent=p===null?"CONNECTING":(state.wsConnected?"LIVE WS":"LIVE FALLBACK");
-  $("chartState").textContent=state.wsConnected?"Live exchange ticks":(state.previousPrice!==null&&p!==null&&p!==state.previousPrice?"Live price fallback":"Synchronized candles");
+  $("chartState").textContent=state.wsConnected?"Live exchange ticks":(state.previousPrice!==null&&p!==null&&p!==state.previousPrice?"Live price fallback":"Synchronized candles");$("chartTransport").textContent=state.wsConnected?"WS LIVE · 1s fallback ready":"HTTP FALLBACK · 1s";
 }
 function tickAge(ts){
   const n=safeNum(ts);return n===null?"—":"updated "+Math.max(0,Math.round((Date.now()-n)/1000))+"s ago";
@@ -174,7 +174,7 @@ function applyCanonicalMarket(frame){
   const p=safeNum(frame.lastPrice??frame.price);if(p===null)return;
   state.previousPrice=state.livePrice;state.livePrice=p;state.lastLiveEventAt=Date.now();state.lastServerSeq=safeNum(frame.seq)||state.lastServerSeq;
   state.market=frame;state.live=frame;
-  state.ticker={...(state.ticker||{}),symbol:state.symbol,price:p,change24h:safeNum(frame.change24h),source:"Bybit live WebSocket",updatedAt:safeNum(frame.dataTs)||Date.now()};
+  state.ticker={...(state.ticker||{}),symbol:state.symbol,price:p,change24h:safeNum(frame.change24h),source:frame.source||(state.wsConnected?"Bybit live WebSocket":"HTTP fallback"),updatedAt:safeNum(frame.dataTs)||Date.now()};
   renderTicker();renderLiveMetrics(frame);drawChart();
 }
 function normalizedRows(){
@@ -249,6 +249,12 @@ function drawChart(){
     const volBase=T+priceH+8,volTop=volBase+(1-vol/maxVol)*volH;
     g.globalAlpha=.16;g.fillRect(xx-bw/2,volTop,bw,Math.max(1,volBase+volH-volTop));g.globalAlpha=1;
   });
+
+  if(Number.isInteger(state.selectedCandle) && state.selectedCandle>=start && state.selectedCandle<end){
+    const sj=state.selectedCandle-start,sr=visible[sj],sx=x(sj);
+    g.strokeStyle="rgba(98,244,224,.65)";g.setLineDash([3,5]);g.beginPath();g.moveTo(sx,T);g.lineTo(sx,T+priceH+volH+8);g.stroke();g.setLineDash([]);
+    const sc=candleValue(sr,"c");if(sc!==null){const sy=y(sc);g.fillStyle="#62f4e0";g.beginPath();g.arc(sx,sy,3.2,0,Math.PI*2);g.fill();}
+  }
 
   // EMA(50), calculated over the complete loaded series and then clipped to the viewport.
   let ema=null;const emaK=2/51,emaValues=[];
@@ -407,47 +413,64 @@ async function checkSystem(){
   $("systemChecks").innerHTML='<div class="placeholder">Running bounded checks…</div>';
   try{const d=await api("/api/system-check",9000);renderSystemChecks(d.checks||{});runtime(d.ok?"System checks passed":"Core checks reported blockers",d.ok?"ok":"warn",d.ok?"All bounded checks returned within their gates.":"See runtime safety panel; these checks never block first paint.")}catch(e){$("systemChecks").innerHTML='<div class="placeholder">System check unavailable: '+String(e.message||e)+'</div>'}
 }
+function selectCandleAt(clientX,clientY){
+  const canvas=$("chart");if(!canvas||!Array.isArray(state.chart)||!state.chart.length)return;
+  const r=canvas.getBoundingClientRect(),rows=normalizedRows(),total=rows.length;
+  const viewCount=clamp(Math.floor(state.viewCount||Math.min(110,total)),25,total);
+  const viewStart=clamp(Math.floor(state.viewStart||0),0,Math.max(0,total-viewCount));
+  const L=12,R=78,pw=Math.max(1,r.width-L-R),x=clamp(clientX-r.left,L,L+pw);
+  const local=clamp(Math.floor(((x-L)/pw)*viewCount),0,viewCount-1);
+  state.selectedCandle=viewStart+local;state.crosshair={x:clientX-r.left,y:clamp(clientY-r.top,18,r.height-44)};state.chartUserInteracted=true;drawChart();
+}
+function setNavView(id){
+  const target=document.getElementById(id);if(!target)return;
+  document.querySelectorAll(".nav-item").forEach(b=>b.classList.toggle("active",b.dataset.target===id));
+  target.scrollIntoView({behavior:"smooth",block:"start"});
+}
+function setFullscreen(on){
+  state.fullscreen=!!on;const shell=$("chartShell");if(!shell)return;
+  shell.classList.toggle("is-fullscreen",state.fullscreen);document.documentElement.classList.toggle("chart-lock",state.fullscreen);document.body.classList.toggle("chart-lock",state.fullscreen);
+  const btn=$("fullscreenChart");if(btn){btn.textContent=state.fullscreen?"⛶ EXIT":"⛶";btn.title=state.fullscreen?"Exit chart full screen":"Enter chart full screen";}
+  setTimeout(drawChart,40);
+}
+function toggleFullscreen(){setFullscreen(!state.fullscreen)}
 function bind(){
   $("symbol").addEventListener("change",()=>{state.symbol=cleanSymbol($("symbol").value)||"BTCUSDT";$("symbolName").textContent=displaySymbol(state.symbol);$("assetIcon").textContent=state.symbol==="BTCUSDT"?"₿":"◈";refreshAll()});
-  $("interval").addEventListener("change",()=>{state.interval=$("interval").value;document.querySelectorAll(".tf-tabs button").forEach(b=>b.classList.toggle("active",({"15m":"15m","30m":"30m","1H":"1h","4H":"4h","1D":"1d"}[b.dataset.tf]===state.interval)));resetChartView();loadCore();});
+  $("interval").addEventListener("change",()=>{state.interval=$("interval").value;document.querySelectorAll(".tf-tabs button").forEach(b=>b.classList.toggle("active",({"15m":"15m","30m":"30m","1H":"1h","4H":"4h","1D":"1d"}[b.dataset.tf]===state.interval)));refreshAll()});
   $("sync").addEventListener("click",refreshAll);
-  $("fitChart").addEventListener("click",resetChartView);
+  $("fitChart").addEventListener("click",()=>{state.chartUserInteracted=false;state.selectedCandle=null;resetChartView();runtime("Chart fitted to live range","ok","Right edge is locked to the latest synchronized candle.")});
   $("zoomIn").addEventListener("click",()=>zoomChart(.78,.5));
   $("zoomOut").addEventListener("click",()=>zoomChart(1.28,.5));
-  $("resetView").addEventListener("click",resetChartView);
+  $("resetView").addEventListener("click",()=>{state.selectedCandle=null;resetChartView()});
+  $("chartCursor").addEventListener("click",()=>{state.selectedCandle=null;state.crosshair=null;drawChart()});
+  $("fullscreenChart").addEventListener("click",toggleFullscreen);
   $("chartStyleToggle").addEventListener("click",()=>$("chartStyle").classList.toggle("hidden"));
   ["candleUpColor","candleDownColor","chartBgColor","chartGridColor"].forEach(id=>$(id).addEventListener("input",updateChartStyle));
-  $("loadPhases").addEventListener("click",loadPhases);
-  $("checkSystem").addEventListener("click",checkSystem);
-
+  $("loadPhases").addEventListener("click",loadPhases);$("checkSystem").addEventListener("click",checkSystem);
   document.querySelectorAll(".tf-tabs button").forEach(b=>b.addEventListener("click",()=>setIntervalFromToolbar(b.dataset.tf)));
+  document.querySelectorAll(".nav-item").forEach(b=>b.addEventListener("click",()=>setNavView(b.dataset.target)));
 
-  const canvas=$("chart");
-  canvas.addEventListener("pointerdown",e=>{
-    state.drag={x:e.clientX,start:state.viewStart};canvas.setPointerCapture?.(e.pointerId);state.crosshair=null;
-  });
+  const canvas=$("chart");let pointerMoved=false;
+  canvas.addEventListener("pointerdown",e=>{if(e.button!==0)return;state.drag={x:e.clientX,start:state.viewStart};pointerMoved=false;canvas.setPointerCapture?.(e.pointerId);state.crosshair={x:e.offsetX,y:e.offsetY}});
   canvas.addEventListener("pointermove",e=>{
     const r=canvas.getBoundingClientRect();
-    if(state.drag){
-      const total=Array.isArray(state.chart)?state.chart.length:0,delta=(e.clientX-state.drag.x)/Math.max(1,r.width)*state.viewCount;
-      state.viewStart=clamp(Math.round(state.drag.start-delta),0,Math.max(0,total-state.viewCount));state.chartUserInteracted=true;drawChart();
-    }else{
-      state.crosshair={x:e.clientX-r.left,y:e.clientY-r.top};drawChart();
-    }
+    if(state.drag){const dx=e.clientX-state.drag.x;if(Math.abs(dx)>3)pointerMoved=true;const total=Array.isArray(state.chart)?state.chart.length:0,delta=dx/Math.max(1,r.width)*state.viewCount;state.viewStart=clamp(Math.round(state.drag.start-delta),0,Math.max(0,total-state.viewCount));state.chartUserInteracted=true;state.crosshair={x:e.clientX-r.left,y:e.clientY-r.top};drawChart()}
+    else{state.crosshair={x:e.clientX-r.left,y:e.clientY-r.top};drawChart()}
   });
-  const stopDrag=()=>{state.drag=null};
-  canvas.addEventListener("pointerup",stopDrag);canvas.addEventListener("pointercancel",stopDrag);
-  canvas.addEventListener("pointerleave",()=>{state.crosshair=null;if(!state.drag)drawChart()});
-  canvas.addEventListener("wheel",e=>{
-    e.preventDefault();const r=canvas.getBoundingClientRect(),ratio=clamp((e.clientX-r.left)/Math.max(1,r.width),0,1);
-    zoomChart(e.deltaY<0?.78:1.28,ratio);
-  },{passive:false});
+  const stopDrag=e=>{if(e&&e.button!==0)return;const wasDrag=pointerMoved;state.drag=null;if(!wasDrag&&e)selectCandleAt(e.clientX,e.clientY)};
+  canvas.addEventListener("pointerup",stopDrag);canvas.addEventListener("pointercancel",()=>{state.drag=null});
+  canvas.addEventListener("pointerleave",()=>{if(!state.drag){state.crosshair=null;drawChart()}});
+  canvas.addEventListener("dblclick",e=>{e.preventDefault();toggleFullscreen()});
+  canvas.addEventListener("wheel",e=>{e.preventDefault();const r=canvas.getBoundingClientRect(),ratio=clamp((e.clientX-r.left)/Math.max(1,r.width),0,1);zoomChart(e.deltaY<0?.78:1.28,ratio)},{passive:false});
+
+  document.addEventListener("keydown",e=>{if(e.key==="Escape"&&state.fullscreen){e.preventDefault();setFullscreen(false)}if((e.key==="f"||e.key==="F")&&!state.fullscreen&&!/INPUT|SELECT|TEXTAREA/.test(document.activeElement?.tagName||"")){e.preventDefault();setFullscreen(true)}});
+  document.addEventListener("click",e=>{if(!$("chartStyle").contains(e.target)&&!$("chartStyleToggle").contains(e.target))$("chartStyle").classList.add("hidden")});
   window.addEventListener("resize",drawChart);
 }
 function refreshAll(){
   clearInterval(state.tickerTimer);clearInterval(state.flowTimer);clearInterval(state.chartTimer);clearInterval(state.decisionTimer);
   closeLiveStream();
-  state.ticker=null;state.live=null;state.market=null;state.chart=null;state.decision=null;state.livePrice=null;state.previousPrice=null;state.phases=null;state.lastLiveEventAt=0;state.chartUserInteracted=false;
+  state.ticker=null;state.live=null;state.market=null;state.chart=null;state.decision=null;state.livePrice=null;state.previousPrice=null;state.phases=null;state.lastLiveEventAt=0;state.chartUserInteracted=false;state.selectedCandle=null;state.crosshair=null;
   $("symbolName").textContent=displaySymbol(state.symbol);connectLiveStream();loadCore();startLoops();
 }
 function startLoops(){
