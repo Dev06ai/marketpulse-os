@@ -1,0 +1,43 @@
+name: Dev Trader CI
+
+on:
+  push:
+    branches: [dev-trader-v1]
+    paths:
+      - 'dev-trader/**'
+      - '.github/workflows/dev-trader.yml'
+  workflow_dispatch:
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: dev-trader/backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -r requirements.txt pytest
+      - run: python -m py_compile app/*.py
+      - run: pytest -q
+
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.6.0'
+      - name: Build debug APK
+        working-directory: dev-trader/android
+        run: gradle assembleDebug --stacktrace
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dev-trader-debug-apk
+          path: dev-trader/android/app/build/outputs/apk/debug/app-debug.apk
