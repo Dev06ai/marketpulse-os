@@ -2393,7 +2393,8 @@ const server=http.createServer(async(req,res)=>{
               portfolioMs:portfolioCheck.timeout?"timeout":null,
               phase7Ms:phase7Check.timeout?"timeout":null,
               decisionEngineMs:decisionCheck.timeout?"timeout":null,
-              phase11_13Ms:validationCheck.timeout?"timeout":null
+              phase11_13Ms:validationCheck.timeout?"timeout":null,
+          phaseAuditMs:phaseAuditCheck.timeout?"timeout":null
             },
             phase16:phase16.VERSION,
             timestamp:Date.now()
@@ -3484,7 +3485,7 @@ const server=http.createServer(async(req,res)=>{
 
       const [
         learningCheck,memoryCheck,marketCheck,derivativesCheck,
-        executionCheck,portfolioCheck,phase7Check,decisionCheck,validationCheck
+        executionCheck,portfolioCheck,phase7Check,decisionCheck,validationCheck,phaseAuditCheck
       ]=await Promise.all([
         bounded(()=>learning.status(),2500),
         bounded(()=>storage.status(),1500),
@@ -3494,7 +3495,8 @@ const server=http.createServer(async(req,res)=>{
         bounded(()=>phase6.snapshot(),2500),
         bounded(()=>phase7.selfTest(),2500),
         bounded(()=>phase910.selfTest(),3500),
-        bounded(()=>phase1113.selfTest(),4500)
+        bounded(()=>phase1113.selfTest(),4500),
+        bounded(()=>phaseAudit.run(),5000)
       ]);
 
       checks.learning=Boolean(learningCheck.value);
@@ -3518,6 +3520,7 @@ const server=http.createServer(async(req,res)=>{
       checks.phase7=Boolean(phase7Check.value&&phase7Check.value.ok);
       checks.decisionEngine=Boolean(decisionCheck.value&&decisionCheck.value.ok);
       checks.phase11_13=Boolean(validationCheck.value&&validationCheck.value.ok);
+      checks.phaseAudit=Boolean(phaseAuditCheck.value&&phaseAuditCheck.value.ok);
 
       const marketError=marketCheck.error||null;
       const derivativesError=derivativesCheck.error||(d&&!d.available?"No derivatives provider returned usable data":null);
@@ -3539,7 +3542,7 @@ const server=http.createServer(async(req,res)=>{
         phase2:PHASE2_VERSION,phase3:PHASE3_VERSION,phase4:PHASE4_VERSION,
         phase5:PHASE5_VERSION,phase6:PHASE6_VERSION,phase7:PHASE7_VERSION,
         phase9:PHASE9_VERSION,phase10:PHASE10_VERSION,phase11:PHASE11_VERSION,
-        phase12:PHASE12_VERSION,phase13:PHASE13_VERSION,
+        phase12:PHASE12_VERSION,phase13:PHASE13_VERSION,phaseAudit:phaseAudit.VERSION,
         routes:{
           core:true,chart:true,coreAnalytics:true,decision:true,validation:true,
           coreScan:true,coreFlow:true,cycle:true,ai:true,memory:true,learning:true,
