@@ -273,10 +273,10 @@ function drawChart(){
 
   const lp=safeNum(state.livePrice);
   if(lp!==null&&lp>=lo&&lp<=hi){
-    const yy=y(lp);g.setLineDash([6,4]);g.strokeStyle="rgba(255,199,104,.95)";g.lineWidth=1;g.beginPath();g.moveTo(L,yy);g.lineTo(L+pw,yy);g.stroke();g.setLineDash([]);
+    const yy=y(lp);g.setLineDash([6,4]);g.strokeStyle="rgba(180,188,198,.82)";g.lineWidth=1;g.beginPath();g.moveTo(L,yy);g.lineTo(L+pw,yy);g.stroke();g.setLineDash([]);
     const tagY=clamp(yy-10,3,h-25),tagW=67,tagH=20,tagX=w-R+4;
-    g.fillStyle="#ffd166";g.beginPath();if(g.roundRect)g.roundRect(tagX,tagY,tagW,tagH,5);else g.rect(tagX,tagY,tagW,tagH);g.fill();
-    g.fillStyle="#0a0d12";g.font="950 9px ui-monospace,SFMono-Regular,Menlo,monospace";g.textAlign="center";g.fillText(fmt(lp,2),tagX+tagW/2,tagY+13);
+    g.fillStyle="#b9c0c9";g.beginPath();if(g.roundRect)g.roundRect(tagX,tagY,tagW,tagH,5);else g.rect(tagX,tagY,tagW,tagH);g.fill();
+    g.fillStyle="#11151b";g.font="950 9px ui-monospace,SFMono-Regular,Menlo,monospace";g.textAlign="center";g.fillText(fmt(lp,2),tagX+tagW/2,tagY+13);
   }
 
   const lv=state.decision?.levels||state.decision?.apex?.executionGate||{};
@@ -299,29 +299,91 @@ function decisionParts(d){
 }
 function renderDecision(){
   const x=decisionParts(state.decision||{}),d=x.d,p=x.p||{},m=x.m||{},lv=x.lv||{},g=x.g||{},action=["LONG","SHORT"].includes(x.action)?x.action:"WAIT";
-  $("decision").textContent=action;$("stateLabel").textContent=action==="WAIT"?"WAIT / NO TRADE":action+" — CURRENT AUTHORITY";
+  const analysis=d?.analysis||{};
+  const activeCandidate=String(
+    d?.candidateEvidence?.action||
+    d?.rawAction||
+    analysis?.side||
+    m?.side||
+    "WAIT"
+  ).toUpperCase();
+  const rawScore=safeNum(
+    m?.confluenceScore??
+    analysis?.score??
+    d?.candidateEvidence?.market?.confluenceScore??
+    d?.score??
+    d?.phase401to500?.apex?.quality
+  );
+  const confluencePct=rawScore===null?null:clamp(Math.round((rawScore/92)*100),0,100);
+  $("decision").textContent=action;
+  $("stateLabel").textContent=action==="WAIT"?"WAIT / NO TRADE":action+" — CURRENT AUTHORITY";
   statusPill(String(g.state||g.status||action),action==="LONG"?"long":action==="SHORT"?"short":"wait");
-  $("thesis").textContent=d?.evidence?.thesis?.[0]||d?.phase20?.transition?.hardLock||d?.phase51to100?.signal?.confidenceSource||m.directionalLean||"Waiting for synchronized evidence and a confirmed final gate.";
-  const probs=[safeNum(p.long),safeNum(p.short),safeNum(p.wait)];
-  ["longProb","shortProb","waitProb"].forEach((id,i)=>$(id).textContent=probs[i]===null?"—":pct(probs[i]));
-  ["longBar","shortBar","waitBar"].forEach((id,i)=>$(id).style.width=probs[i]===null?"0":clamp(Math.abs(probs[i])<=1?probs[i]*100:probs[i],0,100)+"%");
-  $("entry").textContent=safeNum(lv.entry??lv.entryLow)===null?"—":fmt(lv.entry??lv.entryLow,2);
-  $("stop").textContent=safeNum(lv.stop)===null?"—":fmt(lv.stop,2);
-  $("tp1").textContent=safeNum(lv.tp1??lv.target)===null?"—":fmt(lv.tp1??lv.target,2);
-  $("rr").textContent=safeNum(lv.rr)===null?"—":Number(lv.rr).toFixed(2)+"R";
-  const score=safeNum(d?.data?.score??d?.phase301to400?.dataQuality?.score??x.apex.quality);
+
+  $("thesis").textContent=
+    d?.evidence?.thesis?.[0]||
+    d?.thesis||
+    d?.phase20?.transition?.hardLock||
+    d?.phase51to100?.signal?.confidenceSource||
+    m.directionalLean||
+    "Waiting for synchronized evidence and a confirmed final gate.";
+
+  // The engine exposes a confluence score, not a statistically calibrated win probability.
+  // Show that real engine score instead of inventing LONG/SHORT percentages.
+  const rows=[
+    {id:"longProb",bar:"longBar",value:activeCandidate==="LONG"?confluencePct:null},
+    {id:"shortProb",bar:"shortBar",value:activeCandidate==="SHORT"?confluencePct:null},
+    {id:"waitProb",bar:"waitBar",value:action==="WAIT"?100:null}
+  ];
+  rows.forEach(r=>{
+    $(r.id).textContent=r.value===null?"—":r.value+"%";
+    $(r.bar).style.width=r.value===null?"0":r.value+"%";
+  });
+
+  const levelValue=v=>{
+    const n=safeNum(v);
+    return n===null||n<=0?null:n;
+  };
+  const entry=levelValue(lv.entry??lv.entryLow),stop=levelValue(lv.stop),tp1=levelValue(lv.tp1??lv.target);
+  const rr=safeNum(lv.rr);
+  $("entry").textContent=entry===null?"—":fmt(entry,2);
+  $("stop").textContent=stop===null?"—":fmt(stop,2);
+  $("tp1").textContent=tp1===null?"—":fmt(tp1,2);
+  $("rr").textContent=rr===null||rr<=0?"—":Number(rr).toFixed(2)+"R";
+
+  const score=safeNum(
+    d?.data?.score??
+    d?.phase301to400?.dataQuality?.score??
+    rawScore??
+    x.apex.quality
+  );
   $("quality").textContent=score===null?"—":Math.round(score*(score<=1?100:1))+"/100";
-  $("syncState").textContent=x.apex?.synchronization?.ok||d?.synchronization?.ok?"LOCKED":"PENDING";
+  $("syncState").textContent=x.apex?.synchronization?.ok||d?.synchronization?.ok?"LOCKED":(d?.stale?"STALE":"PENDING");
   $("execution").textContent=x.apex?.executionGate?.automaticExecutionReady?"READY":"GATED";
+
   const flow=extractFlow(d);
   $("oi").textContent=fmt(flow.oi,0);$("cvd").textContent=fmt(flow.cvd,3);$("book").textContent=flow.book===null?"—":(flow.book*100).toFixed(1)+"%";$("funding").textContent=flow.funding===null?"—":(flow.funding*100).toFixed(4)+"%";$("liquidations").textContent=fmt(flow.liq,0);
   $("cvdState").textContent=flow.cvdState||"warming";$("liqState").textContent=flow.liqState||"warming";
   $("tapeMarket").textContent=action+" · "+(m.directionalLean||"neutral");
   $("tapeFlow").textContent=flow.cvd===null?"Waiting for CVD":flow.cvdState||fmt(flow.cvd,3);
   $("tapeLiquidity").textContent=flow.book===null?"Waiting for book":(flow.book>=0?"Bid support ":"Offer pressure ")+Math.abs(flow.book*100).toFixed(1)+"%";
+
   $("reasons").innerHTML="";
-  const reasons=[...(Array.isArray(g.reasons)?g.reasons:[]),...(Array.isArray(d?.phase20?.transition?.waitCondition)?d.phase20.transition.waitCondition:[]),...(Array.isArray(d?.evidence?.thesis)?d.evidence.thesis.slice(0,3):[])].filter(Boolean).slice(0,7);
-  (reasons.length?reasons:["The system has not published a blocking reason yet."]).forEach(v=>{const el=document.createElement("div");el.className="reason";el.textContent=String(v);$("reasons").appendChild(el)});
+  const reasons=[
+    ...(Array.isArray(g.reasons)?g.reasons:[]),
+    ...(Array.isArray(d?.phase20?.transition?.waitCondition)?d.phase20.transition.waitCondition:[]),
+    ...(Array.isArray(d?.evidence?.thesis)?d.evidence.thesis.slice(0,3):[]),
+    ...(Array.isArray(d?.reasons)?d.reasons.slice(0,3):[])
+  ].filter(Boolean).slice(0,7);
+  (reasons.length?reasons:["The system has not published a blocking reason yet."]).forEach(v=>{
+    const el=document.createElement("div");el.className="reason";el.textContent=String(v);$("reasons").appendChild(el)
+  });
+
+  const probHeader=document.querySelector(".prob-header");
+  if(probHeader){
+    const label=probHeader.querySelector("span");if(label)label.textContent="SIGNAL CONFLUENCE";
+    const small=probHeader.querySelector("small");if(small)small.textContent=confluencePct===null?"LIVE":"SCORE "+confluencePct+"%";
+  }
+
   drawChart();
 }
 function renderSystemChecks(checks){
