@@ -1,7 +1,8 @@
 (()=>{"use strict";
 const $=(id)=>document.getElementById(id);
 const state={symbol:"BTCUSDT",interval:"1h",cfg:null,ticker:null,chart:null,live:null,decision:null,phases:null,tickerTimer:null,chartTimer:null,decisionTimer:null};
-const CACHE_KEYS={ticker:"mp-rebuild-ticker",chart:"mp-rebuild-chart",decision:"mp-rebuild-decision"};
+function cacheKey(kind){return "mp-rebuild-"+kind+"-"+state.symbol+"-"+state.interval}
+
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 function safeNum(v){const n=Number(v);return Number.isFinite(n)?n:null}
 function fmt(v,max=2){const n=safeNum(v);return n===null?"—":n.toLocaleString(undefined,{maximumFractionDigits:max})}
@@ -97,7 +98,7 @@ function renderSystemChecks(checks){
 }
 async function loadCore(){
   runtime("Loading market state…","warn","First paint does not depend on analytics.");
-  const cachedT=readCache(CACHE_KEYS.ticker),cachedC=readCache(CACHE_KEYS.chart),cachedD=readCache(CACHE_KEYS.decision);
+  const cachedT=readCache(cacheKey("ticker")),cachedC=readCache(cacheKey("chart")),cachedD=readCache(cacheKey("decision"));
   if(cachedT){state.ticker=cachedT;renderTicker()}
   if(cachedC){state.chart=cachedC.candles||cachedC;drawChart()}
   if(cachedD){state.decision=cachedD;renderDecision()}
@@ -109,8 +110,8 @@ async function loadCore(){
   ]);
   const cfg=tasks[0],tick=tasks[1],chart=tasks[2],live=tasks[3];
   if(cfg.status==="fulfilled"){state.cfg=cfg.value;populateSymbols(cfg.value.symbols)}
-  if(tick.status==="fulfilled"){state.ticker=tick.value;writeCache(CACHE_KEYS.ticker,state.ticker);renderTicker()}
-  if(chart.status==="fulfilled"&&Array.isArray(chart.value.candles)){state.chart=chart.value.candles;writeCache(CACHE_KEYS.chart,chart.value);drawChart()}
+  if(tick.status==="fulfilled"){state.ticker=tick.value;writeCache(cacheKey("ticker"),state.ticker);renderTicker()}
+  if(chart.status==="fulfilled"&&Array.isArray(chart.value.candles)){state.chart=chart.value.candles;writeCache(cacheKey("chart"),chart.value);drawChart()}
   if(live.status==="fulfilled"){state.live=live.value||{}}
   runtime(
     (tick.status==="fulfilled"||chart.status==="fulfilled")?"MarketPulse online":"UI online — market feed retrying",
@@ -124,24 +125,24 @@ async function refreshDecision(showStatus=true){
   if(showStatus)runtime("Refreshing decision engine…","warn","Last confirmed frame remains visible until a fresh result arrives.");
   try{
     const d=await api("/api/decision?symbol="+encodeURIComponent(state.symbol)+"&interval="+encodeURIComponent(state.interval),6500);
-    state.decision=d;writeCache(CACHE_KEYS.decision,d);renderDecision();
+    state.decision=d;writeCache(cacheKey("decision"),d);renderDecision();
     runtime("MarketPulse online","ok","Canonical market + decision surfaces are rendered independently.");
   }catch{
     if(!state.decision){
       try{
         const a=await api("/api/phase401-500?symbol="+encodeURIComponent(state.symbol)+"&interval="+encodeURIComponent(state.interval),7500);
-        state.decision=a;writeCache(CACHE_KEYS.decision,a);renderDecision();runtime("MarketPulse online","ok","Apex engine connected.");
+        state.decision=a;writeCache(cacheKey("decision"),a);renderDecision();runtime("MarketPulse online","ok","Apex engine connected.");
       }catch{runtime("UI online — decision engine retrying","warn","No decision payload was allowed to block the market screen.")}
     }
   }
 }
 async function tickLoop(){
   try{
-    const t=await api("/api/fast-ticker?symbol="+encodeURIComponent(state.symbol),3000);state.ticker=t;state.live={...state.live,...t};writeCache(CACHE_KEYS.ticker,t);renderTicker();$("age").textContent="updated now";
+    const t=await api("/api/fast-ticker?symbol="+encodeURIComponent(state.symbol),3000);state.ticker=t;state.live={...state.live,...t};writeCache(cacheKey("ticker"),t);renderTicker();$("age").textContent="updated now";
   }catch{}
 }
 async function chartLoop(){
-  try{const c=await api("/api/chart?symbol="+encodeURIComponent(state.symbol)+"&interval="+encodeURIComponent(state.interval),5000);if(Array.isArray(c.candles)&&c.candles.length){state.chart=c.candles;writeCache(CACHE_KEYS.chart,c);drawChart()}}catch{}
+  try{const c=await api("/api/chart?symbol="+encodeURIComponent(state.symbol)+"&interval="+encodeURIComponent(state.interval),5000);if(Array.isArray(c.candles)&&c.candles.length){state.chart=c.candles;writeCache(cacheKey("chart"),c);drawChart()}}catch{}
 }
 async function loadPhases(){
   if(state.phases){$("phaseList").classList.toggle("hidden");return}
