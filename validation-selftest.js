@@ -206,6 +206,7 @@ assert(/^Naked (DAILY|WEEKLY) POC/.test(String(npoc.setup?.reason||"")),"Naked P
 
 
 const phase301to400=require("./phase301-400-adaptive-intelligence");
+const phase401to500=require("./phase401-500-apex-engine");
 const phase51to100=require("./phase51-100-stack");
 const phase51to100Regression=require("./phase51-100-selftest");
 assert(phase51to100.selfTest().ok,"Phase 51–100 stack self-test failed.");
