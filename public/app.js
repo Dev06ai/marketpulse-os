@@ -300,13 +300,14 @@ function decisionParts(d){
 function renderDecision(){
   const x=decisionParts(state.decision||{}),d=x.d,p=x.p||{},m=x.m||{},lv=x.lv||{},g=x.g||{},action=["LONG","SHORT"].includes(x.action)?x.action:"WAIT";
   const analysis=d?.analysis||{};
-  const activeCandidate=String(
+  const candidateSide=String(
     d?.candidateEvidence?.action||
     d?.rawAction||
     analysis?.side||
     m?.side||
     "WAIT"
   ).toUpperCase();
+  const candidate=["LONG","SHORT"].includes(candidateSide)?candidateSide:"WAIT";
   const rawScore=safeNum(
     m?.confluenceScore??
     analysis?.score??
@@ -315,9 +316,30 @@ function renderDecision(){
     d?.phase401to500?.apex?.quality
   );
   const confluencePct=rawScore===null?null:clamp(Math.round((rawScore/92)*100),0,100);
+  const stability=d?.signalStability||{};
+  const gateReason=String(g?.reason||d?.deploymentGate?.reason||"").trim();
+
   $("decision").textContent=action;
   $("stateLabel").textContent=action==="WAIT"?"WAIT / NO TRADE":action+" — CURRENT AUTHORITY";
   statusPill(String(g.state||g.status||action),action==="LONG"?"long":action==="SHORT"?"short":"wait");
+
+  const candidateEl=$("candidateState");
+  if(candidateEl){
+    candidateEl.className="candidate-state "+(
+      action==="LONG"?"long":action==="SHORT"?"short":
+      stability.state==="CONFIRMING"?"confirming":"wait"
+    );
+    if(action==="LONG"||action==="SHORT"){
+      candidateEl.textContent="FINAL "+action+" · CONFIRMED";
+    }else if(candidate!=="WAIT"){
+      const progress=stability.confirmations&&stability.required
+        ?" · "+stability.confirmations+"/"+stability.required+" confirmations"
+        :"";
+      candidateEl.textContent=candidate+" CANDIDATE"+(confluencePct===null?"":" · "+confluencePct+"% CONFLUENCE")+progress;
+    }else{
+      candidateEl.textContent="NO DIRECTIONAL CANDIDATE";
+    }
+  }
 
   $("thesis").textContent=
     d?.evidence?.thesis?.[0]||
@@ -327,35 +349,24 @@ function renderDecision(){
     m.directionalLean||
     "Waiting for synchronized evidence and a confirmed final gate.";
 
-  // The engine exposes a confluence score, not a statistically calibrated win probability.
-  // Show that real engine score instead of inventing LONG/SHORT percentages.
-  const rows=[
-    {id:"longProb",bar:"longBar",value:activeCandidate==="LONG"?confluencePct:null},
-    {id:"shortProb",bar:"shortBar",value:activeCandidate==="SHORT"?confluencePct:null},
-    {id:"waitProb",bar:"waitBar",value:action==="WAIT"?100:null}
-  ];
-  rows.forEach(r=>{
+  // These are confluence indicators, not calibrated probabilities.
+  [
+    {id:"longProb",bar:"longBar",value:candidate==="LONG"?confluencePct:null},
+    {id:"shortProb",bar:"shortBar",value:candidate==="SHORT"?confluencePct:null},
+    {id:"waitProb",bar:"waitBar",value:candidate==="WAIT"?100:null}
+  ].forEach(r=>{
     $(r.id).textContent=r.value===null?"—":r.value+"%";
     $(r.bar).style.width=r.value===null?"0":r.value+"%";
   });
 
-  const levelValue=v=>{
-    const n=safeNum(v);
-    return n===null||n<=0?null:n;
-  };
-  const entry=levelValue(lv.entry??lv.entryLow),stop=levelValue(lv.stop),tp1=levelValue(lv.tp1??lv.target);
-  const rr=safeNum(lv.rr);
+  const levelValue=v=>{const n=safeNum(v);return n===null||n<=0?null:n};
+  const entry=levelValue(lv.entry??lv.entryLow),stop=levelValue(lv.stop),tp1=levelValue(lv.tp1??lv.target),rr=safeNum(lv.rr);
   $("entry").textContent=entry===null?"—":fmt(entry,2);
   $("stop").textContent=stop===null?"—":fmt(stop,2);
   $("tp1").textContent=tp1===null?"—":fmt(tp1,2);
   $("rr").textContent=rr===null||rr<=0?"—":Number(rr).toFixed(2)+"R";
 
-  const score=safeNum(
-    d?.data?.score??
-    d?.phase301to400?.dataQuality?.score??
-    rawScore??
-    x.apex.quality
-  );
+  const score=safeNum(d?.data?.score??d?.phase301to400?.dataQuality?.score??rawScore??x.apex.quality);
   $("quality").textContent=score===null?"—":Math.round(score*(score<=1?100:1))+"/100";
   $("syncState").textContent=x.apex?.synchronization?.ok||d?.synchronization?.ok?"LOCKED":(d?.stale?"STALE":"PENDING");
   $("execution").textContent=x.apex?.executionGate?.automaticExecutionReady?"READY":"GATED";
@@ -363,18 +374,24 @@ function renderDecision(){
   const flow=extractFlow(d);
   $("oi").textContent=fmt(flow.oi,0);$("cvd").textContent=fmt(flow.cvd,3);$("book").textContent=flow.book===null?"—":(flow.book*100).toFixed(1)+"%";$("funding").textContent=flow.funding===null?"—":(flow.funding*100).toFixed(4)+"%";$("liquidations").textContent=fmt(flow.liq,0);
   $("cvdState").textContent=flow.cvdState||"warming";$("liqState").textContent=flow.liqState||"warming";
-  $("tapeMarket").textContent=action+" · "+(m.directionalLean||"neutral");
+
+  $("tapeMarket").textContent=action+" · "+(candidate!=="WAIT"?candidate+" candidate":"neutral");
   $("tapeFlow").textContent=flow.cvd===null?"Waiting for CVD":flow.cvdState||fmt(flow.cvd,3);
   $("tapeLiquidity").textContent=flow.book===null?"Waiting for book":(flow.book>=0?"Bid support ":"Offer pressure ")+Math.abs(flow.book*100).toFixed(1)+"%";
 
   $("reasons").innerHTML="";
   const reasons=[
+    gateReason,
+    stability.state==="CONFIRMING"
+      ?"Directional candidate is being confirmed across live refreshes."
+      :null,
     ...(Array.isArray(g.reasons)?g.reasons:[]),
     ...(Array.isArray(d?.phase20?.transition?.waitCondition)?d.phase20.transition.waitCondition:[]),
     ...(Array.isArray(d?.evidence?.thesis)?d.evidence.thesis.slice(0,3):[]),
     ...(Array.isArray(d?.reasons)?d.reasons.slice(0,3):[])
-  ].filter(Boolean).slice(0,7);
-  (reasons.length?reasons:["The system has not published a blocking reason yet."]).forEach(v=>{
+  ].filter(Boolean).filter((v,i,a)=>a.indexOf(v)===i).slice(0,7);
+
+  (reasons.length?reasons:["No additional blocking reason was published by the decision engine."]).forEach(v=>{
     const el=document.createElement("div");el.className="reason";el.textContent=String(v);$("reasons").appendChild(el)
   });
 
@@ -383,7 +400,6 @@ function renderDecision(){
     const label=probHeader.querySelector("span");if(label)label.textContent="SIGNAL CONFLUENCE";
     const small=probHeader.querySelector("small");if(small)small.textContent=confluencePct===null?"LIVE":"SCORE "+confluencePct+"%";
   }
-
   drawChart();
 }
 function renderSystemChecks(checks){
@@ -567,7 +583,7 @@ function startLoops(){
   state.tickerTimer=setInterval(tickLoop,1000);
   state.flowTimer=setInterval(flowLoop,2000);
   state.chartTimer=setInterval(chartLoop,15000);
-  state.decisionTimer=setInterval(()=>refreshDecision(false),12000);
+  state.decisionTimer=setInterval(()=>refreshDecision(false),8000);
 }
 function boot(){
   try{
