@@ -141,3 +141,11 @@ The no-cost scheduler runs every five minutes at minute offsets that avoid GitHu
 - Adds a canonical snapshot ID/hash so Decision Center surfaces can verify they are rendering one shared market/decision context.
 - WAIT is structurally prevented from inheriting an executable LONG/SHORT map; Phase 20 is explanatory and cannot bypass validation, risk, paper-only or execution gates.
 - The Phase 20 state is exposed on the authoritative /api/decision payload and rendered in the Decision Center as the Scenario Matrix and Snapshot Integrity surfaces.
+
+
+## Phase 201–300 — Profit-Seeking Signal Engine 3.0
+- 100 deterministic upgrades focused on expected value, calibrated probability, execution friction, risk, regime fit, signal stability, out-of-sample evidence, and live-signal safety.
+- The engine never manufactures a LONG/SHORT signal; it can only suppress an existing candidate.
+- A candidate is exposed as `LIVE_SIGNAL_READY` only when validated probability, R:R, positive expected R after modeled costs, data quality, risk, stability, calibration, drift and evidence gates pass.
+- Automatic order execution remains disabled by design.
+- Phase 201–300 is runtime-gated and does not guarantee profitability.
