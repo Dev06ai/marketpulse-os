@@ -118,25 +118,17 @@ function mismatchReport(input,frame){
     repair:bad.length?"PIN_ALL_SURFACES_TO_CANONICAL_FRAME":null
   };
 }
-function normalizedProbabilities(side,score,quality){
-  const s=clamp(Number(score||0)/100),q=clamp(Number(quality||0));
-  const waitPct=side==="WAIT"
-    ?Math.round(clamp(46+(1-s)*10+(1-q)*18,38,72))
-    :Math.round(clamp(8+(1-s)*18+(1-q)*18,8,42));
-  const pair=100-waitPct;
-  let longPct,shortPct;
-  if(side==="LONG"){
-    longPct=Math.round(pair*clamp(.5+.45*s,.55,.95));
-    shortPct=pair-longPct;
-  }else if(side==="SHORT"){
-    shortPct=Math.round(pair*clamp(.5+.45*s,.55,.95));
-    longPct=pair-shortPct;
-  }else{
-    longPct=Math.floor(pair/2);
-    shortPct=pair-longPct;
-  }
-  const waitOut=100-longPct-shortPct;
-  return {long:longPct/100,short:shortPct/100,wait:waitOut/100};
+function normalizedProbabilities(input={}){
+  const p=input?.decision?.probabilities||input?.probabilities||null;
+  const source=String(input?.decision?.probabilitySource||input?.probabilitySource||"UNAVAILABLE");
+  if(!p||source==="UNAVAILABLE")return {long:null,short:null,wait:null,available:false,source:"UNAVAILABLE"};
+  const keys=["long","short","wait"];
+  const vals=keys.map(k=>Number(p[k]));
+  if(!vals.every(Number.isFinite))return {long:null,short:null,wait:null,available:false,source:"INVALID"};
+  const normalized=vals.every(v=>v>1)?vals.map(v=>v/100):vals;
+  const sum=normalized.reduce((a,b)=>a+b,0);
+  if(!(sum>0.999&&sum<1.001))return {long:null,short:null,wait:null,available:false,source:"INVALID_SUM"};
+  return {long:normalized[0],short:normalized[1],wait:normalized[2],available:true,source};
 }
 function evidence(input){
   const d=input.decision||{},m=d.market||{},l=d.levels||{},der=d.derivatives||input.derivatives||input.flow||{},mtf=d.mtf||input.mtf||{};
@@ -174,7 +166,7 @@ function executionGate(input){
   return {status:eligible?"ELIGIBLE":"BLOCKED",mode,side,score:Number(score.toFixed(2)),rr:Number(rr.toFixed(3)),quality:Number(q.toFixed(4)),canonicalFrame:frame,synchronization:sync,liveCapability:{liveTradingEnabled:liveTrading,liveAutoExecutionEnabled:autoLive,armed,reconciled,killSwitch:ks},reasons,automaticExecutionReady:Boolean(eligible&&mode==="LIVE"&&liveTrading&&autoLive&&armed&&reconciled&&!ks)};
 }
 function buildState(input){
-  const frame=syncFrame(input),sync=mismatchReport(input,frame),gate=executionGate(input),ev=evidence(input),q=quality(input,frame,sync),side=gate.side,probabilities=normalizedProbabilities(side,gate.score,q);
+  const frame=syncFrame(input),sync=mismatchReport(input,frame),gate=executionGate(input),ev=evidence(input),q=quality(input,frame,sync),side=gate.side,probabilities=normalizedProbabilities(input);
   return {
     version:VERSION,
     automaticRealMoneyExecutionSupported:true,
@@ -227,9 +219,8 @@ function selfTest(){
   const out=buildState(input);
   const mismatch=buildState({...input,ticker:{price:100.5,cvdRatio:.10}});
   const wait=buildState({...input,decision:{...input.decision,action:"WAIT",state:"NO_TRADE",liveSignalEligible:false}});
-  const probabilitySum=Number(out.probabilities.long)+Number(out.probabilities.short)+Number(out.probabilities.wait);
   return {
-    ok:specs.length===100&&out.canonical.hash&&out.synchronization.ok&&out.executionGate.status==="ELIGIBLE"&&!out.executionGate.automaticExecutionReady&&probabilitySum===1&&mismatch.synchronization.badCount>0&&wait.command==="WAIT",
+    ok:specs.length===100&&out.canonical.hash&&out.synchronization.ok&&out.executionGate.status==="ELIGIBLE"&&!out.executionGate.automaticExecutionReady&&!out.probabilities.available&&mismatch.synchronization.badCount>0&&wait.command==="WAIT",
     version:VERSION,moduleCount:specs.length,checkedFields:out.synchronization.checkedFields
   };
 }
