@@ -149,3 +149,6 @@ The no-cost scheduler runs every five minutes at minute offsets that avoid GitHu
 - A candidate is exposed as `LIVE_SIGNAL_READY` only when validated probability, R:R, positive expected R after modeled costs, data quality, risk, stability, calibration, drift and evidence gates pass.
 - Automatic order execution remains disabled by design.
 - Phase 201–300 is runtime-gated and does not guarantee profitability.
+
+
+Phase 201–300 final validation marker.
