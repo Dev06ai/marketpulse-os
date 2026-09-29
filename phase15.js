@@ -225,4 +225,4 @@ async function audit({symbol=null,interval=null,limit=200}={}){
 }
 
 function selfTest(){return {ok:VERSION==="15.0.0"&&typeof recordDecision==="function"&&typeof calibration==="function"&&typeof snapshot==="function"&&typeof audit==="function",version:VERSION};}
-module.exports={VERSION,recordDecision,calibration,snapshot,audit};
+module.exports={VERSION,recordDecision,calibration,snapshot,audit,selfTest};
