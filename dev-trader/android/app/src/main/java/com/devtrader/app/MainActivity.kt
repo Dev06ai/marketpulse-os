@@ -45,6 +45,9 @@ import okhttp3.WebSocket
 import okhttp3.WebSocketListener
 import org.json.JSONObject
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
+import android.os.Handler
+import android.os.Looper
 
 private val Charcoal = Color(0xFF0B0B10)
 private val CardColor = Color(0xFF14141D)
@@ -86,10 +89,17 @@ data class LiveUi(
 
 class MainActivity : ComponentActivity() {
     private val permission = registerForActivityResult(ActivityResultContracts.RequestPermission()) {}
-    private val client = OkHttpClient.Builder().pingInterval(20, TimeUnit.SECONDS).build()
+    private val client = OkHttpClient.Builder()
+        .pingInterval(15, TimeUnit.SECONDS)
+        .retryOnConnectionFailure(true)
+        .build()
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private val reconnectScheduled = AtomicBoolean(false)
     private var socket: WebSocket? = null
     private var live by mutableStateOf(LiveUi())
     private var lastNotifiedId: String? = null
+    private var reconnectAttempt = 0
+    private var shuttingDown = false
 
     private val backendWs = "wss://dev-trader-engine.onrender.com/ws"
 
@@ -102,18 +112,59 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun connect() {
+        if (shuttingDown || socket != null) return
+
+        live = live.copy(health = "RECONNECTING", ws = false)
+
         socket = client.newWebSocket(
             Request.Builder().url(backendWs).build(),
             object : WebSocketListener() {
+                override fun onOpen(webSocket: WebSocket, response: Response) {
+                    if (shuttingDown) {
+                        webSocket.close(1000, "activity destroyed")
+                        return
+                    }
+                    socket = webSocket
+                    reconnectAttempt = 0
+                    reconnectScheduled.set(false)
+                }
+
                 override fun onMessage(webSocket: WebSocket, text: String) {
                     runCatching { handleMessage(JSONObject(text)) }
                 }
 
                 override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
+                    if (socket === webSocket) socket = null
                     live = live.copy(health = "RECONNECTING", ws = false)
+                    scheduleReconnect()
+                }
+
+                override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
+                    if (socket === webSocket) socket = null
+                    if (!shuttingDown) {
+                        live = live.copy(health = "RECONNECTING", ws = false)
+                        scheduleReconnect()
+                    }
                 }
             }
         )
+    }
+
+    private fun scheduleReconnect() {
+        if (shuttingDown) return
+        if (!reconnectScheduled.compareAndSet(false, true)) return
+
+        val attempt = reconnectAttempt.coerceAtMost(5)
+        val delayMs = minOf(30_000L, 1_000L * (1L shl attempt))
+        reconnectAttempt = minOf(reconnectAttempt + 1, 5)
+
+        mainHandler.postDelayed({
+            reconnectScheduled.set(false)
+            if (!shuttingDown) {
+                socket = null
+                connect()
+            }
+        }, delayMs)
     }
 
     private fun handleMessage(root: JSONObject) {
@@ -166,7 +217,12 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
+        shuttingDown = true
+        mainHandler.removeCallbacksAndMessages(null)
+        reconnectScheduled.set(false)
         socket?.close(1000, "activity destroyed")
+        socket = null
+        client.dispatcher.executorService.shutdown()
         super.onDestroy()
     }
 }
