@@ -396,18 +396,25 @@ function setIntervalFromToolbar(tf){
 }
 async function loadPhases(){
   if(state.phases){$("phaseList").classList.toggle("hidden");return}
-  $("phaseList").classList.remove("hidden");$("phaseList").innerHTML='<div class="placeholder">Loading phase registry…</div>';
+  $("phaseList").classList.remove("hidden");
+  $("phaseSummary").innerHTML='<div class="phase-loading">Loading engineering registry…</div>';
+  $("phaseList").innerHTML='<div class="placeholder">Synchronizing Phase 1 → 500 registry…</div>';
   try{
     const d=await api("/api/phases",5000);state.phases=d;
-    $("phaseHeadline").textContent="PHASE 1 → 500 · "+d.engineeringPhase;
+    $("phaseHeadline").textContent="PHASE 1 → 500 · "+(d.engineeringPhase||"ENGINEERING REGISTRY");
     const list=Array.isArray(d.phases)?d.phases:[],complete=list.filter(x=>x.status==="COMPLETE").length,validated=list.filter(x=>/VALIDATED/.test(String(x.status))).length;
     $("phaseSummary").innerHTML=
       '<div class="phase-chip"><b>'+list.length+'</b><span>registry items</span></div>'+
       '<div class="phase-chip"><b>'+complete+'</b><span>complete</span></div>'+
       '<div class="phase-chip"><b>'+validated+'</b><span>validated</span></div>'+
       '<div class="phase-chip"><b>'+String(d.promotion?.signalEngineVersion||"500.0.0")+'</b><span>engine version</span></div>';
-    $("phaseList").innerHTML=list.map(x=>'<div class="phase"><b>#'+x.phase+'</b><strong>'+String(x.title||"")+'</strong><em>'+String(x.status||"")+'</em></div>').join("");
-  }catch(e){$("phaseList").innerHTML='<div class="placeholder">Phase registry unavailable: '+String(e.message||e)+'</div>'}
+    $("phaseList").innerHTML=list.length
+      ?list.map(x=>'<div class="phase"><b>#'+x.phase+'</b><strong>'+String(x.title||"")+'</strong><em>'+String(x.status||"")+'</em></div>').join("")
+      :'<div class="placeholder">Registry returned no phase rows.</div>';
+  }catch(e){
+    $("phaseSummary").innerHTML='<div class="phase-loading">Registry temporarily unavailable</div>';
+    $("phaseList").innerHTML='<div class="placeholder">Phase registry unavailable: '+String(e.message||e)+'</div>';
+  }
 }
 async function checkSystem(){
   $("systemChecks").innerHTML='<div class="placeholder">Running bounded checks…</div>';
@@ -494,7 +501,7 @@ function startLoops(){
 }
 function boot(){
   try{
-    loadChartStyle();bind();populateSymbols();connectLiveStream();startLoops();runtime("UI ready — connecting to exchange…","warn","WebSocket drives the canonical price; HTTP is fallback only.");loadCore();
+    loadChartStyle();bind();populateSymbols();connectLiveStream();startLoops();runtime("UI ready — connecting to exchange…","warn","WebSocket drives the canonical price; HTTP is fallback only.");loadCore();setTimeout(()=>loadPhases(),450);
   }catch(e){
     runtime("UI recovery mode","warn","Boot error isolated: "+String(e.message||e));
   }
