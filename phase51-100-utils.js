@@ -41,4 +41,4 @@ function zone(low,high,price){
 function unique(xs=[]){return [...new Set((Array.isArray(xs)?xs:[]).filter(Boolean).map(String))]}
 function reason(code,text){return {code:String(code),text:String(text)}}
 function selfTest(){const a=directionalScore([{side:"LONG",weight:10},{side:"SHORT",weight:2}]),b=evidenceCoverage([{present:true},{present:false}]),c=zone(99,101,100);return {ok:a.long>a.short&&b.coverage===50&&c==="INSIDE",version:VERSION};}
-module.exports={VERSION,n,clamp,side,finite,directionalScore,evidenceCoverage,weightedMean,probability,zone,unique,reason};
+module.exports={VERSION,n,clamp,side,finite,directionalScore,evidenceCoverage,weightedMean,probability,zone,unique,reason,selfTest};
