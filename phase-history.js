@@ -305,7 +305,7 @@ const phases = [
   {phase:297,status:"VALIDATED",title:"Expectancy Decay Detector",description:"Expectancy Decay Detector."},
   {phase:298,status:"VALIDATED",title:"Regime-Specific Decay Detector",description:"Regime-Specific Decay Detector."},
   {phase:299,status:"VALIDATED",title:"Signal Frequency Governor",description:"Signal Frequency Governor."},
-  {phase:300,status:"VALIDATED",title:"Profit Engine Final Gate",description:"Profit Engine Final Gate."}
+  {phase:300,status:"VALIDATED",title:"Profit Engine Final Gate",description:"Profit Engine Final Gate."},
   {phase:301,status:"VALIDATED",title:"Regime Fingerprint Engine",description:"Phase 301: Regime Fingerprint Engine — integrated adaptive intelligence capability."},
   {phase:302,status:"VALIDATED",title:"Trend Range Expansion Classifier",description:"Phase 302: Trend Range Expansion Classifier — integrated adaptive intelligence capability."},
   {phase:303,status:"VALIDATED",title:"Volatility Regime Map",description:"Phase 303: Volatility Regime Map — integrated adaptive intelligence capability."},
