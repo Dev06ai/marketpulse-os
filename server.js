@@ -2430,7 +2430,7 @@ const server=http.createServer(async(req,res)=>{
       try{
         const guard=await auth.requireAdmin(req);
         if(!guard.ok)return send(res,guard.status,{ok:false,error:guard.error});
-        return send(res,200,{ok:true,currentPhase:phaseHistory.getCurrentPhase(),phases:phaseHistory.getPhaseHistory()});
+        return send(res,200,{ok:true,currentPhase:phaseHistory.getCurrentPhase(),engineeringPhase:phaseHistory.getEngineeringPhase(),promotion:phaseHistory.getPromotionSummary(),phases:phaseHistory.getPhaseHistory()});
       }catch(e){return send(res,503,{ok:false,error:String(e.message||e)})}
     }
     if(req.method==='POST'&&u.pathname==='/api/admin/config'){
