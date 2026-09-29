@@ -24,16 +24,16 @@ function strictSignalChecks(a,side,higher,lower,flowScore,dataScore,levels,deriv
   const l=String(lower?.regime||"UNKNOWN").toUpperCase();
   const d=derivatives||{};
   if(!["LONG","SHORT"].includes(side))reasons.push("no directional side");
-  if(dataScore<85)reasons.push("live data quality below 85");
-  if(flowScore<65)reasons.push("order-flow confirmation below 65");
+  if(dataScore<80)reasons.push("live data quality below 80");
+  if(flowScore<60)reasons.push("order-flow confirmation below 60");
   if(a?.regime==="HIGH VOLATILITY")reasons.push("high-volatility regime");
   const requiresHigher=String(interval).toLowerCase()!=="1d";
   const ms=a?.marketStructure||{};
   const reaction=a?.reactionMap?.active||null;
   const reactionConfirmed=Boolean(reaction&&["CONFIRM_LONG","CONFIRM_SHORT","BREAKOUT_LONG","BREAKDOWN_SHORT"].includes(String(reaction.state||""))&&["LONG","SHORT"].includes(String(reaction.action||"")));
   const reactionMatches=reactionConfirmed&&String(reaction.action).toUpperCase()===side;
-  if(reactionMatches&&flowScore<70)reasons.push("reaction confirmed but order-flow confirmation is below 70");
-  if(reactionMatches&&dataScore<85)reasons.push("reaction confirmed but data quality is below 85");
+  if(reactionMatches&&flowScore<60)reasons.push("reaction confirmed but order-flow confirmation is below 60");
+  if(reactionMatches&&dataScore<80)reasons.push("reaction confirmed but data quality is below 80");
   const setupKind=String(a?.strategyFamily||ms.setup?.kind||"").toUpperCase();
   const confirmedSweepReclaim=Boolean(
     a?.reactionMap?.active?.action===side &&
@@ -48,14 +48,14 @@ function strictSignalChecks(a,side,higher,lower,flowScore,dataScore,levels,deriv
   const higherConflict=(side==="LONG"&&h==="DOWNTREND")||(side==="SHORT"&&h==="UPTREND");
   const higherMissing=(h==="UNKNOWN");
   if(requiresHigher&&(higherConflict||higherMissing)){
-    const controlledReversal=levelReversal&&flowScore>=75&&dataScore>=90;
-    const controlledSfp=strongSfp&&flowScore>=70&&dataScore>=85;
-    const controlledReaction=reactionMatches&&flowScore>=70&&dataScore>=85;
-    const controlledDline=dline&&higher8===(side==="LONG"?"UPTREND":"DOWNTREND")&&flowScore>=70&&dataScore>=85;
+    const controlledReversal=levelReversal&&flowScore>=65&&dataScore>=85;
+    const controlledSfp=strongSfp&&flowScore>=65&&dataScore>=80;
+    const controlledReaction=reactionMatches&&flowScore>=60&&dataScore>=80;
+    const controlledDline=dline&&higher8===(side==="LONG"?"UPTREND":"DOWNTREND")&&flowScore>=60&&dataScore>=80;
     if(!controlledReversal&&!controlledSfp&&!controlledReaction&&!controlledDline)reasons.push(higherMissing?"higher-timeframe trend unavailable":"higher-timeframe trend conflicts");
   }
-  const sfpLowerConfirmed=strongSfp&&flowScore>=70&&dataScore>=85;
-  const sweepOverride=confirmedSweepReclaim&&flowScore>=70&&dataScore>=85;
+  const sfpLowerConfirmed=strongSfp&&flowScore>=65&&dataScore>=80;
+  const sweepOverride=confirmedSweepReclaim&&flowScore>=60&&dataScore>=80;
   if(side==="LONG"&&l==="DOWNTREND"&&!sfpLowerConfirmed&&!sweepOverride)reasons.push("15M trend conflicts");
   if(side==="SHORT"&&l==="UPTREND"&&!sfpLowerConfirmed&&!sweepOverride)reasons.push("15M trend conflicts");
   if(String(d.cvdState||"").toUpperCase().includes("DIVERGENCE"))warnings.push("CVD divergence");
@@ -102,7 +102,7 @@ function readiness(a,confluence,dataScore,gate,strict={eligible:true,reasons:[]}
   if(side==="WAIT"||a?.status==="WAITING")return {state:"NO_TRADE",action:"WAIT",reason:"No directional trigger is active."};
   if(gate?.decision==="BLOCKED")return {state:"RISK_BLOCKED",action:"WAIT",reason:"The configured risk gate is blocking this setup."};
   if(!strict.eligible)return {state:"NO_TRADE",action:"WAIT",reason:"High-confidence evidence gate not satisfied: "+strict.reasons.join(", ")+"."};
-  if(a?.status==="READY"&&confluence>=78)return {state:"READY",action:side,reason:"Directional and high-confidence evidence thresholds are satisfied."};
+  if(a?.status==="READY"&&confluence>=72)return {state:"READY",action:side,reason:"Directional evidence threshold is satisfied in loose signal mode."};
   return {state:"NO_TRADE",action:"WAIT",reason:"Evidence is not aligned enough for a high-confidence directional setup."};
 }
 function evaluate(x={}){
