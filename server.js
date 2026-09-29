@@ -2945,8 +2945,21 @@ const server=http.createServer(async(req,res)=>{
           getFastKlines(symbol,interval)
         ]);
         const radar=phase18Opportunity.evaluate(decision,marketState,{weekdayOnly:true,easyMode:true});
-        const ticker=flowBucket(symbol);
-        const apex=phase401to500.buildState({symbol,interval,price:decision?.price??marketState?.price,updatedAt:Date.now(),dataTs:marketState?.updatedAt,liveSeq:marketState?.seq,candles,decision,radar,marketState,ticker:{price:ticker?.lastPrice}});
+        const live=flowBucket(symbol);
+        const canonicalPrice=Number.isFinite(Number(live.lastPrice))
+          ?Number(live.lastPrice)
+          :(Number.isFinite(Number(live.markPrice))
+            ?Number(live.markPrice)
+            :Number.isFinite(Number(marketState?.price))
+              ?Number(marketState.price)
+              :Number(decision?.price));
+        const apex=phase401to500.buildState({
+          symbol,interval,price:canonicalPrice,updatedAt:Date.now(),
+          dataTs:live.lastTs||marketState?.updatedAt,liveSeq:live.liveSeq||marketState?.seq,
+          candles,decision,radar,marketState,
+          ticker:{price:canonicalPrice,change24h:live.price24hPcnt,markPrice:live.markPrice},
+          execution:execSnap
+        });
         return send(res,200,{ok:true,symbol,interval,apex,phase401to500:phase401to500.VERSION,generatedAt:Date.now()},{'cache-control':'no-store, max-age=0'});
       }catch(e){return send(res,503,{ok:false,error:String(e.message||e),phase401to500:phase401to500.VERSION})}
     }
