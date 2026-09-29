@@ -18,5 +18,5 @@ function evaluate(input={}){
   if(positions>=maxPositions)reasons.push("POSITION_LIMIT");
   return {version:VERSION,defined:riskPct!==null,riskPct,blocked:reasons.length>0,reasons,headroomPct:Math.max(0,maxDd-dailyDd)};
 }
-function selfTest(){const a=evaluate({riskPct:.5,maxRiskPct:1,dailyDrawdownPct:1,maxDailyDrawdownPct:3,openPositions:1});const b=evaluate({riskPct:2,maxRiskPct:1});return {ok:!a.blocked&&b.blocked&&b.reasons.includes("RISK_LIMIT"),version:VERSION};}
+function selfTest(){const a=evaluate({riskPct:.5,maxRiskPct:1,dailyDrawdownPct:1,maxDailyDrawdownPct:3,openPositions:1});const b=evaluate({riskPct:2,maxRiskPct:1});const c=evaluate({});const d=evaluate({requireDefinedRisk:true});return {ok:!a.blocked&&b.blocked&&b.reasons.includes("RISK_LIMIT")&&!c.blocked&&!c.defined&&d.blocked&&d.reasons.includes("NO_DEFINED_RISK"),version:VERSION};}
 module.exports={VERSION,evaluate,selfTest};
