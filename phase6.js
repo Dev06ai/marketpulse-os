@@ -212,4 +212,5 @@ async function executionGate(plan,executionState){
   if(corr.available&&corr.clusterRiskPct>corr.limitPct)return {allowed:false,reason:"CORRELATED CLUSTER RISK LIMIT",symbol:sym,clusterRiskPct:corr.clusterRiskPct,limitPct:corr.limitPct,clusterMembers:corr.clusterMembers,correlationSnapshotAgeMs:savedAge};
   return {allowed:true,reason:"PASS",portfolioRiskPct:p.grossRiskPct,symbolExposurePct:symExp,clusterRiskPct:corr.clusterRiskPct,clusterMembers:corr.clusterMembers,correlationAvailable:corr.available,correlationSnapshotAgeMs:Number.isFinite(savedAge)?savedAge:null};
 }
+function selfTest(){const p=buildPortfolio(Object.assign({},DEFAULT_CONFIG,{account:100000}),[{symbol:"BTCUSDT",entry:100,qty:10,riskCash:1000}],[],{}),s=stressTest({stressMovePct:5},[{symbol:"BTCUSDT",side:"LONG",entry:100,qty:1}],[]);return {ok:p.exposureBySymbol.BTCUSDT===0.01&&s.rows.length===2&&s.rows[0].movePct===-5,version:VERSION};}
 module.exports={version:VERSION,createState:defaultState,ensureState,load,save,snapshot,setConfig,buildPortfolio,stressTest,savePortfolio,executionGate,correlationGate};
