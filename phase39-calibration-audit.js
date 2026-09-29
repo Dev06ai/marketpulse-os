@@ -3,7 +3,7 @@
  */
 const VERSION="39.0.0";
 function audit(rows=[]){
-  const valid=rows.filter(x=>Number.isFinite(Number(x.probability))&&(x.outcome===0||x.outcome===1));
+  const valid=(Array.isArray(rows)?rows:[]).map(x=>({...x,probability:Number(x.probability)>1?Number(x.probability)/100:Number(x.probability)})).filter(x=>Number.isFinite(x.probability)&&x.probability>=0&&x.probability<=1&&(x.outcome===0||x.outcome===1));
   if(!valid.length)return {version:VERSION,sample:0,brier:null,coverage:0};
   const brier=valid.reduce((s,x)=>s+(Number(x.probability)-x.outcome)**2,0)/valid.length;
   return {version:VERSION,sample:valid.length,brier,coverage:valid.length/(rows.length||1)};
