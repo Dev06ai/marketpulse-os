@@ -303,6 +303,7 @@ async function getDecisionSnapshotCached(symbol,interval,searchParams,device){
 const SIGNAL_STABILITY=new Map();
 const SIGNAL_CONFIRMATIONS_REQUIRED=2;
 const SIGNAL_RELEASE_MISSES=2;
+const SIGNAL_CANDIDATE_TTL_MS=120000;
 
 function signalStabilityKey(symbol,interval){return String(symbol)+"|"+String(interval)}
 function hardSignalBlock(decision){
@@ -329,7 +330,7 @@ function applySignalStability(decision,symbol,interval){
   const d=decision||{}, key=signalStabilityKey(symbol,interval), now=Date.now();
   const candidate=["LONG","SHORT"].includes(String(d?.action||"").toUpperCase()) ? String(d.action).toUpperCase() : null;
   const eligible=Boolean(d?.liveSignalEligible&&candidate);
-  const row=SIGNAL_STABILITY.get(key)||{side:null,confirmations:0,misses:0,confirmed:false,lastTs:0};
+  const row=SIGNAL_STABILITY.get(key)||{side:null,confirmations:0,misses:0,confirmed:false,lastTs:0,levels:null,lastPrice:null};
 
   if(eligible){
     if(row.side===candidate){
@@ -338,6 +339,8 @@ function applySignalStability(decision,symbol,interval){
       row.side=candidate; row.confirmations=1; row.misses=0; row.confirmed=false;
     }
     row.lastTs=now;
+    row.lastPrice=Number.isFinite(Number(d?.market?.price))?Number(d.market.price):row.lastPrice;
+    row.levels=d?.levels||d?.candidateEvidence?.levels||row.levels||null;
     if(row.confirmations>=SIGNAL_CONFIRMATIONS_REQUIRED)row.confirmed=true;
     SIGNAL_STABILITY.set(key,row);
 
@@ -391,6 +394,23 @@ function applySignalStability(decision,symbol,interval){
     }
     SIGNAL_STABILITY.delete(key);
     return {...d,signalStability:{state:"NONE",side:null,confirmations:0,required:SIGNAL_CONFIRMATIONS_REQUIRED,misses:0}};
+  }
+
+  const rowAge=now-Number(row.lastTs||0);
+  const currentPrice=Number(d?.market?.price??d?.livePrice);
+  const stop=Number(row?.levels?.stop??d?.candidateEvidence?.levels?.stop);
+  const invalidated=(row.side==="LONG"&&Number.isFinite(currentPrice)&&Number.isFinite(stop)&&currentPrice<=stop) ||
+    (row.side==="SHORT"&&Number.isFinite(currentPrice)&&Number.isFinite(stop)&&currentPrice>=stop);
+  if(row.confirmed&&(rowAge>SIGNAL_CANDIDATE_TTL_MS||invalidated)){
+    const reason=invalidated?"PRICE_INVALIDATION":"CANDIDATE_EXPIRED";
+    SIGNAL_STABILITY.delete(key);
+    return {...d,action:"WAIT",state:"NO_TRADE",liveSignalEligible:false,
+      rawAction:row.side,
+      market:{...(d.market||{}),side:"WAIT",status:"WAITING",type:reason,bias:"Neutral",directionalLean:"NEUTRAL"},
+      levels:{...(d.levels||{}),entryLow:null,entryHigh:null,entry:null,stop:null,tp1:null,tp2:null,rr:null},
+      deploymentGate:{...(d.deploymentGate||{}),state:"BLOCKED",reason},
+      candidateEvidence:{...(d.candidateEvidence||{}),action:row.side,levels:row.levels||null},
+      signalStability:{state:"RELEASED",side:row.side,confirmations:row.confirmations,required:SIGNAL_CONFIRMATIONS_REQUIRED,misses:row.misses,reason}};
   }
 
   if(hardSignalBlock(d)){
@@ -1299,7 +1319,8 @@ async function buildDecisionSnapshot(symbol,interval,query,deviceId=null){
         levels:{...(last.payload.levels||{}),entryLow:null,entryHigh:null,entry:null,stop:null,tp1:null,tp2:null,rr:null},
         deploymentGate:{...(last.payload.deploymentGate||{}),state:"BLOCKED",reason:"Decision refresh failed; stale directional data is not eligible for a live signal."},
         operational:{...(last.payload.operational||{}),liveUse:"PAPER_ONLY"},
-        signalStability:{state:"RELEASED",reason:"stale_decision"}
+        signalStability:{state:"STALE",side:last.payload?.signalCandidate?.side||last.payload?.rawAction||null,reason:"stale_decision"},
+        signalCandidate:{...(last.payload?.signalCandidate||{}),stale:true,staleAgeMs:Math.max(0,now-last.ts),staleReason:String(e.message||"DECISION_REFRESH_FAILED")}
       };
       return Object.assign({cache:"stale",stale:true,cacheAgeMs:Math.max(0,now-last.ts),degraded:String(e.message||e)},safeStale);
     }
