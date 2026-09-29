@@ -107,6 +107,33 @@ def _risk_gate(entry: float, stop: float, f: MarketFeatures) -> bool:
     return 0.15 * f.atr_15 <= risk <= 2.5 * f.atr_15
 
 
+def _gate_details(direction: str, setup: str, entry: float, stop: float, target: float, f: MarketFeatures) -> dict:
+    min_rr = _min_rr()
+    ratio = rr(entry, stop, target)
+    risk = abs(entry - stop)
+    risk_ok = _risk_gate(entry, stop, f)
+    confidence, score_reasons = _score(direction, setup, f)
+    confidence_ok = confidence >= _min_confidence()
+    checks = {
+        "rr": round(ratio, 3),
+        "min_rr": min_rr,
+        "risk_distance": round(risk, 4),
+        "atr_15": round(f.atr_15, 4),
+        "risk_gate": risk_ok,
+        "confidence": round(confidence, 3),
+        "min_confidence": _min_confidence(),
+        "confidence_gate": confidence_ok,
+    }
+    reasons = []
+    if ratio < min_rr:
+        reasons.append(f"R:R {ratio:.2f} is below minimum {min_rr:.2f}")
+    if not risk_ok:
+        reasons.append("stop distance fails the ATR risk gate")
+    if not confidence_ok:
+        reasons.append(f"confidence {confidence:.0%} is below minimum {_min_confidence():.0%}")
+    return {"checks": checks, "reasons": reasons, "score_reasons": score_reasons}
+
+
 def _signal(
     *,
     id: str,
@@ -120,14 +147,12 @@ def _signal(
     f: MarketFeatures,
     thesis: list[str],
 ) -> Optional[Signal]:
-    min_rr = _min_rr()
-    ratio = rr(entry, stop, target)
-    if ratio < min_rr or not _risk_gate(entry, stop, f):
+    gate = _gate_details(direction, setup, entry, stop, target, f)
+    ratio = gate["checks"]["rr"]
+    confidence = gate["checks"]["confidence"]
+    if gate["reasons"]:
         return None
-    confidence, score_reasons = _score(direction, setup, f)
-    min_conf = _min_confidence()
-    if confidence < min_conf:
-        return None
+    score_reasons = gate["score_reasons"]
     elite_rr = float(RULES["risk"].get("elite_min_rr", 3.0))
     elite_conf = float(RULES.get("signal", {}).get("elite_confidence", 0.70))
     grade = "A" if ratio >= elite_rr and confidence >= elite_conf else "B"
@@ -362,38 +387,181 @@ def detect_mss(state: MarketState) -> Optional[Signal]:
 class StrategyEngine:
     def __init__(self):
         self.last_signal_id = None
-        self.last_diagnostics = {"status": "STARTING", "blocked_by": [], "setups": {}}
+        self.last_diagnostics = {
+            "status": "STARTING",
+            "wait_reason": "Engine has not evaluated market data yet.",
+            "blocked_by": [],
+            "setups": {},
+        }
+
+    def _pattern_gate(self, state: MarketState, setup: str, direction: str, entry: float, stop: float, target: float, f: MarketFeatures, structural: dict) -> dict:
+        gate = _gate_details(direction, setup, entry, stop, target, f)
+        status = "VALIDATED" if not gate["reasons"] else "REJECTED"
+        return {
+            "status": status,
+            "direction": direction,
+            "structural": structural,
+            "risk_and_quality": gate["checks"],
+            "rejection_reasons": gate["reasons"],
+            "score_context": gate["score_reasons"],
+        }
 
     def diagnostics(self, state: MarketState) -> dict:
         cs = [c for c in state.candles_15 if c.confirmed]
         highs, lows = pivots(cs[:-1], 2) if len(cs) >= 5 else ([], [])
         last = cs[-1] if cs else None
-        sfp = "waiting_for_10_confirmed_15m_candles"
-        if len(cs) >= 10 and last:
-            swept_high = bool(highs and last.high > highs[-1][1] and last.close < highs[-1][1])
-            swept_low = bool(lows and last.low < lows[-1][1] and last.close > lows[-1][1])
-            sfp = "candidate_bearish_sfp" if swept_high else ("candidate_bullish_sfp" if swept_low else "no_confirmed_sfp")
-        dline = "waiting_for_18_confirmed_15m_candles"
-        if len(cs) >= 18 and len(state.candles_60) >= 12:
-            candidates = []
-            if len(lows) >= 3:
-                for a, b in zip(lows[-5:-1], lows[-4:]):
-                    if b[1] > a[1]: candidates.append("LONG")
-            if len(highs) >= 3:
-                for a, b in zip(highs[-5:-1], highs[-4:]):
-                    if b[1] < a[1]: candidates.append("SHORT")
-            dline = "candidate_dline_" + candidates[-1].lower() if candidates else "no_dline_geometry"
-        mss = "waiting_for_12_confirmed_15m_candles"
-        if len(cs) >= 12 and last:
-            mss = "candidate_mss" if ((highs and last.close > highs[-1][1] and last.open <= highs[-1][1]) or (lows and last.close < lows[-1][1] and last.open >= lows[-1][1])) else "no_confirmed_mss"
-        return {
+        result = {
             "status": "SCANNING" if state.data_health == "HEALTHY" else "BLOCKED",
+            "wait_reason": "",
             "blocked_by": [] if state.data_health == "HEALTHY" else ["data_health"],
-            "setups": {"SFP": sfp, "D-Line": dline, "MSS": mss},
+            "setups": {},
             "min_rr": _min_rr(),
             "min_confidence": _min_confidence(),
             "manual_execution_only": True,
+            "confirmed_15m_candles": len(cs),
+            "confirmed_1h_candles": len([c for c in state.candles_60 if c.confirmed]),
         }
+
+        if state.data_health != "HEALTHY":
+            result["wait_reason"] = "Signal evaluation is blocked until the market data feed is healthy."
+            return result
+
+        # SFP diagnostics
+        if len(cs) < 10:
+            result["setups"]["SFP"] = {
+                "status": "WAITING",
+                "reason": f"Need 10 confirmed 15m candles; have {len(cs)}.",
+            }
+        else:
+            recent = cs[-1]
+            ph = highs[-1][1] if highs else None
+            pl = lows[-1][1] if lows else None
+            sfp_detail = {"status": "WAITING", "prior_swing_high": ph, "prior_swing_low": pl}
+            if ph is not None and recent.high > ph:
+                if recent.close < ph:
+                    entry, stop = recent.close, recent.high * 1.0005
+                    target = min((x[1] for x in lows[-5:]), default=recent.low)
+                    if target >= entry:
+                        target = entry - (stop - entry) * _min_rr()
+                    sfp_detail = {"status": "CANDIDATE", "pattern": "Bearish SFP", "swept_level": ph,
+                                  **self._pattern_gate(state, "Bearish SFP", "SHORT", entry, stop, target, compute_features(state),
+                                                     {"sweep": True, "close_back_inside": True, "entry": entry, "stop": stop, "target": target})}
+                else:
+                    sfp_detail["reason"] = "High swept the prior swing high, but the candle did not close back below it."
+            elif pl is not None and recent.low < pl:
+                if recent.close > pl:
+                    entry, stop = recent.close, recent.low * 0.9995
+                    target = max((x[1] for x in highs[-5:]), default=recent.high)
+                    if target <= entry:
+                        target = entry + (entry - stop) * _min_rr()
+                    sfp_detail = {"status": "CANDIDATE", "pattern": "Bullish SFP", "swept_level": pl,
+                                  **self._pattern_gate(state, "Bullish SFP", "LONG", entry, stop, target, compute_features(state),
+                                                     {"sweep": True, "close_back_inside": True, "entry": entry, "stop": stop, "target": target})}
+                else:
+                    sfp_detail["reason"] = "Low swept the prior swing low, but the candle did not close back above it."
+            else:
+                sfp_detail["reason"] = "No confirmed sweep of the latest 15m swing high/low."
+            result["setups"]["SFP"] = sfp_detail
+
+        # D-Line diagnostics
+        if len(cs) < 18 or len(state.candles_60) < 12:
+            result["setups"]["D-Line"] = {
+                "status": "WAITING",
+                "reason": f"Need 18 confirmed 15m and 12 confirmed 1h candles; have {len(cs)} and {len([c for c in state.candles_60 if c.confirmed])}.",
+            }
+        else:
+            f = compute_features(state)
+            candidates = []
+            if len(lows) >= 3:
+                for a, b in zip(lows[-5:-1], lows[-4:]):
+                    if b[1] > a[1]:
+                        candidates.append(("LONG", a, b))
+            if len(highs) >= 3:
+                for a, b in zip(highs[-5:-1], highs[-4:]):
+                    if b[1] < a[1]:
+                        candidates.append(("SHORT", a, b))
+            if not candidates:
+                result["setups"]["D-Line"] = {
+                    "status": "WAITING",
+                    "reason": "No qualifying rising-low or falling-high D-Line geometry.",
+                }
+            else:
+                direction, p1, p2 = candidates[-1]
+                touches = 0
+                start = max(0, p1[0] - 4)
+                for i, c in enumerate(cs[start:p2[0] + 5], start=start):
+                    lv = line_value(p1, p2, i)
+                    tol = max(1.0, abs(lv) * 0.0015)
+                    if abs(c.low - lv) <= tol or abs(c.high - lv) <= tol:
+                        touches += 1
+                projected = line_value(p1, p2, len(cs) - 1)
+                structural = {
+                    "direction": direction,
+                    "touches": touches,
+                    "required_touches": int(RULES["dline"]["preferred_touches"]),
+                    "projected_line": projected,
+                }
+                if touches < int(RULES["dline"]["preferred_touches"]):
+                    structural["status"] = "WAITING"
+                    structural["reason"] = f"Only {touches} qualifying touches; need {int(RULES['dline']['preferred_touches'])}."
+                    result["setups"]["D-Line"] = structural
+                else:
+                    last = cs[-1]
+                    if direction == "LONG":
+                        confirmed = last.close > projected and last.open <= projected
+                        entry, stop, target = last.close, min(c.low for c in cs[-5:]) * 0.9995, last.close + (last.close - min(c.low for c in cs[-5:]) * 0.9995) * _min_rr()
+                    else:
+                        confirmed = last.close < projected and last.open >= projected
+                        entry, stop, target = last.close, max(c.high for c in cs[-5:]) * 1.0005, last.close - (max(c.high for c in cs[-5:]) * 1.0005 - last.close) * _min_rr()
+                    if not confirmed:
+                        structural["status"] = "WAITING"
+                        structural["reason"] = "D-Line geometry exists, but there is no confirmed 15m body close through the projected line."
+                        result["setups"]["D-Line"] = structural
+                    else:
+                        result["setups"]["D-Line"] = self._pattern_gate(
+                            state, "D-Line Breakout", direction, entry, stop, target, f,
+                            {**structural, "body_close_confirmation": True, "entry": entry, "stop": stop, "target": target},
+                        )
+
+        # MSS diagnostics
+        if len(cs) < 12:
+            result["setups"]["MSS"] = {
+                "status": "WAITING",
+                "reason": f"Need 12 confirmed 15m candles; have {len(cs)}.",
+            }
+        else:
+            f = compute_features(state)
+            mss = {"status": "WAITING"}
+            confirmed = False
+            if highs and last and last.close > highs[-1][1] and last.open <= highs[-1][1]:
+                level = highs[-1][1]
+                entry = last.close
+                stop = min(c.low for c in cs[-4:]) * 0.9995
+                target = entry + (entry - stop) * _min_rr()
+                mss = self._pattern_gate(state, "MSS Continuation", "LONG", entry, stop, target, f,
+                                         {"structure_level": level, "body_close": True, "entry": entry, "stop": stop, "target": target})
+                confirmed = True
+            elif lows and last and last.close < lows[-1][1] and last.open >= lows[-1][1]:
+                level = lows[-1][1]
+                entry = last.close
+                stop = max(c.high for c in cs[-4:]) * 1.0005
+                target = entry - (stop - entry) * _min_rr()
+                mss = self._pattern_gate(state, "MSS Continuation", "SHORT", entry, stop, target, f,
+                                         {"structure_level": level, "body_close": True, "entry": entry, "stop": stop, "target": target})
+                confirmed = True
+            if not confirmed:
+                mss["reason"] = "No confirmed 15m body close through the latest structure level."
+            result["setups"]["MSS"] = mss
+
+        waits = []
+        for name, detail in result["setups"].items():
+            if detail.get("status") in {"WAITING", "REJECTED"}:
+                reasons = detail.get("rejection_reasons") or [detail.get("reason", "No qualifying setup")]
+                waits.append(f"{name}: " + "; ".join(reasons))
+            elif detail.get("status") == "CANDIDATE":
+                waits.append(f"{name}: candidate awaiting quality gates")
+        result["wait_reason"] = " | ".join(waits) if waits else "At least one setup passed all diagnostic gates."
+        return result
 
     def evaluate(self, state: MarketState) -> Optional[Signal]:
         self.last_diagnostics = self.diagnostics(state)
