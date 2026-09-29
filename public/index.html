@@ -3,126 +3,181 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-  <meta name="theme-color" content="#05070b">
+  <meta name="theme-color" content="#090a0f">
   <meta name="color-scheme" content="dark">
   <meta name="description" content="MarketPulse — synchronized crypto market intelligence terminal.">
   <link rel="manifest" href="/manifest.json">
-  <link rel="icon" href="/marketpulse-icon-v4.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/app.css?v=20260929-rebuild1">
-  <title>MarketPulse — Crypto Intelligence</title>
+  <link rel="icon" href="/marketpulse-icon-v5.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/app.css?v=20260929-apex2">
+  <title>MarketPulse — Apex Market Terminal</title>
 </head>
 <body>
   <div id="app" class="app">
-    <header class="topbar">
-      <div class="brand">
-        <div class="brand-mark">MP</div>
-        <div>
-          <div class="eyebrow">CRYPTO MARKET INTELLIGENCE</div>
-          <div class="brand-title">MarketPulse</div>
-          <div class="brand-sub">Synchronized market state • fast-first runtime</div>
+    <aside class="sidebar">
+      <div class="brand lockup">
+        <img class="brand-logo" src="/marketpulse-icon-v5.svg" alt="MarketPulse logo">
+        <div class="brand-copy">
+          <span class="brand-overline">MARKET INTELLIGENCE</span>
+          <strong>Market<span>Pulse</span></strong>
+          <small>APEX TERMINAL</small>
         </div>
       </div>
-      <div class="top-controls">
-        <label>Asset <select id="symbol"></select></label>
-        <label>Timeframe <select id="interval">
-          <option>15m</option><option>30m</option><option selected>1h</option><option>4h</option><option>1d</option>
-        </select></label>
-        <button id="sync" class="button primary">SYNC</button>
+      <div class="nav-group">
+        <div class="nav-label">WORKSPACE</div>
+        <button class="nav-item active" type="button"><span>◈</span> Market</button>
+        <button class="nav-item" type="button"><span>◫</span> Decision</button>
+        <button class="nav-item" type="button"><span>⌁</span> Flow</button>
+        <button class="nav-item" type="button"><span>◌</span> System</button>
       </div>
-    </header>
+      <div class="sidebar-card">
+        <div class="live-orb"></div>
+        <div><b id="sidebarStatus">LIVE FEED</b><small id="sidebarStatusMeta">Connecting to exchange stream</small></div>
+      </div>
+      <div class="sidebar-bottom">
+        <span>PHASE 500</span>
+        <span class="sidebar-dot"></span>
+        <span>SYNC CORE</span>
+      </div>
+    </aside>
 
-    <div id="runtime" class="runtime" role="status" aria-live="polite">
-      <span id="runtimeDot" class="dot warn"></span><span id="runtimeText">Starting MarketPulse…</span>
-      <span id="runtimeMeta" class="runtime-meta">UI is ready; market data is loading in the background.</span>
-    </div>
+    <main class="terminal">
+      <header class="topbar">
+        <div class="instrument">
+          <div class="asset-icon" id="assetIcon">₿</div>
+          <div>
+            <div class="instrument-name"><span id="symbolName">BTC/USDT</span><span class="perp-pill">PERP</span></div>
+            <div class="instrument-meta"><span id="source">Connecting exchange feed</span><span class="sep">•</span><span id="age">—</span></div>
+          </div>
+        </div>
 
-    <main class="content">
-      <section class="hero-grid">
-        <article class="panel hero-card">
-          <div class="panel-head">
-            <div>
-              <div class="panel-kicker">CANONICAL MARKET FRAME</div>
-              <h1 id="price">—</h1>
+        <div class="top-price">
+          <strong id="price">—</strong>
+          <span id="change24" class="change">—</span>
+        </div>
+
+        <div class="top-actions">
+          <label class="select-wrap"><span>PAIR</span><select id="symbol"></select></label>
+          <label class="select-wrap"><span>TF</span><select id="interval">
+            <option>15m</option><option>30m</option><option selected>1h</option><option>4h</option><option>1d</option>
+          </select></label>
+          <button id="sync" class="icon-button" title="Synchronize market state">↻</button>
+        </div>
+      </header>
+
+      <div id="runtime" class="runtime-bar" role="status" aria-live="polite">
+        <span id="runtimeDot" class="dot warn"></span>
+        <span id="runtimeText">Connecting market stream…</span>
+        <span id="runtimeMeta">UI is ready; market data loads independently.</span>
+      </div>
+
+      <section class="workspace">
+        <section class="market-column">
+          <div class="chart-shell">
+            <div class="chart-toolbar">
+              <div class="toolbar-left">
+                <div class="chart-title">Price Action</div>
+                <div class="tf-tabs">
+                  <button data-tf="15m" type="button">15m</button>
+                  <button data-tf="30m" type="button">30m</button>
+                  <button data-tf="1h" type="button" class="active">1H</button>
+                  <button data-tf="4h" type="button">4H</button>
+                  <button data-tf="1d" type="button">1D</button>
+                </div>
+                <span class="market-status"><i></i><span id="dataBadge">LIVE</span></span>
+              </div>
+              <div class="toolbar-right">
+                <span class="legend-line"><i></i>50 EMA</span>
+                <span class="legend-line live"><i></i>LAST</span>
+                <button id="fitChart" class="tool-button" type="button">FIT</button>
+              </div>
             </div>
-            <div id="dataBadge" class="badge">CONNECTING</div>
-          </div>
-          <div class="subline">
-            <span id="change24">—</span>
-            <span id="source">Waiting for exchange data</span>
-            <span id="age">—</span>
-          </div>
-          <canvas id="chart" aria-label="BTC price chart"></canvas>
-        </article>
-
-        <aside class="panel decision-card">
-          <div class="panel-head">
-            <div>
-              <div class="panel-kicker">DECISION CENTER</div>
-              <h2 id="decision">WAIT</h2>
+            <div class="chart-wrap">
+              <canvas id="chart" aria-label="MarketPulse exchange style price chart"></canvas>
+              <div id="chartHover" class="chart-hover">—</div>
             </div>
-            <div id="gate" class="badge wait">WAIT</div>
-          </div>
-          <p id="thesis" class="thesis">The dashboard is live. Waiting for the first synchronized decision.</p>
-
-          <div class="prob-grid">
-            <div><span>LONG</span><b id="longProb">—</b><div class="bar"><i id="longBar"></i></div></div>
-            <div><span>SHORT</span><b id="shortProb">—</b><div class="bar"><i id="shortBar"></i></div></div>
-            <div><span>WAIT</span><b id="waitProb">—</b><div class="bar"><i id="waitBar"></i></div></div>
+            <div class="chart-footer">
+              <span id="chartState">Synchronized candles</span>
+              <span id="lastTrade">LAST —</span>
+              <span>1s market transport</span>
+            </div>
           </div>
 
-          <div class="levels">
-            <div><span>ENTRY</span><b id="entry">—</b></div>
-            <div><span>STOP</span><b id="stop">—</b></div>
-            <div><span>TP1</span><b id="tp1">—</b></div>
-            <div><span>R:R</span><b id="rr">—</b></div>
+          <div class="market-strip">
+            <article class="data-card"><span>OPEN INTEREST</span><b id="oi">—</b><small id="oiState">warming</small></article>
+            <article class="data-card"><span>CVD</span><b id="cvd">—</b><small id="cvdState">warming</small></article>
+            <article class="data-card"><span>ORDER BOOK</span><b id="book">—</b><small id="bookState">warming</small></article>
+            <article class="data-card"><span>FUNDING</span><b id="funding">—</b><small id="fundingState">warming</small></article>
+            <article class="data-card"><span>LIQUIDATIONS</span><b id="liquidations">—</b><small id="liqState">warming</small></article>
           </div>
 
-          <div class="evidence">
-            <div><span>DATA QUALITY</span><b id="quality">—</b></div>
-            <div><span>SYNC</span><b id="syncState">PENDING</b></div>
-            <div><span>EXECUTION</span><b id="execution">GATED</b></div>
+          <div class="lower-panels">
+            <section class="glass-panel">
+              <div class="panel-heading">
+                <div><span class="section-label">WHY NO TRADE / THESIS</span><h3 id="stateLabel">WAIT / NO TRADE</h3></div>
+              </div>
+              <div id="reasons" class="reason-list"><div class="placeholder">Waiting for synchronized evidence…</div></div>
+            </section>
+            <section class="glass-panel">
+              <div class="panel-heading">
+                <div><span class="section-label">PHASE 1 → 500</span><h3 id="phaseHeadline">ENGINEERING REGISTRY</h3></div>
+                <button id="loadPhases" class="ghost-button" type="button">OPEN</button>
+              </div>
+              <div id="phaseSummary" class="phase-summary"></div>
+              <div id="phaseList" class="phase-list hidden"></div>
+            </section>
           </div>
+        </section>
+
+        <aside class="decision-column">
+          <section class="decision-panel">
+            <div class="decision-top">
+              <div><span class="section-label">CANONICAL DECISION CENTER</span><h2 id="decision">WAIT</h2></div>
+              <span id="gate" class="status-pill wait">WAIT</span>
+            </div>
+            <p id="thesis" class="thesis">The dashboard is live. Waiting for the first synchronized decision.</p>
+
+            <div class="prob-header"><span>CONFLUENCE</span><small>LIVE</small></div>
+            <div class="probability"><div><span>LONG</span><b id="longProb">—</b></div><div class="prob-track"><i id="longBar"></i></div></div>
+            <div class="probability"><div><span>SHORT</span><b id="shortProb">—</b></div><div class="prob-track"><i id="shortBar"></i></div></div>
+            <div class="probability"><div><span>WAIT</span><b id="waitProb">—</b></div><div class="prob-track"><i id="waitBar"></i></div></div>
+
+            <div class="section-label level-label">TRADE MAP</div>
+            <div class="level-grid">
+              <div><span>ENTRY</span><b id="entry">—</b></div>
+              <div><span>STOP</span><b id="stop">—</b></div>
+              <div><span>TP1</span><b id="tp1">—</b></div>
+              <div><span>R:R</span><b id="rr">—</b></div>
+            </div>
+
+            <div class="decision-footer">
+              <div><span>DATA</span><b id="quality">—</b></div>
+              <div><span>SYNC</span><b id="syncState">PENDING</b></div>
+              <div><span>EXEC</span><b id="execution">GATED</b></div>
+            </div>
+          </section>
+
+          <section class="signal-tape">
+            <div class="signal-title"><span>LIVE SIGNAL TAPE</span><span class="tape-dot"></span></div>
+            <div class="tape-row"><b>MARKET</b><span id="tapeMarket">Waiting for state</span></div>
+            <div class="tape-row"><b>FLOW</b><span id="tapeFlow">Waiting for flow</span></div>
+            <div class="tape-row"><b>LIQUIDITY</b><span id="tapeLiquidity">Waiting for liquidity</span></div>
+          </section>
+
+          <section class="system-mini">
+            <div class="panel-heading">
+              <div><span class="section-label">RUNTIME SAFETY</span><h3>Service checks</h3></div>
+              <button id="checkSystem" class="ghost-button" type="button">CHECK</button>
+            </div>
+            <div id="systemChecks" class="checks"><div class="placeholder">Checks stay isolated from first paint.</div></div>
+          </section>
         </aside>
       </section>
 
-      <section class="metrics-grid">
-        <article class="metric panel"><span>OPEN INTEREST</span><b id="oi">—</b><small id="oiState">warming</small></article>
-        <article class="metric panel"><span>CVD</span><b id="cvd">—</b><small id="cvdState">warming</small></article>
-        <article class="metric panel"><span>ORDER BOOK</span><b id="book">—</b><small id="bookState">warming</small></article>
-        <article class="metric panel"><span>FUNDING</span><b id="funding">—</b><small id="fundingState">warming</small></article>
-        <article class="metric panel"><span>LIQUIDATIONS</span><b id="liquidations">—</b><small id="liqState">warming</small></article>
-      </section>
-
-      <section class="lower-grid">
-        <article class="panel">
-          <div class="panel-head"><div><div class="panel-kicker">WHY NO TRADE / THESIS</div><h3 id="stateLabel">WAIT / NO TRADE</h3></div></div>
-          <div id="reasons" class="reason-list"><div class="placeholder">Waiting for synchronized evidence…</div></div>
-        </article>
-        <article class="panel">
-          <div class="panel-head"><div><div class="panel-kicker">PHASE 1 → 500</div><h3 id="phaseHeadline">ENGINEERING REGISTRY</h3></div><button id="loadPhases" class="button">LOAD</button></div>
-          <div id="phaseSummary" class="phase-summary"></div>
-          <div id="phaseList" class="phase-list hidden"></div>
-        </article>
-      </section>
-
-      <section class="panel system-panel">
-        <div class="panel-head">
-          <div><div class="panel-kicker">RUNTIME SAFETY</div><h3>Independent service checks</h3></div>
-          <button id="checkSystem" class="button">CHECK SYSTEM</button>
-        </div>
-        <div id="systemChecks" class="checks">
-          <div class="placeholder">The UI does not wait for these checks to render.</div>
-        </div>
-      </section>
+      <footer class="footer"><span>MarketPulse OS</span><span id="version">Apex visual runtime • live-price transport enabled</span></footer>
     </main>
-
-    <footer>
-      <span>MarketPulse OS</span>
-      <span id="version">Runtime rebuild • phase registry ready on demand</span>
-    </footer>
   </div>
 
   <noscript><div class="noscript">MarketPulse requires JavaScript for live market data.</div></noscript>
-  <script src="/app.js?v=20260929-rebuild1" defer></script>
+  <script src="/app.js?v=20260929-apex2" defer></script>
 </body>
 </html>
