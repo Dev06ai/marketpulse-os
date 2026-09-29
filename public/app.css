@@ -222,3 +222,23 @@ body{background:#0b0c0f!important}
 }
 .live-orb{box-shadow:0 0 0 5px rgba(255,255,255,.025),0 0 16px rgba(255,255,255,.16)!important}
 .footer{background:transparent!important;color:#626974!important}
+
+/* Directional candidate layer: early information without weakening hard safety gates */
+.candidate-state{
+  display:inline-flex;
+  align-items:center;
+  gap:7px;
+  margin:2px 0 2px;
+  padding:6px 9px;
+  border:1px solid rgba(214,219,228,.14);
+  border-radius:999px;
+  background:#17191e;
+  color:#9ea6b2;
+  font-size:8px;
+  font-weight:950;
+  letter-spacing:.10em;
+}
+.candidate-state.long{color:#9bdcbf;border-color:rgba(103,215,168,.24);background:#111a16}
+.candidate-state.short{color:#e7a0ab;border-color:rgba(233,130,146,.24);background:#1a1417}
+.candidate-state.wait{color:#c5cad2}
+.candidate-state.confirming{color:#d8c083;border-color:rgba(216,179,106,.22);background:#19170f}
