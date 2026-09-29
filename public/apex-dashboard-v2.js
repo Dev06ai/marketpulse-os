@@ -236,7 +236,7 @@
   function pushHistory(l){
     if(!l||!Number.isFinite(Number(l.price)))return;
     const ts=Number(l.dataTs||l.updatedAt||Date.now());
-    const prev=S.history[S.history.length-1];const row={ts,price:Number(l.price),cvd:Number(l.cvdRatio??l.cvdDelta??0),oi:Number(l.oi??0),funding:Number(l.fundingRate??0),liq:Number(l.liquidationTotal??0),longLiq:Number(l.longLIQUIDATION PRESSURE??0),shortLiq:Number(l.shortLIQUIDATION PRESSURE??0),taker:Number(l.takerImbalance??0)};
+    const prev=S.history[S.history.length-1];const row={ts,price:Number(l.price),cvd:Number(l.cvdRatio??l.cvdDelta??0),oi:Number(l.oi??0),funding:Number(l.fundingRate??0),liq:Number(l.liquidationTotal??0),longLiq:Number(l.longLiquidations??0),shortLiq:Number(l.shortLiquidations??0),taker:Number(l.takerImbalance??0)};
     if(prev&&prev.ts===row.ts)S.history[S.history.length-1]=row;else S.history.push(row);if(S.history.length>180)S.history.shift();
   }
   async function refreshExec(){try{S.exec=await api("/api/execution",{timeout:7000});renderExec()}catch(e){alert(e.message)}}
@@ -335,7 +335,7 @@
   function renderFlowViews(){
     const l=S.live||{},a=S.apex||{},c=a.canonical||{},d=S.decision||{},flow=l||c||d.derivatives||{};
     $("#flowSummary").innerHTML=[["CVD state",flow.cvdState||"—"],["CVD ratio",n(flow.cvdRatio,4)],["Taker imbalance",Number.isFinite(Number(flow.takerImbalance))?n(Number(flow.takerImbalance)*100,2)+"%":"—"],["OI change",Number.isFinite(Number(flow.oiChangePct))?n(flow.oiChangePct,2)+"%":"—"]].map(r=>'<div class="apex-row"><span>'+r[0]+'</span><b>'+esc(r[1])+'</b></div>').join("");
-    $("#liqSummary").innerHTML=[["Liquidation bias",flow.liquidationBias||"—"],["Long liq",n(flow.longLIQUIDATION PRESSURE,0)],["Short liq",n(flow.shortLIQUIDATION PRESSURE,0)],["Total",n(flow.liquidationTotal,0)]].map(r=>'<div class="apex-row"><span>'+r[0]+'</span><b>'+esc(r[1])+'</b></div>').join("");
+    $("#liqSummary").innerHTML=[["Liquidation bias",flow.liquidationBias||"—"],["Long liq",n(flow.longLiquidations,0)],["Short liq",n(flow.shortLiquidations,0)],["Total",n(flow.liquidationTotal,0)]].map(r=>'<div class="apex-row"><span>'+r[0]+'</span><b>'+esc(r[1])+'</b></div>').join("");
     $("#positionSummary").innerHTML=[["Positioning",flow.positioning||"—"],["Long %",Number.isFinite(Number(flow.longPercent))?n(flow.longPercent,2)+"%":"—"],["Short %",Number.isFinite(Number(flow.shortPercent))?n(flow.shortPercent,2)+"%":"—"],["Funding",Number.isFinite(Number(flow.fundingRate))?n(Number(flow.fundingRate)*100,4)+"%":"—"]].map(r=>'<div class="apex-row"><span>'+r[0]+'</span><b>'+esc(r[1])+'</b></div>').join("");
     const g=a.executionGate||{};$("#riskSurface").innerHTML=[["Gate",g.status||"WAIT"],["Quality",p(a.quality)],["R:R",n(g.rr,2)+"R"],["Canonical",a.synchronization?.ok!==false?"PASS":"BLOCK"],["Kill switch",S.exec?.control?.killSwitch?"ON":"OFF"]].map(r=>'<div class="apex-row"><span>'+r[0]+'</span><b>'+esc(r[1])+'</b></div>').join("");
     $("#failureModes").innerHTML=(g.reasons||a.ux?.whyNoTrade||["No published failure mode."]).slice(0,8).map(x=>'<div class="apex-listItem">'+esc(x)+'</div>').join("");
