@@ -975,8 +975,8 @@ async function buildDecisionSnapshot(symbol,interval,query,deviceId=null){
       operatorApproved:String(process.env.MARKETPULSE_PHASE50_OPERATOR_ACK||"false").toLowerCase()==="true",
       shadow:String(process.env.MARKETPULSE_PHASE50_SHADOW_MODE||"true").toLowerCase()!=="false"
     });
-    const validationEvidence=analytics?.validation||null;
-    const validationReady=Boolean(validationEvidence?.adaptive?.signalGateReady);
+    const validationEvidence=validation1113||analytics?.validation||null;
+    const validationReady=Boolean(validation1113?.adaptive?.signalGateReady);
     const candidateSideForValidation=String(finalDecision?.action||analysis?.side||"").toUpperCase();
     const directionalValidation=validationEvidence?.directional?.[candidateSideForValidation.toLowerCase()]||null;
     const empiricalWinRate=validationReady
@@ -1026,7 +1026,7 @@ async function buildDecisionSnapshot(symbol,interval,query,deviceId=null){
         cancelIf:phaseStackState?.hardBlockers?.join(", ")||"ANY HARD BLOCKER"
       },
       calibration:{probability:empiricalWinRate,source:empiricalWinRate!=null?"WALK_FORWARD_EMPIRICAL":"UNAVAILABLE"},
-      uncertainty:{coveragePct:phaseStackState?.data?.quality?.score||0,calibrationSamples:analytics?.validation?.sampleCount||0,disagreementPct:0},
+      uncertainty:{coveragePct:phaseStackState?.data?.quality?.score||0,calibrationSamples:Number(validation1113?.summary?.trades||validation1113?.directional?.long?.trades||0),disagreementPct:0},
       expectancy:{winProbability:empiricalWinRate!=null?empiricalWinRate/100:null,averageWinR:Number(conditionalLevels?.rr)||1.5,averageLossR:1,costR:0.05},
       expectancyGate:{probability:null,rr:Number(conditionalLevels?.rr)||0,costBps:10}
     });
@@ -1037,7 +1037,7 @@ async function buildDecisionSnapshot(symbol,interval,query,deviceId=null){
       decision:{...finalDecision,derivatives:flow},
       market:finalDecision?.market||{},analysis,derivatives:flow,consensus,
       mtf:{higher:String(finalDecision?.higher?.side||finalDecision?.higherTimeframe?.side||analysis?.higher?.side||"WAIT").toUpperCase(),execution:String(finalDecision?.action||"WAIT").toUpperCase(),lower:String(analysis?.lower?.side||analysis?.lowerTimeframe?.side||finalDecision?.action||"WAIT").toUpperCase()},
-      phase51to100:phase51to100State,validation:analytics?.validation||null,
+      phase51to100:phase51to100State,validation:validation1113||analytics?.validation||null,
       calibration:{probability:empiricalWinRate??null,source:empiricalWinRate!=null?"WALK_FORWARD_EMPIRICAL":"UNAVAILABLE"},
       freshnessPct:phaseStackState?.data?.quality?.score??100,stale:Boolean(finalDecision?.stale),risk:finalDecision?.risk||{},marketSource:flow?.provider||"MARKET_FEED"
     });
@@ -1060,7 +1060,8 @@ async function buildDecisionSnapshot(symbol,interval,query,deviceId=null){
       baselineAction:String(signalCandidate.side!=="WAIT"?signalCandidate.side:(finalDecision?.action||phase101to200State?.gate?.action||"WAIT")).toUpperCase(),
       baselineEligible:Boolean(phase101to200State?.gate?.action!=="WAIT"&&finalDecision?.liveSignalEligible),
       freshnessPct:phaseStackState?.data?.quality?.score??100,
-      validation:analytics?.validation||null,
+      validation:validation1113||analytics?.validation||null,
+      minimumSamples:80,
       hardBlockers:phase101to200State?.gate?.blockers||[]
     });
     if(phase201to300State?.gate?.status!=="LIVE_SIGNAL_READY"&&["LONG","SHORT"].includes(String(finalDecision?.action||"").toUpperCase())){
