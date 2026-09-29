@@ -33,7 +33,7 @@ function norm(input={}){
     symbol:String(input.symbol||"UNKNOWN"),
     interval:String(input.interval||"UNKNOWN"),
     price:u.n(input.price??decision?.market?.price??analysis?.price),
-    candidate:u.side(decision.action),
+    candidate:u.side(input.candidateAction??decision.action),
     market:decision.market||{},
     levels:decision.levels||{},
     analysis,flow,consensus:input.consensus||{},
