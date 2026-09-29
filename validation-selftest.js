@@ -229,6 +229,26 @@ assert(phase301to400.specs.length===100,"Phase 301–400 must expose exactly 100
 assert(phase301to400Regression,"Phase 301–400 regression suite did not load.");
 
 
-assert(phase401to500.selfTest().ok,"Phase 401–500 apex intelligence self-test failed.");
+const phase401to500Result=phase401to500.selfTest();
+assert(phase401to500Result.ok,"Phase 401–500 apex intelligence self-test failed.");
 assert(phase401to500.specs.length===100,"Phase 401–500 must expose exactly 100 modules.");
 assert(phase401to500.specs[0].phase===401&&phase401to500.specs[99].phase===500,"Phase 401–500 range invariant failed.");
+assert(Number(phase401to500Result.checkedFields)>=6,"Phase 401–500 canonical synchronization must check multiple live-data fields.");
+const phase401FlowFixture={
+  symbol:"BTCUSDT",interval:"15m",price:100,
+  candles:Array.from({length:40},(_,i)=>({t:Date.now()-(39-i)*900000,o:99,h:101,l:98,c:100,v:100})),
+  decision:{
+    action:"LONG",state:"READY",liveSignalEligible:true,livePrice:100,
+    market:{confluenceScore:90,livePrice:100},
+    derivatives:{cvdRatio:.1,cvdState:"BUYERS PRESSURE",oi:100000,fundingRate:.0001,orderBookImbalance:.15,takerImbalance:.1,liquidationBias:"SHORT LIQS DOMINANT"},
+    levels:{entry:100,stop:98,tp1:104,tp2:108,rr:2}
+  },
+  radar:{side:"LONG",score:90,rr:2,price:100},
+  marketState:{price:100,markPrice:100,orderBook:{spreadBps:2,imbalance:.15},flow:{cvdRatio:.1,cvdState:"BUYERS PRESSURE",oi:100000,fundingRate:.0001,orderBookImbalance:.15,takerImbalance:.1,liquidationBias:"SHORT LIQS DOMINANT"}},
+  ticker:{price:100,cvdRatio:.1},
+  execution:{mode:"PAPER",armed:false,killSwitch:false,reconciliation:{ok:true}}
+};
+const phase401Mismatch=phase401to500.buildState({...phase401FlowFixture,marketState:{...phase401FlowFixture.marketState,flow:{...phase401FlowFixture.marketState.flow,orderBookImbalance:.42}}});
+assert(phase401Mismatch.synchronization.badCount>0,"Phase 401–500 must block a material flow mismatch.");
+const phase401Prob=phase401to500.buildState(phase401FlowFixture).probabilities;
+assert(Number(phase401Prob.long)+Number(phase401Prob.short)+Number(phase401Prob.wait)===100,"Phase 401–500 displayed probabilities must sum to exactly 100.");
