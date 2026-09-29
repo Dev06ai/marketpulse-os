@@ -312,6 +312,7 @@ function renderDecision(){
     "WAIT"
   ).toUpperCase();
   const candidate=["LONG","SHORT"].includes(candidateSide)?candidateSide:"WAIT";
+  const staleCandidate=Boolean(d?.stale&&d?.signalCandidate?.stale);
   const rawScore=safeNum(
     m?.confluenceScore??
     analysis?.score??
@@ -342,10 +343,14 @@ function renderDecision(){
   const candidateEl=$("candidateState");
   if(candidateEl){
     candidateEl.className="candidate-state "+(
+      staleCandidate?"stale":
       action==="LONG"?"long":action==="SHORT"?"short":
       stability.state==="CONFIRMING"?"confirming":"wait"
     );
-    if(action==="LONG"||action==="SHORT"){
+    if(staleCandidate&&candidate!=="WAIT"){
+      const age=Number(d?.signalCandidate?.staleAgeMs);
+      candidateEl.textContent=candidate+" CANDIDATE · STALE"+(Number.isFinite(age)?" · "+Math.round(age/1000)+"s":"");
+    }else if(action==="LONG"||action==="SHORT"){
       candidateEl.textContent="FINAL "+action+" · CONFIRMED";
     }else if(candidate!=="WAIT"){
       const progress=stability.confirmations&&stability.required
@@ -360,6 +365,9 @@ function renderDecision(){
   $("thesis").textContent=
     d?.evidence?.thesis?.[0]||
     d?.thesis||
+    (staleCandidate
+      ?"Previous "+candidate+" candidate retained for context only — fresh validation is required."
+      :null)||
     (candidate!=="WAIT"&&blockerSets.length
       ?candidate+" candidate detected — waiting on: "+blockerSets[0].replaceAll("_"," ").toLowerCase()+"."
       :null)||
@@ -406,6 +414,9 @@ function renderDecision(){
       :null,
     stability.state==="CONFIRMING"
       ?"Directional candidate is being confirmed across live refreshes."
+      :null,
+    staleCandidate
+      ?"Stale decision: execution remains blocked until a fresh synchronized decision is available."
       :null,
     ...(Array.isArray(g.reasons)?g.reasons:[]),
     ...(Array.isArray(d?.phase20?.transition?.waitCondition)?d.phase20.transition.waitCondition:[]),
