@@ -19,6 +19,24 @@ const {buildDecisionIntelligence}=require("./decision-intelligence");
 const phase20=require("./phase20-scenario-matrix");
 const phase21=require("./phase21-state-contract");
 const phaseHistory=require("./phase-history");
+const phaseAudit=require("./phase-audit");
+setTimeout(async()=>{
+  try{
+    const report=await phaseAudit.run();
+    console.log("[phase-audit]",JSON.stringify({
+      ok:report.ok,
+      registry:report.registry,
+      coreChecks:report.coreChecks,
+      moduleCount:report.moduleCount,
+      moduleFailures:report.moduleFailures?.slice(0,20)||[],
+      weakSelfTests:report.weakSelfTests?.slice(0,20)||[],
+      modulesWithoutSelfTest:report.modulesWithoutSelfTest?.slice(0,20)||[],
+      consolidated:report.consolidated
+    }));
+  }catch(e){
+    console.error("[phase-audit] runtime error",String(e?.message||e));
+  }
+},1500);
 const phaseStack=require("./phase21-50-stack");
 const phase51to100=require("./phase51-100-stack");
 const phase101to200=require("./phase101-200-stack");
