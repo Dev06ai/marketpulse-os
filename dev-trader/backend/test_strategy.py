@@ -10,7 +10,7 @@ def test_bearish_sfp():
     cs[6]=c(6,100,110,99,100)
     cs[-2]=c(10,100,102,99,101)
     cs[-1]=c(11,100,112,95,100)
-    state=MarketState(candles_15=cs)
+    state=MarketState(candles_15=cs, last_price=100, data_health="HEALTHY")
     sig=detect_sfp(state)
     assert sig is not None
     assert sig.direction=="SHORT"
