@@ -319,9 +319,10 @@ async function getDecisionSnapshotCached(symbol,interval,searchParams,device){
   }
 }
 const SIGNAL_STABILITY=new Map();
-const SIGNAL_CONFIRMATIONS_REQUIRED=2;
-const SIGNAL_RELEASE_MISSES=2;
-const SIGNAL_CANDIDATE_TTL_MS=120000;
+const SIGNAL_CONFIRMATIONS_REQUIRED=1;
+const SIGNAL_RELEASE_MISSES=1;
+const SIGNAL_CANDIDATE_TTL_MS=180000;
+const SIGNAL_MODE="LOOSE";
 
 function signalStabilityKey(symbol,interval){return String(symbol)+"|"+String(interval)}
 function hardSignalBlock(decision){
