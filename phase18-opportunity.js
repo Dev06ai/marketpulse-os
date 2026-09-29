@@ -149,4 +149,4 @@ function evaluate(decision,marketState,{weekdayOnly=true,easyMode=true}={}){
   };
 }
 function selfTest(){const d={action:"LONG",symbol:"BTCUSDT",interval:"15m",market:{confluenceScore:85,price:100,regime:"UPTREND",type:"SFP"},levels:{entry:100,entryLow:99.8,entryHigh:100.2,stop:98,tp1:104,rr:2},deploymentGate:{state:"READY"},liveSignalEligible:true,derivatives:{cvdState:"BUYERS CONFIRM",orderBookImbalance:.1}};const m={summary:{medianPerpPrice:100,avgOrderbookImbalance:.1,consensusQuality:95,dispersionBps:5},regime:"BUYER_PRESSURE"};const x=evaluate(d,m,{weekdayOnly:false,easyMode:true});return {ok:x.ok&&x.side==="LONG"&&["FORMING","ARMED","TRIGGERED"].includes(x.status),version:VERSION};}
-module.exports={VERSION,evaluate,digitalTwin,effectiveDecision};
+module.exports={VERSION,evaluate,digitalTwin,effectiveDecision,selfTest};
