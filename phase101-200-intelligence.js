@@ -5,6 +5,27 @@
  */
 const crypto=require("crypto");
 const VERSION="101-200.0.0";
+const phaseHistory=require("./phase-history");
+function kindForPhase(p){
+  if([101,102,106,110].includes(p))return "market";
+  if([103,104,109].includes(p))return "liquidity";
+  if([105].includes(p))return "flow";
+  if([107,108].includes(p))return "derivatives";
+  if(p>=111&&p<=120)return "structure";
+  if(p>=121&&p<=130)return "timeframe";
+  if(p>=131&&p<=140)return "signal";
+  if(p>=141&&p<=150)return "probability";
+  if(p>=151&&p<=160)return "learning";
+  if(p>=161&&p<=170)return "adaptive";
+  if(p>=171&&p<=180)return "risk";
+  if(p>=181&&p<=190)return "ux";
+  return "admin";
+}
+function featureForPhase(p){return "phase_"+p}
+const moduleSpecs=phaseHistory.getPhaseHistory().filter(x=>x.phase>=101&&x.phase<=200).map(x=>({phase:x.phase,title:x.title,description:x.description,kind:kindForPhase(x.phase),feature:featureForPhase(x.phase)}));
+if(moduleSpecs.length!==100)throw new Error("Phase 101–200 registry must contain exactly 100 phases");
+
+
 const clamp=(x,a=0,b=1)=>Math.max(a,Math.min(b,Number(x)));
 const n=(x,d=null)=>Number.isFinite(Number(x))?Number(x):d;
 const arr=x=>Array.isArray(x)?x:[];
