@@ -995,6 +995,17 @@ async function buildDecisionSnapshot(symbol,interval,query,deviceId=null){
       operatorApproved:String(process.env.MARKETPULSE_PHASE50_OPERATOR_ACK||"false").toLowerCase()==="true",
       shadow:String(process.env.MARKETPULSE_PHASE50_SHADOW_MODE||"true").toLowerCase()!=="false"
     });
+    const earlyCandidate=(()=>{
+      const candidates=[
+        signalCandidate?.side,
+        phase101to200State?.aggregation?.direction,
+        phase101to200State?.baseline?.action,
+        analysis?.side,
+        analysis?.marketStructure?.setup?.side
+      ];
+      const side=candidates.map(v=>String(v||"").toUpperCase()).find(v=>v==="LONG"||v==="SHORT")||"WAIT";
+      return {side,source:candidates.map(v=>String(v||"").toUpperCase()).find(v=>v==="LONG"||v==="SHORT")||"WAIT"};
+    })();
     const validationEvidence=validation1113||analytics?.validation||null;
     const validationReady=Boolean(validation1113?.adaptive?.signalGateReady);
     const candidateSideForValidation=String(signalCandidate?.side||finalDecision?.action||analysis?.side||"").toUpperCase();
@@ -1078,7 +1089,7 @@ async function buildDecisionSnapshot(symbol,interval,query,deviceId=null){
       mtf:{higher:String(finalDecision?.higher?.side||finalDecision?.higherTimeframe?.side||analysis?.higher?.side||"WAIT").toUpperCase(),lower:String(analysis?.lower?.side||analysis?.lowerTimeframe?.side||signalCandidate.side||finalDecision?.action||"WAIT").toUpperCase()},
       phase101to200:phase101to200State,
       baselineAction:String(signalCandidate.side!=="WAIT"?signalCandidate.side:(finalDecision?.action||phase101to200State?.gate?.action||"WAIT")).toUpperCase(),
-      baselineEligible:Boolean(phase101to200State?.gate?.action!=="WAIT"&&finalDecision?.liveSignalEligible),
+      baselineEligible:Boolean(phase101to200State?.gate?.action!=="WAIT"&&["LONG","SHORT"].includes(String(signalCandidate?.side||"").toUpperCase())),
       freshnessPct:phaseStackState?.data?.quality?.score??100,
       validation:validation1113||analytics?.validation||null,
       minimumSamples:80,
@@ -1108,6 +1119,16 @@ async function buildDecisionSnapshot(symbol,interval,query,deviceId=null){
         phase201to300SignalReady:true
       };
     }
+    const signalGateChain={
+      candidate:{side:signalCandidate?.side||"WAIT",earlySide:earlyCandidate?.side||"WAIT",source:signalCandidate?.source||earlyCandidate?.source||"NONE"},
+      phase9to10:{action:String(gatedDecision?.action||"WAIT").toUpperCase(),state:gatedDecision?.state||"WAIT",gate:gatedDecision?.deploymentGate?.state||"UNKNOWN",reason:gatedDecision?.reason||null},
+      phase11to13:{ready:Boolean(validation1113?.adaptive?.signalGateReady),mode:validation1113?.adaptive?.mode||"WARMING",reasons:Array.isArray(validation1113?.adaptive?.reasons)?validation1113.adaptive.reasons:[],summaryTrades:Number(validation1113?.summary?.trades||0),directionalLong:Number(validation1113?.directional?.long?.trades||0),directionalShort:Number(validation1113?.directional?.short?.trades||0)},
+      phase51to100:{qualified:Boolean(phase51to100State?.gate?.qualified),action:phase51to100State?.signal?.action||"WAIT",blockers:Array.isArray(phase51to100State?.gate?.blockers)?phase51to100State.gate.blockers:[]},
+      phase101to200:{qualified:Boolean(phase101to200State?.gate?.action&&phase101to200State.gate.action!=="WAIT"),action:phase101to200State?.gate?.action||"WAIT",blockers:Array.isArray(phase101to200State?.gate?.blockers)?phase101to200State.gate.blockers:[]},
+      phase201to300:{ready:Boolean(phase201to300State?.gate?.status==="LIVE_SIGNAL_READY"),action:phase201to300State?.gate?.action||"WAIT",blockers:Array.isArray(phase201to300State?.gate?.blockers)?phase201to300State.gate.blockers:[]},
+      phase301to400:{action:phase301to400State?.gate?.action||"WAIT",blockers:Array.isArray(phase301to400State?.gate?.blockers)?phase301to400State.gate.blockers:[]},
+      phase401to500:{eligible:Boolean(phase401State?.executionGate?.status==="ELIGIBLE"),reasons:Array.isArray(phase401State?.executionGate?.reasons)?phase401State.executionGate.reasons:[]}
+    };
     const phase301to400State=phase301to400.evaluate({
       symbol,interval,now,
       price:Number(finalDecision?.market?.price??analysis?.price??candles?.at(-1)?.c),
@@ -1280,6 +1301,8 @@ async function buildDecisionSnapshot(symbol,interval,query,deviceId=null){
       ok:true,...finalDecision,analysis,derivatives:flow,consensus,decisionIntelligence,phase20:phase20Scenario,canonicalState,canonicalSnapshotId,phaseStack:phaseStackState,phase51to100:phase51to100State,
       learning:null,
       signalCandidate,
+      earlyCandidate,
+      signalGateChain,
       decisionDiagnostics,
       backtest:analytics?.backtest||null,validation:analytics?.validation||null,setupStats:analytics?.setupStats||null,
       phase11_13:validation1113,
