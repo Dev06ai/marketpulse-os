@@ -156,7 +156,7 @@ function drawChart(){
     const cx=clamp(state.crosshair.x,L,L+pw),cy=clamp(state.crosshair.y,T,T+priceH+volH+8),idx=clamp(Math.floor((cx-L)/pw*rows.length),0,rows.length-1);
     const r=rows[idx],cv=candleValue(r,"c");
     g.strokeStyle="rgba(225,235,245,.18)";g.setLineDash([3,3]);g.beginPath();g.moveTo(cx,T);g.lineTo(cx,T+priceH);g.moveTo(L,cy);g.lineTo(L+pw,cy);g.stroke();g.setLineDash([]);
-    const ts=rowTime(r);const parts=[cv===null?"":fmt(cv,2),ts?new Date(ts).toLocaleString():...[]]; // crosshair anchor only
+    const ts=rowTime(r); // crosshair anchor only
     const hover=$("chartHover");hover.style.display="block";hover.style.left=Math.min(w-170,Math.max(8,cx+12))+"px";hover.style.top=Math.max(8,Math.min(h-54,cy-12))+"px";hover.textContent=ts?new Date(ts).toLocaleString()+"  ·  "+fmt(cv,2):fmt(cv,2);
   }else $("chartHover").style.display="none";
 }
