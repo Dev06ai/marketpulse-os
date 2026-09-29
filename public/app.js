@@ -312,7 +312,19 @@ function renderDecision(){
     "WAIT"
   ).toUpperCase();
   const candidate=["LONG","SHORT"].includes(candidateSide)?candidateSide:"WAIT";
+  const gateChain=d?.signalGateChain||{};
+  const earlyCandidateSide=["LONG","SHORT"].includes(String(d?.earlyCandidate?.side||"").toUpperCase())
+    ?String(d.earlyCandidate.side).toUpperCase():"WAIT";
+  const visibleCandidate=candidate!=="WAIT"?candidate:earlyCandidateSide;
   const staleCandidate=Boolean(d?.stale&&d?.signalCandidate?.stale);
+  const blockingStage=action!=="WAIT"?"READY":
+    gateChain?.phase9to10?.gate==="BLOCKED"?"P9–10":
+    gateChain?.phase11to13?.ready===false&&Array.isArray(gateChain?.phase11to13?.reasons)&&gateChain.phase11to13.reasons.length?"P11–13":
+    gateChain?.phase51to100?.qualified===false?"P51–100":
+    gateChain?.phase101to200?.qualified===false?"P101–200":
+    gateChain?.phase201to300?.ready===false?"P201–300":
+    (Array.isArray(gateChain?.phase301to400?.blockers)&&gateChain.phase301to400.blockers.length)?"P301–400":
+    gateChain?.phase401to500?.eligible===false?"P401–500":"GATE";
   const rawScore=safeNum(
     m?.confluenceScore??
     analysis?.score??
@@ -338,7 +350,7 @@ function renderDecision(){
 
   $("decision").textContent=action;
   $("stateLabel").textContent=action==="WAIT"?"WAIT / NO TRADE":action+" — CURRENT AUTHORITY";
-  statusPill(String(g.state||g.status||action),action==="LONG"?"long":action==="SHORT"?"short":"wait");
+  statusPill(action==="WAIT"?(blockingStage==="READY"?"WAIT":"BLOCKED · "+blockingStage):String(g.state||g.status||action),action==="LONG"?"long":action==="SHORT"?"short":"wait");
 
   const candidateEl=$("candidateState");
   if(candidateEl){
@@ -357,6 +369,8 @@ function renderDecision(){
         ?" · "+stability.confirmations+"/"+stability.required+" confirmations"
         :"";
       candidateEl.textContent=candidate+" CANDIDATE"+(confluencePct===null?"":" · "+confluencePct+"% CONFLUENCE")+progress;
+    }else if(earlyCandidateSide!=="WAIT"){
+      candidateEl.textContent=earlyCandidateSide+" WATCH CANDIDATE · FINAL GATE NOT PASSED";
     }else{
       candidateEl.textContent="NO DIRECTIONAL CANDIDATE";
     }
@@ -367,6 +381,9 @@ function renderDecision(){
     d?.thesis||
     (staleCandidate
       ?"Previous "+candidate+" candidate retained for context only — fresh validation is required."
+      :null)||
+    (candidate==="WAIT"&&earlyCandidateSide!=="WAIT"
+      ?earlyCandidateSide+" watch candidate detected — current blocker: "+blockingStage
       :null)||
     (candidate!=="WAIT"&&blockerSets.length
       ?candidate+" candidate detected — waiting on: "+blockerSets[0].replaceAll("_"," ").toLowerCase()+"."
@@ -418,6 +435,11 @@ function renderDecision(){
     staleCandidate
       ?"Stale decision: execution remains blocked until a fresh synchronized decision is available."
       :null,
+    blockingStage!=="READY"
+      ?"Signal gate currently blocked at "+blockingStage+"."
+      :null,
+    ...(Array.isArray(gateChain?.phase11to13?.reasons)?gateChain.phase11to13.reasons.map(v=>"P11–13: "+String(v).replaceAll("_"," ")):[]),
+    ...(Array.isArray(gateChain?.phase201to300?.blockers)?gateChain.phase201to300.blockers.map(v=>"P201–300: "+String(v).replaceAll("_"," ")):[]),
     ...(Array.isArray(g.reasons)?g.reasons:[]),
     ...(Array.isArray(d?.phase20?.transition?.waitCondition)?d.phase20.transition.waitCondition:[]),
     ...(Array.isArray(d?.evidence?.thesis)?d.evidence.thesis.slice(0,3):[]),
