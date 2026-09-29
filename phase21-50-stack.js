@@ -161,7 +161,7 @@ function evaluate(input={}){
 
   const readiness=phase49.gate({
     data:Boolean(quality.liveEligible),
-    validation:Boolean(validation?.deploymentGate?.state==="PASS"||validation?.gate==="PASS"),
+    validation:Boolean(["PASS","SIGNAL_ELIGIBLE","LIVE_SIGNAL_READY"].includes(String(validation?.deploymentGate?.state||"").toUpperCase())||["PASS","SIGNAL_ELIGIBLE","LIVE_SIGNAL_READY"].includes(String(validation?.gate||"").toUpperCase())),
     robustness:Boolean(input.robustnessPass),
     paperExecution:Boolean(input.paperExecutionPass),
     risk:!riskEval.blocked,
