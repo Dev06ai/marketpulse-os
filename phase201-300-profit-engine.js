@@ -11,6 +11,90 @@ const specs=[{"phase":201,"title":"Edge Baseline Lock","kind":"edge","descriptio
 function canonical(input){const base=input?.phase101to200?.canonical||input?.canonical||{};const out={symbol:String(input.symbol||base.symbol||"UNKNOWN"),interval:String(input.interval||base.interval||"UNKNOWN"),snapshotId:String(base.hash||input.snapshotId||"UNKNOWN"),price:n(input.price),baselineAction:side(input.baselineAction||input.phase101to200?.baseline?.action||input.decision?.action),timestamp:n(input.now,Date.now())};out.hash=crypto.createHash("sha256").update(JSON.stringify(out)).digest("hex").slice(0,24).toUpperCase();return out;}
 function context(input){const d=input.derivatives||{},a=input.analysis||{},c=input.consensus||{},v=input.validation||{},p=input.phase101to200||{},cand=arr(input.candles),r=ret(cand),vol=std(r)||.001,prob=n(p.prediction?.probability??input.calibration?.probability),rr=n(input.decision?.levels?.rr??input.rr),cost=n(input.costR??input.decision?.expectancy?.costR,.05),risk=n(input.decision?.risk?.riskPct??input.riskPct,0),quality=clamp(n(input.freshnessPct,100)/100),venue=clamp(n(c.consensusQualityPct,100)/100),disp=n(c.priceDispersionBps,0),oi=Math.abs(n(d.oiChangePct,0)),tak=Math.abs(n(d.takerImbalance,0)),ob=Math.abs(n(d.orderBook?.imbalance??d.orderBookImbalance,0)),cvd=String(d.cvdState||""),trend=side(a.regime?.trend||a.trend||a.side),base=side(input.baselineAction||p.baseline?.action||input.decision?.action),sample=n(v.sampleCount??v.summary?.trades,0),drift=Math.abs(n(input.driftScore??input.drift?.score,0)),calErr=Math.abs(n(input.calibrationError??v.calibrationError,0)),stability=clamp(n(input.signalStability??p.signalStability,1)),conflict=clamp(n(p.evidence?.conflictIndex,0)/10),mtf=clamp((side(input.mtf?.higher)===base?1:0)+(side(input.mtf?.lower)===base?1:0),0,2)/2,atrPct=vol*100,entry=n(input.decision?.levels?.entry),stop=n(input.decision?.levels?.stop),tp1=n(input.decision?.levels?.tp1),distance=entry!=null&&stop!=null?Math.abs(entry-stop)/(Math.abs(entry)||1):0,target=entry!=null&&tp1!=null?Math.abs(tp1-entry)/(Math.abs(entry)||1):0,edge=prob!=null&&rr!=null?prob*rr-(1-prob)-cost:null;return{input,d,a,c,v,p,cand,r,vol,prob,rr,cost,risk,quality,venue,disp,oi,tak,ob,cvd,trend,base,sample,drift,calErr,stability,conflict,mtf,atrPct,entry,stop,tp1,distance,target,edge};}
 const formulas=[x=>clamp(Math.abs(x.edge??0)),x=>clamp(x.prob??0),x=>clamp((x.rr||0)/3),x=>clamp(1-x.cost/0.25),x=>clamp(1-x.disp/30),x=>clamp(1-x.distance*100),x=>clamp(x.target*100/5),x=>clamp(1-Math.min(1,Math.abs((x.prob??.5)-.5)*2)),x=>clamp(.5+(x.sample/500)*.5),x=>clamp(.5+(x.prob??.5)*.5),x=>clamp((x.rr||0)/3),x=>clamp(x.target*100/4),x=>clamp(1-x.distance*120),x=>clamp(1-x.atrPct/10),x=>clamp(x.atrPct<5?1:.65),x=>clamp(1-x.vol*100),x=>clamp(x.target*100/3),x=>clamp(1-x.atrPct/15),x=>clamp(x.atrPct<4?1:.7),x=>clamp(x.trend===x.base?1:.3),x=>clamp(x.mtf),x=>clamp(x.mtf*.8+.2),x=>clamp(x.base===x.trend?1:.4),x=>clamp(x.base===x.trend?1:.5),x=>clamp(x.base===side(x.a?.setup?.side)?1:.5),x=>clamp(.7+(String(x.a?.setup?.kind||"").includes("FVG")?.3:0)),x=>clamp(.7+(String(x.a?.setup?.kind||"").includes("BREAKER")?.3:0)),x=>clamp(.6+.4*x.mtf),x=>clamp(.7+.3*(x.cvd?1:0)),x=>clamp(.6+.4*Math.min(1,x.tak*3)),x=>clamp(.7+.3*(x.ob>0?.8:0)),x=>clamp(.7+.3*(x.tak>0?.8:0)),x=>clamp(.7+.3*(/BUY|SELL|BULL|BEAR/.test(x.cvd)?1:0)),x=>clamp(.6+.4*Math.min(1,x.oi/4)),x=>clamp(1-Math.min(1,Math.abs(n(x.d?.fundingRate,0))*80)),x=>clamp(1-Math.min(1,Math.abs(n(x.d?.basis,0))*20)),x=>clamp(.6+.4*Math.min(1,Math.abs(n(x.d?.liquidationBiasScore,0)))),x=>clamp(1-x.disp/25),x=>clamp(1-x.disp/20),x=>clamp(x.quality),x=>clamp((x.quality+x.venue)/2),x=>clamp(1-x.disp/20),x=>clamp((x.quality+x.venue)/2),x=>clamp(x.quality),x=>clamp(x.quality),x=>clamp(1),x=>clamp(x.mtf),x=>clamp(1-x.conflict),x=>clamp(.7+.3*n(x.input?.sessionQuality,1)),x=>clamp(1-Math.min(1,n(x.input?.sessionTransitionRisk,0))),x=>clamp(1-Math.min(1,Math.abs(n(x.input?.entryDistancePct,0))/1.5)),x=>clamp(1-Math.min(1,Math.abs(n(x.input?.entryDistancePct,0))/3)),x=>clamp(1-Math.min(1,n(x.input?.triggerAgeBars,0)/5)),x=>clamp(1-Math.min(1,n(x.input?.cooldownPct,0)/100)),x=>clamp(1-Math.min(1,n(x.input?.dailyDrawdownPct,0)/4)),x=>clamp(1-Math.min(1,n(x.input?.portfolioCorrelation,0))),x=>clamp(1-Math.min(1,n(x.input?.correlationStress,0))),x=>clamp(1-Math.min(1,n(x.input?.leveragePct,0)/100)),x=>clamp(1-Math.min(1,n(x.input?.liquidationDistancePct,0)/100)),x=>clamp(1-Math.min(1,n(x.input?.sizeChangePct,0)/50)),x=>clamp(1-Math.min(1,x.risk/3)),x=>clamp((x.rr||0)/3),x=>clamp(1-Math.min(1,n(x.input?.venueConstraintPenalty,0))),x=>clamp(1-Math.min(1,n(x.input?.latencyMs,0)/5000)),x=>clamp(n(x.input?.orderTypeSuitability,1)),x=>clamp(1-Math.min(1,n(x.input?.partialFillRisk,0))),x=>clamp(1-Math.min(1,n(x.input?.feeTierPenalty,0))),x=>clamp(1-Math.min(1,n(x.input?.fundingCostPct,0)/1)),x=>clamp(1-Math.min(1,n(x.input?.carryPenalty,0))),x=>clamp((x.edge??0)+.5),x=>clamp(1-Math.min(1,Math.abs(n(x.input?.edgeError,0)))),x=>clamp((x.edge??0)-.1+.5),x=>clamp((x.edge??0)/(1+x.conflict)),x=>clamp(x.trend===x.base?1:.35),x=>clamp(n(x.input?.historicalSimilarity,0)),x=>clamp(n(x.input?.outOfSampleReady,x.sample>=300?1:0)),x=>clamp(x.sample/300),x=>clamp(1-x.drift),x=>clamp(n(x.input?.challengerSafe,1)),x=>clamp(n(x.input?.leakageSafe,1)),x=>clamp(1-Math.min(1,n(x.input?.dataSnoopingRisk,0))),x=>clamp(1-Math.min(1,n(x.input?.falsePositiveRate,0))),x=>clamp(1-Math.min(1,n(x.input?.falseNegativeRate,0))),x=>clamp(x.stability),x=>clamp(1-Math.min(1,n(x.input?.hysteresisChurn,0))),x=>clamp(n(x.input?.sequenceIntegrity,1)),x=>clamp(n(x.input?.signalMaturity,1)),x=>clamp(1-x.conflict),x=>clamp(n(x.input?.independenceScore,1)),x=>clamp(1-x.calErr*5),x=>clamp(n(x.input?.reliabilityBucket,1)),x=>clamp(n(x.input?.outcomeHorizonMatch,1)),x=>clamp(n(x.input?.walkForwardStability,1)),x=>clamp(1-Math.min(1,n(x.input?.monteCarloDrawdown,0)/.5)),x=>clamp(1-Math.min(1,n(x.input?.tailLossRisk,0))),x=>clamp(n(x.input?.profitFactor,1)/2),x=>clamp(1-Math.min(1,n(x.input?.expectancyDecay,0))),x=>clamp(1-Math.min(1,n(x.input?.regimeDecay,0))),x=>clamp(1-Math.min(1,n(x.input?.signalRatePerHour,0)/10)),x=>clamp(n(x.input?.duplicateSuppression,1)),x=>clamp(n(x.input?.materialChange,1)),x=>clamp(n(x.input?.publicSafe,1)),x=>clamp(n(x.input?.explanationReady,1)),x=>clamp(n(x.input?.checklistReady,1)),x=>clamp(n(x.input?.liveRuntimeGate,1)),x=>clamp(n(x.input?.adminForensicsReady,1)),x=>clamp(n(x.input?.auditChainReady,1)),x=>clamp(n(x.input?.killSwitchClear,1)),x=>clamp(n(x.input?.recoveryClear,1)),x=>clamp((x.edge??-1)>0?1:0)];
-function evaluate(input={}){const c=canonical(input),x=context({...input,canonical:c}),baseOk=x.base!=="WAIT",pOk=x.prob!=null&&x.prob>=0&&x.prob<=1,rrOk=x.rr!=null&&x.rr>=1.5,edgeOk=x.edge!=null&&x.edge>Math.max(.05,n(input.minimumExpectedR,.10)),qualityOk=x.quality>=.7&&x.venue>=.6,conflictOk=x.conflict<=.65,riskOk=x.risk<=1,stabilityOk=x.stability>=.65,evidenceOk=x.sample>=Math.max(100,n(input.minimumSamples,200)),calOk=x.calErr<=.08,driftOk=x.drift<=.35,hard=Array.isArray(input.hardBlockers)?input.hardBlockers:[],modules=specs.map((s,i)=>({...s,metric:Number(clamp(formulas[i]?formulas[i](x):0)).toFixed(6)*1,direction:x.base})),moduleScore=mean(modules.map(m=>m.metric))||0,blockers=[...new Set([...(baseOk?[]:["BASE_DIRECTION_WAIT"]),...(input.baselineEligible===false?["BASELINE_NOT_ELIGIBLE"]:[]),...(pOk?[]:["VALIDATED_PROBABILITY_REQUIRED"]),...(rrOk?[]:["RR_BELOW_1_5"]),...(edgeOk?[]:["NEGATIVE_OR_WEAK_EXPECTED_R"]),...(qualityOk?[]:["DATA_QUALITY_OR_CONSENSUS"]),...(conflictOk?[]:["EVIDENCE_CONFLICT"]),...(riskOk?[]:["RISK_HEADROOM_LOW"]),...(stabilityOk?[]:["SIGNAL_UNSTABLE"]),...(evidenceOk?[]:["INSUFFICIENT_OUT_OF_SAMPLE_EVIDENCE"]),...(calOk?[]:["CALIBRATION_ERROR_HIGH"]),...(driftOk?[]:["MODEL_OR_REGIME_DRIFT"]),...hard])],ready=blockers.length===0&&moduleScore>=n(input.minimumModuleScore,.68);return{version:VERSION,automaticExecutionEnabled:false,decisionSupportOnly:true,canonical:c,baseline:{action:x.base,eligible:input.baselineEligible!==false},profitability:{validatedProbability:x.prob,rr:x.rr,costR:x.cost,expectedR:x.edge,moduleScore:Number(moduleScore.toFixed(6)),positiveEdge:edgeOk},gate:{status:ready?"LIVE_SIGNAL_READY":"WAIT",action:ready?x.base:"WAIT",blockers,ready,liveSignalReady:ready},modules,explanation:{headline:ready?"LIVE SIGNAL — POSITIVE EXPECTED VALUE":"NO TRADE — PROFITABILITY GATE BLOCKED",thesis:ready?"Validated "+Math.round(x.prob*100)+"% probability with "+x.rr.toFixed(2)+"R planned reward and modeled costs.":"The system will not publish a directional signal until the evidence and expected-value gates pass.",invalidation:input.decision?.levels?.stop??null,nextConfirmation:blockers[0]||"Maintain synchronized state.",riskNotice:"Positive expected value is a model estimate, not a profit guarantee."},admin:{moduleCount:modules.length,moduleScore:Number(moduleScore.toFixed(4)),blockers,canonicalHash:c.hash,expectedR:x.edge,validatedProbability:x.prob,rr:x.rr,liveSignalReady:ready,automaticExecutionEnabled:false},audit:{hash:crypto.createHash("sha256").update(JSON.stringify({canonical:c,blockers,modules:modules.map(m=>[m.phase,m.metric])})).digest("hex").slice(0,32).toUpperCase())}};}
+function evaluate(input={}){
+  const c=canonical(input);
+  const x=context({...input,canonical:c});
+  const baseOk=x.base!=="WAIT";
+  const pOk=x.prob!=null&&x.prob>=0&&x.prob<=1;
+  const rrOk=x.rr!=null&&x.rr>=1.5;
+  const edgeOk=x.edge!=null&&x.edge>Math.max(.05,n(input.minimumExpectedR,.10));
+  const qualityOk=x.quality>=.7&&x.venue>=.6;
+  const conflictOk=x.conflict<=.65;
+  const riskOk=x.risk<=1;
+  const stabilityOk=x.stability>=.65;
+  const evidenceOk=x.sample>=Math.max(100,n(input.minimumSamples,200));
+  const calOk=x.calErr<=.08;
+  const driftOk=x.drift<=.35;
+  const hard=Array.isArray(input.hardBlockers)?input.hardBlockers:[];
+  const modules=specs.map((s,i)=>({
+    ...s,
+    metric:Number(clamp(formulas[i]?formulas[i](x):0)).toFixed(6)*1,
+    direction:x.base
+  }));
+  const moduleScore=mean(modules.map(m=>m.metric))||0;
+  const blockers=[];
+  if(!baseOk)blockers.push("BASE_DIRECTION_WAIT");
+  if(input.baselineEligible===false)blockers.push("BASELINE_NOT_ELIGIBLE");
+  if(!pOk)blockers.push("VALIDATED_PROBABILITY_REQUIRED");
+  if(!rrOk)blockers.push("RR_BELOW_1_5");
+  if(!edgeOk)blockers.push("NEGATIVE_OR_WEAK_EXPECTED_R");
+  if(!qualityOk)blockers.push("DATA_QUALITY_OR_CONSENSUS");
+  if(!conflictOk)blockers.push("EVIDENCE_CONFLICT");
+  if(!riskOk)blockers.push("RISK_HEADROOM_LOW");
+  if(!stabilityOk)blockers.push("SIGNAL_UNSTABLE");
+  if(!evidenceOk)blockers.push("INSUFFICIENT_OUT_OF_SAMPLE_EVIDENCE");
+  if(!calOk)blockers.push("CALIBRATION_ERROR_HIGH");
+  if(!driftOk)blockers.push("MODEL_OR_REGIME_DRIFT");
+  for(const h of hard)if(!blockers.includes(h))blockers.push(h);
+  const ready=blockers.length===0&&moduleScore>=n(input.minimumModuleScore,.68);
+  return {
+    version:VERSION,
+    automaticExecutionEnabled:false,
+    decisionSupportOnly:true,
+    canonical:c,
+    baseline:{action:x.base,eligible:input.baselineEligible!==false},
+    profitability:{
+      validatedProbability:x.prob,
+      rr:x.rr,
+      costR:x.cost,
+      expectedR:x.edge,
+      moduleScore:Number(moduleScore.toFixed(6)),
+      positiveEdge:edgeOk
+    },
+    gate:{
+      status:ready?"LIVE_SIGNAL_READY":"WAIT",
+      action:ready?x.base:"WAIT",
+      blockers,
+      ready,
+      liveSignalReady:ready
+    },
+    modules,
+    explanation:{
+      headline:ready?"LIVE SIGNAL — POSITIVE EXPECTED VALUE":"NO TRADE — PROFITABILITY GATE BLOCKED",
+      thesis:ready?"Validated "+Math.round(x.prob*100)+"% probability with "+x.rr.toFixed(2)+"R planned reward and modeled costs.":"The system will not publish a directional signal until the evidence and expected-value gates pass.",
+      invalidation:input.decision?.levels?.stop??null,
+      nextConfirmation:blockers[0]||"Maintain synchronized state.",
+      riskNotice:"Positive expected value is a model estimate, not a profit guarantee."
+    },
+    admin:{
+      moduleCount:modules.length,
+      moduleScore:Number(moduleScore.toFixed(4)),
+      blockers,
+      canonicalHash:c.hash,
+      expectedR:x.edge,
+      validatedProbability:x.prob,
+      rr:x.rr,
+      liveSignalReady:ready,
+      automaticExecutionEnabled:false
+    },
+    audit:{
+      hash:crypto.createHash("sha256").update(JSON.stringify({
+        canonical:c,
+        blockers,
+        modules:modules.map(m=>[m.phase,m.metric])
+      })).digest("hex").slice(0,32).toUpperCase()
+    }
+  };
+}
 function selfTest(){const base={symbol:"BTCUSDT",interval:"15m",now:Date.now(),price:100,baselineAction:"LONG",baselineEligible:true,phase101to200:{canonical:{hash:"ABC123",symbol:"BTCUSDT",interval:"15m"},prediction:{probability:.72},baseline:{action:"LONG"}},decision:{action:"LONG",levels:{entry:100,stop:97,tp1:105,rr:1.6667},risk:{riskPct:.5}},analysis:{side:"LONG",regime:{trend:"LONG"}},derivatives:{oiChangePct:2,takerImbalance:.1,orderBook:{imbalance:.1},cvdState:"BUYERS CONFIRM"},consensus:{consensusQualityPct:100,priceDispersionBps:2},freshnessPct:100,validation:{sampleCount:600,calibrationError:.02},signalStability:1};const a=evaluate(base),b=evaluate({...base,baselineEligible:false}),c=evaluate({...base,calibrationError:.2});return{ok:specs.length===100&&a.gate.status==="LIVE_SIGNAL_READY"&&b.gate.status==="WAIT"&&c.gate.status==="WAIT"&&a.automaticExecutionEnabled===false&&a.canonical.hash&&a.audit.hash,version:VERSION,modules:specs.length};}
 module.exports={VERSION,specs,evaluate,selfTest};
