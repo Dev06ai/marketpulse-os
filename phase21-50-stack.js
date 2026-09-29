@@ -54,6 +54,7 @@ function evaluate(input={}){
   const now=n(input.ts,Date.now());
   const price=n(input.price??decision?.market?.price??analysis?.price);
 
+  const candidate=String(input.candidateAction||decision.action||"WAIT").toUpperCase();
   const canonicalInput={
     symbol:input.symbol,interval:input.interval,ts:now,price,
     decision:{...decision,action:candidate,derivatives},
@@ -64,7 +65,6 @@ function evaluate(input={}){
   const snapshotId=phase21.hash(canonical);
   const envelope=bus.publish(canonical,now);
 
-  const candidate=String(input.candidateAction||decision.action||"WAIT").toUpperCase();
   const prior=input.priorDirection||"WAIT";
   const hysteresis=phase23.update({side:prior,pending:input.pendingSide,count:n(input.pendingCount,0)},candidate,{
     confirmations:Math.max(1,n(input.requiredConfirmations,3)),
