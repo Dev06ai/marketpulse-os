@@ -1,6 +1,6 @@
 {
   "name": "marketpulse-os",
-  "version": "3.0.0",
+  "version": "4.0.0",
   "private": true,
   "type": "commonjs",
   "scripts": {
@@ -12,7 +12,8 @@
     "watchdog": "node marketpulse-watchdog.js",
     "test:autotrader": "node tests/autotrader.js",
     "test:phase201-300": "node phase201-300-selftest.js",
-    "autotrader": "node marketpulse-autotrader.js"
+    "autotrader": "node marketpulse-autotrader.js",
+    "test:phase301-400": "node phase301-400-selftest.js"
   },
   "engines": {
     "node": ">=20"
