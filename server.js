@@ -1119,16 +1119,6 @@ async function buildDecisionSnapshot(symbol,interval,query,deviceId=null){
         phase201to300SignalReady:true
       };
     }
-    const signalGateChain={
-      candidate:{side:signalCandidate?.side||"WAIT",earlySide:earlyCandidate?.side||"WAIT",source:signalCandidate?.source||earlyCandidate?.source||"NONE"},
-      phase9to10:{action:String(gatedDecision?.action||"WAIT").toUpperCase(),state:gatedDecision?.state||"WAIT",gate:gatedDecision?.deploymentGate?.state||"UNKNOWN",reason:gatedDecision?.reason||null},
-      phase11to13:{ready:Boolean(validation1113?.adaptive?.signalGateReady),mode:validation1113?.adaptive?.mode||"WARMING",reasons:Array.isArray(validation1113?.adaptive?.reasons)?validation1113.adaptive.reasons:[],summaryTrades:Number(validation1113?.summary?.trades||0),directionalLong:Number(validation1113?.directional?.long?.trades||0),directionalShort:Number(validation1113?.directional?.short?.trades||0)},
-      phase51to100:{qualified:Boolean(phase51to100State?.gate?.qualified),action:phase51to100State?.signal?.action||"WAIT",blockers:Array.isArray(phase51to100State?.gate?.blockers)?phase51to100State.gate.blockers:[]},
-      phase101to200:{qualified:Boolean(phase101to200State?.gate?.action&&phase101to200State.gate.action!=="WAIT"),action:phase101to200State?.gate?.action||"WAIT",blockers:Array.isArray(phase101to200State?.gate?.blockers)?phase101to200State.gate.blockers:[]},
-      phase201to300:{ready:Boolean(phase201to300State?.gate?.status==="LIVE_SIGNAL_READY"),action:phase201to300State?.gate?.action||"WAIT",blockers:Array.isArray(phase201to300State?.gate?.blockers)?phase201to300State.gate.blockers:[]},
-      phase301to400:{action:phase301to400State?.gate?.action||"WAIT",blockers:Array.isArray(phase301to400State?.gate?.blockers)?phase301to400State.gate.blockers:[]},
-      phase401to500:{eligible:Boolean(phase401State?.executionGate?.status==="ELIGIBLE"),reasons:Array.isArray(phase401State?.executionGate?.reasons)?phase401State.executionGate.reasons:[]}
-    };
     const phase301to400State=phase301to400.evaluate({
       symbol,interval,now,
       price:Number(finalDecision?.market?.price??analysis?.price??candles?.at(-1)?.c),
@@ -1260,6 +1250,16 @@ async function buildDecisionSnapshot(symbol,interval,query,deviceId=null){
         execution:{mode:"PAPER",armed:false,killSwitch:false,reconciliation:{ok:true}}
       });
     }
+    const signalGateChain={
+      candidate:{side:signalCandidate?.side||"WAIT",earlySide:earlyCandidate?.side||"WAIT",source:signalCandidate?.source||earlyCandidate?.source||"NONE"},
+      phase9to10:{action:String(gatedDecision?.action||"WAIT").toUpperCase(),state:gatedDecision?.state||"WAIT",gate:gatedDecision?.deploymentGate?.state||"UNKNOWN",reason:gatedDecision?.reason||null},
+      phase11to13:{ready:Boolean(validation1113?.adaptive?.signalGateReady),mode:validation1113?.adaptive?.mode||"WARMING",reasons:Array.isArray(validation1113?.adaptive?.reasons)?validation1113.adaptive.reasons:[],summaryTrades:Number(validation1113?.summary?.trades||0),directionalLong:Number(validation1113?.directional?.long?.trades||0),directionalShort:Number(validation1113?.directional?.short?.trades||0)},
+      phase51to100:{qualified:Boolean(phase51to100State?.gate?.qualified),action:phase51to100State?.signal?.action||"WAIT",blockers:Array.isArray(phase51to100State?.gate?.blockers)?phase51to100State.gate.blockers:[]},
+      phase101to200:{qualified:Boolean(phase101to200State?.gate?.action&&phase101to200State.gate.action!=="WAIT"),action:phase101to200State?.gate?.action||"WAIT",blockers:Array.isArray(phase101to200State?.gate?.blockers)?phase101to200State.gate.blockers:[]},
+      phase201to300:{ready:Boolean(phase201to300State?.gate?.status==="LIVE_SIGNAL_READY"),action:phase201to300State?.gate?.action||"WAIT",blockers:Array.isArray(phase201to300State?.gate?.blockers)?phase201to300State.gate.blockers:[]},
+      phase301to400:{action:phase301to400State?.gate?.action||"WAIT",blockers:Array.isArray(phase301to400State?.gate?.blockers)?phase301to400State.gate.blockers:[]},
+      phase401to500:{eligible:Boolean(phase401State?.executionGate?.status==="ELIGIBLE"),reasons:Array.isArray(phase401State?.executionGate?.reasons)?phase401State.executionGate.reasons:[]}
+    };
     try{
       setTimeout(()=>signalNotifications.notifyAdminSignal(storage,{
         decision:finalDecision,
