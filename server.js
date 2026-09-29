@@ -959,6 +959,11 @@ async function buildDecisionSnapshot(symbol,interval,query,deviceId=null){
         new Promise(resolve=>setTimeout(()=>resolve(null),1400))
       ]);
     }catch{}
+    let phase6State=null;
+    try{phase6State=await Promise.race([
+      phase6.snapshot(),
+      new Promise(resolve=>setTimeout(()=>resolve(null),700))
+    ])}catch{}
     const phase20Scenario=phase20.buildScenarioMatrix({
       symbol,
       interval,
@@ -1048,8 +1053,25 @@ async function buildDecisionSnapshot(symbol,interval,query,deviceId=null){
         security:true,
         observability:true,operations:true
       },
-      exchangeHealth:{reliabilityPct:100},
-      portfolio:{positions:[]},
+      exchangeHealth:(()=>{
+        const venues=Array.isArray(phase18State?.venues)?phase18State.venues:[];
+        const perps=venues.filter(v=>v?.venueType==="perp");
+        const healthy=perps.filter(v=>v?.status==="healthy"&&Number.isFinite(Number(v?.price)));
+        const spreads=healthy.map(v=>Number(v?.spreadBps)).filter(Number.isFinite);
+        const ages=venues.map(v=>Number(v?.sourceTs)).filter(Number.isFinite).map(ts=>Math.max(0,now-ts));
+        return {
+          reliabilityPct:perps.length?healthy.length/perps.length*100:0,
+          spreadBps:spreads.length?Math.max(...spreads):null,
+          dataLagMs:ages.length?Math.max(...ages):null,
+          outage:perps.length===0,
+          source:"PHASE18_MARKET_STATE"
+        };
+      })(),
+      portfolio:{
+        positions:Array.isArray(phase6State?.portfolio?.positions)?phase6State.portfolio.positions:[],
+        orders:Array.isArray(phase6State?.portfolio?.orders)?phase6State.portfolio.orders:[],
+        totalRiskPct:Number(phase6State?.portfolio?.grossRiskPct||0)
+      },
       checklist:{
         side:finalDecision?.action,
         trigger:finalDecision?.evidence?.trigger||finalDecision?.deploymentGate?.reason,
@@ -1069,7 +1091,8 @@ async function buildDecisionSnapshot(symbol,interval,query,deviceId=null){
       candles,
       decision:{...finalDecision,derivatives:flow},
       market:finalDecision?.market||{},analysis,derivatives:flow,consensus,
-      mtf:{higher:String(finalDecision?.higher?.side||finalDecision?.higherTimeframe?.side||analysis?.higher?.side||"WAIT").toUpperCase(),execution:String(finalDecision?.action||"WAIT").toUpperCase(),lower:String(analysis?.lower?.side||analysis?.lowerTimeframe?.side||finalDecision?.action||"WAIT").toUpperCase()},
+      candidateAction:signalCandidate?.side||finalDecision?.action||"WAIT",
+      mtf:{higher:String(finalDecision?.higher?.side||finalDecision?.higherTimeframe?.side||analysis?.higher?.side||"WAIT").toUpperCase(),execution:String(signalCandidate?.side||finalDecision?.action||"WAIT").toUpperCase(),lower:String(analysis?.lower?.side||analysis?.lowerTimeframe?.side||signalCandidate?.side||finalDecision?.action||"WAIT").toUpperCase()},
       phase51to100:phase51to100State,validation:validation1113||analytics?.validation||null,
       calibration:{probability:empiricalWinRate??null,source:empiricalWinRate!=null?"WALK_FORWARD_EMPIRICAL":"UNAVAILABLE"},
       freshnessPct:phaseStackState?.data?.quality?.score??100,stale:Boolean(finalDecision?.stale),risk:finalDecision?.risk||{},marketSource:flow?.provider||"MARKET_FEED"
