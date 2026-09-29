@@ -319,12 +319,13 @@ function renderDecision(){
   const staleCandidate=Boolean(d?.stale&&d?.signalCandidate?.stale);
   const blockingStage=action!=="WAIT"?"READY":
     gateChain?.phase9to10?.gate==="BLOCKED"?"P9–10":
-    gateChain?.phase11to13?.ready===false&&Array.isArray(gateChain?.phase11to13?.reasons)&&gateChain.phase11to13.reasons.length?"P11–13":
-    gateChain?.phase51to100?.qualified===false?"P51–100":
-    gateChain?.phase101to200?.qualified===false?"P101–200":
-    gateChain?.phase201to300?.ready===false?"P201–300":
+    (Array.isArray(gateChain?.phase11to13?.reasons)&&gateChain.phase11to13.reasons.length)?"P11–13":
+    (Array.isArray(gateChain?.phase51to100?.blockers)&&gateChain.phase51to100.blockers.length)?"P51–100":
+    (Array.isArray(gateChain?.phase101to200?.blockers)&&gateChain.phase101to200.blockers.length)?"P101–200":
+    (Array.isArray(gateChain?.phase201to300?.blockers)&&gateChain.phase201to300.blockers.length)?"P201–300":
     (Array.isArray(gateChain?.phase301to400?.blockers)&&gateChain.phase301to400.blockers.length)?"P301–400":
-    gateChain?.phase401to500?.eligible===false?"P401–500":"GATE";
+    (Array.isArray(gateChain?.phase401to500?.reasons)&&gateChain.phase401to500.reasons.length)?"P401–500":
+    "WAITING";
   const rawScore=safeNum(
     m?.confluenceScore??
     analysis?.score??
@@ -332,7 +333,7 @@ function renderDecision(){
     d?.score??
     d?.phase401to500?.apex?.quality
   );
-  const confluencePct=rawScore===null?null:clamp(Math.round((rawScore/92)*100),0,100);
+  const confluencePct=rawScore===null?null:clamp(Math.round(rawScore<=1?rawScore*100:rawScore),0,100);
   const stability=d?.signalStability||{};
   const diagnostics=d?.decisionDiagnostics||{};
   const blockerSets=[
@@ -397,7 +398,7 @@ function renderDecision(){
   [
     {id:"longProb",bar:"longBar",value:candidate==="LONG"?confluencePct:null},
     {id:"shortProb",bar:"shortBar",value:candidate==="SHORT"?confluencePct:null},
-    {id:"waitProb",bar:"waitBar",value:candidate==="WAIT"?100:null}
+    {id:"waitProb",bar:"waitBar",value:null}
   ].forEach(r=>{
     $(r.id).textContent=r.value===null?"—":r.value+"%";
     $(r.bar).style.width=r.value===null?"0":r.value+"%";
@@ -413,13 +414,15 @@ function renderDecision(){
   const score=safeNum(d?.data?.score??d?.phase301to400?.dataQuality?.score??rawScore??x.apex.quality);
   $("quality").textContent=score===null?"—":Math.round(score*(score<=1?100:1))+"/100";
   $("syncState").textContent=x.apex?.synchronization?.ok||d?.synchronization?.ok?"LOCKED":(d?.stale?"STALE":"PENDING");
-  $("execution").textContent=x.apex?.executionGate?.automaticExecutionReady?"READY":"GATED";
+  $("execution").textContent=x.apex?.executionGate?.automaticExecutionReady
+    ?"AUTO READY"
+    :(d?.liveSignalEligible===true&&action!=="WAIT"?"MANUAL READY":"GATED");
 
   const flow=extractFlow(d);
   $("oi").textContent=fmt(flow.oi,0);$("cvd").textContent=fmt(flow.cvd,3);$("book").textContent=flow.book===null?"—":(flow.book*100).toFixed(1)+"%";$("funding").textContent=flow.funding===null?"—":(flow.funding*100).toFixed(4)+"%";$("liquidations").textContent=fmt(flow.liq,0);
   $("cvdState").textContent=flow.cvdState||"warming";$("liqState").textContent=flow.liqState||"warming";
 
-  $("tapeMarket").textContent=action+" · "+(candidate!=="WAIT"?candidate+" candidate":"neutral");
+  $("tapeMarket").textContent=action+" · "+(visibleCandidate!=="WAIT"?visibleCandidate+" candidate":"neutral");
   $("tapeFlow").textContent=flow.cvd===null?"Waiting for CVD":flow.cvdState||fmt(flow.cvd,3);
   $("tapeLiquidity").textContent=flow.book===null?"Waiting for book":(flow.book>=0?"Bid support ":"Offer pressure ")+Math.abs(flow.book*100).toFixed(1)+"%";
 
