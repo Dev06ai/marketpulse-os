@@ -217,17 +217,26 @@
   async function refresh(force){
     if(S.loading&&!force)return;S.loading=true;
     try{
-      const [chart,live,apex,decision,exec]=await Promise.all([
-        api("/api/chart?symbol="+encodeURIComponent(S.symbol)+"&interval="+encodeURIComponent(S.interval),{timeout:12000}),
-        api("/api/live-sync?symbol="+encodeURIComponent(S.symbol),{timeout:8000}),
-        api("/api/phase401-500?symbol="+encodeURIComponent(S.symbol)+"&interval="+encodeURIComponent(S.interval),{timeout:15000}),
-        api("/api/decision?symbol="+encodeURIComponent(S.symbol)+"&interval="+encodeURIComponent(S.interval),{timeout:15000}),
-        api("/api/execution",{timeout:7000})
-      ]);
-      S.candles=chart.candles||[];S.live=live;S.apex=apex;S.decision=decision;S.exec=exec;
+      const chart=await api("/api/chart?symbol="+encodeURIComponent(S.symbol)+"&interval="+encodeURIComponent(S.interval),{timeout:12000});
+      S.candles=chart.candles||[];
       S.start=clamp(S.start,0,Math.max(0,S.candles.length-S.range));if(!S.start)S.start=Math.max(0,S.candles.length-S.range);
-      pushHistory(live);renderAll();drawMain();drawMiniCharts();if(S.activeView==="markets")renderMarkets();
-    }catch(e){$("#apexBannerText").textContent="Data refresh issue: "+e.message}catch(_){}
+      const live=await api("/api/live-sync?symbol="+encodeURIComponent(S.symbol),{timeout:8000});
+      S.live=live;pushHistory(live);
+      // Deep decision/execution state is refreshed on a slower cadence so the
+      // one-second canonical stream stays responsive without request storms.
+      if(force||!S.apex||Date.now()-(S.deepRefreshAt||0)>4500){
+        const [apex,decision,exec]=await Promise.all([
+          api("/api/phase401-500?symbol="+encodeURIComponent(S.symbol)+"&interval="+encodeURIComponent(S.interval),{timeout:15000}),
+          api("/api/decision?symbol="+encodeURIComponent(S.symbol)+"&interval="+encodeURIComponent(S.interval),{timeout:15000}),
+          api("/api/execution",{timeout:7000})
+        ]);
+        S.apex=apex;S.decision=decision;S.exec=exec;S.deepRefreshAt=Date.now();
+      }else{
+        // Execution status is independently cheap enough to refresh frequently.
+        try{S.exec=await api("/api/execution",{timeout:7000})}catch{}
+      }
+      renderAll();drawMain();drawMiniCharts();if(S.activeView==="markets")renderMarkets();
+    }catch(e){$("#apexBannerText").textContent="Data refresh issue: "+e.message}
     finally{S.loading=false}
   }
   function pushHistory(l){
