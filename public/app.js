@@ -486,28 +486,60 @@ function renderSystemChecks(checks){
 }
 async function loadCore(){
   const epoch=state.marketEpoch,symbol=state.symbol,interval=state.interval;
-  runtime("Loading market state…","warn","First paint does not depend on analytics.");
+  runtime("Loading live market…","warn","Cached chart and price render immediately; live services connect in parallel.");
   const cachedT=readCache(cacheKey("ticker")),cachedC=readCache(cacheKey("chart")),cachedD=readCache(cacheKey("decision"));
   if(cachedT){state.ticker=cachedT;state.livePrice=safeNum(cachedT.price);renderTicker()}
   if(cachedC){state.chart=cachedC.candles||cachedC;drawChart()}
   if(cachedD){state.decision=cachedD;renderDecision()}
-  const tasks=await Promise.allSettled([
-    api("/api/config",3000),
-    api("/api/fast-ticker?symbol="+encodeURIComponent(state.symbol),2500),
-    api("/api/chart?symbol="+encodeURIComponent(state.symbol)+"&interval="+encodeURIComponent(state.interval),5000),
-    api("/api/live-sync?symbol="+encodeURIComponent(state.symbol),2500)
-  ]);
-  const [cfg,tick,chart,live]=tasks;
+
+  // Start the decision request immediately instead of waiting for the slower chart/config calls.
+  // Market and decision requests intentionally run in parallel for a faster first useful state.
+  const decisionBoot=refreshDecision(false).catch(()=>null);
+
+  const requests=[
+    ["config",api("/api/config",2500)],
+    ["ticker",api("/api/fast-ticker?symbol="+encodeURIComponent(symbol),1800)],
+    ["chart",api("/api/chart?symbol="+encodeURIComponent(symbol)+"&interval="+encodeURIComponent(interval),3500)],
+    ["live",api("/api/live-sync?symbol="+encodeURIComponent(symbol),1800)]
+  ];
+
+  requests.forEach(([kind,promise])=>{
+    promise.then(value=>{
+      if(state.marketEpoch!==epoch||state.symbol!==symbol||state.interval!==interval)return;
+      if(kind==="config"){
+        state.cfg=value;populateSymbols(value?.symbols);
+      }else if(kind==="ticker"){
+        if(!state.wsConnected){
+          state.ticker=value;
+          state.livePrice=safeNum(value?.price);
+          state.lastLiveEventAt=Date.now();
+          writeCache(cacheKey("ticker"),state.ticker);
+          renderTicker();
+          drawChart();
+        }
+      }else if(kind==="chart"){
+        if(Array.isArray(value?.candles)&&value.candles.length){
+          state.chart=value.candles;
+          writeCache(cacheKey("chart"),value);
+          drawChart();
+        }
+      }else if(kind==="live"){
+        state.live=value||{};
+        if(safeNum(value?.price)!==null){
+          applyCanonicalMarket({...value,type:"market-sync",seq:value.seq||state.lastServerSeq});
+        }
+      }
+      runtime("MarketPulse online","ok","Live market services loading in parallel.");
+    }).catch(()=>{});
+  });
+
+  await decisionBoot;
   if(state.marketEpoch!==epoch||state.symbol!==symbol||state.interval!==interval)return;
-  if(cfg.status==="fulfilled"){state.cfg=cfg.value;populateSymbols(cfg.value.symbols)}
-  if(tick.status==="fulfilled"&&!state.wsConnected){state.ticker=tick.value;state.livePrice=safeNum(tick.value.price);state.lastLiveEventAt=Date.now();writeCache(cacheKey("ticker"),state.ticker);renderTicker()}
-  if(chart.status==="fulfilled"&&Array.isArray(chart.value.candles)){state.chart=chart.value.candles;writeCache(cacheKey("chart"),chart.value);drawChart()}
-  if(live.status==="fulfilled"){state.live=live.value||{};if(safeNum(live.value?.price)!==null)applyCanonicalMarket({...live.value,type:"market-sync",seq:live.value.seq||state.lastServerSeq})}
-  const marketOk=tick.status==="fulfilled"||chart.status==="fulfilled";
-  runtime(marketOk?"MarketPulse online":"UI online — market feed retrying",marketOk?"ok":"warn",marketOk?"Live terminal ready. Price transport updates every second; analytics refresh independently.":"No blocking UI dependency failed; retrying providers automatically.");
-  if(state.marketEpoch===epoch&&state.symbol===symbol&&state.interval===interval){
-    if(state.decision)renderDecision();
-    refreshDecision(false);
+  const hasMarket=state.livePrice!==null||Array.isArray(state.chart)&&state.chart.length>0;
+  if(hasMarket){
+    runtime("MarketPulse online","ok","Price, chart and decision services are loading independently.");
+  }else{
+    runtime("UI online — market feed retrying","warn","Cached state is available; live providers are retrying automatically.");
   }
 }
 async function tickLoop(){
