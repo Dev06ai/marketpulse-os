@@ -81,3 +81,9 @@ html{scroll-behavior:smooth}
 .phase-highlight strong{font-size:9px;color:#e9edf4}
 .phase-highlight span{font-size:8px;color:#9aa7b8}
 @media(max-width:700px){.phase-summary{grid-template-columns:1fr 1fr}}
+
+/* Decision Center: make the actual synchronized engine state visibly active */
+.prob-header{color:#a9b6c8!important}
+.prob-header small{font-weight:950!important}
+.prob-track{background:rgba(166,181,199,.13)!important;border:1px solid rgba(166,181,199,.07)}
+.probability b{font-variant-numeric:tabular-nums;color:#f4f7fb!important}
