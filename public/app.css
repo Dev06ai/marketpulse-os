@@ -242,3 +242,5 @@ body{background:#0b0c0f!important}
 .candidate-state.short{color:#e7a0ab;border-color:rgba(233,130,146,.24);background:#1a1417}
 .candidate-state.wait{color:#c5cad2}
 .candidate-state.confirming{color:#d8c083;border-color:rgba(216,179,106,.22);background:#19170f}
+
+.candidate-state.stale{color:#c6cbd4;border-color:rgba(198,203,212,.28);background:#15181d;}
