@@ -1028,7 +1028,7 @@ async function buildDecisionSnapshot(symbol,interval,query,deviceId=null){
       calibration:{probability:empiricalWinRate,source:empiricalWinRate!=null?"WALK_FORWARD_EMPIRICAL":"UNAVAILABLE"},
       uncertainty:{coveragePct:phaseStackState?.data?.quality?.score||0,calibrationSamples:Number(validation1113?.summary?.trades||validation1113?.directional?.long?.trades||0),disagreementPct:0},
       expectancy:{winProbability:empiricalWinRate!=null?empiricalWinRate/100:null,averageWinR:Number(conditionalLevels?.rr)||1.5,averageLossR:1,costR:0.05},
-      expectancyGate:{probability:null,rr:Number(conditionalLevels?.rr)||0,costBps:10}
+      expectancyGate:{probability:empiricalWinRate!=null?empiricalWinRate/100:null,rr:Number(conditionalLevels?.rr)||0,costBps:10}
     });
     const phase101to200State=phase101to200.evaluate({
       symbol,interval,now,
