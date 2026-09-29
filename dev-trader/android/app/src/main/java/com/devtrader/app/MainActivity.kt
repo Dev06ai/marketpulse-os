@@ -66,6 +66,7 @@ data class SignalUi(
     val target2: Double,
     val rr: Double,
     val confidence: Double,
+    val grade: String,
     val regime: String,
     val invalidation: String,
     val thesis: List<String>
@@ -140,6 +141,7 @@ class MainActivity : ComponentActivity() {
                 target2 = json.optDouble("target2"),
                 rr = json.optDouble("rr"),
                 confidence = json.optDouble("confidence", 0.0),
+                grade = json.optString("grade", "B"),
                 regime = json.optString("regime", "UNKNOWN"),
                 invalidation = json.optString("invalidation"),
                 thesis = thesis
@@ -366,7 +368,8 @@ private fun SignalCard(signal: SignalUi?) {
             Text("TP2 " + String.format("%.2f", signal.target2), color = Color(0xFF86F7B0))
             Text("R:R " + String.format("%.2f", signal.rr), color = TextColor)
             Text(
-                "Confidence " + String.format("%.0f%%", signal.confidence * 100.0) +
+                "Grade " + signal.grade +
+                    " • Confidence " + String.format("%.0f%%", signal.confidence * 100.0) +
                     " • Regime " + signal.regime,
                 color = Muted,
                 style = MaterialTheme.typography.bodySmall
