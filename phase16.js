@@ -43,4 +43,4 @@ function makeIncident(type,severity,message,meta={}){
 }
 
 function selfTest(){const a=classifySystemCheck({execution:false,marketData:true}),b=shouldKillExecution({checks:{execution:false}},{control:{}}),c=makeIncident("TEST","LOW","ok");return {ok:a.executionCritical.includes("execution")&&a.safeForLive===false&&b.kill&&String(c.id).startsWith("MP16-"),version:VERSION};}
-module.exports={VERSION,now,bool,num,classifySystemCheck,shouldKillExecution,canAutoRemediate,makeIncident,MAX_INCIDENTS};
+module.exports={VERSION,now,bool,num,classifySystemCheck,shouldKillExecution,canAutoRemediate,makeIncident,MAX_INCIDENTS,selfTest};
