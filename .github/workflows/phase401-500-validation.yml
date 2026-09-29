@@ -30,7 +30,6 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: npm
       - run: npm install --ignore-scripts
       - run: node --check phase401-500-apex-engine.js
       - run: node --check phase401-500-selftest.js
