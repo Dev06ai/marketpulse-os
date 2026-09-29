@@ -672,27 +672,6 @@ function queueCoreAnalytics(symbol,interval,candles){
     (async()=>{
       try{
         if(sample.length<240)return;
-        const decisionDiagnostics={
-      candidate:{side:signalCandidate.side,score:signalCandidate.score,source:signalCandidate.source},
-      validation:{
-        action:String(gatedDecision?.action||"WAIT").toUpperCase(),
-        state:String(gatedDecision?.state||"NO_TRADE"),
-        liveSignalEligible:Boolean(gatedDecision?.liveSignalEligible),
-        gate:gatedDecision?.deploymentGate?.state||"UNKNOWN",
-        reason:gatedDecision?.deploymentGate?.reason||null
-      },
-      stability:{
-        state:finalDecision?.signalStability?.state||"NONE",
-        side:finalDecision?.signalStability?.side||null,
-        confirmations:finalDecision?.signalStability?.confirmations||0,
-        required:finalDecision?.signalStability?.required||2
-      },
-      advanced:{action:phase101to200State?.gate?.action||"WAIT",blockers:phase101to200State?.gate?.blockers||[]},
-      profitability:{status:phase201to300State?.gate?.status||"WAIT",action:phase201to300State?.gate?.action||"WAIT",blockers:phase201to300State?.gate?.blockers||[]},
-      adaptive:{status:phase301to400State?.gate?.status||"WAIT",action:phase301to400State?.gate?.action||"WAIT",blockers:phase301to400State?.gate?.blockers||[]},
-      canonical:{status:phase401State?.executionGate?.status||"BLOCKED",side:phase401State?.executionGate?.side||"WAIT",reasons:phase401State?.executionGate?.reasons||[]},
-      final:{action:finalDecision?.action||"WAIT",state:finalDecision?.state||"NO_TRADE",liveSignalEligible:Boolean(finalDecision?.liveSignalEligible)}
-    };
     const payload={
           backtest:backtest(sample),
           validation:walkForwardBacktest(sample),
@@ -862,7 +841,9 @@ async function buildDecisionSnapshot(symbol,interval,query,deviceId=null){
       decisionLevels && typeof decisionLevels==="object" &&
       ["LONG","SHORT"].includes(String(decisionLevels.side||"").toUpperCase())
     ) ? decisionLevels : (
-      analysis?.tradeLevels && typeof analysis.tradeLevels==="object" ? analysis.tradeLevels : null
+      analysis?.tradeLevels && typeof analysis.tradeLevels==="object" ? analysis.tradeLevels : (
+        ["LONG","SHORT"].includes(String(analysisLevels.side||"").toUpperCase()) ? analysisLevels : null
+      )
     );
     const conditionalCheck=candidateSource
       ? validateTradeLevels(candidateSource,{minRR:signalPolicy.minRR})
