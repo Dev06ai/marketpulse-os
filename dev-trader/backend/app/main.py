@@ -20,7 +20,7 @@ class TokenPayload(BaseModel): token:str
 async def broadcast_loop():
     while True:
         await asyncio.sleep(SNAPSHOT)
-        payload={"type":"state",**state.snapshot(),"server_ts":int(time.time()*1000),"signal":last_signal}
+        payload={"type":"state",**state.snapshot(),"server_ts":int(time.time()*1000),"signal":last_signal,"engine":engine.last_diagnostics}
         for ws in list(clients):
             try: await ws.send_json(payload)
             except Exception: clients.discard(ws)
@@ -53,7 +53,10 @@ async def health():
 @app.get("/config")
 async def config():
     return {"symbol":SYMBOL,"snapshot_seconds":SNAPSHOT,"manual_execution_only":True,
-            "min_rr":float(os.getenv("MIN_RR","3")),"max_risk_pct":float(os.getenv("MAX_RISK_PCT","1"))}
+            "min_rr":float(os.getenv("MIN_RR", str(engine.last_diagnostics.get("min_rr", 2.0)))),
+            "min_confidence":float(os.getenv("MIN_CONFIDENCE", str(engine.last_diagnostics.get("min_confidence", 0.52)))),
+            "max_risk_pct":float(os.getenv("MAX_RISK_PCT","1")),
+            "remote_tunable":["MIN_RR","MIN_CONFIDENCE","MAX_RISK_PCT","SNAPSHOT_SECONDS"]}
 
 @app.post("/device/register")
 async def register(payload:TokenPayload):
@@ -62,7 +65,7 @@ async def register(payload:TokenPayload):
 @app.websocket("/ws")
 async def socket(ws:WebSocket):
     await ws.accept(); clients.add(ws)
-    await ws.send_json({"type":"state",**state.snapshot(),"server_ts":int(time.time()*1000),"signal":last_signal})
+    await ws.send_json({"type":"state",**state.snapshot(),"server_ts":int(time.time()*1000),"signal":last_signal,"engine":engine.last_diagnostics})
     try:
         while True: await ws.receive_text()
     except (WebSocketDisconnect,Exception):
