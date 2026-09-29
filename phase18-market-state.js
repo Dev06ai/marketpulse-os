@@ -279,4 +279,5 @@ function health(snapshot){
   const s=snapshot?.summary||{};
   return {ok:Boolean(snapshot?.ok&&Number(s.venueCount)>=2),venueCount:Number(s.venueCount)||0,consensusQuality:Number(s.consensusQuality)||0,dispersionBps:s.dispersionBps,unavailable:(snapshot?.venues||[]).filter(v=>v.status!=="healthy").map(v=>v.name)};
 }
+function selfTest(){const b=bookMetrics([["100","2"]],[["101","1"]],20),h=health({ok:true,summary:{venueCount:2,consensusQuality:95,dispersionBps:5},venues:[{name:"Bybit",status:"healthy"}]});return {ok:b.bestBid===100&&b.bestAsk===101&&b.imbalance===1/3&&h.ok&&h.venueCount===2,version:VERSION};}
 module.exports={VERSION,snapshot,health,bookMetrics};
