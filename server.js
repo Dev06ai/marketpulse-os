@@ -940,7 +940,8 @@ async function buildDecisionSnapshot(symbol,interval,query,deviceId=null){
         gatedDecision?.action,
         decision?.action,
         analysis?.side,
-        analysis?.marketStructure?.setup?.side
+        analysis?.marketStructure?.setup?.side,
+        phaseStack?.direction||phaseStack?.bias?.side
       ];
       const side=candidates.map(v=>String(v||"").toUpperCase()).find(v=>v==="LONG"||v==="SHORT")||"WAIT";
       return {
@@ -1131,7 +1132,12 @@ async function buildDecisionSnapshot(symbol,interval,query,deviceId=null){
       analysis,derivatives:flow,consensus,
       mtf:{higher:String(finalDecision?.higher?.side||finalDecision?.higherTimeframe?.side||analysis?.higher?.side||"WAIT").toUpperCase(),lower:String(analysis?.lower?.side||analysis?.lowerTimeframe?.side||signalCandidate.side||finalDecision?.action||"WAIT").toUpperCase()},
       phase101to200:phase101to200State,
-      baselineAction:String(signalCandidate.side!=="WAIT"?signalCandidate.side:(finalDecision?.action||phase101to200State?.gate?.action||"WAIT")).toUpperCase(),
+      baselineAction:String(
+        signalCandidate.side!=="WAIT"?signalCandidate.side:
+        earlyCandidate?.side!=="WAIT"?earlyCandidate.side:
+        phase101to200State?.aggregation?.direction!=="WAIT"?phase101to200State?.aggregation?.direction:
+        (finalDecision?.action||phase101to200State?.gate?.action||"WAIT")
+      ).toUpperCase(),
       baselineEligible:Boolean(phase101to200State?.gate?.action!=="WAIT"&&["LONG","SHORT"].includes(String(signalCandidate?.side||"").toUpperCase())),
       freshnessPct:phaseStackState?.data?.quality?.score??100,
       validation:validation1113||analytics?.validation||null,
@@ -1303,7 +1309,31 @@ async function buildDecisionSnapshot(symbol,interval,query,deviceId=null){
       phase301to400:{action:phase301to400State?.gate?.action||"WAIT",blockers:Array.isArray(phase301to400State?.gate?.blockers)?phase301to400State.gate.blockers:[]},
       phase401to500:{eligible:Boolean(phase401State?.executionGate?.status==="ELIGIBLE"),reasons:Array.isArray(phase401State?.executionGate?.reasons)?phase401State.executionGate.reasons:[]}
     };
-    try{
+    const resolvedCandidate=(()=>{
+      const candidates=[
+        signalCandidate?.side,
+        earlyCandidate?.side,
+        phase201to300State?.gate?.action,
+        phase301to400State?.gate?.action,
+        phase301to400State?.council?.action,
+        phase101to200State?.aggregation?.direction,
+        phase101to200State?.baseline?.action,
+        analysis?.side,
+        analysis?.marketStructure?.setup?.side,
+        finalDecision?.action
+      ];
+      const side=candidates.map(v=>String(v||"").toUpperCase()).find(v=>v==="LONG"||v==="SHORT")||"WAIT";
+      const score=Number.isFinite(Number(finalDecision?.market?.confluenceScore))
+        ?Number(finalDecision.market.confluenceScore)
+        :Number.isFinite(Number(phase301to400State?.gate?.quality))
+          ?Number(phase301to400State.gate.quality*100)
+          :Number.isFinite(Number(phase101to200State?.aggregation?.edge))
+            ?Number(phase101to200State.aggregation.edge)
+            :null;
+      const source=candidates.map(v=>String(v||"").toUpperCase()).find(v=>v==="LONG"||v==="SHORT")||"WAIT";
+      return {side,score,source,watchOnly:side!=="WAIT"&&String(finalDecision?.action||"WAIT").toUpperCase()==="WAIT"};
+    })();
+        try{
       setTimeout(()=>signalNotifications.notifyAdminSignal(storage,{
         decision:finalDecision,
         symbol,
@@ -1343,9 +1373,10 @@ async function buildDecisionSnapshot(symbol,interval,query,deviceId=null){
     const payload={
       ok:true,...finalDecision,analysis,derivatives:flow,consensus,decisionIntelligence,phase20:phase20Scenario,canonicalState,canonicalSnapshotId,phaseStack:phaseStackState,phase51to100:phase51to100State,
       learning:null,
-      signalCandidate,
+      signalCandidate:resolvedCandidate,
+      signalCandidateRaw:signalCandidate,
       earlyCandidate,
-      signalGateChain,
+      signalGateChain:
       decisionDiagnostics,
       backtest:analytics?.backtest||null,validation:analytics?.validation||null,setupStats:analytics?.setupStats||null,
       phase11_13:validation1113,
