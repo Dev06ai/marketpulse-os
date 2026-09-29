@@ -328,6 +328,15 @@ function renderDecision(){
     "WAIT"
   ).toUpperCase();
   const candidate=["LONG","SHORT"].includes(candidateSide)?candidateSide:"WAIT";
+  const looseWatchSide=["LONG","SHORT"].includes(String(
+    d?.earlyCandidate?.side||
+    d?.analysis?.side||
+    d?.analysis?.marketStructure?.setup?.side||
+    d?.analysis?.regime==="UPTREND"?"LONG":
+    d?.analysis?.regime==="DOWNTREND"?"SHORT":"WAIT"
+  ).toUpperCase())
+    ?String(d?.earlyCandidate?.side||d?.analysis?.side||d?.analysis?.marketStructure?.setup?.side||(d?.analysis?.regime==="UPTREND"?"LONG":d?.analysis?.regime==="DOWNTREND"?"SHORT":"WAIT")).toUpperCase()
+    :"WAIT";
   const gateChain=d?.signalGateChain||{};
   const earlyCandidateSide=["LONG","SHORT"].includes(String(d?.earlyCandidate?.side||"").toUpperCase())
     ?String(d.earlyCandidate.side).toUpperCase():"WAIT";
@@ -388,6 +397,8 @@ function renderDecision(){
       candidateEl.textContent=candidate+" CANDIDATE"+(confluencePct===null?"":" · "+confluencePct+"% CONFLUENCE")+progress;
     }else if(earlyCandidateSide!=="WAIT"){
       candidateEl.textContent=earlyCandidateSide+" WATCH CANDIDATE · FINAL GATE NOT PASSED";
+    }else if(looseWatchSide!=="WAIT"){
+      candidateEl.textContent=looseWatchSide+" WATCH · EVIDENCE DIRECTION";
     }else{
       candidateEl.textContent="NO DIRECTIONAL CANDIDATE";
     }
@@ -401,6 +412,9 @@ function renderDecision(){
       :null)||
     (candidate==="WAIT"&&earlyCandidateSide!=="WAIT"
       ?earlyCandidateSide+" watch candidate detected — current blocker: "+blockingStage
+      :null)||
+    (candidate==="WAIT"&&earlyCandidateSide==="WAIT"&&looseWatchSide!=="WAIT"
+      ?looseWatchSide+" is the current evidence direction; final gate remains unchanged."
       :null)||
     (candidate!=="WAIT"&&blockerSets.length
       ?candidate+" candidate detected — waiting on: "+blockerSets[0].replaceAll("_"," ").toLowerCase()+"."
