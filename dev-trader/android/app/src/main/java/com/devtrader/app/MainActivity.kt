@@ -94,7 +94,7 @@ class MainActivity : ComponentActivity() {
     private var lastNotifiedId: String? = null
 
     // Set this once the private backend is deployed.
-    private val backendWs = "wss://REPLACE_WITH_YOUR_ENGINE_HOST/ws"
+    private val backendWs = "wss://dev-trader-engine.onrender.com/ws"
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
