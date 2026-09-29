@@ -67,6 +67,11 @@ jobs:
       - run: for f in phase5[1-9]-*.js phase[6-9][0-9]-*.js phase100-*.js; do node --check "$f"; done
       - run: node --check phase51-100-stack.js
       - run: node phase51-100-selftest.js
+      - name: Check Phase 101–200 Intelligence OS
+        run: node --check phase101-200-intelligence.js && node --check phase101-200-stack.js
+      - run: node phase101-200-selftest.js
+      - run: node tests/phase101-200.js
+
       - run: node --check phase18-opportunity.js
       - run: node --check phase18-execution-router.js
       - run: node --check marketpulse-autotrader.js
@@ -516,7 +521,7 @@ jobs:
         run: |
           node - <<'NODE'
           const h=require('./phase-history');
-          if(h.getPhaseHistory().length!==100)throw new Error('Phase registry must contain exactly 100 phases');
+          if(h.getPhaseHistory().length!==200)throw new Error('Phase registry must contain exactly 200 phases');
           if(h.getCurrentPhase()!==20)throw new Error('Only validated historical phases 1-20 may be marked complete on this branch');
           console.log('Phase registry OK');
           NODE

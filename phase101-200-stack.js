@@ -1,0 +1,1 @@
+const intelligence=require("./phase101-200-intelligence");module.exports={VERSION:intelligence.VERSION,evaluate:intelligence.evaluate,selfTest:intelligence.selfTest,moduleSpecs:intelligence.moduleSpecs};

@@ -1,0 +1,1 @@
+const stack=require("./phase101-200-stack"),i=require("./phase101-200-intelligence");if(i.moduleSpecs.length!==100)throw new Error("Expected 100 Phase 101–200 upgrades");if(!stack.selfTest().ok)throw new Error("Phase 101–200 stack self-test failed");console.log("phase101-200 selftest: ok; upgrades="+i.moduleSpecs.length);
