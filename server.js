@@ -301,7 +301,7 @@ async function getDecisionSnapshotCached(symbol,interval,searchParams,device){
   }
 }
 const SIGNAL_STABILITY=new Map();
-const SIGNAL_CONFIRMATIONS_REQUIRED=3;
+const SIGNAL_CONFIRMATIONS_REQUIRED=2;
 const SIGNAL_RELEASE_MISSES=2;
 
 function signalStabilityKey(symbol,interval){return String(symbol)+"|"+String(interval)}
