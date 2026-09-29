@@ -8,7 +8,7 @@
   <meta name="description" content="MarketPulse — synchronized crypto market intelligence terminal.">
   <link rel="manifest" href="/manifest.json">
   <link rel="icon" href="/marketpulse-icon-v5.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/app.css?v=20260929-apex2">
+  <link rel="stylesheet" href="/app.css?v=20260929-apex3">
   <title>MarketPulse — Apex Market Terminal</title>
 </head>
 <body>
@@ -88,12 +88,24 @@
               <div class="toolbar-right">
                 <span class="legend-line"><i></i>50 EMA</span>
                 <span class="legend-line live"><i></i>LAST</span>
-                <button id="fitChart" class="tool-button" type="button">FIT</button>
+                <div class="chart-tools">
+                  <button id="zoomOut" class="tool-button" type="button" title="Zoom out">−</button>
+                  <button id="zoomIn" class="tool-button" type="button" title="Zoom in">+</button>
+                  <button id="resetView" class="tool-button" type="button">RESET</button>
+                  <button id="fitChart" class="tool-button" type="button">FIT</button>
+                  <button id="chartStyleToggle" class="tool-button" type="button">STYLE</button>
+                </div>
               </div>
             </div>
             <div class="chart-wrap">
               <canvas id="chart" aria-label="MarketPulse exchange style price chart"></canvas>
               <div id="chartHover" class="chart-hover">—</div>
+              <div id="chartStyle" class="chart-style hidden">
+                <label>UP <input id="candleUpColor" type="color" value="#37e6a2"></label>
+                <label>DOWN <input id="candleDownColor" type="color" value="#ff5d77"></label>
+                <label>BACKGROUND <input id="chartBgColor" type="color" value="#07090f"></label>
+                <label>GRID <input id="chartGridColor" type="color" value="#2b3040"></label>
+              </div>
             </div>
             <div class="chart-footer">
               <span id="chartState">Synchronized candles</span>
@@ -178,6 +190,6 @@
   </div>
 
   <noscript><div class="noscript">MarketPulse requires JavaScript for live market data.</div></noscript>
-  <script src="/app.js?v=20260929-apex2" defer></script>
+  <script src="/app.js?v=20260929-apex3" defer></script>
 </body>
 </html>
