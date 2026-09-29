@@ -224,4 +224,5 @@ async function audit({symbol=null,interval=null,limit=200}={}){
   return rows.filter(x=>(!symbol||x.symbol===symbol)&&(!interval||x.interval===interval)).slice(-Math.max(1,Math.min(Number(limit)||200,1000))).reverse();
 }
 
+function selfTest(){return {ok:VERSION==="15.0.0"&&typeof recordDecision==="function"&&typeof calibration==="function"&&typeof snapshot==="function"&&typeof audit==="function",version:VERSION};}
 module.exports={VERSION,recordDecision,calibration,snapshot,audit};
