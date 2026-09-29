@@ -18,7 +18,7 @@
     activeView:"command"
   };
 
-  const css = String.raw\`
+  const css = String.raw`
   :root{--apex-text:#f4f8fc;--apex-muted:#8190a1;--apex-dim:#536173;--apex-cyan:#54f7e0;--apex-lime:#c9ff43;--apex-violet:#a98aff;--apex-green:#35e7a5;--apex-red:#ff5577;--apex-amber:#ffcc66;--apex-shadow:0 24px 90px rgba(0,0,0,.34)}
   body.apexV2Active{background:#030408!important;color:var(--apex-text)!important} body.apexV2Active:before{display:none!important}
   #apexV2Root{position:fixed;inset:0;z-index:9999;overflow:auto;background:radial-gradient(900px 500px at 8% -12%,rgba(84,247,224,.10),transparent 58%),radial-gradient(800px 520px at 96% 0%,rgba(201,255,67,.07),transparent 55%),linear-gradient(180deg,#04070c,#070b11 46%,#030509);color:var(--apex-text);font:12px Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
@@ -74,7 +74,7 @@
   #apexV2Root .apex-modalCard h3{margin:0 0 7px;font-size:15px} #apexV2Root .apex-modalCard p{font-size:9px;color:#92a0b0;line-height:1.6}
   @media(max-width:1250px){#apexV2Root .apex-top{grid-template-columns:230px 1fr}#apexV2Root .apex-tools{grid-column:1/-1;justify-content:flex-start}#apexV2Root .apex-kpis{grid-template-columns:repeat(4,1fr)}#apexV2Root .apex-layout{grid-template-columns:1fr}#apexV2Root .apex-chartWrap{height:540px}}
   @media(max-width:760px){#apexV2Root .apex-shell{padding:8px 8px 28px}#apexV2Root .apex-top{grid-template-columns:1fr;top:0;border-radius:12px}#apexV2Root .apex-nav{justify-content:flex-start}#apexV2Root .apex-tools{flex-wrap:wrap}#apexV2Root .apex-kpis{grid-template-columns:repeat(2,1fr)}#apexV2Root .apex-chartWrap{height:430px}#apexV2Root .apex-grid,#apexV2Root .apex-split,#apexV2Root .apex-bottomGrid{grid-template-columns:1fr}#apexV2Root .apex-plan{grid-template-columns:1fr 1fr}#apexV2Root .apex-integrity{grid-template-columns:1fr 1fr}}
-\`;
+`;
   function style(){if(document.getElementById("apexV2Style"))return;const s=document.createElement("style");s.id="apexV2Style";s.textContent=css;document.head.appendChild(s)}
 
   const $=(s,r=document)=>r.querySelector(s);
@@ -173,7 +173,7 @@
         <section class="apex-view" data-panel="admin"><div class="apex-card"><div class="apex-cardHead"><div class="apex-title">System / Admin Health</div><span class="apex-chip">diagnostic</span></div><div class="apex-panelBody"><div class="apex-list" id="adminRows"></div></div></div></section>
       </div>
       <div id="apexModal" class="apex-modal"><div class="apex-modalCard"><h3>Live Execution Safety</h3><p id="apexModalText">Loading…</p><div class="apex-command"><button id="closeModal">Close</button><button id="modalKill">KILL SWITCH</button></div></div></div>
-    \`;
+    `;
     root.querySelector("#apexSymbol").value=S.symbol;root.querySelector("#apexTf").value=S.interval;document.body.appendChild(root);
 
     $("#apexNav",root).onclick=e=>{const b=e.target.closest("button[data-view]");if(!b)return;S.activeView=b.dataset.view;$("#apexNav",root).querySelectorAll("button").forEach(x=>x.classList.toggle("on",x===b));root.querySelectorAll(".apex-view").forEach(x=>x.classList.toggle("on",x.dataset.panel===S.activeView));if(S.activeView==="markets")renderMarkets()};    
