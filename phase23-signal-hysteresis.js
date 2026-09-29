@@ -31,6 +31,9 @@ function selfTest(){
   x=update(x,"SHORT",{confirmations:3}); const a=x;
   x=update(x,"SHORT",{confirmations:3}); const b=x;
   x=update(x,"SHORT",{confirmations:3}); const c=x;
-  return {ok:a.side==="LONG"&&a.pending==="SHORT"&&b.side==="LONG"&&c.side==="SHORT"&&c.reason==="CONFIRMED",version:VERSION};
+  let n={side:"WAIT",pending:"WAIT",count:0};
+  n=update(n,"LONG",{confirmations:2}); const fromWait=n;
+  n=update(n,"LONG",{confirmations:2}); const fromWaitConfirmed=n;
+  return {ok:a.side==="LONG"&&a.pending==="SHORT"&&b.side==="LONG"&&c.side==="SHORT"&&c.reason==="CONFIRMED"&&fromWait.side==="WAIT"&&fromWait.pending==="LONG"&&fromWaitConfirmed.side==="LONG",version:VERSION};
 }
 module.exports={VERSION,update,selfTest};
