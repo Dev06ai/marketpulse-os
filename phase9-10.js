@@ -19,7 +19,7 @@ function flowAlignment(side,d){
   return clamp(s,0,100);
 }
 function strictSignalChecks(a,side,higher,lower,flowScore,dataScore,levels,derivatives,interval="1h"){
-  const reasons=[];
+  const reasons=[],warnings=[];
   const h=String(higher?.regime||"UNKNOWN").toUpperCase();
   const l=String(lower?.regime||"UNKNOWN").toUpperCase();
   const d=derivatives||{};
@@ -58,18 +58,18 @@ function strictSignalChecks(a,side,higher,lower,flowScore,dataScore,levels,deriv
   const sweepOverride=confirmedSweepReclaim&&flowScore>=70&&dataScore>=85;
   if(side==="LONG"&&l==="DOWNTREND"&&!sfpLowerConfirmed&&!sweepOverride)reasons.push("15M trend conflicts");
   if(side==="SHORT"&&l==="UPTREND"&&!sfpLowerConfirmed&&!sweepOverride)reasons.push("15M trend conflicts");
-  if(String(d.cvdState||"").toUpperCase().includes("DIVERGENCE"))reasons.push("CVD divergence");
+  if(String(d.cvdState||"").toUpperCase().includes("DIVERGENCE"))warnings.push("CVD divergence");
   if(Number.isFinite(Number(levels?.rr))&&Number(levels.rr)<1.5)reasons.push("R:R below 1.5");
-  if(setupKind==="D_LINE_BREAKOUT"&&(!Number.isFinite(Number(levels?.rr))||Number(levels.rr)<2))reasons.push("D-Line checklist requires 2:1+ R:R");
+  if(setupKind==="D_LINE_BREAKOUT"&&(!Number.isFinite(Number(levels?.rr))||Number(levels.rr)<2))warnings.push("D-Line checklist prefers 2:1+ R:R");
   const advancedExecutionSetup=["SFP","ORDER_BLOCK","BREAKOUT_RETEST"].includes(setupKind);
-  if(advancedExecutionSetup&&(!Number.isFinite(Number(levels?.rr))||Number(levels.rr)<3)&&!(confirmedSweepReclaim&&Number(levels?.rr)>=1.8))reasons.push("Advanced price-action framework requires 3:1+ R:R");
+  if(advancedExecutionSetup&&(!Number.isFinite(Number(levels?.rr))||Number(levels.rr)<3)&&!(confirmedSweepReclaim&&Number(levels?.rr)>=1.8))warnings.push("Advanced price-action framework prefers 3:1+ R:R");
   if(d.available===false)reasons.push("derivatives unavailable");
   const completeness=d.completeness&&typeof d.completeness==="object"
     ?Object.values(d.completeness).filter(Boolean).length
     :null;
   if(completeness!==null&&completeness<3)reasons.push("insufficient derivatives completeness");
   if(Number.isFinite(Number(d.livePointCount))&&Number(d.livePointCount)<5)reasons.push("live flow sample too small");
-  return {eligible:reasons.length===0,reasons};
+  return {eligible:reasons.length===0,reasons,warnings};
 }
 
 function dataIntegrity({analysis,derivatives,consensus,dataQuality={},liveFlow={}}={}){
@@ -149,7 +149,7 @@ function evaluate(x={}){
     market:{side,score:base,confluenceScore:qScore,confluenceLabel:qScore>=80?"HIGH":qScore>=68?"MODERATE-HIGH":qScore>=55?"DEVELOPING":"LOW",price:n(a.price),change24h:n(a.change24h),regime:a.regime||"RANGE",mood:a.mood||"CALM",status:a.status||"WAITING",type:a.type||"NO TRADE",structure:a.structure||"UNKNOWN",momentum:a.momentum||"UNKNOWN",bias:a.directionalLean||a.bias||"NEUTRAL",tradeStyle:style.label,tradeHorizon:style.horizon},
     levels:lv,
     reactionMap:a?.reactionMap||{zones:[],opportunities:[],active:null,note:"Reaction map unavailable."},
-    evidence:{mtfScore:f(mtf),flowScore:f(flow),levelScore:f(level),dataScore:f(data.score),components,warnings:data.warnings,strictGate:strict,marketStructure:a?.marketStructure||null,reactionMap:a?.reactionMap||null,reactionOpportunities:Array.isArray(a?.reactionMap?.opportunities)?a.reactionMap.opportunities:[],thesis,primaryScenario:side==="LONG"?"Continuation higher while price holds invalidation and flow stays constructive.":side==="SHORT"?"Continuation lower while price stays beneath invalidation and flow remains constructive.":"Range / rotation until a confirmed boundary break.",invalidationScenario:side==="LONG"?"Loss of invalidation or major timeframe conflict.":side==="SHORT"?"Reclaim of invalidation or major timeframe conflict.":"A directional thesis needs a confirmed break with volume.",contributors:Array.isArray(a.contributors)?a.contributors.slice(0,12):[]},
+    evidence:{mtfScore:f(mtf),flowScore:f(flow),levelScore:f(level),dataScore:f(data.score),components,warnings:[...data.warnings,...(strict.warnings||[])],strictGate:strict,marketStructure:a?.marketStructure||null,reactionMap:a?.reactionMap||null,reactionOpportunities:Array.isArray(a?.reactionMap?.opportunities)?a.reactionMap.opportunities:[],thesis,primaryScenario:side==="LONG"?"Continuation higher while price holds invalidation and flow stays constructive.":side==="SHORT"?"Continuation lower while price stays beneath invalidation and flow remains constructive.":"Range / rotation until a confirmed boundary break.",invalidationScenario:side==="LONG"?"Loss of invalidation or major timeframe conflict.":side==="SHORT"?"Reclaim of invalidation or major timeframe conflict.":"A directional thesis needs a confirmed break with volume.",contributors:Array.isArray(a.contributors)?a.contributors.slice(0,12):[]},
     data:{score:data.score,candleAgeMs:n(x.dataQuality?.candleAgeMs),derivativesAvailable:Boolean(x.derivatives&&x.derivatives.available!==false),consensusQualityPct:n(x.consensus?.consensusQualityPct),priceDispersionBps:n(x.consensus?.priceDispersionBps),providerCount:n(x.consensus?.sourceCount),independentSourceCount:n(x.consensus?.independentSourceCount),liveConnected:Boolean(x.liveFlow?.liveConnected||x.liveFlow?.wsConnected),livePointCount:n(x.liveFlow?.livePointCount)},
     validation:{available:Boolean(x.validation),sample:n(x.validation?.sample??x.validation?.totalTrades),coverage:n(x.validation?.coverage),note:"Historical validation describes past samples; it is not a guarantee of future results."},
     propGate:x.propGate||{decision:"NOT_EVALUATED"},
