@@ -7,7 +7,7 @@ const state={
   livePrice:null,previousPrice:null,pricePulse:0,lastLiveEventAt:0,lastServerSeq:0,
   crosshair:null,drag:null,chartUserInteracted:false,viewStart:0,viewCount:110,
   ws:null,wsConnected:false,wsReconnectTimer:null,wsRetryMs:1000,
-  style:{up:"#37e6a2",down:"#ff5d77,bg:"#07090f",grid:"#2b3040"},
+  style:{up:"#37e6a2",down:"#ff5d77",bg:"#07090f",grid:"#2b3040"},
   tickerTimer:null,flowTimer:null,chartTimer:null,decisionTimer:null
 };
 
@@ -339,7 +339,7 @@ async function loadCore(){
   ]);
   const [cfg,tick,chart,live]=tasks;
   if(cfg.status==="fulfilled"){state.cfg=cfg.value;populateSymbols(cfg.value.symbols)}
-  if(tick.status==="fulfilled"){state.ticker=tick.value;state.livePrice=safeNum(tick.value.price);state.lastLiveEventAt=Date.now();writeCache(cacheKey("ticker"),state.ticker);renderTicker()}
+  if(tick.status==="fulfilled"&&!state.wsConnected){state.ticker=tick.value;state.livePrice=safeNum(tick.value.price);state.lastLiveEventAt=Date.now();writeCache(cacheKey("ticker"),state.ticker);renderTicker()}
   if(chart.status==="fulfilled"&&Array.isArray(chart.value.candles)){state.chart=chart.value.candles;writeCache(cacheKey("chart"),chart.value);drawChart()}
   if(live.status==="fulfilled"){state.live=live.value||{};if(safeNum(live.value?.price)!==null)applyCanonicalMarket({...live.value,type:"market-sync",seq:live.value.seq||state.lastServerSeq})}
   const marketOk=tick.status==="fulfilled"||chart.status==="fulfilled";
