@@ -12,7 +12,7 @@ function safeRequire(file){
   catch(e){return {ok:false,module:null,error:String(e?.message||e)}}
 }
 
-function run(){
+async function run(){
   const root=__dirname;
   const history=safeRequire(path.join(root,"phase-history.js"));
   const phases=history.ok&&typeof history.module.getPhaseHistory==="function"?history.module.getPhaseHistory():[];
@@ -43,7 +43,7 @@ function run(){
     let selfTest={status:hasSelfTest?"NOT_RUN":"NO_SELF_TEST"};
     if(hasSelfTest){
       try{
-        const result=required.module.selfTest();
+        const result=await Promise.resolve().then(()=>required.module.selfTest());
         selfTest={status:result?.ok===true?"PASS":"FAIL",result:result??null};
       }catch(e){selfTest={status:"ERROR",error:String(e?.message||e)}}
     }
@@ -76,6 +76,26 @@ function run(){
   groupChecks.phase301to400Specs=Boolean(consolidated.phase301to400.module?.specs?.length===100);
   groupChecks.phase401to500Specs=Boolean(consolidated.phase401to500.module?.specs?.length===100);
 
+  const weakSelfTests=modules.filter(x=>x.hasSelfTest&&/return\s*\{\s*ok\s*:\s*true/.test((fs.readFileSync(path.join(root,x.file),"utf8")||""))).map(x=>x.file);
+  const modulesWithoutSelfTest=modules.filter(x=>x.selfTest.status==="NO_SELF_TEST").map(x=>x.file);
+  const coreChecks={
+    phase1_2:Boolean(fs.existsSync(path.join(root,"market-engine.js"))),
+    phase3:Boolean(fs.existsSync(path.join(root,"trade-levels.js"))),
+    phase4:Boolean(history.ok&&fs.existsSync(path.join(root,"phase4.js"))),
+    phase5:Boolean(history.ok&&fs.readFileSync(path.join(root,"server.js"),"utf8").includes("function derivatives")),
+    phase6:Boolean(fs.existsSync(path.join(root,"phase6.js"))),
+    phase7:Boolean(fs.existsSync(path.join(root,"phase7.js"))),
+    phase8:Boolean(fs.existsSync(path.join(root,"auth.js"))&&fs.readFileSync(path.join(root,"auth.js"),"utf8").includes("requireAdmin")),
+    phase9_10:Boolean(fs.existsSync(path.join(root,"phase9-10.js"))),
+    phase11_13:Boolean(fs.existsSync(path.join(root,"phase11-13.js"))),
+    phase14:Boolean(fs.existsSync(path.join(root,"phase14-signal-intelligence.js"))),
+    phase15:Boolean(fs.existsSync(path.join(root,"phase15.js"))),
+    phase16:Boolean(fs.existsSync(path.join(root,"phase16.js"))),
+    phase17:Boolean(fs.existsSync(path.join(root,"autotrader.js"))),
+    phase18:Boolean(fs.existsSync(path.join(root,"phase18-market-state.js"))&&fs.existsSync(path.join(root,"phase18-execution-router.js"))),
+    phase19:Boolean(fs.readFileSync(path.join(root,"server.js"),"utf8").includes("DECISION_LAST_GOOD")),
+    phase20:Boolean(fs.existsSync(path.join(root,"phase20-scenario-matrix.js")))
+  };
   const failures=modules.filter(x=>x.load!=="PASS"||x.selfTest.status==="FAIL"||x.selfTest.status==="ERROR");
   const groupFailures=Object.entries(groupChecks).filter(([k,v])=>v===false||v==="FAIL"||v==="ERROR"||v.selfTest==="FAIL"||v.selfTest==="ERROR"||v.selfTest==="MISSING");
 
@@ -84,8 +104,11 @@ function run(){
     version:VERSION,
     generatedAt:Date.now(),
     registry,
+    coreChecks,
     moduleCount:modules.length,
     moduleFailures:failures,
+    weakSelfTests,
+    modulesWithoutSelfTest,
     consolidated:groupChecks,
     checkedFiles:modules.map(x=>x.file),
   };
