@@ -9,12 +9,22 @@ function update(prev={},candidate="WAIT",opts={}){
   const required=Math.max(1,Number(opts.confirmations||3));
   const opposite=current!=="WAIT"&&next!=="WAIT"&&current!==next;
   const invalidated=Boolean(opts.invalidated);
-  if(invalidated||current==="WAIT"||next===current)return {side:invalidated?"WAIT":current||"WAIT",pending:"WAIT",count:0,reason:invalidated?"INVALIDATED":"HOLD"};
-  const pending=side(prev.pending)===next?next:"WAIT";
-  const count=pending===next?Number(prev.count||0)+1:1;
-  if(count>=required)return {side:next,pending:"WAIT",count:0,reason:"CONFIRMED"};
-  if(opposite)return {side:current,pending:next,count,reason:"CONFIRMING_FLIP"};
-  return {side:next,pending:"WAIT",count:0,reason:"RELEASE"};
+  if(invalidated)return {side:"WAIT",pending:"WAIT",count:0,reason:"INVALIDATED"};
+  if(next==="WAIT")return {side:current,pending:"WAIT",count:0,reason:current==="WAIT"?"HOLD":"NO_NEW_CANDIDATE"};
+  if(current==="WAIT"){
+    const pending=side(prev.pending)===next?next:"WAIT";
+    const count=pending===next?Number(prev.count||0)+1:1;
+    if(count>=required)return {side:next,pending:"WAIT",count:0,reason:"CONFIRMED_FROM_WAIT"};
+    return {side:"WAIT",pending:next,count,reason:"CONFIRMING_FROM_WAIT"};
+  }
+  if(next===current)return {side:current,pending:"WAIT",count:0,reason:"HOLD"};
+  if(opposite){
+    const pending=side(prev.pending)===next?next:"WAIT";
+    const count=pending===next?Number(prev.count||0)+1:1;
+    if(count>=required)return {side:next,pending:"WAIT",count:0,reason:"CONFIRMED"};
+    return {side:current,pending:next,count,reason:"CONFIRMING_FLIP"};
+  }
+  return {side:current,pending:"WAIT",count:0,reason:"HOLD"};
 }
 function selfTest(){
   let x={side:"LONG",pending:"WAIT",count:0};
