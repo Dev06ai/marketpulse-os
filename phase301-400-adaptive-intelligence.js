@@ -79,7 +79,7 @@ function council(input,r,fp,mem,dna,ev){
  if(ev.material){L*=.85;S*=.85}
  const total=L+S||1,lp=clamp(L/total),sp=clamp(S/total);
  const action=lp-sp>.12?"LONG":sp-lp>.12?"SHORT":"WAIT";
- return {action,longProbability:Number(lp.toFixed(4)),shortProbability:Number(sp.toFixed(4)),waitProbability:Number((1-Math.max(lp,sp)).toFixed(4)),base,agreement:Number((Math.max(lp,sp)).toFixed(4))};
+ return {action,longWeight:Number(lp.toFixed(4)),shortWeight:Number(sp.toFixed(4)),neutralWeight:Number((1-Math.max(lp,sp)).toFixed(4)),base,agreement:Number((Math.max(lp,sp)).toFixed(4)),calibratedProbability:null,probabilitySource:"UNAVAILABLE"};
 }
 function failure(input,r,mem,dna,ev,c){
  const blockers=[];
