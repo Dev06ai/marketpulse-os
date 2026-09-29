@@ -87,3 +87,138 @@ html{scroll-behavior:smooth}
 .prob-header small{font-weight:950!important}
 .prob-track{background:rgba(166,181,199,.13)!important;border:1px solid rgba(166,181,199,.07)}
 .probability b{font-variant-numeric:tabular-nums;color:#f4f7fb!important}
+
+/* CHARCOAL BLACK SYSTEM THEME — global surface pass */
+:root{
+  --bg:#0b0c0f;
+  --panel:#111317;
+  --panel2:#15171c;
+  --line:rgba(214,219,228,.09);
+  --line2:rgba(214,219,228,.16);
+  --text:#f2f3f5;
+  --muted:#8e949f;
+  --cyan:#6ee7d8;
+  --blue:#8ca8d9;
+  --violet:#aeb3c2;
+  --green:#67d7a8;
+  --red:#e98292;
+  --amber:#d8b36a;
+  --shadow:0 24px 70px rgba(0,0,0,.48)
+}
+html,body{background:#0b0c0f!important;color:var(--text)}
+body{background:#0b0c0f!important}
+.app{
+  background:
+    radial-gradient(800px 420px at 0% -8%,rgba(255,255,255,.025),transparent 62%),
+    radial-gradient(900px 500px at 100% 0%,rgba(255,255,255,.018),transparent 64%),
+    linear-gradient(180deg,#0b0c0f 0%,#0e1014 52%,#0a0b0e 100%)!important
+}
+.app:before{
+  background-image:
+    linear-gradient(rgba(255,255,255,.012) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(255,255,255,.012) 1px,transparent 1px)!important;
+  opacity:.28!important
+}
+.sidebar{
+  background:#0a0b0e!important;
+  border-right-color:rgba(214,219,228,.08)!important;
+  backdrop-filter:none
+}
+.topbar{
+  background:#0d0f13!important;
+  border-bottom-color:rgba(214,219,228,.08)!important;
+  backdrop-filter:none
+}
+.runtime-bar{
+  background:#101216!important;
+  border-color:rgba(214,219,228,.08)!important
+}
+.workspace{background:transparent!important}
+.chart-shell,.decision-panel,.signal-tape,.system-mini,.glass-panel,.data-card{
+  background:#121419!important;
+  border-color:rgba(214,219,228,.10)!important;
+  box-shadow:0 20px 60px rgba(0,0,0,.36)!important
+}
+.chart-shell:before{
+  background:linear-gradient(120deg,rgba(255,255,255,.018),transparent 40%,rgba(255,255,255,.012))!important
+}
+.chart-toolbar{
+  background:#15171c!important;
+  border-bottom-color:rgba(214,219,228,.10)!important
+}
+.chart-wrap{background:#0d0f13!important}
+.chart-footer{
+  background:#101216!important;
+  border-top-color:rgba(214,219,228,.08)!important
+}
+.chart-style{
+  background:#111317!important;
+  border-color:rgba(214,219,228,.16)!important
+}
+.select-wrap select,.icon-button,.ghost-button,.tool-button{
+  background:#17191e!important;
+  border-color:rgba(214,219,228,.16)!important;
+  color:#f1f2f4!important
+}
+.select-wrap select:hover,.icon-button:hover,.ghost-button:hover,.tool-button:hover{
+  background:#1c1f25!important;
+  border-color:rgba(214,219,228,.27)!important
+}
+.select-wrap select:focus,.tool-button:focus,.ghost-button:focus,.icon-button:focus{
+  border-color:rgba(214,219,228,.40)!important;
+  box-shadow:0 0 0 2px rgba(255,255,255,.035)!important
+}
+.nav-item:hover{background:#15171c!important}
+.nav-item.active{
+  background:#1a1d23!important;
+  box-shadow:inset 3px 0 0 #aeb4bf,0 10px 25px rgba(0,0,0,.20)!important;
+  color:#fff!important
+}
+.nav-item.active span{color:#d7dbe1!important}
+.sidebar-card{
+  background:#111317!important;
+  border-color:rgba(214,219,228,.10)!important
+}
+.asset-icon{
+  background:#171a20!important;
+  border-color:rgba(214,219,228,.14)!important;
+  color:#d6dbe2!important;
+  box-shadow:none!important
+}
+.brand-copy strong span{
+  background:linear-gradient(100deg,#e9ebef,#aeb4bf)!important;
+  -webkit-background-clip:text!important;
+  background-clip:text!important
+}
+.market-strip{background:transparent!important}
+.data-card>span,.level-grid span,.decision-footer span,.prob-header,.signal-tape .signal-title,
+.nav-label,.section-label,.chart-title,.chart-subtitle,.chart-state{
+  color:#a4aab4
+}
+.tape-row{border-bottom-color:rgba(214,219,228,.08)!important}
+.level-grid>div,.decision-footer>div,.phase-chip,.phase-highlight,.reason,.check,.phase{
+  background:#15171c!important;
+  border-color:rgba(214,219,228,.09)!important
+}
+.prob-track{
+  background:#1b1e24!important;
+  border-color:rgba(214,219,228,.06)!important
+}
+.prob-track i{background:linear-gradient(90deg,#b9bec7,#858b95,#c8ccd2)!important}
+.status-pill.wait{
+  color:#e2c486!important;
+  background:#1a1812!important;
+  border-color:rgba(216,179,106,.28)!important
+}
+.status-pill.long{
+  color:#86d8b2!important;
+  background:#121b17!important;
+  border-color:rgba(103,215,168,.20)!important
+}
+.status-pill.short{
+  color:#e895a3!important;
+  background:#1d1418!important;
+  border-color:rgba(233,130,146,.20)!important
+}
+.live-orb{box-shadow:0 0 0 5px rgba(255,255,255,.025),0 0 16px rgba(255,255,255,.16)!important}
+.footer{background:transparent!important;color:#626974!important}
