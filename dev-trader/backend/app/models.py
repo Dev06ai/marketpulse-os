@@ -29,6 +29,12 @@ class MarketState:
     cvd: float = 0.0
     delta_1m: float = 0.0
     orderbook_seq: int | None = None
+    book_bid_qty: float = 0.0
+    book_ask_qty: float = 0.0
+    book_imbalance: float = 0.0
+    spread_bps: float = 0.0
+    liquidation_long_5m: float = 0.0
+    liquidation_short_5m: float = 0.0
     exchange_ts: int | None = None
     received_ts: int | None = None
     last_trade_ts: int | None = None
@@ -37,6 +43,8 @@ class MarketState:
     data_health: str = "STARTING"
     ws_connected: bool = False
     oi_window: list[tuple[int, float]] = field(default_factory=list)
+    cvd_history: list[tuple[int, float]] = field(default_factory=list)
+    liquidation_window: list[tuple[int, str, float]] = field(default_factory=list)
     candles_15: list[Candle] = field(default_factory=list)
     candles_60: list[Candle] = field(default_factory=list)
 
@@ -44,4 +52,7 @@ class MarketState:
         d = asdict(self)
         d["candles_15"] = [c.to_dict() for c in self.candles_15[-120:]]
         d["candles_60"] = [c.to_dict() for c in self.candles_60[-120:]]
+        d["oi_window"] = self.oi_window[-120:]
+        d["cvd_history"] = self.cvd_history[-120:]
+        d["liquidation_window"] = self.liquidation_window[-240:]
         return d
