@@ -67,6 +67,11 @@ jobs:
       - run: for f in phase5[1-9]-*.js phase[6-9][0-9]-*.js phase100-*.js; do node --check "$f"; done
       - run: node --check phase51-100-stack.js
       - run: node phase51-100-selftest.js
+      - name: Check Phase 101–200 Intelligence OS
+        run: node --check phase101-200-intelligence.js && node --check phase101-200-stack.js
+      - run: node phase101-200-selftest.js
+      - run: node tests/phase101-200.js
+
       - run: node --check phase18-opportunity.js
       - run: node --check phase18-execution-router.js
       - run: node --check marketpulse-autotrader.js

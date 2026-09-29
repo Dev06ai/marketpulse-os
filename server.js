@@ -21,6 +21,7 @@ const phase21=require("./phase21-state-contract");
 const phaseHistory=require("./phase-history");
 const phaseStack=require("./phase21-50-stack");
 const phase51to100=require("./phase51-100-stack");
+const phase101to200=require("./phase101-200-stack");
 const signalNotifications=require('./signal-notifications');
 const propFirm=require('./prop-firm');
 const research=require('./research-data');
@@ -985,6 +986,24 @@ async function buildDecisionSnapshot(symbol,interval,query,deviceId=null){
       expectancy:{winProbability:empiricalWinRate!=null?empiricalWinRate/100:null,averageWinR:Number(conditionalLevels?.rr)||1.5,averageLossR:1,costR:0.05},
       expectancyGate:{probability:null,rr:Number(conditionalLevels?.rr)||0,costBps:10}
     });
+    const phase101to200State=phase101to200.evaluate({
+      symbol,interval,now,
+      price:Number(finalDecision?.market?.price??analysis?.price??candles?.at(-1)?.c),
+      candles,
+      decision:{...finalDecision,derivatives:flow},
+      market:finalDecision?.market||{},analysis,derivatives:flow,consensus,
+      mtf:{higher:String(finalDecision?.higher?.side||finalDecision?.higherTimeframe?.side||analysis?.higher?.side||"WAIT").toUpperCase(),execution:String(finalDecision?.action||"WAIT").toUpperCase(),lower:String(analysis?.lower?.side||analysis?.lowerTimeframe?.side||finalDecision?.action||"WAIT").toUpperCase()},
+      phase51to100:phase51to100State,validation:analytics?.validation||null,
+      calibration:{probability:empiricalWinRate??null,source:empiricalWinRate!=null?"WALK_FORWARD_EMPIRICAL":"UNAVAILABLE"},
+      freshnessPct:phaseStackState?.data?.quality?.score??100,stale:Boolean(finalDecision?.stale),risk:finalDecision?.risk||{},marketSource:flow?.provider||"MARKET_FEED"
+    });
+    if(phase101to200State?.gate?.action==="WAIT"&&["LONG","SHORT"].includes(String(finalDecision?.action||"").toUpperCase())){
+      finalDecision={...sanitizeFinalDecision(finalDecision),action:"WAIT",state:"NO_TRADE",liveSignalEligible:false,
+        market:{...(finalDecision.market||{}),side:"WAIT",status:"WAITING",type:"ADVANCED INTELLIGENCE BLOCK",bias:"Neutral",directionalLean:"NEUTRAL",probabilityLabel:"LOW CONFLUENCE"},
+        levels:{...(finalDecision.levels||{}),entryLow:null,entryHigh:null,entry:null,stop:null,tp1:null,tp2:null,rr:null},
+        deploymentGate:{...(finalDecision.deploymentGate||{}),state:"BLOCKED",reason:(phase101to200State.gate.blockers||[]).join(", ")||"Advanced intelligence gate blocked the directional candidate."},
+        operational:{...(finalDecision.operational||{}),liveUse:"PAPER_ONLY"},phase101to200Blocked:true};
+    }
     try{
       setTimeout(()=>signalNotifications.notifyAdminSignal(storage,{
         decision:finalDecision,
@@ -1029,7 +1048,7 @@ async function buildDecisionSnapshot(symbol,interval,query,deviceId=null){
       phase11_13:validation1113,
       phase14:finalDecision.phase14||analysis.phase14||null,
       phase14Status:finalDecision.phase14?.adaptive||analysis.phase14?.adaptive||null,
-      phase11:PHASE11_VERSION,phase12:PHASE12_VERSION,phase13:PHASE13_VERSION,phase14Version:"14.0.0",phase20Version:phase20.VERSION,phase21Version:phase21.VERSION,phase21to50Version:phaseStack.VERSION,phase51to100Version:phase51100.VERSION,phase51to100:phase51100State,
+      phase11:PHASE11_VERSION,phase12:PHASE12_VERSION,phase13:PHASE13_VERSION,phase14Version:"14.0.0",phase20Version:phase20.VERSION,phase21Version:phase21.VERSION,phase21to50Version:phaseStack.VERSION,phase51to100Version:phase51to100.VERSION,phase51to100:phase51to100State,phase101to200Version:phase101to200.VERSION,phase101to200:phase101to200State,
       updatedAt:now
     };
     DECISION_CACHE.set(key,{ts:now,payload});
@@ -2404,6 +2423,9 @@ const server=http.createServer(async(req,res)=>{
       }catch(e){return send(res,400,{ok:false,error:String(e.message||e)})}
     }
     if(req.method==='GET'&&u.pathname==='/api/admin/config')return send(res,200,{ok:true,config:await getAdminRuntime(true)});
+    if(req.method==='GET'&&u.pathname==='/api/admin/intelligence-health'){
+      try{const guard=await auth.requireAdmin(req);if(!guard.ok)return send(res,guard.status,{ok:false,error:guard.error});const last=DECISION_LAST_GOOD.get("BTCUSDT|15m");return send(res,200,{ok:true,phase:"101-200",version:phase101to200.VERSION,automaticExecutionEnabled:false,decisionSupportOnly:true,lastSnapshotId:last?.payload?.phase101to200?.canonical?.hash||null,rollout:last?.payload?.phase101to200?.rollout||{implemented:true,livePromotion:false}})}catch(e){return send(res,503,{ok:false,error:String(e.message||e)})}
+    }
     if(req.method==='GET'&&u.pathname==='/api/admin/phase-history'){
       try{
         const guard=await auth.requireAdmin(req);
