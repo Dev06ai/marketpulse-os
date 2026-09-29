@@ -526,7 +526,7 @@ const GLOBAL_RATE_WINDOW_MS=5*60*1000;
 const GLOBAL_RATE_LIMIT=300;
 const GLOBAL_RATE=new Map();
 const FAST_PUBLIC_PATHS=new Set(["/api/core","/api/chart","/api/fast-ticker","/api/core-enrichment","/api/core-analytics","/api/decision","/api/validation","/api/data-fabric","/api/config","/health","/"]);
-const FAST_TICKER_CACHE=new Map();
+const FAST_TICKER_CACHE=new Map(); const FAST_TICKER_CACHE_TTL_MS=750;
 const CSRF_COOKIE="mp_csrf";
 const SERVER_METRICS={startedAt:Date.now(),requests:0,errors:0,totalLatencyMs:0,routeCounts:new Map(),lastErrors:[],recentRequests:[]};
 let RESEARCH_JOB={running:false,startedAt:null,finishedAt:null,error:null,symbol:null,interval:null,bars:0,records:0,trained:0,skipped:0,progress:{processed:0,total:0,pct:0}};
@@ -2739,7 +2739,7 @@ const server=http.createServer(async(req,res)=>{
       const symbol=(u.searchParams.get('symbol')||'BTCUSDT').toUpperCase();
       if(!SYMBOLS.includes(symbol))return send(res,400,{ok:false,error:'Unsupported symbol'});
       const now=Date.now(),cached=FAST_TICKER_CACHE.get(symbol);
-      if(cached&&now-cached.ts<3000)return send(res,200,{ok:true,...cached.payload,cached:true,cacheAgeMs:now-cached.ts});
+      if(cached&&now-cached.ts<FAST_TICKER_CACHE_TTL_MS)return send(res,200,{ok:true,...cached.payload,cached:true,cacheAgeMs:now-cached.ts});
       try{
         const live=flowBucket(symbol);
         if(Number.isFinite(Number(live.lastPrice))&&now-Number(live.lastTs||0)<10000){
