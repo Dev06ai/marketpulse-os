@@ -76,7 +76,14 @@ async function run(){
   groupChecks.phase301to400Specs=Boolean(consolidated.phase301to400.module?.specs?.length===100);
   groupChecks.phase401to500Specs=Boolean(consolidated.phase401to500.module?.specs?.length===100);
 
-  const weakSelfTests=modules.filter(x=>x.hasSelfTest&&/return\s*\{\s*ok\s*:\s*true/.test((fs.readFileSync(path.join(root,x.file),"utf8")||""))).map(x=>x.file);
+  const weakSelfTests=modules.filter(x=>{
+    if(!x.hasSelfTest)return false;
+    const src=fs.readFileSync(path.join(root,x.file),"utf8")||"";
+    const s=src.indexOf("function selfTest");
+    const e=s>=0?src.indexOf("module.exports",s):-1;
+    const body=s>=0?(e>0?src.slice(s,e):src.slice(s)):"";
+    return /return\s*\{\s*ok\s*:\s*true\s*,?/.test(body);
+  }).map(x=>x.file);
   const modulesWithoutSelfTest=modules.filter(x=>x.selfTest.status==="NO_SELF_TEST").map(x=>x.file);
   const coreChecks={
     phase1_2:Boolean(fs.existsSync(path.join(root,"market-engine.js"))),
