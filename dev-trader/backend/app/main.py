@@ -17,6 +17,8 @@ engine=StrategyEngine(); push=PushService(); stream=None
 
 class TokenPayload(BaseModel): token:str
 
+class PushTestPayload(BaseModel): token: str | None = None
+
 async def broadcast_loop():
     while True:
         await asyncio.sleep(SNAPSHOT)
@@ -46,6 +48,42 @@ app=FastAPI(title="Dev Trader Engine",version="0.1.0",lifespan=lifespan)
 @app.get("/diagnostics")
 async def diagnostics():
     return engine.last_diagnostics
+
+@app.get("/system-check")
+async def system_check():
+    diag = engine.last_diagnostics
+    push_status = push.status()
+    latency = (state.received_ts-state.exchange_ts) if state.received_ts and state.exchange_ts else None
+    return {
+        "backend_ok": True,
+        "server_ts": int(time.time()*1000),
+        "market": {
+            "symbol": state.symbol,
+            "data_health": state.data_health,
+            "ws_connected": state.ws_connected,
+            "last_price": state.last_price,
+            "latency_ms": latency,
+            "orderbook_seq": state.orderbook_seq,
+            "last_trade_ts": state.last_trade_ts,
+            "last_kline_15_ts": state.last_kline_15_ts,
+            "last_kline_60_ts": state.last_kline_60_ts,
+        },
+        "strategy": {
+            "status": diag.get("status"),
+            "wait_reason": diag.get("wait_reason"),
+            "setups": diag.get("setups", {}),
+            "manual_execution_only": diag.get("manual_execution_only", True),
+        },
+        "client": {
+            "connected_websocket_clients": len(clients),
+            "current_signal": last_signal,
+        },
+        "push": push_status,
+    }
+
+@app.post("/system-check/push")
+async def system_check_push(payload: PushTestPayload):
+    return push.send_test(payload.token)
 
 @app.get("/health")
 async def health():
