@@ -371,7 +371,8 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
-            if (fcmSent != null && !fcmReceived) {
+            if (fcmSent != null) {
+                val callbackCheckAt = System.currentTimeMillis()
                 mainHandler.postDelayed({
                     val receivedLater = getSharedPreferences("dev_trader", Context.MODE_PRIVATE)
                         .getLong("last_fcm_received_ts", 0L) >= startedAt
@@ -382,7 +383,7 @@ class MainActivity : ComponentActivity() {
                             } else it
                         }
                     )
-                }, maxOf(2500L, now - startedAt))
+                }, maxOf(2500L, callbackCheckAt - startedAt))
             }
         }
     }
