@@ -7,7 +7,7 @@ const state={
   livePrice:null,previousPrice:null,pricePulse:0,lastLiveEventAt:0,lastServerSeq:0,
   crosshair:null,selectedCandle:null,drag:null,chartUserInteracted:false,viewStart:0,viewCount:110,fullscreen:false,navFocusTimer:null,
   ws:null,wsConnected:false,wsReconnectTimer:null,wsRetryMs:1000,
-  style:{up:"#37e6a2",down:"#ff5d77",bg:"#07090f",grid:"#2b3040"},
+  style:{up:"#37e6a2",down:"#ff5d77",bg:"#0b0d10",grid:"#2b3036"},
   tickerTimer:null,flowTimer:null,chartTimer:null,decisionTimer:null
 };
 
@@ -79,6 +79,8 @@ function loadChartStyle(){
   try{
     const saved=JSON.parse(localStorage.getItem("mp-chart-style")||"null");
     if(saved&&typeof saved==="object")state.style={...state.style,...saved};
+    if(state.style.bg==="#07090f")state.style.bg="#0b0d10";
+    if(state.style.grid==="#2b3040")state.style.grid="#2b3036";
   }catch{}
   if($("candleUpColor"))$("candleUpColor").value=state.style.up;
   if($("candleDownColor"))$("candleDownColor").value=state.style.down;
