@@ -3,8 +3,11 @@
 
 const $=id=>document.getElementById(id);
 const state={
-  symbol:"BTCUSDT",interval:"1h",cfg:null,ticker:null,live:null,chart:null,decision:null,phases:null,
-  livePrice:null,previousPrice:null,pricePulse:0,crosshair:null,fitToken:0,
+  symbol:"BTCUSDT",interval:"1h",cfg:null,ticker:null,live:null,market:null,chart:null,decision:null,phases:null,
+  livePrice:null,previousPrice:null,pricePulse:0,lastLiveEventAt:0,lastServerSeq:0,
+  crosshair:null,drag:null,chartUserInteracted:false,viewStart:0,viewCount:110,
+  ws:null,wsConnected:false,wsReconnectTimer:null,wsRetryMs:1000,
+  style:{up:"#37e6a2",down:"#ff5d77,bg:"#07090f",grid:"#2b3040"},
   tickerTimer:null,flowTimer:null,chartTimer:null,decisionTimer:null
 };
 
@@ -63,14 +66,116 @@ function renderTicker(){
   const ch=safeNum(t.change24h);
   $("change24").textContent=ch===null?"—":(ch>=0?"+":"")+ch.toFixed(2)+"%";
   $("change24").style.color=ch===null?"var(--muted)":ch>=0?"var(--green)":"var(--red)";
-  $("source").textContent=t.source||"exchange feed";
-  $("age").textContent=tickAge(t.updatedAt);
+  $("source").textContent=state.wsConnected?"Bybit live WebSocket":(t.source||"exchange feed");
+  $("age").textContent=tickAge(state.market?.dataTs??t.updatedAt);
   $("lastTrade").textContent="LAST "+fmt(p,2);
-  $("dataBadge").textContent=p===null?"CONNECTING":"LIVE 1S";
-  $("chartState").textContent=state.previousPrice!==null&&p!==null&&p!==state.previousPrice?"Live price moving":"Synchronized candles";
+  $("dataBadge").textContent=p===null?"CONNECTING":(state.wsConnected?"LIVE WS":"LIVE FALLBACK");
+  $("chartState").textContent=state.wsConnected?"Live exchange ticks":(state.previousPrice!==null&&p!==null&&p!==state.previousPrice?"Live price fallback":"Synchronized candles");
 }
 function tickAge(ts){
   const n=safeNum(ts);return n===null?"—":"updated "+Math.max(0,Math.round((Date.now()-n)/1000))+"s ago";
+}
+function loadChartStyle(){
+  try{
+    const saved=JSON.parse(localStorage.getItem("mp-chart-style")||"null");
+    if(saved&&typeof saved==="object")state.style={...state.style,...saved};
+  }catch{}
+  if($("candleUpColor"))$("candleUpColor").value=state.style.up;
+  if($("candleDownColor"))$("candleDownColor").value=state.style.down;
+  if($("chartBgColor"))$("chartBgColor").value=state.style.bg;
+  if($("chartGridColor"))$("chartGridColor").value=state.style.grid;
+}
+function saveChartStyle(){
+  try{localStorage.setItem("mp-chart-style",JSON.stringify(state.style))}catch{}
+}
+function updateChartStyle(){
+  state.style.up=$("candleUpColor").value;
+  state.style.down=$("candleDownColor").value;
+  state.style.bg=$("chartBgColor").value;
+  state.style.grid=$("chartGridColor").value;
+  saveChartStyle();drawChart();
+}
+function resetChartView(){
+  const total=Array.isArray(state.chart)?state.chart.length:0;
+  state.chartUserInteracted=false;
+  state.viewCount=Math.min(110,Math.max(25,total||110));
+  state.viewStart=Math.max(0,(total||state.viewCount)-state.viewCount);
+  drawChart();
+}
+function zoomChart(multiplier,anchorRatio=.5){
+  const total=Array.isArray(state.chart)?state.chart.length:0;
+  if(!total)return;
+  const oldCount=clamp(Math.floor(state.viewCount||Math.min(110,total)),25,total);
+  const oldStart=clamp(Math.floor(state.viewStart||0),0,Math.max(0,total-oldCount));
+  const anchorIndex=oldStart+Math.round(anchorRatio*(oldCount-1));
+  const nextCount=clamp(Math.round(oldCount*multiplier),25,total);
+  state.viewCount=nextCount;
+  state.viewStart=clamp(anchorIndex-Math.round(anchorRatio*(nextCount-1)),0,Math.max(0,total-nextCount));
+  state.chartUserInteracted=true;drawChart();
+}
+function liveStreamUrl(){
+  const proto=location.protocol==="https:"?"wss:":"ws:";
+  return proto+"//"+location.host+"/api/live-stream?symbol="+encodeURIComponent(state.symbol);
+}
+function closeLiveStream(){
+  clearTimeout(state.wsReconnectTimer);state.wsReconnectTimer=null;
+  try{state.ws?.close()}catch{}
+  state.ws=null;state.wsConnected=false;
+}
+function connectLiveStream(){
+  closeLiveStream();
+  const url=liveStreamUrl();
+  try{
+    const ws=new WebSocket(url);state.ws=ws;
+    ws.addEventListener("open",()=>{
+      if(state.ws!==ws)return;
+      state.wsConnected=true;state.wsRetryMs=1000;runtime("LIVE exchange stream connected","ok","Canonical last-traded price is driving the entire terminal.");
+      $("dataBadge").textContent="LIVE WS";
+    });
+    ws.addEventListener("message",ev=>{
+      if(state.ws!==ws)return;
+      try{
+        const frame=JSON.parse(ev.data);
+        if(frame.type!=="market-sync"||String(frame.symbol).toUpperCase()!==state.symbol)return;
+        applyCanonicalMarket(frame);
+      }catch{}
+    });
+    ws.addEventListener("close",()=>{
+      if(state.ws!==ws)return;
+      state.wsConnected=false;
+      $("dataBadge").textContent="RECONNECTING";
+      runtime("Exchange stream reconnecting…","warn","Polling remains active as a safety fallback.");
+      clearTimeout(state.wsReconnectTimer);
+      state.wsReconnectTimer=setTimeout(()=>connectLiveStream(),state.wsRetryMs);
+      state.wsRetryMs=Math.min(state.wsRetryMs*2,10000);
+    });
+    ws.addEventListener("error",()=>{try{ws.close()}catch{}});
+  }catch{
+    state.wsConnected=false;
+    clearTimeout(state.wsReconnectTimer);
+    state.wsReconnectTimer=setTimeout(()=>connectLiveStream(),state.wsRetryMs);
+    state.wsRetryMs=Math.min(state.wsRetryMs*2,10000);
+  }
+}
+function renderLiveMetrics(frame){
+  const f=frame||{};
+  const cvd=safeNum(f.cvdRatio),book=safeNum(f.orderBook?.imbalance),funding=safeNum(f.fundingRate),liq=safeNum(f.liquidationTotal),oi=safeNum(f.oi);
+  $("oi").textContent=fmt(oi,0);$("cvd").textContent=fmt(cvd,4);
+  $("book").textContent=book===null?"—":(book*100).toFixed(1)+"%";
+  $("funding").textContent=funding===null?"—":(funding*100).toFixed(4)+"%";
+  $("liquidations").textContent=fmt(liq,0);
+  $("cvdState").textContent=f.cvdState||"LIVE";
+  $("liqState").textContent=f.liquidationBias||"LIVE";
+  $("tapeFlow").textContent=f.cvdState||"LIVE FLOW";
+  $("tapeLiquidity").textContent=book===null?"LIVE BOOK":(book>=0?"Bid support ":"Offer pressure ")+Math.abs(book*100).toFixed(1)+"%";
+  $("syncState").textContent=state.wsConnected?"LOCKED":"FALLBACK";
+}
+function applyCanonicalMarket(frame){
+  const p=safeNum(frame.lastPrice??frame.price);if(p===null)return;
+  state.previousPrice=state.livePrice;state.livePrice=p;state.lastLiveEventAt=Date.now();state.lastServerSeq=safeNum(frame.seq)||state.lastServerSeq;
+  state.market=frame;state.live=frame;
+  state.ticker={...(state.ticker||{}),symbol:state.symbol,price:p,change24h:safeNum(frame.change24h),source:"Bybit live WebSocket",updatedAt:safeNum(frame.dataTs)||Date.now()};
+  renderTicker();renderLiveMetrics(frame);drawChart();
 }
 function normalizedRows(){
   const rows=Array.isArray(state.chart)?state.chart.slice(-150):[];
@@ -96,68 +201,88 @@ function rowTime(r){
 function drawChart(){
   const c=$("chart");if(!c)return;
   const rect=c.getBoundingClientRect(),dpr=window.devicePixelRatio||1,w=Math.max(1,rect.width),h=Math.max(1,rect.height);
-  c.width=Math.floor(w*dpr);c.height=Math.floor(h*dpr);const g=c.getContext("2d");
-  g.setTransform(dpr,0,0,dpr,0,0);g.clearRect(0,0,w,h);g.fillStyle="#07090f";g.fillRect(0,0,w,h);
+  c.width=Math.floor(w*dpr);c.height=Math.floor(h*dpr);
+  const g=c.getContext("2d");g.setTransform(dpr,0,0,dpr,0,0);
+  g.clearRect(0,0,w,h);g.fillStyle=state.style.bg;g.fillRect(0,0,w,h);
+
   const rows=normalizedRows();
-  if(!rows.length){
-    g.fillStyle="#606c7d";g.font="700 11px system-ui";g.fillText("Waiting for exchange candles…",18,26);return;
+  if(!rows.length){g.fillStyle="#647084";g.font="700 11px system-ui";g.fillText("Waiting for exchange candles…",18,27);return}
+
+  const total=rows.length;
+  if(!state.chartUserInteracted){
+    state.viewCount=Math.min(110,total);
+    state.viewStart=Math.max(0,total-state.viewCount);
   }
-  const L=10,R=76,T=18,B=42,volH=Math.min(62,h*.13),priceH=h-T-B-volH-8,pw=Math.max(1,w-L-R);
-  const values=rows.flatMap(r=>[candleValue(r,"h"),candleValue(r,"l"),candleValue(r,"c")]).filter(v=>v!==null);
-  const lp=safeNum(state.livePrice);if(lp!==null)values.push(lp);
-  let hi=Math.max(...values),lo=Math.min(...values),range=hi-lo;if(range<=0)range=Math.max(1,Math.abs(hi)*.002);hi+=range*.05;lo-=range*.05;range=hi-lo;
-  const x=i=>L+(i+.5)*pw/rows.length,y=v=>T+(hi-v)/range*priceH,yVol=v=>T+priceH+8+(1-(v/maxVol))*volH;
-  const maxVol=Math.max(1,...rows.map(r=>candleValue(r,"v")||0));
-  const grid="#";g.font="9px ui-monospace,SFMono-Regular,Menlo,monospace";g.textAlign="left";
+  state.viewCount=clamp(Math.floor(state.viewCount||Math.min(110,total)),25,total);
+  state.viewStart=clamp(Math.floor(state.viewStart||0),0,Math.max(0,total-state.viewCount));
+
+  const start=state.viewStart,end=Math.min(total,start+state.viewCount),visible=rows.slice(start,end);
+  const L=12,R=78,T=18,B=40,volH=Math.min(62,h*.13),priceH=Math.max(120,h-T-B-volH-8),pw=Math.max(1,w-L-R);
+  const vals=visible.flatMap(r=>[candleValue(r,"h"),candleValue(r,"l"),candleValue(r,"c")]).filter(v=>v!==null);
+  if(state.livePrice!==null)vals.push(state.livePrice);
+  let hi=Math.max(...vals),lo=Math.min(...vals),range=hi-lo;
+  if(!Number.isFinite(range)||range<=0)range=Math.max(1,Math.abs(hi)*.002);
+  hi+=range*.055;lo-=range*.055;range=hi-lo;
+  const x=i=>L+(i+.5)*pw/visible.length;
+  const y=v=>T+(hi-v)/range*priceH;
+  const maxVol=Math.max(1,...visible.map(r=>candleValue(r,"v")||0));
+  const yVol=v=>T+priceH+8+(1-v/maxVol)*volH;
+
+  g.font="9px ui-monospace,SFMono-Regular,Menlo,monospace";g.textAlign="left";
   for(let i=0;i<=6;i++){
-    const yy=T+priceH*i/6;g.strokeStyle="rgba(180,200,220,.075)";g.lineWidth=1;g.beginPath();g.moveTo(L,yy+.5);g.lineTo(L+pw,yy+.5);g.stroke();
-    g.fillStyle="#667286";g.fillText(fmt(hi-range*i/6,2),L+pw+9,yy+3);
+    const yy=T+priceH*i/6;
+    g.strokeStyle=state.style.grid;g.globalAlpha=.26;g.beginPath();g.moveTo(L,yy+.5);g.lineTo(L+pw,yy+.5);g.stroke();g.globalAlpha=1;
+    g.fillStyle="#657084";g.fillText(fmt(hi-range*i/6,2),L+pw+9,yy+3);
   }
-  for(let i=0;i<8;i++){
-    const xx=L+pw*i/7;g.strokeStyle="rgba(180,200,220,.035)";g.beginPath();g.moveTo(xx,T);g.lineTo(xx,T+priceH+volH+8);g.stroke();
+  for(let i=0;i<=8;i++){
+    const xx=L+pw*i/8;g.strokeStyle=state.style.grid;g.globalAlpha=.16;g.beginPath();g.moveTo(xx,T);g.lineTo(xx,T+priceH+volH+8);g.stroke();g.globalAlpha=1;
   }
-  g.strokeStyle="rgba(255,255,255,.04)";g.beginPath();g.moveTo(L,T+priceH+4);g.lineTo(L+pw,T+priceH+4);g.stroke();
-  const bw=Math.max(2,pw/rows.length*.64);
-  rows.forEach((r,i)=>{
+  g.strokeStyle="rgba(255,255,255,.06)";g.beginPath();g.moveTo(L,T+priceH+4);g.lineTo(L+pw,T+priceH+4);g.stroke();
+
+  const bw=Math.max(2,Math.min(11,pw/visible.length*.68));
+  visible.forEach((r,j)=>{
     const o=candleValue(r,"o"),cl=candleValue(r,"c"),hh=candleValue(r,"h"),ll=candleValue(r,"l"),vol=candleValue(r,"v")||0;
     if([o,cl,hh,ll].some(v=>v===null))return;
-    const up=cl>=o,bodyTop=y(Math.max(o,cl)),bodyBot=y(Math.min(o,cl));
-    g.strokeStyle=up?"#38df9d":"#ff5d77";g.lineWidth=1;g.beginPath();g.moveTo(x(i),y(hh));g.lineTo(x(i),y(ll));g.stroke();
-    g.fillStyle=up?"#38df9d":"#ff5d77";g.fillRect(x(i)-bw/2,bodyTop,bw,Math.max(1,bodyBot-bodyTop));
-    g.globalAlpha=.18;g.fillRect(x(i)-bw/2,yVol(vol),bw,Math.max(1,volH-(yVol(vol)-(T+priceH+8))));g.globalAlpha=1;
+    const up=cl>=o,xx=x(j),bodyTop=y(Math.max(o,cl)),bodyBot=y(Math.min(o,cl));
+    g.strokeStyle=up?state.style.up:state.style.down;g.lineWidth=1;g.beginPath();g.moveTo(xx,y(hh));g.lineTo(xx,y(ll));g.stroke();
+    g.fillStyle=up?state.style.up:state.style.down;g.fillRect(xx-bw/2,bodyTop,bw,Math.max(1,bodyBot-bodyTop));
+    g.globalAlpha=.13;g.fillRect(xx-bw/2,T+priceH+8,bw,Math.max(1,(1-vol/maxVol)*volH));g.globalAlpha=1;
   });
-  // 50 EMA
-  let ema=null;const k=2/51;g.strokeStyle="#72f5e0";g.lineWidth=1.7;g.beginPath();
-  rows.forEach((r,i)=>{const cl=candleValue(r,"c");if(cl===null)return;ema=ema===null?cl:cl*k+ema*(1-k);const yy=y(ema);i?g.lineTo(x(i),yy):g.moveTo(x(i),yy)});g.stroke();
-  // time axis
-  g.fillStyle="#5f6b7c";g.textAlign="center";
-  const labelCount=Math.min(7,rows.length);
-  for(let i=0;i<labelCount;i++){
-    const idx=Math.round(i*(rows.length-1)/(labelCount-1||1)),ts=rowTime(rows[idx]);if(ts===null)continue;
-    const dt=new Date(ts),lab=state.interval==="1d"?dt.toLocaleDateString(undefined,{month:"short",day:"numeric"}):dt.toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"});
+
+  // EMA(50), calculated over the complete loaded series and then clipped to the viewport.
+  let ema=null;const emaK=2/51,emaValues=[];
+  rows.forEach((r,i)=>{const cl=candleValue(r,"c");if(cl===null){emaValues[i]=null;return}ema=ema===null?cl:cl*emaK+ema*(1-emaK);emaValues[i]=ema});
+  g.strokeStyle="#72f5e0";g.lineWidth=1.7;g.beginPath();let started=false;
+  for(let i=start;i<end;i++){const v=emaValues[i];if(v===null)continue;const yy=y(v),xx=x(i-start);if(!started){g.moveTo(xx,yy);started=true}else g.lineTo(xx,yy)}
+  if(started)g.stroke();
+
+  g.fillStyle="#5f6b7d";g.textAlign="center";
+  const labels=Math.min(8,visible.length);
+  for(let j=0;j<labels;j++){
+    const idx=Math.round(j*(visible.length-1)/(labels-1||1)),r=visible[idx],ts=rowTime(r);if(ts===null)continue;
+    const dt=new Date(ts),lab=state.interval==="1d"?dt.toLocaleDateString(undefined,{month:"short",day:"numeric"}):dt.toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"});
     g.fillText(lab,x(idx),h-12);
   }
-  // current price line + exchange-style price tag
+
+  const lp=safeNum(state.livePrice);
   if(lp!==null&&lp>=lo&&lp<=hi){
-    const yy=y(lp);g.setLineDash([5,4]);g.strokeStyle="rgba(185,140,255,.75)";g.lineWidth=1;g.beginPath();g.moveTo(L,yy);g.lineTo(L+pw,yy);g.stroke();g.setLineDash([]);
-    const tagY=clamp(yy-10,4,h-25),tagH=20,tagW=64,tagX=w-R+3;
-    g.fillStyle="#b98cff";g.roundRect?.(tagX,tagY,tagW,tagH,5);if(!g.roundRect)g.fillRect(tagX,tagY,tagW,tagH);
-    g.fillStyle="#09090e";g.font="900 9px ui-monospace,SFMono-Regular,Menlo,monospace";g.textAlign="center";g.fillText(fmt(lp,2),tagX+tagW/2,tagY+13);
+    const yy=y(lp);g.setLineDash([5,4]);g.strokeStyle="rgba(185,140,255,.8)";g.lineWidth=1;g.beginPath();g.moveTo(L,yy);g.lineTo(L+pw,yy);g.stroke();g.setLineDash([]);
+    const tagY=clamp(yy-10,3,h-25),tagW=67,tagH=20,tagX=w-R+4;
+    g.fillStyle="#b98cff";g.beginPath();if(g.roundRect)g.roundRect(tagX,tagY,tagW,tagH,5);else g.rect(tagX,tagY,tagW,tagH);g.fill();
+    g.fillStyle="#08090d";g.font="900 9px ui-monospace,SFMono-Regular,Menlo,monospace";g.textAlign="center";g.fillText(fmt(lp,2),tagX+tagW/2,tagY+13);
   }
-  // decision levels
+
   const lv=state.decision?.levels||state.decision?.apex?.executionGate||{};
-  const levels=[["ENTRY",lv.entry??lv.entryLow,"#70a7ff"],["TP1",lv.tp1??lv.target,"#d8ff72"],["SL",lv.stop,"#ff5d77"]];
-  levels.forEach(([label,v,col])=>{
+  [["ENTRY",lv.entry??lv.entryLow,"#70a7ff"],["TP1",lv.tp1??lv.target,"#d8ff72"],["SL",lv.stop,"#ff5d77"]].forEach(([label,v,col])=>{
     const n=safeNum(v);if(n===null||n<lo||n>hi)return;const yy=y(n);
     g.setLineDash([7,6]);g.strokeStyle=col;g.beginPath();g.moveTo(L,yy);g.lineTo(L+pw,yy);g.stroke();g.setLineDash([]);
     g.fillStyle=col;g.textAlign="left";g.font="900 8px ui-monospace,SFMono-Regular,Menlo,monospace";g.fillText(label+"  "+fmt(n,2),L+7,yy-5);
   });
+
   if(state.crosshair){
-    const cx=clamp(state.crosshair.x,L,L+pw),cy=clamp(state.crosshair.y,T,T+priceH+volH+8),idx=clamp(Math.floor((cx-L)/pw*rows.length),0,rows.length-1);
-    const r=rows[idx],cv=candleValue(r,"c");
-    g.strokeStyle="rgba(225,235,245,.18)";g.setLineDash([3,3]);g.beginPath();g.moveTo(cx,T);g.lineTo(cx,T+priceH);g.moveTo(L,cy);g.lineTo(L+pw,cy);g.stroke();g.setLineDash([]);
-    const ts=rowTime(r); // crosshair anchor only
-    const hover=$("chartHover");hover.style.display="block";hover.style.left=Math.min(w-170,Math.max(8,cx+12))+"px";hover.style.top=Math.max(8,Math.min(h-54,cy-12))+"px";hover.textContent=ts?new Date(ts).toLocaleString()+"  ·  "+fmt(cv,2):fmt(cv,2);
+    const cx=clamp(state.crosshair.x,L,L+pw),cy=clamp(state.crosshair.y,T,T+priceH),ratio=(cx-L)/pw,idx=clamp(Math.floor(ratio*visible.length),0,visible.length-1),r=visible[idx],cv=candleValue(r,"c"),ts=rowTime(r);
+    g.strokeStyle="rgba(225,235,245,.20)";g.setLineDash([3,3]);g.beginPath();g.moveTo(cx,T);g.lineTo(cx,T+priceH);g.moveTo(L,cy);g.lineTo(L+pw,cy);g.stroke();g.setLineDash([]);
+    const hover=$("chartHover");hover.style.display="block";hover.style.left=Math.min(w-190,Math.max(8,cx+12))+"px";hover.style.top=Math.max(8,Math.min(h-54,cy+8))+"px";hover.textContent=(ts?new Date(ts).toLocaleString()+" · ":"")+fmt(cv,2)+" · "+fmt(hi-(cy-T)/priceH*range,2);
   }else $("chartHover").style.display="none";
 }
 function decisionParts(d){
@@ -214,27 +339,27 @@ async function loadCore(){
   ]);
   const [cfg,tick,chart,live]=tasks;
   if(cfg.status==="fulfilled"){state.cfg=cfg.value;populateSymbols(cfg.value.symbols)}
-  if(tick.status==="fulfilled"){state.ticker=tick.value;state.livePrice=safeNum(tick.value.price);writeCache(cacheKey("ticker"),state.ticker);renderTicker()}
+  if(tick.status==="fulfilled"){state.ticker=tick.value;state.livePrice=safeNum(tick.value.price);state.lastLiveEventAt=Date.now();writeCache(cacheKey("ticker"),state.ticker);renderTicker()}
   if(chart.status==="fulfilled"&&Array.isArray(chart.value.candles)){state.chart=chart.value.candles;writeCache(cacheKey("chart"),chart.value);drawChart()}
-  if(live.status==="fulfilled")state.live=live.value||{};
+  if(live.status==="fulfilled"){state.live=live.value||{};if(safeNum(live.value?.price)!==null)applyCanonicalMarket({...live.value,type:"market-sync",seq:live.value.seq||state.lastServerSeq})}
   const marketOk=tick.status==="fulfilled"||chart.status==="fulfilled";
   runtime(marketOk?"MarketPulse online":"UI online — market feed retrying",marketOk?"ok":"warn",marketOk?"Live terminal ready. Price transport updates every second; analytics refresh independently.":"No blocking UI dependency failed; retrying providers automatically.");
   if(state.decision)renderDecision();
   refreshDecision(false);
 }
 async function tickLoop(){
+  if(state.wsConnected&&Date.now()-state.lastLiveEventAt<2500)return;
   try{
-    const t=await api("/api/fast-ticker?symbol="+encodeURIComponent(state.symbol)+"&stream=1s",1800);
-    const p=safeNum(t.price);if(p!==null){
-      state.previousPrice=state.livePrice;state.livePrice=p;state.pricePulse=Date.now();
-      state.ticker={...state.ticker,...t};
-      writeCache(cacheKey("ticker"),state.ticker);
-      renderTicker();drawChart();
-    }
+    const t=await api("/api/fast-ticker?symbol="+encodeURIComponent(state.symbol)+"&fallback=1",2200);
+    const p=safeNum(t.price);if(p!==null)applyCanonicalMarket({...t,type:"market-sync",symbol:state.symbol,seq:state.lastServerSeq});
   }catch{}
 }
 async function flowLoop(){
-  try{const d=await api("/api/live-sync?symbol="+encodeURIComponent(state.symbol)+"&stream=1s",2200);state.live=d||{};if(state.decision)renderDecision()}catch{}
+  if(state.wsConnected&&Date.now()-state.lastLiveEventAt<4000)return;
+  try{
+    const d=await api("/api/live-sync?symbol="+encodeURIComponent(state.symbol),2500);
+    if(d?.price!==null)applyCanonicalMarket({...d,type:"market-sync",seq:d.seq});
+  }catch{}
 }
 async function chartLoop(){
   try{
@@ -283,31 +408,56 @@ async function checkSystem(){
 }
 function bind(){
   $("symbol").addEventListener("change",()=>{state.symbol=cleanSymbol($("symbol").value)||"BTCUSDT";$("symbolName").textContent=displaySymbol(state.symbol);$("assetIcon").textContent=state.symbol==="BTCUSDT"?"₿":"◈";refreshAll()});
-  $("interval").addEventListener("change",()=>{state.interval=$("interval").value;document.querySelectorAll(".tf-tabs button").forEach(b=>b.classList.toggle("active",({"15m":"15m","30m":"30m","1H":"1h","4H":"4h","1D":"1d"}[b.dataset.tf]===state.interval)));refreshAll()});
+  $("interval").addEventListener("change",()=>{state.interval=$("interval").value;document.querySelectorAll(".tf-tabs button").forEach(b=>b.classList.toggle("active",({"15m":"15m","30m":"30m","1H":"1h","4H":"4h","1D":"1d"}[b.dataset.tf]===state.interval)));resetChartView();loadCore();});
   $("sync").addEventListener("click",refreshAll);
-  $("fitChart").addEventListener("click",()=>{state.fitToken++;drawChart()});
+  $("fitChart").addEventListener("click",resetChartView);
+  $("zoomIn").addEventListener("click",()=>zoomChart(.78,.5));
+  $("zoomOut").addEventListener("click",()=>zoomChart(1.28,.5));
+  $("resetView").addEventListener("click",resetChartView);
+  $("chartStyleToggle").addEventListener("click",()=>$("chartStyle").classList.toggle("hidden"));
+  ["candleUpColor","candleDownColor","chartBgColor","chartGridColor"].forEach(id=>$(id).addEventListener("input",updateChartStyle));
   $("loadPhases").addEventListener("click",loadPhases);
   $("checkSystem").addEventListener("click",checkSystem);
+
   document.querySelectorAll(".tf-tabs button").forEach(b=>b.addEventListener("click",()=>setIntervalFromToolbar(b.dataset.tf)));
+
   const canvas=$("chart");
-  canvas.addEventListener("mousemove",e=>{const r=canvas.getBoundingClientRect();state.crosshair={x:e.clientX-r.left,y:e.clientY-r.top};drawChart()});
-  canvas.addEventListener("mouseleave",()=>{state.crosshair=null;drawChart()});
+  canvas.addEventListener("pointerdown",e=>{
+    state.drag={x:e.clientX,start:state.viewStart};canvas.setPointerCapture?.(e.pointerId);state.crosshair=null;
+  });
+  canvas.addEventListener("pointermove",e=>{
+    const r=canvas.getBoundingClientRect();
+    if(state.drag){
+      const total=Array.isArray(state.chart)?state.chart.length:0,delta=(e.clientX-state.drag.x)/Math.max(1,r.width)*state.viewCount;
+      state.viewStart=clamp(Math.round(state.drag.start-delta),0,Math.max(0,total-state.viewCount));state.chartUserInteracted=true;drawChart();
+    }else{
+      state.crosshair={x:e.clientX-r.left,y:e.clientY-r.top};drawChart();
+    }
+  });
+  const stopDrag=()=>{state.drag=null};
+  canvas.addEventListener("pointerup",stopDrag);canvas.addEventListener("pointercancel",stopDrag);
+  canvas.addEventListener("pointerleave",()=>{state.crosshair=null;if(!state.drag)drawChart()});
+  canvas.addEventListener("wheel",e=>{
+    e.preventDefault();const r=canvas.getBoundingClientRect(),ratio=clamp((e.clientX-r.left)/Math.max(1,r.width),0,1);
+    zoomChart(e.deltaY<0?.78:1.28,ratio);
+  },{passive:false});
   window.addEventListener("resize",drawChart);
 }
 function refreshAll(){
   clearInterval(state.tickerTimer);clearInterval(state.flowTimer);clearInterval(state.chartTimer);clearInterval(state.decisionTimer);
-  state.ticker=null;state.live=null;state.chart=null;state.decision=null;state.livePrice=null;state.previousPrice=null;state.phases=null;
-  $("symbolName").textContent=displaySymbol(state.symbol);loadCore();startLoops();
+  closeLiveStream();
+  state.ticker=null;state.live=null;state.market=null;state.chart=null;state.decision=null;state.livePrice=null;state.previousPrice=null;state.phases=null;state.lastLiveEventAt=0;state.chartUserInteracted=false;
+  $("symbolName").textContent=displaySymbol(state.symbol);connectLiveStream();loadCore();startLoops();
 }
 function startLoops(){
-  state.tickerTimer=setInterval(tickLoop,1000);
+  state.tickerTimer=setInterval(tickLoop,3000);
   state.flowTimer=setInterval(flowLoop,3000);
   state.chartTimer=setInterval(chartLoop,15000);
   state.decisionTimer=setInterval(()=>refreshDecision(false),12000);
 }
 function boot(){
   try{
-    bind();populateSymbols();startLoops();runtime("UI ready — connecting to market data…","warn","The terminal renders first; market data never blocks the shell.");loadCore();
+    loadChartStyle();bind();populateSymbols();connectLiveStream();startLoops();runtime("UI ready — connecting to exchange…","warn","WebSocket drives the canonical price; HTTP is fallback only.");loadCore();
   }catch(e){
     runtime("UI recovery mode","warn","Boot error isolated: "+String(e.message||e));
   }
