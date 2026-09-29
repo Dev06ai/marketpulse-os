@@ -521,7 +521,7 @@ jobs:
         run: |
           node - <<'NODE'
           const h=require('./phase-history');
-          if(h.getPhaseHistory().length!==100)throw new Error('Phase registry must contain exactly 100 phases');
+          if(h.getPhaseHistory().length!==200)throw new Error('Phase registry must contain exactly 200 phases');
           if(h.getCurrentPhase()!==20)throw new Error('Only validated historical phases 1-20 may be marked complete on this branch');
           console.log('Phase registry OK');
           NODE
