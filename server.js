@@ -672,7 +672,28 @@ function queueCoreAnalytics(symbol,interval,candles){
     (async()=>{
       try{
         if(sample.length<240)return;
-        const payload={
+        const decisionDiagnostics={
+      candidate:{side:signalCandidate.side,score:signalCandidate.score,source:signalCandidate.source},
+      validation:{
+        action:String(gatedDecision?.action||"WAIT").toUpperCase(),
+        state:String(gatedDecision?.state||"NO_TRADE"),
+        liveSignalEligible:Boolean(gatedDecision?.liveSignalEligible),
+        gate:gatedDecision?.deploymentGate?.state||"UNKNOWN",
+        reason:gatedDecision?.deploymentGate?.reason||null
+      },
+      stability:{
+        state:finalDecision?.signalStability?.state||"NONE",
+        side:finalDecision?.signalStability?.side||null,
+        confirmations:finalDecision?.signalStability?.confirmations||0,
+        required:finalDecision?.signalStability?.required||2
+      },
+      advanced:{action:phase101to200State?.gate?.action||"WAIT",blockers:phase101to200State?.gate?.blockers||[]},
+      profitability:{status:phase201to300State?.gate?.status||"WAIT",action:phase201to300State?.gate?.action||"WAIT",blockers:phase201to300State?.gate?.blockers||[]},
+      adaptive:{status:phase301to400State?.gate?.status||"WAIT",action:phase301to400State?.gate?.action||"WAIT",blockers:phase301to400State?.gate?.blockers||[]},
+      canonical:{status:phase401State?.executionGate?.status||"BLOCKED",side:phase401State?.executionGate?.side||"WAIT",reasons:phase401State?.executionGate?.reasons||[]},
+      final:{action:finalDecision?.action||"WAIT",state:finalDecision?.state||"NO_TRADE",liveSignalEligible:Boolean(finalDecision?.liveSignalEligible)}
+    };
+    const payload={
           backtest:backtest(sample),
           validation:walkForwardBacktest(sample),
           setupStats:backtestBySetup(sample)
@@ -871,6 +892,23 @@ async function buildDecisionSnapshot(symbol,interval,query,deviceId=null){
     const gatedDecision=phase1113.applyDeploymentGate(decision,validation1113,{basePolicy:signalPolicy});
     const stableDecision=applySignalStability(gatedDecision,symbol,interval);
     let finalDecision=sanitizeFinalDecision(stableDecision);
+    const signalCandidate=(()=>{
+      const candidates=[
+        stableDecision?.rawAction,
+        stableDecision?.candidateEvidence?.action,
+        gatedDecision?.action,
+        decision?.action,
+        analysis?.side,
+        analysis?.marketStructure?.setup?.side
+      ];
+      const side=candidates.map(v=>String(v||"").toUpperCase()).find(v=>v==="LONG"||v==="SHORT")||"WAIT";
+      return {
+        side,
+        score:Number.isFinite(Number(finalDecision?.market?.confluenceScore))?Number(finalDecision.market.confluenceScore):
+          Number.isFinite(Number(analysis?.score))?Number(analysis.score):null,
+        source:stableDecision?.rawAction||gatedDecision?.action||decision?.action||analysis?.side||"WAIT"
+      };
+    })();
     finalDecision={
       ...finalDecision,
       conditionalLevels:conditionalLevels||null,
@@ -1004,11 +1042,19 @@ async function buildDecisionSnapshot(symbol,interval,query,deviceId=null){
       symbol,interval,now,
       price:Number(finalDecision?.market?.price??analysis?.price??candles?.at(-1)?.c),
       candles,
-      decision:finalDecision,
+      decision:{
+        ...finalDecision,
+        // Preserve the computed directional candidate even when the previous
+        // validation gate intentionally presents the public action as WAIT.
+        action:signalCandidate.side!=="WAIT"?signalCandidate.side:finalDecision.action,
+        levels:finalDecision.levels?.entry!=null
+          ?finalDecision.levels
+          :(finalDecision.conditionalLevels||finalDecision.levels||{})
+      },
       analysis,derivatives:flow,consensus,
-      mtf:{higher:String(finalDecision?.higher?.side||finalDecision?.higherTimeframe?.side||analysis?.higher?.side||"WAIT").toUpperCase(),lower:String(analysis?.lower?.side||analysis?.lowerTimeframe?.side||finalDecision?.action||"WAIT").toUpperCase()},
+      mtf:{higher:String(finalDecision?.higher?.side||finalDecision?.higherTimeframe?.side||analysis?.higher?.side||"WAIT").toUpperCase(),lower:String(analysis?.lower?.side||analysis?.lowerTimeframe?.side||signalCandidate.side||finalDecision?.action||"WAIT").toUpperCase()},
       phase101to200:phase101to200State,
-      baselineAction:String(finalDecision?.action||phase101to200State?.gate?.action||"WAIT").toUpperCase(),
+      baselineAction:String(signalCandidate.side!=="WAIT"?signalCandidate.side:(finalDecision?.action||phase101to200State?.gate?.action||"WAIT")).toUpperCase(),
       baselineEligible:Boolean(phase101to200State?.gate?.action!=="WAIT"&&finalDecision?.liveSignalEligible),
       freshnessPct:phaseStackState?.data?.quality?.score??100,
       validation:analytics?.validation||null,
@@ -1021,9 +1067,22 @@ async function buildDecisionSnapshot(symbol,interval,query,deviceId=null){
         deploymentGate:{...(finalDecision.deploymentGate||{}),state:"BLOCKED",reason:(phase201to300State.gate.blockers||[]).join(", ")||"Profitability engine blocked the directional candidate."},
         operational:{...(finalDecision.operational||{}),liveUse:"PAPER_ONLY"},phase201to300Blocked:true};
     }else if(phase201to300State?.gate?.status==="LIVE_SIGNAL_READY"){
-      finalDecision={...finalDecision,liveSignalEligible:true,state:"READY",
-        deploymentGate:{...(finalDecision.deploymentGate||{}),state:"LIVE_SIGNAL_READY",reason:"Validated positive expected-value gate passed; manual execution remains required."},
-        operational:{...(finalDecision.operational||{}),liveUse:"LIVE_SIGNAL"},phase201to300SignalReady:true};
+      const restoredSide=["LONG","SHORT"].includes(String(phase201to300State?.gate?.action||"").toUpperCase())
+        ?String(phase201to300State.gate.action).toUpperCase():signalCandidate.side;
+      const restoredLevels=(finalDecision.levels&&finalDecision.levels.entry!=null)
+        ?finalDecision.levels:(finalDecision.conditionalLevels||finalDecision.levels||{});
+      finalDecision={
+        ...finalDecision,
+        action:restoredSide,
+        rawAction:restoredSide,
+        state:"READY",
+        liveSignalEligible:true,
+        levels:restoredLevels,
+        market:{...(finalDecision.market||{}),side:restoredSide,status:"READY",type:finalDecision.market?.type||"QUALIFIED SETUP"},
+        deploymentGate:{...(finalDecision.deploymentGate||{}),state:"LIVE_SIGNAL_READY",reason:"Validated positive expected-value gate passed; manual execution remains required.",candidateAction:restoredSide},
+        operational:{...(finalDecision.operational||{}),liveUse:"LIVE_SIGNAL"},
+        phase201to300SignalReady:true
+      };
     }
     const phase301to400State=phase301to400.evaluate({
       symbol,interval,now,
@@ -1196,6 +1255,8 @@ async function buildDecisionSnapshot(symbol,interval,query,deviceId=null){
     const payload={
       ok:true,...finalDecision,analysis,derivatives:flow,consensus,decisionIntelligence,phase20:phase20Scenario,canonicalState,canonicalSnapshotId,phaseStack:phaseStackState,phase51to100:phase51to100State,
       learning:null,
+      signalCandidate,
+      decisionDiagnostics,
       backtest:analytics?.backtest||null,validation:analytics?.validation||null,setupStats:analytics?.setupStats||null,
       phase11_13:validation1113,
       phase14:finalDecision.phase14||analysis.phase14||null,
