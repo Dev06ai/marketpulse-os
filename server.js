@@ -1319,6 +1319,52 @@ async function longDailyHistory(symbol,days=4200){
 const LIVE_FLOW=new Map();
 const LIVE_FLOW_LIMIT=900;
 const LIVE_SYMBOLS=SYMBOLS.filter(s=>["BTCUSDT","ETHUSDT","SOLUSDT","BNBUSDT","XRPUSDT","DOGEUSDT","ADAUSDT"].includes(s));
+async function directPublicTicker(symbol){
+  const coin=String(labels[symbol]||symbol).replace('USDT','').toUpperCase();
+  const jobs=[];
+  jobs.push(async()=>{
+    const u=new URL('https://api.binance.com/api/v3/ticker/24hr');
+    u.searchParams.set('symbol',symbol);
+    const r=await fetch(u,{signal:timeoutSignal(2500),headers:{accept:'application/json'}});
+    if(!r.ok)throw Error('Binance ticker HTTP '+r.status);
+    const x=await r.json();
+    const price=Number(x?.lastPrice);
+    if(!Number.isFinite(price))throw Error('Binance ticker missing price');
+    return {price,change24h:Number(x?.priceChangePercent),source:'Binance public ticker',updatedAt:Date.now()};
+  });
+  jobs.push(async()=>{
+    const u=new URL('https://api.bybit.com/v5/market/tickers');
+    u.searchParams.set('category','linear');u.searchParams.set('symbol',symbol);
+    const r=await fetch(u,{signal:timeoutSignal(2500),headers:{accept:'application/json'}});
+    if(!r.ok)throw Error('Bybit ticker HTTP '+r.status);
+    const x=await r.json(),row=x?.result?.list?.[0],price=Number(row?.lastPrice);
+    if(Number(x?.retCode||0)!==0||!Number.isFinite(price))throw Error('Bybit ticker missing price');
+    return {price,change24h:Number(row?.price24hPcnt),source:'Bybit public ticker',updatedAt:Date.now()};
+  });
+  jobs.push(async()=>{
+    const u=new URL('https://api.coinbase.com/v2/prices/'+coin+'-USD/spot');
+    const r=await fetch(u,{signal:timeoutSignal(2500),headers:{accept:'application/json'}});
+    if(!r.ok)throw Error('Coinbase ticker HTTP '+r.status);
+    const x=await r.json(),price=Number(x?.data?.amount);
+    if(!Number.isFinite(price))throw Error('Coinbase ticker missing price');
+    return {price,change24h:null,source:'Coinbase spot ticker',updatedAt:Date.now()};
+  });
+  const pair=KRAKEN_PAIRS[symbol];
+  if(pair)jobs.push(async()=>{
+    const u=new URL('https://api.kraken.com/0/public/Ticker');
+    u.searchParams.set('pair',pair);
+    const r=await fetch(u,{signal:timeoutSignal(2500),headers:{accept:'application/json'}});
+    if(!r.ok)throw Error('Kraken ticker HTTP '+r.status);
+    const x=await r.json(),row=x?.result&&x.result[Object.keys(x.result)[0]],price=Number(row?.c?.[0]);
+    if(!Number.isFinite(price))throw Error('Kraken ticker missing price');
+    return {price,change24h:null,source:'Kraken public ticker',updatedAt:Date.now()};
+  });
+  return Promise.any(jobs.map(fn=>Promise.resolve().then(fn).then(v=>{
+    if(!v||!Number.isFinite(Number(v.price)))throw Error('Invalid ticker');
+    return {...v,price:Number(v.price)};
+  })));
+}
+
 function flowBucket(symbol){
   let v=LIVE_FLOW.get(symbol);
   if(!v){
@@ -2693,11 +2739,19 @@ const server=http.createServer(async(req,res)=>{
           FAST_TICKER_CACHE.set(symbol,{ts:now,payload});
           return send(res,200,{ok:true,...payload});
         }
-        const snapshot=await Promise.race([
-          dataFabric.krakenSnapshot(symbol),
-          dataFabric.coinbaseSnapshot(symbol)
-        ]);
-        const payload={symbol,price:Number(snapshot.price),change24h:Number(snapshot.change24h),source:snapshot.name,updatedAt:now};
+        let payload=null;
+        try{
+          const direct=await directPublicTicker(symbol);
+          payload={symbol,price:Number(direct.price),change24h:Number.isFinite(Number(direct.change24h))?Number(direct.change24h):null,source:direct.source,updatedAt:now};
+        }catch{
+          const snapshot=await Promise.any([
+            dataFabric.krakenSnapshot(symbol),
+            dataFabric.coinbaseSnapshot(symbol)
+          ]);
+          const price=Number(snapshot?.price);
+          if(!Number.isFinite(price))throw Error('No valid public ticker price');
+          payload={symbol,price,change24h:Number.isFinite(Number(snapshot?.change24h))?Number(snapshot.change24h):null,source:snapshot?.name||'market-feed',updatedAt:now};
+        }
         FAST_TICKER_CACHE.set(symbol,{ts:now,payload});
         return send(res,200,{ok:true,...payload});
       }catch(e){
