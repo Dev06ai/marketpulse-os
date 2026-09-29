@@ -17,3 +17,48 @@
 @media(max-width:1250px){.workspace{grid-template-columns:minmax(0,1fr) 315px}.legend-line{display:none}.chart-tools .tool-button{padding:6px}.topbar{grid-template-columns:1fr auto}.top-price{grid-column:2;grid-row:1}.top-actions{grid-column:1/-1;justify-content:flex-end}}
 @media(max-width:980px){.app{grid-template-columns:72px minmax(0,1fr)}.brand-copy,.nav-label,.sidebar-bottom{display:none}.nav-item{justify-content:center;padding:11px 5px}.nav-item span{width:auto}.lockup{justify-content:center;padding-bottom:18px}.workspace{grid-template-columns:1fr}.decision-column{grid-template-columns:1fr 1fr}.decision-panel{grid-column:1/-1}.chart-wrap{height:62vh}.lower-panels{grid-template-columns:1fr}.market-strip{grid-template-columns:repeat(3,1fr)}}
 @media(max-width:680px){.sidebar{display:none}.app{grid-template-columns:1fr}.topbar{display:flex;flex-wrap:wrap;gap:10px}.top-price{order:2;width:100%;justify-content:flex-start}.top-actions{order:3;width:100%;justify-content:flex-start}.runtime-bar{flex-wrap:wrap}.runtime-bar #runtimeMeta{margin-left:0;width:100%}.workspace{padding:8px}.chart-toolbar{align-items:flex-start;gap:8px;padding:9px;flex-direction:column}.toolbar-right{width:100%;justify-content:space-between}.chart-wrap{min-height:360px;height:62vh}.chart-hint{display:none}.market-strip{grid-template-columns:1fr 1fr}.decision-column{grid-template-columns:1fr}.phase-summary{grid-template-columns:1fr 1fr}.chart-shell.is-fullscreen{inset:0;border-radius:0}.chart-shell.is-fullscreen .chart-toolbar{padding-top:max(9px,env(safe-area-inset-top))}}
+
+/* Apex Command Deck v2 — higher contrast, deeper hierarchy, visible nav focus */
+html{scroll-behavior:smooth}
+:root{
+  --cyan:#6ef7e5;--cyan2:#22d9c6;--blue:#7aaeff;--violet:#c196ff;
+  --bg:#04060a;--panel:#090d14;--panel2:#0c1119;--line:rgba(173,192,216,.11);
+  --line2:rgba(173,192,216,.18);--shadow:0 26px 90px rgba(0,0,0,.42)
+}
+.app{grid-template-columns:210px minmax(0,1fr);background:
+  radial-gradient(900px 500px at 0% 0%,rgba(34,217,198,.075),transparent 62%),
+  radial-gradient(1000px 600px at 100% 4%,rgba(193,150,255,.08),transparent 62%),
+  linear-gradient(180deg,#04060a,#070a10 55%,#04060a)}
+.sidebar{padding:18px 11px;background:linear-gradient(180deg,rgba(4,6,10,.97),rgba(7,10,15,.94));border-right:1px solid rgba(174,197,225,.1)}
+.nav-item{min-height:45px;border:1px solid transparent;padding:11px 11px}
+.nav-item:hover{background:rgba(255,255,255,.035);border-color:rgba(255,255,255,.06)}
+.nav-item.active{background:linear-gradient(100deg,rgba(110,247,229,.15),rgba(122,174,255,.055));border-color:rgba(110,247,229,.14);box-shadow:inset 3px 0 0 var(--cyan),0 12px 28px rgba(0,0,0,.16)}
+.terminal{width:100%;max-width:1900px;margin:0 auto}
+.topbar{padding:14px 20px;background:rgba(4,6,10,.82);border-bottom:1px solid rgba(176,198,226,.1)}
+.workspace{grid-template-columns:minmax(0,1fr) 390px;gap:14px;padding:14px 18px 18px}
+.chart-shell{border-radius:20px;background:linear-gradient(180deg,rgba(10,15,22,.985),rgba(5,9,14,.985));border-color:rgba(149,180,215,.14);box-shadow:0 32px 100px rgba(0,0,0,.36)}
+.chart-shell:before{content:"";position:absolute;inset:0;pointer-events:none;border-radius:20px;background:linear-gradient(120deg,rgba(110,247,229,.035),transparent 38%,rgba(193,150,255,.035));z-index:0}
+.chart-toolbar,.chart-footer{position:relative;z-index:1}
+.chart-toolbar{min-height:58px;padding:0 15px;border-bottom-color:rgba(162,185,213,.11)}
+.chart-wrap{position:relative;z-index:1;height:min(74vh,760px);min-height:500px}
+.chart-footer{padding:8px 13px}
+.decision-panel,.signal-tape,.system-mini,.glass-panel,.data-card{background:linear-gradient(180deg,rgba(10,14,21,.985),rgba(7,10,16,.985));border-color:rgba(161,185,215,.12)}
+.decision-panel{border-radius:20px;padding:18px;box-shadow:0 30px 80px rgba(0,0,0,.4)}
+.decision-top h2{font-size:31px}
+.data-card{border-radius:13px;min-height:81px}
+.data-card b{font-size:15px}
+.signal-tape,.system-mini,.glass-panel{border-radius:15px}
+.market-strip{gap:8px}
+.lower-panels{gap:9px}
+.workspace-target{animation:workspaceTarget 1.3s ease-out}
+@keyframes workspaceTarget{
+  0%{box-shadow:0 0 0 0 rgba(110,247,229,0),0 20px 70px rgba(0,0,0,.25)}
+  20%{box-shadow:0 0 0 2px rgba(110,247,229,.35),0 0 48px rgba(110,247,229,.12)}
+  100%{box-shadow:0 0 0 0 rgba(110,247,229,0),0 20px 70px rgba(0,0,0,.25)}
+}
+.app[data-workspace="decision"] .decision-panel{border-color:rgba(110,247,229,.24)}
+.app[data-workspace="flow"] .market-strip{border-color:rgba(122,174,255,.22);transform:translateY(-1px)}
+.app[data-workspace="system"] .system-mini{border-color:rgba(193,150,255,.24)}
+@media(max-width:1250px){.workspace{grid-template-columns:minmax(0,1fr) 330px}.chart-wrap{height:min(70vh,680px);min-height:470px}}
+@media(max-width:980px){.workspace{grid-template-columns:1fr}.chart-wrap{height:62vh;min-height:420px}}
+@media(max-width:680px){.workspace{padding:9px}.chart-wrap{height:61vh;min-height:360px}.chart-shell{border-radius:16px}}
