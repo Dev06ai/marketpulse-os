@@ -4,6 +4,7 @@ import android.Manifest
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
+import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -25,6 +26,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.Button
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -38,9 +40,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.app.NotificationCompat
+import androidx.core.content.ContextCompat
+import com.google.firebase.messaging.FirebaseMessaging
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
 import org.json.JSONObject
@@ -87,6 +93,13 @@ data class LiveUi(
     val ageMs: Long = 0L
 )
 
+data class SystemCheckUi(
+    val running: Boolean = false,
+    val summary: String = "Not run yet.",
+    val details: List<String> = emptyList(),
+    val success: Boolean = false
+)
+
 class MainActivity : ComponentActivity() {
     private val permission = registerForActivityResult(ActivityResultContracts.RequestPermission()) {}
     private val client = OkHttpClient.Builder()
@@ -97,18 +110,21 @@ class MainActivity : ComponentActivity() {
     private val reconnectScheduled = AtomicBoolean(false)
     private var socket: WebSocket? = null
     private var live by mutableStateOf(LiveUi())
+    private var systemCheck by mutableStateOf(SystemCheckUi())
     private var lastNotifiedId: String? = null
     private var reconnectAttempt = 0
     private var shuttingDown = false
 
     private val backendWs = "wss://dev-trader-engine.onrender.com/ws"
+    private val backendHttp = "https://dev-trader-engine.onrender.com"
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         if (Build.VERSION.SDK_INT >= 33) permission.launch(Manifest.permission.POST_NOTIFICATIONS)
         ensureNotificationChannel(this)
         connect()
-        setContent { DevTraderScreen(live) }
+        registerFcmToken()
+        setContent { DevTraderScreen(live, systemCheck, ::runFullSystemCheck) }
     }
 
     private fun connect() {
@@ -165,6 +181,169 @@ class MainActivity : ComponentActivity() {
                 connect()
             }
         }, delayMs)
+    }
+
+    private fun registerFcmToken() {
+        runCatching {
+            FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
+                if (task.isSuccessful) {
+                    val token = task.result
+                    getSharedPreferences("dev_trader", Context.MODE_PRIVATE)
+                        .edit()
+                        .putString("fcm_token", token)
+                        .apply()
+                    postJson("$backendHttp/device/register", JSONObject().put("token", token)) { _, _ -> }
+                }
+            }
+        }
+    }
+
+    private fun runFullSystemCheck() {
+        val startedAt = System.currentTimeMillis()
+        val localNotifications = Build.VERSION.SDK_INT < 33 ||
+            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+
+        systemCheck = SystemCheckUi(
+            running = true,
+            summary = "Running full system check…",
+            details = listOf("Checking notification permission", "Connecting to backend diagnostics"),
+            success = false
+        )
+
+        if (localNotifications) {
+            postSystemCheckNotification(this, "Local notification test passed on this phone.")
+        } else if (Build.VERSION.SDK_INT >= 33) {
+            permission.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
+
+        getFcmToken { token ->
+            if (token == null) {
+                fetchSystemCheck(startedAt, localNotifications, false, null)
+                return@getFcmToken
+            }
+
+            postJson("$backendHttp/device/register", JSONObject().put("token", token)) { registerOk, _ ->
+                if (!registerOk) {
+                    fetchSystemCheck(startedAt, localNotifications, true, null)
+                    return@postJson
+                }
+                postJson("$backendHttp/system-check/push", JSONObject().put("token", token)) { pushOk, pushBody ->
+                    val sent = runCatching { JSONObject(pushBody).optInt("sent", 0) }.getOrDefault(0)
+                    fetchSystemCheck(startedAt, localNotifications, true, if (pushOk) sent else null)
+                }
+            }
+        }
+    }
+
+    private fun getFcmToken(callback: (String?) -> Unit) {
+        runCatching {
+            FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
+                callback(if (task.isSuccessful) task.result else null)
+            }
+        }.onFailure { callback(null) }
+    }
+
+    private fun fetchSystemCheck(startedAt: Long, localNotifications: Boolean, fcmAvailable: Boolean, fcmSent: Int?) {
+        getJson("$backendHttp/system-check") { ok, body ->
+            val now = System.currentTimeMillis()
+            if (!ok) {
+                mainHandler.post {
+                    systemCheck = SystemCheckUi(
+                        summary = "Backend system check failed",
+                        details = listOf(
+                            "Local notifications: " + if (localNotifications) "PASS" else "NOT GRANTED",
+                            "FCM token: " + if (fcmAvailable) "AVAILABLE" else "UNAVAILABLE",
+                            "Backend diagnostics: FAILED"
+                        ),
+                        success = false
+                    )
+                }
+                return@getJson
+            }
+
+            val json = JSONObject(body)
+            val market = json.optJSONObject("market")
+            val strategy = json.optJSONObject("strategy")
+            val push = json.optJSONObject("push")
+            val backendOk = json.optBoolean("backend_ok", false)
+            val marketHealthy = market?.optString("data_health") == "HEALTHY"
+            val engineWs = market?.optBoolean("ws_connected", false) == true
+            val strategyOk = strategy?.optString("status") == "SCANNING"
+            val firebaseReady = push?.optBoolean("firebase_ready", false) == true
+            val connectedClients = json.optJSONObject("client")?.optInt("connected_websocket_clients", 0) ?: 0
+            val recentFcm = getSharedPreferences("dev_trader", Context.MODE_PRIVATE)
+                .getLong("last_fcm_received_ts", 0L)
+            val fcmReceived = recentFcm >= startedAt
+            val details = mutableListOf(
+                "Backend API: " + if (backendOk) "PASS" else "FAIL",
+                "Bybit market feed: " + if (marketHealthy) "HEALTHY" else (market?.optString("data_health") ?: "UNKNOWN"),
+                "Backend market WebSocket: " + if (engineWs) "CONNECTED" else "DISCONNECTED",
+                "Strategy engine: " + if (strategyOk) "SCANNING" else (strategy?.optString("status") ?: "UNKNOWN"),
+                "App WebSocket clients: $connectedClients",
+                "Local notifications: " + if (localNotifications) "PASS" else "NOT GRANTED",
+                "FCM token: " + if (fcmAvailable) "AVAILABLE" else "UNAVAILABLE",
+                "Firebase backend: " + if (firebaseReady) "READY" else "NOT CONFIGURED"
+            )
+            if (fcmSent != null) {
+                details.add("FCM test: " + if (fcmSent > 0) "SERVER ACCEPTED ($fcmSent)" else "NOT SENT")
+                details.add("FCM callback on phone: " + if (fcmReceived) "RECEIVED" else "NOT YET RECEIVED")
+            } else {
+                details.add("FCM test: NOT RUN")
+            }
+
+            val allCore = backendOk && marketHealthy && engineWs && strategyOk && localNotifications
+            mainHandler.post {
+                systemCheck = SystemCheckUi(
+                    summary = if (allCore) "Core system healthy" else "Issues detected — see details",
+                    details = details,
+                    success = allCore
+                )
+            }
+
+            if (fcmSent != null && !fcmReceived) {
+                mainHandler.postDelayed({
+                    val receivedLater = getSharedPreferences("dev_trader", Context.MODE_PRIVATE)
+                        .getLong("last_fcm_received_ts", 0L) >= startedAt
+                    systemCheck = systemCheck.copy(
+                        details = systemCheck.details.map {
+                            if (it.startsWith("FCM callback on phone:")) {
+                                "FCM callback on phone: " + if (receivedLater) "RECEIVED" else "NOT RECEIVED"
+                            } else it
+                        }
+                    )
+                }, maxOf(2500L, now - startedAt))
+            }
+        }
+    }
+
+    private fun postJson(url: String, body: JSONObject, callback: (Boolean, String) -> Unit) {
+        val request = Request.Builder()
+            .url(url)
+            .post(body.toString().toRequestBody("application/json".toMediaType()))
+            .build()
+        client.newCall(request).enqueue(object : okhttp3.Callback {
+            override fun onFailure(call: okhttp3.Call, e: java.io.IOException) {
+                mainHandler.post { callback(false, e.message ?: "") }
+            }
+            override fun onResponse(call: okhttp3.Call, response: Response) {
+                response.use {
+                    mainHandler.post { callback(it.isSuccessful, it.body?.string().orEmpty()) }
+                }
+            }
+        })
+    }
+
+    private fun getJson(url: String, callback: (Boolean, String) -> Unit) {
+        client.newCall(Request.Builder().url(url).get().build()).enqueue(object : okhttp3.Callback {
+            override fun onFailure(call: okhttp3.Call, e: java.io.IOException) {
+                mainHandler.post { callback(false, e.message ?: "") }
+            }
+            override fun onResponse(call: okhttp3.Call, response: Response) {
+                response.use {
+                    mainHandler.post { callback(it.isSuccessful, it.body?.string().orEmpty()) }
+                }
+            }
+        })
     }
 
     private fun handleMessage(root: JSONObject) {
@@ -242,6 +421,17 @@ private fun ensureNotificationChannel(context: Context) {
     )
 }
 
+private fun postSystemCheckNotification(context: Context, body: String) {
+    val notification = NotificationCompat.Builder(context, CHANNEL_ID)
+        .setSmallIcon(android.R.drawable.ic_dialog_info)
+        .setContentTitle("Dev Trader System Check")
+        .setContentText(body)
+        .setPriority(NotificationCompat.PRIORITY_HIGH)
+        .setAutoCancel(true)
+        .build()
+    context.getSystemService(NotificationManager::class.java).notify(3100, notification)
+}
+
 private fun postSignalNotification(context: Context, signal: SignalUi) {
     val body = String.format(
         "Entry %.2f • SL %.2f • R:R %.2f",
@@ -265,7 +455,7 @@ private fun postSignalNotification(context: Context, signal: SignalUi) {
 }
 
 @Composable
-private fun DevTraderScreen(state: LiveUi) {
+private fun DevTraderScreen(state: LiveUi, check: SystemCheckUi, onRunCheck: () -> Unit) {
     MaterialTheme(colorScheme = darkColorScheme(background = Charcoal, surface = CardColor)) {
         Box(
             modifier = Modifier
@@ -294,6 +484,7 @@ private fun DevTraderScreen(state: LiveUi) {
                 item { FlowCard(state) }
                 item { SignalCard(state) }
                 item { IntegrityCard(state) }
+                item { SystemCheckCard(check, onRunCheck) }
             }
         }
     }
@@ -452,6 +643,27 @@ private fun SignalCard(state: LiveUi) {
                 color = Muted,
                 style = MaterialTheme.typography.bodySmall
             )
+        }
+    }
+}
+
+@Composable
+private fun SystemCheckCard(check: SystemCheckUi, onRunCheck: () -> Unit) {
+    Card(
+        colors = CardDefaults.cardColors(containerColor = CardColor),
+        shape = RoundedCornerShape(18.dp)
+    ) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("SYSTEM CHECK", color = Muted)
+            Text(
+                check.summary,
+                color = if (check.success) Color(0xFF86F7B0) else TextColor,
+                fontWeight = FontWeight.Bold
+            )
+            Button(onClick = onRunCheck, enabled = !check.running) {
+                Text(if (check.running) "CHECKING…" else "RUN FULL SYSTEM CHECK")
+            }
+            check.details.forEach { Text("• " + it, color = TextColor, style = MaterialTheme.typography.bodySmall) }
         }
     }
 }
