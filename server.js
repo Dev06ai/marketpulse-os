@@ -24,6 +24,7 @@ const phase51to100=require("./phase51-100-stack");
 const phase101to200=require("./phase101-200-stack");
 const phase201to300=require("./phase201-300-profit-engine");
 const phase301to400=require("./phase301-400-adaptive-intelligence");
+const phase401to500=require("./phase401-500-apex-engine");
 const signalNotifications=require('./signal-notifications');
 const propFirm=require('./prop-firm');
 const research=require('./research-data');
@@ -2133,6 +2134,22 @@ const server=http.createServer(async(req,res)=>{
             if(cfg.mode==="PAPER"&&snap.execution.mode!=="SIMULATION")return send(res,409,{ok:false,error:"BOT_EXECUTION_MODE_MISMATCH",expected:"SIMULATION",actual:snap.execution.mode});
             if(cfg.mode==="TESTNET"&&snap.execution.mode!=="TESTNET")return send(res,409,{ok:false,error:"BOT_EXECUTION_MODE_MISMATCH",expected:"TESTNET",actual:snap.execution.mode});
             if(cfg.mode==="LIVE"&&snap.execution.mode!=="LIVE")return send(res,409,{ok:false,error:"BOT_EXECUTION_MODE_MISMATCH",expected:"LIVE",actual:snap.execution.mode});
+            if(String(cfg.mode||"PAPER").toUpperCase()==="LIVE"){
+              let apexGate=null;
+              try{
+                const apexCandles=await getFastKlines(signal.symbol,signal.interval);
+                const apex=phase401to500.buildState({
+                  symbol:signal.symbol,interval:signal.interval,price:body?.marketState?.price??body?.decision?.price,
+                  updatedAt:Date.now(),dataTs:body?.marketState?.updatedAt,candles:apexCandles,decision:body.decision,
+                  radar:body.radar,marketState:body.marketState,execution:snap.execution,ticker:{price:body?.marketState?.price}
+                });
+                apexGate=apex.executionGate;
+                if(!apexGate.automaticExecutionReady)return send(res,409,{ok:false,error:"PHASE401_LIVE_AUTO_BLOCKED",reasons:apexGate.reasons,executionGate:apexGate,autotrader:snap});
+              }catch(e){return send(res,409,{ok:false,error:"PHASE401_GATE_ERROR",message:e.message,autotrader:snap})}
+            }else{
+              const apex=phase401to500.buildState({symbol:signal.symbol,interval:signal.interval,price:body?.marketState?.price??body?.decision?.price,updatedAt:Date.now(),dataTs:body?.marketState?.updatedAt,decision:body.decision,radar:body.radar,marketState:body.marketState,execution:snap.execution});
+              if(apex.executionGate.status!=="ELIGIBLE")return send(res,409,{ok:false,error:"PHASE401_EXECUTION_BLOCKED",reasons:apex.executionGate.reasons,executionGate:apex.executionGate,autotrader:snap});
+            }
             const intent=await execution.prepareFromSignal(signal);
             const order=await execution.submitIntent(intent.id);
             if(order?.status==="REJECTED"){
@@ -2917,6 +2934,22 @@ const server=http.createServer(async(req,res)=>{
       try{const x=await phase4.snapshot(requestDevice(req),null,null,null);return send(res,200,{ok:true,events:x.events||[],updatedAt:x.updatedAt})}catch(e){return send(res,503,{ok:false,error:e.message})}
     }
 
+    if(req.method==='GET'&&u.pathname==='/api/phase401-500'){
+      const symbol=(u.searchParams.get('symbol')||'BTCUSDT').toUpperCase(),interval=u.searchParams.get('interval')||'15m';
+      if(!SYMBOLS.includes(symbol)||!['15m','30m','1h','4h','1d'].includes(interval))return send(res,400,{ok:false,error:'Unsupported symbol or interval'});
+      try{
+        const [decision,marketState,execSnap,candles]=await Promise.all([
+          getDecisionSnapshotCached(symbol,interval,u.searchParams,requestDevice(req)),
+          phase18MarketState.snapshot(symbol,{fast:false,liveFlow:flowBucket(symbol)}),
+          execution.snapshot(),
+          getFastKlines(symbol,interval)
+        ]);
+        const radar=phase18Opportunity.evaluate(decision,marketState,{weekdayOnly:true,easyMode:true});
+        const ticker=flowBucket(symbol);
+        const apex=phase401to500.buildState({symbol,interval,price:decision?.price??marketState?.price,updatedAt:Date.now(),dataTs:marketState?.updatedAt,liveSeq:marketState?.seq,candles,decision,radar,marketState,ticker:{price:ticker?.lastPrice}});
+        return send(res,200,{ok:true,symbol,interval,apex,phase401to500:phase401to500.VERSION,generatedAt:Date.now()},{'cache-control':'no-store, max-age=0'});
+      }catch(e){return send(res,503,{ok:false,error:String(e.message||e),phase401to500:phase401to500.VERSION})}
+    }
     if(req.method==='GET'&&u.pathname==='/api/autotrader'){
       try{
         return send(res,200,await execution.getBotSnapshot(),{"cache-control":"no-store, max-age=0"});
