@@ -71,3 +71,13 @@ html{scroll-behavior:smooth}
 .select-wrap select option,.select-wrap select optgroup{background:#0d121a!important;color:#f7f9fc!important;font-weight:850}
 .phase-loading{min-height:92px;display:grid;place-items:center;color:#8a98ab;border:1px dashed rgba(172,195,222,.16);border-radius:10px;font-size:9px;letter-spacing:.08em;text-transform:uppercase}
 .phase-summary{min-height:92px}
+
+/* Phase registry always has useful first-paint content */
+.phase-summary{display:grid!important;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;min-height:92px;margin-top:10px}
+.phase-chip{background:linear-gradient(180deg,rgba(110,247,229,.045),rgba(255,255,255,.015));border-color:rgba(171,198,226,.14)}
+.phase-chip b{font-weight:950;color:#f5f8fc}
+.phase-chip span{color:#8a98ab}
+.phase-highlight{grid-column:1/-1;padding:9px 10px;border:1px solid rgba(255,199,104,.16);border-radius:9px;background:rgba(255,199,104,.035);display:flex;justify-content:space-between;gap:10px;align-items:center}
+.phase-highlight strong{font-size:9px;color:#e9edf4}
+.phase-highlight span{font-size:8px;color:#9aa7b8}
+@media(max-width:700px){.phase-summary{grid-template-columns:1fr 1fr}}
