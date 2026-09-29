@@ -1050,7 +1050,7 @@ async function buildDecisionSnapshot(symbol,interval,query,deviceId=null){
         ?Number(liveSeed.markPrice)
         :Number(finalDecision?.market?.price??analysis?.price??candles?.at(-1)?.c));
     const phase401CanonicalTs=Number.isFinite(Number(liveSeed.lastTs))&&Number(liveSeed.lastTs)>0
-      ?Number(liveSeed.lastTs):now;
+      ?Number(liveSeed.lastTs):Number(candles?.at(-1)?.t||now);
     const phase401Decision={
       ...finalDecision,
       livePrice:phase401CanonicalPrice,
