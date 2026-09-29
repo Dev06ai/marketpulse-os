@@ -43,6 +43,10 @@ async def lifespan(app):
 
 app=FastAPI(title="Dev Trader Engine",version="0.1.0",lifespan=lifespan)
 
+@app.get("/diagnostics")
+async def diagnostics():
+    return engine.last_diagnostics
+
 @app.get("/health")
 async def health():
     latency=(state.received_ts-state.exchange_ts) if state.received_ts and state.exchange_ts else None
