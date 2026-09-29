@@ -135,7 +135,8 @@ function normalizedProbabilities(side,score,quality){
     longPct=Math.floor(pair/2);
     shortPct=pair-longPct;
   }
-  return {long:longPct,short:shortPct,wait:100-longPct-shortPct};
+  const waitOut=100-longPct-shortPct;
+  return {long:longPct/100,short:shortPct/100,wait:waitOut/100};
 }
 function evidence(input){
   const d=input.decision||{},m=d.market||{},l=d.levels||{},der=d.derivatives||input.derivatives||input.flow||{},mtf=d.mtf||input.mtf||{};
@@ -228,7 +229,7 @@ function selfTest(){
   const wait=buildState({...input,decision:{...input.decision,action:"WAIT",state:"NO_TRADE",liveSignalEligible:false}});
   const probabilitySum=Number(out.probabilities.long)+Number(out.probabilities.short)+Number(out.probabilities.wait);
   return {
-    ok:specs.length===100&&out.canonical.hash&&out.synchronization.ok&&out.executionGate.status==="ELIGIBLE"&&!out.executionGate.automaticExecutionReady&&probabilitySum===100&&mismatch.synchronization.badCount>0&&wait.command==="WAIT",
+    ok:specs.length===100&&out.canonical.hash&&out.synchronization.ok&&out.executionGate.status==="ELIGIBLE"&&!out.executionGate.automaticExecutionReady&&probabilitySum===1&&mismatch.synchronization.badCount>0&&wait.command==="WAIT",
     version:VERSION,moduleCount:specs.length,checkedFields:out.synchronization.checkedFields
   };
 }
