@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from typing import Optional
+import os
 
 from .analytics import MarketFeatures, compute_features
 from .models import Candle, MarketState
@@ -44,6 +45,12 @@ def rr(entry: float, stop: float, target: float) -> float:
     reward = abs(target - entry)
     return reward / risk if risk else 0.0
 
+
+def _min_rr() -> float:
+    return float(os.getenv("MIN_RR", str(RULES["risk"]["preferred_min_rr"])))
+
+def _min_confidence() -> float:
+    return float(os.getenv("MIN_CONFIDENCE", str(RULES.get("signal", {}).get("min_confidence", 0.52))))
 
 def _score(direction: str, setup: str, f: MarketFeatures) -> tuple[float, list[str]]:
     score = 0.58
@@ -113,12 +120,12 @@ def _signal(
     f: MarketFeatures,
     thesis: list[str],
 ) -> Optional[Signal]:
-    min_rr = float(RULES["risk"]["preferred_min_rr"])
+    min_rr = _min_rr()
     ratio = rr(entry, stop, target)
     if ratio < min_rr or not _risk_gate(entry, stop, f):
         return None
     confidence, score_reasons = _score(direction, setup, f)
-    min_conf = float(RULES.get("signal", {}).get("min_confidence", 0.52))
+    min_conf = _min_confidence()
     if confidence < min_conf:
         return None
     elite_rr = float(RULES["risk"].get("elite_min_rr", 3.0))
@@ -355,8 +362,41 @@ def detect_mss(state: MarketState) -> Optional[Signal]:
 class StrategyEngine:
     def __init__(self):
         self.last_signal_id = None
+        self.last_diagnostics = {"status": "STARTING", "blocked_by": [], "setups": {}}
+
+    def diagnostics(self, state: MarketState) -> dict:
+        cs = [c for c in state.candles_15 if c.confirmed]
+        highs, lows = pivots(cs[:-1], 2) if len(cs) >= 5 else ([], [])
+        last = cs[-1] if cs else None
+        sfp = "waiting_for_10_confirmed_15m_candles"
+        if len(cs) >= 10 and last:
+            swept_high = bool(highs and last.high > highs[-1][1] and last.close < highs[-1][1])
+            swept_low = bool(lows and last.low < lows[-1][1] and last.close > lows[-1][1])
+            sfp = "candidate_bearish_sfp" if swept_high else ("candidate_bullish_sfp" if swept_low else "no_confirmed_sfp")
+        dline = "waiting_for_18_confirmed_15m_candles"
+        if len(cs) >= 18 and len(state.candles_60) >= 12:
+            candidates = []
+            if len(lows) >= 3:
+                for a, b in zip(lows[-5:-1], lows[-4:]):
+                    if b[1] > a[1]: candidates.append("LONG")
+            if len(highs) >= 3:
+                for a, b in zip(highs[-5:-1], highs[-4:]):
+                    if b[1] < a[1]: candidates.append("SHORT")
+            dline = "candidate_dline_" + candidates[-1].lower() if candidates else "no_dline_geometry"
+        mss = "waiting_for_12_confirmed_15m_candles"
+        if len(cs) >= 12 and last:
+            mss = "candidate_mss" if ((highs and last.close > highs[-1][1] and last.open <= highs[-1][1]) or (lows and last.close < lows[-1][1] and last.open >= lows[-1][1])) else "no_confirmed_mss"
+        return {
+            "status": "SCANNING" if state.data_health == "HEALTHY" else "BLOCKED",
+            "blocked_by": [] if state.data_health == "HEALTHY" else ["data_health"],
+            "setups": {"SFP": sfp, "D-Line": dline, "MSS": mss},
+            "min_rr": _min_rr(),
+            "min_confidence": _min_confidence(),
+            "manual_execution_only": True,
+        }
 
     def evaluate(self, state: MarketState) -> Optional[Signal]:
+        self.last_diagnostics = self.diagnostics(state)
         if state.data_health != "HEALTHY":
             return None
         candidates = [
