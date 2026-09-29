@@ -30,13 +30,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.app.NotificationCompat
@@ -93,7 +91,6 @@ class MainActivity : ComponentActivity() {
     private var live by mutableStateOf(LiveUi())
     private var lastNotifiedId: String? = null
 
-    // Set this once the private backend is deployed.
     private val backendWs = "wss://dev-trader-engine.onrender.com/ws"
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -105,7 +102,6 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun connect() {
-        if (backendWs.contains("REPLACE_WITH_YOUR_ENGINE_HOST")) return
         socket = client.newWebSocket(
             Request.Builder().url(backendWs).build(),
             object : WebSocketListener() {
@@ -240,7 +236,7 @@ private fun DevTraderScreen(state: LiveUi) {
                 item { StatusCard(state) }
                 item { PriceCard(state) }
                 item { FlowCard(state) }
-                item { SignalCard(state.signal) }
+                item { SignalCard(state) }
                 item { IntegrityCard(state) }
             }
         }
@@ -328,7 +324,8 @@ private fun FlowCard(state: LiveUi) {
 }
 
 @Composable
-private fun SignalCard(signal: SignalUi?) {
+private fun SignalCard(state: LiveUi) {
+    val signal = state.signal
     if (signal == null) {
         Box(
             Modifier
@@ -338,13 +335,28 @@ private fun SignalCard(signal: SignalUi?) {
                 .padding(18.dp)
         ) {
             Column {
-                Text("CURRENT STATE", color = Color.White.copy(alpha = 0.82f))
                 Text(
-                    "No new validated trade call",
+                    if (state.health == "HEALTHY") "MARKET SCANNING" else "CURRENT STATE",
+                    color = Color.White.copy(alpha = 0.82f)
+                )
+                Text(
+                    when (state.health) {
+                        "HEALTHY" -> "No validated setup right now"
+                        "STALE" -> "Waiting for fresh market data"
+                        "RECONNECTING" -> "Reconnecting to market engine"
+                        else -> "Waiting for market feed"
+                    },
                     color = Color.White,
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold
                 )
+                if (state.health == "HEALTHY") {
+                    Text(
+                        "Evaluating SFP • D-Line • MSS with live BTC order-flow context",
+                        color = Color.White.copy(alpha = 0.82f),
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
             }
         }
         return
@@ -390,15 +402,32 @@ private fun SignalCard(signal: SignalUi?) {
 
 @Composable
 private fun IntegrityCard(state: LiveUi) {
+    val status = when {
+        !state.ws -> "WebSocket: DISCONNECTED"
+        state.health == "HEALTHY" -> "WebSocket: CONNECTED"
+        else -> "WebSocket: CONNECTED • " + state.health
+    }
+
+    val detail = when {
+        !state.ws -> "Connection to the market engine is down."
+        state.health == "HEALTHY" -> "Feed healthy • engine is actively evaluating validated setups."
+        state.health == "STALE" -> "Feed is stale • new signals remain blocked until fresh data returns."
+        state.health == "RECONNECTING" -> "Engine is reconnecting • signal generation is paused."
+        else -> "Engine status: " + state.health
+    }
+
     Card(
         colors = CardDefaults.cardColors(containerColor = CardColor),
         shape = RoundedCornerShape(18.dp)
     ) {
         Column(Modifier.padding(16.dp)) {
             Text("DATA INTEGRITY", color = Muted)
-            Text("WebSocket: " + if (state.ws) "CONNECTED" else "DISCONNECTED", color = TextColor)
+            Text(status, color = TextColor)
             Text("Feed age: " + state.ageMs + " ms", color = TextColor)
-            Text("Signals are blocked while the engine reports stale data.", color = Muted)
+            Text(
+                detail,
+                color = if (state.health == "HEALTHY" && state.ws) Color(0xFF86F7B0) else Muted
+            )
         }
     }
 }
