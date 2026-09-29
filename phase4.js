@@ -348,6 +348,7 @@ async function addJournal(deviceId,entry){
   const row={id:"P4J-M-"+Date.now()+"-"+Math.random().toString(16).slice(2),source:"MANUAL",ts:Date.now(),asset:x.asset||"BTCUSDT",side:x.side||"Long",entry:finite(x.entry,0),stop:finite(x.stop,0),target:finite(x.target,0),r:finite(x.r,0),note:String(x.note||"").slice(0,800),regime:x.regime||"UNKNOWN",type:x.type||"MANUAL",score:finite(x.score,0)};
   s.journal.push(row);s.journal=s.journal.slice(-MAX_JOURNAL);await save(loaded.id,s);return row;
 }
+function selfTest(){const s=ensureState(defaultState());const r=riskCheck({entry:100,stop:98,target:104},{account:100000,riskPct:1,minRR:1.5,maxOpenRiskPct:2.5},0);return {ok:s.version===STATE_VERSION&&Array.isArray(s.signals)&&r.allowed&&r.rr>=2,version:STATE_VERSION};}
 module.exports={
   createState:defaultState,
   ensureState,
