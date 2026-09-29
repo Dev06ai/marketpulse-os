@@ -88,7 +88,7 @@ function failure(input,r,mem,dna,ev,c){
  if(dna.quality<.35)blockers.push("SETUP_DNA_WEAK");
  if(c.action!=="WAIT"&&c.base!=="WAIT"&&c.action!==c.base)blockers.push("COUNCIL_CONFLICT");
  if(mem.source==="INSUFFICIENT_MEMORY"&&mem.count>0)blockers.push("MEMORY_LOW_CONFIDENCE");
- const prob=n(input.phase201to300?.prediction?.probability);
+ const prob=n(input.phase201to300?.profitability?.validatedProbability??input.phase201to300?.prediction?.probability);
  if(prob!=null&&prob<.55)blockers.push("PROBABILITY_COLLAPSE");
  return {blockers,thesisDegraded:blockers.length>0,emergencyWait:blockers.includes("PROBABILITY_COLLAPSE")||blockers.includes("MATERIAL_OI_SHOCK")};
 }
