@@ -977,7 +977,7 @@ async function buildDecisionSnapshot(symbol,interval,query,deviceId=null){
     });
     const validationEvidence=validation1113||analytics?.validation||null;
     const validationReady=Boolean(validation1113?.adaptive?.signalGateReady);
-    const candidateSideForValidation=String(finalDecision?.action||analysis?.side||"").toUpperCase();
+    const candidateSideForValidation=String(signalCandidate?.side||finalDecision?.action||analysis?.side||"").toUpperCase();
     const directionalValidation=validationEvidence?.directional?.[candidateSideForValidation.toLowerCase()]||null;
     const empiricalWinRate=validationReady
       ? (Number.isFinite(Number(directionalValidation?.trades))&&Number(directionalValidation.trades)>=20&&Number.isFinite(Number(directionalValidation?.winRate))
@@ -1263,6 +1263,7 @@ async function buildDecisionSnapshot(symbol,interval,query,deviceId=null){
       decisionDiagnostics,
       backtest:analytics?.backtest||null,validation:analytics?.validation||null,setupStats:analytics?.setupStats||null,
       phase11_13:validation1113,
+      validationStatus:{ready:validationReady,pending:!validationReady,source:validation1113?"P11-13_WALK_FORWARD":"WARMING",sampleCount:Number(validation1113?.summary?.trades||0),minimumSamples:80},
       phase14:finalDecision.phase14||analysis.phase14||null,
       phase14Status:finalDecision.phase14?.adaptive||analysis.phase14?.adaptive||null,
       phase11:PHASE11_VERSION,phase12:PHASE12_VERSION,phase13:PHASE13_VERSION,phase14Version:"14.0.0",phase20Version:phase20.VERSION,phase21Version:phase21.VERSION,phase21to50Version:phaseStack.VERSION,phase51to100Version:phase51to100.VERSION,phase51to100:phase51to100State,phase101to200Version:phase101to200.VERSION,phase101to200:phase101to200State,phase201to300Version:phase201to300.VERSION,phase201to300:phase201to300State,phase301to400Version:phase301to400.VERSION,phase301to400:phase301to400State,
@@ -1270,6 +1271,16 @@ async function buildDecisionSnapshot(symbol,interval,query,deviceId=null){
       phase401to500:phase401State,
       canonicalExecutionIntegrity:phase401State.executionGate,
       canonicalLiveFrame:phase401State.canonical,
+      decisionSnapshot:{
+        id:canonicalSnapshotId,
+        generatedAt:now,
+        candleTs:Number(candles?.at(-1)?.t||0),
+        liveDataTs:phase401CanonicalTs,
+        liveSeq:Number(liveSeed.liveSeq||0),
+        canonicalPrice:phase401CanonicalPrice,
+        canonicalFrameHash:phase401State?.canonical?.hash||null,
+        source:"BYBIT_CANONICAL"
+      },
       updatedAt:now
     };
     DECISION_CACHE.set(key,{ts:now,payload});
