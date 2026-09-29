@@ -301,6 +301,8 @@ function renderDecision(){
   const x=decisionParts(state.decision||{}),d=x.d,p=x.p||{},m=x.m||{},lv=x.lv||{},g=x.g||{},action=["LONG","SHORT"].includes(x.action)?x.action:"WAIT";
   const analysis=d?.analysis||{};
   const candidateSide=String(
+    d?.signalCandidate?.side||
+    d?.decisionDiagnostics?.candidate?.side||
     d?.candidateEvidence?.action||
     d?.rawAction||
     analysis?.side||
@@ -317,7 +319,19 @@ function renderDecision(){
   );
   const confluencePct=rawScore===null?null:clamp(Math.round((rawScore/92)*100),0,100);
   const stability=d?.signalStability||{};
-  const gateReason=String(g?.reason||d?.deploymentGate?.reason||"").trim();
+  const diagnostics=d?.decisionDiagnostics||{};
+  const blockerSets=[
+    ...(Array.isArray(diagnostics?.profitability?.blockers)?diagnostics.profitability.blockers:[]),
+    ...(Array.isArray(diagnostics?.adaptive?.blockers)?diagnostics.adaptive.blockers:[]),
+    ...(Array.isArray(diagnostics?.canonical?.reasons)?diagnostics.canonical.reasons:[]),
+    ...(Array.isArray(diagnostics?.advanced?.blockers)?diagnostics.advanced.blockers:[])
+  ].filter(Boolean);
+  const gateReason=String(
+    g?.reason||
+    d?.deploymentGate?.reason||
+    blockerSets[0]||
+    "Waiting for the decision gates to resolve."
+  ).trim();
 
   $("decision").textContent=action;
   $("stateLabel").textContent=action==="WAIT"?"WAIT / NO TRADE":action+" — CURRENT AUTHORITY";
@@ -344,6 +358,9 @@ function renderDecision(){
   $("thesis").textContent=
     d?.evidence?.thesis?.[0]||
     d?.thesis||
+    (candidate!=="WAIT"&&blockerSets.length
+      ?candidate+" candidate detected — waiting on: "+blockerSets[0].replaceAll("_"," ").toLowerCase()+"."
+      :null)||
     d?.phase20?.transition?.hardLock||
     d?.phase51to100?.signal?.confidenceSource||
     m.directionalLean||
@@ -382,6 +399,9 @@ function renderDecision(){
   $("reasons").innerHTML="";
   const reasons=[
     gateReason,
+    candidate!=="WAIT"&&diagnostics?.validation?.gate&&diagnostics.validation.gate!=="SIGNAL_ELIGIBLE"
+      ?"Validation gate: "+String(diagnostics.validation.gate).replaceAll("_"," ")
+      :null,
     stability.state==="CONFIRMING"
       ?"Directional candidate is being confirmed across live refreshes."
       :null,
