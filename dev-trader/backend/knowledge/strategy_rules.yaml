@@ -2,14 +2,15 @@ version: 1
 mode: Klein-manual-only
 risk:
   hard_cap_risk_pct: 1.0
-  preferred_min_rr: 3.0
+  preferred_min_rr: 2.0
+  elite_min_rr: 3.0
   dline_reference_min_rr: 2.0
   never_auto_execute: true
 htf:
   weekly_open: true
   previous_week_high_low: true
   daily_swings: true
-  avoid_midrange: true
+  avoid_midrange: false
 sfp:
   enabled: true
   execution_timeframes: [15m, 5m]
