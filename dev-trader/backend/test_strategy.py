@@ -7,9 +7,9 @@ def c(i,o,h,l,cl,confirmed=True):
 def test_bearish_sfp():
     cs=[c(i,100,102+i%2,99,100+(i%3)) for i in range(12)]
     cs[4]=c(4,100,102,60,100)
-    cs[6]=c(6,100,105,99,100)
+    cs[6]=c(6,100,110,99,100)
     cs[-2]=c(10,100,102,99,101)
-    cs[-1]=c(11,100,110,95,100)
+    cs[-1]=c(11,100,112,95,100)
     state=MarketState(candles_15=cs)
     sig=detect_sfp(state)
     assert sig is not None
