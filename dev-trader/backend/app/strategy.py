@@ -17,6 +17,7 @@ class Signal:
     target2: float
     rr: float
     confidence: float
+    grade: str
     regime: str
     invalidation: str
     thesis: list[str]
@@ -117,9 +118,12 @@ def _signal(
     if ratio < min_rr or not _risk_gate(entry, stop, f):
         return None
     confidence, score_reasons = _score(direction, setup, f)
-    min_conf = float(RULES.get("signal", {}).get("min_confidence", 0.60))
+    min_conf = float(RULES.get("signal", {}).get("min_confidence", 0.52))
     if confidence < min_conf:
         return None
+    elite_rr = float(RULES["risk"].get("elite_min_rr", 3.0))
+    elite_conf = float(RULES.get("signal", {}).get("elite_confidence", 0.70))
+    grade = "A" if ratio >= elite_rr and confidence >= elite_conf else "B"
     return Signal(
         id=id,
         direction=direction,
@@ -130,6 +134,7 @@ def _signal(
         target2=target,
         rr=ratio,
         confidence=confidence,
+        grade=grade,
         regime=f.regime,
         invalidation=invalidation,
         thesis=thesis + score_reasons,
@@ -288,6 +293,65 @@ def detect_dline(state: MarketState) -> Optional[Signal]:
     return None
 
 
+
+def detect_mss(state: MarketState) -> Optional[Signal]:
+    """Looser continuation setup: a confirmed 15m body close through a recent structure level."""
+    cs = [c for c in state.candles_15 if c.confirmed]
+    if len(cs) < 12 or state.last_price is None:
+        return None
+    f = compute_features(state)
+    highs, lows = pivots(cs[:-1], 2)
+    last = cs[-1]
+    min_rr = float(RULES["risk"]["preferred_min_rr"])
+
+    if highs:
+        level = highs[-1][1]
+        if last.close > level and last.open <= level:
+            entry = last.close
+            stop = min(c.low for c in cs[-4:]) * 0.9995
+            target = entry + (entry - stop) * min_rr
+            return _signal(
+                id=f"mss-long-{last.end}",
+                direction="LONG",
+                setup="MSS Continuation",
+                entry=entry,
+                stop=stop,
+                target=target,
+                timeframe="15m",
+                invalidation=f"15m close back below reclaimed structure {level:.2f}",
+                f=f,
+                thesis=[
+                    f"15m body close above structure {level:.2f}",
+                    "Momentum continuation setup rather than a first-impulse chase",
+                    "Risk anchored to the recent execution swing",
+                ],
+            )
+
+    if lows:
+        level = lows[-1][1]
+        if last.close < level and last.open >= level:
+            entry = last.close
+            stop = max(c.high for c in cs[-4:]) * 1.0005
+            target = entry - (stop - entry) * min_rr
+            return _signal(
+                id=f"mss-short-{last.end}",
+                direction="SHORT",
+                setup="MSS Continuation",
+                entry=entry,
+                stop=stop,
+                target=target,
+                timeframe="15m",
+                invalidation=f"15m close back above broken structure {level:.2f}",
+                f=f,
+                thesis=[
+                    f"15m body close below structure {level:.2f}",
+                    "Momentum continuation setup rather than a first-impulse chase",
+                    "Risk anchored to the recent execution swing",
+                ],
+            )
+    return None
+
+
 class StrategyEngine:
     def __init__(self):
         self.last_signal_id = None
@@ -298,6 +362,7 @@ class StrategyEngine:
         candidates = [
             detect_sfp(state),
             detect_dline(state),
+            detect_mss(state),
         ]
         signals = [s for s in candidates if s is not None]
         if not signals:
