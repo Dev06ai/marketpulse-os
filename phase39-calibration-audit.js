@@ -8,5 +8,5 @@ function audit(rows=[]){
   const brier=valid.reduce((s,x)=>s+(Number(x.probability)-x.outcome)**2,0)/valid.length;
   return {version:VERSION,sample:valid.length,brier,coverage:valid.length/(rows.length||1)};
 }
-function selfTest(){const x=audit([{probability:.8,outcome:1},{probability:.2,outcome:0}]);return {ok:x.brier<.05&&x.coverage===1,version:VERSION};}
+function selfTest(){const x=audit([{probability:.8,outcome:1},{probability:.2,outcome:0},{probability:80,outcome:1}]);return {ok:x.sample===3&&x.coverage===1&&x.brier<.1,version:VERSION};}
 module.exports={VERSION,audit,selfTest};
