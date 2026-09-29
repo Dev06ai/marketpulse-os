@@ -227,3 +227,8 @@ const phase301to400Regression=require("./phase301-400-selftest");
 assert(phase301to400.selfTest().ok,"Phase 301–400 adaptive intelligence self-test failed.");
 assert(phase301to400.specs.length===100,"Phase 301–400 must expose exactly 100 modules.");
 assert(phase301to400Regression,"Phase 301–400 regression suite did not load.");
+
+
+assert(phase401to500.selfTest().ok,"Phase 401–500 apex intelligence self-test failed.");
+assert(phase401to500.specs.length===100,"Phase 401–500 must expose exactly 100 modules.");
+assert(phase401to500.specs[0].phase===401&&phase401to500.specs[99].phase===500,"Phase 401–500 range invariant failed.");
