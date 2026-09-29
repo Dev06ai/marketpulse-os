@@ -23,6 +23,7 @@ const phaseStack=require("./phase21-50-stack");
 const phase51to100=require("./phase51-100-stack");
 const phase101to200=require("./phase101-200-stack");
 const phase201to300=require("./phase201-300-profit-engine");
+const phase301to400=require("./phase301-400-adaptive-intelligence");
 const signalNotifications=require('./signal-notifications');
 const propFirm=require('./prop-firm');
 const research=require('./research-data');
@@ -1023,6 +1024,21 @@ async function buildDecisionSnapshot(symbol,interval,query,deviceId=null){
         deploymentGate:{...(finalDecision.deploymentGate||{}),state:"LIVE_SIGNAL_READY",reason:"Validated positive expected-value gate passed; manual execution remains required."},
         operational:{...(finalDecision.operational||{}),liveUse:"LIVE_SIGNAL"},phase201to300SignalReady:true};
     }
+    const phase301to400State=phase301to400.evaluate({
+      symbol,interval,now,
+      price:Number(finalDecision?.market?.price??analysis?.price??candles?.at(-1)?.c),
+      candles,decision:finalDecision,analysis,derivatives:flow,consensus,
+      mtf:{higher:String(finalDecision?.higher?.side||finalDecision?.higherTimeframe?.side||analysis?.higher?.side||"WAIT").toUpperCase(),execution:String(finalDecision?.action||"WAIT").toUpperCase(),lower:String(analysis?.lower?.side||analysis?.lowerTimeframe?.side||finalDecision?.action||"WAIT").toUpperCase()},
+      phase201to300:phase201to300State,baselineAction:String(finalDecision?.action||"WAIT").toUpperCase(),
+      learningObservations:analytics?.validation?.recent||[]
+    });
+    if(phase301to400State?.failureIntelligence?.emergencyWait&&["LONG","SHORT"].includes(String(finalDecision?.action||"").toUpperCase())){
+      finalDecision={...sanitizeFinalDecision(finalDecision),action:"WAIT",state:"NO_TRADE",liveSignalEligible:false,
+        market:{...(finalDecision.market||{}),side:"WAIT",status:"WAITING",type:"ADAPTIVE INTELLIGENCE BLOCK",bias:"Neutral",directionalLean:"NEUTRAL"},
+        levels:{...(finalDecision.levels||{}),entryLow:null,entryHigh:null,entry:null,stop:null,tp1:null,tp2:null,rr:null},
+        deploymentGate:{...(finalDecision.deploymentGate||{}),state:"BLOCKED",reason:(phase301to400State.gate.blockers||[]).join(", ")||"Adaptive intelligence detected a material thesis failure."},
+        operational:{...(finalDecision.operational||{}),liveUse:"PAPER_ONLY"},phase301to400Blocked:true};
+    }
     try{
       setTimeout(()=>signalNotifications.notifyAdminSignal(storage,{
         decision:finalDecision,
@@ -1067,7 +1083,7 @@ async function buildDecisionSnapshot(symbol,interval,query,deviceId=null){
       phase11_13:validation1113,
       phase14:finalDecision.phase14||analysis.phase14||null,
       phase14Status:finalDecision.phase14?.adaptive||analysis.phase14?.adaptive||null,
-      phase11:PHASE11_VERSION,phase12:PHASE12_VERSION,phase13:PHASE13_VERSION,phase14Version:"14.0.0",phase20Version:phase20.VERSION,phase21Version:phase21.VERSION,phase21to50Version:phaseStack.VERSION,phase51to100Version:phase51to100.VERSION,phase51to100:phase51to100State,phase101to200Version:phase101to200.VERSION,phase101to200:phase101to200State,phase201to300Version:phase201to300.VERSION,phase201to300:phase201to300State,
+      phase11:PHASE11_VERSION,phase12:PHASE12_VERSION,phase13:PHASE13_VERSION,phase14Version:"14.0.0",phase20Version:phase20.VERSION,phase21Version:phase21.VERSION,phase21to50Version:phaseStack.VERSION,phase51to100Version:phase51to100.VERSION,phase51to100:phase51to100State,phase101to200Version:phase101to200.VERSION,phase101to200:phase101to200State,phase201to300Version:phase201to300.VERSION,phase201to300:phase201to300State,phase301to400Version:phase301to400.VERSION,phase301to400:phase301to400State,
       updatedAt:now
     };
     DECISION_CACHE.set(key,{ts:now,payload});
@@ -2443,7 +2459,7 @@ const server=http.createServer(async(req,res)=>{
     }
     if(req.method==='GET'&&u.pathname==='/api/admin/config')return send(res,200,{ok:true,config:await getAdminRuntime(true)});
     if(req.method==='GET'&&u.pathname==='/api/admin/intelligence-health'){
-      try{const guard=await auth.requireAdmin(req);if(!guard.ok)return send(res,guard.status,{ok:false,error:guard.error});const last=DECISION_LAST_GOOD.get("BTCUSDT|15m");return send(res,200,{ok:true,phase:"201-300",version:phase201to300.VERSION,automaticExecutionEnabled:false,decisionSupportOnly:true,liveSignalRuntimeGated:true,lastSnapshotId:last?.payload?.phase201to300?.canonical?.hash||null,profitGate:last?.payload?.phase201to300?.gate||null,admin:last?.payload?.phase201to300?.admin||null})}catch(e){return send(res,503,{ok:false,error:String(e.message||e)})}
+      try{const guard=await auth.requireAdmin(req);if(!guard.ok)return send(res,guard.status,{ok:false,error:guard.error});const last=DECISION_LAST_GOOD.get("BTCUSDT|15m");return send(res,200,{ok:true,phase:"301-400",version:phase301to400.VERSION,automaticExecutionEnabled:false,decisionSupportOnly:true,liveSignalRuntimeGated:true,lastSnapshotId:last?.payload?.phase301to400?.canonical?.hash||null,adaptiveGate:last?.payload?.phase301to400?.gate||null,regime:last?.payload?.phase301to400?.regime||null,admin:last?.payload?.phase301to400?.adminIntelligence||null})}catch(e){return send(res,503,{ok:false,error:String(e.message||e)})}
     }
     if(req.method==='GET'&&u.pathname==='/api/admin/phase-history'){
       try{
