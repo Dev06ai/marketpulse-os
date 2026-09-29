@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Rising chart candles -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M21,59 L31,59 L31,79 L21,79 Z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M25.5,54 L26.5,54 L26.5,84 L25.5,84 Z" />
+
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M38,51 L48,51 L48,75 L38,75 Z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M42.5,47 L43.5,47 L43.5,79 L42.5,79 Z" />
+
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M55,43 L65,43 L65,69 L55,69 Z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M59.5,39 L60.5,39 L60.5,73 L59.5,73 Z" />
+
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M72,35 L82,35 L82,61 L72,61 Z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M76.5,30 L77.5,30 L77.5,65 L76.5,65 Z" />
+
+    <!-- Rising trend line and arrow -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M18,56 L21.5,61 L46,42 L57,48 L83,23 L79,19 L56,41 L46,35 Z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M76,19 L89,19 L89,32 L84,27 L79,32 L79,27 L70,27 Z" />
+</vector>
