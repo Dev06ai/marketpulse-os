@@ -108,7 +108,7 @@ function evaluate(input={}){
  gate:{status:liveReady?"LIVE_SIGNAL_READY":"WAIT",action,blockers:reasons,quality:Number(quality.toFixed(4))},
  userExperience:{headline:action==="WAIT"?"WAIT — MARKET CONDITIONS NOT SUFFICIENT":`QUALIFIED ${action} — ADAPTIVE INTELLIGENCE ALIGNED`,whyNoTrade:reasons,evidence:{regime:r,setupDNA:dnaState,memory:mem,council:c,events:ev},timeline:{snapshotId,generatedAt:now},replay:{available:true,snapshotId},automaticExecutionEnabled:false},
  adminIntelligence:{version:VERSION,snapshotId,moduleCount:100,qualityIndex:Number((quality*100).toFixed(2)),regime:r,learningStatus:"CHALLENGER_ONLY",promotionRequired:true,automaticExecutionEnabled:false},
- modules:specs.map(s=>({phase:s.phase,title:s.title,kind:s.kind,status:"OBSERVED",metric:Number(clamp(s.kind==="regime"?r.confidence:s.kind==="memory"?mem.confidence:s.kind==="dna"?dnaState.quality:s.kind==="learning"?challenger.weights.dna:s.kind==="validation"?quality:s.kind==="council"?c.agreement:s.kind==="events"?(ev.count?0.8:0.5):s.kind==="entry"?dnaState.quality:s.kind==="failure"?(fail.blockers.length?0.4:1):quality).toFixed(4)),direction:action}))),
+ modules:specs.map(s=>({phase:s.phase,title:s.title,kind:s.kind,status:"OBSERVED",metric:Number(clamp(s.kind==="regime"?r.confidence:s.kind==="memory"?mem.confidence:s.kind==="dna"?dnaState.quality:s.kind==="learning"?challenger.weights.dna:s.kind==="validation"?quality:s.kind==="council"?c.agreement:s.kind==="events"?(ev.count?0.8:0.5):s.kind==="entry"?dnaState.quality:s.kind==="failure"?(fail.blockers.length?0.4:1):quality).toFixed(4)),direction:action})),
  stateHash:hash({snapshotId,action,reasons,quality})
  };
 }
