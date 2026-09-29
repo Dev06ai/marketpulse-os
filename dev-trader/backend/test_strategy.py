@@ -28,3 +28,16 @@ def test_bullish_dline_smoke():
     state=MarketState(candles_15=cs,candles_60=cs[-12:])
     sig=detect_dline(state)
     assert sig is None or sig.direction=="LONG"
+
+
+def test_engine_diagnostics_explain_wait_state():
+    from app.strategy import StrategyEngine
+    cs=[c(i,100,102,99,100) for i in range(24)]
+    state=MarketState(candles_15=cs,candles_60=cs[:12],last_price=100,data_health="HEALTHY")
+    d=StrategyEngine().diagnostics(state)
+    assert d["status"]=="SCANNING"
+    assert "SFP" in d["setups"]
+    assert "D-Line" in d["setups"]
+    assert "MSS" in d["setups"]
+    assert d["wait_reason"]
+    assert d["manual_execution_only"] is True
