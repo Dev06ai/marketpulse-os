@@ -42,4 +42,5 @@ function makeIncident(type,severity,message,meta={}){
   return {id:"MP16-"+Date.now().toString(36)+"-"+Math.random().toString(36).slice(2,8),ts:now(),type,severity,message,meta};
 }
 
+function selfTest(){const a=classifySystemCheck({execution:false,marketData:true}),b=shouldKillExecution({checks:{execution:false}},{control:{}}),c=makeIncident("TEST","LOW","ok");return {ok:a.executionCritical.includes("execution")&&a.safeForLive===false&&b.kill&&String(c.id).startsWith("MP16-"),version:VERSION};}
 module.exports={VERSION,now,bool,num,classifySystemCheck,shouldKillExecution,canAutoRemediate,makeIncident,MAX_INCIDENTS};
