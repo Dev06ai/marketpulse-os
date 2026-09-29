@@ -217,9 +217,11 @@
   async function refresh(force){
     if(S.loading&&!force)return;S.loading=true;
     try{
-      const chart=await api("/api/chart?symbol="+encodeURIComponent(S.symbol)+"&interval="+encodeURIComponent(S.interval),{timeout:12000});
-      S.candles=chart.candles||[];
-      S.start=clamp(S.start,0,Math.max(0,S.candles.length-S.range));if(!S.start)S.start=Math.max(0,S.candles.length-S.range);
+      if(force||!S.candles.length||Date.now()-(S.chartRefreshAt||0)>12000){
+        const chart=await api("/api/chart?symbol="+encodeURIComponent(S.symbol)+"&interval="+encodeURIComponent(S.interval),{timeout:12000});
+        S.candles=chart.candles||[];S.chartRefreshAt=Date.now();
+        S.start=clamp(S.start,0,Math.max(0,S.candles.length-S.range));if(!S.start)S.start=Math.max(0,S.candles.length-S.range);
+      }
       const live=await api("/api/live-sync?symbol="+encodeURIComponent(S.symbol),{timeout:8000});
       S.live=live;pushHistory(live);
       // Deep decision/execution state is refreshed on a slower cadence so the
