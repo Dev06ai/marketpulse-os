@@ -424,7 +424,6 @@ async function loadPhases(){
     $("phaseList").innerHTML='<div class="placeholder">Live registry is temporarily unavailable. The verified 500-item summary above remains available.</div>';
   }
 }
-async function checkSystem()
 async function checkSystem(){
   $("systemChecks").innerHTML='<div class="placeholder">Running bounded checks…</div>';
   try{const d=await api("/api/system-check",9000);renderSystemChecks(d.checks||{});runtime(d.ok?"System checks passed":"Core checks reported blockers",d.ok?"ok":"warn",d.ok?"All bounded checks returned within their gates.":"See runtime safety panel; these checks never block first paint.")}catch(e){$("systemChecks").innerHTML='<div class="placeholder">System check unavailable: '+String(e.message||e)+'</div>'}
