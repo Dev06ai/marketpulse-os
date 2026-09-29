@@ -9,6 +9,10 @@ on:
       - 'phase-history.js'
       - 'server.js'
       - 'public/phase401-500-terminal.*'
+      - 'public/apex-dashboard-v2.js'
+      - 'public/apex-nexus-overhaul.js'
+      - 'public/apex-nexus-overhaul.css'
+      - 'public/index.html'
       - '.github/workflows/phase401-500-validation.yml'
       - 'package.json'
   pull_request:
@@ -34,5 +38,7 @@ jobs:
       - run: node --check phase401-500-apex-engine.js
       - run: node --check phase401-500-selftest.js
       - run: node --check public/phase401-500-terminal.js
+      - run: node --check public/apex-dashboard-v2.js
+      - run: node --check public/apex-nexus-overhaul.js
       - run: node phase401-500-selftest.js
       - run: npm test
