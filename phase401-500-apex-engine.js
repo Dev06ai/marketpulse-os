@@ -27,14 +27,116 @@ function rrFrom(input){
 function scoreFrom(input){return n(input.decision&&input.decision.market&&input.decision.market.confluenceScore,n(input.decision&&input.decision.score,n(input.radar&&input.radar.score,n(input.score,0))))}
 function executionMode(input){return String(input.execution&&input.execution.mode||input.mode||"SIMULATION").toUpperCase()}
 function syncFrame(input){
-  const c=latestCandle(input.candles),flow=input.marketState&&input.marketState.flow||input.flow||input.decision&&input.decision.derivatives||{},book=input.marketState&&input.marketState.orderBook||input.orderBook||flow.orderBook||{};
-  const frame={symbol:String(input.symbol||input.decision&&input.decision.symbol||"UNKNOWN"),interval:String(input.interval||input.decision&&input.decision.interval||"UNKNOWN"),price:canonicalNumber(priceFrom(input)),candleTs:n(c&&c.t,0),decisionTs:n(input.decision&&input.decision.updatedAt,n(input.decision&&input.decision.generatedAt,n(input.updatedAt,0))),liveSeq:n(input.liveSeq,n(input.marketState&&input.marketState.seq,0)),markPrice:canonicalNumber(input.markPrice!=null?input.markPrice:input.marketState&&input.marketState.markPrice!=null?input.marketState.markPrice:flow.markPrice),bid:canonicalNumber(book.bid!=null?book.bid:book.bestBid),ask:canonicalNumber(book.ask!=null?book.ask:book.bestAsk),spreadBps:canonicalNumber(book.spreadBps),cvd:canonicalNumber(flow.cvd!=null?flow.cvd:flow.cvdDelta),oi:canonicalNumber(flow.oi),fundingRate:canonicalNumber(flow.fundingRate),side:actionFrom(input),version:VERSION};
-  frame.hash=hash(frame);return frame;
+  const c=latestCandle(input.candles),d=input.decision||{},flow=input.marketState&&input.marketState.flow||input.flow||d.derivatives||{},book=input.marketState&&input.marketState.orderBook||input.orderBook||flow.orderBook||{};
+  const frame={
+    symbol:String(input.symbol||d.symbol||"UNKNOWN"),
+    interval:String(input.interval||d.interval||"UNKNOWN"),
+    price:canonicalNumber(priceFrom(input)),
+    candleTs:n(c&&c.t,0),
+    decisionTs:n(d.updatedAt,n(d.generatedAt,n(input.updatedAt,0))),
+    liveSeq:n(input.liveSeq,n(input.marketState&&input.marketState.seq,0)),
+    markPrice:canonicalNumber(input.markPrice!=null?input.markPrice:input.marketState&&input.marketState.markPrice!=null?input.marketState.markPrice:flow.markPrice),
+    bid:canonicalNumber(book.bid!=null?book.bid:book.bestBid),
+    ask:canonicalNumber(book.ask!=null?book.ask:book.bestAsk),
+    spreadBps:canonicalNumber(book.spreadBps),
+    cvd:canonicalNumber(flow.cvd!=null?flow.cvd:flow.cvdDelta),
+    cvdRatio:canonicalNumber(flow.cvdRatio),
+    cvdState:String(flow.cvdState||""),
+    oi:canonicalNumber(flow.oi),
+    oiChangePct:canonicalNumber(flow.oiChangePct),
+    fundingRate:canonicalNumber(flow.fundingRate),
+    orderBookImbalance:canonicalNumber(flow.orderBookImbalance!=null?flow.orderBookImbalance:flow.imbalance!=null?flow.imbalance:book.imbalance),
+    takerImbalance:canonicalNumber(flow.takerImbalance),
+    liquidationBias:String(flow.liquidationBias||""),
+    side:actionFrom(input),
+    version:VERSION
+  };
+  frame.hash=hash(frame);
+  return frame;
+}
+function compareBps(a,b){
+  if(!Number.isFinite(Number(a))||!Number.isFinite(Number(b)))return null;
+  const denom=Math.max(1e-9,Math.abs(Number(b)));
+  return Math.abs(Number(a)-Number(b))/denom*10000;
+}
+function addNumericCheck(checks,name,a,b,toleranceBps){
+  if(!Number.isFinite(Number(a))||!Number.isFinite(Number(b)))return;
+  const diffBps=compareBps(a,b);
+  checks.push({name,diffBps,ok:diffBps<=toleranceBps});
+}
+function addAbsoluteCheck(checks,name,a,b,tolerance){
+  if(!Number.isFinite(Number(a))||!Number.isFinite(Number(b)))return;
+  const diff=Math.abs(Number(a)-Number(b));
+  checks.push({name,diff,ok:diff<=tolerance});
+}
+function addStateCheck(checks,name,a,b){
+  if(!a||!b)return;
+  checks.push({name,left:String(a),right:String(b),ok:String(a).toUpperCase()===String(b).toUpperCase()});
 }
 function mismatchReport(input,frame){
-  const checks=[],pairs=[["decisionPrice",input.decision&&input.decision.price],["radarPrice",input.radar&&input.radar.price],["marketStatePrice",input.marketState&&input.marketState.price],["tickerPrice",input.ticker&&input.ticker.price]];
-  pairs.forEach(pair=>{if(Number.isFinite(Number(pair[1]))){const diff=Math.abs(n(pair[1])-frame.price)/Math.max(1e-9,Math.abs(frame.price))*10000;checks.push({name:pair[0],diffBps:diff,ok:diff<=Number(input.maxPriceMismatchBps||12)})}});
-  const bad=checks.filter(x=>!x.ok);return {ok:bad.length===0,checks,badCount:bad.length,repair:bad.length?"PIN_ALL_SURFACES_TO_CANONICAL_FRAME":null};
+  const checks=[];
+  const d=input.decision||{},dd=d.derivatives||{},rf=input.radar||{},ms=input.marketState||{},mf=ms.flow||input.flow||{},tf=input.ticker||{};
+  const maxPriceMismatchBps=Number(input.maxPriceMismatchBps||12);
+  const maxOiMismatchBps=Number(input.maxOiMismatchBps||50);
+  const maxCvdRatioMismatchBps=Number(input.maxCvdRatioMismatchBps||500);
+  const maxFundingMismatch=Math.abs(Number(input.maxFundingMismatch||0.0002));
+  const maxImbalanceMismatch=Number(input.maxImbalanceMismatch||0.08);
+
+  const decisionPrice=d.livePrice??d.market?.livePrice??d.price;
+  addNumericCheck(checks,"decisionPrice",decisionPrice,frame.price,maxPriceMismatchBps);
+  addNumericCheck(checks,"radarPrice",rf.livePrice??rf.price,frame.price,maxPriceMismatchBps);
+  addNumericCheck(checks,"marketStatePrice",ms.price,frame.price,maxPriceMismatchBps);
+  addNumericCheck(checks,"tickerPrice",tf.price,frame.price,maxPriceMismatchBps);
+
+  const decisionCvdRatio=dd.cvdRatio??d.derivatives?.cvdRatio;
+  const marketCvdRatio=mf.cvdRatio;
+  const tickerCvdRatio=tf.cvdRatio;
+  addNumericCheck(checks,"decisionCvdRatio",decisionCvdRatio,frame.cvdRatio,maxCvdRatioMismatchBps);
+  addNumericCheck(checks,"marketFlowCvdRatio",marketCvdRatio,frame.cvdRatio,maxCvdRatioMismatchBps);
+  addNumericCheck(checks,"tickerCvdRatio",tickerCvdRatio,frame.cvdRatio,maxCvdRatioMismatchBps);
+  addStateCheck(checks,"decisionCvdState",dd.cvdState,frame.cvdState);
+  addStateCheck(checks,"marketFlowCvdState",mf.cvdState,frame.cvdState);
+
+  const decisionOi=dd.oi,marketOi=mf.oi;
+  addNumericCheck(checks,"decisionOI",decisionOi,frame.oi,maxOiMismatchBps);
+  addNumericCheck(checks,"marketFlowOI",marketOi,frame.oi,maxOiMismatchBps);
+  addAbsoluteCheck(checks,"decisionFunding",dd.fundingRate,frame.fundingRate,maxFundingMismatch);
+  addAbsoluteCheck(checks,"marketFlowFunding",mf.fundingRate,frame.fundingRate,maxFundingMismatch);
+  addAbsoluteCheck(checks,"decisionBookImbalance",dd.orderBookImbalance??dd.imbalance,frame.orderBookImbalance,maxImbalanceMismatch);
+  addAbsoluteCheck(checks,"marketBookImbalance",mf.orderBookImbalance??mf.imbalance,frame.orderBookImbalance,maxImbalanceMismatch);
+  addAbsoluteCheck(checks,"decisionTakerImbalance",dd.takerImbalance,frame.takerImbalance,maxImbalanceMismatch);
+  addAbsoluteCheck(checks,"marketTakerImbalance",mf.takerImbalance,frame.takerImbalance,maxImbalanceMismatch);
+  addStateCheck(checks,"decisionLiquidationBias",dd.liquidationBias,frame.liquidationBias);
+  addStateCheck(checks,"marketLiquidationBias",mf.liquidationBias,frame.liquidationBias);
+
+  const bad=checks.filter(x=>!x.ok);
+  return {
+    ok:bad.length===0,
+    checks,
+    badCount:bad.length,
+    checkedFields:checks.length,
+    repair:bad.length?"PIN_ALL_SURFACES_TO_CANONICAL_FRAME":null
+  };
+}
+function normalizedProbabilities(side,score,quality){
+  const s=clamp(Number(score||0)/100),q=clamp(Number(quality||0));
+  const waitPct=side==="WAIT"
+    ?Math.round(clamp(46+(1-s)*10+(1-q)*18,38,72))
+    :Math.round(clamp(8+(1-s)*18+(1-q)*18,8,42));
+  const pair=100-waitPct;
+  let longPct,shortPct;
+  if(side==="LONG"){
+    longPct=Math.round(pair*clamp(.5+.45*s,.55,.95));
+    shortPct=pair-longPct;
+  }else if(side==="SHORT"){
+    shortPct=Math.round(pair*clamp(.5+.45*s,.55,.95));
+    longPct=pair-shortPct;
+  }else{
+    longPct=Math.floor(pair/2);
+    shortPct=pair-longPct;
+  }
+  const waitOut=100-longPct-shortPct;
+  return {long:longPct/100,short:shortPct/100,wait:waitOut/100};
 }
 function evidence(input){
   const d=input.decision||{},m=d.market||{},l=d.levels||{},der=d.derivatives||input.derivatives||input.flow||{},mtf=d.mtf||input.mtf||{};
@@ -72,11 +174,63 @@ function executionGate(input){
   return {status:eligible?"ELIGIBLE":"BLOCKED",mode,side,score:Number(score.toFixed(2)),rr:Number(rr.toFixed(3)),quality:Number(q.toFixed(4)),canonicalFrame:frame,synchronization:sync,liveCapability:{liveTradingEnabled:liveTrading,liveAutoExecutionEnabled:autoLive,armed,reconciled,killSwitch:ks},reasons,automaticExecutionReady:Boolean(eligible&&mode==="LIVE"&&liveTrading&&autoLive&&armed&&reconciled&&!ks)};
 }
 function buildState(input){
-  const frame=syncFrame(input),sync=mismatchReport(input,frame),gate=executionGate(input),ev=evidence(input),q=quality(input,frame,sync),side=gate.side,lp=side==="LONG"?Math.max(.5,scoreFrom(input)/100):Math.max(.05,1-scoreFrom(input)/100),sp=side==="SHORT"?Math.max(.5,scoreFrom(input)/100):Math.max(.05,1-scoreFrom(input)/100);
-  return {version:VERSION,automaticRealMoneyExecutionSupported:true,automaticRealMoneyExecutionEnabled:gate.automaticExecutionReady,canonical:frame,synchronization:sync,evidence:ev,probabilities:{long:Number(lp.toFixed(4)),short:Number(sp.toFixed(4))},command:gate.status==="ELIGIBLE"?side:"WAIT",quality:Number(q.toFixed(4)),executionGate:gate,ux:{headline:gate.status==="ELIGIBLE"?"READY "+side:"WAIT — CONDITIONS NOT FULLY ALIGNED",whyNoTrade:gate.reasons,canonicalSync:sync.ok?"SYNCED":"MISMATCH DETECTED",executionMode:gate.mode},admin:{moduleCount:100,learning:"SHADOW/VALIDATED_ONLY",liveAutoExecution:gate.automaticExecutionReady,killSwitch:gate.liveCapability.killSwitch,reconciliation:gate.liveCapability.reconciled},stateHash:hash({frame,gate,q})};
+  const frame=syncFrame(input),sync=mismatchReport(input,frame),gate=executionGate(input),ev=evidence(input),q=quality(input,frame,sync),side=gate.side,probabilities=normalizedProbabilities(side,gate.score,q);
+  return {
+    version:VERSION,
+    automaticRealMoneyExecutionSupported:true,
+    automaticRealMoneyExecutionEnabled:gate.automaticExecutionReady,
+    canonical:frame,
+    synchronization:sync,
+    evidence:ev,
+    probabilities,
+    command:gate.status==="ELIGIBLE"?side:"WAIT",
+    quality:Number(q.toFixed(4)),
+    executionGate:gate,
+    ux:{
+      headline:gate.status==="ELIGIBLE"?"READY "+side:"WAIT — CONDITIONS NOT FULLY ALIGNED",
+      whyNoTrade:gate.reasons,
+      canonicalSync:sync.ok?"SYNCED":"MISMATCH DETECTED",
+      executionMode:gate.mode
+    },
+    admin:{
+      moduleCount:100,
+      learning:"SHADOW/VALIDATED_ONLY",
+      liveAutoExecution:gate.automaticExecutionReady,
+      killSwitch:gate.liveCapability.killSwitch,
+      reconciliation:gate.liveCapability.reconciled
+    },
+    stateHash:hash({frame,gate,q,probabilities})
+  };
 }
 function selfTest(){
-  const input={symbol:"BTCUSDT",interval:"15m",price:100,candles:Array.from({length:40},function(_,i){return {t:Date.now()-i*900000,o:99,h:101,l:98,c:100,v:100}}).reverse(),decision:{action:"LONG",state:"READY",liveSignalEligible:true,market:{confluenceScore:90,regime:"EXPANSION",structure:"BOS"},levels:{entry:100,stop:98,target:104,rr:2},updatedAt:Date.now()},radar:{side:"LONG",score:90,rr:2,price:100},marketState:{price:100,markPrice:100,orderBook:{spreadBps:2},flow:{cvd:10,oi:100000}},execution:{mode:"PAPER",armed:false,killSwitch:false,reconciliation:{ok:true}}};
-  const out=buildState(input);return {ok:specs.length===100&&out.canonical.hash&&out.synchronization.ok&&out.executionGate.status==="ELIGIBLE"&&!out.executionGate.automaticExecutionReady,version:VERSION,moduleCount:specs.length};
+  const now=Date.now();
+  const input={
+    symbol:"BTCUSDT",interval:"15m",price:100,
+    candles:Array.from({length:40},function(_,i){return {t:now-(39-i)*900000,o:99,h:101,l:98,c:100,v:100}}),
+    decision:{
+      action:"LONG",state:"READY",liveSignalEligible:true,livePrice:100,
+      market:{confluenceScore:90,regime:"EXPANSION",structure:"BOS",livePrice:100},
+      derivatives:{
+        cvdRatio:.10,cvdState:"BUYERS PRESSURE",oi:100000,oiChangePct:2,
+        fundingRate:.0001,orderBookImbalance:.15,takerImbalance:.10,liquidationBias:"SHORT LIQS DOMINANT"
+      },
+      levels:{entry:100,stop:98,tp1:104,tp2:108,rr:2},updatedAt:now
+    },
+    radar:{side:"LONG",score:90,rr:2,price:100},
+    marketState:{
+      price:100,markPrice:100,orderBook:{spreadBps:2,imbalance:.15},
+      flow:{cvd:10000,cvdRatio:.10,cvdState:"BUYERS PRESSURE",oi:100000,fundingRate:.0001,orderBookImbalance:.15,takerImbalance:.10,liquidationBias:"SHORT LIQS DOMINANT"}
+    },
+    ticker:{price:100,cvdRatio:.10},
+    execution:{mode:"PAPER",armed:false,killSwitch:false,reconciliation:{ok:true}}
+  };
+  const out=buildState(input);
+  const mismatch=buildState({...input,ticker:{price:100.5,cvdRatio:.10}});
+  const wait=buildState({...input,decision:{...input.decision,action:"WAIT",state:"NO_TRADE",liveSignalEligible:false}});
+  const probabilitySum=Number(out.probabilities.long)+Number(out.probabilities.short)+Number(out.probabilities.wait);
+  return {
+    ok:specs.length===100&&out.canonical.hash&&out.synchronization.ok&&out.executionGate.status==="ELIGIBLE"&&!out.executionGate.automaticExecutionReady&&probabilitySum===1&&mismatch.synchronization.badCount>0&&wait.command==="WAIT",
+    version:VERSION,moduleCount:specs.length,checkedFields:out.synchronization.checkedFields
+  };
 }
 module.exports={VERSION,specs,syncFrame,mismatchReport,executionGate,buildState,selfTest};

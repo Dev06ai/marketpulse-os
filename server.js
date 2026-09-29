@@ -1040,6 +1040,122 @@ async function buildDecisionSnapshot(symbol,interval,query,deviceId=null){
         deploymentGate:{...(finalDecision.deploymentGate||{}),state:"BLOCKED",reason:(phase301to400State.gate.blockers||[]).join(", ")||"Adaptive intelligence detected a material thesis failure."},
         operational:{...(finalDecision.operational||{}),liveUse:"PAPER_ONLY"},phase301to400Blocked:true};
     }
+    // Phase 401–500 is the final canonical integrity gate for the normal
+    // decision path as well as the execution path. Build it from the exact same
+    // live price/flow snapshot that powers the dashboard so READY cannot drift
+    // from the visible market state.
+    const phase401CanonicalPrice=Number.isFinite(Number(liveSeed.lastPrice))
+      ?Number(liveSeed.lastPrice)
+      :(Number.isFinite(Number(liveSeed.markPrice))
+        ?Number(liveSeed.markPrice)
+        :Number(finalDecision?.market?.price??analysis?.price??candles?.at(-1)?.c));
+    const phase401CanonicalTs=Number.isFinite(Number(liveSeed.lastTs))&&Number(liveSeed.lastTs)>0
+      ?Number(liveSeed.lastTs):Number(candles?.at(-1)?.t||now);
+    const phase401Decision={
+      ...finalDecision,
+      livePrice:phase401CanonicalPrice,
+      livePriceTs:phase401CanonicalTs,
+      market:{
+        ...(finalDecision.market||{}),
+        livePrice:phase401CanonicalPrice,
+        marketSyncTs:phase401CanonicalTs,
+        liveSource:"BYBIT_CANONICAL"
+      },
+      derivatives:flow
+    };
+    let phase401State=phase401to500.buildState({
+      symbol,
+      interval,
+      price:phase401CanonicalPrice,
+      updatedAt:now,
+      dataTs:phase401CanonicalTs,
+      liveSeq:liveSeed.liveSeq||0,
+      markPrice:liveSeed.markPrice,
+      candles,
+      decision:phase401Decision,
+      radar:{
+        side:String(finalDecision?.action||"WAIT").toUpperCase(),
+        score:finalDecision?.market?.confluenceScore,
+        rr:finalDecision?.levels?.rr,
+        price:phase401CanonicalPrice
+      },
+      marketState:{
+        price:phase401CanonicalPrice,
+        markPrice:liveSeed.markPrice,
+        orderBook:liveSeed.orderBook||flow.orderBook||null,
+        flow
+      },
+      ticker:{
+        price:phase401CanonicalPrice,
+        markPrice:liveSeed.markPrice,
+        change24h:liveSeed.price24hPcnt
+      },
+      execution:{
+        mode:"PAPER",
+        armed:false,
+        killSwitch:false,
+        reconciliation:{ok:true}
+      }
+    });
+
+    // A canonical mismatch is a hard stop. Re-run the apex state after
+    // demoting the decision so every surface reports the same WAIT state.
+    if(
+      phase401State.executionGate.status!=="ELIGIBLE" &&
+      ["LONG","SHORT"].includes(String(finalDecision?.action||"").toUpperCase()) &&
+      finalDecision?.liveSignalEligible===true
+    ){
+      finalDecision={
+        ...sanitizeFinalDecision(finalDecision),
+        action:"WAIT",
+        state:"NO_TRADE",
+        liveSignalEligible:false,
+        rawAction:String(finalDecision.action).toUpperCase(),
+        market:{
+          ...(finalDecision.market||{}),
+          side:"WAIT",
+          status:"WAITING",
+          type:"CANONICAL INTEGRITY BLOCK",
+          bias:"Neutral",
+          directionalLean:"NEUTRAL",
+          probabilityLabel:"CANONICAL DATA MUST ALIGN"
+        },
+        levels:{
+          ...(finalDecision.levels||{}),
+          side:"WAIT",
+          entryLow:null,entryHigh:null,entry:null,stop:null,tp1:null,tp2:null,rr:null,
+          riskDistance:null,target1Distance:null
+        },
+        deploymentGate:{
+          ...(finalDecision.deploymentGate||{}),
+          state:"BLOCKED",
+          reason:(phase401State.executionGate.reasons||[]).join(", ")||"Phase 401–500 canonical integrity gate blocked the signal."
+        },
+        operational:{...(finalDecision.operational||{}),liveUse:"PAPER_ONLY"},
+        phase401Blocked:true
+      };
+      phase401State=phase401to500.buildState({
+        symbol,
+        interval,
+        price:phase401CanonicalPrice,
+        updatedAt:now,
+        dataTs:phase401CanonicalTs,
+        liveSeq:liveSeed.liveSeq||0,
+        markPrice:liveSeed.markPrice,
+        candles,
+        decision:{
+          ...finalDecision,
+          livePrice:phase401CanonicalPrice,
+          livePriceTs:phase401CanonicalTs,
+          market:{...(finalDecision.market||{}),livePrice:phase401CanonicalPrice,marketSyncTs:phase401CanonicalTs},
+          derivatives:flow
+        },
+        radar:{side:"WAIT",score:finalDecision?.market?.confluenceScore,rr:null,price:phase401CanonicalPrice},
+        marketState:{price:phase401CanonicalPrice,markPrice:liveSeed.markPrice,orderBook:liveSeed.orderBook||flow.orderBook||null,flow},
+        ticker:{price:phase401CanonicalPrice,markPrice:liveSeed.markPrice,change24h:liveSeed.price24hPcnt},
+        execution:{mode:"PAPER",armed:false,killSwitch:false,reconciliation:{ok:true}}
+      });
+    }
     try{
       setTimeout(()=>signalNotifications.notifyAdminSignal(storage,{
         decision:finalDecision,
@@ -1085,6 +1201,10 @@ async function buildDecisionSnapshot(symbol,interval,query,deviceId=null){
       phase14:finalDecision.phase14||analysis.phase14||null,
       phase14Status:finalDecision.phase14?.adaptive||analysis.phase14?.adaptive||null,
       phase11:PHASE11_VERSION,phase12:PHASE12_VERSION,phase13:PHASE13_VERSION,phase14Version:"14.0.0",phase20Version:phase20.VERSION,phase21Version:phase21.VERSION,phase21to50Version:phaseStack.VERSION,phase51to100Version:phase51to100.VERSION,phase51to100:phase51to100State,phase101to200Version:phase101to200.VERSION,phase101to200:phase101to200State,phase201to300Version:phase201to300.VERSION,phase201to300:phase201to300State,phase301to400Version:phase301to400.VERSION,phase301to400:phase301to400State,
+      phase401to500Version:phase401to500.VERSION,
+      phase401to500:phase401State,
+      canonicalExecutionIntegrity:phase401State.executionGate,
+      canonicalLiveFrame:phase401State.canonical,
       updatedAt:now
     };
     DECISION_CACHE.set(key,{ts:now,payload});
