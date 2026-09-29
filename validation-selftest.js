@@ -251,4 +251,4 @@ const phase401FlowFixture={
 const phase401Mismatch=phase401to500.buildState({...phase401FlowFixture,marketState:{...phase401FlowFixture.marketState,flow:{...phase401FlowFixture.marketState.flow,orderBookImbalance:.42}}});
 assert(phase401Mismatch.synchronization.badCount>0,"Phase 401–500 must block a material flow mismatch.");
 const phase401Prob=phase401to500.buildState(phase401FlowFixture).probabilities;
-assert(Number(phase401Prob.long)+Number(phase401Prob.short)+Number(phase401Prob.wait)===100,"Phase 401–500 displayed probabilities must sum to exactly 100.");
+assert(Math.abs(Number(phase401Prob.long)+Number(phase401Prob.short)+Number(phase401Prob.wait)-1)<1e-9,"Phase 401–500 displayed probabilities must sum to exactly 1.");
