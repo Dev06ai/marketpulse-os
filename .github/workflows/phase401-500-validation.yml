@@ -13,6 +13,8 @@ on:
       - 'public/apex-nexus-overhaul.js'
       - 'public/apex-nexus-overhaul.css'
       - 'public/index.html'
+      - 'public/nexus-force-shell.js'
+      - 'public/nexus-force-shell.css'
       - '.github/workflows/phase401-500-validation.yml'
       - 'package.json'
   pull_request:
@@ -44,5 +46,6 @@ jobs:
       - run: node --check public/phase401-500-terminal.js
       - run: node --check public/apex-dashboard-v2.js
       - run: node --check public/apex-nexus-overhaul.js
+      - run: node --check public/nexus-force-shell.js
       - run: node phase401-500-selftest.js
       - run: npm test
