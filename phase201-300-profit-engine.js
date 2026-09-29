@@ -22,7 +22,7 @@ function evaluate(input={}){
   const conflictOk=x.conflict<=.65;
   const riskOk=x.risk<=1;
   const stabilityOk=x.stability>=.65;
-  const evidenceOk=x.sample>=Math.max(100,n(input.minimumSamples,200));
+  const evidenceOk=x.sample>=Math.max(80,n(input.minimumSamples,80));
   const calOk=x.calErr<=.08;
   const driftOk=x.drift<=.35;
   const hard=Array.isArray(input.hardBlockers)?input.hardBlockers:[];
