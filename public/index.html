@@ -5967,11 +5967,14 @@ async function renderLiveSignalSummary(d,model){
   }
 
   var chip=$("thesisChips");
+  var integrity=d?.canonicalExecutionIntegrity||d?.phase401to500?.executionGate||{};
+  var canonicalOk=integrity?.synchronization?.ok!==false;
   if(chip){
     var html=[
       '<span class="chip c">Bias: '+contextSide+" "+confidence+'%</span>',
       '<span class="chip c">Flow: '+(d.evidence?.flowScore!=null?fmt(d.evidence.flowScore)+"/100":"LIVE")+'</span>',
       '<span class="chip c">Data: '+(d.data?.score!=null?fmt(d.data.score)+"/100":"LIVE")+'</span>',
+      '<span class="chip c">Canonical: '+(canonicalOk?"SYNCED":"MISMATCH")+'</span>',
       '<span class="chip c">Execution gate: '+String(d.deploymentGate?.state||"PAPER_ONLY")+'</span>'
     ].join("");
     if(chip.innerHTML!==html)chip.innerHTML=html;
@@ -5979,9 +5982,10 @@ async function renderLiveSignalSummary(d,model){
 
   var meta=$("finalEngineMeta");
   if(meta){
-    var metaText=executionReady
+    var metaBase=executionReady
       ?("CONFIRMED "+side+" "+confidence+"% · synchronized to price action + flow")
       :("WAIT · "+contextSide+" bias "+confidence+"% · final execution gates not cleared");
+    var metaText=metaBase+" · canonical "+(canonicalOk?"SYNCED":"MISMATCH");
     if(meta.textContent!==metaText)meta.textContent=metaText;
   }
 
