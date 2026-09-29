@@ -1,0 +1,14 @@
+# Secrets
+backend/.env
+android/app/google-services.json
+
+# Android/Gradle
+android/.gradle/
+android/local.properties
+android/**/build/
+*.iml
+
+# Python
+__pycache__/
+.pytest_cache/
+*.pyc
