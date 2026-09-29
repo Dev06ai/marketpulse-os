@@ -205,6 +205,7 @@ assert(/^Naked (DAILY|WEEKLY) POC/.test(String(npoc.setup?.reason||"")),"Naked P
 
 
 
+const phase301to400=require("./phase301-400-adaptive-intelligence");
 const phase51to100=require("./phase51-100-stack");
 const phase51to100Regression=require("./phase51-100-selftest");
 assert(phase51to100.selfTest().ok,"Phase 51–100 stack self-test failed.");
@@ -219,3 +220,9 @@ for(const name of phase51to100Files){
   assert(mod&&typeof mod.selfTest==="function","Phase module self-test missing: "+name);
   assert(mod.selfTest().ok,"Phase module self-test failed: "+name);
 }
+
+
+const phase301to400Regression=require("./phase301-400-selftest");
+assert(phase301to400.selfTest().ok,"Phase 301–400 adaptive intelligence self-test failed.");
+assert(phase301to400.specs.length===100,"Phase 301–400 must expose exactly 100 modules.");
+assert(phase301to400Regression,"Phase 301–400 regression suite did not load.");
