@@ -246,7 +246,8 @@ function drawChart(){
     const up=cl>=o,xx=x(j),bodyTop=y(Math.max(o,cl)),bodyBot=y(Math.min(o,cl));
     g.strokeStyle=up?state.style.up:state.style.down;g.lineWidth=1;g.beginPath();g.moveTo(xx,y(hh));g.lineTo(xx,y(ll));g.stroke();
     g.fillStyle=up?state.style.up:state.style.down;g.fillRect(xx-bw/2,bodyTop,bw,Math.max(1,bodyBot-bodyTop));
-    g.globalAlpha=.13;g.fillRect(xx-bw/2,T+priceH+8,bw,Math.max(1,(1-vol/maxVol)*volH));g.globalAlpha=1;
+    const volBase=T+priceH+8,volTop=volBase+(1-vol/maxVol)*volH;
+    g.globalAlpha=.16;g.fillRect(xx-bw/2,volTop,bw,Math.max(1,volBase+volH-volTop));g.globalAlpha=1;
   });
 
   // EMA(50), calculated over the complete loaded series and then clipped to the viewport.
@@ -450,8 +451,8 @@ function refreshAll(){
   $("symbolName").textContent=displaySymbol(state.symbol);connectLiveStream();loadCore();startLoops();
 }
 function startLoops(){
-  state.tickerTimer=setInterval(tickLoop,3000);
-  state.flowTimer=setInterval(flowLoop,3000);
+  state.tickerTimer=setInterval(tickLoop,1000);
+  state.flowTimer=setInterval(flowLoop,2000);
   state.chartTimer=setInterval(chartLoop,15000);
   state.decisionTimer=setInterval(()=>refreshDecision(false),12000);
 }
