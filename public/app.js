@@ -5,7 +5,7 @@ const $=id=>document.getElementById(id);
 const state={
   symbol:"BTCUSDT",interval:"1h",cfg:null,ticker:null,live:null,market:null,chart:null,decision:null,phases:null,
   livePrice:null,previousPrice:null,pricePulse:0,lastLiveEventAt:0,lastServerSeq:0,
-  crosshair:null,selectedCandle:null,drag:null,chartUserInteracted:false,viewStart:0,viewCount:110,fullscreen:false,
+  crosshair:null,selectedCandle:null,drag:null,chartUserInteracted:false,viewStart:0,viewCount:110,fullscreen:false,navFocusTimer:null,
   ws:null,wsConnected:false,wsReconnectTimer:null,wsRetryMs:1000,
   style:{up:"#37e6a2",down:"#ff5d77",bg:"#07090f",grid:"#2b3040"},
   tickerTimer:null,flowTimer:null,chartTimer:null,decisionTimer:null
@@ -424,8 +424,21 @@ function selectCandleAt(clientX,clientY){
 }
 function setNavView(id){
   const target=document.getElementById(id);if(!target)return;
-  document.querySelectorAll(".nav-item").forEach(b=>b.classList.toggle("active",b.dataset.target===id));
-  target.scrollIntoView({behavior:"smooth",block:"start"});
+  const button=document.querySelector('.nav-item[data-target="'+id+'"]');
+  document.querySelectorAll(".nav-item").forEach(b=>b.classList.toggle("active",b===button));
+  const appRoot=$("app");
+  const view=id==="chartShell"?"market":id==="decisionPanel"?"decision":id==="flowPanel"?"flow":"system";
+  appRoot?.setAttribute("data-workspace",view);
+  document.querySelectorAll(".workspace-target").forEach(el=>el.classList.remove("workspace-target"));
+  target.classList.add("workspace-target");
+  const offset=96;
+  const top=Math.max(0,target.getBoundingClientRect().top+window.scrollY-offset);
+  window.scrollTo({top,behavior:"smooth"});
+  clearTimeout(state.navFocusTimer);
+  state.navFocusTimer=setTimeout(()=>target.classList.remove("workspace-target"),1300);
+  if(history.replaceState){
+    try{history.replaceState(null,"","#"+id)}catch{}
+  }
 }
 function setFullscreen(on){
   state.fullscreen=!!on;const shell=$("chartShell");if(!shell)return;
