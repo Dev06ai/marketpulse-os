@@ -27,5 +27,5 @@ class PaperBroker{
   reject(id,reason){const o=this.orders.get(String(id));if(!o)return null;const row={...o,status:"REJECTED",reason:String(reason||"REJECTED")};this.orders.set(String(id),row);return row}
   snapshot(){return {version:VERSION,orders:[...this.orders.values()],positions:[...this.positions]}}
 }
-function selfTest(){const b=new PaperBroker(),o=b.place({side:"LONG",price:100,qty:1});const f=b.fill(o.id,{price:100.2});return {ok:f.status==="FILLED"&&b.snapshot().orders.length===1,version:VERSION};}
+function selfTest(){const b=new PaperBroker(),o=b.place({symbol:"BTCUSDT",side:"LONG",price:100,qty:1});const f=b.fill(o.id,{price:100.2});const p=b.snapshot().positions[0];return {ok:f.status==="FILLED"&&b.snapshot().orders.length===1&&p?.symbol==="BTCUSDT"&&p?.side==="LONG"&&p?.qty===1,version:VERSION};}
 module.exports={VERSION,PaperBroker,selfTest};
