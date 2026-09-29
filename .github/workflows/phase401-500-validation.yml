@@ -23,6 +23,10 @@ on:
       - 'phase-history.js'
       - 'server.js'
       - 'public/phase401-500-terminal.*'
+      - 'public/index.html'
+      - 'public/apex-nexus-overhaul.css'
+      - 'public/apex-nexus-overhaul.js'
+      - 'public/apex-dashboard-v2.js'
       - 'package.json'
 
 jobs:
