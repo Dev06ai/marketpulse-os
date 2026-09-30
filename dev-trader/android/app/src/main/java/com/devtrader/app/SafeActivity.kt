@@ -49,6 +49,29 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 
 class SafeActivity : Activity() {
+    private companion object {
+        val BTC_ORANGE = Color.rgb(247, 147, 26)
+    }
+
+    private fun btcAccent(value: CharSequence): CharSequence {
+        val text = value.toString()
+        if (!text.contains("BTC", ignoreCase = true)) return value
+        val styled = SpannableString(text)
+        var start = 0
+        while (start < text.length) {
+            val index = text.indexOf("BTC", startIndex = start, ignoreCase = true)
+            if (index < 0) break
+            styled.setSpan(
+                ForegroundColorSpan(BTC_ORANGE),
+                index,
+                index + 3,
+                SpannableString.SPAN_EXCLUSIVE_EXCLUSIVE
+            )
+            start = index + 3
+        }
+        return styled
+    }
+
     private val handler = Handler(Looper.getMainLooper())
     private var socket: WebSocket? = null
     private var reconnectAttempt = 0
@@ -333,7 +356,7 @@ class SafeActivity : Activity() {
 
     private fun label(text: String, size: Float, color: Int, spacing: Float): TextView {
         return TextView(this).apply {
-            this.text = text
+            this.text = btcAccent(text)
             textSize = size
             setTextColor(color)
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
@@ -358,7 +381,7 @@ class SafeActivity : Activity() {
         }
 
         val heading = TextView(this).apply {
-            text = title
+            text = btcAccent(title)
             textSize = 11f
             setTextColor(Color.rgb(150, 154, 164))
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
@@ -367,7 +390,7 @@ class SafeActivity : Activity() {
         box.addView(heading)
 
         val value = TextView(this).apply {
-            text = initial
+            text = btcAccent(initial)
             textSize = valueSize
             setTextColor(Color.WHITE)
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
@@ -380,7 +403,7 @@ class SafeActivity : Activity() {
 
     private fun actionButton(label: String): Button {
         return Button(this).apply {
-            text = label
+            text = btcAccent(label)
             textSize = 13f
             setTextColor(Color.WHITE)
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
@@ -669,10 +692,12 @@ class SafeActivity : Activity() {
             health == "RECONNECTING" -> "RECONNECTING…"
             else -> health
         }
-        price.text = "BTC  " + if (priceValue.isNaN()) "—"
-            else String.format(Locale.US, "%,.2f", priceValue) +
-            "\nOI   " + if (oi.isNaN()) "—"
-            else String.format(Locale.US, "%,.2f", oi)
+        price.text = btcAccent(
+            "BTC  " + if (priceValue.isNaN()) "—"
+                else String.format(Locale.US, "%,.2f", priceValue) +
+                    "\nOI   " + if (oi.isNaN()) "—"
+                else String.format(Locale.US, "%,.2f", oi)
+        )
         val upstream = root.optJSONObject("upstream")
         val source = upstream?.optString("source", "").orEmpty()
         integrity.text = "WebSocket  •  " + if (ws) "CONNECTED" else "DISCONNECTED" +
@@ -925,8 +950,8 @@ class SafeActivity : Activity() {
         val notification = NotificationCompat.Builder(this, "dev_trader_signals")
             .setSmallIcon(android.R.drawable.ic_dialog_info)
             .setContentTitle(
-                "BTC " + signalObj.optString("direction") + " • " +
-                    signalObj.optString("setup")
+                btcAccent("BTC " + signalObj.optString("direction") + " • " +
+                    signalObj.optString("setup"))
             )
             .setContentText(
                 "Entry " + String.format(Locale.US, "%.2f", signalObj.optDouble("entry")) +
