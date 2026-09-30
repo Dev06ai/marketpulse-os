@@ -113,10 +113,15 @@ class SafeActivity : Activity() {
             setBackgroundColor(Color.rgb(7, 8, 11))
             isFillViewport = true
             overScrollMode = View.OVER_SCROLL_NEVER
+            isClickable = false
+            isFocusable = false
+            descendantFocusability = ViewGroup.FOCUS_AFTER_DESCENDANTS
         }
 
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
+            isClickable = false
+            isFocusable = false
             setPadding(dp(16), dp(18), dp(16), dp(30))
             background = gradient(
                 intArrayOf(Color.rgb(7, 8, 11), Color.rgb(17, 18, 23), Color.rgb(8, 9, 12)),
@@ -146,8 +151,12 @@ class SafeActivity : Activity() {
         root.addView(market.container, margins(bottom = 12))
 
         root.addView(label("PRICE ACTION", 11f, Color.rgb(156, 160, 171), 0.11f), margins(bottom = 6))
-        chart = MarketChartView(this)
-        chart.minimumHeight = dp(350)
+        chart = MarketChartView(this).apply {
+            minimumHeight = dp(350)
+            isClickable = false
+            isFocusable = false
+            setOnTouchListener { _, _ -> false }
+        }
         root.addView(chart, LinearLayout.LayoutParams(-1, dp(350)).apply { bottomMargin = dp(8) })
 
         val tfRow = LinearLayout(this).apply {
@@ -292,8 +301,14 @@ class SafeActivity : Activity() {
             setTextColor(Color.WHITE)
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
             isAllCaps = false
+            isEnabled = true
+            isClickable = true
+            isFocusable = true
+            isFocusableInTouchMode = true
             minHeight = dp(52)
             minWidth = 0
+            stateListAnimator = null
+            elevation = 0f
             background = gradient(
                 intArrayOf(Color.rgb(58, 60, 69), Color.rgb(34, 35, 42)),
                 GradientDrawable.Orientation.LEFT_RIGHT
@@ -301,8 +316,18 @@ class SafeActivity : Activity() {
                 cornerRadius = dp(16).toFloat()
                 setStroke(dp(1), Color.rgb(84, 87, 98))
             }
-            stateListAnimator = null
-            elevation = 0f
+            setPadding(dp(8), 0, dp(8), 0)
+            setOnTouchListener { v, event ->
+                when (event.actionMasked) {
+                    android.view.MotionEvent.ACTION_DOWN -> alpha = 0.72f
+                    android.view.MotionEvent.ACTION_UP -> {
+                        alpha = 1f
+                        v.performClick()
+                    }
+                    android.view.MotionEvent.ACTION_CANCEL -> alpha = 1f
+                }
+                false
+            }
         }
     }
 
