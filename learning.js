@@ -326,6 +326,89 @@ async function process(symbol,interval,candles,a,options={}){
   return {analysis:adapted,observed};
 }
 
+
+function normalizeLivePrediction(payload){
+  const s=payload?.signal||payload||{};
+  const symbol=String(payload?.symbol||s.symbol||"BTCUSDT").toUpperCase();
+  const interval=String(payload?.interval||s.timeframe||"15m");
+  const side=String(payload?.direction||s.direction||s.side||"WAIT").toUpperCase();
+  const type=String(payload?.setup||s.setup||"DEV TRADER SIGNAL");
+  const scoreRaw=Number(payload?.score??s.score);
+  const confidence=Number(payload?.confidence??s.confidence);
+  const score=Number.isFinite(scoreRaw)?scoreRaw:(Number.isFinite(confidence)?confidence*100:0);
+  const evidence=payload?.evidence||s.evidence||{};
+  const createdTs=Number(payload?.created_ts??payload?.createdTs??s.created_ts??s.createdTs??Date.now());
+  const target=Number(payload?.target2??payload?.target??s.target2??s.target);
+  const stop=Number(payload?.stop??s.stop);
+  const price=Number(payload?.entry??payload?.price??s.entry);
+  return {
+    fingerprint:String(payload?.fingerprint||[
+      "DEV_TRADER",symbol,interval,createdTs,side,type
+    ].join("|")),
+    symbol,interval,candleTs:createdTs,side,type,status:"READY",
+    score:Number.isFinite(score)?score:0,price:Number.isFinite(price)?price:null,
+    stop:Number.isFinite(stop)?stop:null,target:Number.isFinite(target)?target:null,
+    regime:String(payload?.regime??s.regime??"UNKNOWN"),
+    horizonBars:Number(payload?.horizonBars||payload?.horizon_bars||12),
+    features:{
+      source:"DEV_TRADER_LIVE",
+      score:Number.isFinite(score)?score:0,
+      regime:String(payload?.regime??s.regime??"UNKNOWN"),
+      side,type,
+      setupKey:type.toUpperCase(),
+      components:Array.isArray(payload?.components)?payload.components:[],
+      derivatives:{
+        oiChangePct:Number(evidence?.oi_change_5m_pct??evidence?.oiChangePct??evidence?.oi_change_15m_pct),
+        cvdPriceDivergence:String(evidence?.cvd_price_divergence??""),
+        cvdState:String(evidence?.cvd_state??""),
+        orderBookImbalance:Number(evidence?.book_imbalance),
+        takerImbalance:Number(evidence?.taker_imbalance),
+        liquidationBias:String(evidence?.liquidation_pressure??""),
+      },
+      liveMemoryMatch:payload?.memoryMatch||null,
+      thesis:Array.isArray(s?.thesis)?s.thesis:[],
+      evidence
+    }
+  };
+}
+
+async function recordLiveSignalOpen(payload){
+  await init();
+  const pred=normalizeLivePrediction(payload);
+  if(!["LONG","SHORT"].includes(pred.side))return {recorded:false,reason:"invalid direction"};
+  const existing=await storage.getOpenLearningPredictions(pred.symbol,pred.interval,200);
+  const already=existing.find(x=>x.fingerprint===pred.fingerprint);
+  if(already)return {recorded:false,reason:"already open",fingerprint:pred.fingerprint};
+  const out=await storage.recordLearningPrediction(pred);
+  return {recorded:Boolean(out?.recorded),fingerprint:pred.fingerprint,storage:storage.status()};
+}
+
+async function resolveLiveSignal(payload){
+  await init();
+  const pred=normalizeLivePrediction(payload);
+  const open=await storage.getOpenLearningPredictions(pred.symbol,pred.interval,200);
+  const row=open.find(x=>x.fingerprint===pred.fingerprint);
+  if(!row)return {resolved:false,reason:"open prediction not found",fingerprint:pred.fingerprint};
+  const raw=String(payload?.outcome||payload?.status||"").toUpperCase();
+  const outcome=raw==="TARGET_REACHED"||raw==="WIN"?"WIN":raw==="INVALIDATED"||raw==="LOSS"?"LOSS":"TIMEOUT";
+  if(!["WIN","LOSS"].includes(outcome)){
+    await storage.resolveLearningPrediction(row.fingerprint,outcome,Number(payload?.resultR)||0);
+    return {resolved:true,counted:false,outcome,fingerprint:row.fingerprint};
+  }
+  const resultR=Number.isFinite(Number(payload?.resultR))?Number(payload.resultR):(outcome==="WIN"?1:-1);
+  await storage.resolveLearningPrediction(row.fingerprint,outcome,resultR);
+  updateAggregate(row,outcome,resultR);
+  updateOnlineModel(row,outcome);
+  await storage.saveLearningState(state);
+  return {
+    resolved:true,counted:true,outcome,resultR,fingerprint:row.fingerprint,
+    learning:{
+      resolved:Number(state.resolved)||0,wins:Number(state.wins)||0,losses:Number(state.losses)||0,
+      modelUpdates:Number(state.model?.updates)||0
+    }
+  };
+}
+
 async function observeFinalDecision(symbol,interval,candles,decision){
   await init();
   await resolve(symbol,interval,candles);
@@ -436,4 +519,4 @@ async function status(){
     lastComponentAdjustment:Number(state.lastComponentAdjustment)||0
   };
 }
-module.exports={init,process,recalibrate,status,resolve,observeFinalDecision,trainFromReplay};
+module.exports={init,process,recalibrate,status,resolve,observeFinalDecision,recordLiveSignalOpen,resolveLiveSignal,trainFromReplay};
