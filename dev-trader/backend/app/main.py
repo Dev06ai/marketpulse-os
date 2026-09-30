@@ -77,6 +77,7 @@ def mobile_payload():
             "liquidity_map": diag.get("liquidity_map", {"above": [], "below": []}),
             "multi_timeframe_story": diag.get("multi_timeframe_story", ""),
             "radar_lead": diag.get("radar_lead"),
+            "evidence_matrix": diag.get("evidence_matrix", []),
             "sfp_hunter": diag.get("sfp_hunter", {}),
             "breakout_watch": diag.get("breakout_watch", {}),
             "evidence_matrix": diag.get("evidence_matrix", {}),
