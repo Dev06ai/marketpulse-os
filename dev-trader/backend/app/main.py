@@ -29,7 +29,7 @@ push = PushService()
 stream = None
 server_started_ms = int(time.time() * 1000)
 last_engine_eval_ms = 0
-last_opportunity_alert = {"key": "", "ts": 0}
+last_opportunity_alert = {"key": "", "ts": 0, "title": "", "body": ""}
 
 
 class PushTestPayload(BaseModel):
@@ -93,6 +93,12 @@ def mobile_payload():
             "order_block_direction": f.order_block_direction,
             "golden_pocket": f.golden_pocket,
             "weekly_open": f.weekly_open,
+        },
+        "opportunity_alert": {
+            "key": last_opportunity_alert.get("key", ""),
+            "title": last_opportunity_alert.get("title", ""),
+            "body": last_opportunity_alert.get("body", ""),
+            "ts": last_opportunity_alert.get("ts", 0),
         },
         "upstream": {
             "rest_ok": bool(stream.last_rest_ok) if stream else False,
@@ -178,7 +184,7 @@ async def on_state(s: MarketState):
                     "body": breakout.get('message', 'Breakout/reclaim detected.'),
                 }
         if alert and push.ready:
-            last_opportunity_alert = {"key": alert["key"], "ts": now_alert}
+            last_opportunity_alert = {"key": alert["key"], "ts": now_alert, "title": alert["title"], "body": alert["body"]}
             push.send_opportunity(alert)
 
         lifecycle_event = engine.last_lifecycle_event
