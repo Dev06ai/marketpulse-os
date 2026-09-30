@@ -502,15 +502,42 @@ class SafeActivity : Activity() {
             else String.format(Locale.US, "%,.2f", priceValue) +
             "\nOI   " + if (oi.isNaN()) "—"
             else String.format(Locale.US, "%,.2f", oi)
-        integrity.text = "WebSocket  •  " + if (ws) "CONNECTED" else "DISCONNECTED"
+        val upstream = root.optJSONObject("upstream")
+        val source = upstream?.optString("source", "").orEmpty()
+        integrity.text = "WebSocket  •  " + if (ws) "CONNECTED" else "DISCONNECTED" +
+            if (source.isBlank()) "" else "  •  " + source.replace("_", " ")
 
         if (signalObj == null) {
-            signal.text = "SCANNING  •  LOOSE MODE\nSFP  •  D-Line  •  MSS\nWaiting for the next clean trigger"
+            val radar = engine?.optJSONArray("opportunity_radar")
+            val lead = radar?.optJSONObject(0)
+            val second = radar?.optJSONObject(1)
+            val scenario = engine?.optJSONArray("scenario_tree")?.let { arr ->
+                (0 until minOf(2, arr.length())).mapNotNull { arr.optJSONObject(it) }
+                    .joinToString("  •  ") { it.optString("name") + " " + it.optString("state") }
+            }.orEmpty()
+            val leadText = if (lead != null) {
+                lead.optString("direction") + " " + lead.optString("tier") + " " +
+                    lead.optInt("score") + "/" + lead.optInt("max_score") + " • " + lead.optString("setup")
+            } else "No live opportunity detected"
+            val secondText = if (second != null) {
+                second.optString("direction") + " " + second.optString("tier") + " " +
+                    second.optInt("score") + "/" + second.optInt("max_score")
+            } else ""
+            signal.text = "OPPORTUNITY RADAR  •  LOOSE MODE\n" +
+                leadText + if (secondText.isBlank()) "" else "\n" + secondText +
+                if (scenario.isBlank()) "" else "\nSCENARIOS  •  " + scenario +
+                "\nThe radar can flag early setups before full confirmation."
             risk.text = "No active setup"
         } else {
             val lifecycle = signalObj.optString("lifecycle", "ACTIVE")
             val thesis = signalObj.optJSONArray("thesis")
             val reason = if (thesis != null && thesis.length() > 0) thesis.optString(0) else ""
+            val management = signalObj.optJSONObject("evidence")?.optJSONObject("position_management")
+            val managementText = if (management != null) {
+                "\n" + management.optString("status", "REVERSAL") + "  •  " +
+                    management.optString("action", "Manage existing position") +
+                    "\nWhy: " + management.optString("reason", "")
+            } else ""
             signal.text = "TRADE CALL  •  " + signalObj.optString("direction") + "  •  " + lifecycle +
                 "\n" + signalObj.optString("setup") +
                 "\nEntry  " + String.format(Locale.US, "%.2f", signalObj.optDouble("entry")) +
