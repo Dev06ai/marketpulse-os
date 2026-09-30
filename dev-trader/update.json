@@ -3,6 +3,6 @@
   "versionCode": 70,
   "versionName": "0.10.2",
   "apkUrl": "https://github.com/Dev06ai/marketpulse-os/releases/download/dev-trader-v0.10.2-70/app-release.apk",
-  "sha256": "54bfd1f5cc2b92e1cf87552ce8377a5b7c0fe557e425a24124fa99747c08580c",
-  "notes": "Signed Dev Trader release 0.10.2 \u2022 USDT P&L calculator + ATR-based scalp/swing plans"
+  "sha256": "2308bbbbd285b6a16813a61bd62442fb6dcc5780a6a3474a543da7bd4e19710b",
+  "notes": "Signed Dev Trader release 0.10.2 • USDT P&L calculator + ATR-based scalp/swing plans"
 }
