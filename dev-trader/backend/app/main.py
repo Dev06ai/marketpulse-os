@@ -77,10 +77,9 @@ def mobile_payload():
             "liquidity_map": diag.get("liquidity_map", {"above": [], "below": []}),
             "multi_timeframe_story": diag.get("multi_timeframe_story", ""),
             "radar_lead": diag.get("radar_lead"),
-            "evidence_matrix": diag.get("evidence_matrix", []),
+            "evidence_matrix": diag.get("evidence_matrix", {}),
             "sfp_hunter": diag.get("sfp_hunter", {}),
             "breakout_watch": diag.get("breakout_watch", {}),
-            "evidence_matrix": diag.get("evidence_matrix", {}),
             "data_quality": diag.get("data_quality", state.data_health),
         },
         "features": {
@@ -185,7 +184,7 @@ async def on_state(s: MarketState):
                     "title": f"BTC {breakout.get('event','BREAKOUT')}",
                     "body": breakout.get('message', 'Breakout/reclaim detected.'),
                 }
-        if alert and push.ready:
+        if alert and push.ready and not clients:
             last_opportunity_alert = {"key": alert["key"], "ts": now_alert, "title": alert["title"], "body": alert["body"]}
             push.send_opportunity(alert)
 
@@ -208,7 +207,8 @@ async def on_state(s: MarketState):
                         signal_payload.get("evidence", {}).get("memory_match"),
                     )
                 )
-            push.send_signal(signal_payload)
+            if not clients:
+                push.send_signal(signal_payload)
 
 
 async def setup_memory_refresh_loop():
@@ -272,7 +272,7 @@ async def health():
     now = int(time.time() * 1000)
     latency = (state.received_ts - state.exchange_ts) if state.received_ts and state.exchange_ts else None
     recent_market = [x for x in (state.last_trade_ts, state.last_kline_15_ts, state.last_kline_60_ts) if x]
-    data_age = min([now - x for x in recent_market], default=None)
+    data_age = max([now - x for x in recent_market], default=None)
     return {
         "ok": True,
         "symbol": state.symbol,
