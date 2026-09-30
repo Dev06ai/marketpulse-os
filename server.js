@@ -2404,6 +2404,42 @@ const server=http.createServer(async(req,res)=>{
   try{
     const u=new URL(req.url,'http://localhost');
     if(!rateRequest(req,u.pathname))return send(res,429,{ok:false,error:"Too many requests. Please slow down."});
+
+    const devTraderBridgeToken=String(process.env.DEV_TRADER_BRIDGE_TOKEN||"");
+    const devTraderBridgePath=u.pathname.startsWith("/api/dev-trader/");
+    if(devTraderBridgePath){
+      if(!devTraderBridgeToken || req.headers["x-dev-trader-bridge"]!==devTraderBridgeToken){
+        return send(res,401,{ok:false,error:"Dev Trader bridge unauthorized"});
+      }
+      if(req.method==="POST"&&u.pathname==="/api/dev-trader/learning/signal"){
+        let raw="";for await(const chunk of req)raw+=chunk;
+        let body={};try{body=JSON.parse(raw||"{}")}catch{return send(res,400,{ok:false,error:"Invalid JSON"})}
+        try{return send(res,200,{ok:true,...await learning.recordLiveSignalOpen(body)})}catch(e){return send(res,400,{ok:false,error:e.message})}
+      }
+      if(req.method==="POST"&&u.pathname==="/api/dev-trader/learning/outcome"){
+        let raw="";for await(const chunk of req)raw+=chunk;
+        let body={};try{body=JSON.parse(raw||"{}")}catch{return send(res,400,{ok:false,error:"Invalid JSON"})}
+        try{return send(res,200,{ok:true,...await learning.resolveLiveSignal(body)})}catch(e){return send(res,400,{ok:false,error:e.message})}
+      }
+      if(req.method==="GET"&&u.pathname==="/api/dev-trader/learning/status"){
+        try{return send(res,200,{ok:true,...await learning.status()})}catch(e){return send(res,503,{ok:false,error:e.message})}
+      }
+      if(req.method==="GET"&&u.pathname==="/api/dev-trader/setup-memory"){
+        const symbol=u.searchParams.get("symbol")||null,interval=u.searchParams.get("interval")||null;
+        try{return send(res,200,{ok:true,memories:await storage.getSetupMemories({symbol,interval,limit:100})})}catch(e){return send(res,503,{ok:false,error:e.message})}
+      }
+      if(req.method==="POST"&&u.pathname==="/api/dev-trader/setup-memory"){
+        let raw="";for await(const chunk of req)raw+=chunk;
+        let body={};try{body=JSON.parse(raw||"{}")}catch{return send(res,400,{ok:false,error:"Invalid JSON"})}
+        try{return send(res,200,{ok:true,...await storage.saveSetupMemory(body)})}catch(e){return send(res,400,{ok:false,error:e.message})}
+      }
+      if(req.method==="POST"&&u.pathname==="/api/dev-trader/setup-memory/deactivate"){
+        let raw="";for await(const chunk of req)raw+=chunk;
+        let body={};try{body=JSON.parse(raw||"{}")}catch{return send(res,400,{ok:false,error:"Invalid JSON"})}
+        try{return send(res,200,{ok:true,...await storage.deactivateSetupMemory(body.id)})}catch(e){return send(res,400,{ok:false,error:e.message})}
+      }
+    }
+
     if(u.pathname==='/api/watchdog/internal'){
       const watchdogExpected=String(process.env.MARKETPULSE_WATCHDOG_TOKEN||"");
       const autotraderExpected=String(process.env.MARKETPULSE_AUTOTRADER_TOKEN||"");
