@@ -1,4 +1,4 @@
-name: Dev Trader Release # 0.4.0 big upgrade
+name: Dev Trader Release # 0.4.0 rebuild 2
 
 on:
   push:
