@@ -49,9 +49,7 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 
 class SafeActivity : Activity() {
-    private companion object {
-        val BTC_ORANGE = Color.rgb(247, 147, 26)
-    }
+    private val btcOrange = Color.rgb(247, 147, 26)
 
     private fun btcAccent(value: CharSequence): CharSequence {
         val text = value.toString()
@@ -62,7 +60,7 @@ class SafeActivity : Activity() {
             val index = text.indexOf("BTC", startIndex = start, ignoreCase = true)
             if (index < 0) break
             styled.setSpan(
-                ForegroundColorSpan(BTC_ORANGE),
+                ForegroundColorSpan(btcOrange),
                 index,
                 index + 3,
                 SpannableString.SPAN_EXCLUSIVE_EXCLUSIVE
