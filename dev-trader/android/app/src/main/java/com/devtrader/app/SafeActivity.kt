@@ -65,12 +65,42 @@ class SafeActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        installCrashReporter()
+
         buildUi()
-        handler.post {
+        val previous = getSharedPreferences("dev_trader_diagnostics", Context.MODE_PRIVATE)
+            .getString("last_crash", "")
+            .orEmpty()
+        if (previous.isNotBlank()) {
+            check.text = "LAST CRASH CAPTURED\n" + previous.take(2600)
+        }
+
+        // Diagnostic-safe startup: no permission or network work runs automatically.
+        updateButton.text = "START APP UPDATE CHECK"
+        updateButton.setOnClickListener { safe { checkUpdate() } }
+
+        checkButton.text = "START MARKET ENGINE"
+        checkButton.setOnClickListener {
+            checkButton.isEnabled = false
             safe { ensureChannel() }
             safe { requestNotificationPermission() }
-            safe { checkUpdate() }
             safe { connect() }
+            status.text = "MARKET ENGINE\nStarting…"
+        }
+    }
+
+    private fun installCrashReporter() {
+        val previous = Thread.getDefaultUncaughtExceptionHandler()
+        Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
+            runCatching {
+                val trace = java.io.StringWriter()
+                throwable.printStackTrace(java.io.PrintWriter(trace))
+                getSharedPreferences("dev_trader_diagnostics", Context.MODE_PRIVATE)
+                    .edit()
+                    .putString("last_crash", trace.toString())
+                    .apply()
+            }
+            previous?.uncaughtException(thread, throwable)
         }
     }
 
