@@ -61,7 +61,7 @@ jobs:
           DEV_TRADER_KEY_ALIAS: ${{ secrets.DEV_TRADER_KEY_ALIAS }}
           DEV_TRADER_KEY_PASSWORD: ${{ secrets.DEV_TRADER_KEY_PASSWORD }}
         run: |
-          echo "${{ secrets.DEV_TRADER_KEYSTORE_B64 }}" | base64 --decode > "$DEV_TRADER_KEYSTORE_PATH"
+          echo "${{ secrets.DEV_TRADER_KEYSTORE_BASE64 }}" | base64 --decode > "$DEV_TRADER_KEYSTORE_PATH"
           gradle assembleRelease --stacktrace -PdevTraderVersionCode=62 -PdevTraderVersionName=0.9.4
       - uses: actions/upload-artifact@v4
         with:
