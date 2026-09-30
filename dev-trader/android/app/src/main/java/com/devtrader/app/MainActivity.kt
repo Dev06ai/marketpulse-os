@@ -187,6 +187,13 @@ class MainActivity : ComponentActivity() {
 
     private fun startAppUpdate() {
         val current = updateUi
+        if (current.downloaded) {
+            val cached = File(cacheDir, "dev-trader-" + current.versionName + ".apk")
+            if (cached.exists()) {
+                installApk(cached)
+                return
+            }
+        }
         if (!current.available || current.apkUrl.isBlank() || current.sha256.isBlank()) {
             checkForAppUpdate()
             return
@@ -906,7 +913,7 @@ private fun UpdateCard(update: UpdateUi, onUpdate: () -> Unit) {
             if (update.message.isNotBlank()) {
                 Text(update.message, color = Muted, style = MaterialTheme.typography.bodySmall)
             }
-            if (update.available && !update.downloading && !update.downloaded) {
+            if (update.available && !update.downloading) {
                 Button(onClick = onUpdate) {
                     Text("INSTALL UPDATE")
                 }
