@@ -3,6 +3,6 @@
   "versionCode": 65,
   "versionName": "0.9.7",
   "apkUrl": "https://github.com/Dev06ai/marketpulse-os/releases/download/dev-trader-v0.9.7-65/app-release.apk",
-  "sha256": "a78185b0909952440a40bdf96073d29e0a7300067bc4fd2588cd70b61b1eac77",
+  "sha256": "e58322eaa606b673aaf3be9e053abf0b339277279db2021b81390a8b2a42ad31",
   "notes": "Signed Dev Trader release 0.9.7 \u2022 heartbeat-aware background feed supervisor"
 }
