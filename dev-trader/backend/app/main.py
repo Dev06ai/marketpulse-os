@@ -79,6 +79,7 @@ def mobile_payload():
             "radar_lead": diag.get("radar_lead"),
             "sfp_hunter": diag.get("sfp_hunter", {}),
             "breakout_watch": diag.get("breakout_watch", {}),
+            "evidence_matrix": diag.get("evidence_matrix", {}),
             "data_quality": diag.get("data_quality", state.data_health),
         },
         "features": {
