@@ -67,6 +67,10 @@ class SafeActivity : Activity() {
     private var pendingUiUpdate = false
     private var lastUiRenderMs = 0L
     private var lastChartRequestMs = 0L
+    private var lastBootstrapMs = 0L
+    private var bootstrapInFlight = false
+
+    private val backendBase = "https://dev-trader-engine.onrender.com"
 
     private val client by lazy {
         OkHttpClient.Builder()
@@ -86,8 +90,11 @@ class SafeActivity : Activity() {
         loadJournal()
 
         handler.postDelayed({
+            safe { bootstrap(true) }
+        }, 150L)
+        handler.postDelayed({
             safe { connect() }
-        }, 700L)
+        }, 500L)
         handler.postDelayed({
             safe { watchdog() }
         }, 3000L)
@@ -352,10 +359,15 @@ class SafeActivity : Activity() {
         runCatching { block() }
     }
 
-    private fun connect() {
-        if (stopped || socket != null) return
+    private fun connect(force: Boolean = false) {
+        if (stopped) return
+        if (force && socket != null) {
+            runCatching { socket?.cancel() }
+            socket = null
+        }
+        if (socket != null) return
 
-        status.text = "Connecting…"
+        status.text = "CONNECTING…"
         socket = client.newWebSocket(
             Request.Builder()
                 .url("wss://dev-trader-engine.onrender.com/ws")
@@ -366,8 +378,8 @@ class SafeActivity : Activity() {
                     reconnectAttempt = 0
                     reconnectScheduled.set(false)
                     handler.post {
-                        status.text = "LIVE"
-                        integrity.text = "WebSocket  •  CONNECTED"
+                        status.text = "SYNCING…"
+                        integrity.text = "WebSocket  •  CONNECTED  •  WAITING FOR FEED"
                     }
                 }
 
@@ -416,12 +428,52 @@ class SafeActivity : Activity() {
             reconnectScheduled.set(false)
             if (!stopped) {
                 socket = null
+                bootstrap(false)
                 connect()
             }
         }, delay)
     }
 
-    private fun renderState(root: JSONObject) {
+    private fun bootstrap(force: Boolean = false) {
+        if (stopped || bootstrapInFlight) return
+        val now = System.currentTimeMillis()
+        if (!force && now - lastBootstrapMs < 4000L) return
+        lastBootstrapMs = now
+        bootstrapInFlight = true
+        integrity.text = "HTTP  •  SYNCING MARKET SNAPSHOT"
+        getJson(backendBase + "/bootstrap?interval=" + selectedTf) { ok, body ->
+            handler.post {
+                bootstrapInFlight = false
+                if (!ok) {
+                    if (lastStateReceivedMs == 0L) {
+                        status.text = "BACKEND SYNC FAILED"
+                        integrity.text = "HTTP  •  UNAVAILABLE  •  RETRYING"
+                    }
+                    return@post
+                }
+                safe {
+                    val root = JSONObject(body)
+                    latestRoot = root
+                    lastStateReceivedMs = System.currentTimeMillis()
+                    renderState(root, requestChart = false)
+                    val chartObj = root.optJSONObject("chart")
+                    val candles = chartObj?.optJSONArray("candles") ?: JSONArray()
+                    if (candles.length() > 0) {
+                        val lastPrice = chartObj.optDouble("last_price", root.optDouble("last_price", Double.NaN))
+                        chart.setTimeframe(selectedTf)
+                        chart.setData(
+                            candles,
+                            root.optJSONObject("signal"),
+                            calculateEma(candles, 50),
+                            lastPrice
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    private fun renderState(root: JSONObject, requestChart: Boolean = true) {
         val priceValue = root.optDouble("last_price", Double.NaN)
         val health = root.optString("data_health", "UNKNOWN")
         val ws = root.optBoolean("ws_connected", false)
@@ -432,6 +484,7 @@ class SafeActivity : Activity() {
 
         status.text = when {
             health == "HEALTHY" -> "LIVE"
+            health == "DEGRADED" -> "LIVE  •  REST FALLBACK"
             health == "CONNECTING" -> "CONNECTING…"
             health == "RECONNECTING" -> "RECONNECTING…"
             else -> health
@@ -480,14 +533,14 @@ class SafeActivity : Activity() {
             "  •  OB  " + (f?.optString("order_block_direction") ?: "NONE") +
             "\nGolden pocket  " + (f?.optString("golden_pocket") ?: "NONE")
 
-        requestChartIfNeeded()
+        if (requestChart) requestChartIfNeeded()
     }
 
     private fun requestChartIfNeeded(force: Boolean = false) {
         val now = System.currentTimeMillis()
         if (!force && now - lastChartRequestMs < 1200L) return
         lastChartRequestMs = now
-        getJson("https://dev-trader-engine.onrender.com/chart?interval=" + selectedTf) { ok, body ->
+        getJson(backendBase + "/chart?interval=" + selectedTf) { ok, body ->
             if (!ok) return@getJson
             handler.post {
                 safe {
@@ -581,9 +634,15 @@ class SafeActivity : Activity() {
         if (stopped) return
         val age = if (lastStateReceivedMs == 0L) Long.MAX_VALUE
             else System.currentTimeMillis() - lastStateReceivedMs
-        if (age > 8000L && socket != null) {
-            integrity.text = "WebSocket  •  STALE (>8s)"
-            status.text = "DATA STALE"
+        if (age > 7000L) {
+            integrity.text = "Feed  •  STALE (>7s)  •  REST SNAPSHOT RECOVERY"
+            status.text = "DATA RECOVERY"
+            bootstrap(false)
+            if (socket != null && age > 12000L) {
+                runCatching { socket?.cancel() }
+                socket = null
+                reconnect()
+            }
         }
         handler.postDelayed({ safe { watchdog() } }, 3000L)
     }
@@ -600,7 +659,7 @@ class SafeActivity : Activity() {
         if (entry.isNaN() || stop.isNaN()) return
         val account = accountEdit.text.toString().toDoubleOrNull() ?: 5000.0
         val pct = riskEdit.text.toString().toDoubleOrNull() ?: 1.0
-        val url = "https://dev-trader-engine.onrender.com/risk?account_balance=" +
+        val url = backendBase + "/risk?account_balance=" +
             account + "&risk_pct=" + pct + "&entry=" + entry +
             "&stop=" + stop + "&target=" + target
         getJson(url) { ok, body ->
@@ -673,7 +732,7 @@ class SafeActivity : Activity() {
 
     private fun runReplay() {
         replay.text = "Running recent 15m replay…"
-        getJson("https://dev-trader-engine.onrender.com/backtest/recent?lookback=240") { ok, body ->
+        getJson(backendBase + "/backtest/recent?lookback=240") { ok, body ->
             handler.post {
                 if (!ok) {
                     replay.text = "Replay unavailable."
@@ -702,7 +761,7 @@ class SafeActivity : Activity() {
     private fun systemCheck() {
         checkButton.isEnabled = false
         check.text = "Running diagnostics…"
-        getJson("https://dev-trader-engine.onrender.com/system-check") { ok, body ->
+        getJson(backendBase + "/system-check") { ok, body ->
             handler.post {
                 if (!ok) {
                     check.text = "Backend diagnostics failed."
@@ -805,9 +864,8 @@ class SafeActivity : Activity() {
         stopped = true
         handler.removeCallbacksAndMessages(null)
         reconnectScheduled.set(false)
-        socket?.close(1000, "activity destroyed")
+        runCatching { socket?.close(1000, "activity destroyed") }
         socket = null
-        runCatching { client.dispatcher.executorService.shutdown() }
         super.onDestroy()
     }
 }
