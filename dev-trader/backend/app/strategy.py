@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from typing import Optional
 import os
+import time
 
 from .analytics import MarketFeatures, compute_features
 from .models import Candle, MarketState
@@ -93,6 +94,28 @@ def _score(direction: str, setup: str, f: MarketFeatures) -> tuple[float, list[s
     if f.regime == "HIGH_VOL":
         score -= 0.04
         reasons.append("high volatility regime")
+
+    if f.trend_240 == "UP" and direction == "LONG":
+        score += 0.04
+        reasons.append("4h trend aligns")
+    elif f.trend_240 == "DOWN" and direction == "SHORT":
+        score += 0.04
+        reasons.append("4h trend aligns")
+    elif f.trend_240 in {"UP", "DOWN"}:
+        score -= 0.03
+        reasons.append("4h trend is counter-directional")
+
+    if f.golden_pocket == ("LONG_ZONE" if direction == "LONG" else "SHORT_ZONE"):
+        score += 0.04
+        reasons.append("price is in the corresponding golden-pocket zone")
+
+    if f.fvg_direction == ("BULLISH" if direction == "LONG" else "BEARISH"):
+        score += 0.03
+        reasons.append("recent FVG supports direction")
+
+    if f.order_block_direction == ("BULLISH" if direction == "LONG" else "BEARISH"):
+        score += 0.03
+        reasons.append("recent order block supports direction")
 
     return max(0.0, min(score, 0.99)), reasons
 
@@ -387,11 +410,16 @@ def detect_mss(state: MarketState) -> Optional[Signal]:
 class StrategyEngine:
     def __init__(self):
         self.last_signal_id = None
+        self.active_signal = None
+        self.signal_status = "NONE"
+        self.signal_history: list[dict] = []
+        self.last_evaluated_ts = 0
         self.last_diagnostics = {
             "status": "STARTING",
             "wait_reason": "Engine has not evaluated market data yet.",
             "blocked_by": [],
             "setups": {},
+            "signal_state": "NONE",
         }
 
     def _pattern_gate(self, state: MarketState, setup: str, direction: str, entry: float, stop: float, target: float, f: MarketFeatures, structural: dict) -> dict:
@@ -410,6 +438,7 @@ class StrategyEngine:
         cs = [c for c in state.candles_15 if c.confirmed]
         highs, lows = pivots(cs[:-1], 2) if len(cs) >= 5 else ([], [])
         last = cs[-1] if cs else None
+        f0 = compute_features(state)
         result = {
             "status": "SCANNING" if state.data_health == "HEALTHY" else "BLOCKED",
             "wait_reason": "",
@@ -420,6 +449,31 @@ class StrategyEngine:
             "manual_execution_only": True,
             "confirmed_15m_candles": len(cs),
             "confirmed_1h_candles": len([c for c in state.candles_60 if c.confirmed]),
+            "signal_state": self.signal_status,
+            "active_signal": self.active_signal,
+            "market_features": {
+                "trend_15": f0.trend_15,
+                "trend_60": f0.trend_60,
+                "trend_240": f0.trend_240,
+                "market_structure": f0.market_structure,
+                "regime": f0.regime,
+                "atr_15": round(f0.atr_15, 4),
+                "volatility_pct": round(f0.volatility_pct, 4),
+                "oi_change_5m_pct": round(f0.oi_change_5m_pct, 4),
+                "oi_change_15m_pct": round(f0.oi_change_15m_pct, 4),
+                "cvd_price_divergence": f0.cvd_price_divergence,
+                "book_imbalance": round(f0.book_imbalance, 4),
+                "spread_bps": round(f0.spread_bps, 4),
+                "fvg_direction": f0.fvg_direction,
+                "order_block_direction": f0.order_block_direction,
+                "golden_pocket": f0.golden_pocket,
+                "previous_day_high": f0.previous_day_high,
+                "previous_day_low": f0.previous_day_low,
+                "previous_week_high": f0.previous_week_high,
+                "previous_week_low": f0.previous_week_low,
+                "weekly_open": f0.weekly_open,
+            },
+            "last_evaluated_ts": self.last_evaluated_ts,
         }
 
         if state.data_health != "HEALTHY":
@@ -561,9 +615,32 @@ class StrategyEngine:
             elif detail.get("status") == "CANDIDATE":
                 waits.append(f"{name}: candidate awaiting quality gates")
         result["wait_reason"] = " | ".join(waits) if waits else "At least one setup passed all diagnostic gates."
+        result["signal_state"] = self.signal_status
+        result["active_signal"] = self.active_signal
         return result
 
+    def _update_signal_lifecycle(self, state: MarketState):
+        if not self.active_signal or state.last_price is None or self.signal_status != "ACTIVE":
+            return
+        stop = float(self.active_signal["stop"])
+        target = float(self.active_signal["target2"])
+        direction = self.active_signal["direction"]
+        if direction == "LONG":
+            if state.last_price <= stop:
+                self.signal_status = "INVALIDATED"
+            elif state.last_price >= target:
+                self.signal_status = "TARGET_REACHED"
+        else:
+            if state.last_price >= stop:
+                self.signal_status = "INVALIDATED"
+            elif state.last_price <= target:
+                self.signal_status = "TARGET_REACHED"
+        self.active_signal["lifecycle"] = self.signal_status
+        self.active_signal["last_price_seen"] = state.last_price
+
     def evaluate(self, state: MarketState) -> Optional[Signal]:
+        self.last_evaluated_ts = int(time.time() * 1000)
+        self._update_signal_lifecycle(state)
         self.last_diagnostics = self.diagnostics(state)
         if state.data_health != "HEALTHY":
             return None
@@ -579,4 +656,25 @@ class StrategyEngine:
         if signal.id == self.last_signal_id:
             return None
         self.last_signal_id = signal.id
+        self.active_signal = signal.to_dict()
+        self.active_signal["lifecycle"] = "ACTIVE"
+        self.active_signal["created_ts"] = self.last_evaluated_ts
+        self.signal_status = "ACTIVE"
+        self.signal_history.insert(0, {
+            "id": signal.id,
+            "direction": signal.direction,
+            "setup": signal.setup,
+            "entry": signal.entry,
+            "stop": signal.stop,
+            "target2": signal.target2,
+            "rr": signal.rr,
+            "confidence": signal.confidence,
+            "grade": signal.grade,
+            "created_ts": self.last_evaluated_ts,
+            "status": "ACTIVE",
+        })
+        self.signal_history = self.signal_history[:25]
+        self.last_diagnostics["signal_state"] = self.signal_status
+        self.last_diagnostics["active_signal"] = self.active_signal
+        self.last_diagnostics["signal_history"] = self.signal_history
         return signal
