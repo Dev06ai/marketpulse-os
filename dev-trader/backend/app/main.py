@@ -1,4 +1,5 @@
 import asyncio
+import json
 import os
 import time
 from contextlib import asynccontextmanager
@@ -602,6 +603,24 @@ async def socket(ws: WebSocket):
                 message = await asyncio.wait_for(ws.receive(), timeout=25.0)
                 if message.get("type") == "websocket.disconnect":
                     break
+
+                # Application-level keepalive creates regular inbound traffic on
+                # the long-lived mobile socket in addition to transport ping/pong.
+                if message.get("type") == "websocket.receive":
+                    raw_text = message.get("text")
+                    if raw_text:
+                        try:
+                            incoming = json.loads(raw_text)
+                        except (TypeError, ValueError):
+                            incoming = {}
+                        if incoming.get("type") == "keepalive":
+                            await asyncio.wait_for(
+                                ws.send_json({
+                                    "type": "ack",
+                                    "server_ts": int(time.time() * 1000),
+                                }),
+                                timeout=2.0,
+                            )
             except asyncio.TimeoutError:
                 continue
             except WebSocketDisconnect:

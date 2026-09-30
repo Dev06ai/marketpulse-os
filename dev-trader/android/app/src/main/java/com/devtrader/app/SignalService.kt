@@ -22,7 +22,7 @@ import java.util.Locale
 import java.util.concurrent.TimeUnit
 import kotlin.math.min
 
-// Build 70 release marker: USDT PnL calculator and ATR-based scalp/swing trade plans.
+// Build 73 release marker: explicit application keepalive + self-healing live connection.
 class SignalService : Service() {
     companion object {
         private const val SERVICE_CHANNEL = "dev_trader_background"
@@ -35,9 +35,32 @@ class SignalService : Service() {
         private const val PREF_LAST_TRADE_EVENT_KEY = "last_trade_event_key"
         private const val WS_URL = "wss://dev-trader-engine.onrender.com/ws"
         private const val HEARTBEAT_URL = "https://dev-trader-engine.onrender.com/heartbeat"
+        private const val KEEPALIVE_INTERVAL_MS = 15_000L
     }
 
     private val handler = Handler(Looper.getMainLooper())
+    private val keepaliveRunnable = object : Runnable {
+        override fun run() {
+            if (stopped) return
+            val ws = socket
+            if (ws != null) {
+                val ok = runCatching {
+                    ws.send(
+                        JSONObject().apply {
+                            put("type", "keepalive")
+                            put("client_ts", System.currentTimeMillis())
+                        }.toString()
+                    )
+                }.getOrDefault(false)
+                if (!ok) {
+                    socket = null
+                    runCatching { ws.cancel() }
+                    scheduleReconnect()
+                }
+            }
+            handler.postDelayed(this, KEEPALIVE_INTERVAL_MS)
+        }
+    }
     private var socket: WebSocket? = null
     private var reconnectAttempt = 0
     private var stopped = false
@@ -60,6 +83,7 @@ class SignalService : Service() {
         ensureChannels()
         startForegroundNotification()
         connect()
+        handler.postDelayed(keepaliveRunnable, KEEPALIVE_INTERVAL_MS)
         scheduleHealthWatchdog()
     }
 
@@ -140,6 +164,14 @@ class SignalService : Service() {
                     socket = ws
                     lastMessageMs = System.currentTimeMillis()
                     staleChecks = 0
+                    runCatching {
+                        ws.send(
+                            JSONObject().apply {
+                                put("type", "keepalive")
+                                put("client_ts", System.currentTimeMillis())
+                            }.toString()
+                        )
+                    }
                     updateServiceNotification("Live signal monitoring connected")
                 }
 
@@ -450,6 +482,7 @@ class SignalService : Service() {
 
     override fun onDestroy() {
         stopped = true
+        handler.removeCallbacks(keepaliveRunnable)
         handler.removeCallbacksAndMessages(null)
         reconnectScheduled = false
         runCatching { socket?.close(1000, "service destroyed") }
