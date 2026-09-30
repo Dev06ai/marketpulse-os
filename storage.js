@@ -1,3 +1,4 @@
+const crypto=require("crypto");
 const fs=require("fs");
 const path=require("path");
 let Pool=null;try{Pool=require("pg").Pool}catch{}
