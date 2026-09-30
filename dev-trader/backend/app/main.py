@@ -88,6 +88,7 @@ def mobile_payload():
             "rest_ok": bool(stream.last_rest_ok) if stream else False,
             "last_error": stream.last_upstream_error if stream else "",
             "last_rest_sync_ts": stream.last_rest_sync_ms if stream else 0,
+            "source": stream.last_data_source if stream else "NONE",
         },
         "heartbeat": {
             "server_uptime_ms": max(0, now - server_started_ms),
@@ -482,10 +483,14 @@ async def system_check_push(payload: PushTestPayload):
 async def socket(ws: WebSocket):
     await ws.accept()
     clients.add(ws)
-    payload = mobile_payload()
-    await ws.send_json(payload)
     try:
-        while True:
-            await ws.receive_text()
-    except (WebSocketDisconnect, Exception):
+        await ws.send_json(mobile_payload())
+        # State is pushed by broadcast_loop; the mobile client does not need to send
+        # keepalive text frames. Avoid receive_text() because abrupt client/proxy closes
+        # can surface as noisy ConnectionClosedError traces.
+        while ws in clients:
+            await asyncio.sleep(30)
+    except Exception:
+        pass
+    finally:
         clients.discard(ws)
