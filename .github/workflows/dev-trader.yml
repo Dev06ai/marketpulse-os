@@ -63,12 +63,17 @@ jobs:
         run: |
           echo "${{ secrets.DEV_TRADER_KEYSTORE_BASE64 }}" | base64 --decode > "$DEV_TRADER_KEYSTORE_PATH"
           gradle assembleRelease --stacktrace -PdevTraderVersionCode=62 -PdevTraderVersionName=0.9.4
+      - name: Stage Android artifacts
+        if: steps.changed.outputs.android_changed == 'true'
+        run: |
+          mkdir -p release-artifacts
+          cp dev-trader/android/app/build/outputs/apk/debug/app-debug.apk release-artifacts/app-debug.apk
+          cp dev-trader/android/app/build/outputs/apk/release/app-release.apk release-artifacts/app-release.apk
       - uses: actions/upload-artifact@v4
         with:
           name: dev-trader-builds
-          path: |
-            dev-trader/android/app/build/outputs/apk/debug/app-debug.apk
-            dev-trader/android/app/build/outputs/apk/release/app-release.apk
+          path: release-artifacts/
+          if-no-files-found: error
 
   publish-release:
     needs: android
@@ -84,7 +89,7 @@ jobs:
         id: release
         run: |
           mkdir -p release
-          cp dist/dev-trader/android/app/build/outputs/apk/release/app-release.apk release/app-release.apk
+          cp dist/app-release.apk release/app-release.apk
           sha256sum release/app-release.apk | awk '{print $1}' > release/app-release.sha256
           echo "tag=dev-trader-v0.9.4-62" >> "$GITHUB_OUTPUT"
           echo "sha256=$(cat release/app-release.sha256)" >> "$GITHUB_OUTPUT"
