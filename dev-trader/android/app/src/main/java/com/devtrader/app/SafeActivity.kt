@@ -24,6 +24,7 @@ import android.widget.Button
 import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ScrollView
+import android.widget.SeekBar
 import android.widget.TextView
 import androidx.core.app.NotificationCompat
 import androidx.core.content.FileProvider
@@ -63,8 +64,6 @@ class SafeActivity : Activity() {
     private lateinit var journal: TextView
     private lateinit var replay: TextView
     private lateinit var chart: MarketChartView
-    private lateinit var accountEdit: EditText
-    private lateinit var riskEdit: EditText
     private lateinit var updateButton: Button
     private lateinit var checkButton: Button
     private lateinit var alertsButton: Button
@@ -238,20 +237,13 @@ class SafeActivity : Activity() {
         integrity = data.value
         root.addView(data.container, margins(bottom = 12))
 
-        val riskCard = card("RISK  /  MANUAL EXECUTION", "No active setup", 14f)
+        val riskCard = card("PNL CALCULATOR  /  USDT", "Measure profit or loss from entry to exit.", 14f)
         risk = riskCard.value
         root.addView(riskCard.container, margins(bottom = 8))
 
-        val riskRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        accountEdit = numberField("Account", "5000")
-        riskEdit = numberField("Risk %", "1")
-        riskRow.addView(accountEdit, LinearLayout.LayoutParams(0, dp(54), 2f).apply { rightMargin = dp(5) })
-        riskRow.addView(riskEdit, LinearLayout.LayoutParams(0, dp(54), 1f).apply { leftMargin = dp(5) })
-        root.addView(riskRow, margins(bottom = 8))
-
-        val riskButton = actionButton("CALCULATE RISK")
-        riskButton.setOnClickListener { safe { calculateRisk() } }
-        root.addView(riskButton, margins(bottom = 12))
+        val pnlButton = actionButton("OPEN PNL CALCULATOR")
+        pnlButton.setOnClickListener { safe { showPnlCalculator() } }
+        root.addView(pnlButton, margins(bottom = 12))
 
         val toolsRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         updateButton = actionButton("UPDATE")
@@ -666,7 +658,7 @@ class SafeActivity : Activity() {
                 if (breakoutText.isBlank()) "" else "\n" + breakoutText +
                 if (scenario.isBlank()) "" else "\nSCENARIOS  •  " + scenario +
                 "\nNO CONFIRMED TRADE YET • radar is actively monitoring triggers."
-            risk.text = "No confirmed setup • keep scanning"
+            risk.text = "USDT P&L calculator • quantity or cost • long/short • leverage"
         } else {
             val lifecycle = signalObj.optString("lifecycle_stage", signalObj.optString("lifecycle", "ACTIVE"))
             val thesis = signalObj.optJSONArray("thesis")
@@ -699,7 +691,6 @@ class SafeActivity : Activity() {
                 lastSignalId = id
                 appendJournal(signalObj)
                 loadJournal()
-                safe { calculateRisk() }
             }
         }
 
@@ -896,41 +887,147 @@ class SafeActivity : Activity() {
         handler.postDelayed({ safe { watchdog() } }, 2000L)
     }
 
-    private fun calculateRisk() {
-        val signalObj = latestRoot?.optJSONObject("signal")
-        if (signalObj == null) {
-            risk.text = "Waiting for a validated setup…"
-            return
+    private fun showPnlCalculator() {
+        val scroll = ScrollView(this).apply {
+            setBackgroundColor(Color.rgb(7, 8, 11))
+            isFillViewport = true
+            overScrollMode = View.OVER_SCROLL_NEVER
         }
-        val entry = signalObj.optDouble("entry", Double.NaN)
-        val stop = signalObj.optDouble("stop", Double.NaN)
-        val target = signalObj.optDouble("target2", Double.NaN)
-        if (entry.isNaN() || stop.isNaN()) return
-        val account = accountEdit.text.toString().toDoubleOrNull() ?: 5000.0
-        val pct = riskEdit.text.toString().toDoubleOrNull() ?: 1.0
-        val url = backendBase + "/risk?account_balance=" +
-            account + "&risk_pct=" + pct + "&entry=" + entry +
-            "&stop=" + stop + "&target=" + target
-        getJson(url) { ok, body ->
-            handler.post {
-                if (!ok) {
-                    risk.text = "Risk engine unavailable."
-                    return@post
+        val root = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(16), dp(18), dp(16), dp(30))
+            background = gradient(
+                intArrayOf(Color.rgb(7, 8, 11), Color.rgb(17, 18, 23), Color.rgb(8, 9, 12)),
+                GradientDrawable.Orientation.TL_BR
+            )
+        }
+        ViewCompat.setOnApplyWindowInsetsListener(scroll) { _, insets ->
+            val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+            root.setPadding(dp(16), bars.top + dp(10), dp(16), bars.bottom + dp(24))
+            insets
+        }
+        scroll.addView(root)
+        setContentView(scroll)
+
+        val header = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        val back = actionButton("‹").apply {
+            minWidth = dp(48)
+            minHeight = dp(44)
+            textSize = 24f
+            setOnClickListener { buildUi() }
+        }
+        header.addView(back, LinearLayout.LayoutParams(dp(52), dp(46)))
+        header.addView(
+            label("Calculator", 26f, Color.WHITE, 0f),
+            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { leftMargin = dp(10) }
+        )
+        root.addView(header, margins(bottom = 16))
+
+        root.addView(label("PNL", 13f, Color.WHITE, 0f), margins(bottom = 8))
+        root.addView(label("BTCUSDT Perpetual  •  USDT settlement", 14f, Color.rgb(168, 171, 181), 0f), margins(bottom = 14))
+
+        var direction = "LONG"
+        var unitMode = "COST"
+        var leverage = 20
+
+        val sideRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        val longButton = actionButton("LONG")
+        val shortButton = actionButton("SHORT")
+        fun refreshSides() {
+            longButton.alpha = if (direction == "LONG") 1f else 0.45f
+            shortButton.alpha = if (direction == "SHORT") 1f else 0.45f
+        }
+        longButton.setOnClickListener { direction = "LONG"; refreshSides() }
+        shortButton.setOnClickListener { direction = "SHORT"; refreshSides() }
+        sideRow.addView(longButton, LinearLayout.LayoutParams(0, dp(52), 1f).apply { rightMargin = dp(4) })
+        sideRow.addView(shortButton, LinearLayout.LayoutParams(0, dp(52), 1f).apply { leftMargin = dp(4) })
+        root.addView(sideRow, margins(bottom = 14))
+        refreshSides()
+
+        root.addView(label("UNIT SETTINGS", 11f, Color.rgb(154, 158, 170), 0.08f), margins(bottom = 7))
+        val unitRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        val quantityButton = actionButton("QUANTITY / BTC")
+        val costButton = actionButton("POSITION COST / USDT")
+        fun refreshUnits() {
+            quantityButton.alpha = if (unitMode == "QUANTITY") 1f else 0.45f
+            costButton.alpha = if (unitMode == "COST") 1f else 0.45f
+        }
+        quantityButton.setOnClickListener { unitMode = "QUANTITY"; refreshUnits(); amountLabel.text = "Quantity (BTC)"; amountEdit.hint = "e.g. 0.01" }
+        costButton.setOnClickListener { unitMode = "COST"; refreshUnits(); amountLabel.text = "Position Cost (USDT)"; amountEdit.hint = "e.g. 100" }
+        unitRow.addView(quantityButton, LinearLayout.LayoutParams(0, dp(52), 1f).apply { rightMargin = dp(4) })
+        unitRow.addView(costButton, LinearLayout.LayoutParams(0, dp(52), 1f).apply { leftMargin = dp(4) })
+        root.addView(unitRow, margins(bottom = 14))
+        refreshUnits()
+
+        val amountLabel = label("Position Cost (USDT)", 12f, Color.rgb(166, 169, 179), 0f)
+        root.addView(amountLabel, margins(bottom = 5))
+        val amountEdit = numberField("Cost / Quantity", "100")
+        root.addView(amountEdit, margins(bottom = 12))
+
+        val livePrice = latestRoot?.optDouble("last_price", Double.NaN) ?: Double.NaN
+        val defaultPrice = if (livePrice.isFinite()) String.format(Locale.US, "%.2f", livePrice) else ""
+        val openEdit = numberField("Open Price", defaultPrice)
+        val closeEdit = numberField("Closing Price", defaultPrice)
+        root.addView(label("Open Price (USDT)", 12f, Color.rgb(166, 169, 179), 0f), margins(bottom = 5))
+        root.addView(openEdit, margins(bottom = 12))
+        root.addView(label("Closing Price (USDT)", 12f, Color.rgb(166, 169, 179), 0f), margins(bottom = 5))
+        root.addView(closeEdit, margins(bottom = 14))
+
+        val leverageLabel = label("Leverage  •  20x", 12f, Color.rgb(166, 169, 179), 0f)
+        root.addView(leverageLabel, margins(bottom = 4))
+        val leverageBar = SeekBar(this).apply { max = 149; progress = 19; splitTrack = false }
+        leverageBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                leverage = progress + 1
+                leverageLabel.text = "Leverage  •  " + leverage + "x"
+            }
+            override fun onStartTrackingTouch(seekBar: SeekBar?) {}
+            override fun onStopTrackingTouch(seekBar: SeekBar?) {}
+        })
+        root.addView(leverageBar, margins(bottom = 16))
+
+        val resultsCard = card("RESULTS", "Margin  —\nP&L  — USDT\nROI  —\nPrice Move  —", 15f)
+        root.addView(resultsCard.container, margins(bottom = 10))
+        val results = resultsCard.value
+
+        val calcButton = actionButton("CALCULATE P&L")
+        calcButton.setOnClickListener {
+            safe {
+                val amount = amountEdit.text.toString().toDoubleOrNull()
+                val entry = openEdit.text.toString().toDoubleOrNull()
+                val exit = closeEdit.text.toString().toDoubleOrNull()
+                if (amount == null || amount <= 0 || entry == null || entry <= 0 || exit == null || exit <= 0 || leverage <= 0) {
+                    results.text = "Enter a valid position size/cost and both prices."
+                    return@safe
                 }
-                safe {
-                    val j = JSONObject(body)
-                    risk.text =
-                        "Risk " + String.format(Locale.US, "%.2f", j.optDouble("applied_risk_pct")) +
-                        "%  •  Amount " + String.format(Locale.US, "%.2f", j.optDouble("risk_amount")) +
-                        "\nStop distance " + String.format(Locale.US, "%.2f", j.optDouble("stop_distance")) +
-                        " (" + String.format(Locale.US, "%.3f", j.optDouble("stop_distance_pct")) + "%)" +
-                        "\nUnits @1x " + String.format(Locale.US, "%.6f", j.optDouble("units_at_1x")) +
-                        "  •  RR " + String.format(Locale.US, "%.2f", j.optDouble("rr")) +
-                        "\nHard cap enforced  •  Manual execution only"
-                }
+                val qty = if (unitMode == "QUANTITY") amount else amount / entry
+                val notional = qty * entry
+                val margin = notional / leverage.toDouble()
+                val priceMove = if (direction == "LONG") exit - entry else entry - exit
+                val pnl = qty * priceMove
+                val roi = if (margin > 0) pnl / margin * 100.0 else 0.0
+                val pnlSign = if (pnl > 0) "+" else ""
+                val movePct = priceMove / entry * 100.0
+                results.text =
+                    "Margin  " + String.format(Locale.US, "%.2f USDT", margin) +
+                    "\nP&L  " + pnlSign + String.format(Locale.US, "%.2f USDT", pnl) +
+                    "\nROI  " + pnlSign + String.format(Locale.US, "%.2f%%", roi) +
+                    "\nPrice Move  " + pnlSign + String.format(Locale.US, "%.2f%%", movePct) +
+                    "\nQuantity  " + String.format(Locale.US, "%.6f BTC", qty) +
+                    "\nNotional  " + String.format(Locale.US, "%.2f USDT", notional)
             }
         }
+        root.addView(calcButton, margins(bottom = 14))
+
+        root.addView(label(
+            "Note  •  P&L is based on price movement, quantity/cost and leverage. Trading fees, funding and slippage are not included.",
+            12f, Color.rgb(142, 146, 157), 0f
+        ), margins(bottom = 10))
     }
+
 
     private fun journalPrefs() =
         getSharedPreferences("dev_trader_journal", Context.MODE_PRIVATE)
