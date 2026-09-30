@@ -185,7 +185,7 @@ class SafeActivity : Activity() {
         })
         root.addView(topRow, margins(bottom = 2))
         root.addView(label("BTC trading bot", 32f, Color.WHITE, 0f), margins(top = 5, bottom = 2))
-        // 0.9.5 release: HTTP recovery + stable live feed + reduced chart polling
+        // 0.9.6 release: directional SFP radar + clearer active-scan state
         // 0.9.4 release: stable WebSocket supervisor + manual retry + cleaner MTF story
         root.addView(label("FAST SETUP SCANNER  •  MANUAL EXECUTION", 13f, Color.rgb(173, 177, 188), 0f), margins(bottom = 14))
 
@@ -629,11 +629,14 @@ class SafeActivity : Activity() {
             }.orEmpty()
             val leadText = if (lead != null) {
                 lead.optString("direction") + " " + lead.optString("tier") + " " +
-                    lead.optInt("score") + "/" + lead.optInt("max_score") + " • " + lead.optString("setup")
+                    lead.optInt("score") + "/" + lead.optInt("max_score") +
+                    " • " + lead.optString("setup") +
+                    " • " + lead.optString("action", "watch")
             } else "No live opportunity detected"
             val secondText = if (second != null) {
                 second.optString("direction") + " " + second.optString("tier") + " " +
-                    second.optInt("score") + "/" + second.optInt("max_score")
+                    second.optInt("score") + "/" + second.optInt("max_score") +
+                    " • " + second.optString("action", "watch")
             } else ""
             val sfp = engine?.optJSONObject("sfp_hunter")
             val breakout = engine?.optJSONObject("breakout_watch")
@@ -646,13 +649,13 @@ class SafeActivity : Activity() {
                 "BREAKOUT  •  " + breakout.optString("status", "WATCH") + "  •  " +
                     breakout.optString("event", "NONE")
             } else ""
-            signal.text = "OPPORTUNITY RADAR  •  LOOSE MODE\n" +
+            signal.text = "OPPORTUNITY RADAR  •  ACTIVE SCAN\n" +
                 leadText + if (secondText.isBlank()) "" else "\n" + secondText +
                 if (sfpText.isBlank()) "" else "\n" + sfpText +
                 if (breakoutText.isBlank()) "" else "\n" + breakoutText +
                 if (scenario.isBlank()) "" else "\nSCENARIOS  •  " + scenario +
-                "\nThe radar can flag early setups before full confirmation."
-            risk.text = "No active setup"
+                "\nNO CONFIRMED TRADE YET • radar is actively monitoring triggers."
+            risk.text = "No confirmed setup • keep scanning"
         } else {
             val lifecycle = signalObj.optString("lifecycle", "ACTIVE")
             val thesis = signalObj.optJSONArray("thesis")
