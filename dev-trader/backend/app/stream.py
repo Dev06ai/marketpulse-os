@@ -28,6 +28,7 @@ class BybitStream:
         self.last_trade_minute = None
         self.delta_base = 0.0
         self.last_rest_sync_ms = 0
+        self.last_rest_candle_sync_ms = 0
         self.last_rest_ok = False
         self.last_upstream_error = ""
         self.bids: dict[float, float] = {}
@@ -108,11 +109,11 @@ class BybitStream:
         while not self.stop:
             ok = await self.refresh_ticker()
             now = int(time.time() * 1000)
-            latest_kline = max(
-                self.state.last_kline_15_ts or 0,
-                self.state.last_kline_60_ts or 0,
-            )
-            if not self.state.candles_15 or not self.state.candles_60 or now - latest_kline > 15_000:
+            if (
+                not self.state.candles_15
+                or not self.state.candles_60
+                or now - self.last_rest_candle_sync_ms > 15_000
+            ):
                 await self.backfill()
             await asyncio.sleep(3.0 if ok else 2.0)
 
@@ -172,6 +173,9 @@ class BybitStream:
 
         results = await asyncio.gather(*(fetch(x) for x in intervals))
         now = int(time.time() * 1000)
+        if any(ok for _, ok in results):
+            self.last_rest_candle_sync_ms = now
+            self.last_rest_ok = True
         self._refresh_data_health(now)
         await self.on_state(self.state)
 
