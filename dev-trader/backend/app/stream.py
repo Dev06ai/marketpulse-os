@@ -33,13 +33,19 @@ class BybitStream:
     async def run(self):
         while not self.stop:
             try:
-                await self.backfill()
+                # Live WebSocket first; historical warm-up must never block startup.
                 async with websockets.connect(
-                    self.url, ping_interval=20, ping_timeout=10, max_queue=10000
+                    self.url,
+                    ping_interval=20,
+                    ping_timeout=10,
+                    max_queue=10000,
+                    open_timeout=6,
+                    close_timeout=3,
                 ) as ws:
                     self.state.ws_connected = True
-                    self.state.data_health = "HEALTHY"
+                    self.state.data_health = "CONNECTING"
                     await ws.send(json.dumps({"op": "subscribe", "args": self.subs}))
+                    asyncio.create_task(self.backfill())
                     await self.on_state(self.state)
                     async for raw in ws:
                         await self.handle(raw)
@@ -49,20 +55,26 @@ class BybitStream:
                 self.state.ws_connected = False
                 self.state.data_health = "RECONNECTING"
                 await self.on_state(self.state)
-                await asyncio.sleep(2)
+                await asyncio.sleep(1)
 
     async def backfill(self):
-        for interval, dest_name, limit in [
+        intervals = [
             ("5", "candles_5", 180),
             ("15", "candles_15", 180),
             ("60", "candles_60", 240),
-        ]:
+        ]
+
+        async def fetch(item):
+            interval, dest_name, limit = item
             try:
-                rows = await asyncio.to_thread(self._rest_kline, interval, limit)
+                rows = await asyncio.wait_for(
+                    asyncio.to_thread(self._rest_kline, interval, limit),
+                    timeout=4.5,
+                )
                 dest = getattr(self.state, dest_name)
-                dest.clear()
+                merged = {c.start: c for c in dest}
                 for idx, row in enumerate(rows):
-                    dest.append(Candle(
+                    candle = Candle(
                         start=int(row[0]),
                         end=int(row[0]) + int(interval) * 60_000 - 1,
                         open=float(row[1]),
@@ -71,17 +83,35 @@ class BybitStream:
                         close=float(row[4]),
                         volume=float(row[5]),
                         confirmed=(idx < len(rows) - 1),
-                    ))
-                if dest:
-                    now = int(time.time() * 1000)
-                    if interval == "5":
-                        self.state.last_kline_5_ts = now
-                    elif interval == "15":
-                        self.state.last_kline_15_ts = now
-                    else:
-                        self.state.last_kline_60_ts = now
+                    )
+                    merged[candle.start] = candle
+                values = sorted(merged.values(), key=lambda x: x.start)
+                dest.clear()
+                dest.extend(values[-240:])
+                return interval, True
             except Exception:
-                continue
+                return interval, False
+
+        results = await asyncio.gather(*(fetch(x) for x in intervals))
+        if self.state.ws_connected:
+            now = int(time.time() * 1000)
+            self._refresh_data_health(now)
+            await self.on_state(self.state)
+
+
+    def _refresh_data_health(self, now: int):
+        recent = [
+            x for x in (
+                self.state.exchange_ts,
+                self.state.last_trade_ts,
+                self.state.last_kline_5_ts,
+                self.state.last_kline_15_ts,
+            ) if x
+        ]
+        if self.state.ws_connected and recent and max(now - x for x in recent) < 5000:
+            self.state.data_health = "HEALTHY"
+        elif self.state.ws_connected:
+            self.state.data_health = "STALE"
 
     def _rest_kline(self, interval: str, limit: int) -> list[list]:
         query = urlencode({
@@ -94,7 +124,7 @@ class BybitStream:
             "https://api.bybit.com/v5/market/kline?" + query,
             headers={"User-Agent": "Dev-Trader/0.5"},
         )
-        with urlopen(req, timeout=8) as response:
+        with urlopen(req, timeout=4) as response:
             payload = json.loads(response.read().decode("utf-8"))
         if payload.get("retCode") != 0:
             raise RuntimeError(f"Bybit kline error: {payload.get('retMsg')}")
@@ -233,9 +263,5 @@ class BybitStream:
                 self.state.last_kline_15_ts,
             ] if x
         ]
-        self.state.data_health = (
-            "HEALTHY"
-            if self.state.ws_connected and recent and max(now - x for x in recent) < 5000
-            else "STALE"
-        )
+        self._refresh_data_health(now)
         await self.on_state(self.state)
