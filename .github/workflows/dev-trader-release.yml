@@ -67,6 +67,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          TAG="$GITHUB_REF_NAME"
           VERSION_NAME="${{ steps.meta.outputs.version_name }}"
           VERSION_CODE="${{ steps.meta.outputs.version_code }}"
           APK="dev-trader/android/app/build/outputs/apk/release/app-release.apk"
