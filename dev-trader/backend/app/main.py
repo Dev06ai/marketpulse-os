@@ -40,27 +40,64 @@ class RiskPayload(BaseModel):
     target: float | None = None
 
 
+def mobile_payload():
+    now = int(time.time() * 1000)
+    f = compute_features(state)
+    diag = engine.last_diagnostics or {}
+    return {
+        "type": "state",
+        "symbol": state.symbol,
+        "last_price": state.last_price,
+        "mark_price": state.mark_price,
+        "index_price": state.index_price,
+        "open_interest": state.open_interest,
+        "funding_rate": state.funding_rate,
+        "bid": state.bid,
+        "ask": state.ask,
+        "data_health": state.data_health,
+        "ws_connected": state.ws_connected,
+        "exchange_ts": state.exchange_ts,
+        "received_ts": state.received_ts,
+        "server_ts": now,
+        "signal": engine.active_signal,
+        "engine": {
+            "status": diag.get("status", "UNKNOWN"),
+            "wait_reason": diag.get("wait_reason", ""),
+            "signal_state": engine.signal_status,
+            "last_evaluated_ts": engine.last_evaluated_ts,
+            "setups": diag.get("setups", {}),
+        },
+        "features": {
+            "trend_15": f.trend_15,
+            "trend_60": f.trend_60,
+            "trend_240": f.trend_240,
+            "market_structure": f.market_structure,
+            "regime": f.regime,
+            "oi_change_5m_pct": f.oi_change_5m_pct,
+            "cvd_price_divergence": f.cvd_price_divergence,
+            "fvg_direction": f.fvg_direction,
+            "order_block_direction": f.order_block_direction,
+            "golden_pocket": f.golden_pocket,
+            "weekly_open": f.weekly_open,
+        },
+        "heartbeat": {
+            "server_uptime_ms": max(0, now - server_started_ms),
+            "last_received_ts": state.received_ts,
+            "last_trade_ts": state.last_trade_ts,
+            "last_kline_5_ts": state.last_kline_5_ts,
+            "last_kline_15_ts": state.last_kline_15_ts,
+            "last_kline_60_ts": state.last_kline_60_ts,
+        },
+    }
+
+
 async def broadcast_loop():
     while True:
-        await asyncio.sleep(SNAPSHOT)
-        features = compute_features(state)
-        payload = {
-            "type": "state",
-            **state.snapshot(),
-            "server_ts": int(time.time() * 1000),
-            "signal": engine.active_signal,
-            "engine": engine.last_diagnostics,
-            "features": features.__dict__,
-            "heartbeat": {
-                "server_uptime_ms": max(0, int(time.time() * 1000) - server_started_ms),
-                "last_received_ts": state.received_ts,
-                "last_kline_15_ts": state.last_kline_15_ts,
-                "last_kline_60_ts": state.last_kline_60_ts,
-            },
-        }
+        await asyncio.sleep(max(0.5, min(SNAPSHOT, 2.0)))
+        payload = mobile_payload()
         for ws in list(clients):
             try:
-                await ws.send_json(payload)
+                await asyncio.wait_for(ws.send_json(payload), timeout=0.5)
             except Exception:
                 clients.discard(ws)
 
@@ -133,6 +170,23 @@ async def heartbeat():
 @app.get("/diagnostics")
 async def diagnostics():
     return engine.last_diagnostics
+
+
+@app.get("/chart")
+async def chart(interval: str = "15m"):
+    mapping = {
+        "5m": state.candles_5,
+        "15m": state.candles_15,
+        "1h": state.candles_60,
+        "4h": state.candles_4h(),
+    }
+    candles = mapping.get(interval, state.candles_15)
+    return {
+        "symbol": state.symbol,
+        "interval": interval,
+        "last_price": state.last_price,
+        "candles": [c.to_dict() for c in candles[-120:]],
+    }
 
 
 @app.get("/features")
@@ -314,18 +368,7 @@ async def system_check_push(payload: PushTestPayload):
 async def socket(ws: WebSocket):
     await ws.accept()
     clients.add(ws)
-    payload = {
-        "type": "state",
-        **state.snapshot(),
-        "server_ts": int(time.time() * 1000),
-        "signal": engine.active_signal,
-        "engine": engine.last_diagnostics,
-        "features": compute_features(state).__dict__,
-        "heartbeat": {
-            "server_uptime_ms": int(time.time() * 1000) - server_started_ms,
-            "last_received_ts": state.received_ts,
-        },
-    }
+    payload = mobile_payload()
     await ws.send_json(payload)
     try:
         while True:
