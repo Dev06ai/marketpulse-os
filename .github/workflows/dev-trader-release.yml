@@ -2,7 +2,7 @@ name: Dev Trader Release
 
 on:
   push:
-    branches:
+    tags:
       - "dev-trader-v*"
     branches:
       - "dev-trader-release-*"
