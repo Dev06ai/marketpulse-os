@@ -221,64 +221,97 @@ def _signal(
 
 
 def detect_sfp(state: MarketState) -> Optional[Signal]:
-    cs = [c for c in state.candles_15 if c.confirmed]
-    fast = [c for c in state.candles_5 if c.confirmed]
-    source = fast if len(fast) >= 12 else cs
+    """Detect SFPs intrabar so fast reversals are not delayed until candle close.
+
+    Confirmed candles establish the reference swing. The currently forming 5m
+    candle (when available) supplies the live sweep/reclaim state. This keeps
+    the confirmed strategy intact while allowing an early manual-execution
+    signal when price has already swept and reclaimed liquidity.
+    """
+    confirmed_5 = [c for c in state.candles_5 if c.confirmed]
+    confirmed_15 = [c for c in state.candles_15 if c.confirmed]
+    forming_5 = state.candles_5[-1] if state.candles_5 and not state.candles_5[-1].confirmed else None
+
+    if len(confirmed_5) >= 12:
+        source = confirmed_5
+        timeframe = "5m"
+        live = forming_5
+    else:
+        source = confirmed_15
+        timeframe = "15m"
+        live = state.candles_15[-1] if state.candles_15 and not state.candles_15[-1].confirmed else None
+
     if len(source) < 10 or state.last_price is None:
         return None
+
     f = compute_features(state)
-    recent = source[-1]
-    highs, lows = pivots(source[:-1], 2)
+    highs, lows = pivots(source, 2)
     ph = highs[-1][1] if highs else None
     pl = lows[-1][1] if lows else None
     min_rr = float(RULES["risk"]["preferred_min_rr"])
 
-    if ph and recent.high > ph and recent.close < ph:
-        entry, stop = recent.close, recent.high * 1.0005
-        target = min((x[1] for x in lows[-5:]), default=recent.low)
+    if live is not None:
+        # The exchange ticker is the execution price; the forming candle is
+        # only used for its live high/low/open and start timestamp.
+        current_high = max(float(live.high), float(state.last_price))
+        current_low = min(float(live.low), float(state.last_price))
+        current_close = float(state.last_price)
+        current_start = live.start
+        current_end = live.end
+    else:
+        recent = source[-1]
+        current_high = recent.high
+        current_low = recent.low
+        current_close = recent.close
+        current_start = recent.start
+        current_end = recent.end
+
+    if ph is not None and current_high > ph and current_close < ph:
+        entry = current_close
+        stop = current_high * 1.0005
+        target = min((x[1] for x in lows[-5:]), default=current_low)
         if target >= entry:
             target = entry - (stop - entry) * min_rr
         return _signal(
-            id=f"sfp-short-{recent.end}",
+            id=f"sfp-short-{timeframe}-{current_start}-{int(ph)}",
             direction="SHORT",
-            setup="Bearish SFP",
+            setup="Bearish SFP • FAST",
             entry=entry,
             stop=stop,
             target=target,
-            timeframe="5m" if source is fast else "15m",
-            invalidation=f"15m close above swept high {recent.high:.2f}",
+            timeframe=timeframe,
+            invalidation=f"{timeframe} close above swept high {current_high:.2f}",
             f=f,
             thesis=[
-                f"Sweep above prior swing high {ph:.2f}",
-                "Candle closed back below the swept level",
-                "Stop anchored at sweep wick extreme",
+                f"Live sweep above prior swing high {ph:.2f}",
+                "Price is back below the swept level before candle close",
+                "Stop anchored at the live sweep wick extreme",
             ],
         )
 
-    if pl and recent.low < pl and recent.close > pl:
-        entry, stop = recent.close, recent.low * 0.9995
-        target = max((x[1] for x in highs[-5:]), default=recent.high)
+    if pl is not None and current_low < pl and current_close > pl:
+        entry = current_close
+        stop = current_low * 0.9995
+        target = max((x[1] for x in highs[-5:]), default=current_high)
         if target <= entry:
             target = entry + (entry - stop) * min_rr
         return _signal(
-            id=f"sfp-long-{recent.end}",
+            id=f"sfp-long-{timeframe}-{current_start}-{int(pl)}",
             direction="LONG",
-            setup="Bullish SFP",
+            setup="Bullish SFP • FAST",
             entry=entry,
             stop=stop,
             target=target,
-            timeframe="5m" if source is fast else "15m",
-            invalidation=f"15m close below swept low {recent.low:.2f}",
+            timeframe=timeframe,
+            invalidation=f"{timeframe} close below swept low {current_low:.2f}",
             f=f,
             thesis=[
-                f"Sweep below prior swing low {pl:.2f}",
-                "Candle closed back above the swept level",
-                "Stop anchored at sweep wick extreme",
+                f"Live sweep below prior swing low {pl:.2f}",
+                "Price is back above the swept level before candle close",
+                "Stop anchored at the live sweep wick extreme",
             ],
         )
     return None
-
-
 def line_value(p1, p2, x):
     i1, y1 = p1
     i2, y2 = p2
@@ -705,23 +738,41 @@ class StrategyEngine:
 
     def _build_opportunity_radar(self, state: MarketState, f: MarketFeatures) -> list[dict]:
         radar = []
+        confirmed_5 = [c for c in state.candles_5 if c.confirmed]
+        confirmed_15 = [c for c in state.candles_15 if c.confirmed]
+        forming_5 = state.candles_5[-1] if state.candles_5 and not state.candles_5[-1].confirmed else None
         for direction in ("LONG", "SHORT"):
             memory = self._nearest_memory(state, direction, 0.75)
             score, reasons = self._direction_evidence(direction, f, memory)
             pattern_bonus = 0
             setup = "Opportunity watch"
-            last_15 = [c for c in state.candles_15 if c.confirmed]
-            if last_15:
-                last = last_15[-1]
-                highs, lows = pivots(last_15[:-1], 2) if len(last_15) >= 5 else ([], [])
-                if direction == "LONG" and lows and last.low < lows[-1][1] and last.close > lows[-1][1]:
-                    pattern_bonus = 2; setup = "Bullish SFP developing"
-                elif direction == "SHORT" and highs and last.high > highs[-1][1] and last.close < highs[-1][1]:
-                    pattern_bonus = 2; setup = "Bearish SFP developing"
+
+            source = confirmed_5 if len(confirmed_5) >= 12 else confirmed_15
+            forming = forming_5 if source is confirmed_5 else (
+                state.candles_15[-1] if state.candles_15 and not state.candles_15[-1].confirmed else None
+            )
+            if len(source) >= 10:
+                highs, lows = pivots(source, 2)
+                ph = highs[-1][1] if highs else None
+                pl = lows[-1][1] if lows else None
+                live_price = float(state.last_price) if state.last_price is not None else None
+                hi = max(float(forming.high), live_price) if forming is not None and live_price is not None else (forming.high if forming is not None else None)
+                lo = min(float(forming.low), live_price) if forming is not None and live_price is not None else (forming.low if forming is not None else None)
+                close = live_price if forming is not None and live_price is not None else (forming.close if forming is not None else (source[-1].close if source else None))
+
+                if direction == "LONG" and pl is not None and lo is not None and close is not None and lo < pl and close > pl:
+                    pattern_bonus = 3
+                    setup = "Bullish SFP • FAST"
+                    reasons = [f"live sweep below {pl:.2f} and reclaim", *reasons]
+                elif direction == "SHORT" and ph is not None and hi is not None and close is not None and hi > ph and close < ph:
+                    pattern_bonus = 3
+                    setup = "Bearish SFP • FAST"
+                    reasons = [f"live sweep above {ph:.2f} and reclaim", *reasons]
                 elif direction == "LONG" and f.trend_15 == "UP" and f.market_structure == "BULLISH":
                     setup = "Bullish continuation developing"
                 elif direction == "SHORT" and f.trend_15 == "DOWN" and f.market_structure == "BEARISH":
                     setup = "Bearish continuation developing"
+
             total = min(8, score + pattern_bonus)
             tier = "EARLY" if total >= 2 else "WATCH"
             if total >= 4:
@@ -740,7 +791,6 @@ class StrategyEngine:
             })
         radar.sort(key=lambda x: (-x["score"], 0 if x["tier"] == "CONFIRMED" else 1))
         return radar
-
     def _build_scenarios(self, state: MarketState, f: MarketFeatures, radar: list[dict]) -> list[dict]:
         long = next(x for x in radar if x["direction"] == "LONG")
         short = next(x for x in radar if x["direction"] == "SHORT")
