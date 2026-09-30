@@ -1,4 +1,4 @@
-name: Dev Trader Release
+name: Dev Trader Release # 0.5.2 touch and engine responsiveness
 
 on:
   push:
