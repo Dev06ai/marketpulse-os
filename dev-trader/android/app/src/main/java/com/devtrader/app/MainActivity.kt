@@ -4,7 +4,10 @@ import android.Manifest
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
+import android.provider.Settings
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -41,6 +44,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
+import androidx.core.content.FileProvider
 import com.google.firebase.FirebaseApp
 import com.google.firebase.messaging.FirebaseMessaging
 import okhttp3.OkHttpClient
@@ -55,13 +59,9 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import android.os.Handler
 import android.os.Looper
-import androidx.activity.result.IntentSenderRequest
-import com.google.android.play.core.appupdate.AppUpdateManager
-import com.google.android.play.core.appupdate.AppUpdateManagerFactory
-import com.google.android.play.core.appupdate.AppUpdateOptions
-import com.google.android.play.core.install.model.AppUpdateType
-import com.google.android.play.core.install.model.InstallStatus
-import com.google.android.play.core.install.model.UpdateAvailability
+import java.io.File
+import java.io.FileOutputStream
+import java.security.MessageDigest
 
 private val Charcoal = Color(0xFF0B0B10)
 private val CardColor = Color(0xFF14141D)
@@ -112,21 +112,15 @@ data class UpdateUi(
     val available: Boolean = false,
     val downloading: Boolean = false,
     val downloaded: Boolean = false,
-    val message: String = ""
+    val message: String = "",
+    val versionName: String = "",
+    val versionCode: Long = 0L,
+    val apkUrl: String = "",
+    val sha256: String = ""
 )
 
 class MainActivity : ComponentActivity() {
     private val permission = registerForActivityResult(ActivityResultContracts.RequestPermission()) {}
-    private val updateLauncher = registerForActivityResult(
-        ActivityResultContracts.StartIntentSenderForResult()
-    ) { result ->
-        if (result.resultCode != RESULT_OK) {
-            updateUi = updateUi.copy(
-                downloading = false,
-                message = "Play Store update was not completed."
-            )
-        }
-    }
     private val client = OkHttpClient.Builder()
         .pingInterval(15, TimeUnit.SECONDS)
         .retryOnConnectionFailure(true)
@@ -137,7 +131,6 @@ class MainActivity : ComponentActivity() {
     private var live by mutableStateOf(LiveUi())
     private var systemCheck by mutableStateOf(SystemCheckUi())
     private var updateUi by mutableStateOf(UpdateUi())
-    private var appUpdateManager: AppUpdateManager? = null
     private var lastNotifiedId: String? = null
     private var reconnectAttempt = 0
     private var shuttingDown = false
@@ -149,8 +142,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         if (Build.VERSION.SDK_INT >= 33) permission.launch(Manifest.permission.POST_NOTIFICATIONS)
         ensureNotificationChannel(this)
-        appUpdateManager = runCatching { AppUpdateManagerFactory.create(this) }.getOrNull()
-        checkForPlayUpdate()
+        checkForAppUpdate()
         connect()
         registerFcmToken()
         setContent {
@@ -159,65 +151,140 @@ class MainActivity : ComponentActivity() {
                 systemCheck,
                 updateUi,
                 ::runFullSystemCheck,
-                ::startPlayUpdate
+                ::startAppUpdate
             )
         }
     }
 
-    private fun checkForPlayUpdate() {
-        val manager = appUpdateManager ?: return
-        runCatching {
-            manager.appUpdateInfo.addOnSuccessListener { info ->
-                when {
-                    info.updateAvailability() == UpdateAvailability.DEVELOPER_TRIGGERED_UPDATE_IN_PROGRESS -> {
-                        startPlayUpdate(info)
-                    }
-                    info.updateAvailability() == UpdateAvailability.UPDATE_AVAILABLE &&
-                        info.isUpdateTypeAllowed(AppUpdateType.FLEXIBLE) -> {
-                        updateUi = UpdateUi(
-                            available = true,
-                            message = "A new Dev Trader version is available from Google Play."
-                        )
+    private val updateManifestUrl =
+        "https://raw.githubusercontent.com/Dev06ai/marketpulse-os/dev-trader-v1/dev-trader/update.json"
+
+    private fun checkForAppUpdate() {
+        getJson(updateManifestUrl) { ok, body ->
+            if (!ok) return@getJson
+            try {
+                val json = JSONObject(body)
+                if (!json.optBoolean("enabled", false)) return@getJson
+
+                val remoteCode = json.optLong("versionCode", 0L)
+                val currentCode = packageManager.getPackageInfo(packageName, 0).longVersionCode
+                if (remoteCode <= currentCode) return@getJson
+
+                updateUi = UpdateUi(
+                    available = true,
+                    message = "Version " + json.optString("versionName", "new") +
+                        " is ready. Download is verified before installation.",
+                    versionName = json.optString("versionName", "new"),
+                    versionCode = remoteCode,
+                    apkUrl = json.optString("apkUrl", ""),
+                    sha256 = json.optString("sha256", "")
+                )
+            } catch (_: Throwable) {
+                // Update checks are optional and must never affect the trading client.
+            }
+        }
+    }
+
+    private fun startAppUpdate() {
+        val current = updateUi
+        if (!current.available || current.apkUrl.isBlank() || current.sha256.isBlank()) {
+            checkForAppUpdate()
+            return
+        }
+
+        updateUi = current.copy(
+            downloading = true,
+            message = "Downloading Dev Trader " + current.versionName + "…"
+        )
+
+        client.newCall(Request.Builder().url(current.apkUrl).get().build()).enqueue(object : okhttp3.Callback {
+            override fun onFailure(call: okhttp3.Call, e: java.io.IOException) {
+                mainHandler.post {
+                    updateUi = updateUi.copy(
+                        downloading = false,
+                        message = "Update download failed: " + (e.message ?: "network error")
+                    )
+                }
+            }
+
+            override fun onResponse(call: okhttp3.Call, response: Response) {
+                response.use {
+                    try {
+                        if (!it.isSuccessful) throw java.io.IOException("HTTP " + it.code)
+                        val body = it.body ?: throw java.io.IOException("Empty update")
+                        val temp = File.createTempFile("dev-trader-", ".apk.tmp", cacheDir)
+                        val target = File(cacheDir, "dev-trader-" + current.versionName + ".apk")
+                        val digest = MessageDigest.getInstance("SHA-256")
+
+                        body.byteStream().use { input ->
+                            FileOutputStream(temp).use { output ->
+                                val buffer = ByteArray(16 * 1024)
+                                while (true) {
+                                    val count = input.read(buffer)
+                                    if (count <= 0) break
+                                    digest.update(buffer, 0, count)
+                                    output.write(buffer, 0, count)
+                                }
+                            }
+                        }
+
+                        val actualHash = digest.digest().joinToString("") { b -> "%02x".format(b) }
+                        if (!actualHash.equals(current.sha256, ignoreCase = true)) {
+                            temp.delete()
+                            throw java.io.IOException("Checksum verification failed")
+                        }
+
+                        target.delete()
+                        if (!temp.renameTo(target)) throw java.io.IOException("Could not prepare update")
+
+                        mainHandler.post {
+                            updateUi = updateUi.copy(
+                                downloading = false,
+                                downloaded = true,
+                                message = "Update verified. Tap INSTALL UPDATE to finish."
+                            )
+                            installApk(target)
+                        }
+                    } catch (t: Throwable) {
+                        mainHandler.post {
+                            updateUi = updateUi.copy(
+                                downloading = false,
+                                downloaded = false,
+                                message = "Update rejected safely: " + (t.message ?: "unknown error")
+                            )
+                        }
                     }
                 }
             }
-        }
+        })
     }
 
-    private fun startPlayUpdate() {
-        val manager = appUpdateManager ?: return
-        runCatching {
-            manager.appUpdateInfo.addOnSuccessListener { info ->
-                startPlayUpdate(info)
-            }.addOnFailureListener {
-                updateUi = updateUi.copy(message = "Google Play update check failed.")
-            }
-        }
-    }
-
-    private fun startPlayUpdate(info: com.google.android.play.core.appupdate.AppUpdateInfo) {
-        val manager = appUpdateManager ?: return
-        if (info.updateAvailability() != UpdateAvailability.UPDATE_AVAILABLE &&
-            info.updateAvailability() != UpdateAvailability.DEVELOPER_TRIGGERED_UPDATE_IN_PROGRESS) return
-
-        if (!info.isUpdateTypeAllowed(AppUpdateType.FLEXIBLE) &&
-            !info.isUpdateTypeAllowed(AppUpdateType.IMMEDIATE)) return
-
-        val type = if (info.isUpdateTypeAllowed(AppUpdateType.IMMEDIATE)) {
-            AppUpdateType.IMMEDIATE
-        } else {
-            AppUpdateType.FLEXIBLE
-        }
-
-        updateUi = updateUi.copy(available = true, downloading = true, message = "Google Play is updating Dev Trader…")
-        runCatching {
-            manager.startUpdateFlowForResult(
-                info,
-                updateLauncher,
-                AppUpdateOptions.newBuilder(type).build()
+    private fun installApk(file: File) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
+            !packageManager.canRequestPackageInstalls()
+        ) {
+            updateUi = updateUi.copy(
+                message = "Allow Dev Trader to install updates, then tap INSTALL UPDATE again."
             )
-        }.onFailure {
-            updateUi = updateUi.copy(downloading = false, message = "Google Play could not start the update.")
+            startActivity(
+                Intent(
+                    Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+                    Uri.parse("package:" + packageName)
+                )
+            )
+            return
+        }
+
+        val uri = FileProvider.getUriForFile(this, packageName + ".fileprovider", file)
+        val intent = Intent(Intent.ACTION_VIEW).apply {
+            setDataAndType(uri, "application/vnd.android.package-archive")
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        runCatching { startActivity(intent) }.onFailure {
+            updateUi = updateUi.copy(
+                message = "Android could not open the installer: " + (it.message ?: "unknown error")
+            )
         }
     }
 
@@ -562,25 +629,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
-        val manager = appUpdateManager ?: return
-        runCatching {
-            manager.appUpdateInfo.addOnSuccessListener { info ->
-                when {
-                    info.updateAvailability() == UpdateAvailability.DEVELOPER_TRIGGERED_UPDATE_IN_PROGRESS -> {
-                        startPlayUpdate(info)
-                    }
-                    info.installStatus() == InstallStatus.DOWNLOADED -> {
-                        updateUi = updateUi.copy(
-                            available = true,
-                            downloading = false,
-                            downloaded = true,
-                            message = "Update downloaded. Restarting through Google Play…"
-                        )
-                        manager.completeUpdate()
-                    }
-                }
-            }
-        }
+        checkForAppUpdate()
     }
 
     override fun onDestroy() {
@@ -848,7 +897,7 @@ private fun UpdateCard(update: UpdateUi, onUpdate: () -> Unit) {
             Text(
                 when {
                     update.downloaded -> "Update ready"
-                    update.downloading -> "Updating through Google Play…"
+                    update.downloading -> "Downloading update…"
                     else -> "Update available"
                 },
                 color = TextColor,
@@ -859,7 +908,7 @@ private fun UpdateCard(update: UpdateUi, onUpdate: () -> Unit) {
             }
             if (update.available && !update.downloading && !update.downloaded) {
                 Button(onClick = onUpdate) {
-                    Text("UPDATE FROM PLAY STORE")
+                    Text("INSTALL UPDATE")
                 }
             }
         }
