@@ -771,6 +771,46 @@ class StrategyEngine:
         })
         return scenarios
 
+    def _build_evidence_matrix(self, f: MarketFeatures, state: MarketState) -> dict:
+        def aligned(direction: str, field: str, value) -> bool:
+            if field == "trend_15":
+                return value == ("UP" if direction == "LONG" else "DOWN")
+            if field == "trend_60":
+                return value == ("UP" if direction == "LONG" else "DOWN")
+            if field == "trend_240":
+                return value == ("UP" if direction == "LONG" else "DOWN")
+            if field == "market_structure":
+                return str(value).upper() == ("BULLISH" if direction == "LONG" else "BEARISH")
+            if field == "cvd":
+                return value == ("BULLISH" if direction == "LONG" else "BEARISH")
+            if field == "orderbook":
+                return float(value) > 0.08 if direction == "LONG" else float(value) < -0.08
+            if field == "memory":
+                return value is not None
+            return False
+
+        matrix = {}
+        for direction in ("LONG", "SHORT"):
+            memory = self._nearest_memory(state, direction, 0.75)
+            checks = {
+                "trend_15": aligned(direction, "trend_15", f.trend_15),
+                "trend_60": aligned(direction, "trend_60", f.trend_60),
+                "trend_240": aligned(direction, "trend_240", f.trend_240),
+                "market_structure": aligned(direction, "market_structure", f.market_structure),
+                "cvd": aligned(direction, "cvd", f.cvd_price_divergence),
+                "orderbook": aligned(direction, "orderbook", f.book_imbalance),
+                "memory_zone": aligned(direction, "memory", memory),
+            }
+            score = sum(1 for ok in checks.values() if ok)
+            matrix[direction] = {
+                "checks": checks,
+                "score": score,
+                "max_score": len(checks),
+                "missing": [k for k, ok in checks.items() if not ok],
+                "nearby_memory": memory,
+            }
+        return matrix
+
     def _build_sfp_hunter(self, state: MarketState, f: MarketFeatures) -> dict:
         cs = [c for c in state.candles_15 if c.confirmed]
         if len(cs) < 6 or state.last_price is None:
@@ -874,6 +914,7 @@ class StrategyEngine:
         radar_top = radar[0] if radar else None
         sfp_hunter = self._build_sfp_hunter(state, f0)
         breakout_watch = self._build_breakout_watch(state, f0)
+        evidence_matrix = self._build_evidence_matrix(f0, state)
         result = {
             "status": "SCANNING" if state.data_health == "HEALTHY" else ("DEGRADED_SCANNING" if state.data_health == "DEGRADED" else "CONNECTING"),
             "wait_reason": "" if state.data_health == "HEALTHY" else "Opportunity radar remains active while the live feed recovers.",
@@ -894,6 +935,7 @@ class StrategyEngine:
             "radar_lead": radar_top,
             "sfp_hunter": sfp_hunter,
             "breakout_watch": breakout_watch,
+            "evidence_matrix": evidence_matrix,
             "data_quality": state.data_health,
             "market_features": {
                 "trend_15": f0.trend_15,
