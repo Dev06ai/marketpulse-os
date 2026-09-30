@@ -156,6 +156,26 @@ class SafeActivity : Activity() {
         price = market.value
         root.addView(market.container, margins(bottom = 10))
 
+        root.addView(label("PRICE ACTION  •  50 EMA", 11f, Color.rgb(150, 154, 164), 0.11f), margins(bottom = 6))
+        chart = MarketChartView(this)
+        chart.minimumHeight = dp(280)
+        root.addView(chart, LinearLayout.LayoutParams(-1, dp(280)).apply { bottomMargin = dp(6) })
+
+        val tfRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        listOf("15m", "1h", "4h").forEach { tf ->
+            val b = actionButton(tf)
+            b.setOnClickListener {
+                selectedTf = tf
+                chart.setTimeframe(tf)
+                renderChartFromState()
+            }
+            tfRow.addView(b, LinearLayout.LayoutParams(0, dp(44), 1f).apply {
+                leftMargin = dp(3)
+                rightMargin = dp(3)
+            })
+        }
+        root.addView(tfRow, margins(bottom = 12))
+
         val scan = card("SIGNAL ENGINE", "Scanning validated setups…", 18f)
         signal = scan.value
         root.addView(scan.container, margins(bottom = 10))
