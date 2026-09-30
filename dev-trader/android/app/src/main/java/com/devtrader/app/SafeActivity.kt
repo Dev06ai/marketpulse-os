@@ -315,11 +315,15 @@ class SafeActivity : Activity() {
     }
 
     private fun showState(root: JSONObject) {
+        latestRoot = root
+        lastStateReceivedMs = System.currentTimeMillis()
         val priceValue = root.optDouble("last_price", Double.NaN)
         val health = root.optString("data_health", "UNKNOWN")
         val ws = root.optBoolean("ws_connected", false)
         val oi = root.optDouble("open_interest", Double.NaN)
         val signalObj = root.optJSONObject("signal")
+        val engine = root.optJSONObject("engine")
+        val f = root.optJSONObject("features")
 
         handler.post {
             status.text = if (health == "HEALTHY") "LIVE" else health
@@ -330,17 +334,65 @@ class SafeActivity : Activity() {
             integrity.text = "WebSocket  •  " + if (ws) "CONNECTED" else "DISCONNECTED"
 
             if (signalObj == null) {
-                signal.text = "NO VALIDATED SETUP\nSFP  •  D-Line  •  MSS"
+                val reason = engine?.optString("wait_reason").orEmpty()
+                signal.text = "NO VALIDATED SETUP\nSFP  •  D-Line  •  MSS" +
+                    if (reason.isBlank()) "" else "\n" + reason.take(240)
+                risk.text = "Waiting for a validated setup…"
             } else {
-                signal.text = "TRADE CALL  •  " + signalObj.optString("direction") +
+                val lifecycle = signalObj.optString("lifecycle", "ACTIVE")
+                val thesis = signalObj.optJSONArray("thesis")
+                val reason = if (thesis != null && thesis.length() > 0) thesis.optString(0) else ""
+                signal.text = "TRADE CALL  •  " + signalObj.optString("direction") + "  •  " + lifecycle +
                     "\n" + signalObj.optString("setup") +
                     "\nEntry  " + String.format(Locale.US, "%.2f", signalObj.optDouble("entry")) +
                     "    SL  " + String.format(Locale.US, "%.2f", signalObj.optDouble("stop")) +
                     "\nTP1  " + String.format(Locale.US, "%.2f", signalObj.optDouble("target1")) +
                     "    TP2  " + String.format(Locale.US, "%.2f", signalObj.optDouble("target2")) +
-                    "\nR:R  " + String.format(Locale.US, "%.2f", signalObj.optDouble("rr"))
+                    "\nR:R  " + String.format(Locale.US, "%.2f", signalObj.optDouble("rr")) +
+                    "  •  Conf " + String.format(Locale.US, "%.0f%%", signalObj.optDouble("confidence") * 100) +
+                    if (reason.isBlank()) "" else "\n" + reason
+                val id = signalObj.optString("id")
+                if (id.isNotBlank() && id != lastSignalId) {
+                    lastSignalId = id
+                    appendJournal(signalObj)
+                    loadJournal()
+                    safe { calculateRisk() }
+                    sendLocalSignalAlert(signalObj)
+                }
             }
+
+            features.text =
+                "REGIME  " + (f?.optString("regime") ?: "—") +
+                "\nSTRUCTURE  " + (f?.optString("market_structure") ?: "—") +
+                "\n15m / 1h / 4h  " + (f?.optString("trend_15") ?: "—") + " / " +
+                    (f?.optString("trend_60") ?: "—") + " / " + (f?.optString("trend_240") ?: "—") +
+                "\nCVD  " + (f?.optString("cvd_price_divergence") ?: "NONE") +
+                "    OI15m  " + String.format(Locale.US, "%.2f%%", f?.optDouble("oi_change_15m_pct", 0.0) ?: 0.0) +
+                "\nFVG  " + (f?.optString("fvg_direction") ?: "NONE") +
+                "    OB  " + (f?.optString("order_block_direction") ?: "NONE") +
+                "\nGolden pocket  " + (f?.optString("golden_pocket") ?: "NONE") +
+                "\nWeekly open  " + String.format(Locale.US, "%.2f", f?.optDouble("weekly_open", 0.0) ?: 0.0)
+            renderChartFromState()
         }
+    }
+
+    private fun renderChartFromState() {
+        val root = latestRoot ?: return
+        val key = when (selectedTf) { "1h" -> "candles_60"; "4h" -> "candles_4h"; else -> "candles_15" }
+        val candles = root.optJSONArray(key) ?: JSONArray()
+        chart.setTimeframe(selectedTf)
+        chart.setData(candles, root.optJSONObject("signal"), calculateEma(candles, 50), root.optDouble("last_price", Double.NaN))
+    }
+
+    private fun calculateEma(candles: JSONArray, period: Int): Double? {
+        if (candles.length() == 0) return null
+        val alpha = 2.0 / (period + 1.0)
+        var value = candles.optJSONObject(0)?.optDouble("close") ?: return null
+        for (i in 1 until candles.length()) {
+            val close = candles.optJSONObject(i)?.optDouble("close") ?: continue
+            value = alpha * close + (1.0 - alpha) * value
+        }
+        return value
     }
 
     private fun systemCheck() {
