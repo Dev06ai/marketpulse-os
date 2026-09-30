@@ -22,6 +22,7 @@ SYMBOL = os.getenv("SYMBOL", "BTCUSDT")
 WS_URL = os.getenv("BYBIT_WS_URL", "wss://stream.bybit.com/v5/public/linear")
 SNAPSHOT = float(os.getenv("SNAPSHOT_SECONDS", "1"))
 clients = set()
+client_failures = {}
 state = MarketState(symbol=SYMBOL)
 engine = StrategyEngine()
 bridge = MarketPulseBridge()
@@ -127,9 +128,16 @@ async def broadcast_loop():
             continue
         for ws in list(clients):
             try:
-                await asyncio.wait_for(ws.send_json(payload), timeout=0.5)
+                await asyncio.wait_for(ws.send_json(payload), timeout=2.5)
+                client_failures[ws] = 0
             except Exception:
-                clients.discard(ws)
+                failures = client_failures.get(ws, 0) + 1
+                client_failures[ws] = failures
+                # Tolerate transient mobile/network stalls. A single slow send must
+                # not destroy an otherwise healthy long-lived WebSocket.
+                if failures >= 5:
+                    clients.discard(ws)
+                    client_failures.pop(ws, None)
 
 
 async def on_state(s: MarketState):
@@ -540,14 +548,17 @@ async def system_check_push(payload: PushTestPayload):
 async def socket(ws: WebSocket):
     await ws.accept()
     clients.add(ws)
+    client_failures[ws] = 0
     try:
+        # Send immediately so the phone gets price/OI/chart state without waiting for
+        # the next periodic broadcast tick.
         await ws.send_json(mobile_payload())
-        # State is pushed by broadcast_loop; the mobile client does not need to send
-        # keepalive text frames. Avoid receive_text() because abrupt client/proxy closes
-        # can surface as noisy ConnectionClosedError traces.
+        # The server is the publisher. Transport-level ping/pong is handled by the
+        # WebSocket stack; the client does not need to send keepalive text frames.
         while ws in clients:
             await asyncio.sleep(30)
     except Exception:
         pass
     finally:
         clients.discard(ws)
+        client_failures.pop(ws, None)
