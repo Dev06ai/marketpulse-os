@@ -1,0 +1,138 @@
+version: 1
+name: BTC advanced market-structure playbook
+purpose: >
+  Structured educational knowledge used as a decision-support layer. It does not
+  guarantee profitable outcomes and must never override explicit invalidation,
+  data-quality, or risk controls.
+
+elliott_wave:
+  fundamentals:
+    - "Markets can be modeled as motive five-wave structures and corrective three-wave structures."
+    - "Wave counts are fractal: a sequence at one degree can contain lower-degree sequences."
+    - "Do not force a count when pivots are ambiguous; prefer no-count / alternate-count states."
+  impulse_rules:
+    - "Wave 2 must not retrace 100% of wave 1."
+    - "Wave 3 must not be the shortest of waves 1, 3 and 5."
+    - "Wave 4 must not overlap wave 1 price territory for a standard impulse."
+  motive_patterns:
+    - impulse
+    - leading_diagonal
+    - ending_diagonal
+  corrective_patterns:
+    - zigzag
+    - flat
+    - triangle
+    - double_three
+    - triple_three
+  guidelines:
+    - "Alternation: sharp wave 2 often contrasts with sideways wave 4, and vice versa."
+    - "Fibonacci relationships can estimate retracement and extension zones, but only after a valid structural count."
+    - "Wave 3 is often the strongest directional leg, but it is not required to be the longest."
+    - "Ending diagonals can precede sharp reversals; their wave-4 overlap is not treated as an impulse-rule violation."
+  trading_context:
+    preferred:
+      - "Trade with the higher-degree trend."
+      - "Use wave 2/4/B-style corrections as setup zones rather than blindly chasing impulses."
+      - "Prefer confirmed structure plus liquidity/order-flow confluence."
+    avoid:
+      - "Forcing wave labels after a single large candle."
+      - "Treating an Elliott count as a signal by itself."
+      - "Entering solely because a Fibonacci ratio matches."
+
+sfp:
+  definition: >
+    A swing failure pattern is a liquidity sweep beyond a meaningful swing point
+    followed by a close back inside the level.
+  anatomy:
+    - "Identify a meaningful prior swing high/low."
+    - "Require price to trade beyond that swing."
+    - "Require rejection and close back through the swept level."
+    - "Prefer liquidity pools, daily/weekly levels, or obvious equal highs/lows."
+  confirmations:
+    - "Higher-timeframe structure"
+    - "CVD/price divergence"
+    - "OI and liquidation context"
+    - "Order-book imbalance"
+    - "Reaction quality at the swept level"
+  invalidation:
+    - "Acceptance beyond the swept level"
+    - "No reclaim / no close back inside"
+    - "Poor reward-to-risk after structural stop placement"
+
+breakout:
+  definition: "A breakout is a structural level breach with evidence of acceptance rather than a wick-only excursion."
+  confirmation:
+    - "Body close beyond a meaningful support/resistance or trendline."
+    - "Displacement relative to recent candles."
+    - "Order-flow confirmation where available."
+    - "Retest/rejection of the broken level is higher quality than blind first-touch chasing."
+  fakeout:
+    - "Wick through level followed by close back inside."
+    - "Immediate reclaim/failure of the breakout level."
+    - "Breakout against dominant higher-timeframe structure without sufficient confirmation."
+  no_trade:
+    - "Mid-range breakout with no clean level."
+    - "High spread / high volatility execution conditions."
+    - "No structural invalidation point."
+
+d_line:
+  model: >
+    Dev Trader's D-Line is treated as a validated trendline built from meaningful
+    swing pivots and traded only when the line has earned enough touches.
+  validation:
+    - "At least two meaningful touches, with clean geometry."
+    - "Prefer a third interaction/retest for stronger validation."
+    - "Do not treat a line that was repeatedly violated as high-quality support/resistance."
+  breakout:
+    - "Wait for a body close through the line."
+    - "Prefer alignment with the larger trend."
+    - "Prefer retest/rejection of the broken line before entry."
+    - "Use ATR-aware risk rather than microscopic stops."
+  failure:
+    - "Close back through the D-Line after the break."
+    - "Break occurs directly into major opposing liquidity."
+    - "Insufficient reward-to-risk."
+
+market_structure:
+  states:
+    bullish: "Higher highs and higher lows; demand is controlling the swing sequence."
+    bearish: "Lower highs and lower lows; supply is controlling the swing sequence."
+    range: "Alternating or overlapping swings without directional acceptance."
+  transitions:
+    bos: "Break of a prior swing level with acceptance/close."
+    mss: "Material change in swing behavior indicating a possible regime transition."
+  rules:
+    - "Structure outranks isolated indicator readings."
+    - "A single wick is not treated as a confirmed structural break."
+    - "Use higher timeframe structure to filter lower-timeframe signals."
+
+confluence:
+  priority:
+    1: "Data quality / feed health"
+    2: "Higher-timeframe market structure"
+    3: "Liquidity location"
+    4: "Price action trigger: SFP, breakout, D-Line, MSS"
+    5: "Elliott-wave context"
+    6: "CVD / OI / order-book confirmation"
+    7: "Risk/reward and invalidation"
+  no_trade_rules:
+    - "Conflicting higher-timeframe structure"
+    - "Unclear wave count"
+    - "Range midline without an extreme or liquidity event"
+    - "Breakout without acceptance"
+    - "SFP without reclaim"
+    - "R:R below the live minimum"
+    - "Existing active trade not resolved"
+    - "Quality governor daily cap or cooldown active"
+
+execution:
+  styles:
+    scalp:
+      timeframes: [5m, 15m]
+      principle: "Fast reaction around liquidity or micro-structure with strict invalidation."
+    swing:
+      timeframes: [15m, 1h, 4h]
+      principle: "Higher-timeframe alignment and wider structural targets."
+  principle: >
+    The engine should prefer WAIT over a marginal setup. A valid market
+    opportunity is not automatically a valid trade.

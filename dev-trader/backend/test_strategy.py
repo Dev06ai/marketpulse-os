@@ -149,3 +149,59 @@ def test_quality_governor_enforces_post_resolution_cooldown():
     engine.last_resolved_ts = int(_time.time() * 1000)
     assert engine.evaluate(state) is None
     assert "COOLDOWN" in engine.governor_status()["lock_reason"]
+
+
+def test_elliott_impulse_rules_and_context():
+    from app.elliott_wave import _bull_impulse, _bear_impulse
+
+    bull = [
+        ("L", 0, 100.0),
+        ("H", 1, 110.0),
+        ("L", 2, 104.0),
+        ("H", 3, 120.0),
+        ("L", 4, 114.0),
+        ("H", 5, 128.0),
+    ]
+    ok, confidence, reason = _bull_impulse(bull)
+    assert ok is True
+    assert confidence >= 0.8
+    assert "5-wave impulse" in reason
+
+    invalid_bull = [
+        ("L", 0, 100.0),
+        ("H", 1, 110.0),
+        ("L", 2, 99.0),   # wave 2 retraces 100%+
+        ("H", 3, 120.0),
+        ("L", 4, 114.0),
+        ("H", 5, 128.0),
+    ]
+    ok, _, _ = _bull_impulse(invalid_bull)
+    assert ok is False
+
+    bear = [
+        ("H", 0, 128.0),
+        ("L", 1, 118.0),
+        ("H", 2, 124.0),
+        ("L", 3, 108.0),
+        ("H", 4, 114.0),
+        ("L", 5, 100.0),
+    ]
+    ok, confidence, reason = _bear_impulse(bear)
+    assert ok is True
+    assert confidence >= 0.8
+    assert "5-wave impulse" in reason
+
+
+def test_market_features_include_elliott_context():
+    from app.analytics import compute_features
+    cs = [c(i, 100 + i * 0.5, 102 + i * 0.5, 99 + i * 0.5, 101 + i * 0.5) for i in range(24)]
+    state = MarketState(
+        candles_15=cs,
+        candles_60=cs,
+        last_price=112.5,
+        data_health="HEALTHY",
+    )
+    f = compute_features(state)
+    assert f.elliott_phase
+    assert f.elliott_direction in {"LONG", "SHORT", "NEUTRAL", "UNKNOWN"}
+    assert 0.0 <= f.elliott_confidence <= 1.0
