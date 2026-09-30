@@ -102,6 +102,23 @@ async def health():
             "ws_connected":state.ws_connected,"last_price":state.last_price,
             "latency_ms":latency,"signal":last_signal}
 
+@app.get("/app-config")
+async def app_config():
+    return {
+        "distribution": "google-play",
+        "package_name": "com.devtrader.app",
+        "client_updates": "google-play-in-app-updates",
+        "engine_updates": "remote-render",
+        "manual_execution_only": True,
+        "remote_strategy_updates": True,
+        "remote_tunables": ["MIN_RR", "MIN_CONFIDENCE", "MAX_RISK_PCT", "SNAPSHOT_SECONDS"],
+        "remote_feature_flags": {
+            "system_check": True,
+            "strategy_diagnostics": True,
+            "reconnect_watch": True,
+        },
+    }
+
 @app.get("/config")
 async def config():
     return {"symbol":SYMBOL,"snapshot_seconds":SNAPSHOT,"manual_execution_only":True,
