@@ -429,6 +429,97 @@ class StrategyEngine:
         self.signal_status = "NONE"
         self.signal_history: list[dict] = []
         self.last_evaluated_ts = 0
+        self.last_lifecycle_event: dict | None = None
+        self.setup_memories: list[dict] = []
+
+    def set_setup_memories(self, memories: list[dict] | None):
+        self.setup_memories = list(memories or [])[:200]
+
+    def _find_memory_match(self, signal: Signal, state: MarketState) -> dict | None:
+        if state.last_price is None:
+            return None
+        price = float(state.last_price)
+        f = compute_features(state)
+        direction = signal.direction.upper()
+        signal_setup = signal.setup.upper()
+
+        best = None
+        best_score = -1e9
+        for raw in self.setup_memories:
+            if not isinstance(raw, dict) or raw.get("active") is False:
+                continue
+            interval = str(raw.get("interval") or "ALL").upper()
+            if interval not in {"ALL", signal.timeframe.upper()}:
+                continue
+            mem_direction = str(raw.get("direction") or "BOTH").upper()
+            if mem_direction not in {"BOTH", direction}:
+                continue
+
+            low = raw.get("zoneLow", raw.get("zone_low"))
+            high = raw.get("zoneHigh", raw.get("zone_high"))
+            in_zone = True
+            if low is not None and high is not None:
+                try:
+                    lo, hi = sorted((float(low), float(high)))
+                    in_zone = lo <= price <= hi
+                except (TypeError, ValueError):
+                    in_zone = False
+            if not in_zone:
+                continue
+
+            setup_key = str(raw.get("setupKey", raw.get("setup_key", "GENERIC"))).upper()
+            patterns = [str(x).upper() for x in (raw.get("triggerPatterns", raw.get("trigger_patterns")) or [])]
+            setup_match = setup_key == "GENERIC" or setup_key in signal_setup or signal_setup in setup_key
+            pattern_match = any(p and (p in signal_setup or p in " ".join(signal.thesis).upper()) for p in patterns)
+            if not (setup_match or pattern_match):
+                continue
+
+            required = raw.get("requiredEvidence", raw.get("required_evidence")) or {}
+            evidence_ok = True
+            for key, expected in required.items():
+                if key == "regime" and str(f.regime).upper() != str(expected).upper():
+                    evidence_ok = False
+                elif key == "market_structure" and str(f.market_structure).upper() != str(expected).upper():
+                    evidence_ok = False
+                elif key == "cvd_price_divergence" and str(f.cvd_price_divergence).upper() != str(expected).upper():
+                    evidence_ok = False
+            if not evidence_ok:
+                continue
+
+            score = float(raw.get("priority") or 1)
+            if setup_match:
+                score += 3
+            if pattern_match:
+                score += 2
+            if best is None or score > best_score:
+                best_score = score
+                best = {
+                    "id": raw.get("id"),
+                    "title": raw.get("title", setup_key),
+                    "setup_key": setup_key,
+                    "direction": mem_direction,
+                    "interval": interval,
+                    "zone_low": low,
+                    "zone_high": high,
+                    "priority": raw.get("priority", 1),
+                    "source_type": raw.get("sourceType", raw.get("source_type", "manual")),
+                    "notes": raw.get("notes", ""),
+                    "score": round(score, 3),
+                }
+        return best
+
+    def _apply_memory_context(self, signal: Signal, state: MarketState):
+        match = self._find_memory_match(signal, state)
+        if not match:
+            return None
+        bonus = min(0.07, 0.025 + 0.008 * float(match.get("priority") or 1))
+        signal.confidence = min(0.99, signal.confidence + bonus)
+        if signal.rr >= float(RULES["risk"].get("elite_min_rr", 3.0)) and signal.confidence >= float(RULES.get("signal", {}).get("elite_confidence", 0.70)):
+            signal.grade = "A"
+        signal.evidence["memory_match"] = match
+        signal.thesis.append(f"Human setup memory matched at the mapped zone: {match.get('title', match.get('setup_key', 'saved setup'))}.")
+        signal.thesis.append("Memory is advisory: existing live risk/data/setup gates still apply.")
+        return match
         self.last_diagnostics = {
             "status": "STARTING",
             "wait_reason": "Engine has not evaluated market data yet.",
@@ -635,11 +726,13 @@ class StrategyEngine:
         return result
 
     def _update_signal_lifecycle(self, state: MarketState):
+        self.last_lifecycle_event = None
         if not self.active_signal or state.last_price is None or self.signal_status != "ACTIVE":
             return
         stop = float(self.active_signal["stop"])
         target = float(self.active_signal["target2"])
         direction = self.active_signal["direction"]
+        previous = self.signal_status
         if direction == "LONG":
             if state.last_price <= stop:
                 self.signal_status = "INVALIDATED"
@@ -650,8 +743,24 @@ class StrategyEngine:
                 self.signal_status = "INVALIDATED"
             elif state.last_price <= target:
                 self.signal_status = "TARGET_REACHED"
+
         self.active_signal["lifecycle"] = self.signal_status
         self.active_signal["last_price_seen"] = state.last_price
+
+        if self.signal_status != previous:
+            result_r = 1.0 if self.signal_status == "TARGET_REACHED" else -1.0
+            signal_snapshot = dict(self.active_signal)
+            self.last_lifecycle_event = {
+                "signal": signal_snapshot,
+                "outcome": self.signal_status,
+                "result_r": result_r,
+            }
+            for row in self.signal_history:
+                if row.get("id") == self.active_signal.get("id"):
+                    row["status"] = self.signal_status
+                    row["resolved_ts"] = int(time.time() * 1000)
+                    row["result_r"] = result_r
+                    break
 
     def evaluate(self, state: MarketState) -> Optional[Signal]:
         self.last_evaluated_ts = int(time.time() * 1000)
@@ -668,6 +777,7 @@ class StrategyEngine:
         if not signals:
             return None
         signal = max(signals, key=lambda s: (s.confidence, s.rr))
+        self._apply_memory_context(signal, state)
         if signal.id == self.last_signal_id:
             return None
         self.last_signal_id = signal.id
