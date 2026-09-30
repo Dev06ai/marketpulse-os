@@ -825,16 +825,23 @@ class StrategyEngine:
         recent_high = highs[-1][1] if highs else None
         recent_low = lows[-1][1] if lows else None
         candidates = []
-        if recent_high:
-            dist = abs(price - recent_high) / price * 100
+        # Direction must match the side of price. A swing low above current
+        # price is resistance, not a LONG support trigger, and vice versa.
+        if recent_high and recent_high > price:
+            dist = (recent_high - price) / price * 100
             candidates.append(("SHORT", "swing high", recent_high, dist))
-        if recent_low:
-            dist = abs(price - recent_low) / price * 100
+        if recent_low and recent_low < price:
+            dist = (price - recent_low) / price * 100
             candidates.append(("LONG", "swing low", recent_low, dist))
         candidates.sort(key=lambda x: x[3])
         nearest = candidates[0] if candidates else None
         if not nearest:
-            return {"status": "SEARCHING", "message": "Searching for fresh swing-liquidity."}
+            return {
+                "status": "REBUILDING",
+                "message": "Price is outside the latest swing range; rebuilding fresh liquidity references.",
+                "recent_swing_high": round(recent_high, 2) if recent_high else None,
+                "recent_swing_low": round(recent_low, 2) if recent_low else None,
+            }
         direction, label, level, distance = nearest
         pattern = "NONE"
         candle = cs[-1]
