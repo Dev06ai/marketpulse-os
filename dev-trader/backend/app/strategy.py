@@ -661,6 +661,72 @@ class StrategyEngine:
             self.active_signal = None
             self.signal_status = "NONE"
 
+    def rehydrate_remote_history(self, rows: list[dict] | None):
+        """Merge durable remote trade history into daily-cap and cooldown state."""
+        self._rotate_governor_day()
+        rows = list(rows or [])
+        daily = 0
+        last_resolved = self.last_resolved_ts
+        today = self.signal_day_utc
+        for row in rows[:250]:
+            try:
+                opened = int(row.get("opened_ts") or row.get("created_ts") or 0)
+            except (TypeError, ValueError):
+                opened = 0
+            if opened:
+                try:
+                    opened_day = datetime.fromtimestamp(opened / 1000, tz=timezone.utc).date().isoformat()
+                except (ValueError, OSError, OverflowError):
+                    opened_day = ""
+                if opened_day == today:
+                    daily += 1
+            try:
+                resolved = int(row.get("resolved_ts") or 0)
+            except (TypeError, ValueError):
+                resolved = 0
+            last_resolved = max(last_resolved, resolved)
+        self.daily_signal_count = max(self.daily_signal_count, min(daily, _quality_max_daily()))
+        self.last_resolved_ts = max(self.last_resolved_ts, last_resolved)
+
+    def restore_external_active_signal(self, row: dict | None):
+        """Lock the engine to a durable open prediction after a backend restart."""
+        if not isinstance(row, dict):
+            return
+        if self.signal_status == "ACTIVE" and self.active_signal:
+            return
+        direction = str(row.get("direction") or row.get("side") or "").upper()
+        if direction not in {"LONG", "SHORT"}:
+            return
+        try:
+            entry = float(row.get("entry"))
+            stop = float(row.get("stop"))
+            target = float(row.get("target2", row.get("target")))
+        except (TypeError, ValueError):
+            return
+        signal_id = str(row.get("id") or row.get("signal_id") or "")
+        if not signal_id:
+            return
+        self.active_signal = {
+            "id": signal_id,
+            "direction": direction,
+            "setup": row.get("setup") or "Persisted open signal",
+            "entry": entry,
+            "stop": stop,
+            "target1": target,
+            "target2": target,
+            "rr": float(row.get("rr") or 0.0),
+            "confidence": float(row.get("confidence") or 0.0),
+            "grade": row.get("grade") or "A",
+            "timeframe": row.get("timeframe") or "15m",
+            "trade_style": row.get("trade_style") or "SCALP",
+            "created_ts": int(row.get("opened_ts") or row.get("created_ts") or time.time() * 1000),
+            "lifecycle": "ACTIVE",
+            "lifecycle_stage": "ACTIVE",
+        }
+        self.last_signal_id = signal_id
+        self.signal_status = "ACTIVE"
+        self.governor_lock_reason = "ACTIVE: durable open signal recovered after restart."
+
     def governor_status(self) -> dict:
         self._rotate_governor_day()
         now = int(time.time() * 1000)
