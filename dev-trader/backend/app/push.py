@@ -63,8 +63,9 @@ class PushService:
             title=f"MANAGE {management.get('from_direction','')} → {management.get('to_direction','')}"
             body=f"{management.get('status','REVERSAL')} • {management.get('open_pnl_direction','FLAT')} {management.get('open_pnl_r',0):.2f}R • {management.get('action','Reassess position')}"
         else:
-            title=f"BTC {signal['direction']} • {signal['setup']}"
-            body=f"Entry {signal['entry']:.2f} · SL {signal['stop']:.2f} · R:R {signal['rr']:.2f}"
+            style = str(signal.get("trade_style", "SCALP")).upper()
+            title=f"BTC {signal['direction']} • {style} • {signal['setup']}"
+            body=f"{style} · Entry {signal['entry']:.2f} · SL {signal['stop']:.2f} · TP1 {signal['target1']:.2f} · TP2 {signal['target2']:.2f} · R:R {signal['rr']:.2f}"
         for token in list(self.tokens):
             try:
                 messaging.send(messaging.Message(
