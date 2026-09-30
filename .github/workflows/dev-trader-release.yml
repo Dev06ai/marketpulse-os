@@ -2,7 +2,7 @@ name: Dev Trader Release
 
 on:
   push:
-    tags:
+    branches:
       - "dev-trader-v*"
 
 permissions:
@@ -91,6 +91,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release create "$GITHUB_REF_NAME" \
+            --target "$GITHUB_SHA" \
             "dev-trader/android/app/build/outputs/apk/release/app-release.apk#dev-trader-${{ steps.meta.outputs.version_name }}.apk" \
             "dev-trader-update.json#dev-trader-update.json" \
             --title "Dev Trader ${{ steps.meta.outputs.version_name }}" \
