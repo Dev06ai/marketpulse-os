@@ -5,6 +5,8 @@ import android.app.Activity
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
+import android.net.ConnectivityManager
+import android.net.Network
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Color
@@ -76,12 +78,19 @@ class SafeActivity : Activity() {
     private var chartRequestInFlight = false
     private var lastBootstrapMs = 0L
     private var bootstrapInFlight = false
+    private var retryButton: Button? = null
+    private var networkCallback: ConnectivityManager.NetworkCallback? = null
+    private var lastSocketActivityMs = 0L
+    private var lastRetryRequestMs = 0L
 
     private val backendBase = "https://dev-trader-engine.onrender.com"
 
     private val client by lazy {
         OkHttpClient.Builder()
-            .pingInterval(15, TimeUnit.SECONDS)
+            .connectTimeout(8, TimeUnit.SECONDS)
+            .writeTimeout(8, TimeUnit.SECONDS)
+            .readTimeout(0, TimeUnit.SECONDS)
+            .pingInterval(10, TimeUnit.SECONDS)
             .retryOnConnectionFailure(true)
             .build()
     }
@@ -93,6 +102,7 @@ class SafeActivity : Activity() {
         window.navigationBarColor = Color.rgb(8, 9, 12)
         installCrashReporter()
         buildUi()
+        registerNetworkCallback()
         ensureChannel()
         startBackgroundAlerts()
         loadJournal()
@@ -153,7 +163,25 @@ class SafeActivity : Activity() {
         scroll.addView(root)
         setContentView(scroll)
 
-        root.addView(label("DEV TRADER  •  BTCUSDT PERPETUAL", 11f, Color.rgb(154, 158, 170), 0.09f))
+        val topRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        topRow.addView(
+            label("DEV TRADER  •  BTCUSDT PERPETUAL", 11f, Color.rgb(154, 158, 170), 0.09f),
+            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+        )
+        retryButton = actionButton("↻ RETRY").apply {
+            textSize = 11f
+            minHeight = dp(38)
+            minWidth = dp(86)
+            setPadding(dp(8), 0, dp(8), 0)
+            setOnClickListener { safe { forceReconnectFromUser() } }
+        }
+        topRow.addView(retryButton, LinearLayout.LayoutParams(dp(92), dp(40)).apply {
+            leftMargin = dp(8)
+        })
+        root.addView(topRow, margins(bottom = 2))
         root.addView(label("BTC trading bot", 32f, Color.WHITE, 0f), margins(top = 5, bottom = 2))
         root.addView(label("FAST SETUP SCANNER  •  MANUAL EXECUTION", 13f, Color.rgb(173, 177, 188), 0f), margins(bottom = 14))
 
@@ -369,13 +397,16 @@ class SafeActivity : Activity() {
 
     private fun connect(force: Boolean = false) {
         if (stopped) return
-        if (force && socket != null) {
+        if (force) {
+            handler.removeCallbacksAndMessages(null)
+            reconnectScheduled.set(false)
             runCatching { socket?.cancel() }
             socket = null
         }
         if (socket != null) return
 
         status.text = "CONNECTING…"
+        integrity.text = "WebSocket  •  CONNECTING •  SECURE RETRY LOOP"
         socket = client.newWebSocket(
             Request.Builder()
                 .url("wss://dev-trader-engine.onrender.com/ws")
@@ -385,13 +416,16 @@ class SafeActivity : Activity() {
                     socket = ws
                     reconnectAttempt = 0
                     reconnectScheduled.set(false)
+                    lastSocketActivityMs = System.currentTimeMillis()
                     handler.post {
                         status.text = "SYNCING…"
-                        integrity.text = "WebSocket  •  CONNECTED  •  WAITING FOR FEED"
+                        integrity.text = "WebSocket  •  CONNECTED  •  LIVE FEED SUPERVISOR"
                     }
+                    bootstrap(true)
                 }
 
                 override fun onMessage(ws: WebSocket, text: String) {
+                    lastSocketActivityMs = System.currentTimeMillis()
                     safe {
                         val root = JSONObject(text)
                         if (root.optString("type") == "state") {
@@ -411,35 +445,103 @@ class SafeActivity : Activity() {
                 }
 
                 override fun onFailure(ws: WebSocket, t: Throwable, response: Response?) {
-                    if (socket === ws) socket = null
+                    val owned = socket === ws
+                    if (owned) socket = null
+                    if (!owned || stopped) return
                     handler.post {
                         status.text = "RECONNECTING…"
-                        integrity.text = "WebSocket  •  DISCONNECTED"
+                        integrity.text = "WebSocket  •  DISCONNECTED  •  RETRY SCHEDULED"
                     }
-                    reconnect()
+                    reconnect(false)
                 }
 
                 override fun onClosed(ws: WebSocket, code: Int, reason: String) {
-                    if (socket === ws) socket = null
-                    if (!stopped) reconnect()
+                    val owned = socket === ws
+                    if (owned) socket = null
+                    if (!owned || stopped) return
+                    handler.post {
+                        status.text = "RECONNECTING…"
+                        integrity.text = "WebSocket  •  CLOSED •  RETRY SCHEDULED"
+                    }
+                    reconnect(false)
                 }
             }
         )
     }
 
-    private fun reconnect() {
-        if (stopped || !reconnectScheduled.compareAndSet(false, true)) return
-        val attempt = reconnectAttempt.coerceAtMost(5)
-        val delay = minOf(30000L, 1000L * (1L shl attempt))
-        reconnectAttempt = minOf(reconnectAttempt + 1, 5)
+    private fun reconnect(immediate: Boolean = false) {
+        if (stopped || socket != null) return
+        if (immediate) {
+            reconnectScheduled.set(false)
+            handler.post {
+                if (!stopped) {
+                    bootstrap(true)
+                    connect(force = true)
+                }
+            }
+            return
+        }
+        if (!reconnectScheduled.compareAndSet(false, true)) return
+        val attempt = reconnectAttempt.coerceAtMost(4)
+        val delay = minOf(15000L, 1000L * (1L shl attempt))
+        reconnectAttempt = minOf(reconnectAttempt + 1, 4)
         handler.postDelayed({
             reconnectScheduled.set(false)
-            if (!stopped) {
-                socket = null
+            if (!stopped && socket == null) {
                 bootstrap(false)
                 connect()
             }
         }, delay)
+    }
+
+    private fun forceReconnectFromUser() {
+        val now = System.currentTimeMillis()
+        if (now - lastRetryRequestMs < 1500L) return
+        lastRetryRequestMs = now
+        reconnectAttempt = 0
+        retryButton?.isEnabled = false
+        retryButton?.text = "RETRYING…"
+        status.text = "DATA RECOVERY"
+        integrity.text = "MANUAL RETRY  •  REBUILDING LIVE CONNECTION"
+        bootstrap(true)
+        connect(force = true)
+        handler.postDelayed({
+            retryButton?.isEnabled = true
+            retryButton?.text = "↻ RETRY"
+        }, 2000L)
+    }
+
+    private fun registerNetworkCallback() {
+        runCatching {
+            val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+            val callback = object : ConnectivityManager.NetworkCallback() {
+                override fun onAvailable(network: Network) {
+                    handler.postDelayed({
+                        if (!stopped) forceReconnectFromNetwork()
+                    }, 350L)
+                }
+
+                override fun onLost(network: Network) {
+                    handler.post {
+                        if (!stopped) {
+                            status.text = "NETWORK CHANGE"
+                            integrity.text = "NETWORK  •  LOST •  WAITING FOR RECOVERY"
+                        }
+                    }
+                }
+            }
+            networkCallback = callback
+            cm.registerDefaultNetworkCallback(callback)
+        }
+    }
+
+    private fun forceReconnectFromNetwork() {
+        val now = System.currentTimeMillis()
+        if (now - lastRetryRequestMs < 1500L) return
+        lastRetryRequestMs = now
+        reconnectAttempt = 0
+        bootstrap(true)
+        connect(force = true)
     }
 
     private fun bootstrap(force: Boolean = false) {
@@ -716,19 +818,26 @@ class SafeActivity : Activity() {
 
     private fun watchdog() {
         if (stopped) return
-        val age = if (lastStateReceivedMs == 0L) Long.MAX_VALUE
-            else System.currentTimeMillis() - lastStateReceivedMs
-        if (age > 7000L) {
-            integrity.text = "Feed  •  STALE (>7s)  •  REST SNAPSHOT RECOVERY"
-            status.text = "DATA RECOVERY"
-            bootstrap(false)
-            if (socket != null && age > 12000L) {
-                runCatching { socket?.cancel() }
-                socket = null
-                reconnect()
+        val now = System.currentTimeMillis()
+        val stateAge = if (lastStateReceivedMs == 0L) Long.MAX_VALUE
+            else now - lastStateReceivedMs
+        val socketAge = if (lastSocketActivityMs == 0L) Long.MAX_VALUE
+            else now - lastSocketActivityMs
+
+        when {
+            stateAge > 5000L -> {
+                integrity.text = "Feed  •  RECOVERING •  REST SNAPSHOT ACTIVE"
+                status.text = "DATA RECOVERY"
+                bootstrap(false)
+            }
+            stateAge > 9000L || socketAge > 12000L -> {
+                integrity.text = "Feed  •  STALE •  REBUILDING WEBSOCKET"
+                status.text = "RECONNECTING…"
+                reconnect(immediate = true)
             }
         }
-        handler.postDelayed({ safe { watchdog() } }, 3000L)
+
+        handler.postDelayed({ safe { watchdog() } }, 2500L)
     }
 
     private fun calculateRisk() {
@@ -1013,6 +1122,11 @@ class SafeActivity : Activity() {
 
     override fun onDestroy() {
         stopped = true
+        runCatching {
+            val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+            networkCallback?.let { cm.unregisterNetworkCallback(it) }
+        }
+        networkCallback = null
         handler.removeCallbacksAndMessages(null)
         reconnectScheduled.set(false)
         runCatching { socket?.close(1000, "activity destroyed") }
