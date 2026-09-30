@@ -22,6 +22,7 @@ import java.util.Locale
 import java.util.concurrent.TimeUnit
 import kotlin.math.min
 
+// Build 65 release marker: force the signed Android release path to publish the current 0.9.7 client.
 class SignalService : Service() {
     companion object {
         private const val SERVICE_CHANNEL = "dev_trader_background"
