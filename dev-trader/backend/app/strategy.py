@@ -912,7 +912,6 @@ class StrategyEngine:
         self.liquidity_map_state = self._build_liquidity_map(state, f0)
         self.multi_tf_story = self._build_multi_tf_story(f0)
         radar_top = radar[0] if radar else None
-        evidence_matrix = self._build_evidence_matrix(f0, radar)
         sfp_hunter = self._build_sfp_hunter(state, f0)
         breakout_watch = self._build_breakout_watch(state, f0)
         evidence_matrix = self._build_evidence_matrix(f0, state)
@@ -964,8 +963,8 @@ class StrategyEngine:
             "last_evaluated_ts": self.last_evaluated_ts,
         }
 
-        if state.data_health != "HEALTHY":
-            result["wait_reason"] = "Signal evaluation is blocked until the market data feed is healthy."
+        if state.data_health not in {"HEALTHY", "DEGRADED"}:
+            result["wait_reason"] = "Signal evaluation is paused while the market feed reconnects."
             return result
 
         # SFP diagnostics
