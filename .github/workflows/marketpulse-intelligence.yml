@@ -1,10 +1,9 @@
 name: MarketPulse Continuous Intelligence
 
 on:
-  schedule:
-    # GitHub-hosted scheduled runs provide the no-cost fallback for the
-    # Render-free deployment. The sweep itself decides which timeframes are due.
-    - cron: "2-59/5 * * * *"
+  # MarketPulse has been retired. Keep this workflow manual-only so the old
+  # intelligence scheduler cannot wake suspended MarketPulse infrastructure
+  # or consume GitHub Actions minutes.
   workflow_dispatch:
 
 permissions:
@@ -37,10 +36,7 @@ jobs:
         with:
           node-version: "20"
 
-      - name: Keep Render services warm
+      - name: Retired-workflow guard
         run: |
-          curl -fsS --max-time 15 "https://marketpulse-os-d4p9.onrender.com/api/fast-ticker?symbol=BTCUSDT" >/dev/null || true
-          curl -fsS --max-time 15 "https://marketpulse-autotrader.onrender.com/health" >/dev/null || true
+          echo "MarketPulse Continuous Intelligence is retired; no scheduled sweep will run."
 
-      - name: Run scheduled intelligence sweep
-        run: node marketpulse-worker-once.js
