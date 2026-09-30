@@ -1090,6 +1090,135 @@ class StrategyEngine:
             parts.append(f"15m structure is {f.market_structure.lower()}")
         return "; ".join(parts) + "."
 
+    def _build_market_story(
+        self,
+        state: MarketState,
+        f: MarketFeatures,
+        radar: list[dict],
+        sfp_hunter: dict,
+        breakout_watch: dict,
+        setups: dict[str, dict],
+    ) -> dict:
+        """Build an auditable market narrative from structure and confluence."""
+        direction_scores = {
+            "LONG": next((int(x.get("score", 0)) for x in radar if x.get("direction") == "LONG"), 0),
+            "SHORT": next((int(x.get("score", 0)) for x in radar if x.get("direction") == "SHORT"), 0),
+        }
+
+        if f.trend_240 == "UP" and f.trend_60 == "UP" and f.market_structure == "BULLISH":
+            bias = "BULLISH"
+        elif f.trend_240 == "DOWN" and f.trend_60 == "DOWN" and f.market_structure == "BEARISH":
+            bias = "BEARISH"
+        elif direction_scores["LONG"] >= direction_scores["SHORT"] + 2:
+            bias = "LEAN_LONG"
+        elif direction_scores["SHORT"] >= direction_scores["LONG"] + 2:
+            bias = "LEAN_SHORT"
+        else:
+            bias = "BALANCED"
+
+        narrative = [
+            f"4H trend is {f.trend_240.lower()} and 1H trend is {f.trend_60.lower()}",
+            f"15m structure is {f.market_structure.lower()} with 15m trend {f.trend_15.lower()}",
+            f"15m Elliott context is {f.elliott_phase.lower().replace('_', ' ')} / {f.elliott_wave.lower()} / {f.elliott_direction.lower()} at {f.elliott_confidence:.0%} confidence",
+            f"1H Elliott context is {f.elliott_60_phase.lower().replace('_', ' ')} / {f.elliott_60_direction.lower()} at {f.elliott_60_confidence:.0%} confidence",
+        ]
+
+        if f.trend_15 != f.trend_60 and f.trend_15 not in {"UNKNOWN", "RANGE"} and f.trend_60 not in {"UNKNOWN", "RANGE"}:
+            narrative.append("15m is moving against the 1H, so treat the move as a pullback/reversal candidate rather than automatic continuation.")
+
+        if f.cvd_price_divergence != "NONE":
+            narrative.append(f"CVD/price context is {f.cvd_price_divergence.lower()}.")
+        if abs(f.oi_change_15m_pct) >= 0.25:
+            narrative.append(f"15m open interest changed {f.oi_change_15m_pct:+.2f}% and is included as positioning context.")
+        if f.fvg_direction != "NONE":
+            narrative.append(f"Recent FVG is {f.fvg_direction.lower()}.")
+        if f.order_block_direction != "NONE":
+            narrative.append(f"Recent order block is {f.order_block_direction.lower()}.")
+
+        trigger_candidates: list[str] = []
+        if sfp_hunter.get("status") == "TRIGGERED":
+            trigger_candidates.append(f"{sfp_hunter.get('pattern', 'SFP')} at {sfp_hunter.get('target_level', 'liquidity level')}")
+        if breakout_watch.get("status") == "BREAKOUT":
+            trigger_candidates.append(str(breakout_watch.get("event", "breakout")))
+        for name in ("SFP", "D-Line", "MSS"):
+            detail = setups.get(name) or {}
+            if detail.get("status") == "VALIDATED":
+                trigger_candidates.append(f"{name} validated")
+            elif detail.get("status") == "CANDIDATE":
+                trigger_candidates.append(f"{name} candidate")
+
+        if trigger_candidates:
+            narrative.append("Current trigger map: " + " • ".join(trigger_candidates[:4]))
+        else:
+            narrative.append("No confirmed price-action trigger is active; the engine is waiting for one.")
+
+        governor = self.governor_status()
+        active = self.active_signal if self.signal_status == "ACTIVE" else None
+        if active:
+            no_trade_reason = "An active signal is unresolved; no opposite-direction signal is permitted."
+        elif governor.get("daily_count", 0) >= governor.get("daily_max", 3):
+            no_trade_reason = "Daily elite-signal quota has been reached; WAIT."
+        elif governor.get("cooldown_remaining_ms", 0) > 0:
+            no_trade_reason = "Post-trade quality cooldown is active; WAIT for a new independent setup."
+        elif bias == "BALANCED":
+            no_trade_reason = "Directional evidence is balanced; wait for structural confirmation."
+        elif f.elliott_phase == "RANGE_OR_AMBIGUOUS" and abs(direction_scores["LONG"] - direction_scores["SHORT"]) < 2:
+            no_trade_reason = "Elliott count is ambiguous and directional evidence is not decisive; do not force a wave count."
+        else:
+            no_trade_reason = "WAIT unless a candidate clears every live quality gate."
+
+        summary = (
+            f"MARKET STORY: {bias}. "
+            + " → ".join([
+                f"4H {f.trend_240.lower()}",
+                f"1H {f.trend_60.lower()}",
+                f"15m {f.trend_15.lower()}",
+                f"{f.market_structure.lower()} structure",
+            ])
+            + f". Elliott: {f.elliott_phase.lower().replace('_', ' ')}"
+            + (f" with {f.elliott_direction.lower()} context." if f.elliott_direction not in {"NEUTRAL", "UNKNOWN"} else ".")
+        )
+
+        return {
+            "bias": bias,
+            "summary": summary,
+            "narrative": narrative,
+            "wave_context": {
+                "15m": {
+                    "phase": f.elliott_phase,
+                    "wave": f.elliott_wave,
+                    "direction": f.elliott_direction,
+                    "confidence": round(f.elliott_confidence, 3),
+                    "reason": f.elliott_reason,
+                },
+                "1h": {
+                    "phase": f.elliott_60_phase,
+                    "direction": f.elliott_60_direction,
+                    "confidence": round(f.elliott_60_confidence, 3),
+                    "reason": f.elliott_60_reason,
+                },
+            },
+            "trade_map": {
+                "LONG": {
+                    "status": "STRONGER_CONTEXT" if direction_scores["LONG"] >= direction_scores["SHORT"] + 2 else "WATCH",
+                    "trigger": "Bullish SFP/reclaim, validated D-Line/MSS, or accepted breakout with supporting confluence.",
+                    "invalidation": "Loss of structural support/swept low or clear bearish acceptance.",
+                },
+                "SHORT": {
+                    "status": "STRONGER_CONTEXT" if direction_scores["SHORT"] >= direction_scores["LONG"] + 2 else "WATCH",
+                    "trigger": "Bearish SFP/rejection, validated D-Line/MSS, or accepted breakout with supporting confluence.",
+                    "invalidation": "Reclaim of structural resistance/swept high or clear bullish acceptance.",
+                },
+            },
+            "trigger_map": trigger_candidates[:5],
+            "primary_scenario": "LONG" if direction_scores["LONG"] >= direction_scores["SHORT"] else "SHORT",
+            "long_score": direction_scores["LONG"],
+            "short_score": direction_scores["SHORT"],
+            "no_trade_reason": no_trade_reason,
+            "active_signal_lock": bool(active),
+            "governor": governor,
+        }
+
     def _build_liquidity_map(self, state: MarketState, f: MarketFeatures) -> dict:
         if state.last_price is None:
             return {"above": [], "below": []}
@@ -1391,6 +1520,7 @@ class StrategyEngine:
             "scenario_tree": scenarios,
             "liquidity_map": self.liquidity_map_state,
             "multi_timeframe_story": self.multi_tf_story,
+            "market_story": {},
             "radar_lead": radar_top,
             "evidence_matrix": evidence_matrix,
             "sfp_hunter": sfp_hunter,
@@ -1564,6 +1694,9 @@ class StrategyEngine:
                 mss["reason"] = "No confirmed 15m body close through the latest structure level."
             result["setups"]["MSS"] = mss
 
+        result["market_story"] = self._build_market_story(
+            state, f0, radar, sfp_hunter, breakout_watch, result["setups"]
+        )
         waits = []
         for name, detail in result["setups"].items():
             if detail.get("status") in {"WAITING", "REJECTED"}:
