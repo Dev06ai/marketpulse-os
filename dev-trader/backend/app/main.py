@@ -251,12 +251,15 @@ async def setup_memory_refresh_loop():
                 if now_mono - last_learning_rehydrate_ts >= 60.0:
                     history = await bridge.fetch_learning_history(SYMBOL)
                     engine.learning.rehydrate(history)
+                    engine.rehydrate_remote_history(history)
                     last_learning_rehydrate_ts = now_mono
 
                 # Reconcile any persisted live signal after a restart/cold start.
                 # This prevents an open signal from being forgotten merely because
                 # the Python process restarted while the market was moving.
                 open_predictions = await bridge.fetch_open_signals(SYMBOL)
+                if open_predictions:
+                    engine.restore_external_active_signal(open_predictions[0])
                 if state.last_price is not None:
                     current_price = float(state.last_price)
                     for row in open_predictions[:20]:
