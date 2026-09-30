@@ -101,6 +101,27 @@ async function init(){
       await pool.query('CREATE INDEX IF NOT EXISTS idx_signal_dna_lookup ON marketpulse_signal_dna(symbol,interval,candle_ts DESC)');
       await pool.query('CREATE INDEX IF NOT EXISTS idx_signal_dna_regime ON marketpulse_signal_dna(regime,status)');
       await pool.query('CREATE INDEX IF NOT EXISTS idx_learning_open ON marketpulse_learning_predictions(symbol,interval,outcome) WHERE outcome IS NULL');
+      await pool.query(`CREATE TABLE IF NOT EXISTS marketpulse_setup_memory (
+        id TEXT PRIMARY KEY,
+        symbol TEXT NOT NULL,
+        interval TEXT NOT NULL,
+        title TEXT NOT NULL,
+        setup_key TEXT NOT NULL,
+        direction TEXT NOT NULL,
+        zone_low NUMERIC,
+        zone_high NUMERIC,
+        trigger_patterns JSONB NOT NULL DEFAULT '[]'::jsonb,
+        required_evidence JSONB NOT NULL DEFAULT '{}'::jsonb,
+        invalidation_price NUMERIC,
+        notes TEXT NOT NULL DEFAULT '',
+        source_type TEXT NOT NULL DEFAULT 'manual',
+        source_ref TEXT,
+        priority NUMERIC NOT NULL DEFAULT 1,
+        active BOOLEAN NOT NULL DEFAULT TRUE,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        expires_at TIMESTAMPTZ
+      )`);
+      await pool.query('CREATE INDEX IF NOT EXISTS idx_setup_memory_active ON marketpulse_setup_memory(symbol,interval,active,created_at DESC)');
       await pool.query(`CREATE TABLE IF NOT EXISTS marketpulse_phase4 (
         device_id TEXT PRIMARY KEY,
         payload JSONB NOT NULL DEFAULT '{}'::jsonb,
@@ -373,6 +394,83 @@ async function resolveLearningPrediction(fingerprint,outcome,resultR){
   for(const x of rows)if(x.fingerprint===fingerprint&&!x.outcome){x.outcome=outcome;x.resultR=resultR;x.resolvedAt=new Date().toISOString()}
   all.__learning_predictions__=rows.slice(-5000);writeLocal(all);
 }
+
+async function saveSetupMemory(memory){
+  await init();
+  const m=memory&&typeof memory==="object"?memory:{};
+  const id=String(m.id||crypto.randomUUID?.()||("setup-"+Date.now()));
+  const payload={
+    id,
+    symbol:String(m.symbol||"BTCUSDT").toUpperCase(),
+    interval:String(m.interval||"15m"),
+    title:String(m.title||m.setupKey||"Human setup memory"),
+    setupKey:String(m.setupKey||m.setup_key||"GENERIC").toUpperCase(),
+    direction:String(m.direction||"BOTH").toUpperCase(),
+    zoneLow:Number.isFinite(Number(m.zoneLow))?Number(m.zoneLow):null,
+    zoneHigh:Number.isFinite(Number(m.zoneHigh))?Number(m.zoneHigh):null,
+    triggerPatterns:Array.isArray(m.triggerPatterns)?m.triggerPatterns.map(String):[],
+    requiredEvidence:m.requiredEvidence&&typeof m.requiredEvidence==="object"?m.requiredEvidence:{},
+    invalidationPrice:Number.isFinite(Number(m.invalidationPrice))?Number(m.invalidationPrice):null,
+    notes:String(m.notes||""),
+    sourceType:String(m.sourceType||"manual"),
+    sourceRef:m.sourceRef?String(m.sourceRef):null,
+    priority:Number.isFinite(Number(m.priority))?Number(m.priority):1,
+    active:m.active!==false,
+    expiresAt:m.expiresAt?new Date(m.expiresAt):null
+  };
+  if(mode==="postgres"){
+    await pool.query(`INSERT INTO marketpulse_setup_memory
+      (id,symbol,interval,title,setup_key,direction,zone_low,zone_high,trigger_patterns,required_evidence,invalidation_price,notes,source_type,source_ref,priority,active,expires_at)
+      VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
+      ON CONFLICT(id) DO UPDATE SET
+        symbol=EXCLUDED.symbol,interval=EXCLUDED.interval,title=EXCLUDED.title,setup_key=EXCLUDED.setup_key,
+        direction=EXCLUDED.direction,zone_low=EXCLUDED.zone_low,zone_high=EXCLUDED.zone_high,
+        trigger_patterns=EXCLUDED.trigger_patterns,required_evidence=EXCLUDED.required_evidence,
+        invalidation_price=EXCLUDED.invalidation_price,notes=EXCLUDED.notes,source_type=EXCLUDED.source_type,
+        source_ref=EXCLUDED.source_ref,priority=EXCLUDED.priority,active=EXCLUDED.active,expires_at=EXCLUDED.expires_at`,
+      [payload.id,payload.symbol,payload.interval,payload.title,payload.setupKey,payload.direction,payload.zoneLow,payload.zoneHigh,
+       payload.triggerPatterns,payload.requiredEvidence,payload.invalidationPrice,payload.notes,payload.sourceType,payload.sourceRef,
+       payload.priority,payload.active,payload.expiresAt]);
+    return {stored:true,storage:"postgres",memory:payload};
+  }
+  const all=readLocal(),rows=Array.isArray(all.__setup_memory__)?all.__setup_memory__:[],idx=rows.findIndex(x=>x.id===payload.id);
+  if(idx>=0)rows[idx]=payload;else rows.push(payload);
+  all.__setup_memory__=rows.slice(-2000);writeLocal(all);
+  return {stored:true,storage:"local",memory:payload};
+}
+async function getSetupMemories({symbol=null,interval=null,limit=100}={}){
+  await init();
+  const lim=Math.max(1,Math.min(Number(limit)||100,500));
+  if(mode==="postgres"){
+    const params=[];const where=["active=TRUE","(expires_at IS NULL OR expires_at>NOW())"];
+    if(symbol){params.push(String(symbol).toUpperCase());where.push(`symbol=${params.length}`)}
+    if(interval){params.push(String(interval));where.push(`(interval=${params.length} OR interval='ALL')`)}
+    params.push(lim);
+    const q=`SELECT id,symbol,interval,title,setup_key AS "setupKey",direction,zone_low AS "zoneLow",zone_high AS "zoneHigh",
+      trigger_patterns AS "triggerPatterns",required_evidence AS "requiredEvidence",invalidation_price AS "invalidationPrice",
+      notes,source_type AS "sourceType",source_ref AS "sourceRef",priority,active,created_at AS "createdAt",expires_at AS "expiresAt"
+      FROM marketpulse_setup_memory WHERE ${where.join(" AND ")}
+      ORDER BY priority DESC,created_at DESC LIMIT ${params.length}`;
+    const r=await pool.query(q,params);return r.rows;
+  }
+  const all=readLocal();let rows=Array.isArray(all.__setup_memory__)?all.__setup_memory__:[];
+  const now=Date.now();
+  return rows.filter(x=>x.active!==false&&(!x.expiresAt||Date.parse(x.expiresAt)>now)&&(!symbol||x.symbol===String(symbol).toUpperCase())&&(!interval||x.interval===String(interval)||x.interval==="ALL"))
+    .sort((a,b)=>(Number(b.priority)||0)-(Number(a.priority)||0)||Number(b.createdAt||0)-Number(a.createdAt||0)).slice(0,lim);
+}
+async function deactivateSetupMemory(id){
+  await init();
+  const key=String(id||"");
+  if(!key)return {updated:false};
+  if(mode==="postgres"){
+    const r=await pool.query("UPDATE marketpulse_setup_memory SET active=FALSE WHERE id=$1",[key]);
+    return {updated:Boolean(r.rowCount)};
+  }
+  const all=readLocal(),rows=Array.isArray(all.__setup_memory__)?all.__setup_memory__:[];
+  let updated=false;for(const x of rows){if(x.id===key){x.active=false;updated=true}}
+  all.__setup_memory__=rows;writeLocal(all);return {updated};
+}
+
 async function saveSignalDNA(records){
   await init();const rows=Array.isArray(records)?records:[];
   if(mode==="postgres"){
