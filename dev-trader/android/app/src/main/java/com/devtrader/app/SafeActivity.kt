@@ -86,6 +86,33 @@ class SafeActivity : Activity() {
     private var lastSocketRebuildMs = 0L
     private var reconnectRunnable: Runnable? = null
 
+    private val keepaliveRunnable = object : Runnable {
+        override fun run() {
+            if (stopped) return
+            val ws = socket
+            if (ws != null) {
+                val ok = runCatching {
+                    ws.send(
+                        JSONObject().apply {
+                            put("type", "keepalive")
+                            put("client_ts", System.currentTimeMillis())
+                        }.toString()
+                    )
+                }.getOrDefault(false)
+                if (!ok) {
+                    handler.post {
+                        if (!stopped) reconnect(immediate = true)
+                    }
+                }
+            }
+            handler.postDelayed(this, KEEPALIVE_INTERVAL_MS)
+        }
+    }
+
+    companion object {
+        private const val KEEPALIVE_INTERVAL_MS = 15_000L
+    }
+
     private val backendBase = "https://dev-trader-engine.onrender.com"
 
     private val client by lazy {
@@ -119,6 +146,7 @@ class SafeActivity : Activity() {
         handler.postDelayed({
             safe { watchdog() }
         }, 3000L)
+        handler.postDelayed(keepaliveRunnable, KEEPALIVE_INTERVAL_MS)
     }
 
     private fun installCrashReporter() {
@@ -431,6 +459,14 @@ class SafeActivity : Activity() {
                     reconnectAttempt = 0
                     reconnectScheduled.set(false)
                     lastSocketActivityMs = System.currentTimeMillis()
+                    runCatching {
+                        ws.send(
+                            JSONObject().apply {
+                                put("type", "keepalive")
+                                put("client_ts", System.currentTimeMillis())
+                            }.toString()
+                        )
+                    }
                     handler.post {
                         status.text = "SYNCING…"
                         integrity.text = "WebSocket  •  CONNECTED  •  LIVE FEED SUPERVISOR"
@@ -484,9 +520,11 @@ class SafeActivity : Activity() {
     }
 
     private fun reconnect(immediate: Boolean = false) {
-        if (stopped || socket != null) return
+        if (stopped) return
         if (immediate) {
             reconnectScheduled.set(false)
+            reconnectRunnable?.let { handler.removeCallbacks(it) }
+            reconnectRunnable = null
             handler.post {
                 if (!stopped) {
                     bootstrap(true)
@@ -495,6 +533,7 @@ class SafeActivity : Activity() {
             }
             return
         }
+        if (socket != null) return
         if (!reconnectScheduled.compareAndSet(false, true)) return
         val attempt = reconnectAttempt.coerceAtMost(4)
         val delay = minOf(15000L, 1000L * (1L shl attempt))
@@ -886,14 +925,14 @@ class SafeActivity : Activity() {
 
         // HTTP bootstrap is the hard fallback: the UI must recover even when the
         // WebSocket transport is unavailable or the phone changes networks.
-        if (stateAge > 2500L) {
+        if (stateAge > 5000L) {
             integrity.text = "Feed  •  RECOVERING •  HTTP SNAPSHOT ACTIVE"
             status.text = "DATA RECOVERY"
             bootstrap(false)
         }
 
-        if ((stateAge > 8000L || socketAge > 10000L) &&
-            now - lastSocketRebuildMs > 8000L
+        if ((stateAge > 12000L || socketAge > 15000L) &&
+            now - lastSocketRebuildMs > 10000L
         ) {
             lastSocketRebuildMs = now
             integrity.text = "Feed  •  STALE •  REBUILDING WEBSOCKET"
