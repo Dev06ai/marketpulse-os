@@ -6,6 +6,7 @@ import time
 from .analytics import MarketFeatures, compute_features
 from .models import Candle, MarketState
 from .knowledge import RULES
+from .learning import AdaptiveLearning
 
 
 @dataclass
@@ -456,13 +457,15 @@ def detect_mss(state: MarketState) -> Optional[Signal]:
 
 
 class StrategyEngine:
-    def __init__(self):
+    def __init__(self, learning: AdaptiveLearning | None = None):
+        self.learning = learning or AdaptiveLearning()
         self.last_signal_id = None
         self.active_signal = None
         self.signal_status = "NONE"
         self.signal_history: list[dict] = []
         self.last_evaluated_ts = 0
         self.last_lifecycle_event: dict | None = None
+        self.last_lifecycle_events: list[dict] = []
         self.setup_memories: list[dict] = []
         self.position_management: dict | None = None
         self.last_diagnostics: dict = {"status": "STARTING", "wait_reason": "Engine has not evaluated market data yet.", "blocked_by": [], "setups": {}, "signal_state": "NONE"}
@@ -566,6 +569,22 @@ class StrategyEngine:
             "setups": {},
             "signal_state": "NONE",
         }
+
+    def _apply_learning_context(self, signal: Signal, state: MarketState):
+        context = self.learning.context(signal.to_dict())
+        signal.evidence["adaptive_learning"] = context
+        delta = float(context.get("confidence_delta") or 0.0)
+        if delta:
+            signal.confidence = max(0.0, min(0.99, signal.confidence + delta))
+            if signal.rr >= float(RULES["risk"].get("elite_min_rr", 3.0)) and signal.confidence >= float(RULES.get("signal", {}).get("elite_confidence", 0.70)):
+                signal.grade = "A"
+        favorable = context.get("favorable_conditions") or []
+        caution = context.get("caution_conditions") or []
+        if favorable:
+            signal.thesis.append("Adaptive learning: historically favorable context — " + ", ".join(x["tag"] for x in favorable[:2]) + ".")
+        if caution:
+            signal.thesis.append("Adaptive learning caution: weak historical context — " + ", ".join(x["tag"] for x in caution[:2]) + ".")
+        signal.thesis.append("Learning is advisory and bounded; risk gates and manual execution remain unchanged.")
 
     def _pattern_gate(self, state: MarketState, setup: str, direction: str, entry: float, stop: float, target: float, f: MarketFeatures, structural: dict) -> dict:
         gate = _gate_details(direction, setup, entry, stop, target, f)
@@ -971,6 +990,7 @@ class StrategyEngine:
         scenarios = self._build_scenarios(state, f0, radar) if radar else []
         self.opportunity_radar_state = radar
         self.scenario_tree_state = scenarios
+        learning_context = self.learning.context(self.active_signal) if self.active_signal else None
         self.liquidity_map_state = self._build_liquidity_map(state, f0)
         self.multi_tf_story = self._build_multi_tf_story(f0)
         radar_top = radar[0] if radar else None
@@ -1000,6 +1020,8 @@ class StrategyEngine:
             "breakout_watch": breakout_watch,
             "evidence_matrix": evidence_matrix,
             "data_quality": state.data_health,
+            "learning": self.learning.summary(),
+            "learning_context": learning_context,
             "market_features": {
                 "trend_15": f0.trend_15,
                 "trend_60": f0.trend_60,
@@ -1269,40 +1291,120 @@ class StrategyEngine:
 
     def _update_signal_lifecycle(self, state: MarketState):
         self.last_lifecycle_event = None
+        self.last_lifecycle_events = []
         if not self.active_signal or state.last_price is None or self.signal_status != "ACTIVE":
             return
+
+        price = float(state.last_price)
         stop = float(self.active_signal["stop"])
-        target = float(self.active_signal["target2"])
-        direction = self.active_signal["direction"]
-        previous = self.signal_status
+        target1 = float(self.active_signal["target1"])
+        target2 = float(self.active_signal["target2"])
+        direction = str(self.active_signal["direction"]).upper()
+        now = int(time.time() * 1000)
+        events: list[dict] = []
+
+        def emit(stage: str, event_type: str, level: float, note: str, final: bool, result_r: float = 0.0):
+            event = {
+                "key": f"{event_type}:{self.active_signal.get('id')}",
+                "type": event_type,
+                "stage": stage,
+                "signal_id": self.active_signal.get("id"),
+                "direction": direction,
+                "setup": self.active_signal.get("setup", ""),
+                "price": price,
+                "level": level,
+                "ts": now,
+                "note": note,
+                "final": final,
+                "result_r": round(float(result_r), 3),
+            }
+            events.append(event)
+            self.learning.record_event(self.active_signal, event_type, price, note)
+            self.active_signal["last_event"] = event
+
+        tp1_hit = bool(self.active_signal.get("tp1_hit_ts"))
         if direction == "LONG":
-            if state.last_price <= stop:
-                self.signal_status = "INVALIDATED"
-            elif state.last_price >= target:
+            if not tp1_hit and price >= target1:
+                self.active_signal["tp1_hit_ts"] = now
+                emit("TP1", "TP1_HIT", target1,
+                     "TP1 reached. Protect the remaining position manually; TP2 remains the final tracked target.",
+                     False, 1.5)
+                tp1_hit = True
+            if price >= target2:
+                if not tp1_hit:
+                    self.active_signal["tp1_hit_ts"] = now
+                    emit("TP1", "TP1_HIT", target1, "Price crossed TP1 and TP2 in the same market update.", False, 1.5)
+                self.active_signal["tp2_hit_ts"] = now
                 self.signal_status = "TARGET_REACHED"
+                emit("TP2", "TP2_HIT", target2, "Final tracked target reached.", True, float(self.active_signal.get("rr") or 0.0))
+            elif price <= stop:
+                self.active_signal["sl_hit_ts"] = now
+                self.signal_status = "INVALIDATED"
+                emit("SL", "SL_HIT", stop,
+                     "Stop/invalidation level reached." if not tp1_hit else
+                     "Stop reached after TP1. Actual realized PnL depends on manual position management.",
+                     True, 0.0 if tp1_hit else -1.0)
         else:
-            if state.last_price >= stop:
-                self.signal_status = "INVALIDATED"
-            elif state.last_price <= target:
+            if not tp1_hit and price <= target1:
+                self.active_signal["tp1_hit_ts"] = now
+                emit("TP1", "TP1_HIT", target1,
+                     "TP1 reached. Protect the remaining position manually; TP2 remains the final tracked target.",
+                     False, 1.5)
+                tp1_hit = True
+            if price <= target2:
+                if not tp1_hit:
+                    self.active_signal["tp1_hit_ts"] = now
+                    emit("TP1", "TP1_HIT", target1, "Price crossed TP1 and TP2 in the same market update.", False, 1.5)
+                self.active_signal["tp2_hit_ts"] = now
                 self.signal_status = "TARGET_REACHED"
+                emit("TP2", "TP2_HIT", target2, "Final tracked target reached.", True, float(self.active_signal.get("rr") or 0.0))
+            elif price >= stop:
+                self.active_signal["sl_hit_ts"] = now
+                self.signal_status = "INVALIDATED"
+                emit("SL", "SL_HIT", stop,
+                     "Stop/invalidation level reached." if not tp1_hit else
+                     "Stop reached after TP1. Actual realized PnL depends on manual position management.",
+                     True, 0.0 if tp1_hit else -1.0)
 
         self.active_signal["lifecycle"] = self.signal_status
-        self.active_signal["last_price_seen"] = state.last_price
+        self.active_signal["lifecycle_stage"] = "TP2_HIT" if self.active_signal.get("tp2_hit_ts") else ("TP1_HIT" if self.active_signal.get("tp1_hit_ts") else "ACTIVE")
+        self.active_signal["last_price_seen"] = price
+        self.last_lifecycle_events = events
 
-        if self.signal_status != previous:
-            result_r = 1.0 if self.signal_status == "TARGET_REACHED" else -1.0
+        if events:
+            final = next((x for x in reversed(events) if x.get("final")), None)
+            if final:
+                lesson = self.learning.resolve(
+                    self.active_signal,
+                    "TP2_REACHED" if final["type"] == "TP2_HIT" else "SL_HIT",
+                    float(final["result_r"]),
+                )
+                final["learning_review"] = lesson
+                self.active_signal["learning_review"] = lesson
+
             signal_snapshot = dict(self.active_signal)
-            self.last_lifecycle_event = {
-                "signal": signal_snapshot,
-                "outcome": self.signal_status,
-                "result_r": result_r,
-            }
-            for row in self.signal_history:
-                if row.get("id") == self.active_signal.get("id"):
-                    row["status"] = self.signal_status
-                    row["resolved_ts"] = int(time.time() * 1000)
-                    row["result_r"] = result_r
-                    break
+            for event in events:
+                self.last_lifecycle_event = {
+                    "signal": signal_snapshot,
+                    "event": event,
+                    "outcome": (
+                        "TP1_REACHED" if event["type"] == "TP1_HIT"
+                        else "TARGET_REACHED" if event["type"] == "TP2_HIT"
+                        else "INVALIDATED"
+                    ),
+                    "result_r": float(event.get("result_r") or 0.0),
+                }
+
+            if self.signal_status != "ACTIVE":
+                for row in self.signal_history:
+                    if row.get("id") == self.active_signal.get("id"):
+                        row["status"] = self.signal_status
+                        row["resolved_ts"] = now
+                        row["result_r"] = float((final or events[-1]).get("result_r") or 0.0)
+                        row["tp1_hit"] = bool(self.active_signal.get("tp1_hit_ts"))
+                        row["learning_review"] = self.active_signal.get("learning_review")
+                        break
+
 
     def evaluate(self, state: MarketState) -> Optional[Signal]:
         self.last_evaluated_ts = int(time.time() * 1000)
@@ -1324,6 +1426,7 @@ class StrategyEngine:
             return None
         signal = max(signals, key=lambda s: (s.confidence, s.rr))
         self._apply_memory_context(signal, state)
+        self._apply_learning_context(signal, state)
         previous_signal = dict(self.active_signal) if self.active_signal else None
         self.position_management = self._build_position_management(previous_signal, signal, state)
         if self.position_management:
@@ -1335,7 +1438,9 @@ class StrategyEngine:
         self.last_signal_id = signal.id
         self.active_signal = signal.to_dict()
         self.active_signal["lifecycle"] = "ACTIVE"
+        self.active_signal["lifecycle_stage"] = "ACTIVE"
         self.active_signal["created_ts"] = self.last_evaluated_ts
+        self.learning.record_open(self.active_signal)
         self.signal_status = "ACTIVE"
         self.signal_history.insert(0, {
             "id": signal.id,
@@ -1349,6 +1454,8 @@ class StrategyEngine:
             "grade": signal.grade,
             "created_ts": self.last_evaluated_ts,
             "status": "ACTIVE",
+            "tp1_hit": False,
+            "tp2_hit": False,
         })
         self.signal_history = self.signal_history[:25]
         self.last_diagnostics["signal_state"] = self.signal_status
