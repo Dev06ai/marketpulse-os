@@ -361,11 +361,16 @@ class SafeActivity : Activity() {
                     val notifications = Build.VERSION.SDK_INT < 33 ||
                         checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
 
-                    check.text = "API  " + if (api) "PASS" else "FAIL" +
-                        "\nBybit  " + if (healthy) "HEALTHY" else "NOT HEALTHY" +
-                        "\nEngine WS  " + if (ws) "CONNECTED" else "DISCONNECTED" +
-                        "\nStrategy  " + if (scanning) "SCANNING" else "NOT READY" +
-                        "\nAlerts  " + if (notifications) "READY" else "NOT ENABLED"
+                    val apiText = if (api) "PASS" else "FAIL"
+                    val bybitText = if (healthy) "HEALTHY" else "NOT HEALTHY"
+                    val wsText = if (ws) "CONNECTED" else "DISCONNECTED"
+                    val strategyText = if (scanning) "SCANNING" else "NOT READY"
+                    val alertText = if (notifications) "READY" else "NOT ENABLED"
+                    check.text = "API  " + apiText +
+                        "\nBybit  " + bybitText +
+                        "\nEngine WS  " + wsText +
+                        "\nStrategy  " + strategyText +
+                        "\nAlerts  " + alertText
                 }
                 checkButton.isEnabled = true
             }
