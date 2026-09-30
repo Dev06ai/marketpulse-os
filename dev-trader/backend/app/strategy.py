@@ -635,7 +635,7 @@ class StrategyEngine:
                     daily += 1
             if resolved:
                 last_resolved = max(last_resolved, resolved)
-            if str(row.get("status") or "").upper() == "ACTIVE" and opened and now - opened < 24 * 60 * 60_000:
+            if str(row.get("status") or "").upper() == "ACTIVE" and opened:
                 active = row
         self.daily_signal_count = min(daily, _quality_max_daily())
         self.last_resolved_ts = last_resolved
@@ -1291,6 +1291,7 @@ class StrategyEngine:
             "confirmed_1h_candles": len([c for c in state.candles_60 if c.confirmed]),
             "signal_state": self.signal_status,
             "active_signal": self.active_signal,
+            "trade_governor": self.governor_status(),
             "setup_watch": self.setup_watch(state),
             "opportunity_radar": radar,
             "scenario_tree": scenarios,
@@ -1731,6 +1732,9 @@ class StrategyEngine:
         if not qualified:
             self.governor_last_quality_rejection = " | ".join(rejected[:3])
             self.governor_lock_reason = "WAITING: no candidate met the elite quality gate."
+            self.last_diagnostics["status"] = "QUALITY_LOCK"
+            self.last_diagnostics["wait_reason"] = "No candidate met the elite quality gate."
+            self.last_diagnostics["blocked_by"] = ["quality_governor"]
             return None
 
         signal = max(qualified, key=lambda s: (s.confidence, s.rr))
