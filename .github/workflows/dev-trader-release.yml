@@ -1,4 +1,4 @@
-name: Dev Trader Release
+name: Dev Trader Release # 0.5.0 exchange-style bot UI
 
 on:
   push:
