@@ -190,7 +190,40 @@ class SafeActivity : Activity() {
 
         updateButton = actionButton("CHECK FOR UPDATES")
         updateButton.setOnClickListener { safe { checkUpdate() } }
-        root.addView(updateButton, margins(bottom = 12))
+        root.addView(updateButton, margins(bottom = 10))
+
+        val contextCard = card("MARKET CONTEXT", "Loading regime and structure…", 14f)
+        features = contextCard.value
+        root.addView(contextCard.container, margins(bottom = 10))
+
+        val riskCard = card("PROP RISK ENGINE", "Waiting for a validated setup…", 14f)
+        risk = riskCard.value
+        root.addView(riskCard.container, margins(bottom = 8))
+
+        val riskRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        accountEdit = numberField("Account", "5000")
+        riskEdit = numberField("Risk %", "1")
+        riskRow.addView(accountEdit, LinearLayout.LayoutParams(0, dp(52), 2f).apply { rightMargin = dp(5) })
+        riskRow.addView(riskEdit, LinearLayout.LayoutParams(0, dp(52), 1f).apply { leftMargin = dp(5) })
+        root.addView(riskRow, margins(bottom = 8))
+
+        val riskButton = actionButton("CALCULATE RISK")
+        riskButton.setOnClickListener { safe { calculateRisk() } }
+        root.addView(riskButton, margins(bottom = 10))
+
+        val journalCard = card("TRADING JOURNAL", "No signals recorded yet.", 14f)
+        journal = journalCard.value
+        root.addView(journalCard.container, margins(bottom = 8))
+        val journalButton = actionButton("REFRESH JOURNAL")
+        journalButton.setOnClickListener { loadJournal() }
+        root.addView(journalButton, margins(bottom = 10))
+
+        val replayCard = card("MARKET REPLAY / BACKTEST", "Not run yet.", 14f)
+        replay = replayCard.value
+        root.addView(replayCard.container, margins(bottom = 8))
+        val replayButton = actionButton("RUN RECENT 15M REPLAY")
+        replayButton.setOnClickListener { safe { runReplay() } }
+        root.addView(replayButton, margins(bottom = 10))
 
         val diagnostics = card("SYSTEM CHECK", "Not run yet", 16f)
         check = diagnostics.value
