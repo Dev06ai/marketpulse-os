@@ -341,10 +341,13 @@ function normalizeLivePrediction(payload){
   const target=Number(payload?.target2??payload?.target??s.target2??s.target);
   const stop=Number(payload?.stop??s.stop);
   const price=Number(payload?.entry??payload?.price??s.entry);
+  const signalId=String(s?.id||payload?.signalId||"");
   return {
-    fingerprint:String(payload?.fingerprint||[
-      "DEV_TRADER",symbol,interval,createdTs,side,type
-    ].join("|")),
+    fingerprint:String(payload?.fingerprint||(
+      signalId
+        ? ["DEV_TRADER",signalId].join("|")
+        : ["DEV_TRADER",symbol,interval,createdTs,side,type].join("|")
+    )),
     symbol,interval,candleTs:createdTs,side,type,status:"READY",
     score:Number.isFinite(score)?score:0,price:Number.isFinite(price)?price:null,
     stop:Number.isFinite(stop)?stop:null,target:Number.isFinite(target)?target:null,
@@ -356,6 +359,7 @@ function normalizeLivePrediction(payload){
       regime:String(payload?.regime??s.regime??"UNKNOWN"),
       side,type,
       setupKey:type.toUpperCase(),
+      signalId:signalId||null,
       components:Array.isArray(payload?.components)?payload.components:[],
       derivatives:{
         oiChangePct:Number(evidence?.oi_change_5m_pct??evidence?.oiChangePct??evidence?.oi_change_15m_pct),
