@@ -48,6 +48,20 @@ signal_policy:
   stale_data_blocks_signal: true
   duplicate_signal_block: true
   manual_execution_only: true
+  quality_governor:
+    enabled: true
+    max_signals_per_utc_day: 3
+    cooldown_minutes_after_resolution: 120
+    min_confidence: 0.70
+    min_rr: 3.0
+    require_grade_a: true
+    require_1h_alignment: true
+    require_4h_alignment: true
+    require_structure_alignment: true
+    minimum_extra_confirmations: 2
+    block_high_vol: true
+    block_range_non_sfp: true
+    max_spread_bps: 5.0
 
 scan:
   mode: loose
