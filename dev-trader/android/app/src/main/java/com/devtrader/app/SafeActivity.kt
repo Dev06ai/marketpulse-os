@@ -620,6 +620,7 @@ class SafeActivity : Activity() {
             health == "CONNECTING" -> "CONNECTING…"
             health == "RECONNECTING" -> "RECONNECTING…"
             else -> health
+        }
         price.text = "BTC  " + if (priceValue.isNaN()) "—"
             else String.format(Locale.US, "%,.2f", priceValue) +
             "\nOI   " + if (oi.isNaN()) "—"
