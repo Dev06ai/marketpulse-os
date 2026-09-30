@@ -82,6 +82,7 @@ class SafeActivity : Activity() {
     private var networkCallback: ConnectivityManager.NetworkCallback? = null
     private var lastSocketActivityMs = 0L
     private var lastRetryRequestMs = 0L
+    private var lastSocketRebuildMs = 0L
     private var reconnectRunnable: Runnable? = null
 
     private val backendBase = "https://dev-trader-engine.onrender.com"
@@ -215,7 +216,7 @@ class SafeActivity : Activity() {
             b.setOnClickListener {
                 selectedTf = tf
                 chart.setTimeframe(tf)
-                requestChartIfNeeded(true)
+                bootstrap(true)
             }
             tfRow.addView(b, LinearLayout.LayoutParams(0, dp(46), 1f).apply {
                 leftMargin = dp(3)
@@ -440,7 +441,7 @@ class SafeActivity : Activity() {
                                 handler.post {
                                     pendingUiUpdate = false
                                     lastUiRenderMs = System.currentTimeMillis()
-                                    safe { renderState(root) }
+                                    safe { renderState(root, requestChart = false) }
                                 }
                             }
                         }
@@ -505,6 +506,7 @@ class SafeActivity : Activity() {
         if (now - lastRetryRequestMs < 1500L) return
         lastRetryRequestMs = now
         reconnectAttempt = 0
+        lastSocketRebuildMs = now
         retryButton?.isEnabled = false
         retryButton?.text = "RETRYING…"
         status.text = "DATA RECOVERY"
@@ -546,6 +548,7 @@ class SafeActivity : Activity() {
         if (now - lastRetryRequestMs < 1500L) return
         lastRetryRequestMs = now
         reconnectAttempt = 0
+        lastSocketRebuildMs = now
         bootstrap(true)
         connect(force = true)
     }
@@ -842,20 +845,24 @@ class SafeActivity : Activity() {
         val socketAge = if (lastSocketActivityMs == 0L) Long.MAX_VALUE
             else now - lastSocketActivityMs
 
-        when {
-            stateAge > 5000L -> {
-                integrity.text = "Feed  •  RECOVERING •  REST SNAPSHOT ACTIVE"
-                status.text = "DATA RECOVERY"
-                bootstrap(false)
-            }
-            stateAge > 9000L || socketAge > 12000L -> {
-                integrity.text = "Feed  •  STALE •  REBUILDING WEBSOCKET"
-                status.text = "RECONNECTING…"
-                reconnect(immediate = true)
-            }
+        // HTTP bootstrap is the hard fallback: the UI must recover even when the
+        // WebSocket transport is unavailable or the phone changes networks.
+        if (stateAge > 2500L) {
+            integrity.text = "Feed  •  RECOVERING •  HTTP SNAPSHOT ACTIVE"
+            status.text = "DATA RECOVERY"
+            bootstrap(false)
         }
 
-        handler.postDelayed({ safe { watchdog() } }, 2500L)
+        if ((stateAge > 8000L || socketAge > 10000L) &&
+            now - lastSocketRebuildMs > 8000L
+        ) {
+            lastSocketRebuildMs = now
+            integrity.text = "Feed  •  STALE •  REBUILDING WEBSOCKET"
+            status.text = "RECONNECTING…"
+            reconnect(immediate = true)
+        }
+
+        handler.postDelayed({ safe { watchdog() } }, 2000L)
     }
 
     private fun calculateRisk() {
@@ -1140,6 +1147,7 @@ class SafeActivity : Activity() {
 
     override fun onDestroy() {
         stopped = true
+        lastSocketRebuildMs = System.currentTimeMillis()
         runCatching {
             val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
             networkCallback?.let { cm.unregisterNetworkCallback(it) }
