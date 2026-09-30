@@ -677,14 +677,20 @@ class SafeActivity : Activity() {
                     management.optString("action", "Manage existing position") +
                     "\nWhy: " + management.optString("reason", "")
             } else ""
-            signal.text = "TRADE CALL  •  " + signalObj.optString("direction") + "  •  " + lifecycle +
+            val tradeStyle = signalObj.optString("trade_style", "SCALP")
+            val styleReason = signalObj.optString("style_reason", signalObj.optJSONObject("evidence")?.optString("style_reason", ""))
+            val evidenceObj = signalObj.optJSONObject("evidence")
+            val riskDistance = evidenceObj?.optDouble("risk_distance", Double.NaN) ?: Double.NaN
+            signal.text = "TRADE CALL  •  " + signalObj.optString("direction") + "  •  " + tradeStyle + "  •  " + lifecycle +
                 "\n" + signalObj.optString("setup") +
                 "\nEntry  " + String.format(Locale.US, "%.2f", signalObj.optDouble("entry")) +
                 "    SL  " + String.format(Locale.US, "%.2f", signalObj.optDouble("stop")) +
                 "\nTP1  " + String.format(Locale.US, "%.2f", signalObj.optDouble("target1")) +
                 "    TP2  " + String.format(Locale.US, "%.2f", signalObj.optDouble("target2")) +
-                "\nRR  " + String.format(Locale.US, "%.2f", signalObj.optDouble("rr")) +
+                "\nRisk  " + (if (riskDistance.isNaN()) "—" else String.format(Locale.US, "%.2f pts", riskDistance)) +
+                "  •  RR  " + String.format(Locale.US, "%.2f", signalObj.optDouble("rr")) +
                 "  •  Conf " + String.format(Locale.US, "%.0f%%", signalObj.optDouble("confidence") * 100) +
+                if (styleReason.isBlank()) "" else "\n" + styleReason +
                 if (reason.isBlank()) "" else "\n" + reason +
                 managementText
 
