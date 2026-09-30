@@ -105,6 +105,7 @@ class MarketChartView @JvmOverloads constructor(
     private var pinchStartZoomX = 1f
     private var pinchStartZoomY = 1f
     private var lastTapMs = 0L
+    private var lastDataCount = 0
 
     fun setData(
         candles: JSONArray,
@@ -116,13 +117,18 @@ class MarketChartView @JvmOverloads constructor(
         this.signal = signal
         this.ema50 = ema50
         if (!price.isNaN()) this.livePrice = price
+
+        val newCount = candles.length()
         if (followLive) {
             candleShift = 0f
             verticalOffset = 0.0
         } else {
-            val maxShift = max(0f, candles.length().toFloat() - visibleCount())
+            val added = (newCount - lastDataCount).coerceAtLeast(0)
+            if (added > 0) candleShift += added.toFloat()
+            val maxShift = max(0f, newCount.toFloat() - visibleCount())
             candleShift = candleShift.coerceIn(0f, maxShift)
         }
+        lastDataCount = newCount
         invalidate()
     }
 
