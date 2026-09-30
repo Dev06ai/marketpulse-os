@@ -72,6 +72,7 @@ class SafeActivity : Activity() {
     private var pendingUiUpdate = false
     private var lastUiRenderMs = 0L
     private var lastChartRequestMs = 0L
+    private var chartRequestInFlight = false
     private var lastBootstrapMs = 0L
     private var bootstrapInFlight = false
 
@@ -164,12 +165,12 @@ class SafeActivity : Activity() {
 
         root.addView(label("PRICE ACTION", 11f, Color.rgb(156, 160, 171), 0.11f), margins(bottom = 6))
         chart = MarketChartView(this).apply {
-            minimumHeight = dp(350)
+            minimumHeight = dp(410)
             isClickable = false
             isFocusable = false
             setOnTouchListener { _, _ -> false }
         }
-        root.addView(chart, LinearLayout.LayoutParams(-1, dp(350)).apply { bottomMargin = dp(8) })
+        root.addView(chart, LinearLayout.LayoutParams(-1, dp(410)).apply { bottomMargin = dp(10) })
 
         val tfRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -300,7 +301,7 @@ class SafeActivity : Activity() {
             setTextColor(Color.WHITE)
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
             includeFontPadding = false
-            setLineSpacing(0f, 1.12f)
+            setLineSpacing(0f, 1.24f)
         }
         box.addView(value, margins(top = 8))
         return CardRefs(box, value)
@@ -466,6 +467,7 @@ class SafeActivity : Activity() {
                     if (candles.length() > 0) {
                         val lastPrice = chartObj.optDouble("last_price", root.optDouble("last_price", Double.NaN))
                         chart.setTimeframe(selectedTf)
+                        chart.setLivePrice(lastPrice)
                         chart.setData(
                             candles,
                             root.optJSONObject("signal"),
@@ -529,29 +531,34 @@ class SafeActivity : Activity() {
 
         features.text =
             "REGIME  " + (f?.optString("regime") ?: "—") +
-            "  •  STRUCTURE  " + (f?.optString("market_structure") ?: "—") +
+            "\nSTRUCTURE  " + (f?.optString("market_structure") ?: "—") +
             "\n15m / 1h / 4h  " + (f?.optString("trend_15") ?: "—") + " / " +
                 (f?.optString("trend_60") ?: "—") + " / " + (f?.optString("trend_240") ?: "—") +
             "\nCVD  " + (f?.optString("cvd_price_divergence") ?: "NONE") +
-            "  •  OI5m  " + String.format(Locale.US, "%.2f%%", f?.optDouble("oi_change_5m_pct", 0.0) ?: 0.0) +
+            "\nOI 5m  " + String.format(Locale.US, "%.2f%%", f?.optDouble("oi_change_5m_pct", 0.0) ?: 0.0) +
             "\nFVG  " + (f?.optString("fvg_direction") ?: "NONE") +
-            "  •  OB  " + (f?.optString("order_block_direction") ?: "NONE") +
+            "\nOB  " + (f?.optString("order_block_direction") ?: "NONE") +
             "\nGolden pocket  " + (f?.optString("golden_pocket") ?: "NONE")
 
+        chart.setLivePrice(priceValue)
         if (requestChart) requestChartIfNeeded()
     }
 
     private fun requestChartIfNeeded(force: Boolean = false) {
         val now = System.currentTimeMillis()
-        if (!force && now - lastChartRequestMs < 1200L) return
+        if (chartRequestInFlight) return
+        if (!force && now - lastChartRequestMs < 900L) return
         lastChartRequestMs = now
+        chartRequestInFlight = true
         getJson(backendBase + "/chart?interval=" + selectedTf) { ok, body ->
-            if (!ok) return@getJson
             handler.post {
+                chartRequestInFlight = false
+                if (!ok) return@post
                 safe {
                     val j = JSONObject(body)
                     val candles = j.optJSONArray("candles") ?: JSONArray()
-                    val lastPrice = j.optDouble("last_price", Double.NaN)
+                    val live = latestRoot?.optDouble("last_price", Double.NaN) ?: Double.NaN
+                    val lastPrice = if (!live.isNaN()) live else j.optDouble("last_price", Double.NaN)
                     chart.setTimeframe(selectedTf)
                     chart.setData(candles, latestRoot?.optJSONObject("signal"), calculateEma(candles, 50), lastPrice)
                 }
