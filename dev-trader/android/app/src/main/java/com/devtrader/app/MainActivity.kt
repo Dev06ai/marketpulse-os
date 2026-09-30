@@ -44,8 +44,6 @@ import androidx.compose.ui.unit.dp
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
-import com.google.firebase.FirebaseApp
-import com.google.firebase.messaging.FirebaseMessaging
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
@@ -160,10 +158,6 @@ class MainActivity : ComponentActivity() {
             }
             runCatching { checkForAppUpdate() }
             runCatching { connect() }
-            mainHandler.postDelayed(
-                { runCatching { registerFcmToken() } },
-                1500L
-            )
         }
     }
 
@@ -376,48 +370,18 @@ class MainActivity : ComponentActivity() {
         }, delayMs)
     }
 
-    private fun registerFcmToken() {
-        if (!isFirebaseAvailable()) return
-        try {
-            FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
-                try {
-                    if (task.isSuccessful) {
-                        val token = task.result
-                        getSharedPreferences("dev_trader", Context.MODE_PRIVATE)
-                            .edit()
-                            .putString("fcm_token", token)
-                            .apply()
-                        postJson("$backendHttp/device/register", JSONObject().put("token", token)) { _, _ -> }
-                    }
-                } catch (_: Throwable) {
-                    // FCM is optional; never let notification setup crash the trading client.
-                }
-            }
-        } catch (_: Throwable) {
-            // Firebase may not be configured in this build.
-        }
-    }
-
-    private fun isFirebaseAvailable(): Boolean {
-        return try {
-            FirebaseApp.getApps(this).isNotEmpty()
-        } catch (_: Throwable) {
-            false
-        }
-    }
     private fun runFullSystemCheck() {
         val startedAt = System.currentTimeMillis()
         try {
             val localNotifications = Build.VERSION.SDK_INT < 33 ||
                 ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
-            val firebaseAvailable = isFirebaseAvailable()
 
             systemCheck = SystemCheckUi(
                 running = true,
                 summary = "Running full system check…",
                 details = listOf(
                     "Local notifications: " + if (localNotifications) "PASS" else "NOT GRANTED",
-                    "Firebase client: " + if (firebaseAvailable) "AVAILABLE" else "NOT CONFIGURED",
+                    "Push notifications: DISABLED (Firebase not configured)",
                     "Connecting to backend diagnostics…"
                 ),
                 success = false
@@ -431,40 +395,7 @@ class MainActivity : ComponentActivity() {
                 runCatching { requestNotificationPermissionIfNeeded() }
             }
 
-            if (!firebaseAvailable) {
-                fetchSystemCheck(startedAt, localNotifications, false, null)
-                return
-            }
-
-            getFcmToken { token ->
-                try {
-                    if (token == null) {
-                        fetchSystemCheck(startedAt, localNotifications, false, null)
-                        return@getFcmToken
-                    }
-
-                    postJson("$backendHttp/device/register", JSONObject().put("token", token)) { registerOk, _ ->
-                        try {
-                            if (!registerOk) {
-                                fetchSystemCheck(startedAt, localNotifications, true, null)
-                                return@postJson
-                            }
-                            postJson("$backendHttp/system-check/push", JSONObject().put("token", token)) { pushOk, pushBody ->
-                                try {
-                                    val sent = runCatching { JSONObject(pushBody).optInt("sent", 0) }.getOrDefault(0)
-                                    fetchSystemCheck(startedAt, localNotifications, true, if (pushOk) sent else null)
-                                } catch (_: Throwable) {
-                                    fetchSystemCheck(startedAt, localNotifications, true, null)
-                                }
-                            }
-                        } catch (_: Throwable) {
-                            fetchSystemCheck(startedAt, localNotifications, true, null)
-                        }
-                    }
-                } catch (_: Throwable) {
-                    fetchSystemCheck(startedAt, localNotifications, false, null)
-                }
-            }
+            fetchSystemCheck(startedAt, localNotifications)
         } catch (t: Throwable) {
             mainHandler.post {
                 systemCheck = SystemCheckUi(
@@ -477,33 +408,15 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun getFcmToken(callback: (String?) -> Unit) {
-        if (!isFirebaseAvailable()) {
-            callback(null)
-            return
-        }
-        try {
-            FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
-                try {
-                    callback(if (task.isSuccessful) task.result else null)
-                } catch (_: Throwable) {
-                    callback(null)
-                }
-            }
-        } catch (_: Throwable) {
-            callback(null)
-        }
-    }
-    private fun fetchSystemCheck(startedAt: Long, localNotifications: Boolean, fcmAvailable: Boolean, fcmSent: Int?) {
+    private fun fetchSystemCheck(startedAt: Long, localNotifications: Boolean) {
         getJson("$backendHttp/system-check") { ok, body ->
-            val now = System.currentTimeMillis()
             if (!ok) {
                 mainHandler.post {
                     systemCheck = SystemCheckUi(
                         summary = "Backend system check failed",
                         details = listOf(
                             "Local notifications: " + if (localNotifications) "PASS" else "NOT GRANTED",
-                            "FCM token: " + if (fcmAvailable) "AVAILABLE" else "UNAVAILABLE",
+                            "Push notifications: DISABLED (Firebase not configured)",
                             "Backend diagnostics: FAILED"
                         ),
                         success = false
@@ -513,73 +426,44 @@ class MainActivity : ComponentActivity() {
             }
 
             try {
-            val json = JSONObject(body)
-            val market = json.optJSONObject("market")
-            val strategy = json.optJSONObject("strategy")
-            val push = json.optJSONObject("push")
-            val backendOk = json.optBoolean("backend_ok", false)
-            val marketHealthy = market?.optString("data_health") == "HEALTHY"
-            val engineWs = market?.optBoolean("ws_connected", false) == true
-            val strategyOk = strategy?.optString("status") == "SCANNING"
-            val firebaseReady = push?.optBoolean("firebase_ready", false) == true
-            val connectedClients = json.optJSONObject("client")?.optInt("connected_websocket_clients", 0) ?: 0
-            val recentFcm = getSharedPreferences("dev_trader", Context.MODE_PRIVATE)
-                .getLong("last_fcm_received_ts", 0L)
-            val fcmReceived = recentFcm >= startedAt
-            val details = mutableListOf(
-                "Backend API: " + if (backendOk) "PASS" else "FAIL",
-                "Bybit market feed: " + if (marketHealthy) "HEALTHY" else (market?.optString("data_health") ?: "UNKNOWN"),
-                "Backend market WebSocket: " + if (engineWs) "CONNECTED" else "DISCONNECTED",
-                "Strategy engine: " + if (strategyOk) "SCANNING" else (strategy?.optString("status") ?: "UNKNOWN"),
-                "App WebSocket clients: $connectedClients",
-                "Local notifications: " + if (localNotifications) "PASS" else "NOT GRANTED",
-                "FCM token: " + if (fcmAvailable) "AVAILABLE" else "UNAVAILABLE",
-                "Firebase backend: " + if (firebaseReady) "READY" else "NOT CONFIGURED"
-            )
-            if (fcmSent != null) {
-                details.add("FCM test: " + if (fcmSent > 0) "SERVER ACCEPTED ($fcmSent)" else "NOT SENT")
-                details.add("FCM callback on phone: " + if (fcmReceived) "RECEIVED" else "NOT YET RECEIVED")
-            } else {
-                details.add("FCM test: NOT RUN")
-            }
-
-            val allCore = backendOk && marketHealthy && engineWs && strategyOk && localNotifications
-            mainHandler.post {
-                systemCheck = SystemCheckUi(
-                    summary = if (allCore) "Core system healthy" else "Issues detected — see details",
-                    details = details,
-                    success = allCore
+                val json = JSONObject(body)
+                val market = json.optJSONObject("market")
+                val strategy = json.optJSONObject("strategy")
+                val backendOk = json.optBoolean("backend_ok", false)
+                val marketHealthy = market?.optString("data_health") == "HEALTHY"
+                val engineWs = market?.optBoolean("ws_connected", false) == true
+                val strategyOk = strategy?.optString("status") == "SCANNING"
+                val connectedClients = json.optJSONObject("client")?.optInt("connected_websocket_clients", 0) ?: 0
+                val details = mutableListOf(
+                    "Backend API: " + if (backendOk) "PASS" else "FAIL",
+                    "Bybit market feed: " + if (marketHealthy) "HEALTHY" else (market?.optString("data_health") ?: "UNKNOWN"),
+                    "Backend market WebSocket: " + if (engineWs) "CONNECTED" else "DISCONNECTED",
+                    "Strategy engine: " + if (strategyOk) "SCANNING" else (strategy?.optString("status") ?: "UNKNOWN"),
+                    "App WebSocket clients: " + connectedClients,
+                    "Local notifications: " + if (localNotifications) "PASS" else "NOT GRANTED",
+                    "Push notifications: DISABLED (Firebase not configured)"
                 )
-            }
-
-
+                val allCore = backendOk && marketHealthy && engineWs && strategyOk && localNotifications
+                mainHandler.post {
+                    systemCheck = SystemCheckUi(
+                        running = false,
+                        summary = if (allCore) "Core system healthy" else "Issues detected — see details",
+                        details = details,
+                        success = allCore
+                    )
+                }
             } catch (t: Throwable) {
                 mainHandler.post {
                     systemCheck = SystemCheckUi(
+                        running = false,
                         summary = "System check failed safely",
                         details = listOf("Diagnostics response error: " + (t.message ?: t.javaClass.simpleName)),
                         success = false
                     )
                 }
             }
-
-            if (fcmSent != null) {
-                val callbackCheckAt = System.currentTimeMillis()
-                mainHandler.postDelayed({
-                    val receivedLater = getSharedPreferences("dev_trader", Context.MODE_PRIVATE)
-                        .getLong("last_fcm_received_ts", 0L) >= startedAt
-                    systemCheck = systemCheck.copy(
-                        details = systemCheck.details.map {
-                            if (it.startsWith("FCM callback on phone:")) {
-                                "FCM callback on phone: " + if (receivedLater) "RECEIVED" else "NOT RECEIVED"
-                            } else it
-                        }
-                    )
-                }, maxOf(2500L, callbackCheckAt - startedAt))
-            }
         }
     }
-
     private fun postJson(url: String, body: JSONObject, callback: (Boolean, String) -> Unit) {
         val request = Request.Builder()
             .url(url)
