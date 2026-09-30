@@ -78,10 +78,15 @@ class SafeActivity : Activity() {
         window.navigationBarColor = Color.rgb(8, 9, 12)
         installCrashReporter()
         buildUi()
+        ensureChannel()
+        loadJournal()
 
         handler.postDelayed({
             safe { connect() }
         }, 700L)
+        handler.postDelayed({
+            safe { watchdog() }
+        }, 3000L)
     }
 
     private fun installCrashReporter() {
