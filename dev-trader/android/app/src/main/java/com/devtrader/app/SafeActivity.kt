@@ -679,10 +679,14 @@ class SafeActivity : Activity() {
                     val wsText = if (ws) "CONNECTED" else "DISCONNECTED"
                     val strategyText = if (scanning) "SCANNING" else "NOT READY"
                     val alertText = if (notifications) "READY" else "NOT ENABLED"
+                    val featureJson = j.optJSONObject("features")
                     check.text = "API  " + apiText +
                         "\nBybit  " + bybitText +
                         "\nEngine WS  " + wsText +
                         "\nStrategy  " + strategyText +
+                        "\nSignal  " + (strategy?.optString("signal_state", "NONE") ?: "NONE") +
+                        "\nRegime  " + (featureJson?.optString("regime", "—") ?: "—") +
+                        "\nStructure  " + (featureJson?.optString("market_structure", "—") ?: "—") +
                         "\nAlerts  " + alertText
                 }
                 checkButton.isEnabled = true
