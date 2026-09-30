@@ -73,6 +73,7 @@ class MarketState:
     oi_window: list[tuple[int, float]] = field(default_factory=list)
     cvd_history: list[tuple[int, float]] = field(default_factory=list)
     liquidation_window: list[tuple[int, str, float]] = field(default_factory=list)
+    candles_5: list[Candle] = field(default_factory=list)
     candles_15: list[Candle] = field(default_factory=list)
     candles_60: list[Candle] = field(default_factory=list)
 
@@ -81,6 +82,7 @@ class MarketState:
 
     def snapshot(self) -> dict[str, Any]:
         d = asdict(self)
+        d["candles_5"] = [c.to_dict() for c in self.candles_5[-180:]]
         d["candles_15"] = [c.to_dict() for c in self.candles_15[-120:]]
         d["candles_60"] = [c.to_dict() for c in self.candles_60[-120:]]
         d["candles_4h"] = [c.to_dict() for c in self.candles_4h()[-80:]]
