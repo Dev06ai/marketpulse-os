@@ -31,6 +31,7 @@ stream = None
 server_started_ms = int(time.time() * 1000)
 last_engine_eval_ms = 0
 last_opportunity_alert = {"key": "", "ts": 0, "title": "", "body": ""}
+last_trade_event = {}
 
 
 class PushTestPayload(BaseModel):
@@ -102,6 +103,9 @@ def mobile_payload():
             "body": last_opportunity_alert.get("body", ""),
             "ts": last_opportunity_alert.get("ts", 0),
         },
+        "trade_event": dict(last_trade_event),
+        "learning": diag.get("learning", {}),
+        "learning_context": diag.get("learning_context"),
         "upstream": {
             "rest_ok": bool(stream.last_rest_ok) if stream else False,
             "last_error": stream.last_upstream_error if stream else "",
@@ -196,15 +200,25 @@ async def on_state(s: MarketState):
             last_opportunity_alert = {"key": alert["key"], "ts": now_alert, "title": alert["title"], "body": alert["body"]}
             push.send_opportunity(alert)
 
-        lifecycle_event = engine.last_lifecycle_event
-        if lifecycle_event and bridge.enabled:
-            asyncio.create_task(
-                bridge.post_outcome(
-                    lifecycle_event["signal"],
-                    lifecycle_event["outcome"],
-                    float(lifecycle_event.get("result_r", 0)),
+        lifecycle_events = list(getattr(engine, "last_lifecycle_events", []) or [])
+        if lifecycle_events:
+            global last_trade_event
+            for event in lifecycle_events:
+                last_trade_event = dict(event)
+                # The background Android service receives the same event over the
+                # persistent socket. FCM is the secondary path when the foreground
+                # app has no connected client.
+                if push.ready and not clients:
+                    push.send_trade_event(event)
+            final_event = next((e for e in reversed(lifecycle_events) if e.get("final")), None)
+            if final_event and bridge.enabled and engine.last_lifecycle_event:
+                asyncio.create_task(
+                    bridge.post_outcome(
+                        engine.last_lifecycle_event["signal"],
+                        engine.last_lifecycle_event["outcome"],
+                        float(engine.last_lifecycle_event.get("result_r", 0)),
+                    )
                 )
-            )
 
         if sig:
             signal_payload = sig.to_dict()
@@ -380,6 +394,17 @@ async def signal_history():
         "active": engine.active_signal,
         "state": engine.signal_status,
         "history": engine.signal_history,
+        "learning": engine.learning.summary(),
+        "latest_lesson": (engine.learning.summary() or {}).get("latest_lesson"),
+    }
+
+
+@app.get("/learning")
+async def learning():
+    return {
+        "summary": engine.learning.summary(),
+        "context": engine.learning.context(engine.active_signal) if engine.active_signal else None,
+        "manual_execution_only": True,
     }
 
 
@@ -429,6 +454,7 @@ async def system_check():
             },
             "heartbeat": heartbeat,
             "client": {"connected_websocket_clients": int(len(clients))},
+            "learning": engine.learning.summary(),
             "push": {
                 "firebase_ready": bool(push_status.get("firebase_ready", False)),
                 "registered_tokens": int(push_status.get("registered_tokens", 0)),
