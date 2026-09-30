@@ -80,6 +80,11 @@ class AdaptiveLearning:
             pass
         return tags[:20]
 
+    def recent_trades(self) -> list[dict[str, Any]]:
+        """Return a bounded copy of persisted trade records for engine rehydration."""
+        with self.lock:
+            return [dict(row) for row in self.data.get("trades", [])[:250]]
+
     def context(self, signal: dict[str, Any]) -> dict[str, Any]:
         with self.lock:
             key = self._key(signal)

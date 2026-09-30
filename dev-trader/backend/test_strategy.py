@@ -92,3 +92,60 @@ def test_aligned_15m_setup_can_be_classified_as_swing():
     assert tp1 > 84000.0
     assert tp2 > tp1
     assert 3.5 <= abs(tp2 - 84000.0) / risk <= 5.0
+
+
+def test_quality_governor_locks_until_active_signal_resolves():
+    from app.strategy import StrategyEngine
+    cs = [c(i,100,102,99,100,confirmed=True) for i in range(24)]
+    state = MarketState(
+        candles_15=cs,
+        candles_60=cs[:12],
+        last_price=100,
+        data_health="HEALTHY",
+    )
+    engine = StrategyEngine()
+    engine.active_signal = {
+        "id": "existing-1",
+        "direction": "LONG",
+        "setup": "Bullish SFP • FAST",
+        "entry": 100.0,
+        "stop": 98.0,
+        "target1": 103.0,
+        "target2": 106.0,
+        "rr": 3.0,
+    }
+    engine.signal_status = "ACTIVE"
+    assert engine.evaluate(state) is None
+    assert engine.governor_status()["active_signal_lock"] is True
+
+
+def test_quality_governor_enforces_daily_cap():
+    from app.strategy import StrategyEngine
+    cs = [c(i,100,102,99,100,confirmed=True) for i in range(24)]
+    state = MarketState(
+        candles_15=cs,
+        candles_60=cs[:12],
+        last_price=100,
+        data_health="HEALTHY",
+    )
+    engine = StrategyEngine()
+    engine.daily_signal_count = 3
+    assert engine.evaluate(state) is None
+    assert "DAILY CAP" in engine.governor_status()["lock_reason"]
+
+
+def test_quality_governor_enforces_post_resolution_cooldown():
+    from app.strategy import StrategyEngine
+    import time as _time
+    cs = [c(i,100,102,99,100,confirmed=True) for i in range(24)]
+    state = MarketState(
+        candles_15=cs,
+        candles_60=cs[:12],
+        last_price=100,
+        data_health="HEALTHY",
+    )
+    engine = StrategyEngine()
+    engine.signal_status = "NONE"
+    engine.last_resolved_ts = int(_time.time() * 1000)
+    assert engine.evaluate(state) is None
+    assert "COOLDOWN" in engine.governor_status()["lock_reason"]
