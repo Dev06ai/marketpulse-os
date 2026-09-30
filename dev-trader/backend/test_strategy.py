@@ -205,3 +205,27 @@ def test_market_features_include_elliott_context():
     assert f.elliott_phase
     assert f.elliott_direction in {"LONG", "SHORT", "NEUTRAL", "UNKNOWN"}
     assert 0.0 <= f.elliott_confidence <= 1.0
+
+
+def test_market_story_is_structured_and_auditable():
+    from app.strategy import StrategyEngine
+
+    cs = [c(i, 100 + i * 0.2, 102 + i * 0.2, 99 + i * 0.2, 101 + i * 0.2) for i in range(30)]
+    state = MarketState(
+        candles_15=cs,
+        candles_60=cs,
+        last_price=106.8,
+        data_health="HEALTHY",
+    )
+    engine = StrategyEngine()
+    diagnostics = engine.diagnostics(state)
+    story = diagnostics["market_story"]
+
+    assert story["bias"] in {"BULLISH", "BEARISH", "LEAN_LONG", "LEAN_SHORT", "BALANCED"}
+    assert isinstance(story["summary"], str) and story["summary"]
+    assert isinstance(story["narrative"], list) and story["narrative"]
+    assert "15m" in story["wave_context"]
+    assert "1h" in story["wave_context"]
+    assert "LONG" in story["trade_map"]
+    assert "SHORT" in story["trade_map"]
+    assert "no_trade_reason" in story
