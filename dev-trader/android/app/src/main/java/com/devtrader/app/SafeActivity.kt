@@ -82,6 +82,7 @@ class SafeActivity : Activity() {
     private var networkCallback: ConnectivityManager.NetworkCallback? = null
     private var lastSocketActivityMs = 0L
     private var lastRetryRequestMs = 0L
+    private var reconnectRunnable: Runnable? = null
 
     private val backendBase = "https://dev-trader-engine.onrender.com"
 
@@ -398,7 +399,8 @@ class SafeActivity : Activity() {
     private fun connect(force: Boolean = false) {
         if (stopped) return
         if (force) {
-            handler.removeCallbacksAndMessages(null)
+            reconnectRunnable?.let { handler.removeCallbacks(it) }
+            reconnectRunnable = null
             reconnectScheduled.set(false)
             runCatching { socket?.cancel() }
             socket = null
@@ -485,13 +487,16 @@ class SafeActivity : Activity() {
         val attempt = reconnectAttempt.coerceAtMost(4)
         val delay = minOf(15000L, 1000L * (1L shl attempt))
         reconnectAttempt = minOf(reconnectAttempt + 1, 4)
-        handler.postDelayed({
+        val task = Runnable {
+            reconnectRunnable = null
             reconnectScheduled.set(false)
             if (!stopped && socket == null) {
                 bootstrap(false)
                 connect()
             }
-        }, delay)
+        }
+        reconnectRunnable = task
+        handler.postDelayed(task, delay)
     }
 
     private fun forceReconnectFromUser() {
@@ -1127,6 +1132,8 @@ class SafeActivity : Activity() {
             networkCallback?.let { cm.unregisterNetworkCallback(it) }
         }
         networkCallback = null
+        reconnectRunnable?.let { handler.removeCallbacks(it) }
+        reconnectRunnable = null
         handler.removeCallbacksAndMessages(null)
         reconnectScheduled.set(false)
         runCatching { socket?.close(1000, "activity destroyed") }
