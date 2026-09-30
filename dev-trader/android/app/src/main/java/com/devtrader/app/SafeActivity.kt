@@ -254,6 +254,17 @@ class SafeActivity : Activity() {
         root.addView(footer, margins(top = 18))
     }
 
+    private fun label(text: String, size: Float, color: Int, spacing: Float): TextView {
+        return TextView(this).apply {
+            this.text = text
+            textSize = size
+            setTextColor(color)
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            letterSpacing = spacing
+            includeFontPadding = false
+        }
+    }
+
     private data class CardRefs(val container: LinearLayout, val value: TextView)
 
     private fun card(title: String, initial: String, valueSize: Float): CardRefs {
