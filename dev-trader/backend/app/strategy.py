@@ -771,6 +771,95 @@ class StrategyEngine:
         })
         return scenarios
 
+    def _build_sfp_hunter(self, state: MarketState, f: MarketFeatures) -> dict:
+        cs = [c for c in state.candles_15 if c.confirmed]
+        if len(cs) < 6 or state.last_price is None:
+            return {"status": "BUILDING", "message": "Waiting for enough 15m structure."}
+        highs, lows = pivots(cs[:-1], 2)
+        price = float(state.last_price)
+        recent_high = highs[-1][1] if highs else None
+        recent_low = lows[-1][1] if lows else None
+        candidates = []
+        if recent_high:
+            dist = abs(price - recent_high) / price * 100
+            candidates.append(("SHORT", "swing high", recent_high, dist))
+        if recent_low:
+            dist = abs(price - recent_low) / price * 100
+            candidates.append(("LONG", "swing low", recent_low, dist))
+        candidates.sort(key=lambda x: x[3])
+        nearest = candidates[0] if candidates else None
+        if not nearest:
+            return {"status": "SEARCHING", "message": "Searching for fresh swing-liquidity."}
+        direction, label, level, distance = nearest
+        pattern = "NONE"
+        candle = cs[-1]
+        if direction == "SHORT" and candle.high > level and candle.close < level:
+            pattern = "BEARISH_SFP"
+        elif direction == "LONG" and candle.low < level and candle.close > level:
+            pattern = "BULLISH_SFP"
+        memory = self._nearest_memory(state, direction, 0.75)
+        if pattern != "NONE":
+            status = "TRIGGERED"
+        elif distance <= 0.35:
+            status = "NEAR_TRIGGER"
+        else:
+            status = "WATCH"
+        return {
+            "status": status,
+            "direction": direction,
+            "target_level": round(level, 2),
+            "distance_pct": round(distance, 3),
+            "pattern": pattern,
+            "setup_memory": memory,
+            "cvd": f.cvd_price_divergence,
+            "oi_5m_pct": round(f.oi_change_5m_pct, 3),
+            "message": (
+                "Sweep and reclaim detected." if pattern != "NONE"
+                else "Near a liquidity swing; watch for sweep + close back through the level."
+            ),
+        }
+
+    def _build_breakout_watch(self, state: MarketState, f: MarketFeatures) -> dict:
+        if state.last_price is None:
+            return {"status": "WAITING", "message": "Waiting for live price."}
+        price = float(state.last_price)
+        candidates = []
+        for name, level, direction in [
+            ("previous day high", f.previous_day_high, "UP"),
+            ("previous day low", f.previous_day_low, "DOWN"),
+            ("previous week high", f.previous_week_high, "UP"),
+            ("previous week low", f.previous_week_low, "DOWN"),
+            ("weekly open", f.weekly_open, "BOTH"),
+        ]:
+            if level is None:
+                continue
+            dist = abs(price - float(level)) / price * 100
+            if dist <= 1.0:
+                candidates.append({"name": name, "level": round(float(level), 2), "direction": direction, "distance_pct": round(dist, 3)})
+        candidates.sort(key=lambda x: x["distance_pct"])
+        nearest = candidates[:4]
+        last = [c for c in state.candles_15 if c.confirmed][-1:] if state.candles_15 else []
+        state_name = "WATCH"
+        event = "NONE"
+        if nearest and last:
+            c = last[0]
+            level = nearest[0]["level"]
+            if c.close > level and c.open <= level:
+                state_name, event = "BREAKOUT", "BULLISH_BREAKOUT"
+            elif c.close < level and c.open >= level:
+                state_name, event = "BREAKOUT", "BEARISH_BREAKOUT"
+            elif abs(price - level) / price * 100 <= 0.20:
+                state_name, event = "AT_LEVEL", "BREAKOUT_IMMINENT"
+        return {
+            "status": state_name,
+            "event": event,
+            "nearby_levels": nearest,
+            "message": (
+                "Breakout/reclaim event detected." if event != "NONE"
+                else "Watching nearby daily/weekly levels for breakout or rejection."
+            ),
+        }
+
     def diagnostics(self, state: MarketState) -> dict:
         cs = [c for c in state.candles_15 if c.confirmed]
         highs, lows = pivots(cs[:-1], 2) if len(cs) >= 5 else ([], [])
@@ -783,6 +872,8 @@ class StrategyEngine:
         self.liquidity_map_state = self._build_liquidity_map(state, f0)
         self.multi_tf_story = self._build_multi_tf_story(f0)
         radar_top = radar[0] if radar else None
+        sfp_hunter = self._build_sfp_hunter(state, f0)
+        breakout_watch = self._build_breakout_watch(state, f0)
         result = {
             "status": "SCANNING" if state.data_health == "HEALTHY" else ("DEGRADED_SCANNING" if state.data_health == "DEGRADED" else "CONNECTING"),
             "wait_reason": "" if state.data_health == "HEALTHY" else "Opportunity radar remains active while the live feed recovers.",
@@ -801,6 +892,8 @@ class StrategyEngine:
             "liquidity_map": self.liquidity_map_state,
             "multi_timeframe_story": self.multi_tf_story,
             "radar_lead": radar_top,
+            "sfp_hunter": sfp_hunter,
+            "breakout_watch": breakout_watch,
             "data_quality": state.data_health,
             "market_features": {
                 "trend_15": f0.trend_15,
