@@ -158,6 +158,32 @@ async def setup_memory_refresh_loop():
             if bridge.enabled:
                 memories = await bridge.fetch_setup_memories(SYMBOL)
                 engine.set_setup_memories(memories)
+
+                # Reconcile any persisted live signal after a restart/cold start.
+                # This prevents an open signal from being forgotten merely because
+                # the Python process restarted while the market was moving.
+                open_predictions = await bridge.fetch_open_signals(SYMBOL)
+                if state.last_price is not None:
+                    current_price = float(state.last_price)
+                    for row in open_predictions[:20]:
+                        side = str(row.get("side") or "").upper()
+                        stop = row.get("stop")
+                        target = row.get("target")
+                        try:
+                            stop = float(stop)
+                            target = float(target)
+                        except (TypeError, ValueError):
+                            continue
+                        if side == "LONG":
+                            if current_price <= stop:
+                                asyncio.create_task(bridge.post_outcome(row, "INVALIDATED", -1.0))
+                            elif current_price >= target:
+                                asyncio.create_task(bridge.post_outcome(row, "TARGET_REACHED", 1.0))
+                        elif side == "SHORT":
+                            if current_price >= stop:
+                                asyncio.create_task(bridge.post_outcome(row, "INVALIDATED", -1.0))
+                            elif current_price <= target:
+                                asyncio.create_task(bridge.post_outcome(row, "TARGET_REACHED", 1.0))
         except Exception:
             pass
         await asyncio.sleep(10)
