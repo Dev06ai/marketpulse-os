@@ -2432,6 +2432,14 @@ const server=http.createServer(async(req,res)=>{
           return send(res,200,{ok:true,predictions});
         }catch(e){return send(res,503,{ok:false,error:e.message})}
       }
+      if(req.method==="GET"&&u.pathname==="/api/dev-trader/learning/history"){
+        const symbol=u.searchParams.get("symbol")||null,interval=u.searchParams.get("interval")||null;
+        try{
+          let predictions=await storage.getLearningPredictions({symbol,interval,limit:500,resolvedOnly:true});
+          predictions=predictions.filter(p=>p?.features?.source==="DEV_TRADER_LIVE"&&p?.outcome);
+          return send(res,200,{ok:true,predictions});
+        }catch(e){return send(res,503,{ok:false,error:e.message})}
+      }
       if(req.method==="GET"&&u.pathname==="/api/dev-trader/setup-memory"){
         const symbol=u.searchParams.get("symbol")||null,interval=u.searchParams.get("interval")||null;
         try{return send(res,200,{ok:true,memories:await storage.getSetupMemories({symbol,interval,limit:100})})}catch(e){return send(res,503,{ok:false,error:e.message})}
