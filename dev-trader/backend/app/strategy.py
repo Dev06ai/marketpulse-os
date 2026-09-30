@@ -221,6 +221,16 @@ def _score(direction: str, setup: str, f: MarketFeatures) -> tuple[float, list[s
         score += 0.04
         reasons.append("price is in the corresponding golden-pocket zone")
 
+    wave_align = f.elliott_direction == ("LONG" if direction == "LONG" else "SHORT")
+    wave_strong = f.elliott_confidence >= float(RULES.get("signal_policy", {}).get("quality_governor", {}).get("elliott_min_confidence", 0.55))
+    if wave_align and wave_strong:
+        score += 0.08
+        reasons.append(f"Elliott Wave context aligns ({f.elliott_phase}, {f.elliott_wave})")
+    elif f.elliott_direction not in {"NEUTRAL", "UNKNOWN"} and not wave_align and f.elliott_confidence >= 0.65:
+        score -= 0.06
+        reasons.append("Elliott Wave context is strongly counter-directional")
+
+
     if f.fvg_direction == ("BULLISH" if direction == "LONG" else "BEARISH"):
         score += 0.03
         reasons.append("recent FVG supports direction")
@@ -333,6 +343,15 @@ def _signal(
             "fvg_direction": f.fvg_direction,
             "order_block_direction": f.order_block_direction,
             "golden_pocket": f.golden_pocket,
+            "elliott_phase": f.elliott_phase,
+            "elliott_direction": f.elliott_direction,
+            "elliott_wave": f.elliott_wave,
+            "elliott_confidence": round(f.elliott_confidence, 3),
+            "elliott_reason": f.elliott_reason,
+            "elliott_1h_phase": f.elliott_60_phase,
+            "elliott_1h_direction": f.elliott_60_direction,
+            "elliott_1h_confidence": round(f.elliott_60_confidence, 3),
+            "elliott_1h_reason": f.elliott_60_reason,
             "weekly_open": f.weekly_open,
             "previous_week_high": f.previous_week_high,
             "previous_week_low": f.previous_week_low,
@@ -734,6 +753,7 @@ class StrategyEngine:
         active_lock = self.signal_status == "ACTIVE" and bool(self.active_signal)
         return {
             "enabled": bool(_quality_rules().get("enabled", True)),
+            "elliott_knowledge": True,
             "mode": "ELITE_QUALITY",
             "daily_count": self.daily_signal_count,
             "daily_max": _quality_max_daily(),
@@ -804,6 +824,14 @@ class StrategyEngine:
         if f.spread_bps > max_spread:
             reasons.append(f"spread {f.spread_bps:.2f} bps > {max_spread:.2f} bps")
         confirmations = 0
+        wave_threshold = float(cfg.get("elliott_min_confidence", 0.55))
+        if (
+            f.elliott_direction == direction
+            and f.elliott_confidence >= wave_threshold
+            and f.elliott_60_direction in {"NEUTRAL", direction}
+            and f.elliott_60_confidence >= 0.40
+        ):
+            confirmations += 1
         if (direction == "LONG" and f.cvd_price_divergence == "BULLISH") or (direction == "SHORT" and f.cvd_price_divergence == "BEARISH"):
             confirmations += 1
         if (direction == "LONG" and f.book_imbalance > 0.12) or (direction == "SHORT" and f.book_imbalance < -0.12):
@@ -1387,6 +1415,15 @@ class StrategyEngine:
                 "fvg_direction": f0.fvg_direction,
                 "order_block_direction": f0.order_block_direction,
                 "golden_pocket": f0.golden_pocket,
+                "elliott_phase": f0.elliott_phase,
+                "elliott_direction": f0.elliott_direction,
+                "elliott_wave": f0.elliott_wave,
+                "elliott_confidence": round(f0.elliott_confidence, 3),
+                "elliott_reason": f0.elliott_reason,
+                "elliott_1h_phase": f0.elliott_60_phase,
+                "elliott_1h_direction": f0.elliott_60_direction,
+                "elliott_1h_confidence": round(f0.elliott_60_confidence, 3),
+                "elliott_1h_reason": f0.elliott_60_reason,
                 "previous_day_high": f0.previous_day_high,
                 "previous_day_low": f0.previous_day_low,
                 "previous_week_high": f0.previous_week_high,
