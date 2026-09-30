@@ -26,6 +26,7 @@ engine = StrategyEngine()
 push = PushService()
 stream = None
 server_started_ms = int(time.time() * 1000)
+last_engine_eval_ms = 0
 
 
 class PushTestPayload(BaseModel):
@@ -103,11 +104,23 @@ async def broadcast_loop():
 
 
 async def on_state(s: MarketState):
-    global state
+    global state, last_engine_eval_ms
     state = s
-    sig = engine.evaluate(state)
-    if sig:
-        push.send_signal(sig.to_dict())
+    now = int(time.time() * 1000)
+
+    # Do not run the full strategy stack on every trade/order-book tick.
+    # The feed can arrive many times per second; the engine only needs a
+    # bounded evaluation cadence to keep the event loop responsive.
+    should_evaluate = (
+        now - last_engine_eval_ms >= 350
+        or s.last_kline_5_ts == now
+        or s.last_kline_15_ts == now
+    )
+    if should_evaluate:
+        last_engine_eval_ms = now
+        sig = engine.evaluate(state)
+        if sig:
+            push.send_signal(sig.to_dict())
 
 
 @asynccontextmanager
