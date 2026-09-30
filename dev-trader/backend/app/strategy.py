@@ -799,7 +799,12 @@ class StrategyEngine:
                 "market_structure": aligned(direction, "market_structure", f.market_structure),
                 "cvd": aligned(direction, "cvd", f.cvd_price_divergence),
                 "orderbook": aligned(direction, "orderbook", f.book_imbalance),
-                "memory_zone": aligned(direction, "memory", memory),
+                "price_oi": (
+                    f.oi_change_5m_pct > 0.15 and f.price_impulse > 0
+                    if direction == "LONG"
+                    else f.oi_change_5m_pct > 0.15 and f.price_impulse < 0
+                ),
+                "nearby_memory": aligned(direction, "memory", memory),
             }
             score = sum(1 for ok in checks.values() if ok)
             matrix[direction] = {
