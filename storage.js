@@ -47,6 +47,44 @@ function defaultFeatureFlags(){
   };
 }
 function writeLocal(data){try{fs.mkdirSync(path.dirname(FALLBACK_FILE),{recursive:true});fs.writeFileSync(FALLBACK_FILE,JSON.stringify(data))}catch{}}
+async function seedSetupMemoriesFromFile(){
+  const seedPath=path.join(__dirname,"setup-memory-seeds.json");
+  let seeds=[];
+  try{if(!fs.existsSync(seedPath))return {seeded:0};seeds=JSON.parse(fs.readFileSync(seedPath,"utf8"));if(!Array.isArray(seeds))return {seeded:0}}catch{return {seeded:0}}
+  let seeded=0;
+  if(mode==="postgres"&&pool){
+    for(const m of seeds){
+      if(!m||!m.id)continue;
+      const r=await pool.query(`
+        INSERT INTO marketpulse_setup_memory
+        (id,symbol,interval,title,setup_key,direction,zone_low,zone_high,trigger_patterns,required_evidence,invalidation_price,notes,source_type,source_ref,priority,active,expires_at)
+        VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
+        ON CONFLICT(id) DO NOTHING
+      `,[
+        String(m.id),String(m.symbol||"BTCUSDT").toUpperCase(),String(m.interval||"ALL"),
+        String(m.title||m.setupKey||"Human setup memory"),String(m.setupKey||"GENERIC").toUpperCase(),
+        String(m.direction||"BOTH").toUpperCase(),
+        Number.isFinite(Number(m.zoneLow))?Number(m.zoneLow):null,
+        Number.isFinite(Number(m.zoneHigh))?Number(m.zoneHigh):null,
+        Array.isArray(m.triggerPatterns)?m.triggerPatterns.map(String):[],
+        m.requiredEvidence&&typeof m.requiredEvidence==="object"?m.requiredEvidence:{},
+        Number.isFinite(Number(m.invalidationPrice))?Number(m.invalidationPrice):null,
+        String(m.notes||""),String(m.sourceType||"manual"),m.sourceRef?String(m.sourceRef):null,
+        Number.isFinite(Number(m.priority))?Number(m.priority):1,m.active!==false,m.expiresAt?new Date(m.expiresAt):null
+      ]);
+      if(r.rowCount)seeded+=r.rowCount;
+    }
+    return {seeded,storage:"postgres"};
+  }
+  const all=readLocal();const rows=Array.isArray(all.__setup_memory__)?all.__setup_memory__:[];
+  const ids=new Set(rows.map(x=>x.id));
+  for(const m of seeds){
+    if(!m||!m.id||ids.has(m.id))continue;
+    rows.push(m);ids.add(m.id);seeded++;
+  }
+  all.__setup_memory__=rows.slice(-2000);writeLocal(all);
+  return {seeded,storage:"local"};
+}
 
 async function init(){
   if(initPromise)return initPromise;
@@ -285,6 +323,7 @@ async function init(){
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       )`);
       mode="postgres";
+      await seedSetupMemoriesFromFile();
     }catch(err){
       mode="local";try{await pool?.end()}catch{}pool=null;
       console.error("MarketPulse memory DB unavailable; using local fallback:",err.message);
