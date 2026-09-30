@@ -30,6 +30,7 @@ class SignalService : Service() {
         private const val SIGNAL_NOTIFICATION_ID = 3101
         private const val PREFS = "dev_trader_signal_state"
         private const val PREF_LAST_SIGNAL_ID = "last_signal_id"
+        private const val PREF_LAST_ALERT_KEY = "last_alert_key"
         private const val WS_URL = "wss://dev-trader-engine.onrender.com/ws"
     }
 
@@ -125,11 +126,24 @@ class SignalService : Service() {
                     runCatching {
                         val root = JSONObject(text)
                         if (root.optString("type") != "state") return
+                        val prefs = getSharedPreferences(PREFS, MODE_PRIVATE)
+
+                        val alert = root.optJSONObject("opportunity_alert")
+                        if (alert != null) {
+                            val alertKey = alert.optString("key")
+                            val title = alert.optString("title")
+                            val body = alert.optString("body")
+                            val previousAlert = prefs.getString(PREF_LAST_ALERT_KEY, null)
+                            if (!alertKey.isNullOrBlank() && alertKey != previousAlert) {
+                                prefs.edit().putString(PREF_LAST_ALERT_KEY, alertKey).apply()
+                                notifyOpportunity(title, body)
+                            }
+                        }
+
                         val signal = root.optJSONObject("signal") ?: return
                         val id = signal.optString("id")
                         if (id.isBlank()) return
 
-                        val prefs = getSharedPreferences(PREFS, MODE_PRIVATE)
                         val previous = prefs.getString(PREF_LAST_SIGNAL_ID, null)
                         if (id != previous) {
                             prefs.edit().putString(PREF_LAST_SIGNAL_ID, id).apply()
@@ -237,6 +251,31 @@ class SignalService : Service() {
 
         getSystemService(NotificationManager::class.java)
             .notify(SIGNAL_NOTIFICATION_ID, notification)
+    }
+
+    private fun notifyOpportunity(title: String, body: String) {
+        if (Build.VERSION.SDK_INT >= 33 &&
+            checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) !=
+            android.content.pm.PackageManager.PERMISSION_GRANTED
+        ) return
+
+        val launchIntent = Intent(this, SafeActivity::class.java)
+        val pending = PendingIntent.getActivity(
+            this, SIGNAL_NOTIFICATION_ID + 1, launchIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        val notification = NotificationCompat.Builder(this, SIGNAL_CHANNEL)
+            .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .setContentTitle(title.ifBlank { "Dev Trader Opportunity" })
+            .setContentText(body.ifBlank { "Opportunity developing." })
+            .setStyle(NotificationCompat.BigTextStyle().bigText(body))
+            .setContentIntent(pending)
+            .setAutoCancel(true)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setCategory(Notification.CATEGORY_MESSAGE)
+            .build()
+        getSystemService(NotificationManager::class.java)
+            .notify(SIGNAL_NOTIFICATION_ID + 1, notification)
     }
 
     private fun format(value: Double): String =
