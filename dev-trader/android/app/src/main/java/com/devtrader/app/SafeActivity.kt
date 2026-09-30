@@ -546,7 +546,8 @@ class SafeActivity : Activity() {
                 "    TP2  " + String.format(Locale.US, "%.2f", signalObj.optDouble("target2")) +
                 "\nRR  " + String.format(Locale.US, "%.2f", signalObj.optDouble("rr")) +
                 "  •  Conf " + String.format(Locale.US, "%.0f%%", signalObj.optDouble("confidence") * 100) +
-                if (reason.isBlank()) "" else "\n" + reason
+                if (reason.isBlank()) "" else "\n" + reason +
+                managementText
 
             val id = signalObj.optString("id")
             if (id.isNotBlank() && id != lastSignalId) {
@@ -559,8 +560,7 @@ class SafeActivity : Activity() {
 
         val story = engine?.optString("multi_timeframe_story", "").orEmpty()
         features.text =
-            (if (story.isBlank()) "" else "STORY  " + story + "
-") +
+            (if (story.isBlank()) "" else "STORY  " + story + "\n") +
             "REGIME  " + (f?.optString("regime") ?: "—") +
             "\nSTRUCTURE  " + (f?.optString("market_structure") ?: "—") +
             "\n15m / 1h / 4h  " + (f?.optString("trend_15") ?: "—") + " / " +
