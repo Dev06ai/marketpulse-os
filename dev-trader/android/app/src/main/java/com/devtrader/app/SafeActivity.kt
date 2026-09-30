@@ -25,6 +25,7 @@ import android.widget.ScrollView
 import android.widget.TextView
 import androidx.core.app.NotificationCompat
 import androidx.core.content.FileProvider
+import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
@@ -93,6 +94,7 @@ class SafeActivity : Activity() {
         installCrashReporter()
         buildUi()
         ensureChannel()
+        startBackgroundAlerts()
         loadJournal()
 
         handler.postDelayed({
@@ -525,7 +527,6 @@ class SafeActivity : Activity() {
                 appendJournal(signalObj)
                 loadJournal()
                 safe { calculateRisk() }
-                sendLocalSignalAlert(signalObj)
             }
         }
 
@@ -610,14 +611,42 @@ class SafeActivity : Activity() {
         )
     }
 
-    private fun requestAlertPermission() {
+    private fun startBackgroundAlerts() {
         if (Build.VERSION.SDK_INT >= 33 &&
             checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
         ) {
+            alertsButton.text = "ALLOW SIGNAL ALERTS"
+            alertsButton.isEnabled = true
             requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 4101)
-        } else {
-            alertsButton.text = "SIGNAL ALERTS ENABLED"
+            return
+        }
+        runCatching {
+            ContextCompat.startForegroundService(this, Intent(this, SignalService::class.java))
+            alertsButton.text = "BACKGROUND ALERTS ACTIVE"
             alertsButton.isEnabled = false
+        }.onFailure {
+            alertsButton.text = "START ALERTS AGAIN"
+            alertsButton.isEnabled = true
+        }
+    }
+
+    private fun requestAlertPermission() {
+        startBackgroundAlerts()
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == 4101) {
+            if (grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED || Build.VERSION.SDK_INT < 33) {
+                startBackgroundAlerts()
+            } else {
+                alertsButton.text = "ALLOW SIGNAL ALERTS IN SETTINGS"
+                alertsButton.isEnabled = true
+            }
         }
     }
 
