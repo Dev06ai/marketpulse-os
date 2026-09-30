@@ -1,5 +1,6 @@
 from app.models import Candle, MarketState
-from app.strategy import detect_sfp, detect_dline
+from app.strategy import detect_sfp, detect_dline, _trade_plan
+from app.analytics import MarketFeatures
 
 def c(i,o,h,l,cl,confirmed=True):
     return Candle(i*900000,(i+1)*900000,o,h,l,cl,100,confirmed)
@@ -54,3 +55,40 @@ def test_evidence_matrix_consistent_with_radar():
     assert d["evidence_matrix"]["SHORT"]["max_score"] == 8
     assert "price_oi" in d["evidence_matrix"]["LONG"]["checks"]
     assert "nearby_memory" in d["evidence_matrix"]["LONG"]["checks"]
+
+
+def test_trade_plan_widens_microscopic_stop_and_builds_realistic_targets():
+    f = MarketFeatures(atr_15=180.0, trend_60="DOWN", trend_240="DOWN", market_structure="BEARISH")
+    stop, tp1, tp2, style, reason, risk = _trade_plan(
+        direction="SHORT",
+        setup="Bearish SFP • FAST",
+        timeframe="5m",
+        entry=84231.70,
+        raw_stop=84294.13,
+        raw_target=83312.70,
+        f=f,
+    )
+    assert style == "SCALP"
+    assert risk >= 180.0 * 0.65
+    assert stop > 84294.13
+    assert tp1 < 84231.70
+    assert tp2 < tp1
+    assert 3.0 <= abs(tp2 - 84231.70) / risk <= 3.5
+
+
+def test_aligned_15m_setup_can_be_classified_as_swing():
+    f = MarketFeatures(atr_15=150.0, trend_60="UP", trend_240="UP", market_structure="BULLISH")
+    stop, tp1, tp2, style, reason, risk = _trade_plan(
+        direction="LONG",
+        setup="MSS Continuation",
+        timeframe="15m",
+        entry=84000.0,
+        raw_stop=83880.0,
+        raw_target=85000.0,
+        f=f,
+    )
+    assert style == "SWING"
+    assert risk >= 150.0
+    assert tp1 > 84000.0
+    assert tp2 > tp1
+    assert 3.5 <= abs(tp2 - 84000.0) / risk <= 5.0
