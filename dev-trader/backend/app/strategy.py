@@ -26,6 +26,8 @@ class Signal:
     thesis: list[str]
     evidence: dict
     timeframe: str
+    trade_style: str
+    style_reason: str
 
     def to_dict(self):
         return self.__dict__
@@ -53,6 +55,85 @@ def _min_rr() -> float:
 
 def _min_confidence() -> float:
     return float(os.getenv("MIN_CONFIDENCE", str(RULES.get("scan", {}).get("min_confidence", 0.44))))
+
+def _trade_style(direction: str, setup: str, timeframe: str, f: MarketFeatures) -> tuple[str, str]:
+    """Classify the setup before choosing stop/targets.
+
+    SCALP = fast 5m/15m reaction or mixed higher-timeframe context.
+    SWING = 15m setup with aligned 1h and 4h context, or a broader continuation.
+    """
+    setup_upper = str(setup).upper()
+    tf = str(timeframe).lower()
+    if "FAST" in setup_upper or tf == "5m":
+        return "SCALP", "Fast 5m/15m reaction setup; targets are built from intraday ATR."
+    if (
+        tf in {"15m", "1h"}
+        and ((direction == "LONG" and f.trend_60 == "UP" and f.trend_240 == "UP")
+             or (direction == "SHORT" and f.trend_60 == "DOWN" and f.trend_240 == "DOWN"))
+        and f.market_structure in {"BULLISH", "BEARISH"}
+    ):
+        return "SWING", "Higher-timeframe trend and structure align; targets use a wider swing plan."
+    return "SCALP", "Intraday setup without full higher-timeframe alignment; targets use the scalp plan."
+
+
+def _trade_plan(
+    *,
+    direction: str,
+    setup: str,
+    timeframe: str,
+    entry: float,
+    raw_stop: float,
+    raw_target: float,
+    f: MarketFeatures,
+) -> tuple[float, float, float, str, str, float]:
+    """Build a structurally anchored but non-microscopic stop/target plan.
+
+    The stop is never tightened past the supplied invalidation anchor. When a
+    raw stop is too close, it is widened using ATR so ordinary BTC noise is less
+    likely to hit it immediately. TP1/TP2 are volatility-aware and bounded so a
+    distant historical level cannot create an unrealistic 10R+ target.
+    """
+    style, style_reason = _trade_style(direction, setup, timeframe, f)
+    atr = max(float(f.atr_15 or 0.0), abs(entry) * 0.0005)
+    anchor_risk = abs(entry - raw_stop)
+
+    if style == "SWING":
+        min_risk = max(atr * 1.00, abs(entry) * 0.0010)
+        tp1_rr = 1.60
+        tp2_rr = 3.50
+        max_rr = 5.00
+    else:
+        min_risk = max(atr * 0.65, abs(entry) * 0.0007)
+        tp1_rr = 1.40
+        tp2_rr = 3.00
+        max_rr = 3.50
+
+    risk = max(anchor_risk, min_risk)
+    if direction == "LONG":
+        stop = min(raw_stop, entry - risk)
+        risk = entry - stop
+        tp1 = entry + risk * tp1_rr
+        structural_distance = abs(raw_target - entry)
+        target_distance = min(max(structural_distance, risk * tp2_rr), risk * max_rr)
+        tp2 = entry + target_distance
+    else:
+        stop = max(raw_stop, entry + risk)
+        risk = stop - entry
+        tp1 = entry - risk * tp1_rr
+        structural_distance = abs(raw_target - entry)
+        target_distance = min(max(structural_distance, risk * tp2_rr), risk * max_rr)
+        tp2 = entry - target_distance
+
+    # Do not permit the planner to reduce risk below its volatility floor.
+    if risk <= 0:
+        risk = min_risk
+        stop = entry - risk if direction == "LONG" else entry + risk
+        tp1 = entry + risk * tp1_rr if direction == "LONG" else entry - risk * tp1_rr
+        tp2 = entry + risk * tp2_rr if direction == "LONG" else entry - risk * tp2_rr
+
+    return stop, tp1, tp2, style, style_reason, risk
+
+
 
 def _score(direction: str, setup: str, f: MarketFeatures) -> tuple[float, list[str]]:
     score = 0.58
@@ -176,7 +257,16 @@ def _signal(
     f: MarketFeatures,
     thesis: list[str],
 ) -> Optional[Signal]:
-    gate = _gate_details(direction, setup, entry, stop, target, f)
+    stop, target1, target2, trade_style, style_reason, risk_distance = _trade_plan(
+        direction=direction,
+        setup=setup,
+        timeframe=timeframe,
+        entry=entry,
+        raw_stop=stop,
+        raw_target=target,
+        f=f,
+    )
+    gate = _gate_details(direction, setup, entry, stop, target2, f)
     ratio = gate["checks"]["rr"]
     confidence = gate["checks"]["confidence"]
     if gate["reasons"]:
@@ -191,8 +281,8 @@ def _signal(
         setup=setup,
         entry=entry,
         stop=stop,
-        target1=entry + (1 if direction == "LONG" else -1) * abs(entry - stop) * 1.5,
-        target2=target,
+        target1=target1,
+        target2=target2,
         rr=ratio,
         confidence=confidence,
         grade=grade,
