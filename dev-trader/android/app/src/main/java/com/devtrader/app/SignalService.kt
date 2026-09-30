@@ -32,6 +32,7 @@ class SignalService : Service() {
         private const val PREF_LAST_SIGNAL_ID = "last_signal_id"
         private const val PREF_LAST_ALERT_KEY = "last_alert_key"
         private const val WS_URL = "wss://dev-trader-engine.onrender.com/ws"
+        private const val HEARTBEAT_URL = "https://dev-trader-engine.onrender.com/heartbeat"
     }
 
     private val handler = Handler(Looper.getMainLooper())
@@ -40,6 +41,7 @@ class SignalService : Service() {
     private var stopped = false
     private var lastMessageMs = 0L
     private var reconnectScheduled = false
+    private var staleChecks = 0
     private val client by lazy {
         OkHttpClient.Builder()
             .connectTimeout(8, TimeUnit.SECONDS)
@@ -135,6 +137,7 @@ class SignalService : Service() {
                     reconnectScheduled = false
                     socket = ws
                     lastMessageMs = System.currentTimeMillis()
+                    staleChecks = 0
                     updateServiceNotification("Live signal monitoring connected")
                 }
 
@@ -208,13 +211,66 @@ class SignalService : Service() {
             if (stopped) return
             val age = if (lastMessageMs == 0L) Long.MAX_VALUE
             else System.currentTimeMillis() - lastMessageMs
+
             if (age > 12_000L) {
-                updateServiceNotification("Live feed stale • rebuilding connection…")
-                connect(force = true)
+                staleChecks += 1
+                checkHeartbeatAndRecover()
             } else if (socket == null) {
+                staleChecks = 0
                 connect()
             }
             handler.postDelayed(this, 4_000L)
+        }
+    }
+
+    private fun checkHeartbeatAndRecover() {
+        if (stopped) return
+        runCatching {
+            client.newCall(
+                Request.Builder().url(HEARTBEAT_URL).get().build()
+            ).enqueue(object : okhttp3.Callback {
+                override fun onFailure(call: okhttp3.Call, e: java.io.IOException) {
+                    if (!stopped && staleChecks >= 3) {
+                        updateServiceNotification("Live feed reconnecting…")
+                        connect(force = true)
+                    }
+                }
+
+                override fun onResponse(call: okhttp3.Call, response: Response) {
+                    response.use {
+                        if (!it.isSuccessful || it.body == null) {
+                            if (!stopped && staleChecks >= 3) {
+                                updateServiceNotification("Live feed reconnecting…")
+                                connect(force = true)
+                            }
+                            return
+                        }
+                        val body = it.body!!.string()
+                        runCatching {
+                            val root = JSONObject(body)
+                            val marketWs = root.optBoolean("market_ws", false)
+                            val dataHealth = root.optString("data_health", "")
+                            val receivedAge = root.optJSONObject("ages_ms")
+                                ?.optLong("received_ms", Long.MAX_VALUE)
+                                ?: Long.MAX_VALUE
+                            val backendHealthy = marketWs &&
+                                dataHealth in setOf("HEALTHY", "DEGRADED") &&
+                                receivedAge < 10_000L
+
+                            if (backendHealthy) {
+                                // The backend is alive; rebuild only our stale socket.
+                                if (!stopped) {
+                                    staleChecks = 0
+                                    connect(force = true)
+                                }
+                            } else if (!stopped && staleChecks >= 3) {
+                                updateServiceNotification("Live feed reconnecting…")
+                                connect(force = true)
+                            }
+                        }
+                    }
+                }
+            })
         }
     }
 
