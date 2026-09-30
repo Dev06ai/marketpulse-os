@@ -256,7 +256,7 @@ class BybitStream:
             ) if x
         ]
         if recent and min(now - x for x in recent) < 5000:
-            self.state.data_health = "HEALTHY"
+            self.state.data_health = "DEGRADED" if self.last_data_source == "BINANCE_FALLBACK" else "HEALTHY"
         elif self.state.ws_connected:
             self.state.data_health = "STALE"
         elif self.last_rest_ok and self.state.last_price is not None:
