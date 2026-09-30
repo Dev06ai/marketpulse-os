@@ -668,7 +668,7 @@ class SafeActivity : Activity() {
                 "\nNO CONFIRMED TRADE YET • radar is actively monitoring triggers."
             risk.text = "No confirmed setup • keep scanning"
         } else {
-            val lifecycle = signalObj.optString("lifecycle", "ACTIVE")
+            val lifecycle = signalObj.optString("lifecycle_stage", signalObj.optString("lifecycle", "ACTIVE"))
             val thesis = signalObj.optJSONArray("thesis")
             val reason = if (thesis != null && thesis.length() > 0) thesis.optString(0) else ""
             val management = signalObj.optJSONObject("evidence")?.optJSONObject("position_management")
@@ -695,6 +695,16 @@ class SafeActivity : Activity() {
                 loadJournal()
                 safe { calculateRisk() }
             }
+        }
+
+        val tradeEvent = root.optJSONObject("trade_event")
+        if (tradeEvent != null && tradeEvent.optString("key").isNotBlank()) {
+            val eventType = tradeEvent.optString("type", "TRADE_EVENT").replace("_", " ")
+            val eventPrice = tradeEvent.optDouble("price", Double.NaN)
+            val eventNote = tradeEvent.optString("note", "")
+            risk.text = eventType + "  •  " +
+                if (eventPrice.isNaN()) "—" else String.format(Locale.US, "%.2f", eventPrice) +
+                if (eventNote.isBlank()) "" else "\n" + eventNote
         }
 
         val story = engine?.optString("multi_timeframe_story", "").orEmpty()
