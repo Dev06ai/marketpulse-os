@@ -3785,7 +3785,7 @@ server.on("upgrade",(req,socket,head)=>{
   }
 });
 
-storage.init().catch(()=>{});learning.init().catch(()=>{});
+storage.init().then(()=>storage.dedupeDevTraderLearning()).catch(()=>{});learning.init().catch(()=>{});
 server.listen(PORT,()=>{
   console.log('MarketPulse OS listening on :'+PORT);
   setTimeout(()=>{runResearchWarmup().catch(()=>{})},12000);
