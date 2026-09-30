@@ -29,6 +29,7 @@ push = PushService()
 stream = None
 server_started_ms = int(time.time() * 1000)
 last_engine_eval_ms = 0
+last_opportunity_alert = {"key": "", "ts": 0}
 
 
 class PushTestPayload(BaseModel):
@@ -141,8 +142,46 @@ async def on_state(s: MarketState):
         last_engine_eval_ms = now
         sig = engine.evaluate(state)
 
-        lifecycle_event = engine.last_lifecycle_event
-        if lifecycle_event and bridge.enabled:
+        # Notify only on meaningful opportunity transitions, not on every radar refresh.
+        global last_opportunity_alert
+        radar = engine.opportunity_radar_state
+        sfp = (engine.last_diagnostics or {}).get("sfp_hunter", {})
+        breakout = (engine.last_diagnostics or {}).get("breakout_watch", {})
+        now_alert = int(time.time() * 1000)
+        alert = None
+        if radar:
+            lead = radar[0]
+            if lead.get("tier") in {"DEVELOPING", "CONFIRMED"}:
+                key = f"radar:{lead.get('direction')}:{lead.get('tier')}:{lead.get('setup')}"
+                if key != last_opportunity_alert["key"] or now_alert - last_opportunity_alert["ts"] > 15 * 60_000:
+                    alert = {
+                        "key": key,
+                        "title": f"BTC {lead.get('direction')} • {lead.get('tier')} opportunity",
+                        "body": f"{lead.get('setup')} • {lead.get('score')}/{lead.get('max_score')} evidence. " +
+                                 ("; ".join(lead.get('reasons', [])[:3]) or "Multiple live confirmations developing."),
+                    }
+        if sfp.get("status") == "TRIGGERED":
+            key = f"sfp:{sfp.get('direction')}:{sfp.get('pattern')}:{sfp.get('target_level')}"
+            if key != last_opportunity_alert["key"] or now_alert - last_opportunity_alert["ts"] > 15 * 60_000:
+                alert = {
+                    "key": key,
+                    "title": f"BTC {sfp.get('direction')} • SFP detected",
+                    "body": f"{sfp.get('pattern')} at {sfp.get('target_level')}. CVD {sfp.get('cvd')} • OI 5m {sfp.get('oi_5m_pct')}%.",
+                }
+        if breakout.get("status") == "BREAKOUT":
+            level = breakout.get('nearby_levels', [{}])[0].get('level') if breakout.get('nearby_levels') else ''
+            key = f"breakout:{breakout.get('event')}:{level}"
+            if key != last_opportunity_alert["key"] or now_alert - last_opportunity_alert["ts"] > 15 * 60_000:
+                alert = {
+                    "key": key,
+                    "title": f"BTC {breakout.get('event','BREAKOUT')}",
+                    "body": breakout.get('message', 'Breakout/reclaim detected.'),
+                }
+        if alert and push.ready:
+            last_opportunity_alert = {"key": alert["key"], "ts": now_alert}
+            push.send_opportunity(alert)
+
+        lifecycle_event = engine.last_lifecycle_event        if lifecycle_event and bridge.enabled:
             asyncio.create_task(
                 bridge.post_outcome(
                     lifecycle_event["signal"],
