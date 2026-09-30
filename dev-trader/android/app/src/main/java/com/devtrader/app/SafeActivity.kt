@@ -5,6 +5,7 @@ import android.app.Activity
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Color
 import android.graphics.Typeface
@@ -23,6 +24,7 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import androidx.core.app.NotificationCompat
+import androidx.core.content.FileProvider
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
@@ -33,6 +35,9 @@ import okhttp3.WebSocket
 import okhttp3.WebSocketListener
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.File
+import java.io.FileOutputStream
+import java.security.MessageDigest
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
@@ -214,12 +219,12 @@ class SafeActivity : Activity() {
         root.addView(riskButton, margins(bottom = 12))
 
         val toolsRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        val updateTool = actionButton("UPDATE")
-        updateTool.setOnClickListener { safe { checkUpdate() } }
-        val checkTool = actionButton("SYSTEM CHECK")
-        checkTool.setOnClickListener { safe { systemCheck() } }
-        toolsRow.addView(updateTool, LinearLayout.LayoutParams(0, dp(50), 1f).apply { rightMargin = dp(5) })
-        toolsRow.addView(checkTool, LinearLayout.LayoutParams(0, dp(50), 1f).apply { leftMargin = dp(5) })
+        updateButton = actionButton("UPDATE")
+        updateButton.setOnClickListener { safe { checkUpdate() } }
+        checkButton = actionButton("SYSTEM CHECK")
+        checkButton.setOnClickListener { safe { systemCheck() } }
+        toolsRow.addView(updateButton, LinearLayout.LayoutParams(0, dp(50), 1f).apply { rightMargin = dp(5) })
+        toolsRow.addView(checkButton, LinearLayout.LayoutParams(0, dp(50), 1f).apply { leftMargin = dp(5) })
         root.addView(toolsRow, margins(bottom = 10))
 
         val appUpdate = card("APP UPDATE", "Ready", 13f)
@@ -817,13 +822,80 @@ class SafeActivity : Activity() {
                     val currentCode = packageManager.getPackageInfo(packageName, 0).longVersionCode
                     val remoteName = j.optString("versionName", "new")
 
-                    update.text = if (!j.optBoolean("enabled", false) || remoteCode <= currentCode) {
-                        "UP TO DATE  •  build " + currentCode
+                    if (!j.optBoolean("enabled", false) || remoteCode <= currentCode) {
+                        update.text = "UP TO DATE  •  build " + currentCode
                     } else {
-                        "UPDATE AVAILABLE  •  v" + remoteName
+                        val apkUrl = j.optString("apkUrl", "")
+                        val expectedSha = j.optString("sha256", "")
+                        if (apkUrl.isBlank() || expectedSha.length < 32) {
+                            update.text = "UPDATE METADATA INVALID"
+                        } else {
+                            update.text = "DOWNLOADING  •  v" + remoteName
+                            downloadAndInstallUpdate(apkUrl, expectedSha, remoteName)
+                        }
                     }
                 }
             }
+        }
+    }
+
+    private fun downloadAndInstallUpdate(apkUrl: String, expectedSha: String, versionName: String) {
+        runCatching {
+            val request = Request.Builder().url(apkUrl).get().build()
+            client.newCall(request).enqueue(object : okhttp3.Callback {
+                override fun onFailure(call: okhttp3.Call, e: java.io.IOException) {
+                    handler.post { update.text = "UPDATE DOWNLOAD FAILED  •  RETRY" }
+                }
+
+                override fun onResponse(call: okhttp3.Call, response: Response) {
+                    response.use {
+                        if (!it.isSuccessful || it.body == null) {
+                            handler.post { update.text = "UPDATE DOWNLOAD FAILED  •  HTTP " + it.code }
+                            return
+                        }
+                        val dir = File(cacheDir, "updates")
+                        dir.mkdirs()
+                        val apk = File(dir, "dev-trader-" + versionName + ".apk")
+                        val digest = MessageDigest.getInstance("SHA-256")
+                        FileOutputStream(apk).use { out ->
+                            it.body!!.byteStream().use { input ->
+                                val buffer = ByteArray(32 * 1024)
+                                while (true) {
+                                    val count = input.read(buffer)
+                                    if (count <= 0) break
+                                    digest.update(buffer, 0, count)
+                                    out.write(buffer, 0, count)
+                                }
+                            }
+                        }
+                        val actualSha = digest.digest().joinToString("") { b -> "%02x".format(b) }
+                        if (!actualSha.equals(expectedSha, ignoreCase = true)) {
+                            apk.delete()
+                            handler.post { update.text = "UPDATE BLOCKED  •  CHECKSUM FAILED" }
+                            return
+                        }
+                        handler.post {
+                            update.text = "UPDATE VERIFIED  •  INSTALLING v" + versionName
+                            installApk(apk)
+                        }
+                    }
+                }
+            })
+        }.onFailure {
+            update.text = "UPDATE FAILED  •  RETRY"
+        }
+    }
+
+    private fun installApk(apk: File) {
+        runCatching {
+            val uri = FileProvider.getUriForFile(this, packageName + ".fileprovider", apk)
+            val intent = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(uri, "application/vnd.android.package-archive")
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            startActivity(intent)
+        }.onFailure {
+            update.text = "INSTALL BLOCKED  •  ALLOW INSTALLING FROM THIS SOURCE"
         }
     }
 
