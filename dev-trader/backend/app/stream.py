@@ -55,7 +55,7 @@ class BybitStream:
         for interval, dest_name, limit in [
             ("5", "candles_5", 180),
             ("15", "candles_15", 180),
-            ("60", "candles_60", 120),
+            ("60", "candles_60", 240),
         ]:
             try:
                 rows = await asyncio.to_thread(self._rest_kline, interval, limit)
