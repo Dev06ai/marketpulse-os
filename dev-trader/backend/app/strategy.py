@@ -540,6 +540,45 @@ class StrategyEngine:
             "score_context": gate["score_reasons"],
         }
 
+    def setup_watch(self, state: MarketState) -> list[dict]:
+        if state.last_price is None:
+            return []
+        price = float(state.last_price)
+        watched = []
+        for raw in self.setup_memories:
+            if not isinstance(raw, dict) or raw.get("active") is False:
+                continue
+            low = raw.get("zoneLow", raw.get("zone_low"))
+            high = raw.get("zoneHigh", raw.get("zone_high"))
+            if low is None or high is None:
+                continue
+            try:
+                lo, hi = sorted((float(low), float(high)))
+            except (TypeError, ValueError):
+                continue
+            if price < lo:
+                state_name = "BELOW"
+                edge_distance_pct = (lo - price) / max(price, 1.0) * 100.0
+            elif price > hi:
+                state_name = "ABOVE"
+                edge_distance_pct = (price - hi) / max(price, 1.0) * 100.0
+            else:
+                state_name = "AT_ZONE"
+                edge_distance_pct = 0.0
+            watched.append({
+                "id": raw.get("id"),
+                "title": raw.get("title", raw.get("setupKey", "saved setup")),
+                "direction": raw.get("direction", "BOTH"),
+                "zone_low": lo,
+                "zone_high": hi,
+                "state": state_name,
+                "distance_pct": round(edge_distance_pct, 3),
+                "priority": raw.get("priority", 1),
+                "trigger_patterns": raw.get("triggerPatterns", raw.get("trigger_patterns", [])),
+            })
+        watched.sort(key=lambda x: (0 if x["state"] == "AT_ZONE" else 1, -float(x.get("priority") or 1), float(x.get("distance_pct") or 0)))
+        return watched[:30]
+
     def diagnostics(self, state: MarketState) -> dict:
         cs = [c for c in state.candles_15 if c.confirmed]
         highs, lows = pivots(cs[:-1], 2) if len(cs) >= 5 else ([], [])
@@ -557,6 +596,7 @@ class StrategyEngine:
             "confirmed_1h_candles": len([c for c in state.candles_60 if c.confirmed]),
             "signal_state": self.signal_status,
             "active_signal": self.active_signal,
+            "setup_watch": self.setup_watch(state),
             "market_features": {
                 "trend_15": f0.trend_15,
                 "trend_60": f0.trend_60,
