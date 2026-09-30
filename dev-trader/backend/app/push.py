@@ -76,6 +76,43 @@ class PushService:
                 self.last_error=str(exc)
                 print(f"FCM send failed: {exc}")
 
+    def send_trade_event(self, event: dict):
+        if not (self.ready and messaging):
+            return
+        event_type = str(event.get("type") or "TRADE_EVENT").upper()
+        direction = str(event.get("direction") or "BTC").upper()
+        setup = str(event.get("setup") or "setup")
+        price = event.get("price")
+        level = event.get("level")
+        if event_type == "TP1_HIT":
+            title = f"BTC {direction} • TP1 HIT"
+        elif event_type == "TP2_HIT":
+            title = f"BTC {direction} • TP2 HIT"
+        elif event_type == "SL_HIT":
+            title = f"BTC {direction} • STOP / INVALIDATION"
+        else:
+            title = f"BTC {direction} • {event_type.replace('_', ' ')}"
+        body = f"{setup} • price {price:.2f}" if isinstance(price, (int, float)) else setup
+        if isinstance(level, (int, float)):
+            body += f" • level {level:.2f}"
+        if event.get("note"):
+            body += f" • {event['note']}"
+        for token in list(self.tokens):
+            try:
+                messaging.send(messaging.Message(
+                    token=token,
+                    notification=messaging.Notification(title=title, body=body),
+                    data={
+                        "type": "trade_event",
+                        "event_key": str(event.get("key") or ""),
+                        "event_type": event_type,
+                        "signal_id": str(event.get("signal_id") or ""),
+                    },
+                ))
+            except Exception as exc:
+                self.last_error=str(exc)
+                print(f"FCM trade event send failed: {exc}")
+
     def send_opportunity(self, alert: dict):
         if not (self.ready and messaging):
             return
