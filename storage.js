@@ -66,8 +66,8 @@ async function seedSetupMemoriesFromFile(){
         String(m.direction||"BOTH").toUpperCase(),
         Number.isFinite(Number(m.zoneLow))?Number(m.zoneLow):null,
         Number.isFinite(Number(m.zoneHigh))?Number(m.zoneHigh):null,
-        Array.isArray(m.triggerPatterns)?m.triggerPatterns.map(String):[],
-        m.requiredEvidence&&typeof m.requiredEvidence==="object"?m.requiredEvidence:{},
+        JSON.stringify(Array.isArray(m.triggerPatterns)?m.triggerPatterns.map(String):[]),
+        JSON.stringify(m.requiredEvidence&&typeof m.requiredEvidence==="object"?m.requiredEvidence:{}),
         Number.isFinite(Number(m.invalidationPrice))?Number(m.invalidationPrice):null,
         String(m.notes||""),String(m.sourceType||"manual"),m.sourceRef?String(m.sourceRef):null,
         Number.isFinite(Number(m.priority))?Number(m.priority):1,m.active!==false,m.expiresAt?new Date(m.expiresAt):null
