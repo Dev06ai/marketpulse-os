@@ -443,7 +443,12 @@ class SafeActivity : Activity() {
 
     private fun renderChartFromState() {
         val root = latestRoot ?: return
-        val key = when (selectedTf) { "1h" -> "candles_60"; "4h" -> "candles_4h"; else -> "candles_15" }
+        val key = when (selectedTf) {
+            "5m" -> "candles_5"
+            "1h" -> "candles_60"
+            "4h" -> "candles_4h"
+            else -> "candles_15"
+        }
         val candles = root.optJSONArray(key) ?: JSONArray()
         chart.setTimeframe(selectedTf)
         chart.setData(candles, root.optJSONObject("signal"), calculateEma(candles, 50), root.optDouble("last_price", Double.NaN))
