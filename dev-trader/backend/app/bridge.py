@@ -94,3 +94,14 @@ class MarketPulseBridge:
         )
         rows = result.get("predictions", []) if isinstance(result, dict) else []
         return rows if isinstance(rows, list) else []
+
+    async def fetch_learning_history(self, symbol: str):
+        result = await asyncio.to_thread(
+            self._request,
+            "GET",
+            "/api/dev-trader/learning/history",
+            None,
+            {"symbol": symbol.upper()},
+        )
+        rows = result.get("predictions", []) if isinstance(result, dict) else []
+        return rows if isinstance(rows, list) else []
