@@ -55,6 +55,13 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import android.os.Handler
 import android.os.Looper
+import androidx.activity.result.IntentSenderRequest
+import com.google.android.play.core.appupdate.AppUpdateManager
+import com.google.android.play.core.appupdate.AppUpdateManagerFactory
+import com.google.android.play.core.appupdate.AppUpdateOptions
+import com.google.android.play.core.install.model.AppUpdateType
+import com.google.android.play.core.install.model.InstallStatus
+import com.google.android.play.core.install.model.UpdateAvailability
 
 private val Charcoal = Color(0xFF0B0B10)
 private val CardColor = Color(0xFF14141D)
@@ -101,8 +108,25 @@ data class SystemCheckUi(
     val success: Boolean = false
 )
 
+data class UpdateUi(
+    val available: Boolean = false,
+    val downloading: Boolean = false,
+    val downloaded: Boolean = false,
+    val message: String = ""
+)
+
 class MainActivity : ComponentActivity() {
     private val permission = registerForActivityResult(ActivityResultContracts.RequestPermission()) {}
+    private val updateLauncher = registerForActivityResult(
+        ActivityResultContracts.StartIntentSenderForResult()
+    ) { result ->
+        if (result.resultCode != RESULT_OK) {
+            updateUi = updateUi.copy(
+                downloading = false,
+                message = "Play Store update was not completed."
+            )
+        }
+    }
     private val client = OkHttpClient.Builder()
         .pingInterval(15, TimeUnit.SECONDS)
         .retryOnConnectionFailure(true)
@@ -112,6 +136,8 @@ class MainActivity : ComponentActivity() {
     private var socket: WebSocket? = null
     private var live by mutableStateOf(LiveUi())
     private var systemCheck by mutableStateOf(SystemCheckUi())
+    private var updateUi by mutableStateOf(UpdateUi())
+    private var appUpdateManager: AppUpdateManager? = null
     private var lastNotifiedId: String? = null
     private var reconnectAttempt = 0
     private var shuttingDown = false
@@ -123,9 +149,76 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         if (Build.VERSION.SDK_INT >= 33) permission.launch(Manifest.permission.POST_NOTIFICATIONS)
         ensureNotificationChannel(this)
+        appUpdateManager = runCatching { AppUpdateManagerFactory.create(this) }.getOrNull()
+        checkForPlayUpdate()
         connect()
         registerFcmToken()
-        setContent { DevTraderScreen(live, systemCheck, ::runFullSystemCheck) }
+        setContent {
+            DevTraderScreen(
+                live,
+                systemCheck,
+                updateUi,
+                ::runFullSystemCheck,
+                ::startPlayUpdate
+            )
+        }
+    }
+
+    private fun checkForPlayUpdate() {
+        val manager = appUpdateManager ?: return
+        runCatching {
+            manager.appUpdateInfo.addOnSuccessListener { info ->
+                when {
+                    info.updateAvailability() == UpdateAvailability.DEVELOPER_TRIGGERED_UPDATE_IN_PROGRESS -> {
+                        startPlayUpdate(info)
+                    }
+                    info.updateAvailability() == UpdateAvailability.UPDATE_AVAILABLE &&
+                        info.isUpdateTypeAllowed(AppUpdateType.FLEXIBLE) -> {
+                        updateUi = UpdateUi(
+                            available = true,
+                            message = "A new Dev Trader version is available from Google Play."
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    private fun startPlayUpdate() {
+        val manager = appUpdateManager ?: return
+        runCatching {
+            manager.appUpdateInfo.addOnSuccessListener { info ->
+                startPlayUpdate(info)
+            }.addOnFailureListener {
+                updateUi = updateUi.copy(message = "Google Play update check failed.")
+            }
+        }
+    }
+
+    private fun startPlayUpdate(info: com.google.android.play.core.appupdate.AppUpdateInfo) {
+        val manager = appUpdateManager ?: return
+        if (info.updateAvailability() != UpdateAvailability.UPDATE_AVAILABLE &&
+            info.updateAvailability() != UpdateAvailability.DEVELOPER_TRIGGERED_UPDATE_IN_PROGRESS) return
+
+        if (!info.isUpdateTypeAllowed(AppUpdateType.FLEXIBLE) &&
+            !info.isUpdateTypeAllowed(AppUpdateType.IMMEDIATE)) return
+
+        val type = if (info.isUpdateTypeAllowed(AppUpdateType.IMMEDIATE)) {
+            AppUpdateType.IMMEDIATE
+        } else {
+            AppUpdateType.FLEXIBLE
+        }
+
+        updateUi = updateUi.copy(available = true, downloading = true, message = "Google Play is updating Dev Trader…")
+        runCatching {
+            manager.startUpdateFlowForResult(
+                info,
+                updateLauncher,
+                AppUpdateOptions.newBuilder(type).build()
+            )
+        }.onFailure {
+            updateUi = updateUi.copy(downloading = false, message = "Google Play could not start the update.")
+        }
     }
 
     private fun connect() {
@@ -467,6 +560,29 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        val manager = appUpdateManager ?: return
+        runCatching {
+            manager.appUpdateInfo.addOnSuccessListener { info ->
+                when {
+                    info.updateAvailability() == UpdateAvailability.DEVELOPER_TRIGGERED_UPDATE_IN_PROGRESS -> {
+                        startPlayUpdate(info)
+                    }
+                    info.installStatus() == InstallStatus.DOWNLOADED -> {
+                        updateUi = updateUi.copy(
+                            available = true,
+                            downloading = false,
+                            downloaded = true,
+                            message = "Update downloaded. Restarting through Google Play…"
+                        )
+                        manager.completeUpdate()
+                    }
+                }
+            }
+        }
+    }
+
     override fun onDestroy() {
         shuttingDown = true
         mainHandler.removeCallbacksAndMessages(null)
@@ -527,7 +643,7 @@ private fun postSignalNotification(context: Context, signal: SignalUi) {
 }
 
 @Composable
-private fun DevTraderScreen(state: LiveUi, check: SystemCheckUi, onRunCheck: () -> Unit) {
+private fun DevTraderScreen(state: LiveUi, check: SystemCheckUi, update: UpdateUi, onRunCheck: () -> Unit, onUpdate: () -> Unit) {
     MaterialTheme(colorScheme = darkColorScheme(background = Charcoal, surface = CardColor)) {
         Box(
             modifier = Modifier
@@ -556,6 +672,7 @@ private fun DevTraderScreen(state: LiveUi, check: SystemCheckUi, onRunCheck: () 
                 item { FlowCard(state) }
                 item { SignalCard(state) }
                 item { IntegrityCard(state) }
+                item { UpdateCard(update, onUpdate) }
                 item { SystemCheckCard(check, onRunCheck) }
             }
         }
@@ -715,6 +832,36 @@ private fun SignalCard(state: LiveUi) {
                 color = Muted,
                 style = MaterialTheme.typography.bodySmall
             )
+        }
+    }
+}
+
+@Composable
+private fun UpdateCard(update: UpdateUi, onUpdate: () -> Unit) {
+    if (!update.available && update.message.isBlank()) return
+    Card(
+        colors = CardDefaults.cardColors(containerColor = CardColor),
+        shape = RoundedCornerShape(18.dp)
+    ) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("APP UPDATE", color = Muted)
+            Text(
+                when {
+                    update.downloaded -> "Update ready"
+                    update.downloading -> "Updating through Google Play…"
+                    else -> "Update available"
+                },
+                color = TextColor,
+                fontWeight = FontWeight.Bold
+            )
+            if (update.message.isNotBlank()) {
+                Text(update.message, color = Muted, style = MaterialTheme.typography.bodySmall)
+            }
+            if (update.available && !update.downloading && !update.downloaded) {
+                Button(onClick = onUpdate) {
+                    Text("UPDATE FROM PLAY STORE")
+                }
+            }
         }
     }
 }
