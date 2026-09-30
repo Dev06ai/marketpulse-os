@@ -2,9 +2,9 @@ version: 1
 mode: Klein-manual-only
 risk:
   hard_cap_risk_pct: 1.0
-  preferred_min_rr: 2.0
+  preferred_min_rr: 1.5
   elite_min_rr: 3.0
-  dline_reference_min_rr: 2.0
+  dline_reference_min_rr: 1.5
   never_auto_execute: true
 htf:
   weekly_open: true
@@ -20,22 +20,24 @@ sfp:
 mss:
   enabled: true
   require_body_close: true
-  avoid_chasing_first_impulse: true
+  minimum_confirmed_candles: 8
+  avoid_chasing_first_impulse: false
 fvg:
   enabled: true
   entry_reference: 50_percent
   invalidation_on_close_through_reference: true
 order_block:
   enabled: true
-  require_structure_shift: true
+  require_structure_shift: false
   invalidation_on_structural_close: true
 breaker:
   enabled: true
 dline:
   enabled: true
   timeframes: [15m, 1h]
-  preferred_touches: 3
+  preferred_touches: 2
   body_close_confirmation: true
+  loose_scan: true
   trade_with_bigger_trend: true
   entries: [breakout, retest]
 order_flow:
@@ -46,3 +48,9 @@ signal_policy:
   stale_data_blocks_signal: true
   duplicate_signal_block: true
   manual_execution_only: true
+
+scan:
+  mode: loose
+  min_confidence: 0.44
+  risk_atr_min: 0.08
+  risk_atr_max: 3.0
