@@ -523,8 +523,21 @@ class SafeActivity : Activity() {
                 second.optString("direction") + " " + second.optString("tier") + " " +
                     second.optInt("score") + "/" + second.optInt("max_score")
             } else ""
+            val sfp = engine?.optJSONObject("sfp_hunter")
+            val breakout = engine?.optJSONObject("breakout_watch")
+            val sfpText = if (sfp != null) {
+                "SFP  •  " + sfp.optString("status", "WATCH") + "  •  " +
+                    sfp.optString("direction", "—") + " @ " +
+                    String.format(Locale.US, "%.2f", sfp.optDouble("target_level", Double.NaN))
+            } else ""
+            val breakoutText = if (breakout != null) {
+                "BREAKOUT  •  " + breakout.optString("status", "WATCH") + "  •  " +
+                    breakout.optString("event", "NONE")
+            } else ""
             signal.text = "OPPORTUNITY RADAR  •  LOOSE MODE\n" +
                 leadText + if (secondText.isBlank()) "" else "\n" + secondText +
+                if (sfpText.isBlank()) "" else "\n" + sfpText +
+                if (breakoutText.isBlank()) "" else "\n" + breakoutText +
                 if (scenario.isBlank()) "" else "\nSCENARIOS  •  " + scenario +
                 "\nThe radar can flag early setups before full confirmation."
             risk.text = "No active setup"
