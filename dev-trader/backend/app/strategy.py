@@ -432,6 +432,11 @@ class StrategyEngine:
         self.last_lifecycle_event: dict | None = None
         self.setup_memories: list[dict] = []
         self.position_management: dict | None = None
+        self.last_diagnostics: dict = {"status": "STARTING", "wait_reason": "Engine has not evaluated market data yet.", "blocked_by": [], "setups": {}, "signal_state": "NONE"}
+        self.opportunity_radar_state: list[dict] = []
+        self.scenario_tree_state: list[dict] = []
+        self.liquidity_map_state: dict = {"above": [], "below": []}
+        self.multi_tf_story: str = "Waiting for multi-timeframe data."
 
     def set_setup_memories(self, memories: list[dict] | None):
         self.setup_memories = list(memories or [])[:200]
@@ -558,11 +563,11 @@ class StrategyEngine:
             except (TypeError, ValueError):
                 continue
             if price < lo:
-                state_name = "BELOW"
                 edge_distance_pct = (lo - price) / max(price, 1.0) * 100.0
+                state_name = "APPROACHING" if edge_distance_pct <= 0.35 else "BELOW"
             elif price > hi:
-                state_name = "ABOVE"
                 edge_distance_pct = (price - hi) / max(price, 1.0) * 100.0
+                state_name = "APPROACHING" if edge_distance_pct <= 0.35 else "ABOVE"
             else:
                 state_name = "AT_ZONE"
                 edge_distance_pct = 0.0
@@ -580,15 +585,208 @@ class StrategyEngine:
         watched.sort(key=lambda x: (0 if x["state"] == "AT_ZONE" else 1, -float(x.get("priority") or 1), float(x.get("distance_pct") or 0)))
         return watched[:30]
 
+    def _direction_evidence(self, direction: str, f: MarketFeatures, memory_match: dict | None = None) -> tuple[int, list[str]]:
+        direction = direction.upper()
+        score = 0
+        reasons: list[str] = []
+        if (direction == "LONG" and f.trend_15 == "UP") or (direction == "SHORT" and f.trend_15 == "DOWN"):
+            score += 1; reasons.append("15m trend aligns")
+        if (direction == "LONG" and f.trend_60 == "UP") or (direction == "SHORT" and f.trend_60 == "DOWN"):
+            score += 1; reasons.append("1h trend aligns")
+        if (direction == "LONG" and f.trend_240 == "UP") or (direction == "SHORT" and f.trend_240 == "DOWN"):
+            score += 1; reasons.append("4h trend aligns")
+        if (direction == "LONG" and str(f.market_structure).upper() == "BULLISH") or (direction == "SHORT" and str(f.market_structure).upper() == "BEARISH"):
+            score += 1; reasons.append("market structure aligns")
+        if (direction == "LONG" and f.cvd_price_divergence == "BULLISH") or (direction == "SHORT" and f.cvd_price_divergence == "BEARISH"):
+            score += 1; reasons.append("CVD divergence aligns")
+        if (direction == "LONG" and f.book_imbalance > 0.08) or (direction == "SHORT" and f.book_imbalance < -0.08):
+            score += 1; reasons.append("orderbook pressure aligns")
+        if direction == "LONG" and f.oi_change_5m_pct > 0.15 and f.price_impulse > 0:
+            score += 1; reasons.append("price + OI supports continuation")
+        elif direction == "SHORT" and f.oi_change_5m_pct > 0.15 and f.price_impulse < 0:
+            score += 1; reasons.append("price + OI supports continuation")
+        elif f.liquidation_pressure == ("LONG_LIQUIDATIONS" if direction == "LONG" else "SHORT_LIQUIDATIONS"):
+            score += 1; reasons.append("directional liquidation pressure")
+        if memory_match:
+            score += 1; reasons.append("saved setup memory is nearby")
+        return min(score, 8), reasons
+
+    def _nearest_memory(self, state: MarketState, direction: str | None = None, max_distance_pct: float = 0.75) -> dict | None:
+        if state.last_price is None:
+            return None
+        price = float(state.last_price)
+        direction = direction.upper() if direction else None
+        best = None
+        best_dist = 1e9
+        for raw in self.setup_memories:
+            if not isinstance(raw, dict) or raw.get("active") is False:
+                continue
+            mem_dir = str(raw.get("direction") or "BOTH").upper()
+            if direction and mem_dir not in {"BOTH", direction}:
+                continue
+            low = raw.get("zoneLow", raw.get("zone_low"))
+            high = raw.get("zoneHigh", raw.get("zone_high"))
+            if low is None or high is None:
+                continue
+            try:
+                lo, hi = sorted((float(low), float(high)))
+            except (TypeError, ValueError):
+                continue
+            dist = 0.0 if lo <= price <= hi else (lo - price if price < lo else price - hi)
+            dist_pct = dist / max(price, 1.0) * 100.0
+            if dist_pct <= max_distance_pct and dist_pct < best_dist:
+                best_dist = dist_pct
+                best = {
+                    "id": raw.get("id"),
+                    "title": raw.get("title", raw.get("setupKey", "saved setup")),
+                    "direction": mem_dir,
+                    "zone_low": lo,
+                    "zone_high": hi,
+                    "distance_pct": round(dist_pct, 3),
+                    "priority": raw.get("priority", 1),
+                    "trigger_patterns": raw.get("triggerPatterns", raw.get("trigger_patterns", [])),
+                    "source_type": raw.get("sourceType", raw.get("source_type", "manual")),
+                }
+        return best
+
+    def _build_multi_tf_story(self, f: MarketFeatures) -> str:
+        parts = []
+        parts.append(f"4H {f.trend_240.lower()}")
+        parts.append(f"1H {f.trend_60.lower()}")
+        parts.append(f"15m {f.trend_15.lower()}")
+        if f.trend_60 == f.trend_240 and f.trend_60 in {"UP", "DOWN"}:
+            parts.append(f"higher timeframes are aligned {f.trend_60.lower()}")
+        elif f.trend_15 != "UNKNOWN" and f.trend_60 != "UNKNOWN" and f.trend_15 != f.trend_60:
+            parts.append("15m is moving against the 1H, suggesting a pullback or early reversal")
+        if f.market_structure != "UNKNOWN":
+            parts.append(f"15m structure is {f.market_structure.lower()}")
+        return "; ".join(parts) + "."
+
+    def _build_liquidity_map(self, state: MarketState, f: MarketFeatures) -> dict:
+        if state.last_price is None:
+            return {"above": [], "below": []}
+        price = float(state.last_price)
+        levels: list[dict] = []
+        candidates = [
+            ("recent 15m high", f.liquidity_high),
+            ("recent 15m low", f.liquidity_low),
+            ("previous day high", f.previous_day_high),
+            ("previous day low", f.previous_day_low),
+            ("previous week high", f.previous_week_high),
+            ("previous week low", f.previous_week_low),
+            ("weekly open", f.weekly_open),
+        ]
+        for title, level in candidates:
+            if level is not None and float(level) > 0:
+                side = "above" if float(level) > price else "below"
+                levels.append({"title": title, "price": round(float(level), 2), "side": side, "distance_pct": round(abs(float(level) - price) / price * 100.0, 3)})
+        for raw in self.setup_memories:
+            if not isinstance(raw, dict) or raw.get("active") is False:
+                continue
+            low = raw.get("zoneLow", raw.get("zone_low"))
+            high = raw.get("zoneHigh", raw.get("zone_high"))
+            if low is None or high is None:
+                continue
+            try:
+                lo, hi = sorted((float(low), float(high)))
+            except (TypeError, ValueError):
+                continue
+            if lo > price:
+                levels.append({"title": raw.get("title", "saved zone"), "price": round(lo, 2), "side": "above", "distance_pct": round((lo-price)/price*100.0,3)})
+            elif hi < price:
+                levels.append({"title": raw.get("title", "saved zone"), "price": round(hi, 2), "side": "below", "distance_pct": round((price-hi)/price*100.0,3)})
+        out = {"above": [], "below": []}
+        for side in ("above", "below"):
+            unique = {}
+            for row in sorted((x for x in levels if x["side"] == side), key=lambda x: x["distance_pct"]):
+                unique[(row["title"], row["price"])] = row
+            out[side] = list(unique.values())[:5]
+        return out
+
+    def _build_opportunity_radar(self, state: MarketState, f: MarketFeatures) -> list[dict]:
+        radar = []
+        for direction in ("LONG", "SHORT"):
+            memory = self._nearest_memory(state, direction, 0.75)
+            score, reasons = self._direction_evidence(direction, f, memory)
+            pattern_bonus = 0
+            setup = "Opportunity watch"
+            last_15 = [c for c in state.candles_15 if c.confirmed]
+            if last_15:
+                last = last_15[-1]
+                highs, lows = pivots(last_15[:-1], 2) if len(last_15) >= 5 else ([], [])
+                if direction == "LONG" and lows and last.low < lows[-1][1] and last.close > lows[-1][1]:
+                    pattern_bonus = 2; setup = "Bullish SFP developing"
+                elif direction == "SHORT" and highs and last.high > highs[-1][1] and last.close < highs[-1][1]:
+                    pattern_bonus = 2; setup = "Bearish SFP developing"
+                elif direction == "LONG" and f.trend_15 == "UP" and f.market_structure == "BULLISH":
+                    setup = "Bullish continuation developing"
+                elif direction == "SHORT" and f.trend_15 == "DOWN" and f.market_structure == "BEARISH":
+                    setup = "Bearish continuation developing"
+            total = min(8, score + pattern_bonus)
+            tier = "EARLY" if total >= 2 else "WATCH"
+            if total >= 4:
+                tier = "DEVELOPING"
+            if total >= 6:
+                tier = "CONFIRMED"
+            radar.append({
+                "direction": direction,
+                "tier": tier,
+                "score": total,
+                "max_score": 8,
+                "setup": setup,
+                "reasons": reasons[:5],
+                "memory": memory,
+                "action": ("watch for confirmation" if tier in {"WATCH","EARLY"} else "setup is actively developing"),
+            })
+        radar.sort(key=lambda x: (-x["score"], 0 if x["tier"] == "CONFIRMED" else 1))
+        return radar
+
+    def _build_scenarios(self, state: MarketState, f: MarketFeatures, radar: list[dict]) -> list[dict]:
+        long = next(x for x in radar if x["direction"] == "LONG")
+        short = next(x for x in radar if x["direction"] == "SHORT")
+        scenarios = []
+        scenarios.append({
+            "name": "Bullish continuation / reversal",
+            "direction": "LONG",
+            "state": "ACTIVE" if long["score"] >= short["score"] + 2 else "WATCH",
+            "evidence": long["score"],
+            "trigger": "reclaim/sweep-and-hold + bullish structure/CVD",
+            "invalidation": "loss of the nearest mapped long support or clear bearish acceptance",
+        })
+        scenarios.append({
+            "name": "Bearish continuation / reversal",
+            "direction": "SHORT",
+            "state": "ACTIVE" if short["score"] >= long["score"] + 2 else "WATCH",
+            "evidence": short["score"],
+            "trigger": "rejection/SFP + bearish structure/CVD",
+            "invalidation": "reclaim of the nearest mapped short resistance",
+        })
+        scenarios.append({
+            "name": "Range / two-sided rotation",
+            "direction": "BOTH",
+            "state": "ACTIVE" if f.regime == "RANGE" or abs(long["score"] - short["score"]) <= 1 else "WATCH",
+            "evidence": round(max(0, 8 - abs(long["score"] - short["score"]) * 2), 2),
+            "trigger": "sweep one side of a range and rotate back",
+            "invalidation": "clean acceptance outside the range",
+        })
+        return scenarios
+
     def diagnostics(self, state: MarketState) -> dict:
         cs = [c for c in state.candles_15 if c.confirmed]
         highs, lows = pivots(cs[:-1], 2) if len(cs) >= 5 else ([], [])
         last = cs[-1] if cs else None
         f0 = compute_features(state)
+        radar = self._build_opportunity_radar(state, f0) if state.last_price is not None else []
+        scenarios = self._build_scenarios(state, f0, radar) if radar else []
+        self.opportunity_radar_state = radar
+        self.scenario_tree_state = scenarios
+        self.liquidity_map_state = self._build_liquidity_map(state, f0)
+        self.multi_tf_story = self._build_multi_tf_story(f0)
+        radar_top = radar[0] if radar else None
         result = {
-            "status": "SCANNING" if state.data_health == "HEALTHY" else "BLOCKED",
-            "wait_reason": "",
-            "blocked_by": [] if state.data_health == "HEALTHY" else ["data_health"],
+            "status": "SCANNING" if state.data_health == "HEALTHY" else ("DEGRADED_SCANNING" if state.data_health == "DEGRADED" else "CONNECTING"),
+            "wait_reason": "" if state.data_health == "HEALTHY" else "Opportunity radar remains active while the live feed recovers.",
+            "blocked_by": ["data_health"] if state.data_health not in {"HEALTHY", "DEGRADED"} else [],
             "setups": {},
             "min_rr": _min_rr(),
             "min_confidence": _min_confidence(),
@@ -598,6 +796,12 @@ class StrategyEngine:
             "signal_state": self.signal_status,
             "active_signal": self.active_signal,
             "setup_watch": self.setup_watch(state),
+            "opportunity_radar": radar,
+            "scenario_tree": scenarios,
+            "liquidity_map": self.liquidity_map_state,
+            "multi_timeframe_story": self.multi_tf_story,
+            "radar_lead": radar_top,
+            "data_quality": state.data_health,
             "market_features": {
                 "trend_15": f0.trend_15,
                 "trend_60": f0.trend_60,
@@ -899,6 +1103,7 @@ class StrategyEngine:
 
     def evaluate(self, state: MarketState) -> Optional[Signal]:
         self.last_evaluated_ts = int(time.time() * 1000)
+        self.position_management = None
         self._update_signal_lifecycle(state)
         self.last_diagnostics = self.diagnostics(state)
         if state.data_health != "HEALTHY":
