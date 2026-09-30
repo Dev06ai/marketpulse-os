@@ -3,6 +3,6 @@
   "versionCode": 52,
   "versionName": "0.5.2",
   "apkUrl": "https://github.com/Dev06ai/marketpulse-os/releases/download/dev-trader-v0.5.2-52/app-release.apk",
-  "sha256": "PLACEHOLDER",
+  "sha256": "59ad9dfcbb66ac2001c0fb76db4f8a228ef5f879d033df4d9afe2c1f75ded872",
   "notes": "Touch responsiveness and engine evaluation throttle"
 }
