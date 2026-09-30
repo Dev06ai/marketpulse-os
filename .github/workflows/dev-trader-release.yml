@@ -1,4 +1,4 @@
-name: Dev Trader Release
+name: Dev Trader Release # 0.2.8 release
 
 on:
   push:
