@@ -10,6 +10,7 @@ from dotenv import load_dotenv
 from .models import MarketState
 from .stream import BybitStream
 from .strategy import StrategyEngine
+from .bridge import MarketPulseBridge
 from .push import PushService
 from .analytics import compute_features
 from .risk import calculate_risk
@@ -23,6 +24,7 @@ SNAPSHOT = float(os.getenv("SNAPSHOT_SECONDS", "1"))
 clients = set()
 state = MarketState(symbol=SYMBOL)
 engine = StrategyEngine()
+bridge = MarketPulseBridge()
 push = PushService()
 stream = None
 server_started_ms = int(time.time() * 1000)
@@ -127,8 +129,38 @@ async def on_state(s: MarketState):
     if should_evaluate:
         last_engine_eval_ms = now
         sig = engine.evaluate(state)
+
+        lifecycle_event = engine.last_lifecycle_event
+        if lifecycle_event and bridge.enabled:
+            asyncio.create_task(
+                bridge.post_outcome(
+                    lifecycle_event["signal"],
+                    lifecycle_event["outcome"],
+                    float(lifecycle_event.get("result_r", 0)),
+                )
+            )
+
         if sig:
-            push.send_signal(sig.to_dict())
+            signal_payload = sig.to_dict()
+            if bridge.enabled:
+                asyncio.create_task(
+                    bridge.post_open_signal(
+                        signal_payload,
+                        signal_payload.get("evidence", {}).get("memory_match"),
+                    )
+                )
+            push.send_signal(signal_payload)
+
+
+async def setup_memory_refresh_loop():
+    while True:
+        try:
+            if bridge.enabled:
+                memories = await bridge.fetch_setup_memories(SYMBOL)
+                engine.set_setup_memories(memories)
+        except Exception:
+            pass
+        await asyncio.sleep(10)
 
 
 @asynccontextmanager
@@ -139,6 +171,7 @@ async def lifespan(app: FastAPI):
         asyncio.create_task(stream.run()),
         asyncio.create_task(stream.rest_fallback_loop()),
         asyncio.create_task(broadcast_loop()),
+        asyncio.create_task(setup_memory_refresh_loop()),
     ]
     yield
     stream.stop = True
@@ -187,6 +220,7 @@ async def heartbeat():
         "strategy_last_evaluation_ts": engine.last_evaluated_ts,
         "strategy_signal_state": engine.signal_status,
         "clients": len(clients),
+        "learning_bridge": {"enabled": bridge.enabled, "setup_memories": len(engine.setup_memories)},
     }
 
 
