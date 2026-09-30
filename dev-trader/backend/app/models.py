@@ -65,6 +65,7 @@ class MarketState:
     liquidation_short_5m: float = 0.0
     exchange_ts: int | None = None
     received_ts: int | None = None
+    last_market_update_ts: int | None = None
     last_trade_ts: int | None = None
     last_kline_5_ts: int | None = None
     last_kline_15_ts: int | None = None
