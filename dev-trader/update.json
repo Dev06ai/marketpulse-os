@@ -1,8 +1,8 @@
 {
   "enabled": true,
-  "versionCode": 65,
-  "versionName": "0.9.7",
-  "apkUrl": "https://github.com/Dev06ai/marketpulse-os/releases/download/dev-trader-v0.9.7-65/app-release.apk",
-  "sha256": "e58322eaa606b673aaf3be9e053abf0b339277279db2021b81390a8b2a42ad31",
-  "notes": "Signed Dev Trader release 0.9.7 \u2022 heartbeat-aware background feed supervisor"
+  "versionCode": 66,
+  "versionName": "0.9.8",
+  "apkUrl": "https://github.com/Dev06ai/marketpulse-os/releases/download/dev-trader-v0.9.8-66/app-release.apk",
+  "sha256": "1701930e579db350cf9deef890b7405f388b110db573dbbb571bc57725df977d",
+  "notes": "Signed Dev Trader release 0.9.8 \u2022 intrabar SFP + live freshness fixes"
 }
