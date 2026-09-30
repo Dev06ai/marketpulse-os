@@ -48,8 +48,8 @@ jobs:
         run: |
           set -euo pipefail
           TAG="$GITHUB_REF_NAME"
-          if [[ ! "$TAG" =~ ^dev-trader-(v)?([0-9]+\.[0-9]+\.[0-9]+)-([0-9]+)$ ]]; then
-            echo "Tag or release branch must identify version and code, e.g. dev-trader-v0.2.7-13"
+          if [[ ! "$TAG" =~ ^dev-trader-(v|release-)?([0-9]+\.[0-9]+\.[0-9]+)-([0-9]+)$ ]]; then
+            echo "Ref must identify version and code, e.g. dev-trader-v0.2.7-13 or dev-trader-release-0.2.7-13"
             exit 1
           fi
           VERSION_NAME="${BASH_REMATCH[2]}"
