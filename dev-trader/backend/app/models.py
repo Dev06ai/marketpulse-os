@@ -66,6 +66,7 @@ class MarketState:
     exchange_ts: int | None = None
     received_ts: int | None = None
     last_trade_ts: int | None = None
+    last_kline_5_ts: int | None = None
     last_kline_15_ts: int | None = None
     last_kline_60_ts: int | None = None
     data_health: str = "STARTING"
