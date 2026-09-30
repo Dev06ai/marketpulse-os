@@ -1,4 +1,4 @@
-name: Dev Trader Release # 0.5.1 responsive engine build
+name: Dev Trader Release # 0.5.1 responsive engine rebuild
 
 on:
   push:
