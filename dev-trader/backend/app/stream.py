@@ -27,6 +27,9 @@ class BybitStream:
         ]
         self.last_trade_minute = None
         self.delta_base = 0.0
+        self.last_rest_sync_ms = 0
+        self.last_rest_ok = False
+        self.last_upstream_error = ""
         self.bids: dict[float, float] = {}
         self.asks: dict[float, float] = {}
 
@@ -51,11 +54,86 @@ class BybitStream:
                         await self.handle(raw)
                         if self.stop:
                             break
-            except Exception:
+            except Exception as exc:
+                self.last_upstream_error = str(exc)[:240]
                 self.state.ws_connected = False
                 self.state.data_health = "RECONNECTING"
                 await self.on_state(self.state)
                 await asyncio.sleep(1)
+
+    async def refresh_ticker(self):
+        now = int(time.time() * 1000)
+        try:
+            payload = await asyncio.wait_for(
+                asyncio.to_thread(self._rest_ticker),
+                timeout=4.0,
+            )
+            rows = payload.get("result", {}).get("list", []) or []
+            if not rows:
+                raise RuntimeError("Bybit ticker returned no rows")
+            d = rows[0]
+            for attr, key in [
+                ("last_price", "lastPrice"),
+                ("mark_price", "markPrice"),
+                ("index_price", "indexPrice"),
+                ("open_interest", "openInterest"),
+                ("open_interest_value", "openInterestValue"),
+                ("funding_rate", "fundingRate"),
+                ("bid", "bid1Price"),
+                ("ask", "ask1Price"),
+            ]:
+                if d.get(key) not in (None, ""):
+                    setattr(self.state, attr, float(d[key]))
+            self.state.received_ts = now
+            self.state.exchange_ts = now
+            self.state.last_market_update_ts = now
+            if self.state.open_interest is not None:
+                self.state.oi_window.append((now, self.state.open_interest))
+            self.last_rest_sync_ms = now
+            self.last_rest_ok = True
+            self.last_upstream_error = ""
+            self._trim_windows(now)
+            self._refresh_data_health(now)
+            await self.on_state(self.state)
+            return True
+        except Exception as exc:
+            self.last_rest_sync_ms = now
+            self.last_rest_ok = False
+            self.last_upstream_error = str(exc)[:240]
+            self._refresh_data_health(now)
+            await self.on_state(self.state)
+            return False
+
+    async def rest_fallback_loop(self):
+        while not self.stop:
+            ok = await self.refresh_ticker()
+            now = int(time.time() * 1000)
+            latest_kline = max(
+                self.state.last_kline_15_ts or 0,
+                self.state.last_kline_60_ts or 0,
+            )
+            if not self.state.candles_15 or not self.state.candles_60 or now - latest_kline > 15_000:
+                await self.backfill()
+            await asyncio.sleep(3.0 if ok else 2.0)
+
+    async def bootstrap_rest(self):
+        await self.refresh_ticker()
+        await self.backfill()
+
+    def _rest_ticker(self) -> dict:
+        query = urlencode({
+            "category": "linear",
+            "symbol": self.symbol,
+        })
+        req = UrlRequest(
+            "https://api.bybit.com/v5/market/tickers?" + query,
+            headers={"User-Agent": "Dev-Trader/0.6"},
+        )
+        with urlopen(req, timeout=4) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+        if payload.get("retCode") != 0:
+            raise RuntimeError(f"Bybit ticker error: {payload.get('retMsg')}")
+        return payload
 
     async def backfill(self):
         intervals = [
@@ -93,25 +171,27 @@ class BybitStream:
                 return interval, False
 
         results = await asyncio.gather(*(fetch(x) for x in intervals))
-        if self.state.ws_connected:
-            now = int(time.time() * 1000)
-            self._refresh_data_health(now)
-            await self.on_state(self.state)
+        now = int(time.time() * 1000)
+        self._refresh_data_health(now)
+        await self.on_state(self.state)
 
 
     def _refresh_data_health(self, now: int):
         recent = [
             x for x in (
-                self.state.exchange_ts,
+                self.state.last_market_update_ts,
                 self.state.last_trade_ts,
                 self.state.last_kline_5_ts,
                 self.state.last_kline_15_ts,
+                self.state.received_ts,
             ) if x
         ]
-        if self.state.ws_connected and recent and max(now - x for x in recent) < 5000:
+        if recent and min(now - x for x in recent) < 5000:
             self.state.data_health = "HEALTHY"
         elif self.state.ws_connected:
             self.state.data_health = "STALE"
+        elif self.last_rest_ok and self.state.last_price is not None:
+            self.state.data_health = "DEGRADED"
 
     def _rest_kline(self, interval: str, limit: int) -> list[list]:
         query = urlencode({
@@ -198,6 +278,7 @@ class BybitStream:
             ]:
                 if d.get(key) not in (None, ""):
                     setattr(self.state, attr, float(d[key]))
+            self.state.last_market_update_ts = now
             if self.state.open_interest is not None:
                 self.state.oi_window.append((now, self.state.open_interest))
 
@@ -206,6 +287,7 @@ class BybitStream:
                 size = float(t.get("v", 0))
                 self.state.cvd += size if t.get("S") == "Buy" else -size
                 self.state.last_trade_ts = int(t.get("T", now))
+                self.state.last_market_update_ts = now
                 minute = self.state.last_trade_ts // 60_000
                 if minute != self.last_trade_minute:
                     self.last_trade_minute = minute
@@ -247,6 +329,7 @@ class BybitStream:
                 else:
                     dest.append(c)
                 del dest[:-240]
+                self.state.last_market_update_ts = now
                 if interval == "5":
                     self.state.last_kline_5_ts = int(k.get("timestamp", now))
                 elif interval == "15":
@@ -255,13 +338,5 @@ class BybitStream:
                     self.state.last_kline_60_ts = int(k.get("timestamp", now))
 
         self._trim_windows(now)
-        recent = [
-            x for x in [
-                self.state.exchange_ts,
-                self.state.last_trade_ts,
-                self.state.last_kline_5_ts,
-                self.state.last_kline_15_ts,
-            ] if x
-        ]
         self._refresh_data_health(now)
         await self.on_state(self.state)
