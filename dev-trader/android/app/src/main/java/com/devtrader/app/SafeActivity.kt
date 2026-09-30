@@ -603,13 +603,23 @@ class SafeActivity : Activity() {
         val engine = root.optJSONObject("engine")
         val f = root.optJSONObject("features")
 
+        val nowMs = System.currentTimeMillis()
+        val receivedTs = root.optLong("received_ts", 0L)
+        val marketUpdateTs = root.optLong("last_market_update_ts", 0L)
+        val freshestTs = maxOf(receivedTs, marketUpdateTs)
+        val freshMarket = priceValue.isFinite() && freshestTs > 0L && (nowMs - freshestTs) <= 8_000L
+
+        // REST/bootstrap can be fresh while the WebSocket is negotiating. Show the
+        // truth about market-data freshness rather than briefly calling fresh data
+        // "DATA RECOVERY".
         status.text = when {
+            freshMarket && health == "DEGRADED" -> "LIVE  •  REST FALLBACK"
+            freshMarket -> "LIVE"
             health == "HEALTHY" -> "LIVE"
             health == "DEGRADED" -> "LIVE  •  REST FALLBACK"
             health == "CONNECTING" -> "CONNECTING…"
             health == "RECONNECTING" -> "RECONNECTING…"
             else -> health
-        }
         price.text = "BTC  " + if (priceValue.isNaN()) "—"
             else String.format(Locale.US, "%,.2f", priceValue) +
             "\nOI   " + if (oi.isNaN()) "—"
