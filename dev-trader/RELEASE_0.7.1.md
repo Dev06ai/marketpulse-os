@@ -1,0 +1,1 @@
+# Dev Trader 0.7.1\n\nBackground signal monitoring service enabled for Android.\n
