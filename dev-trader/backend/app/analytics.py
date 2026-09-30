@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 
 from .models import Candle, MarketState
+from .elliott_wave import analyze_elliott
 
 
 @dataclass
@@ -36,6 +37,15 @@ class MarketFeatures:
     order_block_direction: str = "NONE"
     order_block_mid: float | None = None
     golden_pocket: str = "NONE"
+    elliott_phase: str = "UNKNOWN"
+    elliott_direction: str = "NEUTRAL"
+    elliott_wave: str = "UNCOUNTED"
+    elliott_confidence: float = 0.0
+    elliott_reason: str = ""
+    elliott_60_phase: str = "UNKNOWN"
+    elliott_60_direction: str = "NEUTRAL"
+    elliott_60_confidence: float = 0.0
+    elliott_60_reason: str = ""
 
 
 def _atr(candles: list[Candle], n: int = 14) -> float:
@@ -226,6 +236,18 @@ def compute_features(state: MarketState) -> MarketFeatures:
         f.regime = "HIGH_VOL"
     else:
         f.regime = "RANGE"
+
+    wave15 = analyze_elliott(state.candles_15, "15m")
+    wave60 = analyze_elliott(state.candles_60, "1h")
+    f.elliott_phase = wave15.phase
+    f.elliott_direction = wave15.direction
+    f.elliott_wave = wave15.wave
+    f.elliott_confidence = wave15.confidence
+    f.elliott_reason = wave15.reason
+    f.elliott_60_phase = wave60.phase
+    f.elliott_60_direction = wave60.direction
+    f.elliott_60_confidence = wave60.confidence
+    f.elliott_60_reason = wave60.reason
 
     if state.last_price and f.previous_week_high and f.previous_week_low:
         swing = f.previous_week_high - f.previous_week_low
