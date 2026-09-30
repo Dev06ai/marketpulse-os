@@ -965,6 +965,8 @@ class StrategyEngine:
                 waits.append(f"{name}: " + "; ".join(reasons))
             elif detail.get("status") == "CANDIDATE":
                 waits.append(f"{name}: candidate awaiting quality gates")
+        if state.data_health == "DEGRADED":
+            waits.insert(0, "Primary feed unavailable: using secondary market data; microstructure freshness is reduced.")
         result["wait_reason"] = " | ".join(waits) if waits else "At least one setup passed all diagnostic gates."
         result["signal_state"] = self.signal_status
         result["active_signal"] = self.active_signal
@@ -1106,7 +1108,10 @@ class StrategyEngine:
         self.position_management = None
         self._update_signal_lifecycle(state)
         self.last_diagnostics = self.diagnostics(state)
-        if state.data_health != "HEALTHY":
+        # Keep loose mode active on the secondary REST feed. Candle-based setups
+        # can still be evaluated with reduced microstructure freshness rather than
+        # freezing the bot until the primary WebSocket is perfect.
+        if state.data_health not in {"HEALTHY", "DEGRADED"}:
             return None
         candidates = [
             detect_sfp(state),
