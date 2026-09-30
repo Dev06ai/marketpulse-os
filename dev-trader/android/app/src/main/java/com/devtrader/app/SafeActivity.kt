@@ -231,10 +231,14 @@ class SafeActivity : Activity() {
 
         checkButton = actionButton("RUN SYSTEM CHECK")
         checkButton.setOnClickListener { safe { systemCheck() } }
-        root.addView(checkButton)
+        root.addView(checkButton, margins(bottom = 8))
+
+        alertsButton = actionButton("ENABLE SIGNAL ALERTS")
+        alertsButton.setOnClickListener { requestAlertPermission() }
+        root.addView(alertsButton)
 
         val footer = TextView(this).apply {
-            text = "ENGINE AUTO-STARTS  •  MANUAL TRADING ONLY"
+            text = "ENGINE AUTO-STARTS  •  MANUAL TRADING ONLY  •  NO AUTO EXECUTION"
             textSize = 11f
             setTextColor(Color.rgb(122, 126, 136))
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
