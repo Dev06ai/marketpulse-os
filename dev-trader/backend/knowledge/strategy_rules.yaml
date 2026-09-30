@@ -52,7 +52,7 @@ signal_policy:
     enabled: true
     max_signals_per_utc_day: 3
     cooldown_minutes_after_resolution: 120
-    min_confidence: 0.70
+    min_confidence: 0.44
     min_rr: 3.0
     require_grade_a: true
     require_1h_alignment: true
