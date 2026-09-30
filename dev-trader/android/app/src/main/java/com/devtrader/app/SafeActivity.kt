@@ -185,6 +185,7 @@ class SafeActivity : Activity() {
         })
         root.addView(topRow, margins(bottom = 2))
         root.addView(label("BTC trading bot", 32f, Color.WHITE, 0f), margins(top = 5, bottom = 2))
+        // 0.9.5 release: HTTP recovery + stable live feed + reduced chart polling
         // 0.9.4 release: stable WebSocket supervisor + manual retry + cleaner MTF story
         root.addView(label("FAST SETUP SCANNER  •  MANUAL EXECUTION", 13f, Color.rgb(173, 177, 188), 0f), margins(bottom = 14))
 
