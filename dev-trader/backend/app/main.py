@@ -555,8 +555,18 @@ async def socket(ws: WebSocket):
         await ws.send_json(mobile_payload())
         # The server is the publisher. Transport-level ping/pong is handled by the
         # WebSocket stack; the client does not need to send keepalive text frames.
+        # Keep a lightweight receive loop so disconnects are detected cleanly
+        # instead of surfacing as noisy ASGI exceptions. The server remains the
+        # publisher; the client only needs the transport heartbeat.
         while ws in clients:
-            await asyncio.sleep(30)
+            try:
+                message = await asyncio.wait_for(ws.receive(), timeout=25.0)
+                if message.get("type") == "websocket.disconnect":
+                    break
+            except asyncio.TimeoutError:
+                continue
+            except WebSocketDisconnect:
+                break
     except Exception:
         pass
     finally:
