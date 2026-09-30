@@ -274,7 +274,7 @@ class SafeActivity : Activity() {
         signal = setup.value
         root.addView(setup.container, margins(bottom = 12))
 
-        val context = card("MARKET PULSE", "MTF STORY\n4H —  •  1H —  •  15m —\nREGIME —  •  STRUCTURE —\nCVD —  •  OI —  •  FVG —  •  OB —", 13f)
+        val context = card("MARKET STORY", "BIAS —\n4H —  •  1H —  •  15m —\nWAVE 15m —  •  1H —\nTRIGGERS —", 13f)
         features = context.value
         root.addView(context.container, margins(bottom = 12))
 
@@ -773,17 +773,41 @@ class SafeActivity : Activity() {
                 "MTF STORY\n" + first + if (remainder.isBlank()) "" else "\n" + remainder
             }
         }
+        val storyObj = engine?.optJSONObject("market_story")
+        val storyBias = storyObj?.optString("bias", "BALANCED") ?: "BALANCED"
+        val storySummary = storyObj?.optString("summary", "").orEmpty()
+        val wave15Obj = storyObj?.optJSONObject("wave_context")?.optJSONObject("15m")
+        val wave1hObj = storyObj?.optJSONObject("wave_context")?.optJSONObject("1h")
+        val storyTriggers = storyObj?.optJSONArray("trigger_map")
+        val triggerText = if (storyTriggers != null && storyTriggers.length() > 0) {
+            (0 until minOf(3, storyTriggers.length())).joinToString(" • ") { storyTriggers.optString(it) }
+        } else "Waiting for a confirmed trigger"
+        val storyNarrative = storyObj?.optJSONArray("narrative")
+        val narrativeText = if (storyNarrative != null && storyNarrative.length() > 0) {
+            (0 until minOf(3, storyNarrative.length())).joinToString("\n") { "• " + storyNarrative.optString(it) }
+        } else "• Building market narrative from live structure and flow"
+        val noTradeReason = storyObj?.optString("no_trade_reason", "").orEmpty()
+        val longScore = storyObj?.optInt("long_score", 0) ?: 0
+        val shortScore = storyObj?.optInt("short_score", 0) ?: 0
+
         features.text =
-            compactStory +
+            "BIAS  " + storyBias +
+            "\n" + (if (storySummary.isBlank()) compactStory else storySummary) +
+            "\n15m WAVE  " + (wave15Obj?.optString("phase", "UNKNOWN") ?: "UNKNOWN") +
+                " • " + (wave15Obj?.optString("wave", "UNCOUNTED") ?: "UNCOUNTED") +
+                " • " + (wave15Obj?.optString("direction", "NEUTRAL") ?: "NEUTRAL") +
+            "\n1h WAVE  " + (wave1hObj?.optString("phase", "UNKNOWN") ?: "UNKNOWN") +
+                " • " + (wave1hObj?.optString("direction", "NEUTRAL") ?: "NEUTRAL") +
+            "\nTRIGGERS  " + triggerText +
+            "\nSCENARIO SCORE  L " + longScore + "  •  S " + shortScore +
+            "\n" + narrativeText +
+            (if (noTradeReason.isBlank()) "" else "\nNO-TRADE RULE  " + noTradeReason) +
             "\nREGIME  " + (f?.optString("regime") ?: "—") +
-            "\nSTRUCTURE  " + (f?.optString("market_structure") ?: "—") +
-            "\n15m / 1h / 4h  " + (f?.optString("trend_15") ?: "—") + " / " +
-                (f?.optString("trend_60") ?: "—") + " / " + (f?.optString("trend_240") ?: "—") +
+            "  •  STRUCTURE  " + (f?.optString("market_structure") ?: "—") +
             "\nCVD  " + (f?.optString("cvd_price_divergence") ?: "NONE") +
-            "\nOI 5m  " + String.format(Locale.US, "%.2f%%", f?.optDouble("oi_change_5m_pct", 0.0) ?: 0.0) +
-            "\nFVG  " + (f?.optString("fvg_direction") ?: "NONE") +
-            "\nOB  " + (f?.optString("order_block_direction") ?: "NONE") +
-            "\nGolden pocket  " + (f?.optString("golden_pocket") ?: "NONE")
+            "  •  OI 5m  " + String.format(Locale.US, "%.2f%%", f?.optDouble("oi_change_5m_pct", 0.0) ?: 0.0) +
+            "  •  FVG  " + (f?.optString("fvg_direction") ?: "NONE") +
+            "  •  OB  " + (f?.optString("order_block_direction") ?: "NONE")
 
         chart.setLivePrice(priceValue)
         if (requestChart) requestChartIfNeeded()
