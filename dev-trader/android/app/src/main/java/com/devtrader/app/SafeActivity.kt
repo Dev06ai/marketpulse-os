@@ -137,8 +137,7 @@ class SafeActivity : Activity() {
         status = engine.value
         root.addView(engine.container, margins(bottom = 10))
 
-        val market = card("BITCOIN  /  LIVE MARKET", "BTC  —
-OI   —", 22f)
+        val market = card("BITCOIN  /  LIVE MARKET", "BTC  —\\nOI   —", 22f)
         price = market.value
         root.addView(market.container, margins(bottom = 10))
 
@@ -392,7 +391,7 @@ OI   —", 22f)
                     val remoteName = j.optString("versionName", "new")
 
                     update.text = if (!j.optBoolean("enabled", false) || remoteCode <= currentCode) {
-                        "UP TO DATE  •  v" + BuildConfig.VERSION_NAME
+                        "UP TO DATE  •  build " + currentCode
                     } else {
                         "UPDATE AVAILABLE  •  v" + remoteName
                     }
