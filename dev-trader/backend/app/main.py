@@ -75,6 +75,7 @@ def mobile_payload():
             "last_evaluated_ts": engine.last_evaluated_ts,
             "setups": diag.get("setups", {}),
             "position_management": engine.position_management,
+            "trade_governor": engine.governor_status(),
             "setup_watch": diag.get("setup_watch", []),
             "opportunity_radar": diag.get("opportunity_radar", []),
             "scenario_tree": diag.get("scenario_tree", []),
@@ -544,9 +545,11 @@ async def app_config():
         "remote_tunables": [
             "MIN_RR", "MIN_CONFIDENCE", "MAX_RISK_PCT", "SNAPSHOT_SECONDS",
             "DLINE_TOUCHES", "SIGNAL_EXPIRY_MINUTES",
+            "MAX_DAILY_SIGNALS", "SIGNAL_COOLDOWN_MINUTES",
+            "QUALITY_MIN_CONFIDENCE", "QUALITY_MIN_RR",
         ],
         "product": "Dev Trader BTC Trading Bot",
-        "scan_mode": "loose",
+        "scan_mode": "elite_quality",
         "signal_timeframes": ["5m", "15m", "1h"],
         "remote_feature_flags": {
             "system_check": True,
@@ -574,6 +577,10 @@ async def config():
         "min_confidence": float(os.getenv("MIN_CONFIDENCE", str(engine.last_diagnostics.get("min_confidence", 0.52))),
         ),
         "max_risk_pct": float(os.getenv("MAX_RISK_PCT", "1")),
+        "max_daily_signals": int(os.getenv("MAX_DAILY_SIGNALS", str((engine.governor_status() or {}).get("daily_max", 3)))),
+        "signal_cooldown_minutes": int(os.getenv("SIGNAL_COOLDOWN_MINUTES", str((engine.governor_status() or {}).get("cooldown_minutes", 120)))),
+        "quality_min_confidence": float(os.getenv("QUALITY_MIN_CONFIDENCE", str((engine.governor_status() or {}).get("min_confidence", 0.70)))),
+        "quality_min_rr": float(os.getenv("QUALITY_MIN_RR", str((engine.governor_status() or {}).get("min_rr", 3.0)))),
         "dline_touches": int(os.getenv("DLINE_TOUCHES", "3")),
         "signal_expiry_minutes": int(os.getenv("SIGNAL_EXPIRY_MINUTES", "45")),
     }
