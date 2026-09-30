@@ -948,6 +948,11 @@ class SafeActivity : Activity() {
         refreshSides()
 
         root.addView(label("UNIT SETTINGS", 11f, Color.rgb(154, 158, 170), 0.08f), margins(bottom = 7))
+        val amountLabel = label("Position Cost (USDT)", 12f, Color.rgb(166, 169, 179), 0f)
+        root.addView(amountLabel, margins(bottom = 5))
+        val amountEdit = numberField("Cost / Quantity", "100")
+        root.addView(amountEdit, margins(bottom = 12))
+
         val unitRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         val quantityButton = actionButton("QUANTITY / BTC")
         val costButton = actionButton("POSITION COST / USDT")
@@ -955,17 +960,22 @@ class SafeActivity : Activity() {
             quantityButton.alpha = if (unitMode == "QUANTITY") 1f else 0.45f
             costButton.alpha = if (unitMode == "COST") 1f else 0.45f
         }
-        quantityButton.setOnClickListener { unitMode = "QUANTITY"; refreshUnits(); amountLabel.text = "Quantity (BTC)"; amountEdit.hint = "e.g. 0.01" }
-        costButton.setOnClickListener { unitMode = "COST"; refreshUnits(); amountLabel.text = "Position Cost (USDT)"; amountEdit.hint = "e.g. 100" }
+        quantityButton.setOnClickListener {
+            unitMode = "QUANTITY"
+            refreshUnits()
+            amountLabel.text = "Quantity (BTC)"
+            amountEdit.hint = "e.g. 0.01"
+        }
+        costButton.setOnClickListener {
+            unitMode = "COST"
+            refreshUnits()
+            amountLabel.text = "Position Cost (USDT)"
+            amountEdit.hint = "e.g. 100"
+        }
         unitRow.addView(quantityButton, LinearLayout.LayoutParams(0, dp(52), 1f).apply { rightMargin = dp(4) })
         unitRow.addView(costButton, LinearLayout.LayoutParams(0, dp(52), 1f).apply { leftMargin = dp(4) })
         root.addView(unitRow, margins(bottom = 14))
         refreshUnits()
-
-        val amountLabel = label("Position Cost (USDT)", 12f, Color.rgb(166, 169, 179), 0f)
-        root.addView(amountLabel, margins(bottom = 5))
-        val amountEdit = numberField("Cost / Quantity", "100")
-        root.addView(amountEdit, margins(bottom = 12))
 
         val livePrice = latestRoot?.optDouble("last_price", Double.NaN) ?: Double.NaN
         val defaultPrice = if (livePrice.isFinite()) String.format(Locale.US, "%.2f", livePrice) else ""
