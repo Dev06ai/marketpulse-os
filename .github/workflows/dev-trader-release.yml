@@ -40,11 +40,7 @@ jobs:
           echo "$DEV_TRADER_KEYSTORE_BASE64" | base64 --decode > "$DEV_TRADER_KEYSTORE_PATH"
           test -s "$DEV_TRADER_KEYSTORE_PATH"
 
-      - name: Build signed release APK
-        working-directory: dev-trader/android
-        run: gradle assembleRelease --stacktrace
-
-      - name: Prepare release metadata
+      - name: Parse release version
         id: meta
         shell: bash
         run: |
@@ -56,6 +52,23 @@ jobs:
           fi
           VERSION_NAME="${BASH_REMATCH[1]}"
           VERSION_CODE="${BASH_REMATCH[2]}"
+          echo "version_name=${VERSION_NAME}" >> "$GITHUB_OUTPUT"
+          echo "version_code=${VERSION_CODE}" >> "$GITHUB_OUTPUT"
+
+      - name: Build signed release APK
+        working-directory: dev-trader/android
+        run: |
+          gradle assembleRelease \
+            -PdevTraderVersionName="${{ steps.meta.outputs.version_name }}" \
+            -PdevTraderVersionCode="${{ steps.meta.outputs.version_code }}" \
+            --stacktrace
+
+      - name: Prepare release metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION_NAME="${{ steps.meta.outputs.version_name }}"
+          VERSION_CODE="${{ steps.meta.outputs.version_code }}"
           APK="dev-trader/android/app/build/outputs/apk/release/app-release.apk"
           SHA256="$(sha256sum "$APK" | cut -d " " -f1)"
           APK_URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/dev-trader-${VERSION_NAME}.apk"
