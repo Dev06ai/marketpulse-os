@@ -1695,7 +1695,7 @@ class StrategyEngine:
             result["setups"]["MSS"] = mss
 
         result["market_story"] = self._build_market_story(
-            state, f, radar, sfp_hunter, breakout_watch, result["setups"]
+            state, f0, radar, sfp_hunter, breakout_watch, result["setups"]
         )
         waits = []
         for name, detail in result["setups"].items():
