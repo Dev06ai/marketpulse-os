@@ -557,7 +557,10 @@ class SafeActivity : Activity() {
             }
         }
 
+        val story = engine?.optString("multi_timeframe_story", "").orEmpty()
         features.text =
+            (if (story.isBlank()) "" else "STORY  " + story + "
+") +
             "REGIME  " + (f?.optString("regime") ?: "—") +
             "\nSTRUCTURE  " + (f?.optString("market_structure") ?: "—") +
             "\n15m / 1h / 4h  " + (f?.optString("trend_15") ?: "—") + " / " +
