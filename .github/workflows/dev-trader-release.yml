@@ -4,6 +4,8 @@ on:
   push:
     branches:
       - "dev-trader-v*"
+    branches:
+      - "dev-trader-release-*"
 
 permissions:
   contents: write
@@ -46,12 +48,12 @@ jobs:
         run: |
           set -euo pipefail
           TAG="$GITHUB_REF_NAME"
-          if [[ ! "$TAG" =~ ^dev-trader-v([0-9]+\.[0-9]+\.[0-9]+)-([0-9]+)$ ]]; then
-            echo "Tag must look like dev-trader-v0.2.1-7"
+          if [[ ! "$TAG" =~ ^dev-trader-(v)?([0-9]+\.[0-9]+\.[0-9]+)-([0-9]+)$ ]]; then
+            echo "Tag or release branch must identify version and code, e.g. dev-trader-v0.2.7-13"
             exit 1
           fi
-          VERSION_NAME="${BASH_REMATCH[1]}"
-          VERSION_CODE="${BASH_REMATCH[2]}"
+          VERSION_NAME="${BASH_REMATCH[2]}"
+          VERSION_CODE="${BASH_REMATCH[3]}"
           echo "version_name=${VERSION_NAME}" >> "$GITHUB_OUTPUT"
           echo "version_code=${VERSION_CODE}" >> "$GITHUB_OUTPUT"
 
