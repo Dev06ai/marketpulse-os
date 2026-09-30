@@ -472,6 +472,29 @@ async function deactivateSetupMemory(id){
   all.__setup_memory__=rows;writeLocal(all);return {updated};
 }
 
+
+async function dedupeDevTraderLearning(){
+  await init();
+  if(mode!=="postgres")return {removed:0};
+  const r=await pool.query(`
+    WITH ranked AS (
+      SELECT fingerprint,
+             ROW_NUMBER() OVER (
+               PARTITION BY symbol,interval,side,type,ROUND(COALESCE(price,0)::numeric,2),ROUND(COALESCE(stop,0)::numeric,2),ROUND(COALESCE(target,0)::numeric,2)
+               ORDER BY created_at DESC
+             ) AS rn
+      FROM marketpulse_learning_predictions
+      WHERE outcome IS NULL
+        AND features->>'source'='DEV_TRADER_LIVE'
+    )
+    DELETE FROM marketpulse_learning_predictions p
+    USING ranked r
+    WHERE p.fingerprint=r.fingerprint AND r.rn>1
+    RETURNING p.fingerprint
+  `);
+  return {removed:r.rowCount||0};
+}
+
 async function saveSignalDNA(records){
   await init();const rows=Array.isArray(records)?records:[];
   if(mode==="postgres"){
