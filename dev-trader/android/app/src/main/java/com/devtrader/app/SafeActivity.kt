@@ -349,17 +349,18 @@ class SafeActivity : Activity() {
                 override fun onMessage(ws: WebSocket, text: String) {
                     safe {
                         val root = JSONObject(text)
-                        if (root.optString("type") != "state") return
-                        latestRoot = root
-                        lastStateReceivedMs = System.currentTimeMillis()
-                        val now = System.currentTimeMillis()
-                        if (now - lastUiRenderMs < 350L) return
-                        if (pendingUiUpdate) return
-                        pendingUiUpdate = true
-                        handler.post {
-                            pendingUiUpdate = false
-                            lastUiRenderMs = System.currentTimeMillis()
-                            safe { renderState(root) }
+                        if (root.optString("type") == "state") {
+                            latestRoot = root
+                            lastStateReceivedMs = System.currentTimeMillis()
+                            val now = System.currentTimeMillis()
+                            if (now - lastUiRenderMs >= 350L && !pendingUiUpdate) {
+                                pendingUiUpdate = true
+                                handler.post {
+                                    pendingUiUpdate = false
+                                    lastUiRenderMs = System.currentTimeMillis()
+                                    safe { renderState(root) }
+                                }
+                            }
                         }
                     }
                 }
