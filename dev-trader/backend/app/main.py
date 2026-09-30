@@ -105,9 +105,10 @@ async def health():
 @app.get("/app-config")
 async def app_config():
     return {
-        "distribution": "google-play",
+        "distribution": "github-release",
         "package_name": "com.devtrader.app",
-        "client_updates": "google-play-in-app-updates",
+        "client_updates": "verified-in-app-apk-update",
+        "update_manifest_url": "https://raw.githubusercontent.com/Dev06ai/marketpulse-os/dev-trader-v1/dev-trader/update.json",
         "engine_updates": "remote-render",
         "manual_execution_only": True,
         "remote_strategy_updates": True,
