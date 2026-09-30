@@ -248,6 +248,81 @@ class AdaptiveLearning:
             self._save()
             return lesson
 
+    def rehydrate(self, rows: list[dict[str, Any]] | None):
+        """Merge durable resolved predictions without generating duplicate lessons."""
+        with self.lock:
+            for row in reversed(list(rows or [])):
+                sid = str(row.get("fingerprint") or row.get("id") or "")
+                outcome = str(row.get("outcome") or "").upper()
+                if not sid or outcome not in {"WIN", "LOSS"}:
+                    continue
+                if any(t.get("id") == sid for t in self.data["trades"]):
+                    continue
+
+                features = row.get("features") or {}
+                evidence = features.get("evidence") if isinstance(features, dict) else {}
+                if not isinstance(evidence, dict):
+                    evidence = {}
+                signal = {
+                    "id": sid,
+                    "setup": row.get("type") or features.get("type") or "DEV TRADER SIGNAL",
+                    "direction": row.get("side") or features.get("side") or "WAIT",
+                    "timeframe": row.get("interval") or "15m",
+                    "entry": row.get("price"),
+                    "stop": row.get("stop"),
+                    "target2": row.get("target"),
+                    "rr": row.get("resultR") if outcome == "WIN" else 1.0,
+                    "regime": row.get("regime") or features.get("regime") or "UNKNOWN",
+                    "evidence": {
+                        "trend_15": evidence.get("trend_15"),
+                        "trend_60": evidence.get("trend_60"),
+                        "trend_240": evidence.get("trend_240"),
+                        "market_structure": evidence.get("market_structure") or features.get("structure"),
+                        "cvd_price_divergence": evidence.get("cvd_price_divergence"),
+                        "fvg_direction": evidence.get("fvg_direction"),
+                        "order_block_direction": evidence.get("order_block_direction"),
+                        "golden_pocket": evidence.get("golden_pocket"),
+                    },
+                }
+                tags = self._tags(signal)
+                self.data["trades"].append({
+                    "id": sid,
+                    "setup": signal["setup"],
+                    "direction": signal["direction"],
+                    "timeframe": signal["timeframe"],
+                    "entry": signal["entry"],
+                    "stop": signal["stop"],
+                    "target2": signal["target2"],
+                    "rr": signal["rr"],
+                    "opened_ts": row.get("candleTs") or row.get("createdAt") or int(time.time() * 1000),
+                    "tags": tags,
+                    "events": [],
+                    "status": "WIN" if outcome == "WIN" else "LOSS",
+                    "result_r": float(row.get("resultR") or (1.0 if outcome == "WIN" else -1.0)),
+                    "resolved_ts": row.get("resolvedAt") or int(time.time() * 1000),
+                    "rehydrated": True,
+                })
+                key = self._key(signal)
+                profile = self.data["profiles"].setdefault(key, {"trades": 0, "wins": 0, "losses": 0, "total_r": 0.0, "tp1_hits": 0})
+                profile["trades"] += 1
+                result_r = float(row.get("resultR") or (1.0 if outcome == "WIN" else -1.0))
+                profile["total_r"] += result_r
+                if outcome == "WIN":
+                    profile["wins"] += 1
+                else:
+                    profile["losses"] += 1
+                for tag in tags:
+                    cs = self.data["conditions"].setdefault(tag, {"trades": 0, "wins": 0, "losses": 0, "total_r": 0.0})
+                    cs["trades"] += 1
+                    cs["total_r"] += result_r
+                    if outcome == "WIN":
+                        cs["wins"] += 1
+                    else:
+                        cs["losses"] += 1
+
+            self.data["trades"] = self.data["trades"][-250:]
+            self._save()
+
     def summary(self) -> dict[str, Any]:
         with self.lock:
             total = sum(int(v.get("trades", 0)) for v in self.data["profiles"].values())
