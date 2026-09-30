@@ -1,8 +1,8 @@
 {
   "enabled": true,
-  "versionCode": 50,
-  "versionName": "0.5.0",
-  "apkUrl": "https://github.com/Dev06ai/marketpulse-os/releases/download/dev-trader-v0.5.0-50/app-release.apk",
-  "sha256": "76a87903b4b3c75ef1c37f5f32cd4bfc165b530954aebb1368d25e9db245f06b",
-  "notes": "Dev Trader 0.5.0 exchange-style BTC trading bot UI with loose setup scanning"
+  "versionCode": 51,
+  "versionName": "0.5.1",
+  "apkUrl": "https://github.com/Dev06ai/marketpulse-os/releases/download/dev-trader-v0.5.1-51/app-release.apk",
+  "sha256": "2970a5ec86a1ef6019187b7b6aae40fc922a1eb832c663c885b9ecf2b14ba269",
+  "notes": "Signed Dev Trader release 0.5.1"
 }
