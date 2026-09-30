@@ -1,8 +1,8 @@
 {
   "enabled": true,
-  "versionCode": 67,
-  "versionName": "0.9.9",
-  "apkUrl": "https://github.com/Dev06ai/marketpulse-os/releases/download/dev-trader-v0.9.9-67/app-release.apk",
-  "sha256": "9930b6d9b598089b5d48fe1d94953f350d7afa8f79144883dbd8e516f55b582d",
-  "notes": "Signed Dev Trader release 0.9.9 • TP1/TP2/SL alerts + adaptive learning"
+  "versionCode": 69,
+  "versionName": "0.10.1",
+  "apkUrl": "https://github.com/Dev06ai/marketpulse-os/releases/download/dev-trader-v0.10.1-69/app-release.apk",
+  "sha256": "cb4cef37cd83580a33624de327ef6173141de2e4967a3ce1461c098a8bf043d7",
+  "notes": "Signed Dev Trader release 0.10.1 \u2022 ATR-based scalp/swing risk plans + TP1/TP2/SL alerts"
 }
