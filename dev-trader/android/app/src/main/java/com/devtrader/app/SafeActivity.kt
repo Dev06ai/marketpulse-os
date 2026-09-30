@@ -50,28 +50,10 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 class SafeActivity : Activity() {
     private val btcOrange = Color.rgb(247, 147, 26)
-    private val usdtGreen = Color.rgb(0, 200, 83)
 
-    // BTC stays white everywhere by default. Only the BTC ticker immediately
+    // Keep all ordinary asset labels white. Only the BTC ticker immediately
     // beside the live price receives the Bitcoin-orange accent.
-    private fun marketAssetAccent(value: CharSequence): CharSequence {
-        val text = value.toString()
-        if (!text.contains("USDT", ignoreCase = true)) return value
-        val styled = SpannableString(text)
-        var start = 0
-        while (start < text.length) {
-            val index = text.indexOf("USDT", startIndex = start, ignoreCase = true)
-            if (index < 0) break
-            styled.setSpan(
-                ForegroundColorSpan(usdtGreen),
-                index,
-                index + 4,
-                SpannableString.SPAN_EXCLUSIVE_EXCLUSIVE
-            )
-            start = index + 4
-        }
-        return styled
-    }
+    private fun marketAssetAccent(value: CharSequence): CharSequence = value
 
     private fun priceBtcAccent(value: CharSequence): CharSequence {
         val text = value.toString()
