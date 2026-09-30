@@ -1013,10 +1013,10 @@ class SafeActivity : Activity() {
                     results.text = "Enter a valid position size/cost and both prices."
                     return@safe
                 }
-                val qty = if (unitMode == "QUANTITY") amount else amount / entry
-                val notional = qty * entry
-                val margin = notional / leverage.toDouble()
                 val priceMove = if (direction == "LONG") exit - entry else entry - exit
+                val margin = if (unitMode == "COST") amount / 1.0015 else (amount * entry) / leverage.toDouble()
+                val notional = if (unitMode == "COST") margin * leverage.toDouble() else amount * entry
+                val qty = if (unitMode == "COST") notional / entry else amount
                 val pnl = qty * priceMove
                 val roi = if (margin > 0) pnl / margin * 100.0 else 0.0
                 val pnlSign = if (pnl > 0) "+" else ""
@@ -1033,7 +1033,7 @@ class SafeActivity : Activity() {
         root.addView(calcButton, margins(bottom = 14))
 
         root.addView(label(
-            "Note  •  P&L is based on price movement, quantity/cost and leverage. Trading fees, funding and slippage are not included.",
+            "Note  •  Cost mode treats the entered amount as position margin and scales notional by leverage. A 0.15% reserve is applied. Actual fees, funding and slippage can differ.",
             12f, Color.rgb(142, 146, 157), 0f
         ), margins(bottom = 10))
     }
