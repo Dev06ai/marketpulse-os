@@ -75,3 +75,20 @@ class PushService:
             except Exception as exc:
                 self.last_error=str(exc)
                 print(f"FCM send failed: {exc}")
+
+    def send_opportunity(self, alert: dict):
+        if not (self.ready and messaging):
+            return
+        title = str(alert.get("title") or "Dev Trader Opportunity")
+        body = str(alert.get("body") or "Opportunity developing.")
+        data = {"type": "opportunity_alert", "alert_key": str(alert.get("key") or "")}
+        for token in list(self.tokens):
+            try:
+                messaging.send(messaging.Message(
+                    token=token,
+                    notification=messaging.Notification(title=title, body=body),
+                    data=data,
+                ))
+            except Exception as exc:
+                self.last_error = str(exc)
+                print(f"FCM opportunity send failed: {exc}")
