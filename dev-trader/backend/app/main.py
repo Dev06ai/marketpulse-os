@@ -69,6 +69,7 @@ def mobile_payload():
             "signal_state": engine.signal_status,
             "last_evaluated_ts": engine.last_evaluated_ts,
             "setups": diag.get("setups", {}),
+            "position_management": engine.position_management,
         },
         "features": {
             "trend_15": f.trend_15,
