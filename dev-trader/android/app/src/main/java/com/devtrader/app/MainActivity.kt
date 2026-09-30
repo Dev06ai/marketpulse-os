@@ -12,7 +12,6 @@ import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -120,7 +119,6 @@ data class UpdateUi(
 )
 
 class MainActivity : ComponentActivity() {
-    private val permission = registerForActivityResult(ActivityResultContracts.RequestPermission()) {}
     private val client = OkHttpClient.Builder()
         .pingInterval(15, TimeUnit.SECONDS)
         .retryOnConnectionFailure(true)
@@ -135,16 +133,16 @@ class MainActivity : ComponentActivity() {
     private var reconnectAttempt = 0
     private var shuttingDown = false
 
+    companion object {
+        private const val REQUEST_NOTIFICATIONS = 4101
+    }
+
     private val backendWs = "wss://dev-trader-engine.onrender.com/ws"
     private val backendHttp = "https://dev-trader-engine.onrender.com"
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        if (Build.VERSION.SDK_INT >= 33) permission.launch(Manifest.permission.POST_NOTIFICATIONS)
-        ensureNotificationChannel(this)
-        checkForAppUpdate()
-        connect()
-        registerFcmToken()
+
         setContent {
             DevTraderScreen(
                 live,
@@ -152,6 +150,33 @@ class MainActivity : ComponentActivity() {
                 updateUi,
                 ::runFullSystemCheck,
                 ::startAppUpdate
+            )
+        }
+
+        mainHandler.post {
+            runCatching {
+                ensureNotificationChannel(this)
+                requestNotificationPermissionIfNeeded()
+            }
+            runCatching { checkForAppUpdate() }
+            runCatching { connect() }
+            mainHandler.postDelayed(
+                { runCatching { registerFcmToken() } },
+                1500L
+            )
+        }
+    }
+
+    private fun requestNotificationPermissionIfNeeded() {
+        if (Build.VERSION.SDK_INT >= 33 &&
+            ContextCompat.checkSelfPermission(
+                this,
+                Manifest.permission.POST_NOTIFICATIONS
+            ) != PackageManager.PERMISSION_GRANTED
+        ) {
+            requestPermissions(
+                arrayOf(Manifest.permission.POST_NOTIFICATIONS),
+                REQUEST_NOTIFICATIONS
             )
         }
     }
@@ -403,7 +428,7 @@ class MainActivity : ComponentActivity() {
                     postSystemCheckNotification(this, "Local notification test passed on this phone.")
                 }
             } else if (Build.VERSION.SDK_INT >= 33) {
-                runCatching { permission.launch(Manifest.permission.POST_NOTIFICATIONS) }
+                runCatching { requestNotificationPermissionIfNeeded() }
             }
 
             if (!firebaseAvailable) {
