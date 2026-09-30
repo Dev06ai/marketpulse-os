@@ -62,6 +62,8 @@ signal_policy:
     block_high_vol: true
     block_range_non_sfp: true
     max_spread_bps: 5.0
+    elliott_min_confidence: 0.55
+    require_elliott_alignment_when_confident: true
 
 scan:
   mode: loose
