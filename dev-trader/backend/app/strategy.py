@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import Optional
 import os
 import time
@@ -55,6 +56,35 @@ def _min_rr() -> float:
 
 def _min_confidence() -> float:
     return float(os.getenv("MIN_CONFIDENCE", str(RULES.get("scan", {}).get("min_confidence", 0.44))))
+
+def _quality_rules() -> dict:
+    return dict((RULES.get("signal_policy", {}).get("quality_governor", {}) or {}))
+
+def _quality_max_daily() -> int:
+    return max(1, int(os.getenv(
+        "MAX_DAILY_SIGNALS",
+        str(_quality_rules().get("max_signals_per_utc_day", 3)),
+    )))
+
+def _quality_cooldown_ms() -> int:
+    minutes = float(os.getenv(
+        "SIGNAL_COOLDOWN_MINUTES",
+        str(_quality_rules().get("cooldown_minutes_after_resolution", 120)),
+    ))
+    return max(0, int(minutes * 60_000))
+
+def _quality_min_confidence() -> float:
+    return float(os.getenv(
+        "QUALITY_MIN_CONFIDENCE",
+        str(_quality_rules().get("min_confidence", 0.70)),
+    ))
+
+def _quality_min_rr() -> float:
+    return float(os.getenv(
+        "QUALITY_MIN_RR",
+        str(_quality_rules().get("min_rr", 3.0)),
+    ))
+
 
 def _trade_style(direction: str, setup: str, timeframe: str, f: MarketFeatures) -> tuple[str, str]:
     """Classify the setup before choosing stop/targets.
@@ -570,6 +600,161 @@ class StrategyEngine:
         self.scenario_tree_state: list[dict] = []
         self.liquidity_map_state: dict = {"above": [], "below": []}
         self.multi_tf_story: str = "Waiting for multi-timeframe data."
+        self.signal_day_utc = datetime.now(timezone.utc).date().isoformat()
+        self.daily_signal_count = 0
+        self.last_resolved_ts = 0
+        self.governor_lock_reason = ""
+        self.governor_last_quality_rejection = ""
+        self._rehydrate_signal_governor()
+
+    def _rotate_governor_day(self):
+        today = datetime.now(timezone.utc).date().isoformat()
+        if today != self.signal_day_utc:
+            self.signal_day_utc = today
+            self.daily_signal_count = 0
+            self.governor_lock_reason = ""
+
+    def _rehydrate_signal_governor(self):
+        """Restore the daily quota, cooldown, and active-signal lock after restart."""
+        self._rotate_governor_day()
+        try:
+            trades = list(self.learning.recent_trades())
+        except Exception:
+            trades = []
+        active = None
+        daily = 0
+        last_resolved = 0
+        now = int(time.time() * 1000)
+        day = self.signal_day_utc
+        for row in trades:
+            opened = int(row.get("opened_ts") or 0)
+            resolved = int(row.get("resolved_ts") or 0)
+            if opened:
+                opened_day = datetime.fromtimestamp(opened / 1000, tz=timezone.utc).date().isoformat()
+                if opened_day == day:
+                    daily += 1
+            if resolved:
+                last_resolved = max(last_resolved, resolved)
+            if str(row.get("status") or "").upper() == "ACTIVE" and opened and now - opened < 24 * 60 * 60_000:
+                active = row
+        self.daily_signal_count = min(daily, _quality_max_daily())
+        self.last_resolved_ts = last_resolved
+        if active:
+            self.active_signal = {
+                "id": active.get("id"),
+                "direction": active.get("direction"),
+                "setup": active.get("setup"),
+                "entry": active.get("entry"),
+                "stop": active.get("stop"),
+                "target1": active.get("target1"),
+                "target2": active.get("target2"),
+                "rr": active.get("rr"),
+                "timeframe": active.get("timeframe"),
+                "created_ts": active.get("opened_ts"),
+                "lifecycle": "ACTIVE",
+                "lifecycle_stage": "ACTIVE",
+            }
+            self.signal_status = "ACTIVE"
+            self.last_signal_id = active.get("id")
+            self.governor_lock_reason = "An unresolved signal is still active."
+        else:
+            self.active_signal = None
+            self.signal_status = "NONE"
+
+    def governor_status(self) -> dict:
+        self._rotate_governor_day()
+        now = int(time.time() * 1000)
+        cooldown_left = max(0, _quality_cooldown_ms() - (now - self.last_resolved_ts)) if self.last_resolved_ts else 0
+        active_lock = self.signal_status == "ACTIVE" and bool(self.active_signal)
+        return {
+            "enabled": bool(_quality_rules().get("enabled", True)),
+            "mode": "ELITE_QUALITY",
+            "daily_count": self.daily_signal_count,
+            "daily_max": _quality_max_daily(),
+            "cooldown_minutes": round(_quality_cooldown_ms() / 60_000),
+            "cooldown_remaining_ms": cooldown_left,
+            "active_signal_lock": active_lock,
+            "lock_reason": self.governor_lock_reason,
+            "last_quality_rejection": self.governor_last_quality_rejection,
+            "min_confidence": _quality_min_confidence(),
+            "min_rr": _quality_min_rr(),
+        }
+
+    def _governor_allows_new_signal(self) -> bool:
+        self._rotate_governor_day()
+        cfg = _quality_rules()
+        if not bool(cfg.get("enabled", True)):
+            self.governor_lock_reason = ""
+            return True
+        if self.signal_status == "ACTIVE" and self.active_signal:
+            self.governor_lock_reason = "WAITING: current signal must resolve at TP2 or SL before another signal is issued."
+            return False
+        if self.daily_signal_count >= _quality_max_daily():
+            self.governor_lock_reason = f"DAILY CAP: {self.daily_signal_count}/{_quality_max_daily()} quality signals used."
+            return False
+        if self.last_resolved_ts:
+            cooldown_left = _quality_cooldown_ms() - (int(time.time() * 1000) - self.last_resolved_ts)
+            if cooldown_left > 0:
+                minutes = max(1, round(cooldown_left / 60_000))
+                self.governor_lock_reason = f"COOLDOWN: wait about {minutes} more minute(s) after the last resolved signal."
+                return False
+        self.governor_lock_reason = ""
+        return True
+
+    def _quality_gate(self, signal: Signal, state: MarketState) -> tuple[bool, str]:
+        cfg = _quality_rules()
+        if not bool(cfg.get("enabled", True)):
+            return True, ""
+        f = compute_features(state)
+        reasons = []
+        if signal.confidence < _quality_min_confidence():
+            reasons.append(f"confidence {signal.confidence:.0%} < {_quality_min_confidence():.0%}")
+        if signal.rr < _quality_min_rr():
+            reasons.append(f"R:R {signal.rr:.2f} < {_quality_min_rr():.2f}")
+        if bool(cfg.get("require_grade_a", True)) and signal.grade != "A":
+            reasons.append("grade is not A")
+        direction = signal.direction.upper()
+        if bool(cfg.get("require_1h_alignment", True)):
+            aligned = (direction == "LONG" and f.trend_60 == "UP") or (direction == "SHORT" and f.trend_60 == "DOWN")
+            if not aligned:
+                reasons.append("1h trend is not aligned")
+        if bool(cfg.get("require_4h_alignment", True)):
+            aligned = (direction == "LONG" and f.trend_240 == "UP") or (direction == "SHORT" and f.trend_240 == "DOWN")
+            if not aligned:
+                reasons.append("4h trend is not aligned")
+        if bool(cfg.get("require_structure_alignment", True)):
+            aligned = (
+                (direction == "LONG" and str(f.market_structure).upper() in {"BULLISH","UP","HIGHER_HIGHS","HIGHER_LOW"})
+                or
+                (direction == "SHORT" and str(f.market_structure).upper() in {"BEARISH","DOWN","LOWER_HIGHS","LOWER_LOW"})
+            )
+            if not aligned:
+                reasons.append("market structure is not aligned")
+        if bool(cfg.get("block_high_vol", True)) and f.regime == "HIGH_VOL":
+            reasons.append("high-volatility regime")
+        if bool(cfg.get("block_range_non_sfp", True)) and f.regime == "RANGE" and "SFP" not in signal.setup.upper():
+            reasons.append("range regime: only SFP setups are eligible")
+        max_spread = float(cfg.get("max_spread_bps", 5.0))
+        if f.spread_bps > max_spread:
+            reasons.append(f"spread {f.spread_bps:.2f} bps > {max_spread:.2f} bps")
+        confirmations = 0
+        if (direction == "LONG" and f.cvd_price_divergence == "BULLISH") or (direction == "SHORT" and f.cvd_price_divergence == "BEARISH"):
+            confirmations += 1
+        if (direction == "LONG" and f.book_imbalance > 0.12) or (direction == "SHORT" and f.book_imbalance < -0.12):
+            confirmations += 1
+        if f.fvg_direction == ("BULLISH" if direction == "LONG" else "BEARISH"):
+            confirmations += 1
+        if f.order_block_direction == ("BULLISH" if direction == "LONG" else "BEARISH"):
+            confirmations += 1
+        if f.golden_pocket == ("LONG_ZONE" if direction == "LONG" else "SHORT_ZONE"):
+            confirmations += 1
+        required = max(0, int(cfg.get("minimum_extra_confirmations", 2)))
+        if confirmations < required:
+            reasons.append(f"only {confirmations} extra confirmations; need {required}")
+        if reasons:
+            return False, "; ".join(reasons)
+        return True, ""
+
 
     def set_setup_memories(self, memories: list[dict] | None):
         self.setup_memories = list(memories or [])[:200]
@@ -1493,6 +1678,8 @@ class StrategyEngine:
                 }
 
             if self.signal_status != "ACTIVE":
+                self.last_resolved_ts = now
+                self.governor_lock_reason = "RESOLVED: quality cooldown is active before the next signal."
                 for row in self.signal_history:
                     if row.get("id") == self.active_signal.get("id"):
                         row["status"] = self.signal_status
@@ -1507,7 +1694,13 @@ class StrategyEngine:
         self.last_evaluated_ts = int(time.time() * 1000)
         self.position_management = None
         self._update_signal_lifecycle(state)
+        self._rotate_governor_day()
         self.last_diagnostics = self.diagnostics(state)
+        if not self._governor_allows_new_signal():
+            self.last_diagnostics["status"] = "QUALITY_LOCK"
+            self.last_diagnostics["wait_reason"] = self.governor_lock_reason
+            self.last_diagnostics["blocked_by"] = ["quality_governor"]
+            return None
         # Keep loose mode active on the secondary REST feed. Candle-based setups
         # can still be evaluated with reduced microstructure freshness rather than
         # freezing the bot until the primary WebSocket is perfect.
@@ -1521,9 +1714,27 @@ class StrategyEngine:
         signals = [s for s in candidates if s is not None]
         if not signals:
             return None
-        signal = max(signals, key=lambda s: (s.confidence, s.rr))
-        self._apply_memory_context(signal, state)
-        self._apply_learning_context(signal, state)
+
+        # The base detector can find several setups; only keep candidates that
+        # survive the strict "best trade only" quality gate after learning/context
+        # adjustments. This prevents frequent low-conviction direction flips.
+        qualified = []
+        rejected = []
+        for candidate in signals:
+            self._apply_memory_context(candidate, state)
+            self._apply_learning_context(candidate, state)
+            ok, reason = self._quality_gate(candidate, state)
+            if ok:
+                qualified.append(candidate)
+            else:
+                rejected.append(f"{candidate.setup}: {reason}")
+        if not qualified:
+            self.governor_last_quality_rejection = " | ".join(rejected[:3])
+            self.governor_lock_reason = "WAITING: no candidate met the elite quality gate."
+            return None
+
+        signal = max(qualified, key=lambda s: (s.confidence, s.rr))
+        self.governor_last_quality_rejection = ""
         previous_signal = dict(self.active_signal) if self.active_signal else None
         self.position_management = self._build_position_management(previous_signal, signal, state)
         if self.position_management:
@@ -1533,6 +1744,8 @@ class StrategyEngine:
         if signal.id == self.last_signal_id:
             return None
         self.last_signal_id = signal.id
+        self.daily_signal_count += 1
+        self.governor_lock_reason = "ACTIVE: waiting for this signal to resolve at TP2 or SL."
         self.active_signal = signal.to_dict()
         self.active_signal["lifecycle"] = "ACTIVE"
         self.active_signal["lifecycle_stage"] = "ACTIVE"
