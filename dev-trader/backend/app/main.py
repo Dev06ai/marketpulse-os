@@ -32,6 +32,7 @@ server_started_ms = int(time.time() * 1000)
 last_engine_eval_ms = 0
 last_opportunity_alert = {"key": "", "ts": 0, "title": "", "body": ""}
 last_trade_event = {}
+last_learning_rehydrate_ts = 0.0
 
 
 class PushTestPayload(BaseModel):
@@ -234,11 +235,21 @@ async def on_state(s: MarketState):
 
 
 async def setup_memory_refresh_loop():
+    global last_learning_rehydrate_ts
     while True:
         try:
             if bridge.enabled:
                 memories = await bridge.fetch_setup_memories(SYMBOL)
                 engine.set_setup_memories(memories)
+
+                # Rehydrate the local adaptive learner from durable resolved
+                # Dev Trader outcomes so a service restart does not reset what it
+                # has learned about setups and contexts.
+                now_mono = asyncio.get_running_loop().time()
+                if now_mono - last_learning_rehydrate_ts >= 60.0:
+                    history = await bridge.fetch_learning_history(SYMBOL)
+                    engine.learning.rehydrate(history)
+                    last_learning_rehydrate_ts = now_mono
 
                 # Reconcile any persisted live signal after a restart/cold start.
                 # This prevents an open signal from being forgotten merely because
