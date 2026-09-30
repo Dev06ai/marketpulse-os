@@ -47,10 +47,22 @@ class SafeActivity : Activity() {
     private lateinit var price: TextView
     private lateinit var signal: TextView
     private lateinit var integrity: TextView
+    private lateinit var features: TextView
     private lateinit var update: TextView
     private lateinit var check: TextView
+    private lateinit var risk: TextView
+    private lateinit var journal: TextView
+    private lateinit var replay: TextView
+    private lateinit var chart: MarketChartView
+    private lateinit var accountEdit: EditText
+    private lateinit var riskEdit: EditText
     private lateinit var updateButton: Button
     private lateinit var checkButton: Button
+    private lateinit var alertsButton: Button
+    private var selectedTf = "15m"
+    private var lastStateReceivedMs = 0L
+    private var latestRoot: JSONObject? = null
+    private var lastSignalId: String? = null
 
     private val client by lazy {
         OkHttpClient.Builder()
