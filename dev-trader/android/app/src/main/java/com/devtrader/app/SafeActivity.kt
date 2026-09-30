@@ -20,6 +20,8 @@ import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
 import android.text.InputType
+import android.text.SpannableString
+import android.text.style.ForegroundColorSpan
 import android.widget.Button
 import android.widget.EditText
 import android.widget.LinearLayout
@@ -132,6 +134,21 @@ class SafeActivity : Activity() {
             }
             previous?.uncaughtException(thread, throwable)
         }
+    }
+
+    private fun setTradeSetupText(text: String) {
+        val styled = SpannableString(text)
+        fun colorAll(term: String, color: Int) {
+            var start = text.indexOf(term)
+            while (start >= 0) {
+                styled.setSpan(ForegroundColorSpan(color), start, start + term.length, 0)
+                start = text.indexOf(term, start + term.length)
+            }
+        }
+        colorAll("LONG", Color.rgb(54, 211, 153))
+        colorAll("SHORT", Color.rgb(255, 82, 105))
+        colorAll("NO CONFIRMED TRADE YET", Color.rgb(167, 139, 250))
+        signal.text = styled
     }
 
     private fun buildUi() {
@@ -652,12 +669,12 @@ class SafeActivity : Activity() {
                 "BREAKOUT  •  " + breakout.optString("status", "WATCH") + "  •  " +
                     breakout.optString("event", "NONE")
             } else ""
-            signal.text = "OPPORTUNITY RADAR  •  ACTIVE SCAN\n" +
+            setTradeSetupText("OPPORTUNITY RADAR  •  ACTIVE SCAN\n" +
                 leadText + if (secondText.isBlank()) "" else "\n" + secondText +
                 if (sfpText.isBlank()) "" else "\n" + sfpText +
                 if (breakoutText.isBlank()) "" else "\n" + breakoutText +
                 if (scenario.isBlank()) "" else "\nSCENARIOS  •  " + scenario +
-                "\nNO CONFIRMED TRADE YET • radar is actively monitoring triggers."
+                "\nNO CONFIRMED TRADE YET • radar is actively monitoring triggers.")
             risk.text = "USDT P&L calculator • quantity or cost • long/short • leverage"
         } else {
             val lifecycle = signalObj.optString("lifecycle_stage", signalObj.optString("lifecycle", "ACTIVE"))
@@ -673,7 +690,7 @@ class SafeActivity : Activity() {
             val styleReason = signalObj.optString("style_reason", signalObj.optJSONObject("evidence")?.optString("style_reason", ""))
             val evidenceObj = signalObj.optJSONObject("evidence")
             val riskDistance = evidenceObj?.optDouble("risk_distance", Double.NaN) ?: Double.NaN
-            signal.text = "TRADE CALL  •  " + signalObj.optString("direction") + "  •  " + tradeStyle + "  •  " + lifecycle +
+            setTradeSetupText("TRADE CALL  •  " + signalObj.optString("direction") + "  •  " + tradeStyle + "  •  " + lifecycle +
                 "\n" + signalObj.optString("setup") +
                 "\nEntry  " + String.format(Locale.US, "%.2f", signalObj.optDouble("entry")) +
                 "    SL  " + String.format(Locale.US, "%.2f", signalObj.optDouble("stop")) +
@@ -684,7 +701,7 @@ class SafeActivity : Activity() {
                 "  •  Conf " + String.format(Locale.US, "%.0f%%", signalObj.optDouble("confidence") * 100) +
                 if (styleReason.isBlank()) "" else "\n" + styleReason +
                 if (reason.isBlank()) "" else "\n" + reason +
-                managementText
+                managementText)
 
             val id = signalObj.optString("id")
             if (id.isNotBlank() && id != lastSignalId) {
