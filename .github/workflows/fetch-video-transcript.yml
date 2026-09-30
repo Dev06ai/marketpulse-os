@@ -1,0 +1,27 @@
+name: Fetch requested YouTube transcript
+
+on:
+  push:
+    branches: ["video-ingest-jHzR0xO0pkM"]
+
+permissions:
+  contents: read
+
+jobs:
+  fetch-transcript:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fetch transcript
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p out
+          curl -fsSL "https://youtube-transcript.ai/transcript/jHzR0xO0pkM.txt" -o out/transcript.txt
+          test -s out/transcript.txt
+          echo "Transcript bytes: $(wc -c < out/transcript.txt)"
+          head -40 out/transcript.txt
+      - name: Upload transcript artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: dev-trader-video-transcript
+          path: out/transcript.txt
