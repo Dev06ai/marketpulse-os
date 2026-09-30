@@ -47,16 +47,22 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          TAG="$GITHUB_REF_NAME"
-          if [[ ! "$TAG" =~ ^dev-trader-(v|release-)?([0-9]+\.[0-9]+\.[0-9]+)-([0-9]+)$ ]]; then
-            echo "Ref must identify version and code, e.g. dev-trader-v0.2.7-13 or dev-trader-release-0.2.7-13"
+          REF="$GITHUB_REF_NAME"
+          if [[ "$REF" =~ ^dev-trader-v([0-9]+\.[0-9]+\.[0-9]+)-([0-9]+)$ ]]; then
+            VERSION_NAME="${BASH_REMATCH[1]}"
+            VERSION_CODE="${BASH_REMATCH[2]}"
+            RELEASE_TAG="$REF"
+          elif [[ "$REF" =~ ^dev-trader-release-([0-9]+\.[0-9]+\.[0-9]+)-([0-9]+)$ ]]; then
+            VERSION_NAME="${BASH_REMATCH[1]}"
+            VERSION_CODE="${BASH_REMATCH[2]}"
+            RELEASE_TAG="dev-trader-v${VERSION_NAME}-${VERSION_CODE}"
+          else
+            echo "Unsupported release ref: $REF"
             exit 1
           fi
-          VERSION_NAME="${BASH_REMATCH[2]}"
-          VERSION_CODE="${BASH_REMATCH[3]}"
           echo "version_name=${VERSION_NAME}" >> "$GITHUB_OUTPUT"
           echo "version_code=${VERSION_CODE}" >> "$GITHUB_OUTPUT"
-
+          echo "release_tag=${RELEASE_TAG}" >> "$GITHUB_OUTPUT"
       - name: Build signed release APK
         working-directory: dev-trader/android
         run: |
@@ -69,7 +75,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          TAG="$GITHUB_REF_NAME"
+          TAG="${{ steps.meta.outputs.release_tag }}"
           VERSION_NAME="${{ steps.meta.outputs.version_name }}"
           VERSION_CODE="${{ steps.meta.outputs.version_code }}"
           APK="dev-trader/android/app/build/outputs/apk/release/app-release.apk"
@@ -92,7 +98,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" \
+          gh release create "${{ steps.meta.outputs.release_tag }}" \
             --target "$GITHUB_SHA" \
             "dev-trader/android/app/build/outputs/apk/release/app-release.apk#dev-trader-${{ steps.meta.outputs.version_name }}.apk" \
             "dev-trader-update.json#dev-trader-update.json" \
