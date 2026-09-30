@@ -114,17 +114,19 @@ def _abc(p: list[tuple[str, int, float]]) -> tuple[str, float, str]:
     q = p[-4:]
     kinds = "".join(x[0] for x in q)
     if kinds == "HLHL":
-        a = q[1][2] - q[0][2]
+        # High -> Low -> High -> Low = bearish A-B-C sequence.
+        a = q[0][2] - q[1][2]
         b = q[2][2] - q[1][2]
         c = q[2][2] - q[3][2]
-        if a < 0 and c > 0:
-            return "CORRECTION_UP", 0.45, "Possible bullish ABC correction."
-    if kinds == "LHLH":
-        a = q[1][2] - q[0][2]
-        b = q[2][2] - q[1][2]
-        c = q[2][2] - q[3][2]
-        if a > 0 and c < 0:
+        if a > 0 and b > 0 and c > 0:
             return "CORRECTION_DOWN", 0.45, "Possible bearish ABC correction."
+    if kinds == "LHLH":
+        # Low -> High -> Low -> High = bullish A-B-C sequence.
+        a = q[1][2] - q[0][2]
+        b = q[2][2] - q[1][2]
+        c = q[3][2] - q[2][2]
+        if a > 0 and b > 0 and c > 0:
+            return "CORRECTION_UP", 0.45, "Possible bullish ABC correction."
     return "UNKNOWN", 0.0, ""
 
 
