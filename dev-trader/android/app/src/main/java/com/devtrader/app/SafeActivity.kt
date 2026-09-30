@@ -395,6 +395,189 @@ class SafeActivity : Activity() {
         return value
     }
 
+    private fun numberField(hint: String, value: String): EditText {
+        return EditText(this).apply {
+            this.hint = hint
+            setText(value)
+            textSize = 15f
+            setTextColor(Color.WHITE)
+            setHintTextColor(Color.rgb(120, 124, 134))
+            inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL
+            setPadding(dp(12), 0, dp(12), 0)
+            background = gradient(
+                intArrayOf(Color.rgb(28, 29, 35), Color.rgb(17, 18, 23)),
+                GradientDrawable.Orientation.LEFT_RIGHT
+            ).apply {
+                cornerRadius = dp(14).toFloat()
+                setStroke(dp(1), Color.rgb(55, 57, 66))
+            }
+        }
+    }
+
+    private fun ensureChannel() {
+        getSystemService(NotificationManager::class.java).createNotificationChannel(
+            NotificationChannel(
+                "dev_trader_signals",
+                "Dev Trader Signals",
+                NotificationManager.IMPORTANCE_HIGH
+            )
+        )
+    }
+
+    private fun requestAlertPermission() {
+        if (Build.VERSION.SDK_INT >= 33 &&
+            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) {
+            requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 4101)
+        } else {
+            alertsButton.text = "SIGNAL ALERTS ENABLED"
+            alertsButton.isEnabled = false
+        }
+    }
+
+    private fun sendLocalSignalAlert(signalObj: JSONObject) {
+        if (Build.VERSION.SDK_INT >= 33 &&
+            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) return
+        val notification = NotificationCompat.Builder(this, "dev_trader_signals")
+            .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .setContentTitle(
+                "BTC " + signalObj.optString("direction") + " • " +
+                    signalObj.optString("setup")
+            )
+            .setContentText(
+                "Entry " + String.format(Locale.US, "%.2f", signalObj.optDouble("entry")) +
+                    " • SL " + String.format(Locale.US, "%.2f", signalObj.optDouble("stop")) +
+                    " • RR " + String.format(Locale.US, "%.2f", signalObj.optDouble("rr"))
+            )
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setAutoCancel(true)
+            .build()
+        getSystemService(NotificationManager::class.java).notify(2001, notification)
+    }
+
+    private fun watchdog() {
+        if (stopped) return
+        val age = if (lastStateReceivedMs == 0L) Long.MAX_VALUE
+            else System.currentTimeMillis() - lastStateReceivedMs
+        if (age > 8000L && socket != null) {
+            integrity.text = "WebSocket  •  STALE (>8s)"
+            status.text = "DATA STALE"
+        }
+        handler.postDelayed({ safe { watchdog() } }, 3000L)
+    }
+
+    private fun calculateRisk() {
+        val signalObj = latestRoot?.optJSONObject("signal")
+        if (signalObj == null) {
+            risk.text = "Waiting for a validated setup…"
+            return
+        }
+        val entry = signalObj.optDouble("entry", Double.NaN)
+        val stop = signalObj.optDouble("stop", Double.NaN)
+        val target = signalObj.optDouble("target2", Double.NaN)
+        if (entry.isNaN() || stop.isNaN()) return
+        val account = accountEdit.text.toString().toDoubleOrNull() ?: 5000.0
+        val pct = riskEdit.text.toString().toDoubleOrNull() ?: 1.0
+        val url = "https://dev-trader-engine.onrender.com/risk?account_balance=" +
+            account + "&risk_pct=" + pct + "&entry=" + entry +
+            "&stop=" + stop + "&target=" + target
+        getJson(url) { ok, body ->
+            handler.post {
+                if (!ok) {
+                    risk.text = "Risk engine unavailable."
+                    return@post
+                }
+                safe {
+                    val j = JSONObject(body)
+                    risk.text =
+                        "Risk " + String.format(Locale.US, "%.2f", j.optDouble("applied_risk_pct")) +
+                        "%  •  Amount " + String.format(Locale.US, "%.2f", j.optDouble("risk_amount")) +
+                        "\nStop distance " + String.format(Locale.US, "%.2f", j.optDouble("stop_distance")) +
+                        " (" + String.format(Locale.US, "%.3f", j.optDouble("stop_distance_pct")) + "%)" +
+                        "\nUnits @1x " + String.format(Locale.US, "%.6f", j.optDouble("units_at_1x")) +
+                        "  •  RR " + String.format(Locale.US, "%.2f", j.optDouble("rr")) +
+                        "\nHard cap enforced  •  Manual execution only"
+                }
+            }
+        }
+    }
+
+    private fun journalPrefs() =
+        getSharedPreferences("dev_trader_journal", Context.MODE_PRIVATE)
+
+    private fun appendJournal(signalObj: JSONObject) {
+        val old = try {
+            JSONArray(journalPrefs().getString("items", "[]"))
+        } catch (_: Throwable) {
+            JSONArray()
+        }
+        val item = JSONObject()
+            .put("ts", System.currentTimeMillis())
+            .put("id", signalObj.optString("id"))
+            .put("direction", signalObj.optString("direction"))
+            .put("setup", signalObj.optString("setup"))
+            .put("entry", signalObj.optDouble("entry"))
+            .put("stop", signalObj.optDouble("stop"))
+            .put("target", signalObj.optDouble("target2"))
+            .put("rr", signalObj.optDouble("rr"))
+            .put("confidence", signalObj.optDouble("confidence"))
+        val next = JSONArray().put(item)
+        for (i in 0 until minOf(old.length(), 24)) next.put(old.optJSONObject(i))
+        journalPrefs().edit().putString("items", next.toString()).apply()
+    }
+
+    private fun loadJournal() {
+        val arr = try {
+            JSONArray(journalPrefs().getString("items", "[]"))
+        } catch (_: Throwable) {
+            JSONArray()
+        }
+        if (arr.length() == 0) {
+            journal.text = "No signals recorded yet."
+            return
+        }
+        val out = StringBuilder()
+        for (i in 0 until minOf(5, arr.length())) {
+            val item = arr.optJSONObject(i) ?: continue
+            out.append(item.optString("direction"))
+                .append(" • ")
+                .append(item.optString("setup"))
+                .append(" • RR ")
+                .append(String.format(Locale.US, "%.2f", item.optDouble("rr")))
+                .append("\n")
+        }
+        journal.text = out.toString().trim()
+    }
+
+    private fun runReplay() {
+        replay.text = "Running recent 15m replay…"
+        getJson("https://dev-trader-engine.onrender.com/backtest/recent?lookback=240") { ok, body ->
+            handler.post {
+                if (!ok) {
+                    replay.text = "Replay unavailable."
+                    return@post
+                }
+                safe {
+                    val j = JSONObject(body)
+                    if (!j.optBoolean("ready", false)) {
+                        replay.text = j.optString("reason", "Not enough candles.")
+                        return@safe
+                    }
+                    val s = j.optJSONObject("stats") ?: JSONObject()
+                    val pf = s.optDouble("profit_factor", Double.NaN)
+                    replay.text =
+                        "Trades  " + s.optInt("trades") +
+                        "\nWin rate  " + String.format(Locale.US, "%.1f%%", s.optDouble("win_rate_pct")) +
+                        "\nTotal R  " + String.format(Locale.US, "%.2f", s.optDouble("total_r")) +
+                        "\nMax DD  " + String.format(Locale.US, "%.2fR", s.optDouble("max_drawdown_r")) +
+                        "\nExpectancy  " + String.format(Locale.US, "%.3fR", s.optDouble("expectancy_r")) +
+                        "\nProfit factor  " + if (pf.isNaN()) "—" else String.format(Locale.US, "%.2f", pf)
+                }
+            }
+        }
+    }
+
     private fun systemCheck() {
         checkButton.isEnabled = false
         check.text = "Running diagnostics…"
