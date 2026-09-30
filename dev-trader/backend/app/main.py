@@ -543,6 +543,8 @@ async def app_config():
             "chart": True,
             "risk_engine": True,
             "signal_lifecycle": True,
+            "trade_milestones": True,
+            "adaptive_learning": True,
             "replay": True,
             "journal": True,
         },
