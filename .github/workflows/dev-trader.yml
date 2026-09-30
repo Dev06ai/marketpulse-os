@@ -116,7 +116,7 @@ jobs:
               "enabled": True,
               "versionCode": 76,
               "versionName": "0.10.8",
-              "apkUrl": "https://github.com/Dev06ai/marketpulse-os/releases/download/dev-trader-v0.10.6-74/app-release.apk",
+              "apkUrl": "https://github.com/Dev06ai/marketpulse-os/releases/download/dev-trader-v0.10.8-76/app-release.apk",
               "sha256": os.environ["SHA256"],
               "notes": "Signed Dev Trader release 0.10.8 • Bitcoin-orange BTC + green USDT accents"
           })
