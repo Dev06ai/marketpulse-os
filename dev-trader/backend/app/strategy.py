@@ -1132,11 +1132,14 @@ class StrategyEngine:
             strength += 1
 
         status = "STRONG_REVERSAL" if strength >= 4 else ("REVERSAL" if strength >= 2 else "EARLY_REVERSAL")
-        action = (
-            f"Close/secure the existing {prev_dir} before taking the new {new_signal.direction}."
-            if strength >= 2
-            else f"Do not blindly flip; reassess the existing {prev_dir} while the new {new_signal.direction} develops."
-        )
+        if strength >= 2 and pnl_r > 0.25:
+            action = f"Existing {prev_dir} is in profit (+{pnl_r:.2f}R): secure/book profit, then consider the new {new_signal.direction}."
+        elif strength >= 2 and pnl_r <= 0:
+            action = f"Existing {prev_dir} thesis is under pressure: close/reassess it before taking the new {new_signal.direction}."
+        elif strength >= 2:
+            action = f"Existing {prev_dir} is near flat: secure the position and transition to the new {new_signal.direction} only if its thesis remains valid."
+        else:
+            action = f"Do not blindly flip; keep reassessing the existing {prev_dir} while the new {new_signal.direction} develops."
         reason_text = reasons[:5]
 
         return {
