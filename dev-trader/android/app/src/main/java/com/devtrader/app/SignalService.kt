@@ -313,6 +313,7 @@ class SignalService : Service() {
 
         val direction = signal.optString("direction", "SIGNAL").uppercase(Locale.US)
         val setup = signal.optString("setup", "setup")
+        val tradeStyle = signal.optString("trade_style", "SCALP").uppercase(Locale.US)
         val entry = signal.optDouble("entry", Double.NaN)
         val stop = signal.optDouble("stop", Double.NaN)
         val rr = signal.optDouble("rr", Double.NaN)
@@ -340,8 +341,8 @@ class SignalService : Service() {
             }
             body = "$status · $pnlText\n$action\nWhy: $reason"
         } else {
-            title = "BTC $direction • $setup"
-            body = "Entry " + format(entry) + " · SL " + format(stop) + " · R:R " + format(rr)
+            title = "BTC $direction • $tradeStyle • $setup"
+            body = "$tradeStyle · Entry " + format(entry) + " · SL " + format(stop) + " · R:R " + format(rr)
         }
 
         val launchIntent = Intent(this, SafeActivity::class.java)
