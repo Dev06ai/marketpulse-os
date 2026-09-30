@@ -181,7 +181,8 @@ async def on_state(s: MarketState):
             last_opportunity_alert = {"key": alert["key"], "ts": now_alert}
             push.send_opportunity(alert)
 
-        lifecycle_event = engine.last_lifecycle_event        if lifecycle_event and bridge.enabled:
+        lifecycle_event = engine.last_lifecycle_event
+        if lifecycle_event and bridge.enabled:
             asyncio.create_task(
                 bridge.post_outcome(
                     lifecycle_event["signal"],
