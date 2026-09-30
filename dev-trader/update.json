@@ -1,8 +1,8 @@
 {
   "enabled": true,
-  "versionCode": 74,
-  "versionName": "0.10.6",
+  "versionCode": 75,
+  "versionName": "0.10.7",
   "apkUrl": "https://github.com/Dev06ai/marketpulse-os/releases/download/dev-trader-v0.10.6-74/app-release.apk",
-  "sha256": "b42b27062af2ead46f9949739202ca885a74cd163bff1153af982588f8fd0f0f",
-  "notes": "Signed Dev Trader release 0.10.6 \u2022 Market Story + Elliott Wave context"
+  "sha256": "d3541c300422ff3efccfc695943a9cc4134d7f80b4b520cba2d98b9e839b2e47",
+  "notes": "Signed Dev Trader release 0.10.7 \u2022 Bitcoin-orange BTC accent"
 }
