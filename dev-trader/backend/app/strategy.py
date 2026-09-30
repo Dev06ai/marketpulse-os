@@ -912,6 +912,7 @@ class StrategyEngine:
         self.liquidity_map_state = self._build_liquidity_map(state, f0)
         self.multi_tf_story = self._build_multi_tf_story(f0)
         radar_top = radar[0] if radar else None
+        evidence_matrix = self._build_evidence_matrix(f0, radar)
         sfp_hunter = self._build_sfp_hunter(state, f0)
         breakout_watch = self._build_breakout_watch(state, f0)
         evidence_matrix = self._build_evidence_matrix(f0, state)
@@ -933,6 +934,7 @@ class StrategyEngine:
             "liquidity_map": self.liquidity_map_state,
             "multi_timeframe_story": self.multi_tf_story,
             "radar_lead": radar_top,
+            "evidence_matrix": evidence_matrix,
             "sfp_hunter": sfp_hunter,
             "breakout_watch": breakout_watch,
             "evidence_matrix": evidence_matrix,
