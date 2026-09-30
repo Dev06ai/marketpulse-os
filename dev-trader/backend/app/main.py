@@ -70,6 +70,13 @@ def mobile_payload():
             "last_evaluated_ts": engine.last_evaluated_ts,
             "setups": diag.get("setups", {}),
             "position_management": engine.position_management,
+            "setup_watch": diag.get("setup_watch", []),
+            "opportunity_radar": diag.get("opportunity_radar", []),
+            "scenario_tree": diag.get("scenario_tree", []),
+            "liquidity_map": diag.get("liquidity_map", {"above": [], "below": []}),
+            "multi_timeframe_story": diag.get("multi_timeframe_story", ""),
+            "radar_lead": diag.get("radar_lead"),
+            "data_quality": diag.get("data_quality", state.data_health),
         },
         "features": {
             "trend_15": f.trend_15,
