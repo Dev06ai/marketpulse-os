@@ -431,6 +431,7 @@ class StrategyEngine:
         self.last_evaluated_ts = 0
         self.last_lifecycle_event: dict | None = None
         self.setup_memories: list[dict] = []
+        self.position_management: dict | None = None
 
     def set_setup_memories(self, memories: list[dict] | None):
         self.setup_memories = list(memories or [])[:200]
@@ -765,6 +766,100 @@ class StrategyEngine:
         result["active_signal"] = self.active_signal
         return result
 
+
+    def _build_position_management(self, previous: dict | None, new_signal: Signal, state: MarketState) -> dict | None:
+        if not previous or previous.get("direction") == new_signal.direction or self.signal_status != "ACTIVE":
+            return None
+        try:
+            prev_entry = float(previous.get("entry"))
+            prev_stop = float(previous.get("stop"))
+            current = float(state.last_price)
+        except (TypeError, ValueError):
+            return None
+
+        prev_dir = str(previous.get("direction", "")).upper()
+        risk = abs(prev_entry - prev_stop)
+        pnl = (current - prev_entry) if prev_dir == "LONG" else (prev_entry - current)
+        pnl_r = (pnl / risk) if risk > 0 else 0.0
+
+        f = compute_features(state)
+        memory = (new_signal.evidence or {}).get("memory_match")
+        reasons: list[str] = []
+
+        if new_signal.setup:
+            reasons.append(f"New {new_signal.setup} signal confirmed.")
+        if new_signal.direction == "SHORT":
+            if f.trend_60 == "DOWN":
+                reasons.append("1h trend has bearish alignment.")
+            if f.trend_240 == "DOWN":
+                reasons.append("4h trend also supports the short.")
+            if str(f.market_structure).upper() in {"BEARISH", "DOWN", "LOWER_HIGHS", "LOWER_LOW"}:
+                reasons.append("Market structure is shifting bearish.")
+            if f.cvd_price_divergence == "BEARISH":
+                reasons.append("Bearish price/CVD divergence supports the reversal.")
+            if f.book_imbalance < -0.12:
+                reasons.append("Order-book imbalance favors sellers.")
+            if f.liquidation_pressure == "SHORT_LIQUIDATIONS":
+                reasons.append("Short-side liquidation pressure is present.")
+        else:
+            if f.trend_60 == "UP":
+                reasons.append("1h trend has bullish alignment.")
+            if f.trend_240 == "UP":
+                reasons.append("4h trend also supports the long.")
+            if str(f.market_structure).upper() in {"BULLISH", "UP", "HIGHER_HIGHS", "HIGHER_LOW"}:
+                reasons.append("Market structure is shifting bullish.")
+            if f.cvd_price_divergence == "BULLISH":
+                reasons.append("Bullish price/CVD divergence supports the reversal.")
+            if f.book_imbalance > 0.12:
+                reasons.append("Order-book imbalance favors buyers.")
+            if f.liquidation_pressure == "LONG_LIQUIDATIONS":
+                reasons.append("Long-side liquidation pressure is present.")
+
+        if memory:
+            reasons.append(f"Saved human setup memory matches: {memory.get('title', memory.get('setup_key', 'mapped setup'))}.")
+
+        strength = 1
+        if (new_signal.direction == "SHORT" and f.trend_60 == "DOWN") or (new_signal.direction == "LONG" and f.trend_60 == "UP"):
+            strength += 1
+        if (new_signal.direction == "SHORT" and f.trend_240 == "DOWN") or (new_signal.direction == "LONG" and f.trend_240 == "UP"):
+            strength += 1
+        if (new_signal.direction == "SHORT" and str(f.market_structure).upper() in {"BEARISH","DOWN","LOWER_HIGHS","LOWER_LOW"}) or (new_signal.direction == "LONG" and str(f.market_structure).upper() in {"BULLISH","UP","HIGHER_HIGHS","HIGHER_LOW"}):
+            strength += 1
+        if (new_signal.direction == "SHORT" and f.cvd_price_divergence == "BEARISH") or (new_signal.direction == "LONG" and f.cvd_price_divergence == "BULLISH"):
+            strength += 1
+        if (new_signal.direction == "SHORT" and f.book_imbalance < -0.12) or (new_signal.direction == "LONG" and f.book_imbalance > 0.12):
+            strength += 1
+        if memory:
+            strength += 1
+
+        status = "STRONG_REVERSAL" if strength >= 4 else ("REVERSAL" if strength >= 2 else "EARLY_REVERSAL")
+        action = (
+            f"Close/secure the existing {prev_dir} before taking the new {new_signal.direction}."
+            if strength >= 2
+            else f"Do not blindly flip; reassess the existing {prev_dir} while the new {new_signal.direction} develops."
+        )
+        reason_text = reasons[:5]
+
+        return {
+            "type": "POSITION_REVERSAL",
+            "status": status,
+            "strength_score": strength,
+            "from_direction": prev_dir,
+            "to_direction": new_signal.direction,
+            "from_signal_id": previous.get("id"),
+            "to_signal_id": new_signal.id,
+            "previous_entry": prev_entry,
+            "current_price": current,
+            "open_pnl_r": round(pnl_r, 3),
+            "open_pnl_direction": "PROFIT" if pnl_r > 0 else ("LOSS" if pnl_r < 0 else "FLAT"),
+            "action": action,
+            "reason": " ".join(reason_text) if reason_text else "A new opposite-direction setup has been confirmed.",
+            "reasons": reason_text,
+            "why_new_trade": f"The new {new_signal.direction} setup is being supported by {strength} independent reversal/context confirmations, not direction alone.",
+            "manual_execution_only": True,
+            "note": "Advisory position management only. The bot does not place or close exchange orders automatically.",
+        }
+
     def _update_signal_lifecycle(self, state: MarketState):
         self.last_lifecycle_event = None
         if not self.active_signal or state.last_price is None or self.signal_status != "ACTIVE":
@@ -818,6 +913,12 @@ class StrategyEngine:
             return None
         signal = max(signals, key=lambda s: (s.confidence, s.rr))
         self._apply_memory_context(signal, state)
+        previous_signal = dict(self.active_signal) if self.active_signal else None
+        self.position_management = self._build_position_management(previous_signal, signal, state)
+        if self.position_management:
+            signal.evidence["position_management"] = self.position_management
+            signal.thesis.append(self.position_management["action"])
+            signal.thesis.append("Reversal reason: " + self.position_management["why_new_trade"])
         if signal.id == self.last_signal_id:
             return None
         self.last_signal_id = signal.id
