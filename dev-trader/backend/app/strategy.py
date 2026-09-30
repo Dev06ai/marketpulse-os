@@ -6,7 +6,7 @@ import time
 
 from .analytics import MarketFeatures, compute_features
 from .models import Candle, MarketState
-from .knowledge import RULES
+from .knowledge import RULES, knowledge_summary
 from .learning import AdaptiveLearning
 
 
