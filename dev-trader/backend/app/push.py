@@ -58,14 +58,20 @@ class PushService:
 
     def send_signal(self,signal):
         if not (self.ready and messaging): return
+        management=signal.get("evidence", {}).get("position_management") or {}
+        if management:
+            title=f"MANAGE {management.get('from_direction','')} → {management.get('to_direction','')}"
+            body=f"{management.get('status','REVERSAL')} • {management.get('open_pnl_direction','FLAT')} {management.get('open_pnl_r',0):.2f}R • {management.get('action','Reassess position')}"
+        else:
+            title=f"BTC {signal['direction']} • {signal['setup']}"
+            body=f"Entry {signal['entry']:.2f} · SL {signal['stop']:.2f} · R:R {signal['rr']:.2f}"
         for token in list(self.tokens):
             try:
                 messaging.send(messaging.Message(
                     token=token,
-                    notification=messaging.Notification(
-                        title=f"BTC {signal['direction']} • {signal['setup']}",
-                        body=f"Entry {signal['entry']:.2f} · SL {signal['stop']:.2f} · R:R {signal['rr']:.2f}"),
-                    data={"type":"trade_signal","signal_id":signal["id"]}))
+                    notification=messaging.Notification(title=title, body=body),
+                    data={"type":"trade_signal","signal_id":signal["id"],
+                          "management_type": management.get("type","")}))
             except Exception as exc:
                 self.last_error=str(exc)
                 print(f"FCM send failed: {exc}")
