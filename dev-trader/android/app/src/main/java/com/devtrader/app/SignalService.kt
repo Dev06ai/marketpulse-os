@@ -32,6 +32,7 @@ class SignalService : Service() {
         private const val PREFS = "dev_trader_signal_state"
         private const val PREF_LAST_SIGNAL_ID = "last_signal_id"
         private const val PREF_LAST_ALERT_KEY = "last_alert_key"
+        private const val PREF_LAST_TRADE_EVENT_KEY = "last_trade_event_key"
         private const val WS_URL = "wss://dev-trader-engine.onrender.com/ws"
         private const val HEARTBEAT_URL = "https://dev-trader-engine.onrender.com/heartbeat"
     }
@@ -155,9 +156,19 @@ class SignalService : Service() {
                             val title = alert.optString("title")
                             val body = alert.optString("body")
                             val previousAlert = prefs.getString(PREF_LAST_ALERT_KEY, null)
-                            if (!alertKey.isNullOrBlank() && alertKey != previousAlert) {
+                            if (alertKey.isNotBlank() && alertKey != previousAlert) {
                                 prefs.edit().putString(PREF_LAST_ALERT_KEY, alertKey).apply()
                                 notifyOpportunity(title, body)
+                            }
+                        }
+
+                        val tradeEvent = root.optJSONObject("trade_event")
+                        if (tradeEvent != null) {
+                            val eventKey = tradeEvent.optString("key")
+                            val previousEvent = prefs.getString(PREF_LAST_TRADE_EVENT_KEY, null)
+                            if (eventKey.isNotBlank() && eventKey != previousEvent) {
+                                prefs.edit().putString(PREF_LAST_TRADE_EVENT_KEY, eventKey).apply()
+                                notifyTradeEvent(tradeEvent)
                             }
                         }
 
@@ -352,6 +363,55 @@ class SignalService : Service() {
 
         getSystemService(NotificationManager::class.java)
             .notify(SIGNAL_NOTIFICATION_ID, notification)
+    }
+
+    private fun notifyTradeEvent(event: JSONObject) {
+        if (Build.VERSION.SDK_INT >= 33 &&
+            checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) !=
+            android.content.pm.PackageManager.PERMISSION_GRANTED
+        ) return
+
+        val type = event.optString("type", "TRADE_EVENT")
+        val direction = event.optString("direction", "BTC").uppercase(Locale.US)
+        val setup = event.optString("setup", "setup")
+        val price = format(event.optDouble("price", Double.NaN))
+        val level = format(event.optDouble("level", Double.NaN))
+        val note = event.optString("note", "")
+        val learning = event.optJSONObject("learning_review")
+
+        val title = when (type) {
+            "TP1_HIT" -> "BTC $direction • TP1 HIT"
+            "TP2_HIT" -> "BTC $direction • TP2 HIT"
+            "SL_HIT" -> "BTC $direction • STOP / INVALIDATION"
+            else -> "BTC $direction • " + type.replace('_', ' ')
+        }
+        var body = "$setup\nPrice $price • Level $level"
+        if (note.isNotBlank()) body += "\n$note"
+        if (learning != null) {
+            val next = learning.optJSONArray("do_next_time")
+            val avoid = learning.optJSONArray("avoid_next_time")
+            if (next != null && next.length() > 0) body += "\nNext time: " + next.optString(0)
+            if (avoid != null && avoid.length() > 0) body += "\nAvoid: " + avoid.optString(0)
+        }
+
+        val launchIntent = Intent(this, SafeActivity::class.java)
+        val pending = PendingIntent.getActivity(
+            this, 3200, launchIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        val notificationId = 3200 + (event.optString("key").hashCode() and 0x7fffffff) % 50000
+        val notification = NotificationCompat.Builder(this, SIGNAL_CHANNEL)
+            .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .setContentTitle(title)
+            .setContentText(body.replace("\n", " · "))
+            .setStyle(NotificationCompat.BigTextStyle().bigText(body))
+            .setContentIntent(pending)
+            .setAutoCancel(true)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setCategory(Notification.CATEGORY_MESSAGE)
+            .build()
+
+        getSystemService(NotificationManager::class.java).notify(notificationId, notification)
     }
 
     private fun notifyOpportunity(title: String, body: String) {
