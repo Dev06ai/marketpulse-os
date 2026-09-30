@@ -1,8 +1,8 @@
 {
   "enabled": true,
-  "versionCode": 77,
-  "versionName": "0.10.9",
-  "apkUrl": "https://github.com/Dev06ai/marketpulse-os/releases/download/dev-trader-v0.10.9-77/app-release.apk",
-  "sha256": "fb07393a3f436aba8d04d5043000acf6c6682731cfa604d181e60431545c2125",
-  "notes": "Signed Dev Trader release 0.10.9 \u2022 live-price BTC orange + green USDT"
+  "versionCode": 78,
+  "versionName": "0.11.0",
+  "apkUrl": "https://github.com/Dev06ai/marketpulse-os/releases/download/dev-trader-v0.11.0-78/app-release.apk",
+  "sha256": "8f42cda1e97e2ce8fe62b62660ebb8a795a59c3a7cd7edcf8219f74fe5f9678d",
+  "notes": "Signed Dev Trader release 0.11.0 \u2022 live-price BTC orange only"
 }
