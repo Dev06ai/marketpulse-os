@@ -227,7 +227,7 @@ class SafeActivity : Activity() {
         signal = setup.value
         root.addView(setup.container, margins(bottom = 12))
 
-        val context = card("MARKET PULSE", "REGIME —  •  STRUCTURE —\n15m —  /  1h —  /  4h —\nCVD —  •  OI —  •  FVG —  •  OB —", 14f)
+        val context = card("MARKET PULSE", "MTF STORY\n4H —  •  1H —  •  15m —\nREGIME —  •  STRUCTURE —\nCVD —  •  OI —  •  FVG —  •  OB —", 13f)
         features = context.value
         root.addView(context.container, margins(bottom = 12))
 
@@ -679,9 +679,21 @@ class SafeActivity : Activity() {
         }
 
         val story = engine?.optString("multi_timeframe_story", "").orEmpty()
+        val storyParts = story.split(";")
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+        val compactStory = when {
+            storyParts.isEmpty() -> "MTF STORY\n4H —  •  1H —  •  15m —"
+            storyParts.size == 1 -> "MTF STORY\n" + storyParts[0]
+            else -> {
+                val first = storyParts.take(3).joinToString("  •  ")
+                val remainder = storyParts.drop(3).joinToString("  •  ")
+                "MTF STORY\n" + first + if (remainder.isBlank()) "" else "\n" + remainder
+            }
+        }
         features.text =
-            (if (story.isBlank()) "" else "STORY  " + story + "\n") +
-            "REGIME  " + (f?.optString("regime") ?: "—") +
+            compactStory +
+            "\nREGIME  " + (f?.optString("regime") ?: "—") +
             "\nSTRUCTURE  " + (f?.optString("market_structure") ?: "—") +
             "\n15m / 1h / 4h  " + (f?.optString("trend_15") ?: "—") + " / " +
                 (f?.optString("trend_60") ?: "—") + " / " + (f?.optString("trend_240") ?: "—") +
