@@ -190,8 +190,33 @@ class SignalService : Service() {
         val entry = signal.optDouble("entry", Double.NaN)
         val stop = signal.optDouble("stop", Double.NaN)
         val rr = signal.optDouble("rr", Double.NaN)
-        val title = "BTC $direction • $setup"
-        val body = "Entry " + format(entry) + " · SL " + format(stop) + " · R:R " + format(rr)
+
+        val evidence = signal.optJSONObject("evidence")
+        val management = evidence?.optJSONObject("position_management")
+        val hasManagement = management != null
+
+        val title: String
+        val body: String
+
+        if (hasManagement) {
+            val from = management?.optString("from_direction", "POSITION").orEmpty()
+            val to = management?.optString("to_direction", direction).orEmpty()
+            val status = management?.optString("status", "REVERSAL").orEmpty()
+            val pnlR = management?.optDouble("open_pnl_r", Double.NaN) ?: Double.NaN
+            val pnlDirection = management?.optString("open_pnl_direction", "FLAT").orEmpty()
+            val action = management?.optString("action", "Reassess the existing position.").orEmpty()
+            val reason = management?.optString("reason", "Opposite-direction structure has been confirmed.").orEmpty()
+            title = "MANAGE $from → $to"
+            val pnlText = if (pnlR.isFinite()) {
+                "Existing $from: $pnlDirection " + String.format(Locale.US, "%.2f", pnlR) + "R"
+            } else {
+                "Existing $from: current PnL unavailable"
+            }
+            body = "$status · $pnlText\n$action\nWhy: $reason"
+        } else {
+            title = "BTC $direction • $setup"
+            body = "Entry " + format(entry) + " · SL " + format(stop) + " · R:R " + format(rr)
+        }
 
         val launchIntent = Intent(this, SafeActivity::class.java)
         val pending = PendingIntent.getActivity(
@@ -202,7 +227,7 @@ class SignalService : Service() {
         val notification = NotificationCompat.Builder(this, SIGNAL_CHANNEL)
             .setSmallIcon(android.R.drawable.ic_dialog_info)
             .setContentTitle(title)
-            .setContentText(body)
+            .setContentText(body.replace("\n", " · "))
             .setStyle(NotificationCompat.BigTextStyle().bigText(body))
             .setContentIntent(pending)
             .setAutoCancel(true)
