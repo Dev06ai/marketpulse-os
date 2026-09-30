@@ -91,7 +91,7 @@ jobs:
           VERSION_CODE="${{ steps.meta.outputs.version_code }}"
           APK="dev-trader/android/app/build/outputs/apk/release/app-release.apk"
           SHA256="$(sha256sum "$APK" | cut -d " " -f1)"
-          APK_URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/dev-trader-${VERSION_NAME}.apk"
+          APK_URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/app-release.apk"
           cat > dev-trader-update.json <<EOF
           {
             "enabled": true,
@@ -105,16 +105,23 @@ jobs:
           echo "version_name=${VERSION_NAME}" >> "$GITHUB_OUTPUT"
           echo "version_code=${VERSION_CODE}" >> "$GITHUB_OUTPUT"
 
-      - name: Create GitHub release
+      - name: Create or update GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "${{ steps.meta.outputs.release_tag }}" \
-            --target "$GITHUB_SHA" \
-            "dev-trader/android/app/build/outputs/apk/release/app-release.apk#dev-trader-${{ steps.meta.outputs.version_name }}.apk" \
-            "dev-trader-update.json#dev-trader-update.json" \
-            --title "Dev Trader ${{ steps.meta.outputs.version_name }}" \
-            --notes "Signed self-update release for Dev Trader."
+          TAG="${{ steps.meta.outputs.release_tag }}"
+          APK="dev-trader/android/app/build/outputs/apk/release/app-release.apk"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "$APK" --clobber
+            gh release upload "$TAG" "dev-trader-update.json#dev-trader-update.json" --clobber
+          else
+            gh release create "$TAG" \
+              --target "$GITHUB_SHA" \
+              "$APK" \
+              "dev-trader-update.json#dev-trader-update.json" \
+              --title "Dev Trader ${{ steps.meta.outputs.version_name }}" \
+              --notes "Signed self-update release for Dev Trader."
+          fi
 
       - name: Publish update manifest
         env:
