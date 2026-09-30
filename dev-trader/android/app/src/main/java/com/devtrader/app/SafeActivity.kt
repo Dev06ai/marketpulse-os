@@ -50,11 +50,13 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 class SafeActivity : Activity() {
     private val btcOrange = Color.rgb(247, 147, 26)
+    private val usdtGreen = Color.rgb(0, 200, 83)
 
-    private fun btcAccent(value: CharSequence): CharSequence {
+    private fun marketAssetAccent(value: CharSequence): CharSequence {
         val text = value.toString()
-        if (!text.contains("BTC", ignoreCase = true)) return value
+        if (!text.contains("BTC", ignoreCase = true) && !text.contains("USDT", ignoreCase = true)) return value
         val styled = SpannableString(text)
+
         var start = 0
         while (start < text.length) {
             val index = text.indexOf("BTC", startIndex = start, ignoreCase = true)
@@ -66,6 +68,19 @@ class SafeActivity : Activity() {
                 SpannableString.SPAN_EXCLUSIVE_EXCLUSIVE
             )
             start = index + 3
+        }
+
+        start = 0
+        while (start < text.length) {
+            val index = text.indexOf("USDT", startIndex = start, ignoreCase = true)
+            if (index < 0) break
+            styled.setSpan(
+                ForegroundColorSpan(usdtGreen),
+                index,
+                index + 4,
+                SpannableString.SPAN_EXCLUSIVE_EXCLUSIVE
+            )
+            start = index + 4
         }
         return styled
     }
@@ -354,7 +369,7 @@ class SafeActivity : Activity() {
 
     private fun label(text: String, size: Float, color: Int, spacing: Float): TextView {
         return TextView(this).apply {
-            this.text = btcAccent(text)
+            this.text = marketAssetAccent(text)
             textSize = size
             setTextColor(color)
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
@@ -379,7 +394,7 @@ class SafeActivity : Activity() {
         }
 
         val heading = TextView(this).apply {
-            text = btcAccent(title)
+            text = marketAssetAccent(title)
             textSize = 11f
             setTextColor(Color.rgb(150, 154, 164))
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
@@ -388,7 +403,7 @@ class SafeActivity : Activity() {
         box.addView(heading)
 
         val value = TextView(this).apply {
-            text = btcAccent(initial)
+            text = marketAssetAccent(initial)
             textSize = valueSize
             setTextColor(Color.WHITE)
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
@@ -401,7 +416,7 @@ class SafeActivity : Activity() {
 
     private fun actionButton(label: String): Button {
         return Button(this).apply {
-            text = btcAccent(label)
+            text = marketAssetAccent(label)
             textSize = 13f
             setTextColor(Color.WHITE)
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
@@ -690,7 +705,7 @@ class SafeActivity : Activity() {
             health == "RECONNECTING" -> "RECONNECTING…"
             else -> health
         }
-        price.text = btcAccent(
+        price.text = marketAssetAccent(
             "BTC  " + if (priceValue.isNaN()) "—"
                 else String.format(Locale.US, "%,.2f", priceValue) +
                     "\nOI   " + if (oi.isNaN()) "—"
@@ -948,7 +963,7 @@ class SafeActivity : Activity() {
         val notification = NotificationCompat.Builder(this, "dev_trader_signals")
             .setSmallIcon(android.R.drawable.ic_dialog_info)
             .setContentTitle(
-                btcAccent("BTC " + signalObj.optString("direction") + " • " +
+                marketAssetAccent("BTC " + signalObj.optString("direction") + " • " +
                     signalObj.optString("setup"))
             )
             .setContentText(
