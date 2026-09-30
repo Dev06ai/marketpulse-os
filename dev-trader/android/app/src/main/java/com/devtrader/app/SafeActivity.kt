@@ -52,25 +52,13 @@ class SafeActivity : Activity() {
     private val btcOrange = Color.rgb(247, 147, 26)
     private val usdtGreen = Color.rgb(0, 200, 83)
 
+    // BTC stays white everywhere by default. Only the BTC ticker immediately
+    // beside the live price receives the Bitcoin-orange accent.
     private fun marketAssetAccent(value: CharSequence): CharSequence {
         val text = value.toString()
-        if (!text.contains("BTC", ignoreCase = true) && !text.contains("USDT", ignoreCase = true)) return value
+        if (!text.contains("USDT", ignoreCase = true)) return value
         val styled = SpannableString(text)
-
         var start = 0
-        while (start < text.length) {
-            val index = text.indexOf("BTC", startIndex = start, ignoreCase = true)
-            if (index < 0) break
-            styled.setSpan(
-                ForegroundColorSpan(btcOrange),
-                index,
-                index + 3,
-                SpannableString.SPAN_EXCLUSIVE_EXCLUSIVE
-            )
-            start = index + 3
-        }
-
-        start = 0
         while (start < text.length) {
             val index = text.indexOf("USDT", startIndex = start, ignoreCase = true)
             if (index < 0) break
@@ -81,6 +69,21 @@ class SafeActivity : Activity() {
                 SpannableString.SPAN_EXCLUSIVE_EXCLUSIVE
             )
             start = index + 4
+        }
+        return styled
+    }
+
+    private fun priceBtcAccent(value: CharSequence): CharSequence {
+        val text = value.toString()
+        val styled = SpannableString(text)
+        val index = text.indexOf("BTC", ignoreCase = true)
+        if (index >= 0) {
+            styled.setSpan(
+                ForegroundColorSpan(btcOrange),
+                index,
+                index + 3,
+                SpannableString.SPAN_EXCLUSIVE_EXCLUSIVE
+            )
         }
         return styled
     }
@@ -705,7 +708,7 @@ class SafeActivity : Activity() {
             health == "RECONNECTING" -> "RECONNECTING…"
             else -> health
         }
-        price.text = marketAssetAccent(
+        price.text = priceBtcAccent(
             "BTC  " + if (priceValue.isNaN()) "—"
                 else String.format(Locale.US, "%,.2f", priceValue) +
                     "\nOI   " + if (oi.isNaN()) "—"
