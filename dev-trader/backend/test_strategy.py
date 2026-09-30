@@ -41,3 +41,16 @@ def test_engine_diagnostics_explain_wait_state():
     assert "MSS" in d["setups"]
     assert d["wait_reason"]
     assert d["manual_execution_only"] is True
+
+
+def test_evidence_matrix_consistent_with_radar():
+    from app.strategy import StrategyEngine
+    cs=[c(i,100+i*0.2,102+i*0.2,99+i*0.2,101+i*0.2) for i in range(24)]
+    state=MarketState(candles_15=cs,candles_60=cs[:12],last_price=105.6,data_health="HEALTHY")
+    engine=StrategyEngine()
+    d=engine.diagnostics(state)
+    assert set(d["evidence_matrix"]) == {"LONG", "SHORT"}
+    assert d["evidence_matrix"]["LONG"]["max_score"] == 8
+    assert d["evidence_matrix"]["SHORT"]["max_score"] == 8
+    assert "price_oi" in d["evidence_matrix"]["LONG"]["checks"]
+    assert "nearby_memory" in d["evidence_matrix"]["LONG"]["checks"]
