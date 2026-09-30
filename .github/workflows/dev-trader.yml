@@ -62,7 +62,7 @@ jobs:
           DEV_TRADER_KEY_PASSWORD: ${{ secrets.DEV_TRADER_KEY_PASSWORD }}
         run: |
           echo "${{ secrets.DEV_TRADER_KEYSTORE_BASE64 }}" | base64 --decode > "$DEV_TRADER_KEYSTORE_PATH"
-          gradle assembleRelease --stacktrace -PdevTraderVersionCode=72 -PdevTraderVersionName=0.10.4
+          gradle assembleRelease --stacktrace -PdevTraderVersionCode=74 -PdevTraderVersionName=0.10.6
       - name: Stage Android artifacts
         if: steps.changed.outputs.android_changed == 'true'
         run: |
@@ -125,5 +125,5 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add dev-trader/update.json
-          git commit -m "Publish Dev Trader self-update manifest dev-trader-release-0.10.4-72 [skip ci]" || exit 0
+          git commit -m "Publish Dev Trader self-update manifest dev-trader-release-0.10.6-74 [skip ci]" || exit 0
           git push origin dev-trader-v1
