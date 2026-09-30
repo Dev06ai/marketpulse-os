@@ -753,7 +753,7 @@ class StrategyEngine:
         active_lock = self.signal_status == "ACTIVE" and bool(self.active_signal)
         return {
             "enabled": bool(_quality_rules().get("enabled", True)),
-            "elliott_knowledge": True,
+            "elliott_knowledge": knowledge_summary(),
             "mode": "ELITE_QUALITY",
             "daily_count": self.daily_signal_count,
             "daily_max": _quality_max_daily(),
