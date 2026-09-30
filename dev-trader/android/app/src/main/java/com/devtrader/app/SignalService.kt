@@ -38,9 +38,14 @@ class SignalService : Service() {
     private var socket: WebSocket? = null
     private var reconnectAttempt = 0
     private var stopped = false
+    private var lastMessageMs = 0L
+    private var reconnectScheduled = false
     private val client by lazy {
         OkHttpClient.Builder()
-            .pingInterval(15, TimeUnit.SECONDS)
+            .connectTimeout(8, TimeUnit.SECONDS)
+            .writeTimeout(8, TimeUnit.SECONDS)
+            .readTimeout(0, TimeUnit.SECONDS)
+            .pingInterval(10, TimeUnit.SECONDS)
             .retryOnConnectionFailure(true)
             .build()
     }
@@ -51,11 +56,13 @@ class SignalService : Service() {
         ensureChannels()
         startForegroundNotification()
         connect()
+        scheduleHealthWatchdog()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         stopped = false
         if (socket == null) connect()
+        scheduleHealthWatchdog()
         return START_STICKY
     }
 
@@ -111,18 +118,27 @@ class SignalService : Service() {
         }
     }
 
-    private fun connect() {
-        if (stopped || socket != null) return
+    private fun connect(force: Boolean = false) {
+        if (stopped) return
+        if (force) {
+            reconnectScheduled = false
+            runCatching { socket?.cancel() }
+            socket = null
+        }
+        if (socket != null) return
         socket = client.newWebSocket(
             Request.Builder().url(WS_URL).build(),
             object : WebSocketListener() {
                 override fun onOpen(ws: WebSocket, response: Response) {
                     reconnectAttempt = 0
+                    reconnectScheduled = false
                     socket = ws
+                    lastMessageMs = System.currentTimeMillis()
                     updateServiceNotification("Live signal monitoring connected")
                 }
 
                 override fun onMessage(ws: WebSocket, text: String) {
+                    lastMessageMs = System.currentTimeMillis()
                     runCatching {
                         val root = JSONObject(text)
                         if (root.optString("type") != "state") return
@@ -153,25 +169,52 @@ class SignalService : Service() {
                 }
 
                 override fun onClosed(ws: WebSocket, code: Int, reason: String) {
-                    socket = null
-                    scheduleReconnect()
+                    val owned = socket === ws
+                    if (owned) socket = null
+                    if (owned) scheduleReconnect()
                 }
 
                 override fun onFailure(ws: WebSocket, t: Throwable, response: Response?) {
-                    socket = null
-                    updateServiceNotification("Reconnecting to live signal feed…")
-                    scheduleReconnect()
+                    val owned = socket === ws
+                    if (owned) socket = null
+                    if (owned) {
+                        updateServiceNotification("Reconnecting to live signal feed…")
+                        scheduleReconnect()
+                    }
                 }
             }
         )
     }
 
     private fun scheduleReconnect() {
-        if (stopped || socket != null) return
-        reconnectAttempt = min(reconnectAttempt + 1, 6)
-        val delay = min(30_000L, 1_000L shl (reconnectAttempt - 1))
-        handler.removeCallbacksAndMessages(null)
-        handler.postDelayed({ if (!stopped) connect() }, delay)
+        if (stopped || socket != null || reconnectScheduled) return
+        reconnectScheduled = true
+        reconnectAttempt = min(reconnectAttempt + 1, 4)
+        val delay = min(12_000L, 1_000L shl (reconnectAttempt - 1))
+        handler.postDelayed({
+            reconnectScheduled = false
+            if (!stopped && socket == null) connect()
+        }, delay)
+    }
+
+    private fun scheduleHealthWatchdog() {
+        handler.removeCallbacks(healthWatchdog)
+        handler.postDelayed(healthWatchdog, 4_000L)
+    }
+
+    private val healthWatchdog = object : Runnable {
+        override fun run() {
+            if (stopped) return
+            val age = if (lastMessageMs == 0L) Long.MAX_VALUE
+            else System.currentTimeMillis() - lastMessageMs
+            if (age > 12_000L) {
+                updateServiceNotification("Live feed stale • rebuilding connection…")
+                connect(force = true)
+            } else if (socket == null) {
+                connect()
+            }
+            handler.postDelayed(this, 4_000L)
+        }
     }
 
     private fun updateServiceNotification(text: String) {
@@ -289,6 +332,7 @@ class SignalService : Service() {
     override fun onDestroy() {
         stopped = true
         handler.removeCallbacksAndMessages(null)
+        reconnectScheduled = false
         runCatching { socket?.close(1000, "service destroyed") }
         socket = null
         super.onDestroy()
