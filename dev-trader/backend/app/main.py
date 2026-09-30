@@ -81,6 +81,11 @@ def mobile_payload():
             "golden_pocket": f.golden_pocket,
             "weekly_open": f.weekly_open,
         },
+        "upstream": {
+            "rest_ok": bool(stream.last_rest_ok) if stream else False,
+            "last_error": stream.last_upstream_error if stream else "",
+            "last_rest_sync_ts": stream.last_rest_sync_ms if stream else 0,
+        },
         "heartbeat": {
             "server_uptime_ms": max(0, now - server_started_ms),
             "last_received_ts": state.received_ts,
@@ -94,8 +99,11 @@ def mobile_payload():
 
 async def broadcast_loop():
     while True:
-        await asyncio.sleep(max(0.5, min(SNAPSHOT, 2.0)))
-        payload = mobile_payload()
+        await asyncio.sleep(max(0.5, min(SNAPSHOT, 1.0)))
+        try:
+            payload = mobile_payload()
+        except Exception:
+            continue
         for ws in list(clients):
             try:
                 await asyncio.wait_for(ws.send_json(payload), timeout=0.5)
@@ -129,6 +137,7 @@ async def lifespan(app: FastAPI):
     stream = BybitStream(WS_URL, SYMBOL, on_state)
     tasks = [
         asyncio.create_task(stream.run()),
+        asyncio.create_task(stream.rest_fallback_loop()),
         asyncio.create_task(broadcast_loop()),
     ]
     yield
@@ -137,7 +146,7 @@ async def lifespan(app: FastAPI):
         t.cancel()
 
 
-app = FastAPI(title="Dev Trader BTC Trading Bot", version="0.5.0", lifespan=lifespan)
+app = FastAPI(title="Dev Trader BTC Trading Bot", version="0.6.0", lifespan=lifespan)
 
 
 @app.get("/health")
@@ -174,6 +183,7 @@ async def heartbeat():
         "market_ws": state.ws_connected,
         "data_health": state.data_health,
         "ages_ms": ages,
+        "last_market_update_ts": state.last_market_update_ts,
         "strategy_last_evaluation_ts": engine.last_evaluated_ts,
         "strategy_signal_state": engine.signal_status,
         "clients": len(clients),
@@ -183,6 +193,36 @@ async def heartbeat():
 @app.get("/diagnostics")
 async def diagnostics():
     return engine.last_diagnostics
+
+
+@app.get("/bootstrap")
+async def bootstrap(interval: str = "15m"):
+    if stream is not None:
+        try:
+            if state.last_price is None or not state.candles_15:
+                await asyncio.wait_for(stream.bootstrap_rest(), timeout=8.0)
+        except Exception:
+            pass
+    payload = mobile_payload()
+    pools = {
+        "5m": state.candles_5,
+        "15m": state.candles_15,
+        "1h": state.candles_60,
+        "4h": state.candles_4h(),
+    }
+    candles = pools.get(interval, state.candles_15)
+    payload["chart"] = {
+        "symbol": state.symbol,
+        "interval": interval,
+        "last_price": state.last_price,
+        "candles": [c.to_dict() for c in candles[-120:]],
+    }
+    payload["upstream"] = {
+        "rest_ok": bool(stream.last_rest_ok) if stream else False,
+        "last_error": stream.last_upstream_error if stream else "",
+        "last_rest_sync_ts": stream.last_rest_sync_ms if stream else 0,
+    }
+    return payload
 
 
 @app.get("/chart")
