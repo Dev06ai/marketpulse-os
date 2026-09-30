@@ -107,151 +107,130 @@ class SafeActivity : Activity() {
 
     private fun buildUi() {
         val scroll = ScrollView(this).apply {
-            setBackgroundColor(Color.rgb(8, 9, 12))
+            setBackgroundColor(Color.rgb(7, 8, 11))
             isFillViewport = true
+            overScrollMode = View.OVER_SCROLL_NEVER
         }
 
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(18), dp(18), dp(18), dp(28))
+            setPadding(dp(16), dp(18), dp(16), dp(30))
             background = gradient(
-                intArrayOf(Color.rgb(8, 9, 12), Color.rgb(18, 19, 24), Color.rgb(7, 8, 11)),
+                intArrayOf(Color.rgb(7, 8, 11), Color.rgb(17, 18, 23), Color.rgb(8, 9, 12)),
                 GradientDrawable.Orientation.TL_BR
             )
         }
 
         ViewCompat.setOnApplyWindowInsetsListener(scroll) { _, insets ->
             val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
-            root.setPadding(dp(18), bars.top + dp(16), dp(18), bars.bottom + dp(24))
+            root.setPadding(dp(16), bars.top + dp(12), dp(16), bars.bottom + dp(28))
             insets
         }
 
         scroll.addView(root)
         setContentView(scroll)
 
-        val eyebrow = TextView(this).apply {
-            text = "DEV TRADER  /  KLEIN"
-            textSize = 12f
-            setTextColor(Color.rgb(151, 156, 166))
-            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-            letterSpacing = 0.12f
-        }
-        root.addView(eyebrow)
+        root.addView(label("DEV TRADER  •  BTCUSDT PERPETUAL", 11f, Color.rgb(154, 158, 170), 0.09f))
+        root.addView(label("BTC trading bot", 32f, Color.WHITE, 0f), margins(top = 5, bottom = 2))
+        root.addView(label("FAST SETUP SCANNER  •  MANUAL EXECUTION", 13f, Color.rgb(173, 177, 188), 0f), margins(bottom = 14))
 
-        val title = TextView(this).apply {
-            text = "Trading engine"
-            textSize = 31f
-            setTextColor(Color.WHITE)
-            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-            includeFontPadding = false
-        }
-        root.addView(title, margins(top = 5, bottom = 3))
+        val live = card("MARKET STATUS", "LIVE  •  DATA CONNECTING", 16f)
+        status = live.value
+        root.addView(live.container, margins(bottom = 10))
 
-        val subtitle = TextView(this).apply {
-            text = "Manual execution  •  SFP  •  D-Line  •  MSS"
-            textSize = 14f
-            setTextColor(Color.rgb(174, 178, 188))
-        }
-        root.addView(subtitle, margins(bottom = 16))
-
-        val engine = card("MARKET ENGINE", "Connecting…", 22f)
-        status = engine.value
-        root.addView(engine.container, margins(bottom = 10))
-
-        val market = card("BITCOIN  /  LIVE MARKET", "BTC  —\\nOI   —", 22f)
+        val market = card("BTCUSDT  /  LIVE MARKET", "BTC  —\nOI  —", 25f)
         price = market.value
-        root.addView(market.container, margins(bottom = 10))
+        root.addView(market.container, margins(bottom = 12))
 
-        root.addView(label("PRICE ACTION  •  50 EMA", 11f, Color.rgb(150, 154, 164), 0.11f), margins(bottom = 6))
+        root.addView(label("PRICE ACTION", 11f, Color.rgb(156, 160, 171), 0.11f), margins(bottom = 6))
         chart = MarketChartView(this)
-        chart.minimumHeight = dp(280)
-        root.addView(chart, LinearLayout.LayoutParams(-1, dp(280)).apply { bottomMargin = dp(6) })
+        chart.minimumHeight = dp(350)
+        root.addView(chart, LinearLayout.LayoutParams(-1, dp(350)).apply { bottomMargin = dp(8) })
 
-        val tfRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        listOf("15m", "1h", "4h").forEach { tf ->
+        val tfRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(0, 0, 0, 0)
+        }
+        listOf("5m", "15m", "1h", "4h").forEach { tf ->
             val b = actionButton(tf)
             b.setOnClickListener {
                 selectedTf = tf
                 chart.setTimeframe(tf)
                 renderChartFromState()
             }
-            tfRow.addView(b, LinearLayout.LayoutParams(0, dp(44), 1f).apply {
+            tfRow.addView(b, LinearLayout.LayoutParams(0, dp(46), 1f).apply {
                 leftMargin = dp(3)
                 rightMargin = dp(3)
             })
         }
-        root.addView(tfRow, margins(bottom = 12))
+        root.addView(tfRow, margins(bottom = 14))
 
-        val scan = card("SIGNAL ENGINE", "Scanning validated setups…", 18f)
-        signal = scan.value
-        root.addView(scan.container, margins(bottom = 10))
+        val setup = card("TRADE SETUP", "SCANNING  •  LOOSE MODE\nSFP  •  D-Line  •  MSS", 18f)
+        signal = setup.value
+        root.addView(setup.container, margins(bottom = 12))
 
-        val data = card("DATA INTEGRITY", "WebSocket  •  Connecting", 16f)
+        val context = card("MARKET PULSE", "REGIME —  •  STRUCTURE —\n15m —  /  1h —  /  4h —\nCVD —  •  OI —  •  FVG —  •  OB —", 14f)
+        features = context.value
+        root.addView(context.container, margins(bottom = 12))
+
+        val data = card("DATA FEED", "WebSocket  •  CONNECTING", 14f)
         integrity = data.value
-        root.addView(data.container, margins(bottom = 10))
+        root.addView(data.container, margins(bottom = 12))
 
-        val appUpdate = card("APP UPDATE", "Ready", 16f)
-        update = appUpdate.value
-        root.addView(appUpdate.container, margins(bottom = 10))
-
-        updateButton = actionButton("CHECK FOR UPDATES")
-        updateButton.setOnClickListener { safe { checkUpdate() } }
-        root.addView(updateButton, margins(bottom = 10))
-
-        val contextCard = card("MARKET CONTEXT", "Loading regime and structure…", 14f)
-        features = contextCard.value
-        root.addView(contextCard.container, margins(bottom = 10))
-
-        val riskCard = card("PROP RISK ENGINE", "Waiting for a validated setup…", 14f)
+        val riskCard = card("RISK  /  MANUAL EXECUTION", "No active setup", 14f)
         risk = riskCard.value
         root.addView(riskCard.container, margins(bottom = 8))
 
         val riskRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         accountEdit = numberField("Account", "5000")
         riskEdit = numberField("Risk %", "1")
-        riskRow.addView(accountEdit, LinearLayout.LayoutParams(0, dp(52), 2f).apply { rightMargin = dp(5) })
-        riskRow.addView(riskEdit, LinearLayout.LayoutParams(0, dp(52), 1f).apply { leftMargin = dp(5) })
+        riskRow.addView(accountEdit, LinearLayout.LayoutParams(0, dp(54), 2f).apply { rightMargin = dp(5) })
+        riskRow.addView(riskEdit, LinearLayout.LayoutParams(0, dp(54), 1f).apply { leftMargin = dp(5) })
         root.addView(riskRow, margins(bottom = 8))
 
         val riskButton = actionButton("CALCULATE RISK")
         riskButton.setOnClickListener { safe { calculateRisk() } }
-        root.addView(riskButton, margins(bottom = 10))
+        root.addView(riskButton, margins(bottom = 12))
 
-        val journalCard = card("TRADING JOURNAL", "No signals recorded yet.", 14f)
-        journal = journalCard.value
-        root.addView(journalCard.container, margins(bottom = 8))
-        val journalButton = actionButton("REFRESH JOURNAL")
-        journalButton.setOnClickListener { loadJournal() }
-        root.addView(journalButton, margins(bottom = 10))
+        val toolsRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        val updateTool = actionButton("UPDATE")
+        updateTool.setOnClickListener { safe { checkUpdate() } }
+        val checkTool = actionButton("SYSTEM CHECK")
+        checkTool.setOnClickListener { safe { systemCheck() } }
+        toolsRow.addView(updateTool, LinearLayout.LayoutParams(0, dp(50), 1f).apply { rightMargin = dp(5) })
+        toolsRow.addView(checkTool, LinearLayout.LayoutParams(0, dp(50), 1f).apply { leftMargin = dp(5) })
+        root.addView(toolsRow, margins(bottom = 10))
 
-        val replayCard = card("MARKET REPLAY / BACKTEST", "Not run yet.", 14f)
-        replay = replayCard.value
-        root.addView(replayCard.container, margins(bottom = 8))
-        val replayButton = actionButton("RUN RECENT 15M REPLAY")
-        replayButton.setOnClickListener { safe { runReplay() } }
-        root.addView(replayButton, margins(bottom = 10))
+        val appUpdate = card("APP UPDATE", "Ready", 13f)
+        update = appUpdate.value
+        root.addView(appUpdate.container, margins(bottom = 12))
 
-        val diagnostics = card("SYSTEM CHECK", "Not run yet", 16f)
+        val diagnostics = card("SYSTEM CHECK", "Not run yet", 13f)
         check = diagnostics.value
-        root.addView(diagnostics.container, margins(bottom = 10))
-
-        checkButton = actionButton("RUN SYSTEM CHECK")
-        checkButton.setOnClickListener { safe { systemCheck() } }
-        root.addView(checkButton, margins(bottom = 8))
+        root.addView(diagnostics.container, margins(bottom = 12))
 
         alertsButton = actionButton("ENABLE SIGNAL ALERTS")
         alertsButton.setOnClickListener { requestAlertPermission() }
-        root.addView(alertsButton)
+        root.addView(alertsButton, margins(bottom = 12))
 
-        val footer = TextView(this).apply {
-            text = "ENGINE AUTO-STARTS  •  MANUAL TRADING ONLY  •  NO AUTO EXECUTION"
-            textSize = 11f
-            setTextColor(Color.rgb(122, 126, 136))
-            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-            letterSpacing = 0.08f
-            gravity = Gravity.CENTER
-        }
-        root.addView(footer, margins(top = 18))
+        val journalCard = card("TRADING JOURNAL", "No setups recorded yet.", 13f)
+        journal = journalCard.value
+        root.addView(journalCard.container, margins(bottom = 10))
+        val journalButton = actionButton("REFRESH JOURNAL")
+        journalButton.setOnClickListener { loadJournal() }
+        root.addView(journalButton, margins(bottom = 12))
+
+        val replayCard = card("REPLAY  /  BACKTEST", "Ready", 13f)
+        replay = replayCard.value
+        root.addView(replayCard.container, margins(bottom = 8))
+        val replayButton = actionButton("RUN RECENT REPLAY")
+        replayButton.setOnClickListener { safe { runReplay() } }
+        root.addView(replayButton, margins(bottom = 16))
+
+        root.addView(label(
+            "AUTO-START  •  FAST SETUP SCAN  •  MANUAL TRADING ONLY  •  NO AUTO EXECUTION",
+            9f, Color.rgb(112, 116, 126), 0.06f
+        ).apply { gravity = Gravity.CENTER })
     }
 
     private fun label(text: String, size: Float, color: Int, spacing: Float): TextView {
@@ -464,7 +443,12 @@ class SafeActivity : Activity() {
 
     private fun renderChartFromState() {
         val root = latestRoot ?: return
-        val key = when (selectedTf) { "1h" -> "candles_60"; "4h" -> "candles_4h"; else -> "candles_15" }
+        val key = when (selectedTf) {
+            "5m" -> "candles_5"
+            "1h" -> "candles_60"
+            "4h" -> "candles_4h"
+            else -> "candles_15"
+        }
         val candles = root.optJSONArray(key) ?: JSONArray()
         chart.setTimeframe(selectedTf)
         chart.setData(candles, root.optJSONObject("signal"), calculateEma(candles, 50), root.optDouble("last_price", Double.NaN))

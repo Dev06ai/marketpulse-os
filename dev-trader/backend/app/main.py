@@ -87,7 +87,7 @@ async def lifespan(app: FastAPI):
         t.cancel()
 
 
-app = FastAPI(title="Dev Trader Engine", version="0.4.0", lifespan=lifespan)
+app = FastAPI(title="Dev Trader BTC Trading Bot", version="0.5.0", lifespan=lifespan)
 
 
 @app.get("/health")
@@ -171,6 +171,7 @@ async def system_check():
                 "latency_ms": int(state.received_ts - state.exchange_ts) if state.received_ts and state.exchange_ts else None,
                 "orderbook_seq": int(state.orderbook_seq) if state.orderbook_seq is not None else None,
                 "last_trade_ts": int(state.last_trade_ts) if state.last_trade_ts is not None else None,
+                "last_kline_5_ts": int(state.last_kline_5_ts) if state.last_kline_5_ts is not None else None,
                 "last_kline_15_ts": int(state.last_kline_15_ts) if state.last_kline_15_ts is not None else None,
                 "last_kline_60_ts": int(state.last_kline_60_ts) if state.last_kline_60_ts is not None else None,
             },
@@ -272,6 +273,9 @@ async def app_config():
             "MIN_RR", "MIN_CONFIDENCE", "MAX_RISK_PCT", "SNAPSHOT_SECONDS",
             "DLINE_TOUCHES", "SIGNAL_EXPIRY_MINUTES",
         ],
+        "product": "Dev Trader BTC Trading Bot",
+        "scan_mode": "loose",
+        "signal_timeframes": ["5m", "15m", "1h"],
         "remote_feature_flags": {
             "system_check": True,
             "strategy_diagnostics": True,

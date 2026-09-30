@@ -51,7 +51,7 @@ def _min_rr() -> float:
     return float(os.getenv("MIN_RR", str(RULES["risk"]["preferred_min_rr"])))
 
 def _min_confidence() -> float:
-    return float(os.getenv("MIN_CONFIDENCE", str(RULES.get("signal", {}).get("min_confidence", 0.52))))
+    return float(os.getenv("MIN_CONFIDENCE", str(RULES.get("scan", {}).get("min_confidence", 0.44))))
 
 def _score(direction: str, setup: str, f: MarketFeatures) -> tuple[float, list[str]]:
     score = 0.58
@@ -127,7 +127,12 @@ def _risk_gate(entry: float, stop: float, f: MarketFeatures) -> bool:
     if f.atr_15 <= 0:
         return True
     # Avoid microscopic stops and stops so large that the setup becomes structurally inefficient.
-    return 0.15 * f.atr_15 <= risk <= 2.5 * f.atr_15
+    atr = f.atr_15 or 0.0
+    if atr <= 0:
+        return True
+    low = float(RULES.get("scan", {}).get("risk_atr_min", 0.08))
+    high = float(RULES.get("scan", {}).get("risk_atr_max", 3.0))
+    return low * atr <= risk <= high * atr
 
 
 def _gate_details(direction: str, setup: str, entry: float, stop: float, target: float, f: MarketFeatures) -> dict:
@@ -217,11 +222,13 @@ def _signal(
 
 def detect_sfp(state: MarketState) -> Optional[Signal]:
     cs = [c for c in state.candles_15 if c.confirmed]
-    if len(cs) < 10 or state.last_price is None:
+    fast = [c for c in state.candles_5 if c.confirmed]
+    source = fast if len(fast) >= 12 else cs
+    if len(source) < 10 or state.last_price is None:
         return None
     f = compute_features(state)
-    recent = cs[-1]
-    highs, lows = pivots(cs[:-1], 2)
+    recent = source[-1]
+    highs, lows = pivots(source[:-1], 2)
     ph = highs[-1][1] if highs else None
     pl = lows[-1][1] if lows else None
     min_rr = float(RULES["risk"]["preferred_min_rr"])
@@ -238,7 +245,7 @@ def detect_sfp(state: MarketState) -> Optional[Signal]:
             entry=entry,
             stop=stop,
             target=target,
-            timeframe="15m",
+            timeframe="5m" if source is fast else "15m",
             invalidation=f"15m close above swept high {recent.high:.2f}",
             f=f,
             thesis=[
@@ -260,7 +267,7 @@ def detect_sfp(state: MarketState) -> Optional[Signal]:
             entry=entry,
             stop=stop,
             target=target,
-            timeframe="15m",
+            timeframe="5m" if source is fast else "15m",
             invalidation=f"15m close below swept low {recent.low:.2f}",
             f=f,
             thesis=[
@@ -360,7 +367,7 @@ def detect_dline(state: MarketState) -> Optional[Signal]:
 def detect_mss(state: MarketState) -> Optional[Signal]:
     """Looser continuation setup: a confirmed 15m body close through a recent structure level."""
     cs = [c for c in state.candles_15 if c.confirmed]
-    if len(cs) < 12 or state.last_price is None:
+    if len(cs) < int(RULES.get("mss", {}).get("minimum_confirmed_candles", 8)) or state.last_price is None:
         return None
     f = compute_features(state)
     highs, lows = pivots(cs[:-1], 2)
