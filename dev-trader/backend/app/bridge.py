@@ -8,7 +8,7 @@ from typing import Any
 
 
 class MarketPulseBridge:
-    """Small non-blocking bridge from Dev Trader's live Python engine to MarketPulse's durable Node core."""
+    """Non-blocking bridge from Dev Trader to MarketPulse's durable Node core."""
 
     def __init__(self):
         self.base_url = str(os.getenv("MARKETPULSE_CORE_URL", "https://marketpulse-os-d4p9.onrender.com")).rstrip("/")
@@ -48,16 +48,25 @@ class MarketPulseBridge:
         except Exception:
             return None
 
+    async def _post_retry(self, path: str, payload: dict[str, Any]):
+        for attempt in range(3):
+            result = await asyncio.to_thread(self._request, "POST", path, payload)
+            if isinstance(result, dict) and result.get("ok") is not False:
+                return result
+            if attempt < 2:
+                await asyncio.sleep(0.4 * (attempt + 1))
+        return None
+
     async def post_open_signal(self, signal: dict[str, Any], memory_match: dict[str, Any] | None = None):
         payload = dict(signal or {})
         payload["memoryMatch"] = memory_match
-        return await asyncio.to_thread(self._request, "POST", "/api/dev-trader/learning/signal", payload)
+        return await self._post_retry("/api/dev-trader/learning/signal", payload)
 
     async def post_outcome(self, signal: dict[str, Any], outcome: str, result_r: float):
         payload = dict(signal or {})
         payload["outcome"] = outcome
         payload["resultR"] = result_r
-        return await asyncio.to_thread(self._request, "POST", "/api/dev-trader/learning/outcome", payload)
+        return await self._post_retry("/api/dev-trader/learning/outcome", payload)
 
     async def fetch_setup_memories(self, symbol: str):
         now = asyncio.get_running_loop().time()
@@ -74,3 +83,14 @@ class MarketPulseBridge:
         self._memory_cache = rows if isinstance(rows, list) else []
         self._memory_cache_ts = now
         return list(self._memory_cache)
+
+    async def fetch_open_signals(self, symbol: str):
+        result = await asyncio.to_thread(
+            self._request,
+            "GET",
+            "/api/dev-trader/learning/open",
+            None,
+            {"symbol": symbol.upper()},
+        )
+        rows = result.get("predictions", []) if isinstance(result, dict) else []
+        return rows if isinstance(rows, list) else []
