@@ -126,6 +126,7 @@ class SignalService : Service() {
             socket = null
         }
         if (socket != null) return
+        lastMessageMs = System.currentTimeMillis()
         socket = client.newWebSocket(
             Request.Builder().url(WS_URL).build(),
             object : WebSocketListener() {
