@@ -306,8 +306,15 @@ def _signal(
             "weekly_open": f.weekly_open,
             "previous_week_high": f.previous_week_high,
             "previous_week_low": f.previous_week_low,
+            "trade_style": trade_style,
+            "style_reason": style_reason,
+            "risk_distance": round(risk_distance, 4),
+            "risk_pct_of_price": round((risk_distance / entry * 100.0) if entry else 0.0, 4),
+            "atr_15_multiple": round((risk_distance / f.atr_15) if f.atr_15 else 0.0, 3),
         },
         timeframe=timeframe,
+        trade_style=trade_style,
+        style_reason=style_reason,
     )
 
 
