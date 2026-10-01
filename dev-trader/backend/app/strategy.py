@@ -2008,6 +2008,7 @@ class StrategyEngine:
                 "harmonic_confidence": round(f0.harmonic_confidence, 3),
                 "harmonic_reason": f0.harmonic_reason,
                 "reference_scenario_training": MARKET_KNOWLEDGE.get("reference_scenario_training", {}).get("source", "loaded"),
+                "additional_reference_training": bool(MARKET_KNOWLEDGE.get("additional_reference_training")),
                 "video_reference_training": bool(MARKET_KNOWLEDGE.get("video_reference_training")),
                 "video_reference_lessons": len(
                     MARKET_KNOWLEDGE.get("video_reference_training", {}).get("lessons", []) or []
