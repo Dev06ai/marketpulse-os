@@ -17,8 +17,8 @@ def test_demo_signature_matches_hmac_sha256():
     signature = client.build_signature(
         ts,
         "GET",
-        "/api/v2/mix/account/account",
-        "marginCoin=USDT&productType=USDT-FUTURES&symbol=BTCUSDT",
+        "/api/v3/account/assets",
+        "coin=USDT",
         "",
     )
     expected_pre = (
@@ -47,3 +47,30 @@ def test_private_client_is_locked_without_demo_mode():
             os.environ.pop("BITGET_DEMO_TRADING", None)
         else:
             os.environ["BITGET_DEMO_TRADING"] = old
+
+
+def test_uta_place_market_order_payload(monkeypatch):
+    monkeypatch.setenv("BITGET_DEMO_TRADING", "true")
+    client = BitgetDemoClient("k", "s", "p")
+    sent = {}
+
+    def fake_settings():
+        return {"holdMode": "hedge_mode"}
+
+    def fake_post(path, payload):
+        sent["path"] = path
+        sent["payload"] = payload
+        return {"code": "00000", "data": {"orderId": "123"}}
+
+    monkeypatch.setattr(client, "account_settings", fake_settings)
+    monkeypatch.setattr(client, "_post", fake_post)
+
+    client.place_market_order("BTCUSDT", "SHORT", "0.001", "84300", "82400", "DTDEMO-test")
+
+    assert sent["path"] == "/api/v3/trade/place-order"
+    assert sent["payload"]["category"] == "USDT-FUTURES"
+    assert sent["payload"]["symbol"] == "BTCUSDT"
+    assert sent["payload"]["side"] == "sell"
+    assert sent["payload"]["posSide"] == "short"
+    assert sent["payload"]["takeProfit"] == "82400"
+    assert sent["payload"]["stopLoss"] == "84300"
