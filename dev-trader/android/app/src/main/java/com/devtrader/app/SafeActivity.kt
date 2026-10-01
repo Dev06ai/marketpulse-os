@@ -1536,8 +1536,8 @@ class SafeActivity : Activity() {
                         else -> "CHECK CONNECTION"
                     }
                     check.text = "API  " + apiText +
-                        "\nBybit  " + bybitText +
-                        "\nEngine WS  " + wsText +
+                        "\nMarket Feed  " + feedHealth + " • " + sourceText +
+                        "\nPrimary WS  " + wsText +
                         "\nStrategy  " + strategyText +
                         "\nSignal  " + (strategy?.optString("signal_state", "NONE") ?: "NONE") +
                         "\nBitget Demo  " + demoText +
