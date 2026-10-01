@@ -375,3 +375,22 @@ def test_video_reference_training_is_loaded_and_wave_c_scenario_exists():
     assert features["video_reference_training"] is True
     assert features["video_reference_lessons"] >= 5
     assert any("Wave-C / Wave-5 confluence completion" in s.get("name", "") for s in scenarios)
+
+
+def test_additional_reference_training_is_loaded():
+    from app.strategy import StrategyEngine
+
+    engine = StrategyEngine()
+    cs = [c(i, 84000 + ((i % 6) * 20), 84050 + ((i % 6) * 20), 83950 - ((i % 5) * 15), 84000 + ((i % 6) * 15)) for i in range(30)]
+    state = MarketState(
+        candles_15=cs,
+        candles_60=cs,
+        last_price=84000.0,
+        data_health="HEALTHY",
+    )
+    diagnostics = engine.diagnostics(state)
+    features = diagnostics["market_features"]
+    scenarios = diagnostics["scenario_tree"]
+
+    assert features["additional_reference_training"] is True
+    assert any("converging trendline compression" in s.get("name", "").lower() for s in scenarios)
