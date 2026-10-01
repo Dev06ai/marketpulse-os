@@ -62,7 +62,7 @@ jobs:
           DEV_TRADER_KEY_PASSWORD: ${{ secrets.DEV_TRADER_KEY_PASSWORD }}
         run: |
           echo "${{ secrets.DEV_TRADER_KEYSTORE_BASE64 }}" | base64 --decode > "$DEV_TRADER_KEYSTORE_PATH"
-          gradle assembleRelease --stacktrace -PdevTraderVersionCode=84 -PdevTraderVersionName=0.11.6
+          gradle assembleRelease --stacktrace -PdevTraderVersionCode=86 -PdevTraderVersionName=0.11.8
       - name: Stage Android artifacts
         if: steps.changed.outputs.android_changed == 'true'
         run: |
@@ -95,14 +95,14 @@ jobs:
           mkdir -p release
           cp dist/app-release.apk release/app-release.apk
           sha256sum release/app-release.apk | awk '{print $1}' > release/app-release.sha256
-          echo "tag=dev-trader-v0.11.7-85" >> "$GITHUB_OUTPUT"
+          echo "tag=dev-trader-v0.11.8-86" >> "$GITHUB_OUTPUT"
           echo "sha256=$(cat release/app-release.sha256)" >> "$GITHUB_OUTPUT"
       - name: Create GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release delete "${{ steps.release.outputs.tag }}" --yes --cleanup-tag || true
-          gh release create "${{ steps.release.outputs.tag }}"             release/app-release.apk             --title "Dev Trader 0.11.7 (85)"             --notes "Connection supervisor: persistent REST fallback, lower engine load, and non-churning WebSocket recovery."
+          gh release create "${{ steps.release.outputs.tag }}"             release/app-release.apk             --title "Dev Trader 0.11.8 (86)"             --notes "Connection supervisor: persistent REST fallback, lower engine load, and non-churning WebSocket recovery."
       - name: Publish verified update manifest
         env:
           SHA256: "${{ steps.release.outputs.sha256 }}"
@@ -114,16 +114,16 @@ jobs:
           data = json.loads(p.read_text())
           data.update({
               "enabled": True,
-              "versionCode": 84,
-              "versionName": "0.11.6",
-              "apkUrl": "https://github.com/Dev06ai/marketpulse-os/releases/download/dev-trader-v0.11.6-84/app-release.apk",
+              "versionCode": 86,
+              "versionName": "0.11.8",
+              "apkUrl": "https://github.com/Dev06ai/marketpulse-os/releases/download/dev-trader-v0.11.8-86/app-release.apk",
               "sha256": os.environ["SHA256"],
-              "notes": "Signed Dev Trader release 0.11.7 • canonical Bitget Demo fill reconciliation and trade-history fix"
+              "notes": "Signed Dev Trader release 0.11.8 • persistent journal deduplication, execution lifecycle UI, and feed-status clarity"
           })
           p.write_text(json.dumps(data, indent=2) + "\n")
           PY
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add dev-trader/update.json
-          git commit -m "Publish Dev Trader self-update manifest dev-trader-release-0.11.4-82 [skip ci]" || exit 0
+          git commit -m "Publish Dev Trader self-update manifest dev-trader-release-0.11.8-86 [skip ci]" || exit 0
           git push origin dev-trader-v1
