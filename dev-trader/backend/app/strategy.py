@@ -1252,7 +1252,7 @@ class StrategyEngine:
             "long_score": direction_scores["LONG"],
             "short_score": direction_scores["SHORT"],
             "no_trade_reason": no_trade_reason,
-            "active_signal_lock": bool(active),
+            "active_signal_lock": bool(active_count),
             "governor": governor,
         }
 
@@ -2456,6 +2456,9 @@ class StrategyEngine:
         self._multi_cycle_events = []
         if os.getenv("BITGET_DEMO_TRADING", "false").lower() in {"1", "true", "yes", "on"}:
             return
+        if not self.active_signals and self.active_signal and self.signal_status == "ACTIVE":
+            sid = str(self.active_signal.get("id") or "legacy-active")
+            self.active_signals[sid] = self.active_signal
         if not self.active_signals or state.last_price is None:
             return
 
