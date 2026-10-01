@@ -37,3 +37,5 @@ dependencies {
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("androidx.compose.runtime:runtime:1.12.1")
 }
+
+// RELEASE PIPELINE MARKER: 0.11.7-85
