@@ -288,6 +288,41 @@ class BitgetDemoClient:
             payload["posSide"] = "long" if str(direction).upper() == "LONG" else "short"
         return self._post("/api/v3/trade/place-order", payload)
 
+    def place_market_close(
+        self,
+        symbol: str,
+        direction: str,
+        size: str,
+        client_oid: str,
+    ) -> dict[str, Any]:
+        """Close an existing futures position with a market order.
+
+        Bitget UTA uses the opposite side to close a position. In one-way mode
+        the order must be reduce-only. In hedge mode the existing position
+        side is supplied with posSide and reduceOnly is omitted.
+        """
+        direction = str(direction).upper()
+        if direction not in {"LONG", "SHORT"}:
+            raise BitgetDemoError("Invalid position direction for close.")
+        side = "sell" if direction == "LONG" else "buy"
+        payload = {
+            "category": self.product_type,
+            "symbol": symbol,
+            "side": side,
+            "orderType": "market",
+            "qty": size,
+            "timeInForce": "gtc",
+            "clientOid": client_oid,
+            "marginMode": os.getenv("BITGET_MARGIN_MODE", "isolated"),
+        }
+        settings = self.account_settings()
+        hold_mode = str(settings.get("holdMode", "")).lower()
+        if hold_mode == "hedge_mode":
+            payload["posSide"] = "long" if direction == "LONG" else "short"
+        else:
+            payload["reduceOnly"] = "yes"
+        return self._post("/api/v3/trade/place-order", payload)
+
     @staticmethod
     def extract_order_id(result: dict[str, Any]) -> str:
         data = result.get("data") or {}
