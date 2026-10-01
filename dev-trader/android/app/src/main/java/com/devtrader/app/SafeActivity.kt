@@ -101,6 +101,14 @@ class SafeActivity : Activity() {
     private var lastBootstrapMs = 0L
     private var lastBootstrapSuccessMs = 0L
     private var bootstrapInFlight = false
+    private val snapshotPollRunnable = object : Runnable {
+        override fun run() {
+            if (stopped) return
+            bootstrap(false)
+            handler.postDelayed(this, 3000L)
+        }
+    }
+
     private var retryButton: Button? = null
     private var networkCallback: ConnectivityManager.NetworkCallback? = null
     private var lastSocketActivityMs = 0L
@@ -1417,6 +1425,7 @@ class SafeActivity : Activity() {
         handler.postDelayed({
             safe { watchdog() }
         }, 1800L)
+        handler.postDelayed(snapshotPollRunnable, 1200L)
     }
 
     override fun onDestroy() {
@@ -1429,6 +1438,7 @@ class SafeActivity : Activity() {
         networkCallback = null
         reconnectRunnable?.let { handler.removeCallbacks(it) }
         reconnectRunnable = null
+        handler.removeCallbacks(snapshotPollRunnable)
         handler.removeCallbacksAndMessages(null)
         reconnectScheduled.set(false)
         runCatching { socket?.close(1000, "activity destroyed") }
