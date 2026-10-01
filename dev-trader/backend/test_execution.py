@@ -39,7 +39,14 @@ class FakeClient:
         return 1000.0
 
     def contract_config(self, symbol):
-        return {"sizeMultiplier": "0.001", "volumePlace": 3, "minTradeNum": "0.001", "minTradeUSDT": "5"}
+        return {
+            "sizeMultiplier": "0.001",
+            "volumePlace": 3,
+            "minTradeNum": "0.001",
+            "minTradeUSDT": "5",
+            "priceEndStep": "0.1",
+            "pricePlace": "1",
+        }
 
     def place_market_order(self, *args):
         return {"code": "00000", "data": {"orderId": "123", "clientOid": args[-1]}}
@@ -155,3 +162,21 @@ def test_demo_execution_rejects_zero_futures_balance(monkeypatch):
     result = asyncio.run(executor.handle_signal(signal))
     assert result["ok"] is False
     assert "balance is 0 USDT" in result["reason"]
+
+
+
+def test_price_normalization_uses_bitget_price_step():
+    config = {"priceEndStep": "0.1", "pricePlace": "1"}
+
+    assert DemoExecutionEngine._format_price(
+        83966.14, config, "LONG", "sl"
+    ) == "83966.1"
+    assert DemoExecutionEngine._format_price(
+        85200.01, config, "LONG", "tp"
+    ) == "85200.1"
+    assert DemoExecutionEngine._format_price(
+        84300.14, config, "SHORT", "sl"
+    ) == "84300.2"
+    assert DemoExecutionEngine._format_price(
+        82400.16, config, "SHORT", "tp"
+    ) == "82400.1"
