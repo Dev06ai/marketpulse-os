@@ -262,6 +262,49 @@ async def on_state(s: MarketState):
 
         if sig:
             signal_payload = sig.to_dict()
+
+            # Every qualified signal is actionable. The execution supervisor may
+            # close older opposite-direction trades only when the new signal has
+            # materially stronger evidence; otherwise existing trades stay open.
+            transition = {"action": "KEEP", "reason": "no execution supervisor"}
+            if execution.enabled and execution.ready:
+                try:
+                    transition = await execution.manage_signal_transition(
+                        signal_payload,
+                        float(state.last_price) if state.last_price is not None else None,
+                    )
+                except Exception as exc:
+                    transition = {"action": "KEEP", "reason": f"transition check failed: {exc}"}
+                signal_payload["execution_management"] = transition
+
+                # A smart reversal may have closed one or more older exchange
+                # trades. Resolve those exact strategy signals and feed the
+                # closure back into learning before the new trade is opened.
+                if transition.get("action") == "REVERSE":
+                    for closed_trade in execution.history(100):
+                        if str(closed_trade.get("status") or "").upper() != "CLOSED":
+                            continue
+                        closed_signal_id = str(closed_trade.get("signal_id") or "")
+                        if not closed_signal_id or closed_signal_id not in engine.active_signals:
+                            continue
+                        engine.resolve_external_execution({
+                            "type": "EXECUTION_CLOSED",
+                            "key": f"EXECUTION_CLOSED:{closed_trade.get('execution_id')}",
+                            "execution_id": closed_trade.get("execution_id"),
+                            "signal_id": closed_signal_id,
+                            "direction": closed_trade.get("direction"),
+                            "setup": closed_trade.get("setup"),
+                            "entry_price": closed_trade.get("entry_price"),
+                            "exit_price": closed_trade.get("exit_price"),
+                            "realized_pnl_usdt": closed_trade.get("realized_pnl_usdt"),
+                            "net_profit_usdt": closed_trade.get("net_profit_usdt"),
+                            "result_r": closed_trade.get("result_r"),
+                            "close_reason": closed_trade.get("close_reason"),
+                            "status": "CLOSED",
+                            "ts": closed_trade.get("closed_ts"),
+                            "learning_review": closed_trade.get("learning_review"),
+                        })
+
             if bridge.enabled:
                 asyncio.create_task(
                     bridge.post_open_signal(
@@ -298,7 +341,8 @@ async def setup_memory_refresh_loop():
                 # the Python process restarted while the market was moving.
                 open_predictions = await bridge.fetch_open_signals(SYMBOL)
                 if open_predictions:
-                    engine.restore_external_active_signal(open_predictions[0])
+                    for open_row in open_predictions[:10]:
+                        engine.restore_external_active_signal(open_row)
                 if state.last_price is not None:
                     current_price = float(state.last_price)
                     for row in open_predictions[:20]:
