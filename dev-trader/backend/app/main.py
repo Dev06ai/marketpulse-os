@@ -175,6 +175,22 @@ async def on_state(s: MarketState):
         breakout = (engine.last_diagnostics or {}).get("breakout_watch", {})
         now_alert = int(time.time() * 1000)
         alert = None
+        fast_move = (engine.last_diagnostics or {}).get("fast_move", {})
+        fast_status = fast_move.get("status")
+        fast_direction = fast_move.get("direction")
+        if fast_status in {"ARMED", "TRIGGERED"} and fast_direction in {"LONG", "SHORT"}:
+            fast_key = f"fast:{fast_direction}:{fast_status}:{int(now_alert // (7 * 60_000))}"
+            if fast_key != last_opportunity_alert["key"] or now_alert - last_opportunity_alert["ts"] > 7 * 60_000:
+                alert = {
+                    "key": fast_key,
+                    "title": f"BTC {fast_direction} • FAST MOMENTUM {fast_status}",
+                    "body": (
+                        f"5m move {float(fast_move.get('move_atr', 0.0)):.2f} ATR • "
+                        f"volume {float(fast_move.get('volume_ratio', 1.0)):.1f}x. "
+                        + ("; ".join(fast_move.get("reasons", [])[:3]) or "Early momentum is building.")
+                        + " Manual confirmation/quality gate still required."
+                    ),
+                }
         if radar:
             lead = radar[0]
             if lead.get("tier") in {"DEVELOPING", "CONFIRMED"}:

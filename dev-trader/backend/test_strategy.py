@@ -281,3 +281,69 @@ def test_reference_scenarios_are_wired_into_scenario_tree():
     assert any("1H OB bounce" in x for x in names)
     assert any("harmonic" in x.lower() for x in names)
     assert any("flat B retest" in x for x in names)
+
+
+def c5(i, o, h, l, cl, volume, confirmed=True):
+    return Candle(i * 300000, (i + 1) * 300000, o, h, l, cl, volume, confirmed)
+
+
+def test_fast_move_context_triggers_early_on_large_5m_expansion():
+    from app.strategy import StrategyEngine
+
+    candles = []
+    price = 100000.0
+    for i in range(18):
+        move = 8.0 if i < 14 else 12.0
+        o = price
+        cl = price + move
+        candles.append(c5(i, o, cl + 2.0, o - 2.0, cl, 100.0))
+        price = cl
+
+    # Strong current expansion with volume and a local range break.
+    candles[-1] = c5(
+        17,
+        candles[-2].close,
+        candles[-2].close + 900.0,
+        candles[-2].close - 10.0,
+        candles[-2].close + 850.0,
+        260.0,
+        False,
+    )
+
+    state = MarketState(
+        candles_5=candles,
+        candles_15=[],
+        candles_60=[],
+        last_price=candles[-1].close,
+        book_imbalance=0.20,
+        oi_window=[],
+        data_health="HEALTHY",
+    )
+    engine = StrategyEngine()
+    ctx = engine._build_fast_move_context(state, MarketFeatures())
+    assert ctx["direction"] == "LONG"
+    assert ctx["status"] in {"ARMED", "TRIGGERED", "EXTENDED"}
+    assert ctx["move_atr"] > 1.0
+    assert ctx["volume_ratio"] > 1.0
+
+
+def test_fast_move_radar_mentions_momentum_in_large_move():
+    from app.strategy import StrategyEngine
+
+    candles = []
+    price = 100000.0
+    for i in range(18):
+        cl = price + 25.0
+        candles.append(c5(i, price, cl + 3.0, price - 3.0, cl, 100.0))
+        price = cl
+    candles[-1] = c5(17, candles[-2].close, candles[-2].close + 1100.0, candles[-2].close - 5.0, candles[-2].close + 1000.0, 300.0, False)
+
+    state = MarketState(
+        candles_5=candles,
+        last_price=candles[-1].close,
+        data_health="HEALTHY",
+    )
+    engine = StrategyEngine()
+    f = MarketFeatures()
+    radar = engine._build_opportunity_radar(state, f)
+    assert any("Momentum Capture" in row.get("setup", "") for row in radar)

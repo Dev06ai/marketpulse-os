@@ -64,6 +64,8 @@ signal_policy:
     max_spread_bps: 5.0
     elliott_min_confidence: 0.55
     require_elliott_alignment_when_confident: true
+    momentum_min_confidence: 0.74
+    momentum_min_confirmations: 2
 
 scan:
   mode: loose
