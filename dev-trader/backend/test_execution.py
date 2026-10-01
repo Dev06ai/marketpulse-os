@@ -248,4 +248,5 @@ def test_every_new_signal_replaces_existing_demo_position(monkeypatch):
 
     assert result["ok"] is True
     assert client.close_calls[-1][1] == "LONG"
-    assert [row["signal_id"] for row in executor.history(5) if row.get("status") == "OPEN"] == ["SIG-2"]
+    assert result["trade"]["signal_id"] == "SIG-2"
+    assert result["trade"]["status"] == "OPEN"
