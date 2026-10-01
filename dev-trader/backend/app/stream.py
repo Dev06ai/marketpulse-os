@@ -90,7 +90,7 @@ class BybitStream:
             ]:
                 if d.get(key) not in (None, ""):
                     setattr(self.state, attr, float(d[key]))
-            self.last_data_source = "BYBIT"
+            self.last_data_source = "BYBIT_REST"
             self.state.received_ts = now
             self.state.exchange_ts = now
             self.state.last_market_update_ts = now
@@ -256,7 +256,10 @@ class BybitStream:
             ) if x
         ]
         if recent and min(now - x for x in recent) < 5000:
-            self.state.data_health = "DEGRADED" if self.last_data_source == "BINANCE_FALLBACK" else "HEALTHY"
+            if self.last_data_source == "BINANCE_FALLBACK" or not self.state.ws_connected:
+                self.state.data_health = "DEGRADED"
+            else:
+                self.state.data_health = "HEALTHY"
         elif self.state.ws_connected:
             self.state.data_health = "STALE"
         elif self.last_rest_ok and self.state.last_price is not None:
