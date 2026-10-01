@@ -168,6 +168,13 @@ def _trade_plan(
 def _score(direction: str, setup: str, f: MarketFeatures) -> tuple[float, list[str]]:
     score = 0.58
     reasons = [f"{setup} structure confirmed"]
+    if str(setup).upper().startswith("MOMENTUM CAPTURE"):
+        # Fast-move candidates are only allowed into the live engine when the
+        # detector already found strong displacement/flow. Give this path a
+        # higher base confidence, while the dedicated quality gate below still
+        # enforces its own momentum-specific safeguards.
+        score = 0.74
+        reasons.append("dedicated fast-move detector triggered")
 
     trend_ok = (direction == "LONG" and f.trend_60 == "UP") or (direction == "SHORT" and f.trend_60 == "DOWN")
     trend_counter = (direction == "LONG" and f.trend_60 == "DOWN") or (direction == "SHORT" and f.trend_60 == "UP")
@@ -792,19 +799,25 @@ class StrategyEngine:
         if not bool(cfg.get("enabled", True)):
             return True, ""
         f = compute_features(state)
+        momentum_exception = str(signal.setup).upper().startswith("MOMENTUM CAPTURE")
+        momentum_ctx = self._build_fast_move_context(state, f) if momentum_exception else None
+        if momentum_exception and (not momentum_ctx or momentum_ctx.get("status") != "TRIGGERED"):
+            return False, "momentum trigger is no longer active"
         reasons = []
-        if signal.confidence < _quality_min_confidence():
-            reasons.append(f"confidence {signal.confidence:.0%} < {_quality_min_confidence():.0%}")
+        momentum_min_conf = float(cfg.get("momentum_min_confidence", 0.74))
+        min_conf_required = momentum_min_conf if momentum_exception else _quality_min_confidence()
+        if signal.confidence < min_conf_required:
+            reasons.append(f"confidence {signal.confidence:.0%} < {min_conf_required:.0%}")
         if signal.rr < _quality_min_rr():
             reasons.append(f"R:R {signal.rr:.2f} < {_quality_min_rr():.2f}")
         if bool(cfg.get("require_grade_a", True)) and signal.grade != "A":
             reasons.append("grade is not A")
         direction = signal.direction.upper()
-        if bool(cfg.get("require_1h_alignment", True)):
+        if bool(cfg.get("require_1h_alignment", True)) and not momentum_exception:
             aligned = (direction == "LONG" and f.trend_60 == "UP") or (direction == "SHORT" and f.trend_60 == "DOWN")
             if not aligned:
                 reasons.append("1h trend is not aligned")
-        if bool(cfg.get("require_4h_alignment", True)):
+        if bool(cfg.get("require_4h_alignment", True)) and not momentum_exception:
             aligned = (direction == "LONG" and f.trend_240 == "UP") or (direction == "SHORT" and f.trend_240 == "DOWN")
             if not aligned:
                 reasons.append("4h trend is not aligned")
@@ -816,9 +829,9 @@ class StrategyEngine:
             )
             if not aligned:
                 reasons.append("market structure is not aligned")
-        if bool(cfg.get("block_high_vol", True)) and f.regime == "HIGH_VOL":
+        if bool(cfg.get("block_high_vol", True)) and f.regime == "HIGH_VOL" and not momentum_exception:
             reasons.append("high-volatility regime")
-        if bool(cfg.get("block_range_non_sfp", True)) and f.regime == "RANGE" and "SFP" not in signal.setup.upper():
+        if bool(cfg.get("block_range_non_sfp", True)) and f.regime == "RANGE" and "SFP" not in signal.setup.upper() and not momentum_exception:
             reasons.append("range regime: only SFP setups are eligible")
         max_spread = float(cfg.get("max_spread_bps", 5.0))
         if f.spread_bps > max_spread:
@@ -842,7 +855,16 @@ class StrategyEngine:
             confirmations += 1
         if f.golden_pocket == ("LONG_ZONE" if direction == "LONG" else "SHORT_ZONE"):
             confirmations += 1
-        required = max(0, int(cfg.get("minimum_extra_confirmations", 2)))
+        required = max(
+            0,
+            int(cfg.get("momentum_min_confirmations", 2)) if momentum_exception
+            else int(cfg.get("minimum_extra_confirmations", 2))
+        )
+        if momentum_exception:
+            # The fast detector itself counts as one confirmation; the live
+            # microstructure context must still provide at least one additional
+            # directional confirmation.
+            confirmations += 1
         if confirmations < required:
             reasons.append(f"only {confirmations} extra confirmations; need {required}")
         if reasons:
@@ -1259,6 +1281,178 @@ class StrategyEngine:
                 unique[(row["title"], row["price"])] = row
             out[side] = list(unique.values())[:5]
         return out
+
+    def _build_fast_move_context(self, state: MarketState, f: MarketFeatures) -> dict:
+        """Detect early, high-energy 5m BTC moves before a 15m candle closes.
+
+        This is intentionally an early-warning layer. It does not by itself
+        guarantee a trade; it feeds a stricter momentum signal path and a
+        notification so the user can react before a large move is mature.
+        """
+        cs = [c for c in state.candles_5 if c.confirmed]
+        forming = state.candles_5[-1] if state.candles_5 and not state.candles_5[-1].confirmed else None
+        if len(cs) < 14 or state.last_price is None:
+            return {
+                "status": "WATCH",
+                "direction": "NONE",
+                "score": 0.0,
+                "reason": "Waiting for enough 5m structure.",
+            }
+
+        sample = cs[-13:]
+        tr_values = []
+        prev = sample[0].open
+        for c in sample:
+            tr_values.append(max(c.high - c.low, abs(c.high - prev), abs(c.low - prev)))
+            prev = c.close
+        atr5 = sum(tr_values[-12:]) / max(1, len(tr_values[-12:]))
+        if atr5 <= 0:
+            return {"status": "WATCH", "direction": "NONE", "score": 0.0, "reason": "5m ATR unavailable."}
+
+        reference = cs[-7].close
+        price = float(state.last_price)
+        move = price - float(reference)
+        move_atr = abs(move) / atr5
+
+        avg_volume = sum(max(0.0, c.volume) for c in cs[-13:-1]) / 12.0
+        current_volume = float(forming.volume if forming is not None else cs[-1].volume)
+        volume_ratio = current_volume / avg_volume if avg_volume > 0 else 1.0
+
+        prior = cs[-7:-1]
+        recent_high = max((c.high for c in prior), default=price)
+        recent_low = min((c.low for c in prior), default=price)
+        hi = max(price, float(forming.high)) if forming is not None else float(cs[-1].high)
+        lo = min(price, float(forming.low)) if forming is not None else float(cs[-1].low)
+        bullish_break = hi > recent_high and move > 0
+        bearish_break = lo < recent_low and move < 0
+
+        direction = "LONG" if bullish_break else "SHORT" if bearish_break else ("LONG" if move > 0 else "SHORT")
+        if move_atr < 1.10:
+            return {
+                "status": "WATCH",
+                "direction": direction,
+                "score": round(move_atr / 1.10 * 0.25, 3),
+                "move_atr": round(move_atr, 3),
+                "volume_ratio": round(volume_ratio, 2),
+                "recent_high": round(recent_high, 2),
+                "recent_low": round(recent_low, 2),
+                "reason": "5m displacement is not yet large enough.",
+            }
+
+        score = 0.0
+        reasons = [f"5m displacement {move_atr:.2f} ATR"]
+        if move_atr >= 1.35:
+            score += 0.25
+            reasons.append("fast directional expansion")
+        if move_atr >= 1.80:
+            score += 0.10
+        if volume_ratio >= 1.25:
+            score += 0.20
+            reasons.append(f"volume {volume_ratio:.1f}x baseline")
+        if volume_ratio >= 1.75:
+            score += 0.05
+        if bullish_break or bearish_break:
+            score += 0.25
+            reasons.append("5m range/structure break")
+        if direction == "LONG":
+            if f.oi_change_5m_pct > 0.10:
+                score += 0.10
+                reasons.append("OI expansion supports long continuation")
+            if f.book_imbalance > 0.08:
+                score += 0.05
+                reasons.append("orderbook supports buyers")
+            if f.liquidation_pressure == "LONG_LIQUIDATIONS":
+                score += 0.05
+            if f.cvd_impulse > 0:
+                score += 0.05
+                reasons.append("CVD impulse is positive")
+        else:
+            if f.oi_change_5m_pct > 0.10:
+                score += 0.10
+                reasons.append("OI expansion supports short continuation")
+            if f.book_imbalance < -0.08:
+                score += 0.05
+                reasons.append("orderbook supports sellers")
+            if f.liquidation_pressure == "SHORT_LIQUIDATIONS":
+                score += 0.05
+            if f.cvd_impulse < 0:
+                score += 0.05
+                reasons.append("CVD impulse is negative")
+
+        score = min(1.0, score)
+        if move_atr > 3.50:
+            return {
+                "status": "EXTENDED",
+                "direction": direction,
+                "score": round(score, 3),
+                "move_atr": round(move_atr, 3),
+                "volume_ratio": round(volume_ratio, 2),
+                "recent_high": round(recent_high, 2),
+                "recent_low": round(recent_low, 2),
+                "reasons": reasons[:6],
+                "reason": "Move is already extended; do not chase the impulse. Wait for pullback/retest.",
+            }
+
+        status = "TRIGGERED" if score >= 0.70 and move_atr >= 1.35 else ("ARMED" if score >= 0.45 else "WATCH")
+        return {
+            "status": status,
+            "direction": direction,
+            "score": round(score, 3),
+            "move_atr": round(move_atr, 3),
+            "volume_ratio": round(volume_ratio, 2),
+            "recent_high": round(recent_high, 2),
+            "recent_low": round(recent_low, 2),
+            "atr5": round(atr5, 4),
+            "reasons": reasons[:6],
+            "reason": (
+                "Fast move trigger: notify and evaluate an early momentum setup."
+                if status == "TRIGGERED"
+                else "Momentum is building; watch for structure confirmation."
+            ),
+        }
+
+    def _momentum_signal(self, state: MarketState, f: MarketFeatures) -> Optional[Signal]:
+        ctx = self._build_fast_move_context(state, f)
+        if ctx.get("status") != "TRIGGERED" or state.last_price is None:
+            return None
+
+        direction = str(ctx.get("direction") or "").upper()
+        if direction not in {"LONG", "SHORT"}:
+            return None
+
+        entry = float(state.last_price)
+        atr5 = float(ctx.get("atr5") or 0.0)
+        if atr5 <= 0:
+            return None
+
+        recent_high = float(ctx.get("recent_high") or entry)
+        recent_low = float(ctx.get("recent_low") or entry)
+        buffer = max(atr5 * 0.35, entry * 0.00035)
+        if direction == "LONG":
+            raw_stop = recent_low - buffer
+            raw_target = entry + max((entry - raw_stop) * 3.20, atr5 * 4.0)
+            invalidation = f"5m momentum invalid if price accepts back below {raw_stop:.2f}."
+        else:
+            raw_stop = recent_high + buffer
+            raw_target = entry - max((raw_stop - entry) * 3.20, atr5 * 4.0)
+            invalidation = f"5m momentum invalid if price accepts back above {raw_stop:.2f}."
+
+        return _signal(
+            id=f"momentum-fast-{direction}-{int((state.last_kline_5_ts or int(time.time()*1000))//300000)}",
+            direction=direction,
+            setup="Momentum Capture • FAST",
+            entry=entry,
+            stop=raw_stop,
+            target=raw_target,
+            timeframe="5m",
+            invalidation=invalidation,
+            f=f,
+            thesis=[
+                "Early momentum-capture path triggered before the 15m candle fully confirms.",
+                f"5m displacement is {float(ctx.get('move_atr', 0.0)):.2f} ATR with {float(ctx.get('volume_ratio', 1.0)):.2f}x volume.",
+                *list(ctx.get("reasons") or [])[:4],
+            ],
+        )
 
     def _build_opportunity_radar(self, state: MarketState, f: MarketFeatures) -> list[dict]:
         radar = []
@@ -2092,6 +2286,7 @@ class StrategyEngine:
             detect_sfp(state),
             detect_dline(state),
             detect_mss(state),
+            self._momentum_signal(state, compute_features(state)),
         ]
         signals = [s for s in candidates if s is not None]
         if not signals:
