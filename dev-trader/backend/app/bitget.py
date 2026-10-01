@@ -165,10 +165,13 @@ class BitgetDemoClient:
         return []
 
     def account(self, symbol: str = "BTCUSDT") -> dict[str, Any]:
-        return self._get(
-            "/api/v3/account/assets",
-            {"coin": self.margin_coin},
-        )
+        # UTA assets is a single unified endpoint. Fetch the asset list and
+        # filter for the configured margin coin locally.
+        return self._get("/api/v3/account/assets")
+
+    def account_info(self) -> dict[str, Any]:
+        data = self._data(self._get("/api/v3/account/info"))
+        return data if isinstance(data, dict) else {}
 
     def account_settings(self) -> dict[str, Any]:
         data = self._data(self._get("/api/v3/account/settings"))
@@ -306,7 +309,9 @@ class BitgetDemoClient:
             for row in assets:
                 if str(row.get("coin", "")).upper() != self.margin_coin.upper():
                     continue
-                for key in ("available", "balance", "availableBalance"):
+                # Current UTA asset responses expose balance; older/current
+                # variants may also include available-style aliases.
+                for key in ("available", "availableBalance", "availableAmount", "balance"):
                     value = self.numeric(row.get(key), -1)
                     if value >= 0:
                         return value
@@ -335,6 +340,70 @@ class BitgetDemoClient:
             result["ready"] = False
             result["reason"] = "Bitget Demo API credentials are not configured."
             return result
+
+        warnings: list[str] = []
+        try:
+            # Account-info requires no UTA permission and is the cleanest
+            # authentication/connectivity probe.
+            result["diagnostic_stage"] = "account_info"
+            account_info = self.account_info()
+            result["account_permission_type"] = account_info.get("permType")
+            result["account_permissions"] = account_info.get("permissions") or []
+
+            # Asset balance is the funding/readiness source.
+            result["diagnostic_stage"] = "assets"
+            balance = self.available_balance(symbol)
+            result["available_balance_usdt"] = round(balance, 4)
+            result["funded"] = balance > 0
+
+            # Settings and positions are useful diagnostics but should not
+            # make an otherwise authenticated/funded Demo account appear
+            # disconnected if one auxiliary endpoint is unavailable.
+            result["diagnostic_stage"] = "account_settings"
+            try:
+                settings = self.account_settings()
+                result["hold_mode"] = settings.get("holdMode")
+                result["account_mode"] = settings.get("accountMode")
+                result["asset_mode"] = settings.get("assetMode")
+            except Exception as exc:
+                warnings.append(f"account_settings: {exc}")
+
+            result["diagnostic_stage"] = "positions"
+            try:
+                positions = self.positions(symbol)
+                result["open_positions"] = [
+                    {
+                        "holdSide": p.get("holdSide") or p.get("posSide"),
+                        "total": p.get("total") or p.get("available") or p.get("positionSize"),
+                        "openPriceAvg": p.get("openPriceAvg") or p.get("openAvgPrice") or p.get("openAvgPx"),
+                        "unrealizedPL": p.get("unrealizedPL") or p.get("unrealisedPnl"),
+                        "positionId": p.get("posId") or p.get("positionId"),
+                    }
+                    for p in positions
+                    if self.numeric(p.get("total") or p.get("positionSize") or p.get("available"), 0.0) > 0
+                ]
+            except Exception as exc:
+                result["open_positions"] = []
+                warnings.append(f"positions: {exc}")
+
+            result["diagnostic_stage"] = "complete"
+            result["ready"] = bool(balance > 0 and self.demo and self.configured)
+            result["reason"] = "READY" if result["ready"] else "Bitget Demo futures balance is 0 USDT."
+            if warnings:
+                result["warnings"] = warnings
+        except Exception as exc:
+            result["ready"] = False
+            result["reason"] = str(exc)
+            result["error_type"] = type(exc).__name__
+            try:
+                print(
+                    f"BITGET_DEMO_STATUS_ERROR stage={result.get('diagnostic_stage')} "
+                    f"type={type(exc).__name__} reason={str(exc)[:300]}",
+                    flush=True,
+                )
+            except Exception:
+                pass
+        return result
         try:
             result["diagnostic_stage"] = "account_settings"
             settings = self.account_settings()
