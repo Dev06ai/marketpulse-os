@@ -341,7 +341,7 @@ def test_fast_move_radar_mentions_momentum_in_large_move():
         candles[-2].close,
         candles[-2].close + 70.0,
         candles[-2].close - 5.0,
-        candles[-2].close + 280.0,
+        candles[-2].close + 50.0,
         300.0,
         False,
     )
