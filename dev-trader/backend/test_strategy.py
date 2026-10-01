@@ -94,7 +94,7 @@ def test_aligned_15m_setup_can_be_classified_as_swing():
     assert 3.5 <= abs(tp2 - 84000.0) / risk <= 5.0
 
 
-def test_quality_governor_locks_until_active_signal_resolves():
+def test_quality_governor_allows_independent_setups_while_trade_is_active():
     from app.strategy import StrategyEngine
     cs = [c(i,100,102,99,100,confirmed=True) for i in range(24)]
     state = MarketState(
@@ -113,10 +113,13 @@ def test_quality_governor_locks_until_active_signal_resolves():
         "target1": 103.0,
         "target2": 106.0,
         "rr": 3.0,
+        "confidence": 0.90,
+        "grade": "A",
     }
     engine.signal_status = "ACTIVE"
-    assert engine.evaluate(state) is None
-    assert engine.governor_status()["active_signal_lock"] is True
+    engine.active_signals["existing-1"] = engine.active_signal
+    assert engine.governor_status()["active_signal_lock"] is False
+    assert engine.governor_status()["active_signal_count"] == 1
 
 
 def test_quality_governor_enforces_daily_cap():
