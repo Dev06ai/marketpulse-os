@@ -355,3 +355,23 @@ def test_fast_move_radar_mentions_momentum_in_large_move():
     f = MarketFeatures()
     radar = engine._build_opportunity_radar(state, f)
     assert any("Momentum Capture" in row.get("setup", "") for row in radar)
+
+
+def test_video_reference_training_is_loaded_and_wave_c_scenario_exists():
+    from app.strategy import StrategyEngine
+
+    engine = StrategyEngine()
+    cs = [c(i, 84000 + i * 5, 84020 + i * 5, 83950 + i * 5, 84010 + i * 5) for i in range(40)]
+    state = MarketState(
+        candles_15=cs,
+        candles_60=cs,
+        last_price=84200.0,
+        data_health="HEALTHY",
+    )
+    diagnostics = engine.diagnostics(state)
+    features = diagnostics["features"]
+    scenarios = diagnostics["scenario_tree"]
+
+    assert features["video_reference_training"] is True
+    assert features["video_reference_lessons"] >= 5
+    assert any("Wave-C / Wave-5 confluence completion" in s.get("name", "") for s in scenarios)
