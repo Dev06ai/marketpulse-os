@@ -419,7 +419,7 @@ class DemoExecutionEngine:
         status = {
             "demo_enabled": True,
             "configured": self.ready,
-            "ready": True,
+            "ready": False,
             "symbol": self.symbol,
             "product_type": self.client.product_type,
             "margin_mode": os.getenv("BITGET_MARGIN_MODE", "isolated"),
@@ -435,14 +435,22 @@ class DemoExecutionEngine:
             ],
         }
         if balance is not None:
-            status["available_balance_usdt"] = round(balance, 4)
+            available = self._num(balance, 0.0)
         else:
             try:
-                status["available_balance_usdt"] = round(self._num(
-                    self.client.available_balance(self.symbol), 0.0
-                ), 4)
+                available = self._num(self.client.available_balance(self.symbol), 0.0)
             except Exception:
-                status["available_balance_usdt"] = None
+                available = 0.0
+        status["available_balance_usdt"] = round(available, 4)
+        status["funded"] = available > 0
+        status["ready"] = bool(self.enabled and self.ready and available > 0)
+        status["readiness_reason"] = (
+            "READY"
+            if status["ready"]
+            else "Add Bitget Demo USDT funds to the futures account."
+            if self.enabled and self.ready and available <= 0
+            else "Bitget Demo API credentials are not configured."
+        )
         return status
 
     def _local_demo_trades(self) -> list[dict[str, Any]]:
@@ -644,7 +652,7 @@ class DemoExecutionEngine:
         return {
             "demo_enabled": self.enabled,
             "configured": self.ready,
-            "ready": bool(self.enabled and self.ready),
+            "ready": bool((self.data.get("client_status") or {}).get("ready", False)),
             "trades": len(closed),
             "open_trades": len([r for r in rows if r.get("status") in {"OPEN", "ORDER_PENDING"}]),
             "wins": len(wins),
