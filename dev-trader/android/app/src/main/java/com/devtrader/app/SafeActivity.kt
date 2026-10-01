@@ -1365,16 +1365,25 @@ class SafeActivity : Activity() {
                     val market = j.optJSONObject("market")
                     val strategy = j.optJSONObject("strategy")
                     val api = j.optBoolean("backend_ok", false)
-                    val healthy = market?.optString("data_health") == "HEALTHY"
+                    val dataHealth = market?.optString("data_health", "UNKNOWN") ?: "UNKNOWN"
                     val ws = market?.optBoolean("ws_connected", false) == true
+                    val signalState = strategy?.optString("signal_state", "NONE") ?: "NONE"
                     val scanning = strategy?.optString("status") == "SCANNING"
                     val notifications = Build.VERSION.SDK_INT < 33 ||
                         checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
 
                     val apiText = if (api) "PASS" else "FAIL"
-                    val bybitText = if (healthy) "HEALTHY" else "NOT HEALTHY"
+                    val bybitText = when (dataHealth.uppercase(Locale.US)) {
+                        "HEALTHY" -> "HEALTHY"
+                        "DEGRADED" -> "DEGRADED"
+                        else -> "NOT HEALTHY"
+                    }
                     val wsText = if (ws) "CONNECTED" else "DISCONNECTED"
-                    val strategyText = if (scanning) "SCANNING" else "NOT READY"
+                    val strategyText = when {
+                        signalState == "ACTIVE" -> "ACTIVE"
+                        scanning -> "SCANNING"
+                        else -> "NOT READY"
+                    }
                     val alertText = if (notifications) "READY" else "NOT ENABLED"
                     val featureJson = j.optJSONObject("features")
                     val demo = strategy?.optJSONObject("demo_execution")
