@@ -310,7 +310,16 @@ class BitgetDemoClient:
                     value = self.numeric(row.get(key), -1)
                     if value >= 0:
                         return value
-        raise BitgetDemoError("Unable to read available USDT balance from Bitget UTA Demo account.")
+        shape = {
+            "data_type": type(data).__name__,
+            "data_keys": sorted(list(data.keys())) if isinstance(data, dict) else [],
+            "asset_count": len(assets) if isinstance(assets, list) else 0,
+            "margin_coin": self.margin_coin,
+        }
+        raise BitgetDemoError(
+            "Unable to read available USDT balance from Bitget UTA Demo account; "
+            f"response_shape={json.dumps(shape, separators=(',', ':'))}"
+        )
 
     def status(self, symbol: str = "BTCUSDT") -> dict[str, Any]:
         result = {
