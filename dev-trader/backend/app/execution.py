@@ -118,7 +118,12 @@ class DemoExecutionEngine:
     @staticmethod
     def _normalize_qty(qty: float, config: dict[str, Any]) -> float:
         step = DemoExecutionEngine._num(config.get("sizeMultiplier"), 0.0)
-        min_qty = DemoExecutionEngine._num(config.get("minTradeNum"), 0.0)
+        min_qty = DemoExecutionEngine._num(
+            config.get("minTradeNum")
+            or config.get("minOrderSize")
+            or config.get("minimumOrderSize"),
+            0.0,
+        )
         if step <= 0:
             # Fall back to the exchange's declared decimal precision.
             places = int(DemoExecutionEngine._num(config.get("volumePlace"), 3))
@@ -156,7 +161,11 @@ class DemoExecutionEngine:
         raw_qty = min(raw_qty, self.max_notional / entry)
         config = await self._contract()
         qty = self._normalize_qty(raw_qty, config)
-        min_usdt = self._num(config.get("minTradeUSDT"), 0.0)
+        min_usdt = self._num(
+            config.get("minTradeUSDT")
+            or config.get("minOrderAmount"),
+            0.0,
+        )
         if qty <= 0:
             raise BitgetDemoError("Calculated demo position is below Bitget's minimum quantity.")
         if min_usdt > 0 and qty * entry < min_usdt:
