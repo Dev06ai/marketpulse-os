@@ -239,3 +239,41 @@ video_reference_training:
     early_watch: "Notify when a scenario becomes ARMED around a clear trigger zone."
     setup_trigger: "Notify immediately when confirmation conditions are met."
     extended_move: "Do not chase a mature impulse; wait for the next corrective entry."
+
+
+additional_reference_training:
+  source: "Two newly uploaded BTC TradingView reference charts."
+  concepts:
+    converging_trendlines:
+      description: "A descending resistance trendline and ascending support trendline can compress price into a converging structure."
+      validation:
+        - "Require at least two meaningful touches on each boundary."
+        - "Prefer three or more total reactions to show the geometry is respected."
+        - "The lines should converge rather than remain parallel."
+      upper_boundary:
+        - "Treat repeated tests of descending resistance as a possible short/rejection zone."
+        - "A wick through resistance without acceptance is not a breakout."
+      lower_boundary:
+        - "Treat repeated tests of ascending support as a possible long/reversal zone."
+        - "A sweep below support followed by reclaim can become an SFP-style trigger."
+      breakout:
+        - "Prefer a body close outside the converging structure."
+        - "Require displacement and preferably a retest/acceptance."
+        - "Breakout direction must not be assumed from geometry alone."
+      invalidation:
+        - "A clean body close back inside the structure after the break."
+        - "Breakout directly into major opposing liquidity without room for the required R:R."
+    nested_elliott_degrees:
+      description: "The second reference shows multiple Elliott degrees being tracked simultaneously."
+      rules:
+        - "A higher-degree count provides context while lower-degree counts describe the current leg."
+        - "Do not confuse a lower-degree Wave-3/4/5 with the end of the higher-degree correction."
+        - "Maintain primary and alternate counts when pivots allow more than one interpretation."
+        - "Prefer the count that satisfies the formal impulse rules and explains the most confirmed pivots with the fewest exceptions."
+      decision_tree:
+        - "Higher-degree bearish context + lower-degree corrective bounce -> treat the bounce as possible Wave-2/B until invalidated."
+        - "Lower-degree bearish impulse confirms after the bounce -> monitor for Wave-3/4/5 continuation."
+        - "Price reaches stacked support/Fibonacci/OB confluence -> monitor for Wave-5/C completion and reversal evidence."
+      no_trade:
+        - "Forcing a single higher-degree count when alternatives remain materially plausible."
+        - "Entering only because a projected Elliott path looks visually attractive."
