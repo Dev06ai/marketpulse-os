@@ -1297,12 +1297,36 @@ class SafeActivity : Activity() {
     private fun journalPrefs() =
         getSharedPreferences("dev_trader_journal", Context.MODE_PRIVATE)
 
+    private fun journalKey(item: JSONObject): String {
+        val id = item.optString("id").trim()
+        if (id.isNotBlank()) return "id:$id"
+        return listOf(
+            item.optString("direction"),
+            item.optString("setup"),
+            String.format(Locale.US, "%.8f", item.optDouble("entry")),
+            String.format(Locale.US, "%.8f", item.optDouble("stop")),
+            String.format(Locale.US, "%.8f", item.optDouble("target")),
+            String.format(Locale.US, "%.4f", item.optDouble("rr"))
+        ).joinToString("|")
+    }
+
+    private fun dedupeJournal(source: JSONArray): JSONArray {
+        val out = JSONArray()
+        val seen = HashSet<String>()
+        for (i in 0 until source.length()) {
+            val item = source.optJSONObject(i) ?: continue
+            if (seen.add(journalKey(item))) out.put(item)
+        }
+        return out
+    }
+
     private fun appendJournal(signalObj: JSONObject) {
         val old = try {
             JSONArray(journalPrefs().getString("items", "[]"))
         } catch (_: Throwable) {
             JSONArray()
         }
+        val cleaned = dedupeJournal(old)
         val item = JSONObject()
             .put("ts", System.currentTimeMillis())
             .put("id", signalObj.optString("id"))
@@ -1313,17 +1337,25 @@ class SafeActivity : Activity() {
             .put("target", signalObj.optDouble("target2"))
             .put("rr", signalObj.optDouble("rr"))
             .put("confidence", signalObj.optDouble("confidence"))
-        val next = JSONArray().put(item)
-        for (i in 0 until minOf(old.length(), 24)) next.put(old.optJSONObject(i))
+
+        val key = journalKey(item)
+        val next = JSONArray()
+        if (!cleaned.asSequence().any { journalKey(it) == key }) next.put(item)
+        for (i in 0 until minOf(cleaned.length(), 24)) next.put(cleaned.optJSONObject(i))
         journalPrefs().edit().putString("items", next.toString()).apply()
     }
 
     private fun loadJournal() {
-        val arr = try {
+        val raw = try {
             JSONArray(journalPrefs().getString("items", "[]"))
         } catch (_: Throwable) {
             JSONArray()
         }
+        val arr = dedupeJournal(raw)
+        if (arr.length() != raw.length()) {
+            journalPrefs().edit().putString("items", arr.toString()).apply()
+        }
+        arr.optJSONObject(0)?.optString("id")?.takeIf { it.isNotBlank() }?.let { lastSignalId = it }
         if (arr.length() == 0) {
             journal.text = "No signals recorded yet."
             return
