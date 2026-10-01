@@ -1351,6 +1351,7 @@ class StrategyEngine:
                 "direction": direction,
                 "score": round(move_atr / 1.10 * 0.25, 3),
                 "move_atr": round(move_atr, 3),
+                "extension_threshold": extension_threshold,
                 "volume_ratio": round(volume_ratio, 2),
                 "recent_high": round(recent_high, 2),
                 "recent_low": round(recent_low, 2),
@@ -1398,7 +1399,11 @@ class StrategyEngine:
                 reasons.append("CVD impulse is negative")
 
         score = min(1.0, score)
-        if move_atr > 3.00:
+        # A fully closed 5m impulse is considered mature at a lower threshold
+        # than a still-forming candle. This preserves early capture while
+        # preventing a completed multi-ATR impulse from being chased.
+        extension_threshold = 2.50 if forming is None else 3.00
+        if move_atr > extension_threshold:
             return {
                 "status": "EXTENDED",
                 "direction": direction,
@@ -1427,6 +1432,7 @@ class StrategyEngine:
             "direction": direction,
             "score": round(score, 3),
             "move_atr": round(move_atr, 3),
+            "extension_threshold": extension_threshold,
             "volume_ratio": round(volume_ratio, 2),
             "recent_high": round(recent_high, 2),
             "recent_low": round(recent_low, 2),
@@ -1446,7 +1452,8 @@ class StrategyEngine:
 
         # Notify early through the radar, but never chase a mature impulse.
         # A trade candidate must come from the first expansion or a clean retest.
-        if float(ctx.get("move_atr") or 0.0) > 3.00:
+        extension_threshold = float(ctx.get("extension_threshold") or 3.00)
+        if float(ctx.get("move_atr") or 0.0) > extension_threshold:
             return None
 
         direction = str(ctx.get("direction") or "").upper()
