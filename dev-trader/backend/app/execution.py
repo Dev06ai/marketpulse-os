@@ -367,18 +367,39 @@ class DemoExecutionEngine:
         if not self.enabled or not self.ready:
             return []
         newly_closed: list[dict[str, Any]] = []
+        reconciliation_warnings: list[str] = []
         try:
             positions = await self._current_positions()
             now = int(time.time() * 1000)
             position_rows = [p for p in positions if self._num(p.get("total"), 0.0) > 0]
-            history = await asyncio.to_thread(
-                self.client.position_history,
-                self.symbol,
-                max(0, now - 90 * 24 * 60 * 60 * 1000),
-                now,
-                100,
-            )
-            orders = await asyncio.to_thread(self.client.orders_history, self.symbol, 100)
+
+            # Bitget UTA v3 limits historical order/fill queries to a maximum
+            # 30-day window per request. Keep reconciliation inside that window.
+            history_start = max(0, now - 30 * 24 * 60 * 60 * 1000)
+            try:
+                history = await asyncio.to_thread(
+                    self.client.position_history,
+                    self.symbol,
+                    history_start,
+                    now,
+                    100,
+                )
+            except Exception as exc:
+                history = []
+                reconciliation_warnings.append(f"position_history: {exc}")
+
+            try:
+                orders = await asyncio.to_thread(
+                    self.client.orders_history,
+                    self.symbol,
+                    100,
+                    history_start,
+                    now,
+                )
+            except Exception as exc:
+                orders = []
+                reconciliation_warnings.append(f"orders_history: {exc}")
+
             self._merge_exchange_open_orders(orders)
             for trade in self._local_demo_trades():
                 if trade.get("status") in {"FAILED", "CLOSED"}:
@@ -407,10 +428,16 @@ class DemoExecutionEngine:
 
             with self.lock:
                 self.data["last_sync_ts"] = now
-                self.data["client_status"] = self._safe_status(
+                status = self._safe_status(
                     balance=None,
                     open_positions=position_rows,
                 )
+                if reconciliation_warnings:
+                    status["reconciliation_warning"] = " | ".join(reconciliation_warnings)
+                    status["history_reconciliation"] = "DEGRADED"
+                else:
+                    status["history_reconciliation"] = "HEALTHY"
+                self.data["client_status"] = status
                 self._save()
         except Exception as exc:
             with self.lock:
