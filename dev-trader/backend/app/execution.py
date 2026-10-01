@@ -28,11 +28,11 @@ class DemoExecutionEngine:
         self.risk_pct = float(os.getenv("BITGET_DEMO_RISK_PCT", "0.25"))
         self.max_notional = float(os.getenv("BITGET_DEMO_MAX_NOTIONAL_USDT", "500"))
         self.max_daily = int(os.getenv("BITGET_DEMO_MAX_DAILY_TRADES", "3"))
-        # Every actual StrategyEngine signal is an execution instruction.
-        # When a demo position is already open, close/replace it first rather
-        # than silently skipping the new signal. This keeps one active Bitget
-        # position while ensuring every emitted trade call is acted upon.
-        self.replace_position_on_signal = os.getenv("BITGET_DEMO_REPLACE_ON_SIGNAL", "true").lower() == "true"
+        # Multiple emitted signals may remain open together. A reversal is
+        # handled explicitly by the strategy/execution supervisor rather than
+        # automatically replacing every existing position.
+        self.replace_position_on_signal = False
+        self.smart_reversal_enabled = os.getenv("BITGET_DEMO_SMART_REVERSAL", "true").lower() == "true"
         self.sync_seconds = max(3.0, float(os.getenv("BITGET_EXECUTION_SYNC_SECONDS", "5")))
         self.path = Path(os.getenv("BITGET_EXECUTION_STATE_FILE", "/tmp/dev_trader_execution.json"))
         self.lock = threading.RLock()
@@ -218,26 +218,14 @@ class DemoExecutionEngine:
         if not allowed:
             return {"ok": False, "skipped": True, "reason": reason}
 
-        # Every emitted StrategyEngine signal is actionable. Keep one active
-        # Bitget position, but replace an existing position rather than silently
-        # dropping the new setup. This covers same-direction re-entries and
-        # direction flips while preserving deterministic single-position risk.
+        # Every emitted StrategyEngine signal is actionable. Existing
+        # same-direction trades stay open; a smart reversal, when warranted,
+        # is performed by manage_signal_transition() before this method opens
+        # the new signal.
         try:
             positions = await self._current_positions()
         except Exception as exc:
             return {"ok": False, "reason": f"Unable to verify Bitget position: {exc}"}
-
-        if self.replace_position_on_signal:
-            existing = [
-                row for row in positions
-                if self._num(row.get("total"), 0.0) > 0
-            ]
-            if existing:
-                try:
-                    await self._close_existing_positions(existing)
-                    await self.sync()
-                except Exception as exc:
-                    return {"ok": False, "reason": f"Unable to replace existing Bitget Demo position: {exc}"}
 
         try:
             qty, risk_usdt, config = await self._risk_size(signal)
@@ -349,6 +337,96 @@ class DemoExecutionEngine:
                 }
                 self._save()
             return {"ok": False, "reason": str(exc)}
+
+    async def manage_signal_transition(
+        self,
+        signal: dict[str, Any],
+        current_price: float | None,
+    ) -> dict[str, Any]:
+        """Decide whether a new signal should supersede existing opposite trades.
+
+        Same-direction setups are additive: keep existing positions and open the
+        new setup. Opposite-direction setups only force a reversal when the new
+        signal has materially stronger evidence and the existing trade has not
+        already established meaningful profit. In hedge mode, a non-superseding
+        opposite signal can coexist; in one-way mode Bitget will naturally net
+        the position, so the decision is made conservatively before submission.
+        """
+        if not self.smart_reversal_enabled or current_price is None:
+            return {"action": "KEEP", "reason": "smart reversal disabled"}
+        new_direction = str(signal.get("direction") or "").upper()
+        if new_direction not in {"LONG", "SHORT"}:
+            return {"action": "KEEP", "reason": "invalid direction"}
+
+        with self.lock:
+            open_trades = [
+                dict(row) for row in self.data.get("trades", [])
+                if str(row.get("status") or "").upper() == "OPEN"
+            ]
+        opposite = [row for row in open_trades if str(row.get("direction") or "").upper() != new_direction]
+        if not opposite:
+            return {"action": "KEEP", "reason": "no opposite open trade"}
+
+        new_conf = self._num(signal.get("confidence"))
+        new_rr = self._num(signal.get("rr"))
+        evidence = signal.get("evidence") if isinstance(signal.get("evidence"), dict) else {}
+        aligned = 0
+        if str(evidence.get("trend_15") or "").upper() == new_direction.replace("LONG","UP").replace("SHORT","DOWN"):
+            aligned += 1
+        if str(evidence.get("trend_60") or "").upper() == new_direction.replace("LONG","UP").replace("SHORT","DOWN"):
+            aligned += 1
+        if str(evidence.get("trend_240") or "").upper() == new_direction.replace("LONG","UP").replace("SHORT","DOWN"):
+            aligned += 1
+        expected_structure = "BULLISH" if new_direction == "LONG" else "BEARISH"
+        if str(evidence.get("market_structure") or "").upper() == expected_structure:
+            aligned += 1
+
+        should_close = False
+        reasons: list[str] = []
+        for old in opposite:
+            old_entry = self._num(old.get("entry_price") or old.get("entry_plan"))
+            old_stop = self._num(old.get("stop_loss"))
+            old_conf = self._num(old.get("confidence"))
+            if old_entry <= 0 or old_stop <= 0:
+                continue
+            risk = abs(old_entry - old_stop)
+            if risk <= 0:
+                continue
+            old_direction = str(old.get("direction") or "").upper()
+            progress_r = (
+                (float(current_price) - old_entry) / risk
+                if old_direction == "LONG"
+                else (old_entry - float(current_price)) / risk
+            )
+            # Once a trade has already established roughly +1.25R, do not churn
+            # it merely because a counter-signal appears.
+            if progress_r >= 1.25:
+                reasons.append(f"{old.get('signal_id')}: protected profit {progress_r:.2f}R")
+                continue
+
+            materially_stronger = new_conf >= max(0.82, old_conf + 0.07)
+            strong_rr = new_rr >= 3.0
+            market_flip = aligned >= 3
+            if materially_stronger and strong_rr and market_flip:
+                should_close = True
+                reasons.append(
+                    f"{old.get('signal_id')}: reversal {new_conf:.2f} confidence, "
+                    f"{aligned}/4 directional evidence, old progress {progress_r:.2f}R"
+                )
+
+        if not should_close:
+            return {"action": "KEEP", "reason": "; ".join(reasons) or "reversal gate not strong enough"}
+
+        positions = []
+        try:
+            positions = await self._current_positions()
+        except Exception:
+            positions = []
+        active_positions = [row for row in positions if self._num(row.get("total"), 0.0) > 0]
+        if active_positions:
+            await self._close_existing_positions(active_positions)
+            await self.sync()
+        return {"action": "REVERSE", "reason": "; ".join(reasons)}
 
     async def _close_existing_positions(self, positions: list[dict[str, Any]]):
         """Close all currently open Bitget Demo positions before a new signal."""
