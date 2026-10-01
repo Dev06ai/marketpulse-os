@@ -821,7 +821,7 @@ class StrategyEngine:
             aligned = (direction == "LONG" and f.trend_240 == "UP") or (direction == "SHORT" and f.trend_240 == "DOWN")
             if not aligned:
                 reasons.append("4h trend is not aligned")
-        if bool(cfg.get("require_structure_alignment", True)):
+        if bool(cfg.get("require_structure_alignment", True)) and not momentum_exception:
             aligned = (
                 (direction == "LONG" and str(f.market_structure).upper() in {"BULLISH","UP","HIGHER_HIGHS","HIGHER_LOW"})
                 or
@@ -1456,6 +1456,7 @@ class StrategyEngine:
 
     def _build_opportunity_radar(self, state: MarketState, f: MarketFeatures) -> list[dict]:
         radar = []
+        fast_move = self._build_fast_move_context(state, f)
         confirmed_5 = [c for c in state.candles_5 if c.confirmed]
         confirmed_15 = [c for c in state.candles_15 if c.confirmed]
         forming_5 = state.candles_5[-1] if state.candles_5 and not state.candles_5[-1].confirmed else None
@@ -1490,6 +1491,18 @@ class StrategyEngine:
                     setup = "Bullish continuation developing"
                 elif direction == "SHORT" and f.trend_15 == "DOWN" and f.market_structure == "BEARISH":
                     setup = "Bearish continuation developing"
+
+            if fast_move.get("status") in {"ARMED", "TRIGGERED"} and fast_move.get("direction") == direction:
+                fast_bonus = 2 if fast_move.get("status") == "TRIGGERED" else 1
+                pattern_bonus += fast_bonus
+                setup = "Momentum Capture • FAST"
+                reasons = [
+                    f"5m momentum {fast_move.get('status').lower()}",
+                    f"{float(fast_move.get('move_atr', 0.0)):.2f} ATR displacement",
+                    f"{float(fast_move.get('volume_ratio', 1.0)):.1f}x volume",
+                    *list(fast_move.get("reasons") or [])[:2],
+                    *reasons,
+                ]
 
             total = min(8, score + pattern_bonus)
             tier = "EARLY" if total >= 2 else "WATCH"
@@ -1859,6 +1872,7 @@ class StrategyEngine:
             "evidence_matrix": evidence_matrix,
             "sfp_hunter": sfp_hunter,
             "breakout_watch": breakout_watch,
+            "fast_move": self._build_fast_move_context(state, f0),
             "evidence_matrix": evidence_matrix,
             "data_quality": state.data_health,
             "learning": self.learning.summary(),
