@@ -120,3 +120,38 @@ def test_close_reason_and_r_math():
         [],
     )
     assert reason == "SL"
+
+
+def test_demo_execution_rejects_zero_futures_balance(monkeypatch):
+    monkeypatch.setenv("BITGET_DEMO_TRADING", "true")
+    monkeypatch.setenv("BITGET_EXECUTION_STATE_FILE", "/tmp/dev-trader-test-zero-balance.json")
+    try:
+        os.remove("/tmp/dev-trader-test-zero-balance.json")
+    except FileNotFoundError:
+        pass
+
+    class ZeroBalanceClient(FakeClient):
+        def available_balance(self, symbol):
+            return 0.0
+
+    executor = DemoExecutionEngine(FakeLearning())
+    executor.client = ZeroBalanceClient()
+
+    signal = {
+        "id": "SIG-ZERO",
+        "direction": "SHORT",
+        "setup": "TEST",
+        "entry": 100000,
+        "stop": 101000,
+        "target1": 97000,
+        "target2": 97000,
+        "rr": 3.0,
+        "confidence": 0.80,
+        "grade": "A",
+        "trade_style": "SCALP",
+        "evidence": {},
+    }
+
+    result = asyncio.run(executor.handle_signal(signal))
+    assert result["ok"] is False
+    assert "balance is 0 USDT" in result["reason"]
