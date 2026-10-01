@@ -85,6 +85,7 @@ class SafeActivity : Activity() {
     private lateinit var check: TextView
     private lateinit var risk: TextView
     private lateinit var journal: TextView
+    private lateinit var tradeHistory: TextView
     private lateinit var replay: TextView
     private lateinit var chart: MarketChartView
     private lateinit var updateButton: Button
@@ -94,6 +95,7 @@ class SafeActivity : Activity() {
     private var lastStateReceivedMs = 0L
     private var latestRoot: JSONObject? = null
     private var lastSignalId: String? = null
+    private var lastExecutionEventKey: String? = null
     private var pendingUiUpdate = false
     private var lastUiRenderMs = 0L
     private var lastChartRequestMs = 0L
@@ -176,9 +178,13 @@ class SafeActivity : Activity() {
         ensureChannel()
         startBackgroundAlerts()
         loadJournal()
+        loadTradeHistory()
 
         handler.postDelayed({
-            safe { bootstrap(true) }
+            safe {
+                bootstrap(true)
+                loadTradeHistory()
+            }
         }, 150L)
         handler.postDelayed({
             safe { connect() }
@@ -357,6 +363,13 @@ class SafeActivity : Activity() {
         val journalButton = actionButton("REFRESH JOURNAL")
         journalButton.setOnClickListener { loadJournal() }
         root.addView(journalButton, margins(bottom = 12))
+
+        val tradeHistoryCard = card("BITGET DEMO  /  EXECUTED TRADES", "Demo execution is not configured yet.", 12f)
+        tradeHistory = tradeHistoryCard.value
+        root.addView(tradeHistoryCard.container, margins(bottom = 10))
+        val tradeHistoryButton = actionButton("REFRESH DEMO TRADE HISTORY")
+        tradeHistoryButton.setOnClickListener { safe { loadTradeHistory() } }
+        root.addView(tradeHistoryButton, margins(bottom = 12))
 
         val replayCard = card("REPLAY  /  BACKTEST", "Ready", 13f)
         replay = replayCard.value
@@ -795,6 +808,14 @@ class SafeActivity : Activity() {
             }
         }
 
+        val execution = root.optJSONObject("execution")
+        val executionEvent = execution?.optJSONObject("last_event")
+        val executionEventKey = executionEvent?.optString("key").orEmpty()
+        if (executionEventKey.isNotBlank() && executionEventKey != lastExecutionEventKey) {
+            lastExecutionEventKey = executionEventKey
+            loadTradeHistory()
+        }
+
         val tradeEvent = root.optJSONObject("trade_event")
         if (tradeEvent != null && tradeEvent.optString("key").isNotBlank()) {
             val eventType = tradeEvent.optString("type", "TRADE_EVENT").replace("_", " ")
@@ -1172,6 +1193,86 @@ class SafeActivity : Activity() {
         ), margins(bottom = 10))
     }
 
+
+    private fun loadTradeHistory() {
+        getJson(backendBase + "/trades?limit=20") { ok, body ->
+            handler.post {
+                if (!ok) {
+                    tradeHistory.text = "Bitget Demo trade history unavailable."
+                    return@post
+                }
+                safe {
+                    val root = JSONObject(body)
+                    val summary = root.optJSONObject("summary") ?: JSONObject()
+                    val ready = summary.optBoolean("ready", false)
+                    val configured = summary.optBoolean("configured", false)
+                    val total = summary.optInt("trades", 0)
+                    val wins = summary.optInt("wins", 0)
+                    val losses = summary.optInt("losses", 0)
+                    val winRate = summary.optDouble("win_rate", Double.NaN)
+                    val totalNet = summary.optDouble("total_net_profit_usdt", 0.0)
+                    val openTrades = summary.optInt("open_trades", 0)
+
+                    if (!configured) {
+                        tradeHistory.text =
+                            "BITGET DEMO  •  NOT CONFIGURED\n" +
+                            "Add a Bitget Demo API key, secret and passphrase on the backend.\n" +
+                            "No live-money execution is enabled."
+                        return@safe
+                    }
+
+                    val header =
+                        "BITGET DEMO  •  " + if (ready) "READY" else "CONNECTION ISSUE" +
+                        "\nClosed  $total  •  Open  $openTrades  •  W $wins / L $losses" +
+                        "\nWin rate  " + if (winRate.isNaN()) "—" else String.format(Locale.US, "%.1f%%", winRate * 100.0) +
+                        "  •  Net P&L  " + String.format(Locale.US, "%+.2f USDT", totalNet)
+
+                    val rows = root.optJSONArray("trades") ?: JSONArray()
+                    val out = StringBuilder(header)
+                    val count = minOf(10, rows.length())
+                    if (count == 0) {
+                        out.append("\n\nNo executed demo trades yet.")
+                    } else {
+                        out.append("\n")
+                        for (i in 0 until count) {
+                            val t = rows.optJSONObject(i) ?: continue
+                            val direction = t.optString("direction", "—")
+                            val setup = t.optString("setup", "BITGET DEMO")
+                            val status = t.optString("status", "—")
+                            val entry = t.optDouble("entry_price", t.optDouble("entry_plan", Double.NaN))
+                            val exit = t.optDouble("exit_price", Double.NaN)
+                            val sl = t.optDouble("stop_loss", Double.NaN)
+                            val tp = t.optDouble("take_profit", Double.NaN)
+                            val qty = t.optDouble("filled_qty", t.optDouble("requested_qty", Double.NaN))
+                            val pnl = t.optDouble("net_profit_usdt", 0.0)
+                            val resultR = t.optDouble("result_r", Double.NaN)
+                            val reason = t.optString("close_reason", "")
+                            val sign = if (pnl >= 0) "+" else ""
+                            out.append("\n")
+                                .append(direction).append(" • ").append(status).append(" • ").append(setup)
+                                .append("\nEntry  ").append(formatCompact(entry))
+                                .append("   Exit  ").append(if (exit.isFinite() && exit > 0) formatCompact(exit) else "—")
+                                .append("\nSL  ").append(formatCompact(sl))
+                                .append("   TP  ").append(formatCompact(tp))
+                                .append("\nQty  ").append(if (qty.isFinite()) String.format(Locale.US, "%.6f BTC", qty) else "—")
+                                .append("   P&L  ").append(sign).append(String.format(Locale.US, "%.2f USDT", pnl))
+                                .append("   R  ").append(if (resultR.isFinite()) String.format(Locale.US, "%.2f", resultR) else "—")
+                            if (reason.isNotBlank()) out.append("\nClose  ").append(reason)
+                            val fee = t.optDouble("fees_usdt", 0.0)
+                            val funding = t.optDouble("funding_usdt", 0.0)
+                            out.append("\nFees  ").append(String.format(Locale.US, "%.2f", fee))
+                                .append("  Funding  ").append(String.format(Locale.US, "%.2f", funding))
+                                .append("\n")
+                        }
+                    }
+                    tradeHistory.text = out.toString().trim()
+                }
+            }
+        }
+    }
+
+    private fun formatCompact(value: Double): String =
+        if (value.isFinite() && value > 0) String.format(Locale.US, "%.2f", value) else "—"
 
     private fun journalPrefs() =
         getSharedPreferences("dev_trader_journal", Context.MODE_PRIVATE)
