@@ -363,7 +363,7 @@ class DemoExecutionEngine:
             history = await asyncio.to_thread(
                 self.client.position_history,
                 self.symbol,
-                max(0, now - 7 * 24 * 60 * 60 * 1000),
+                max(0, now - 90 * 24 * 60 * 60 * 1000),
                 now,
                 100,
             )
@@ -582,10 +582,17 @@ class DemoExecutionEngine:
 
     @staticmethod
     def _infer_close_reason(trade: dict[str, Any], closed: dict[str, Any], orders: list[dict[str, Any]]) -> str:
+        closed_ts = DemoExecutionEngine._num(closed.get("utime") or closed.get("ctime"), 0)
+        relevant = []
+        for order in orders:
+            if str(order.get("symbol", "")).upper() != str(trade.get("symbol", "")).upper():
+                continue
+            updated = DemoExecutionEngine._num(order.get("updatedTime") or order.get("createdTime"), 0)
+            if closed_ts <= 0 or updated <= 0 or abs(updated - closed_ts) <= 10 * 60 * 1000:
+                relevant.append(order)
         text = " ".join(
             str(order.get("execType") or order.get("delegateType") or order.get("orderType") or "")
-            for order in orders
-            if str(order.get("symbol", "")).upper() == str(trade.get("symbol", "")).upper()
+            for order in relevant
         ).lower()
         if any(x in text for x in ("stop_loss", "stop-loss", "stoploss", "loss_market", "sl")):
             return "SL"
