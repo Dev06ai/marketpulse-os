@@ -46,6 +46,10 @@ class MarketFeatures:
     elliott_60_direction: str = "NEUTRAL"
     elliott_60_confidence: float = 0.0
     elliott_60_reason: str = ""
+    harmonic_pattern: str = "NONE"
+    harmonic_direction: str = "NEUTRAL"
+    harmonic_confidence: float = 0.0
+    harmonic_reason: str = ""
 
 
 def _atr(candles: list[Candle], n: int = 14) -> float:
@@ -140,6 +144,83 @@ def _order_block(candles: list[Candle]) -> tuple[str, float | None]:
             return "BEARISH", (base.open + base.close) / 2.0
     return "NONE", None
 
+
+def _harmonic_context(candles: list[Candle]) -> tuple[str, str, float, str]:
+    """Conservative X-A-B-C-D harmonic-like detector for scenario watching.
+
+    It intentionally labels approximate ratio clusters as harmonic-like rather
+    than claiming an exact named pattern when the structure is ambiguous.
+    """
+    cs = [c for c in candles if c.confirmed]
+    if len(cs) < 8:
+        return "NONE", "NEUTRAL", 0.0, "Not enough confirmed pivots for harmonic context."
+
+    highs, lows = [], []
+    window = 2
+    for i in range(window, len(cs) - window):
+        c = cs[i]
+        if c.high >= max(x.high for x in cs[i-window:i+window+1]):
+            highs.append((i, float(c.high)))
+        if c.low <= min(x.low for x in cs[i-window:i+window+1]):
+            lows.append((i, float(c.low)))
+
+    piv = sorted(
+        [("H", i, p) for i, p in highs] + [("L", i, p) for i, p in lows],
+        key=lambda x: x[1],
+    )
+    clean = []
+    for p in piv:
+        if not clean or p[0] != clean[-1][0]:
+            clean.append(p)
+        elif p[0] == "H" and p[2] >= clean[-1][2]:
+            clean[-1] = p
+        elif p[0] == "L" and p[2] <= clean[-1][2]:
+            clean[-1] = p
+
+    if len(clean) < 5:
+        return "NONE", "NEUTRAL", 0.0, "No five-pivot alternating structure."
+
+    q = clean[-5:]
+    kinds = "".join(x[0] for x in q)
+
+    def score(r1, r2, r3, r4):
+        # Wide, deliberately conservative tolerances for visual scenario matching.
+        s = 0.0
+        s += 0.25 if 0.50 <= r1 <= 0.82 else 0.0
+        s += 0.20 if 0.30 <= r2 <= 1.00 else 0.0
+        s += 0.25 if 1.00 <= r3 <= 1.80 else 0.0
+        s += 0.30 if 0.65 <= r4 <= 0.95 else 0.0
+        return s
+
+    if kinds == "LHLHL":
+        x, a, b, c, d = [x[2] for x in q]
+        xa = a - x
+        ab = a - b
+        bc = c - b
+        cd = c - d
+        ad = a - d
+        if min(xa, ab, bc, cd, ad) <= 0:
+            return "NONE", "NEUTRAL", 0.0, "Bullish harmonic geometry is invalid."
+        r1, r2, r3, r4 = ab / xa, bc / ab, cd / bc, ad / xa
+        sc = score(r1, r2, r3, r4)
+        if sc >= 0.70:
+            return "HARMONIC_LIKE", "LONG", sc, f"Potential bullish X-A-B-C-D ratio cluster: AB/XA={r1:.2f}, BC/AB={r2:.2f}, CD/BC={r3:.2f}, AD/XA={r4:.2f}."
+
+    if kinds == "HLHLH":
+        x, a, b, c, d = [x[2] for x in q]
+        xa = x - a
+        ab = b - a
+        bc = b - c
+        cd = d - c
+        ad = d - a
+        if min(xa, ab, bc, cd, ad) <= 0:
+            return "NONE", "NEUTRAL", 0.0, "Bearish harmonic geometry is invalid."
+        r1, r2, r3, r4 = ab / xa, bc / ab, cd / bc, ad / xa
+        sc = score(r1, r2, r3, r4)
+        if sc >= 0.70:
+            return "HARMONIC_LIKE", "SHORT", sc, f"Potential bearish X-A-B-C-D ratio cluster: AB/XA={r1:.2f}, BC/AB={r2:.2f}, CD/BC={r3:.2f}, AD/XA={r4:.2f}."
+
+    return "NONE", "NEUTRAL", 0.0, "No conservative harmonic ratio cluster confirmed."
 
 def _htf_levels(candles: list[Candle]):
     cs = [c for c in candles if c.confirmed]
@@ -248,6 +329,12 @@ def compute_features(state: MarketState) -> MarketFeatures:
     f.elliott_60_direction = wave60.direction
     f.elliott_60_confidence = wave60.confidence
     f.elliott_60_reason = wave60.reason
+    (
+        f.harmonic_pattern,
+        f.harmonic_direction,
+        f.harmonic_confidence,
+        f.harmonic_reason,
+    ) = _harmonic_context(state.candles_15)
 
     if state.last_price and f.previous_week_high and f.previous_week_low:
         swing = f.previous_week_high - f.previous_week_low
