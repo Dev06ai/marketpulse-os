@@ -1,8 +1,8 @@
 {
   "enabled": true,
-  "versionCode": 81,
-  "versionName": "0.11.3",
+  "versionCode": 82,
+  "versionName": "0.11.4",
   "apkUrl": "https://github.com/Dev06ai/marketpulse-os/releases/download/dev-trader-v0.11.4-82/app-release.apk",
   "sha256": "34138e76c4bd6fbd37fd07fb5e9c44e89c3986cd5e805a1314edf39dc69b2c97",
-  "notes": "Signed Dev Trader release 0.11.3 \u2022 persistent connection supervisor"
+  "notes": "Signed Dev Trader release 0.11.4 • Bitget Demo trade history card"
 }
