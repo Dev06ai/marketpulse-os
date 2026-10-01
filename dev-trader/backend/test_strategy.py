@@ -327,6 +327,56 @@ def test_fast_move_context_triggers_early_on_large_5m_expansion():
     assert ctx["volume_ratio"] > 1.0
 
 
+def test_fast_move_does_not_trigger_on_wick_only_break():
+    from app.strategy import StrategyEngine
+    candles = []
+    price = 100000.0
+    for i in range(18):
+        cl = price + 20.0
+        candles.append(c5(i, price, cl + 2.0, price - 2.0, cl, 100.0))
+        price = cl
+    # Wick above the recent high, but close/live body does not accept beyond it.
+    candles[-1] = c5(
+        17,
+        candles[-2].close,
+        max(c.high for c in candles[-4:-1]) + 80.0,
+        candles[-2].close - 5.0,
+        candles[-2].close + 5.0,
+        220.0,
+        False,
+    )
+    state = MarketState(
+        candles_5=candles,
+        last_price=candles[-1].close,
+        data_health="HEALTHY",
+    )
+    engine = StrategyEngine()
+    ctx = engine._build_fast_move_context(state, MarketFeatures())
+    assert ctx["status"] != "TRIGGERED"
+
+
+def test_momentum_trade_is_not_created_after_mature_impulse():
+    from app.strategy import StrategyEngine
+    candles = []
+    price = 100000.0
+    for i in range(18):
+        cl = price + 40.0
+        candles.append(c5(i, price, cl + 4.0, price - 4.0, cl, 140.0))
+        price = cl
+    state = MarketState(
+        candles_5=candles,
+        last_price=price,
+        data_health="HEALTHY",
+    )
+    engine = StrategyEngine()
+    f = MarketFeatures()
+    ctx = engine._build_fast_move_context(state, f)
+    # The exact threshold is implementation detail; a clearly mature impulse
+    # must be handled as an extended/watch state rather than a chase entry.
+    assert ctx["status"] == "EXTENDED"
+    assert engine._momentum_signal(state, f) is None
+
+
 def test_fast_move_radar_mentions_momentum_in_large_move():
     from app.strategy import StrategyEngine
 
