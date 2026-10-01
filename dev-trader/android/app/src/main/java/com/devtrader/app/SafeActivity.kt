@@ -1269,7 +1269,9 @@ class SafeActivity : Activity() {
                             out.append("\n")
                                 .append(direction).append(" • ").append(status).append(" • ").append(setup)
                                 .append("\nEntry  ").append(formatCompact(entry))
-                                .append("   Exit  ").append(if (exit.isFinite() && exit > 0) formatCompact(exit) else "—")
+                                .append("   Exit  ").append(
+                                    if (status == "CLOSED" && exit.isFinite() && exit > 0) formatCompact(exit) else "—"
+                                )
                                 .append("\nSL  ").append(formatCompact(sl))
                                 .append("   TP  ").append(formatCompact(tp))
                                 .append("\nQty  ").append(if (qty.isFinite()) String.format(Locale.US, "%.6f BTC", qty) else "—")
