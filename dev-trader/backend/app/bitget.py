@@ -17,10 +17,11 @@ class BitgetDemoError(RuntimeError):
 
 
 class BitgetDemoClient:
-    """Minimal Bitget Classic Futures REST client, deliberately demo-only.
+    """Bitget Unified Trading Account (UTA v3) Futures REST client, demo-only.
 
-    Live-money execution is intentionally unsupported by this client. Every
-    private request carries the Bitget demo header (paptrading=1).
+    The Dev Trader key was created with UTA permissions, so all account/trading
+    calls use Bitget's /api/v3 UTA endpoints. Live-money execution remains
+    intentionally unsupported.
     """
 
     def __init__(
@@ -85,9 +86,9 @@ class BitgetDemoClient:
             "locale": "en-US",
             "Content-Type": "application/json",
             "Accept": "application/json",
-            # Bitget requires this header for Demo Trading API requests.
+            # Required for Bitget Demo Trading API calls.
             "paptrading": "1",
-            "User-Agent": "Dev-Trader-Demo/1.0",
+            "User-Agent": "Dev-Trader-Demo/1.1",
         }
 
     def _request(
@@ -107,7 +108,7 @@ class BitgetDemoClient:
         body = json.dumps(payload or {}, separators=(",", ":")) if payload is not None else ""
         timestamp_ms = int(time.time() * 1000)
         url = f"{self.base_url}{path}" + (f"?{query}" if query else "")
-        headers = {"Accept": "application/json", "User-Agent": "Dev-Trader-Demo/1.0"}
+        headers = {"Accept": "application/json", "User-Agent": "Dev-Trader-Demo/1.1"}
 
         if private:
             signature = self.build_signature(timestamp_ms, method, path, query, body)
@@ -154,37 +155,39 @@ class BitgetDemoClient:
     @staticmethod
     def _list(result: dict[str, Any]) -> list[dict[str, Any]]:
         data = result.get("data") or {}
-        rows = data.get("list") if isinstance(data, dict) else data
-        return rows if isinstance(rows, list) else []
+        if isinstance(data, list):
+            return data
+        if isinstance(data, dict):
+            for key in ("list", "assets", "data"):
+                rows = data.get(key)
+                if isinstance(rows, list):
+                    return rows
+        return []
 
     def account(self, symbol: str = "BTCUSDT") -> dict[str, Any]:
         return self._get(
-            "/api/v2/mix/account/account",
-            {
-                "symbol": symbol,
-                "productType": self.product_type,
-                "marginCoin": self.margin_coin,
-            },
+            "/api/v3/account/assets",
+            {"coin": self.margin_coin},
         )
 
+    def account_settings(self) -> dict[str, Any]:
+        data = self._data(self._get("/api/v3/account/settings"))
+        return data if isinstance(data, dict) else {}
+
     def contract_config(self, symbol: str = "BTCUSDT") -> dict[str, Any]:
-        return self._get(
-            "/api/v2/mix/market/contracts",
-            {
-                "productType": self.product_type,
-                "symbol": symbol,
-            },
+        rows = self._list(
+            self._get(
+                "/api/v3/market/instruments",
+                {"category": self.product_type, "symbol": symbol},
+            )
         )
+        return rows[0] if rows else {}
 
     def positions(self, symbol: str = "BTCUSDT") -> list[dict[str, Any]]:
         return self._list(
             self._get(
-                "/api/v2/mix/position/single-position",
-                {
-                    "symbol": symbol,
-                    "productType": self.product_type,
-                    "marginCoin": self.margin_coin,
-                },
+                "/api/v3/position/current-position",
+                {"category": self.product_type, "symbol": symbol},
             )
         )
 
@@ -197,9 +200,9 @@ class BitgetDemoClient:
     ) -> list[dict[str, Any]]:
         return self._list(
             self._get(
-                "/api/v2/mix/position/history-position",
+                "/api/v3/position/history-position",
                 {
-                    "productType": self.product_type,
+                    "category": self.product_type,
                     "symbol": symbol,
                     "startTime": start_ms,
                     "endTime": end_ms,
@@ -211,9 +214,9 @@ class BitgetDemoClient:
     def orders_history(self, symbol: str = "BTCUSDT", limit: int = 100) -> list[dict[str, Any]]:
         return self._list(
             self._get(
-                "/api/v2/mix/order/orders-history",
+                "/api/v3/trade/history-orders",
                 {
-                    "productType": self.product_type,
+                    "category": self.product_type,
                     "symbol": symbol,
                     "limit": max(1, min(int(limit), 100)),
                 },
@@ -223,12 +226,8 @@ class BitgetDemoClient:
     def order_detail(self, symbol: str, order_id: str) -> dict[str, Any]:
         data = self._data(
             self._get(
-                "/api/v2/mix/order/detail",
-                {
-                    "productType": self.product_type,
-                    "symbol": symbol,
-                    "orderId": order_id,
-                },
+                "/api/v3/trade/order-info",
+                {"orderId": order_id},
             )
         )
         return data if isinstance(data, dict) else {}
@@ -236,9 +235,9 @@ class BitgetDemoClient:
     def fills(self, symbol: str = "BTCUSDT", order_id: str | None = None, limit: int = 100) -> list[dict[str, Any]]:
         return self._list(
             self._get(
-                "/api/v2/mix/order/fills",
+                "/api/v3/trade/fills",
                 {
-                    "productType": self.product_type,
+                    "category": self.product_type,
                     "symbol": symbol,
                     "orderId": order_id,
                     "limit": max(1, min(int(limit), 100)),
@@ -257,20 +256,26 @@ class BitgetDemoClient:
     ) -> dict[str, Any]:
         side = "buy" if str(direction).upper() == "LONG" else "sell"
         payload = {
+            "category": self.product_type,
             "symbol": symbol,
-            "productType": self.product_type,
-            "marginMode": os.getenv("BITGET_MARGIN_MODE", "isolated"),
-            "marginCoin": self.margin_coin,
-            "size": size,
             "side": side,
-            "tradeSide": "open",
             "orderType": "market",
+            "qty": size,
+            "timeInForce": "gtc",
             "clientOid": client_oid,
-            "reduceOnly": "NO",
-            "presetStopSurplusPrice": take_profit,
-            "presetStopLossPrice": stop_loss,
+            "reduceOnly": "no",
+            "marginMode": os.getenv("BITGET_MARGIN_MODE", "isolated"),
+            "takeProfit": take_profit,
+            "stopLoss": stop_loss,
+            "tpTriggerBy": "mark",
+            "slTriggerBy": "mark",
+            "tpOrderType": "market",
+            "slOrderType": "market",
         }
-        return self._post("/api/v2/mix/order/place-order", payload)
+        settings = self.account_settings()
+        if str(settings.get("holdMode", "")).lower() == "hedge_mode":
+            payload["posSide"] = "long" if str(direction).upper() == "LONG" else "short"
+        return self._post("/api/v3/trade/place-order", payload)
 
     @staticmethod
     def extract_order_id(result: dict[str, Any]) -> str:
@@ -288,24 +293,22 @@ class BitgetDemoClient:
 
     def available_balance(self, symbol: str = "BTCUSDT") -> float:
         data = self._data(self.account(symbol))
-        if isinstance(data, dict):
-            for key in ("available", "availableBalance", "crossedMarginAvailable", "usdtAvailable"):
-                value = self.numeric(data.get(key), -1)
-                if value >= 0:
-                    return value
-        if isinstance(data, list):
-            for row in data:
-                if str(row.get("marginCoin", "")).upper() == self.margin_coin:
-                    for key in ("available", "availableBalance", "crossedMarginAvailable"):
-                        value = self.numeric(row.get(key), -1)
-                        if value >= 0:
-                            return value
-        raise BitgetDemoError("Unable to read available USDT balance from Bitget Demo account.")
+        assets = data.get("assets") if isinstance(data, dict) else data
+        if isinstance(assets, list):
+            for row in assets:
+                if str(row.get("coin", "")).upper() != self.margin_coin.upper():
+                    continue
+                for key in ("available", "balance", "availableBalance"):
+                    value = self.numeric(row.get(key), -1)
+                    if value >= 0:
+                        return value
+        raise BitgetDemoError("Unable to read available USDT balance from Bitget UTA Demo account.")
 
     def status(self, symbol: str = "BTCUSDT") -> dict[str, Any]:
         result = {
             "demo_enabled": self.demo,
             "configured": self.configured,
+            "api_version": "UTA_V3",
             "symbol": symbol,
             "product_type": self.product_type,
             "margin_mode": os.getenv("BITGET_MARGIN_MODE", "isolated"),
@@ -315,23 +318,28 @@ class BitgetDemoClient:
             result["reason"] = "Bitget Demo API credentials are not configured."
             return result
         try:
+            settings = self.account_settings()
             positions = self.positions(symbol)
             balance = self.available_balance(symbol)
             result.update({
-                "ready": True,
+                "ready": balance > 0,
                 "available_balance_usdt": round(balance, 4),
+                "hold_mode": settings.get("holdMode"),
+                "account_mode": settings.get("accountMode"),
                 "open_positions": [
                     {
-                        "holdSide": p.get("holdSide"),
-                        "total": p.get("total"),
-                        "openPriceAvg": p.get("openPriceAvg") or p.get("openAvgPrice"),
-                        "unrealizedPL": p.get("unrealizedPL"),
+                        "holdSide": p.get("holdSide") or p.get("posSide"),
+                        "total": p.get("total") or p.get("available") or p.get("positionSize"),
+                        "openPriceAvg": p.get("openPriceAvg") or p.get("openAvgPrice") or p.get("openAvgPx"),
+                        "unrealizedPL": p.get("unrealizedPL") or p.get("unrealisedPnl"),
                         "positionId": p.get("posId") or p.get("positionId"),
                     }
                     for p in positions
-                    if self.numeric(p.get("total"), 0.0) > 0
+                    if self.numeric(p.get("total") or p.get("positionSize") or p.get("available"), 0.0) > 0
                 ],
             })
+            if balance <= 0:
+                result["reason"] = "Bitget Demo futures balance is 0 USDT."
         except Exception as exc:
             result["ready"] = False
             result["reason"] = str(exc)
