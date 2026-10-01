@@ -40,7 +40,7 @@ def test_private_client_is_locked_without_demo_mode():
     os.environ["BITGET_DEMO_TRADING"] = "false"
     try:
         client = BitgetDemoClient("k", "s", "p")
-        assert client.enabled if hasattr(client, "enabled") else True
+        assert client.demo is False
         assert client.configured is False
     finally:
         if old is None:
