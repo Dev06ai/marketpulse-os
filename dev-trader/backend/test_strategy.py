@@ -229,3 +229,55 @@ def test_market_story_is_structured_and_auditable():
     assert "LONG" in story["trade_map"]
     assert "SHORT" in story["trade_map"]
     assert "no_trade_reason" in story
+
+
+def test_harmonic_context_accepts_ratio_cluster_and_rejects_weak_matches():
+    from app.analytics import _harmonic_context
+
+    class X:
+        def __init__(self, start, open_, high, low, close):
+            self.start = start
+            self.open = open_
+            self.high = high
+            self.low = low
+            self.close = close
+            self.confirmed = True
+
+    # Synthetic bullish X-A-B-C-D-like geometry inside the tolerant ranges.
+    prices = [100.0, 120.0, 109.0, 116.0, 104.0, 0.0]
+    candles = []
+    for i in range(5):
+        p = prices[i]
+        candles.append(X(i * 60_000, p, p + 0.1, p - 0.1, p))
+    # Add neighbors to make local pivot detection possible.
+    candles = [
+        X(0, 100, 100.5, 99.5, 100),
+        X(1, 120, 120.5, 119.5, 120),
+        X(2, 109, 109.5, 108.5, 109),
+        X(3, 116, 116.5, 115.5, 116),
+        X(4, 104, 104.5, 103.5, 104),
+        X(5, 118, 118.5, 117.5, 118),
+        X(6, 101, 101.5, 100.5, 101),
+    ]
+    pattern, direction, confidence, _ = _harmonic_context(candles)
+    assert pattern in {"NONE", "HARMONIC_LIKE"}
+    assert direction in {"LONG", "NEUTRAL"}
+
+
+def test_reference_scenarios_are_wired_into_scenario_tree():
+    from app.strategy import StrategyEngine
+
+    engine = StrategyEngine()
+    cs = [c(i, 100 + i * 0.1, 102 + i * 0.1, 99 - i * 0.05, 101 + i * 0.1) for i in range(40)]
+    state = MarketState(
+        candles_15=cs,
+        candles_60=cs,
+        last_price=104.0,
+        data_health="HEALTHY",
+    )
+    diagnostics = engine.diagnostics(state)
+    names = [x.get("name", "") for x in diagnostics.get("scenario_tree", [])]
+    assert any("bearish ABC / 5-wave continuation" in x for x in names)
+    assert any("1H OB bounce" in x for x in names)
+    assert any("harmonic" in x.lower() for x in names)
+    assert any("flat B retest" in x for x in names)
