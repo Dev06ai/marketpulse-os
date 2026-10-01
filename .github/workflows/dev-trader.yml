@@ -125,5 +125,5 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add dev-trader/update.json
-          git commit -m "Publish Dev Trader self-update manifest dev-trader-release-0.11.3-81 [skip ci]" || exit 0
+          git commit -m "Publish Dev Trader self-update manifest dev-trader-release-0.11.4-82 [skip ci]" || exit 0
           git push origin dev-trader-v1
