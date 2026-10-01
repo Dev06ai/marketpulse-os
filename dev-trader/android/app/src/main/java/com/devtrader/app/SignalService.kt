@@ -429,9 +429,30 @@ class SignalService : Service() {
             "TP1_HIT" -> "BTC $direction • TP1 HIT"
             "TP2_HIT" -> "BTC $direction • TP2 HIT"
             "SL_HIT" -> "BTC $direction • STOP / INVALIDATION"
+            "EXECUTION_OPEN" -> "BTC $direction • DEMO TRADE OPENED"
+            "EXECUTION_CLOSED" -> "BTC $direction • DEMO TRADE CLOSED"
+            "EXECUTION_FAILED" -> "BTC $direction • DEMO TRADE FAILED"
             else -> "BTC $direction • " + type.replace('_', ' ')
         }
         var body = "$setup\nPrice $price • Level $level"
+        if (type == "EXECUTION_OPEN") {
+            val entry = event.optDouble("entry_price", Double.NaN)
+            val stop = event.optDouble("stop_loss", Double.NaN)
+            val tp = event.optDouble("take_profit", Double.NaN)
+            body = "$setup\nEntry " + format(entry) + " • SL " + format(stop) + " • TP " + format(tp) + "\nBitget Demo execution"
+        } else if (type == "EXECUTION_CLOSED") {
+            val entry = event.optDouble("entry_price", Double.NaN)
+            val exit = event.optDouble("exit_price", Double.NaN)
+            val pnl = event.optDouble("net_profit_usdt", 0.0)
+            val r = event.optDouble("result_r", Double.NaN)
+            val reason = event.optString("close_reason", "UNKNOWN")
+            body = "$setup\nEntry " + format(entry) + " • Exit " + format(exit) + "\nP&L " +
+                String.format(Locale.US, "%+.2f", pnl) + " USDT • R " +
+                if (r.isFinite()) String.format(Locale.US, "%.2f", r) else "—" +
+                "\nClose " + reason + " • Bitget Demo"
+        } else if (type == "EXECUTION_FAILED") {
+            body = "$setup\nDemo execution failed\n" + event.optString("note", "Unknown execution error.")
+        }
         if (note.isNotBlank()) body += "\n$note"
         if (learning != null) {
             val next = learning.optJSONArray("do_next_time")
