@@ -114,11 +114,11 @@ jobs:
           data = json.loads(p.read_text())
           data.update({
               "enabled": True,
-              "versionCode": 81,
-              "versionName": "0.11.3",
+              "versionCode": 82,
+              "versionName": "0.11.4",
               "apkUrl": "https://github.com/Dev06ai/marketpulse-os/releases/download/dev-trader-v0.11.4-82/app-release.apk",
               "sha256": os.environ["SHA256"],
-              "notes": "Signed Dev Trader release 0.11.3 • persistent connection supervisor"
+              "notes": "Signed Dev Trader release 0.11.4 • Bitget Demo trade history card"
           })
           p.write_text(json.dumps(data, indent=2) + "\n")
           PY
