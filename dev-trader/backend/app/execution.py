@@ -456,48 +456,29 @@ class DemoExecutionEngine:
         return newly_closed
 
     def _safe_status(self, balance: float | None, open_positions: list[dict[str, Any]]) -> dict[str, Any]:
-        status = {
-            "demo_enabled": True,
-            "configured": self.ready,
-            "ready": False,
-            "symbol": self.symbol,
-            "product_type": self.client.product_type,
-            "margin_mode": os.getenv("BITGET_MARGIN_MODE", "isolated"),
-            "open_positions": [
-                {
-                    "holdSide": p.get("holdSide"),
-                    "total": p.get("total"),
-                    "openPriceAvg": p.get("openPriceAvg") or p.get("openAvgPrice"),
-                    "unrealizedPL": p.get("unrealizedPL"),
-                    "positionId": p.get("posId") or p.get("positionId"),
-                }
-                for p in open_positions
-            ],
-        }
+        # Use the UTA diagnostic path so a valid funded Demo account is not
+        # reported as disconnected because one auxiliary endpoint failed.
+        status = self.client.status(self.symbol)
+        status["symbol"] = self.symbol
+        status["product_type"] = self.client.product_type
+        status["margin_mode"] = os.getenv("BITGET_MARGIN_MODE", "isolated")
+        status["open_positions"] = [
+            {
+                "holdSide": p.get("holdSide") or p.get("posSide"),
+                "total": p.get("total") or p.get("positionSize") or p.get("available"),
+                "openPriceAvg": p.get("openPriceAvg") or p.get("openAvgPrice"),
+                "unrealizedPL": p.get("unrealizedPL") or p.get("unrealisedPnl"),
+                "positionId": p.get("posId") or p.get("positionId"),
+            }
+            for p in open_positions
+            if self._num(p.get("total") or p.get("positionSize") or p.get("available"), 0.0) > 0
+        ]
         if balance is not None:
-            available = self._num(balance, 0.0)
-        else:
-            try:
-                available = self._num(self.client.available_balance(self.symbol), 0.0)
-            except Exception as exc:
-                status["balance_error"] = str(exc)
-                status["readiness_reason"] = "Bitget Demo balance check failed."
-                try:
-                    print(f"BITGET_DEMO_BALANCE_ERROR type={type(exc).__name__} reason={str(exc)[:400]}", flush=True)
-                except Exception:
-                    pass
-                available = 0.0
-        status["available_balance_usdt"] = round(available, 4)
-        status["funded"] = available > 0
-        status["ready"] = bool(self.enabled and self.ready and available > 0)
-        if status["ready"]:
-            status["readiness_reason"] = "READY"
-        elif status.get("balance_error"):
-            status["readiness_reason"] = "Bitget Demo balance check failed."
-        elif self.enabled and self.ready and available <= 0:
-            status["readiness_reason"] = "Add Bitget Demo USDT funds to the futures account."
-        else:
-            status["readiness_reason"] = "Bitget Demo API credentials are not configured."
+            status["available_balance_usdt"] = round(self._num(balance, 0.0), 4)
+            status["funded"] = status["available_balance_usdt"] > 0
+            if status["funded"] and status.get("ready") is not True:
+                status["ready"] = True
+                status["reason"] = "READY"
         return status
 
     def _local_demo_trades(self) -> list[dict[str, Any]]:
