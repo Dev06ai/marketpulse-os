@@ -2456,14 +2456,17 @@ class StrategyEngine:
         self._multi_cycle_events = []
         if os.getenv("BITGET_DEMO_TRADING", "false").lower() in {"1", "true", "yes", "on"}:
             return
+        legacy_single = False
         if not self.active_signals and self.active_signal and self.signal_status == "ACTIVE":
             sid = str(self.active_signal.get("id") or "legacy-active")
             self.active_signals[sid] = self.active_signal
+            legacy_single = True
         if not self.active_signals or state.last_price is None:
             return
 
         resolved_ids = set()
         latest_event = None
+        legacy_signal = self.active_signal
 
         for signal_id in list(self.active_signals.keys()):
             signal = self.active_signals.get(signal_id)
@@ -2488,6 +2491,18 @@ class StrategyEngine:
                 key=lambda row: int(row.get("created_ts") or 0),
             )
             self.signal_status = "ACTIVE"
+        elif legacy_single and latest_event:
+            self.active_signal = legacy_signal
+            self.signal_status = str(latest_event.get("event", {}).get("type") or self.signal_status)
+            # Preserve the legacy single-signal terminal status expected by
+            # direct lifecycle callers/tests while production uses active_signals.
+            self.signal_status = (
+                "TARGET_REACHED"
+                if latest_event.get("event", {}).get("type") == "TP2_HIT"
+                else "INVALIDATED"
+                if latest_event.get("event", {}).get("type") == "SL_HIT"
+                else self.signal_status
+            )
         else:
             self.active_signal = None
             self.signal_status = "NONE"
