@@ -369,8 +369,12 @@ class DemoExecutionEngine:
         newly_closed: list[dict[str, Any]] = []
         reconciliation_warnings: list[str] = []
         try:
-            positions = await self._current_positions()
             now = int(time.time() * 1000)
+            try:
+                positions = await self._current_positions()
+            except Exception as exc:
+                positions = []
+                reconciliation_warnings.append(f"current_positions: {exc}")
             position_rows = [p for p in positions if self._num(p.get("total"), 0.0) > 0]
 
             # Bitget UTA v3 limits historical order/fill queries to a maximum
