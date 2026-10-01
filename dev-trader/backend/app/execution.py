@@ -271,12 +271,19 @@ class DemoExecutionEngine:
                 self.data["trades"] = self.data["trades"][:500]
                 self._daily_count += 1
                 self.data["last_event"] = {
-                    "key": f"EXECUTION_OPEN:{client_oid}",
-                    "type": "EXECUTION_OPEN",
+                    "key": f"EXECUTION_PENDING:{client_oid}",
+                    "type": "EXECUTION_PENDING",
                     "execution_id": client_oid,
+                    "signal_id": trade.get("signal_id"),
                     "direction": trade["direction"],
                     "setup": trade["setup"],
                     "status": "ORDER_PENDING",
+                    "entry_plan": entry_plan,
+                    "entry_price": 0.0,
+                    "stop_loss": stop,
+                    "take_profit": tp,
+                    "requested_qty": qty,
+                    "actual_fill_confirmed": False,
                     "ts": now,
                 }
                 self._save()
@@ -334,17 +341,45 @@ class DemoExecutionEngine:
                 if avg > 0:
                     trade["entry_price"] = avg
                 if status in {"filled", "full_fill", "full-filled"} or filled > 0:
+                    # The exchange fill is the single source of truth for the
+                    # executed entry. Keep the original signal entry separately
+                    # as entry_plan so the UI never confuses a plan with a fill.
                     trade["status"] = "OPEN"
+                    trade["entry_price"] = avg if avg > 0 else self._num(trade.get("entry_price") or trade.get("entry_plan"))
+                    trade["filled_qty"] = filled if filled > 0 else self._num(trade.get("filled_qty") or trade.get("requested_qty"))
+                    trade["exit_price"] = 0.0
+                    trade["closed_ts"] = 0
+                    trade["close_reason"] = ""
+                    trade["actual_fill_confirmed"] = True
                     trade["exchange_order_detail"] = detail
                     trade["last_exchange_ts"] = int(time.time() * 1000)
+                    fill_ts = trade["last_exchange_ts"]
+                    fill_event = {
+                        "key": f"EXECUTION_OPEN:{execution_id}:{fill_ts}",
+                        "type": "EXECUTION_OPEN",
+                        "execution_id": execution_id,
+                        "signal_id": trade.get("signal_id"),
+                        "direction": trade["direction"],
+                        "setup": trade.get("setup"),
+                        "status": "OPEN",
+                        "entry_plan": self._num(trade.get("entry_plan")),
+                        "entry_price": trade["entry_price"],
+                        "stop_loss": self._num(trade.get("stop_loss")),
+                        "take_profit": self._num(trade.get("take_profit")),
+                        "filled_qty": trade["filled_qty"],
+                        "actual_fill_confirmed": True,
+                        "ts": fill_ts,
+                        "note": "Bitget Demo market order filled; actual exchange fill price is authoritative.",
+                    }
+                    with self.lock:
+                        self.data["last_event"] = fill_event
+                        self._save()
                     self.learning.record_event(
                         trade["signal_snapshot"],
                         "EXECUTION_OPEN",
                         trade["entry_price"] or trade["entry_plan"],
                         "Bitget Demo order filled.",
                     )
-                    with self.lock:
-                        self._save()
                     return
                 if status in {"cancelled", "canceled", "rejected"}:
                     trade["status"] = "FAILED"
@@ -420,6 +455,10 @@ class DemoExecutionEngine:
                         current.get("openPriceAvg") or current.get("openAvgPrice"),
                         self._num(trade.get("entry_price") or trade.get("entry_plan"))
                     )
+                    trade["exit_price"] = 0.0
+                    trade["closed_ts"] = 0
+                    trade["close_reason"] = ""
+                    trade["actual_fill_confirmed"] = True
                     trade["unrealized_pnl_usdt"] = self._num(current.get("unrealizedPL"))
                     trade["funding_usdt"] = abs(self._num(current.get("totalFee") or current.get("deductedFee")))
                     continue
