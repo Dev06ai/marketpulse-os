@@ -16,6 +16,7 @@ from .push import PushService
 from .analytics import compute_features
 from .risk import calculate_risk
 from .backtest import run_walk_forward
+from .execution import DemoExecutionEngine
 
 load_dotenv()
 
@@ -27,6 +28,7 @@ client_failures = {}
 state = MarketState(symbol=SYMBOL)
 engine = StrategyEngine()
 bridge = MarketPulseBridge()
+execution = DemoExecutionEngine(engine.learning, bridge=bridge)
 push = PushService()
 stream = None
 server_started_ms = int(time.time() * 1000)
@@ -110,7 +112,8 @@ def mobile_payload():
             "body": last_opportunity_alert.get("body", ""),
             "ts": last_opportunity_alert.get("ts", 0),
         },
-        "trade_event": dict(last_trade_event),
+        "trade_event": dict(last_trade_event) if last_trade_event else (execution.snapshot().get("last_event") or {}),
+        "execution": execution.snapshot(),
         "learning": diag.get("learning", {}),
         "learning_context": diag.get("learning_context"),
         "upstream": {
@@ -247,6 +250,12 @@ async def on_state(s: MarketState):
                     )
                 )
 
+        execution_event = execution.snapshot().get("last_event") or {}
+        if execution_event and execution_event.get("key") != last_trade_event.get("key"):
+            last_trade_event = dict(execution_event)
+            if push.ready and not clients:
+                push.send_trade_event(execution_event)
+
         if sig:
             signal_payload = sig.to_dict()
             if bridge.enabled:
@@ -258,6 +267,8 @@ async def on_state(s: MarketState):
                 )
             if not clients:
                 push.send_signal(signal_payload)
+            if execution.enabled and execution.ready:
+                asyncio.create_task(execution.handle_signal(signal_payload))
 
 
 async def setup_memory_refresh_loop():
@@ -319,6 +330,7 @@ async def lifespan(app: FastAPI):
         asyncio.create_task(stream.rest_fallback_loop()),
         asyncio.create_task(broadcast_loop()),
         asyncio.create_task(setup_memory_refresh_loop()),
+        asyncio.create_task(execution.run()),
     ]
     yield
     stream.stop = True
@@ -428,6 +440,31 @@ async def features():
     return compute_features(state).__dict__
 
 
+@app.get("/trades")
+async def trades(limit: int = 100):
+    if execution.enabled and execution.ready:
+        await execution.sync()
+    return {
+        "mode": "BITGET_DEMO",
+        "summary": execution.summary(),
+        "trades": execution.history(limit),
+    }
+
+
+@app.get("/trades/summary")
+async def trades_summary():
+    if execution.enabled and execution.ready:
+        await execution.sync()
+    return execution.summary()
+
+
+@app.get("/execution/status")
+async def execution_status():
+    if execution.enabled and execution.ready:
+        await execution.sync()
+    return execution.snapshot()
+
+
 @app.get("/signal-history")
 async def signal_history():
     return {
@@ -444,7 +481,8 @@ async def learning():
     return {
         "summary": engine.learning.summary(),
         "context": engine.learning.context(engine.active_signal) if engine.active_signal else None,
-        "manual_execution_only": True,
+        "manual_execution_only": not execution.enabled,
+        "demo_execution": execution.snapshot(),
     }
 
 
@@ -488,8 +526,9 @@ async def system_check():
             "strategy": {
                 "status": str(diag.get("status", "UNKNOWN")),
                 "wait_reason": str(diag.get("wait_reason", "")),
-                "manual_execution_only": bool(diag.get("manual_execution_only", True)),
+                "manual_execution_only": bool(diag.get("manual_execution_only", not execution.enabled)),
                 "signal_state": engine.signal_status,
+                "demo_execution": execution.snapshot(),
                 "last_evaluated_ts": engine.last_evaluated_ts,
             },
             "heartbeat": heartbeat,
@@ -587,6 +626,9 @@ async def app_config():
             "signal_lifecycle": True,
             "trade_milestones": True,
             "adaptive_learning": True,
+            "demo_execution": True,
+            "trade_history": True,
+            "execution_learning": True,
             "replay": True,
             "journal": True,
         },
@@ -598,7 +640,8 @@ async def config():
     return {
         "symbol": SYMBOL,
         "snapshot_seconds": SNAPSHOT,
-        "manual_execution_only": True,
+        "manual_execution_only": not execution.enabled,
+        "demo_execution_enabled": execution.enabled,
         "min_rr": float(os.getenv("MIN_RR", str(engine.last_diagnostics.get("min_rr", 2.0))),
         ),
         "min_confidence": float(os.getenv("MIN_CONFIDENCE", str(engine.last_diagnostics.get("min_confidence", 0.52))),
