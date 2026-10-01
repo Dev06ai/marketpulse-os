@@ -253,6 +253,8 @@ async def on_state(s: MarketState):
         execution_event = execution.snapshot().get("last_event") or {}
         if execution_event and execution_event.get("key") != last_trade_event.get("key"):
             last_trade_event = dict(execution_event)
+            if execution_event.get("type") == "EXECUTION_CLOSED":
+                engine.resolve_external_execution(execution_event)
             if push.ready and not clients:
                 push.send_trade_event(execution_event)
 
