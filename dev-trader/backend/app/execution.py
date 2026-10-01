@@ -424,7 +424,18 @@ class DemoExecutionEngine:
             positions = []
         active_positions = [row for row in positions if self._num(row.get("total"), 0.0) > 0]
         if active_positions:
-            await self._close_existing_positions(active_positions)
+            try:
+                mode = str((await asyncio.to_thread(self.client.account_settings)).get("holdMode") or "").lower()
+            except Exception:
+                mode = ""
+            if mode == "hedge_mode":
+                old_side = "SHORT" if new_direction == "LONG" else "LONG"
+                active_positions = [
+                    row for row in active_positions
+                    if self._direction_from_position(row) == old_side
+                ]
+            if active_positions:
+                await self._close_existing_positions(active_positions)
             await self.sync()
         return {"action": "REVERSE", "reason": "; ".join(reasons)}
 
