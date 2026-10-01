@@ -1526,7 +1526,8 @@ class StrategyEngine:
         radar.sort(key=lambda x: (-x["score"], 0 if x["tier"] == "CONFIRMED" else 1))
         return radar
     def _build_reference_scenarios(self, state: MarketState, f: MarketFeatures) -> list[dict]:
-        """Translate the uploaded TradingView examples into dynamic watch states."""
+        """Translate reference-video concepts into dynamic watch states."""
+        video_training = MARKET_KNOWLEDGE.get("video_reference_training", {}) or {}
         if state.last_price is None:
             return []
 
@@ -1662,6 +1663,39 @@ class StrategyEngine:
             "invalidation": "Body-close acceptance outside the range plus retest confirmation.",
         })
 
+        wave_c_state = "WATCH"
+        wave_c_reason = "Waiting for a lower confluence zone and reversal confirmation."
+        if lower is not None and near(lower, 0.65) and bearish_context:
+            wave_c_state = "ARMED"
+            wave_c_reason = "Price is approaching a dynamic 1H/daily-support cluster that can host a Wave-C or Wave-5 completion."
+        if (
+            lower is not None
+            and near(lower, 0.50)
+            and bearish_context
+            and (
+                f.cvd_price_divergence == "BULLISH"
+                or f.market_structure == "BULLISH"
+                or f.harmonic_direction == "LONG"
+            )
+        ):
+            wave_c_state = "DEVELOPING"
+            wave_c_reason = "Lower confluence is being reached with early reversal evidence; wait for bullish MSS/reclaim before promotion."
+        scenarios.append({
+            "name": "Video reference: Wave-C / Wave-5 confluence completion",
+            "direction": "LONG",
+            "state": wave_c_state,
+            "setup_family": "confluence_bottom",
+            "reason": wave_c_reason,
+            "trigger": "Liquidity sweep or rejection in the confluence zone followed by bullish MSS, reclaim and supportive CVD/OI/order-flow context.",
+            "target_ladder": [x for x in [upper, daily_high] if x is not None][:3],
+            "invalidation": "Clean acceptance through the confluence zone or continuation with no reversal structure.",
+            "source": "video_reference_training",
+            "training_loaded": bool(video_training),
+        })
+
+        for scenario in scenarios:
+            scenario["source"] = scenario.get("source", "video_reference_training")
+            scenario["training_loaded"] = bool(video_training)
         return scenarios
 
     def _build_scenarios(self, state: MarketState, f: MarketFeatures, radar: list[dict]) -> list[dict]:
@@ -1910,6 +1944,10 @@ class StrategyEngine:
                 "harmonic_confidence": round(f0.harmonic_confidence, 3),
                 "harmonic_reason": f0.harmonic_reason,
                 "reference_scenario_training": MARKET_KNOWLEDGE.get("reference_scenario_training", {}).get("source", "loaded"),
+                "video_reference_training": bool(MARKET_KNOWLEDGE.get("video_reference_training")),
+                "video_reference_lessons": len(
+                    MARKET_KNOWLEDGE.get("video_reference_training", {}).get("lessons", []) or []
+                ),
                 "previous_day_high": f0.previous_day_high,
                 "previous_day_low": f0.previous_day_low,
                 "previous_week_high": f0.previous_week_high,
