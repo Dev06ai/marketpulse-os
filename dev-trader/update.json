@@ -1,8 +1,8 @@
 {
   "enabled": true,
-  "versionCode": 83,
-  "versionName": "0.11.5",
-  "apkUrl": "https://github.com/Dev06ai/marketpulse-os/releases/download/dev-trader-v0.11.5-83/app-release.apk",
-  "sha256": "4c1d18fb2436734c09ccb89d819836a323e9f460575c37e36be421f84bb21f17",
-  "notes": "Signed Dev Trader release 0.11.5 \u2022 Bitget Demo funding readiness"
+  "versionCode": 84,
+  "versionName": "0.11.6",
+  "apkUrl": "https://github.com/Dev06ai/marketpulse-os/releases/download/dev-trader-v0.11.6-84/app-release.apk",
+  "sha256": "fc5a47eec66fc6b71c0abbe11e795ff77e2faacf7cbdf856ea0efba75a1783ff",
+  "notes": "Signed Dev Trader release 0.11.6 \u2022 Bitget Demo environment diagnostics"
 }
