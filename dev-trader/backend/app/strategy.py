@@ -1407,7 +1407,7 @@ class StrategyEngine:
             if forming is None
             else (3.00 if body_fraction >= 0.55 else 99.0)
         )
-        if move_atr > extension_threshold:
+        if move_atr >= extension_threshold:
             return {
                 "status": "EXTENDED",
                 "direction": direction,
@@ -1457,7 +1457,7 @@ class StrategyEngine:
         # Notify early through the radar, but never chase a mature impulse.
         # A trade candidate must come from the first expansion or a clean retest.
         extension_threshold = float(ctx.get("extension_threshold") or 3.00)
-        if float(ctx.get("move_atr") or 0.0) > extension_threshold:
+        if float(ctx.get("move_atr") or 0.0) >= extension_threshold:
             return None
 
         direction = str(ctx.get("direction") or "").upper()
