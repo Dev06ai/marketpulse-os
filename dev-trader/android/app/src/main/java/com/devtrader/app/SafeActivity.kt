@@ -146,6 +146,16 @@ class SafeActivity : Activity() {
             .build()
     }
 
+    // REST requests must never inherit the WebSocket client's infinite read timeout.
+    // A stalled HTTP request previously could hold bootstrapInFlight forever and
+    // leave the UI parked on DATA RECOVERY after returning to the app.
+    private val restClient by lazy {
+        client.newBuilder()
+            .readTimeout(8, TimeUnit.SECONDS)
+            .callTimeout(12, TimeUnit.SECONDS)
+            .build()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         WindowCompat.setDecorFitsSystemWindows(window, true)
@@ -978,7 +988,12 @@ class SafeActivity : Activity() {
             bootstrap(false)
         }
 
-        if ((stateAge > 12000L || socketAge > 15000L) &&
+        // Do not tear down a healthy REST-backed market feed merely because
+        // the WebSocket has been quiet. Rebuild the socket only when the actual
+        // market state is stale; this prevents the reconnect loop from fighting
+        // the HTTP fallback after Android resumes from background.
+        if (stateAge > 12000L &&
+            socketAge > 15000L &&
             now - lastSocketRebuildMs > 10000L
         ) {
             lastSocketRebuildMs = now
@@ -1355,7 +1370,7 @@ class SafeActivity : Activity() {
 
     private fun getJson(url: String, callback: (Boolean, String) -> Unit) {
         runCatching {
-            client.newCall(
+            restClient.newCall(
                 Request.Builder()
                     .url(url)
                     .get()
@@ -1381,9 +1396,19 @@ class SafeActivity : Activity() {
     override fun onStart() {
         super.onStart()
         stopped = false
+
+        // Always rebuild the market snapshot when the activity returns to the
+        // foreground. A previously-open socket can survive while its stream data
+        // has gone stale, so connect() alone is not enough.
+        handler.postDelayed({
+            safe { bootstrap(true) }
+        }, 150L)
         handler.postDelayed({
             safe { connect() }
-        }, 300L)
+        }, 450L)
+        handler.postDelayed({
+            safe { watchdog() }
+        }, 1800L)
     }
 
     override fun onDestroy() {
