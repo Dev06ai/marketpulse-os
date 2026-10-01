@@ -9,8 +9,8 @@ android {
         applicationId = "com.devtrader.app"
         minSdk = 26
         targetSdk = 37
-        versionCode = (providers.gradleProperty("devTraderVersionCode").orNull ?: "86").toInt()
-        versionName = providers.gradleProperty("devTraderVersionName").orNull ?: "0.11.8"
+        versionCode = (providers.gradleProperty("devTraderVersionCode").orNull ?: "87").toInt()
+        versionName = providers.gradleProperty("devTraderVersionName").orNull ?: "0.11.9"
     }
     signingConfigs {
         create("devTraderRelease") {
