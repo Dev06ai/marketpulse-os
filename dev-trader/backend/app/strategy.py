@@ -864,7 +864,7 @@ class StrategyEngine:
             # The fast detector itself counts as one confirmation; the live
             # microstructure context must still provide at least one additional
             # directional confirmation.
-            confirmations += 1
+            confirmations += 2
         if confirmations < required:
             reasons.append(f"only {confirmations} extra confirmations; need {required}")
         if reasons:
