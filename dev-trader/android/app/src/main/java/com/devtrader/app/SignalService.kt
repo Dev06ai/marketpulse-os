@@ -319,9 +319,6 @@ class SignalService : Service() {
                                             put("client_ts", System.currentTimeMillis())
                                         }.toString()
                                     )
-                                    if (!marketWs && dataHealth == "DEGRADED") {
-                                        updateServiceNotification("Market feed on REST fallback")
-                                    }
                                 }
                             } else if (!stopped && staleChecks >= 3) {
                                 updateServiceNotification("Live feed reconnecting…")
