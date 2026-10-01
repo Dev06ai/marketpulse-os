@@ -610,7 +610,9 @@ async def app_config():
         "client_updates": "verified-in-app-apk-update",
         "update_manifest_url": "https://raw.githubusercontent.com/Dev06ai/marketpulse-os/dev-trader-v1/dev-trader/update.json",
         "engine_updates": "remote-render",
-        "manual_execution_only": True,
+        "manual_execution_only": not execution.enabled,
+        "demo_auto_execution": bool(execution.enabled and execution.ready),
+        "live_money_execution": False,
         "remote_strategy_updates": True,
         "remote_tunables": [
             "MIN_RR", "MIN_CONFIDENCE", "MAX_RISK_PCT", "SNAPSHOT_SECONDS",
