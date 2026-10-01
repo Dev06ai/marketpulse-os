@@ -1339,8 +1339,15 @@ class SafeActivity : Activity() {
             .put("confidence", signalObj.optDouble("confidence"))
 
         val key = journalKey(item)
+        var exists = false
+        for (i in 0 until cleaned.length()) {
+            if (journalKey(cleaned.optJSONObject(i) ?: JSONObject()) == key) {
+                exists = true
+                break
+            }
+        }
         val next = JSONArray()
-        if (!cleaned.asSequence().any { journalKey(it) == key }) next.put(item)
+        if (!exists) next.put(item)
         for (i in 0 until minOf(cleaned.length(), 24)) next.put(cleaned.optJSONObject(i))
         journalPrefs().edit().putString("items", next.toString()).apply()
     }
