@@ -28,6 +28,11 @@ class DemoExecutionEngine:
         self.risk_pct = float(os.getenv("BITGET_DEMO_RISK_PCT", "0.25"))
         self.max_notional = float(os.getenv("BITGET_DEMO_MAX_NOTIONAL_USDT", "500"))
         self.max_daily = int(os.getenv("BITGET_DEMO_MAX_DAILY_TRADES", "3"))
+        # Every actual StrategyEngine signal is an execution instruction.
+        # When a demo position is already open, close/replace it first rather
+        # than silently skipping the new signal. This keeps one active Bitget
+        # position while ensuring every emitted trade call is acted upon.
+        self.replace_position_on_signal = os.getenv("BITGET_DEMO_REPLACE_ON_SIGNAL", "true").lower() == "true"
         self.sync_seconds = max(3.0, float(os.getenv("BITGET_EXECUTION_SYNC_SECONDS", "5")))
         self.path = Path(os.getenv("BITGET_EXECUTION_STATE_FILE", "/tmp/dev_trader_execution.json"))
         self.lock = threading.RLock()
@@ -177,11 +182,15 @@ class DemoExecutionEngine:
             return False, "Demo execution disabled."
         if not self.ready:
             return False, "Bitget Demo API credentials are not configured."
+        signal_id = str(signal.get("id") or "").strip()
+        if signal_id and any(
+            str(row.get("signal_id") or "").strip() == signal_id
+            for row in self.data.get("trades", [])
+        ):
+            return False, "This signal has already been submitted to Bitget Demo."
         self._rotate_day()
         if self._daily_count >= self.max_daily:
             return False, "Demo daily execution cap reached."
-        if self._open_local_trade():
-            return False, "An executed demo trade is already active."
         direction = str(signal.get("direction", "")).upper()
         grade = str(signal.get("grade", "")).upper()
         rr = self._num(signal.get("rr"))
@@ -199,19 +208,36 @@ class DemoExecutionEngine:
         return True, ""
 
     async def handle_signal(self, signal: dict[str, Any]) -> dict[str, Any]:
+        # Sync first so a just-closed position is not mistaken for an active one.
+        try:
+            await self.sync()
+        except Exception:
+            pass
+
         allowed, reason = self._signal_allowed(signal)
         if not allowed:
             return {"ok": False, "skipped": True, "reason": reason}
 
-        # Reconcile the exchange before opening anything. A service restart must
-        # never cause Dev Trader to double-open a position.
+        # Every emitted StrategyEngine signal is actionable. Keep one active
+        # Bitget position, but replace an existing position rather than silently
+        # dropping the new setup. This covers same-direction re-entries and
+        # direction flips while preserving deterministic single-position risk.
         try:
             positions = await self._current_positions()
         except Exception as exc:
             return {"ok": False, "reason": f"Unable to verify Bitget position: {exc}"}
 
-        if any(self._num(row.get("total"), 0.0) > 0 for row in positions):
-            return {"ok": False, "skipped": True, "reason": "Bitget already has an open futures position."}
+        if self.replace_position_on_signal:
+            existing = [
+                row for row in positions
+                if self._num(row.get("total"), 0.0) > 0
+            ]
+            if existing:
+                try:
+                    await self._close_existing_positions(existing)
+                    await self.sync()
+                except Exception as exc:
+                    return {"ok": False, "reason": f"Unable to replace existing Bitget Demo position: {exc}"}
 
         try:
             qty, risk_usdt, config = await self._risk_size(signal)
@@ -323,6 +349,47 @@ class DemoExecutionEngine:
                 }
                 self._save()
             return {"ok": False, "reason": str(exc)}
+
+    async def _close_existing_positions(self, positions: list[dict[str, Any]]):
+        """Close all currently open Bitget Demo positions before a new signal."""
+        close_orders = []
+        for row in positions:
+            qty = self._num(
+                row.get("total")
+                or row.get("positionSize")
+                or row.get("available"),
+                0.0,
+            )
+            if qty <= 0:
+                continue
+            direction = self._direction_from_position(row)
+            if direction not in {"LONG", "SHORT"}:
+                continue
+            config = await self._contract()
+            formatted_qty = self._format_qty(qty, config)
+            if formatted_qty == "0":
+                continue
+            client_oid = f"DTDEMO-CLOSE-{int(time.time() * 1000) % 100000000}"
+            result = await asyncio.to_thread(
+                self.client.place_market_close,
+                self.symbol,
+                direction,
+                formatted_qty,
+                client_oid,
+            )
+            close_orders.append((client_oid, self.client.extract_order_id(result)))
+
+        if not close_orders:
+            return
+
+        # Market close requests are accepted asynchronously. Wait briefly for
+        # Bitget's position endpoint to show zero before opening the replacement.
+        for _ in range(20):
+            await asyncio.sleep(0.35)
+            current = await self._current_positions()
+            if not any(self._num(r.get("total"), 0.0) > 0 for r in current):
+                return
+        raise BitgetDemoError("Bitget Demo position did not fully close before the replacement signal.");
 
     async def _poll_fill(self, execution_id: str):
         trade = self._trade_by_id(execution_id)
