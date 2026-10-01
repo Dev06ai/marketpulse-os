@@ -99,6 +99,7 @@ class SafeActivity : Activity() {
     private var lastChartRequestMs = 0L
     private var chartRequestInFlight = false
     private var lastBootstrapMs = 0L
+    private var lastBootstrapSuccessMs = 0L
     private var bootstrapInFlight = false
     private var retryButton: Button? = null
     private var networkCallback: ConnectivityManager.NetworkCallback? = null
@@ -644,16 +645,19 @@ class SafeActivity : Activity() {
             handler.post {
                 bootstrapInFlight = false
                 if (!ok) {
-                    if (lastStateReceivedMs == 0L) {
-                        status.text = "BACKEND SYNC FAILED"
-                        integrity.text = "HTTP  •  UNAVAILABLE  •  RETRYING"
+                    val nowFail = System.currentTimeMillis()
+                    if (lastBootstrapSuccessMs == 0L || nowFail - lastBootstrapSuccessMs > 10_000L) {
+                        status.text = if (socket == null) "RECONNECTING…" else "SYNCING…"
+                        integrity.text = "HTTP  •  SNAPSHOT FAILED  •  RETRYING"
                     }
                     return@post
                 }
                 safe {
                     val root = JSONObject(body)
                     latestRoot = root
-                    lastStateReceivedMs = System.currentTimeMillis()
+                    val receivedAt = System.currentTimeMillis()
+                    lastStateReceivedMs = receivedAt
+                    lastBootstrapSuccessMs = receivedAt
                     renderState(root, requestChart = false)
                     val chartObj = root.optJSONObject("chart")
                     val candles = chartObj?.optJSONArray("candles") ?: JSONArray()
@@ -980,11 +984,14 @@ class SafeActivity : Activity() {
         val socketAge = if (lastSocketActivityMs == 0L) Long.MAX_VALUE
             else now - lastSocketActivityMs
 
-        // HTTP bootstrap is the hard fallback: the UI must recover even when the
-        // WebSocket transport is unavailable or the phone changes networks.
+        // HTTP bootstrap is the hard fallback. Do not label the UI DATA RECOVERY
+        // merely because WebSocket messages are momentarily quiet: a successful
+        // HTTP snapshot is a valid live market state.
         if (stateAge > 5000L) {
-            integrity.text = "Feed  •  RECOVERING •  HTTP SNAPSHOT ACTIVE"
-            status.text = "DATA RECOVERY"
+            val bootstrapFresh = lastBootstrapSuccessMs > 0L && now - lastBootstrapSuccessMs <= 10_000L
+            if (!bootstrapFresh) {
+                integrity.text = "Feed  •  REFRESHING •  HTTP SNAPSHOT"
+            }
             bootstrap(false)
         }
 
@@ -993,6 +1000,7 @@ class SafeActivity : Activity() {
         // market state is stale; this prevents the reconnect loop from fighting
         // the HTTP fallback after Android resumes from background.
         if (stateAge > 12000L &&
+            (lastBootstrapSuccessMs == 0L || now - lastBootstrapSuccessMs > 10_000L) &&
             socketAge > 15000L &&
             now - lastSocketRebuildMs > 10000L
         ) {
