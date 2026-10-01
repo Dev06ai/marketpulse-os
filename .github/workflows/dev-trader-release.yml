@@ -2,10 +2,9 @@ name: Dev Trader Release
 
 on:
   push:
-    tags:
-      - "dev-trader-v*"
     branches:
       - "dev-trader-release-*"
+  workflow_dispatch:
 
 permissions:
   contents: write
