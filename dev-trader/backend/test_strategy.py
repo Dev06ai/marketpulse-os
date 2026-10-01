@@ -336,7 +336,15 @@ def test_fast_move_radar_mentions_momentum_in_large_move():
         cl = price + 25.0
         candles.append(c5(i, price, cl + 3.0, price - 3.0, cl, 100.0))
         price = cl
-    candles[-1] = c5(17, candles[-2].close, candles[-2].close + 1100.0, candles[-2].close - 5.0, candles[-2].close + 1000.0, 300.0, False)
+    candles[-1] = c5(
+        17,
+        candles[-2].close,
+        candles[-2].close + 320.0,
+        candles[-2].close - 5.0,
+        candles[-2].close + 280.0,
+        300.0,
+        False,
+    )
 
     state = MarketState(
         candles_5=candles,
