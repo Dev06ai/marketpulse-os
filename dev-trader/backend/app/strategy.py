@@ -1,49 +1,645 @@
-    def _rehydrate_signal_governor(self):
-        """Restore the daily quota, cooldown, and active-signal lock after restart."""
-        self._rotate_governor_day()
-        try:
-            trades = list(self.learning.recent_trades())
-        except Exception:
-            trades = []
-        active = None
-        daily = 0
-        last_resolved = 0
-        now = int(time.time() * 1000)
-        day = self.signal_day_utc
-        for row in trades:
-            opened = int(row.get("opened_ts") or 0)
-            resolved = int(row.get("resolved_ts") or 0)
-            if opened:
-                opened_day = datetime.fromtimestamp(opened / 1000, tz=timezone.utc).date().isoformat()
-                if opened_day == day:
-                    daily += 1
-            if resolved:
-                last_resolved = max(last_resolved, resolved)
-            if str(row.get("status") or "").upper() == "ACTIVE" and opened:
-                active = row
-        self.daily_signal_count = min(daily, _quality_max_daily())
-        self.last_resolved_ts = last_resolved
-        if active:
-            self.active_signal = {
-                "id": active.get("id"),
-                "direction": active.get("direction"),
-                "setup": active.get("setup"),
-                "entry": active.get("entry"),
-                "stop": active.get("stop"),
-                "target1": active.get("target1"),
-                "target2": active.get("target2"),
-                "rr": active.get("rr"),
-                "timeframe": active.get("timeframe"),
-                "created_ts": active.get("opened_ts"),
-                "lifecycle": "ACTIVE",
-                "lifecycle_stage": "ACTIVE",
-            }
-            self.signal_status = "ACTIVE"
-            self.last_signal_id = active.get("id")
-            self.governor_lock_reason = "An unresolved signal is still active."
-        else:
-            self.active_signal = None
-            self.signal_status = "NONE"
+from dataclasses import dataclass
+from datetime import datetime, timezone
+from typing import Optional
+import os
+import time
+
+from .analytics import MarketFeatures, compute_features
+from .models import Candle, MarketState
+from .knowledge import RULES, MARKET_KNOWLEDGE, knowledge_summary
+from .learning import AdaptiveLearning
+
+
+@dataclass
+class Signal:
+    id: str
+    direction: str
+    setup: str
+    entry: float
+    stop: float
+    target1: float
+    target2: float
+    rr: float
+    confidence: float
+    grade: str
+    regime: str
+    invalidation: str
+    thesis: list[str]
+    evidence: dict
+    timeframe: str
+    trade_style: str
+    style_reason: str
+
+    def to_dict(self):
+        return self.__dict__
+
+
+def pivots(candles: list[Candle], window: int = 2):
+    highs, lows = [], []
+    for i in range(window, len(candles) - window):
+        c = candles[i]
+        if c.high >= max(x.high for x in candles[i-window:i+window+1]):
+            highs.append((i, c.high))
+        if c.low <= min(x.low for x in candles[i-window:i+window+1]):
+            lows.append((i, c.low))
+    return highs, lows
+
+
+def rr(entry: float, stop: float, target: float) -> float:
+    risk = abs(entry - stop)
+    reward = abs(target - entry)
+    return reward / risk if risk else 0.0
+
+
+def _min_rr() -> float:
+    return float(os.getenv("MIN_RR", str(RULES["risk"]["preferred_min_rr"])))
+
+def _min_confidence() -> float:
+    return float(os.getenv("MIN_CONFIDENCE", str(RULES.get("scan", {}).get("min_confidence", 0.44))))
+
+def _quality_rules() -> dict:
+    return dict((RULES.get("signal_policy", {}).get("quality_governor", {}) or {}))
+
+def _quality_max_daily() -> int:
+    return max(1, int(os.getenv(
+        "MAX_DAILY_SIGNALS",
+        str(_quality_rules().get("max_signals_per_utc_day", 3)),
+    )))
+
+def _quality_cooldown_ms() -> int:
+    minutes = float(os.getenv(
+        "SIGNAL_COOLDOWN_MINUTES",
+        str(_quality_rules().get("cooldown_minutes_after_resolution", 120)),
+    ))
+    return max(0, int(minutes * 60_000))
+
+def _quality_min_confidence() -> float:
+    return float(os.getenv(
+        "QUALITY_MIN_CONFIDENCE",
+        str(_quality_rules().get("min_confidence", 0.70)),
+    ))
+
+def _quality_min_rr() -> float:
+    return float(os.getenv(
+        "QUALITY_MIN_RR",
+        str(_quality_rules().get("min_rr", 3.0)),
+    ))
+
+
+def _trade_style(direction: str, setup: str, timeframe: str, f: MarketFeatures) -> tuple[str, str]:
+    """Classify the setup before choosing stop/targets.
+
+    SCALP = fast 5m/15m reaction or mixed higher-timeframe context.
+    SWING = 15m setup with aligned 1h and 4h context, or a broader continuation.
+    """
+    setup_upper = str(setup).upper()
+    tf = str(timeframe).lower()
+    if "FAST" in setup_upper or tf == "5m":
+        return "SCALP", "Fast 5m/15m reaction setup; targets are built from intraday ATR."
+    if (
+        tf in {"15m", "1h"}
+        and ((direction == "LONG" and f.trend_60 == "UP" and f.trend_240 == "UP")
+             or (direction == "SHORT" and f.trend_60 == "DOWN" and f.trend_240 == "DOWN"))
+        and f.market_structure in {"BULLISH", "BEARISH"}
+    ):
+        return "SWING", "Higher-timeframe trend and structure align; targets use a wider swing plan."
+    return "SCALP", "Intraday setup without full higher-timeframe alignment; targets use the scalp plan."
+
+
+def _trade_plan(
+    *,
+    direction: str,
+    setup: str,
+    timeframe: str,
+    entry: float,
+    raw_stop: float,
+    raw_target: float,
+    f: MarketFeatures,
+) -> tuple[float, float, float, str, str, float]:
+    """Build a structurally anchored but non-microscopic stop/target plan.
+
+    The stop is never tightened past the supplied invalidation anchor. When a
+    raw stop is too close, it is widened using ATR so ordinary BTC noise is less
+    likely to hit it immediately. TP1/TP2 are volatility-aware and bounded so a
+    distant historical level cannot create an unrealistic 10R+ target.
+    """
+    style, style_reason = _trade_style(direction, setup, timeframe, f)
+    atr = max(float(f.atr_15 or 0.0), abs(entry) * 0.0005)
+    anchor_risk = abs(entry - raw_stop)
+
+    if style == "SWING":
+        min_risk = max(atr * 1.00, abs(entry) * 0.0010)
+        tp1_rr = 1.60
+        tp2_rr = 3.50
+        max_rr = 5.00
+    else:
+        min_risk = max(atr * 0.65, abs(entry) * 0.0007)
+        tp1_rr = 1.40
+        tp2_rr = 3.00
+        max_rr = 3.50
+
+    risk = max(anchor_risk, min_risk)
+    if direction == "LONG":
+        stop = min(raw_stop, entry - risk)
+        risk = entry - stop
+        tp1 = entry + risk * tp1_rr
+        structural_distance = abs(raw_target - entry)
+        target_distance = min(max(structural_distance, risk * tp2_rr), risk * max_rr)
+        tp2 = entry + target_distance
+    else:
+        stop = max(raw_stop, entry + risk)
+        risk = stop - entry
+        tp1 = entry - risk * tp1_rr
+        structural_distance = abs(raw_target - entry)
+        target_distance = min(max(structural_distance, risk * tp2_rr), risk * max_rr)
+        tp2 = entry - target_distance
+
+    # Do not permit the planner to reduce risk below its volatility floor.
+    if risk <= 0:
+        risk = min_risk
+        stop = entry - risk if direction == "LONG" else entry + risk
+        tp1 = entry + risk * tp1_rr if direction == "LONG" else entry - risk * tp1_rr
+        tp2 = entry + risk * tp2_rr if direction == "LONG" else entry - risk * tp2_rr
+
+    return stop, tp1, tp2, style, style_reason, risk
+
+
+
+def _score(direction: str, setup: str, f: MarketFeatures) -> tuple[float, list[str]]:
+    score = 0.58
+    reasons = [f"{setup} structure confirmed"]
+    if str(setup).upper().startswith("MOMENTUM CAPTURE"):
+        # Fast-move candidates are only allowed into the live engine when the
+        # detector already found strong displacement/flow. Give this path a
+        # higher base confidence, while the dedicated quality gate below still
+        # enforces its own momentum-specific safeguards.
+        score = 0.74
+        reasons.append("dedicated fast-move detector triggered")
+
+    trend_ok = (direction == "LONG" and f.trend_60 == "UP") or (direction == "SHORT" and f.trend_60 == "DOWN")
+    trend_counter = (direction == "LONG" and f.trend_60 == "DOWN") or (direction == "SHORT" and f.trend_60 == "UP")
+    if trend_ok:
+        score += 0.13
+        reasons.append("1h trend aligns with the trade")
+    elif trend_counter:
+        score -= 0.10
+        reasons.append("trade is counter-trend on 1h")
+
+    if direction == "LONG" and f.cvd_price_divergence == "BULLISH":
+        score += 0.10
+        reasons.append("bullish price/CVD divergence")
+    elif direction == "SHORT" and f.cvd_price_divergence == "BEARISH":
+        score += 0.10
+        reasons.append("bearish price/CVD divergence")
+
+    if direction == "LONG" and f.book_imbalance > 0.12:
+        score += 0.07
+        reasons.append("bid-side depth supports longs")
+    elif direction == "SHORT" and f.book_imbalance < -0.12:
+        score += 0.07
+        reasons.append("ask-side depth supports shorts")
+
+    if direction == "LONG" and f.liquidation_pressure == "LONG_LIQUIDATIONS":
+        score += 0.05
+        reasons.append("long liquidation pressure present")
+    elif direction == "SHORT" and f.liquidation_pressure == "SHORT_LIQUIDATIONS":
+        score += 0.05
+        reasons.append("short liquidation pressure present")
+
+    if f.spread_bps > 5:
+        score -= 0.08
+        reasons.append("wide spread reduces execution quality")
+
+    if f.regime == "HIGH_VOL":
+        score -= 0.04
+        reasons.append("high volatility regime")
+
+    if f.trend_240 == "UP" and direction == "LONG":
+        score += 0.04
+        reasons.append("4h trend aligns")
+    elif f.trend_240 == "DOWN" and direction == "SHORT":
+        score += 0.04
+        reasons.append("4h trend aligns")
+    elif f.trend_240 in {"UP", "DOWN"}:
+        score -= 0.03
+        reasons.append("4h trend is counter-directional")
+
+    if f.golden_pocket == ("LONG_ZONE" if direction == "LONG" else "SHORT_ZONE"):
+        score += 0.04
+        reasons.append("price is in the corresponding golden-pocket zone")
+
+    wave_align = f.elliott_direction == ("LONG" if direction == "LONG" else "SHORT")
+    wave_strong = f.elliott_confidence >= float(RULES.get("signal_policy", {}).get("quality_governor", {}).get("elliott_min_confidence", 0.55))
+    if wave_align and wave_strong:
+        score += 0.08
+        reasons.append(f"Elliott Wave context aligns ({f.elliott_phase}, {f.elliott_wave})")
+    elif f.elliott_direction not in {"NEUTRAL", "UNKNOWN"} and not wave_align and f.elliott_confidence >= 0.65:
+        score -= 0.06
+        reasons.append("Elliott Wave context is strongly counter-directional")
+
+
+    if f.fvg_direction == ("BULLISH" if direction == "LONG" else "BEARISH"):
+        score += 0.03
+        reasons.append("recent FVG supports direction")
+
+    if f.order_block_direction == ("BULLISH" if direction == "LONG" else "BEARISH"):
+        score += 0.03
+        reasons.append("recent order block supports direction")
+
+    return max(0.0, min(score, 0.99)), reasons
+
+
+def _risk_gate(entry: float, stop: float, f: MarketFeatures) -> bool:
+    if entry <= 0 or stop <= 0:
+        return False
+    risk = abs(entry - stop)
+    if f.atr_15 <= 0:
+        return True
+    # Avoid microscopic stops and stops so large that the setup becomes structurally inefficient.
+    atr = f.atr_15 or 0.0
+    if atr <= 0:
+        return True
+    low = float(RULES.get("scan", {}).get("risk_atr_min", 0.08))
+    high = float(RULES.get("scan", {}).get("risk_atr_max", 3.0))
+    return low * atr <= risk <= high * atr
+
+
+def _gate_details(direction: str, setup: str, entry: float, stop: float, target: float, f: MarketFeatures) -> dict:
+    min_rr = _min_rr()
+    ratio = rr(entry, stop, target)
+    risk = abs(entry - stop)
+    risk_ok = _risk_gate(entry, stop, f)
+    confidence, score_reasons = _score(direction, setup, f)
+    confidence_ok = confidence >= _min_confidence()
+    checks = {
+        "rr": round(ratio, 3),
+        "min_rr": min_rr,
+        "risk_distance": round(risk, 4),
+        "atr_15": round(f.atr_15, 4),
+        "risk_gate": risk_ok,
+        "confidence": round(confidence, 3),
+        "min_confidence": _min_confidence(),
+        "confidence_gate": confidence_ok,
+    }
+    reasons = []
+    if ratio < min_rr:
+        reasons.append(f"R:R {ratio:.2f} is below minimum {min_rr:.2f}")
+    if not risk_ok:
+        reasons.append("stop distance fails the ATR risk gate")
+    if not confidence_ok:
+        reasons.append(f"confidence {confidence:.0%} is below minimum {_min_confidence():.0%}")
+    return {"checks": checks, "reasons": reasons, "score_reasons": score_reasons}
+
+
+def _signal(
+    *,
+    id: str,
+    direction: str,
+    setup: str,
+    entry: float,
+    stop: float,
+    target: float,
+    timeframe: str,
+    invalidation: str,
+    f: MarketFeatures,
+    thesis: list[str],
+) -> Optional[Signal]:
+    stop, target1, target2, trade_style, style_reason, risk_distance = _trade_plan(
+        direction=direction,
+        setup=setup,
+        timeframe=timeframe,
+        entry=entry,
+        raw_stop=stop,
+        raw_target=target,
+        f=f,
+    )
+    gate = _gate_details(direction, setup, entry, stop, target2, f)
+    ratio = gate["checks"]["rr"]
+    confidence = gate["checks"]["confidence"]
+    if gate["reasons"]:
+        return None
+    score_reasons = gate["score_reasons"]
+    elite_rr = float(RULES["risk"].get("elite_min_rr", 3.0))
+    elite_conf = float(RULES.get("signal", {}).get("elite_confidence", 0.70))
+    grade = "A" if ratio >= elite_rr and confidence >= elite_conf else "B"
+    return Signal(
+        id=id,
+        direction=direction,
+        setup=setup,
+        entry=entry,
+        stop=stop,
+        target1=target1,
+        target2=target2,
+        rr=ratio,
+        confidence=confidence,
+        grade=grade,
+        regime=f.regime,
+        invalidation=invalidation,
+        thesis=thesis + score_reasons,
+        evidence={
+            "trend_15": f.trend_15,
+            "trend_60": f.trend_60,
+            "book_imbalance": round(f.book_imbalance, 4),
+            "spread_bps": round(f.spread_bps, 3),
+            "oi_change_5m_pct": round(f.oi_change_5m_pct, 3),
+            "oi_change_15m_pct": round(f.oi_change_15m_pct, 3),
+            "cvd_price_divergence": f.cvd_price_divergence,
+            "liquidation_pressure": f.liquidation_pressure,
+            "trend_240": f.trend_240,
+            "market_structure": f.market_structure,
+            "fvg_direction": f.fvg_direction,
+            "order_block_direction": f.order_block_direction,
+            "golden_pocket": f.golden_pocket,
+            "elliott_phase": f.elliott_phase,
+            "elliott_direction": f.elliott_direction,
+            "elliott_wave": f.elliott_wave,
+            "elliott_confidence": round(f.elliott_confidence, 3),
+            "elliott_reason": f.elliott_reason,
+            "elliott_1h_phase": f.elliott_60_phase,
+            "elliott_1h_direction": f.elliott_60_direction,
+            "elliott_1h_confidence": round(f.elliott_60_confidence, 3),
+            "elliott_1h_reason": f.elliott_60_reason,
+            "weekly_open": f.weekly_open,
+            "previous_week_high": f.previous_week_high,
+            "previous_week_low": f.previous_week_low,
+            "trade_style": trade_style,
+            "style_reason": style_reason,
+            "risk_distance": round(risk_distance, 4),
+            "risk_pct_of_price": round((risk_distance / entry * 100.0) if entry else 0.0, 4),
+            "atr_15_multiple": round((risk_distance / f.atr_15) if f.atr_15 else 0.0, 3),
+        },
+        timeframe=timeframe,
+        trade_style=trade_style,
+        style_reason=style_reason,
+    )
+
+
+def detect_sfp(state: MarketState) -> Optional[Signal]:
+    """Detect SFPs intrabar so fast reversals are not delayed until candle close.
+
+    Confirmed candles establish the reference swing. The currently forming 5m
+    candle (when available) supplies the live sweep/reclaim state. This keeps
+    the confirmed strategy intact while allowing an early manual-execution
+    signal when price has already swept and reclaimed liquidity.
+    """
+    confirmed_5 = [c for c in state.candles_5 if c.confirmed]
+    confirmed_15 = [c for c in state.candles_15 if c.confirmed]
+    forming_5 = state.candles_5[-1] if state.candles_5 and not state.candles_5[-1].confirmed else None
+
+    if len(confirmed_5) >= 12:
+        source = confirmed_5
+        timeframe = "5m"
+        live = forming_5
+    else:
+        source = confirmed_15
+        timeframe = "15m"
+        live = state.candles_15[-1] if state.candles_15 and not state.candles_15[-1].confirmed else None
+
+    if len(source) < 10 or state.last_price is None:
+        return None
+
+    f = compute_features(state)
+    highs, lows = pivots(source, 2)
+    ph = highs[-1][1] if highs else None
+    pl = lows[-1][1] if lows else None
+    min_rr = float(RULES["risk"]["preferred_min_rr"])
+
+    if live is not None:
+        # The exchange ticker is the execution price; the forming candle is
+        # only used for its live high/low/open and start timestamp.
+        current_high = max(float(live.high), float(state.last_price))
+        current_low = min(float(live.low), float(state.last_price))
+        current_close = float(state.last_price)
+        current_start = live.start
+        current_end = live.end
+    else:
+        recent = source[-1]
+        current_high = recent.high
+        current_low = recent.low
+        current_close = recent.close
+        current_start = recent.start
+        current_end = recent.end
+
+    if ph is not None and current_high > ph and current_close < ph:
+        entry = current_close
+        stop = current_high * 1.0005
+        target = min((x[1] for x in lows[-5:]), default=current_low)
+        if target >= entry:
+            target = entry - (stop - entry) * min_rr
+        return _signal(
+            id=f"sfp-short-{timeframe}-{current_start}-{int(ph)}",
+            direction="SHORT",
+            setup="Bearish SFP • FAST",
+            entry=entry,
+            stop=stop,
+            target=target,
+            timeframe=timeframe,
+            invalidation=f"{timeframe} close above swept high {current_high:.2f}",
+            f=f,
+            thesis=[
+                f"Live sweep above prior swing high {ph:.2f}",
+                "Price is back below the swept level before candle close",
+                "Stop anchored at the live sweep wick extreme",
+            ],
+        )
+
+    if pl is not None and current_low < pl and current_close > pl:
+        entry = current_close
+        stop = current_low * 0.9995
+        target = max((x[1] for x in highs[-5:]), default=current_high)
+        if target <= entry:
+            target = entry + (entry - stop) * min_rr
+        return _signal(
+            id=f"sfp-long-{timeframe}-{current_start}-{int(pl)}",
+            direction="LONG",
+            setup="Bullish SFP • FAST",
+            entry=entry,
+            stop=stop,
+            target=target,
+            timeframe=timeframe,
+            invalidation=f"{timeframe} close below swept low {current_low:.2f}",
+            f=f,
+            thesis=[
+                f"Live sweep below prior swing low {pl:.2f}",
+                "Price is back above the swept level before candle close",
+                "Stop anchored at the live sweep wick extreme",
+            ],
+        )
+    return None
+def line_value(p1, p2, x):
+    i1, y1 = p1
+    i2, y2 = p2
+    return y2 if i2 == i1 else y1 + (y2 - y1) * ((x - i1) / (i2 - i1))
+
+
+def detect_dline(state: MarketState) -> Optional[Signal]:
+    cs = [c for c in state.candles_15 if c.confirmed]
+    if len(cs) < 18 or len(state.candles_60) < 12:
+        return None
+    f = compute_features(state)
+    highs, lows = pivots(cs[:-1], 2)
+    last = cs[-1]
+    candidates = []
+
+    if len(lows) >= 3:
+        for a, b in zip(lows[-5:-1], lows[-4:]):
+            if b[1] > a[1]:
+                candidates.append(("LONG", a, b))
+    if len(highs) >= 3:
+        for a, b in zip(highs[-5:-1], highs[-4:]):
+            if b[1] < a[1]:
+                candidates.append(("SHORT", a, b))
+    if not candidates:
+        return None
+
+    direction, p1, p2 = candidates[-1]
+    touches = 0
+    start = max(0, p1[0] - 4)
+    for i, c in enumerate(cs[start:p2[0] + 5], start=start):
+        lv = line_value(p1, p2, i)
+        tol = max(1.0, abs(lv) * 0.0015)
+        if abs(c.low - lv) <= tol or abs(c.high - lv) <= tol:
+            touches += 1
+    if touches < int(RULES["dline"]["preferred_touches"]):
+        return None
+
+    projected = line_value(p1, p2, len(cs) - 1)
+    min_rr = float(RULES["risk"]["preferred_min_rr"])
+
+    if direction == "LONG" and last.close > projected and last.open <= projected:
+        stop = min(c.low for c in cs[-5:]) * 0.9995
+        entry = last.close
+        target = entry + (entry - stop) * min_rr
+        return _signal(
+            id=f"dline-long-{last.end}",
+            direction="LONG",
+            setup="D-Line Breakout",
+            entry=entry,
+            stop=stop,
+            target=target,
+            timeframe="15m",
+            invalidation=f"15m close back below D-Line near {projected:.2f}",
+            f=f,
+            thesis=[
+                "Multiple qualifying D-Line touches",
+                "15m body close beyond the trend line",
+                "Stop anchored below the recent execution swing",
+            ],
+        )
+
+    if direction == "SHORT" and last.close < projected and last.open >= projected:
+        stop = max(c.high for c in cs[-5:]) * 1.0005
+        entry = last.close
+        target = entry - (stop - entry) * min_rr
+        return _signal(
+            id=f"dline-short-{last.end}",
+            direction="SHORT",
+            setup="D-Line Breakout",
+            entry=entry,
+            stop=stop,
+            target=target,
+            timeframe="15m",
+            invalidation=f"15m close back above D-Line near {projected:.2f}",
+            f=f,
+            thesis=[
+                "Multiple qualifying D-Line touches",
+                "15m body close beyond the trend line",
+                "Stop anchored above the recent execution swing",
+            ],
+        )
+    return None
+
+
+
+def detect_mss(state: MarketState) -> Optional[Signal]:
+    """Looser continuation setup: a confirmed 15m body close through a recent structure level."""
+    cs = [c for c in state.candles_15 if c.confirmed]
+    if len(cs) < int(RULES.get("mss", {}).get("minimum_confirmed_candles", 8)) or state.last_price is None:
+        return None
+    f = compute_features(state)
+    highs, lows = pivots(cs[:-1], 2)
+    last = cs[-1]
+    min_rr = float(RULES["risk"]["preferred_min_rr"])
+
+    if highs:
+        level = highs[-1][1]
+        if last.close > level and last.open <= level:
+            entry = last.close
+            stop = min(c.low for c in cs[-4:]) * 0.9995
+            target = entry + (entry - stop) * min_rr
+            return _signal(
+                id=f"mss-long-{last.end}",
+                direction="LONG",
+                setup="MSS Continuation",
+                entry=entry,
+                stop=stop,
+                target=target,
+                timeframe="15m",
+                invalidation=f"15m close back below reclaimed structure {level:.2f}",
+                f=f,
+                thesis=[
+                    f"15m body close above structure {level:.2f}",
+                    "Momentum continuation setup rather than a first-impulse chase",
+                    "Risk anchored to the recent execution swing",
+                ],
+            )
+
+    if lows:
+        level = lows[-1][1]
+        if last.close < level and last.open >= level:
+            entry = last.close
+            stop = max(c.high for c in cs[-4:]) * 1.0005
+            target = entry - (stop - entry) * min_rr
+            return _signal(
+                id=f"mss-short-{last.end}",
+                direction="SHORT",
+                setup="MSS Continuation",
+                entry=entry,
+                stop=stop,
+                target=target,
+                timeframe="15m",
+                invalidation=f"15m close back above broken structure {level:.2f}",
+                f=f,
+                thesis=[
+                    f"15m body close below structure {level:.2f}",
+                    "Momentum continuation setup rather than a first-impulse chase",
+                    "Risk anchored to the recent execution swing",
+                ],
+            )
+    return None
+
+
+class StrategyEngine:
+    def __init__(self, learning: AdaptiveLearning | None = None):
+        self.learning = learning or AdaptiveLearning()
+        self.last_signal_id = None
+        self.active_signal = None
+        self.active_signals: dict[str, dict] = {}
+        self.signal_status = "NONE"
+        self.signal_history: list[dict] = []
+        self.last_evaluated_ts = 0
+        self.last_lifecycle_event: dict | None = None
+        self.last_lifecycle_events: list[dict] = []
+        self.setup_memories: list[dict] = []
+        self.position_management: dict | None = None
+        self.last_diagnostics: dict = {"status": "STARTING", "wait_reason": "Engine has not evaluated market data yet.", "blocked_by": [], "setups": {}, "signal_state": "NONE"}
+        self.opportunity_radar_state: list[dict] = []
+        self.scenario_tree_state: list[dict] = []
+        self.liquidity_map_state: dict = {"above": [], "below": []}
+        self.multi_tf_story: str = "Waiting for multi-timeframe data."
+        self.signal_day_utc = datetime.now(timezone.utc).date().isoformat()
+        self.daily_signal_count = 0
+        self.last_resolved_ts = 0
+        self.governor_lock_reason = ""
+        self.governor_last_quality_rejection = ""
+        self._rehydrate_signal_governor()
+
+    def _rotate_governor_day(self):
+        today = datetime.now(timezone.utc).date().isoformat()
+        if today != self.signal_day_utc:
+            self.signal_day_utc = today
+            self.daily_signal_count = 0
+            self.governor_lock_reason = ""
 
     def _rehydrate_signal_governor(self):
         """Restore daily quota and all unresolved active signals after restart."""
@@ -52,10 +648,12 @@
             trades = list(self.learning.recent_trades())
         except Exception:
             trades = []
+
         self.active_signals = {}
         daily = 0
         last_resolved = 0
         day = self.signal_day_utc
+
         for row in trades:
             opened = int(row.get("opened_ts") or 0)
             resolved = int(row.get("resolved_ts") or 0)
@@ -65,8 +663,9 @@
                     daily += 1
             if resolved:
                 last_resolved = max(last_resolved, resolved)
+
             if str(row.get("status") or "").upper() == "ACTIVE" and opened:
-                sid = str(row.get("id") or "")
+                sid = str(row.get("id") or "").strip()
                 if sid:
                     self.active_signals[sid] = {
                         "id": sid,
@@ -87,8 +686,12 @@
 
         self.daily_signal_count = min(daily, _quality_max_daily())
         self.last_resolved_ts = last_resolved
+
         if self.active_signals:
-            self.active_signal = max(self.active_signals.values(), key=lambda row: int(row.get("created_ts") or 0))
+            self.active_signal = max(
+                self.active_signals.values(),
+                key=lambda row: int(row.get("created_ts") or 0),
+            )
             self.last_signal_id = self.active_signal.get("id")
             self.signal_status = "ACTIVE"
             self.governor_lock_reason = f"ACTIVE: {len(self.active_signals)} signal(s) restored after restart."
@@ -96,7 +699,8 @@
             self.active_signal = None
             self.signal_status = "NONE"
             self.governor_lock_reason = ""
-            def rehydrate_remote_history(self, rows: list[dict] | None):
+
+    def rehydrate_remote_history(self, rows: list[dict] | None):
         """Merge durable remote trade history into daily-cap and cooldown state."""
         self._rotate_governor_day()
         rows = list(rows or [])
@@ -127,18 +731,22 @@
         """Restore one durable open prediction without discarding other active signals."""
         if not isinstance(row, dict):
             return
+
         direction = str(row.get("direction") or row.get("side") or "").upper()
         if direction not in {"LONG", "SHORT"}:
             return
-        signal_id = str(row.get("id") or row.get("signal_id") or "")
+
+        signal_id = str(row.get("id") or row.get("signal_id") or "").strip()
         if not signal_id:
             return
+
         try:
             entry = float(row.get("entry"))
             stop = float(row.get("stop"))
             target = float(row.get("target2", row.get("target")))
         except (TypeError, ValueError):
             return
+
         restored = {
             "id": signal_id,
             "direction": direction,
@@ -173,6 +781,8 @@
             "mode": "ELITE_QUALITY_MULTI_TRADE",
             "daily_count": self.daily_signal_count,
             "daily_max": _quality_max_daily(),
+            "cooldown_minutes": round(_quality_cooldown_ms() / 60_000),
+            "cooldown_remaining_ms": cooldown_left,
             "active_signal_lock": active_lock,
             "active_signal_count": len(self.active_signals),
             "lock_reason": self.governor_lock_reason,
@@ -188,7 +798,6 @@
             self.governor_lock_reason = ""
             return True
         if self.daily_signal_count >= _quality_max_daily():
-
             self.governor_lock_reason = f"DAILY CAP: {self.daily_signal_count}/{_quality_max_daily()} quality signals used."
             return False
         if self.last_resolved_ts:
@@ -581,9 +1190,9 @@
             narrative.append("No confirmed price-action trigger is active; the engine is waiting for one.")
 
         governor = self.governor_status()
-        active = self.active_signal if self.signal_status == "ACTIVE" else None
-        if active:
-            no_trade_reason = "An active signal is unresolved; no opposite-direction signal is permitted."
+        active_count = len(self.active_signals)
+        if active_count > 0:
+            no_trade_reason = f"{active_count} active signal(s) are being managed; new independent setups remain eligible."
         elif governor.get("daily_count", 0) >= governor.get("daily_max", 3):
             no_trade_reason = "Daily elite-signal quota has been reached; WAIT."
         elif governor.get("cooldown_remaining_ms", 0) > 0:
@@ -1714,139 +2323,174 @@
             "note": "Advisory position management only. The bot does not place or close exchange orders automatically.",
         }
 
-    def _update_signal_lifecycle(self, state: MarketState):
+    def _update_one_signal_lifecycle(self, state: MarketState):
         self.last_lifecycle_event = None
         self.last_lifecycle_events = []
-        # In Bitget Demo mode, the exchange-confirmed execution lifecycle is
-        # authoritative. Strategy still tracks multiple active signals for
-        # supervision, but never declares a local close before Bitget does.
+        # In Bitget Demo execution mode, the exchange's actual TP/SL/order
+        # lifecycle is authoritative. Do not resolve the signal from a local
+        # price touch, or the learner could count a theoretical result before
+        # the exchange position actually closes.
+        if os.getenv("BITGET_DEMO_TRADING", "false").lower() in {"1", "true", "yes", "on"}:
+            return
+        if not self.active_signal or state.last_price is None or self.signal_status != "ACTIVE":
+            return
+
+        price = float(state.last_price)
+        stop = float(self.active_signal["stop"])
+        target1 = float(self.active_signal["target1"])
+        target2 = float(self.active_signal["target2"])
+        direction = str(self.active_signal["direction"]).upper()
+        now = int(time.time() * 1000)
+        events: list[dict] = []
+
+        def emit(stage: str, event_type: str, level: float, note: str, final: bool, result_r: float = 0.0):
+            event = {
+                "key": f"{event_type}:{self.active_signal.get('id')}",
+                "type": event_type,
+                "stage": stage,
+                "signal_id": self.active_signal.get("id"),
+                "direction": direction,
+                "setup": self.active_signal.get("setup", ""),
+                "price": price,
+                "level": level,
+                "ts": now,
+                "note": note,
+                "final": final,
+                "result_r": round(float(result_r), 3),
+            }
+            events.append(event)
+            self.learning.record_event(self.active_signal, event_type, price, note)
+            self.active_signal["last_event"] = event
+
+        tp1_hit = bool(self.active_signal.get("tp1_hit_ts"))
+        if direction == "LONG":
+            if not tp1_hit and price >= target1:
+                self.active_signal["tp1_hit_ts"] = now
+                emit("TP1", "TP1_HIT", target1,
+                     "TP1 reached. Protect the remaining position manually; TP2 remains the final tracked target.",
+                     False, 1.5)
+                tp1_hit = True
+            if price >= target2:
+                if not tp1_hit:
+                    self.active_signal["tp1_hit_ts"] = now
+                    emit("TP1", "TP1_HIT", target1, "Price crossed TP1 and TP2 in the same market update.", False, 1.5)
+                self.active_signal["tp2_hit_ts"] = now
+                self.signal_status = "TARGET_REACHED"
+                emit("TP2", "TP2_HIT", target2, "Final tracked target reached.", True, float(self.active_signal.get("rr") or 0.0))
+            elif price <= stop:
+                self.active_signal["sl_hit_ts"] = now
+                self.signal_status = "INVALIDATED"
+                emit("SL", "SL_HIT", stop,
+                     "Stop/invalidation level reached." if not tp1_hit else
+                     "Stop reached after TP1. Actual realized PnL depends on manual position management.",
+                     True, 0.0 if tp1_hit else -1.0)
+        else:
+            if not tp1_hit and price <= target1:
+                self.active_signal["tp1_hit_ts"] = now
+                emit("TP1", "TP1_HIT", target1,
+                     "TP1 reached. Protect the remaining position manually; TP2 remains the final tracked target.",
+                     False, 1.5)
+                tp1_hit = True
+            if price <= target2:
+                if not tp1_hit:
+                    self.active_signal["tp1_hit_ts"] = now
+                    emit("TP1", "TP1_HIT", target1, "Price crossed TP1 and TP2 in the same market update.", False, 1.5)
+                self.active_signal["tp2_hit_ts"] = now
+                self.signal_status = "TARGET_REACHED"
+                emit("TP2", "TP2_HIT", target2, "Final tracked target reached.", True, float(self.active_signal.get("rr") or 0.0))
+            elif price >= stop:
+                self.active_signal["sl_hit_ts"] = now
+                self.signal_status = "INVALIDATED"
+                emit("SL", "SL_HIT", stop,
+                     "Stop/invalidation level reached." if not tp1_hit else
+                     "Stop reached after TP1. Actual realized PnL depends on manual position management.",
+                     True, 0.0 if tp1_hit else -1.0)
+
+        self.active_signal["lifecycle"] = self.signal_status
+        self.active_signal["lifecycle_stage"] = "TP2_HIT" if self.active_signal.get("tp2_hit_ts") else ("TP1_HIT" if self.active_signal.get("tp1_hit_ts") else "ACTIVE")
+        self.active_signal["last_price_seen"] = price
+        self.last_lifecycle_events = events
+        self._multi_cycle_events = list(events)
+
+        if events:
+            final = next((x for x in reversed(events) if x.get("final")), None)
+            if final:
+                lesson = self.learning.resolve(
+                    self.active_signal,
+                    "TP2_REACHED" if final["type"] == "TP2_HIT" else "SL_HIT",
+                    float(final["result_r"]),
+                )
+                final["learning_review"] = lesson
+                self.active_signal["learning_review"] = lesson
+
+            signal_snapshot = dict(self.active_signal)
+            for event in events:
+                self.last_lifecycle_event = {
+                    "signal": signal_snapshot,
+                    "event": event,
+                    "outcome": (
+                        "TP1_REACHED" if event["type"] == "TP1_HIT"
+                        else "TARGET_REACHED" if event["type"] == "TP2_HIT"
+                        else "INVALIDATED"
+                    ),
+                    "result_r": float(event.get("result_r") or 0.0),
+                }
+
+            if self.signal_status != "ACTIVE":
+                self.last_resolved_ts = now
+                self.governor_lock_reason = "RESOLVED: quality cooldown is active before the next signal."
+                for row in self.signal_history:
+                    if row.get("id") == self.active_signal.get("id"):
+                        row["status"] = self.signal_status
+                        row["resolved_ts"] = now
+                        row["result_r"] = float((final or events[-1]).get("result_r") or 0.0)
+                        row["tp1_hit"] = bool(self.active_signal.get("tp1_hit_ts"))
+                        row["learning_review"] = self.active_signal.get("learning_review")
+                        break
+
+
+    def _update_signal_lifecycle(self, state: MarketState):
+        """Run the TP/SL lifecycle independently for every active signal."""
+        self.last_lifecycle_event = None
+        self.last_lifecycle_events = []
+        self._multi_cycle_events = []
         if os.getenv("BITGET_DEMO_TRADING", "false").lower() in {"1", "true", "yes", "on"}:
             return
         if not self.active_signals or state.last_price is None:
             return
 
-        price = float(state.last_price)
-        now = int(time.time() * 1000)
-        resolved_ids: set[str] = set()
+        resolved_ids = set()
+        latest_event = None
 
-        for signal_id, signal in list(self.active_signals.items()):
-            if str(signal.get("lifecycle") or "ACTIVE").upper() != "ACTIVE":
-                resolved_ids.add(signal_id)
+        for signal_id in list(self.active_signals.keys()):
+            signal = self.active_signals.get(signal_id)
+            if not signal:
                 continue
-
-            stop = float(signal["stop"])
-            target1 = float(signal["target1"])
-            target2 = float(signal["target2"])
-            direction = str(signal["direction"]).upper()
-            events: list[dict] = []
-
-            def emit(stage: str, event_type: str, level: float, note: str, final: bool, result_r: float = 0.0):
-                event = {
-                    "key": f"{event_type}:{signal.get('id')}",
-                    "type": event_type,
-                    "stage": stage,
-                    "signal_id": signal.get("id"),
-                    "direction": direction,
-                    "setup": signal.get("setup", ""),
-                    "price": price,
-                    "level": level,
-                    "ts": now,
-                    "note": note,
-                    "final": final,
-                    "result_r": round(float(result_r), 3),
-                }
-                events.append(event)
-                self.learning.record_event(signal, event_type, price, note)
-                signal["last_event"] = event
-
-            tp1_hit = bool(signal.get("tp1_hit_ts"))
-            if direction == "LONG":
-                if not tp1_hit and price >= target1:
-                    signal["tp1_hit_ts"] = now
-                    emit("TP1", "TP1_HIT", target1,
-                         "TP1 reached. Protect the remaining position manually; TP2 remains the final tracked target.",
-                         False, 1.5)
-                    tp1_hit = True
-                if price >= target2:
-                    if not tp1_hit:
-                        signal["tp1_hit_ts"] = now
-                        emit("TP1", "TP1_HIT", target1, "Price crossed TP1 and TP2 in the same market update.", False, 1.5)
-                    signal["tp2_hit_ts"] = now
-                    signal["lifecycle"] = "TARGET_REACHED"
-                    signal["lifecycle_stage"] = "TP2_HIT"
-                    emit("TP2", "TP2_HIT", target2, "Final tracked target reached.", True, float(signal.get("rr") or 0.0))
-                    resolved_ids.add(signal_id)
-                elif price <= stop:
-                    signal["sl_hit_ts"] = now
-                    signal["lifecycle"] = "INVALIDATED"
-                    signal["lifecycle_stage"] = "SL_HIT"
-                    emit("SL", "SL_HIT", stop,
-                         "Stop/invalidation level reached.",
-                         True, 0.0 if tp1_hit else -1.0)
-                    resolved_ids.add(signal_id)
-            else:
-                if not tp1_hit and price <= target1:
-                    signal["tp1_hit_ts"] = now
-                    emit("TP1", "TP1_HIT", target1,
-                         "TP1 reached. Protect the remaining position manually; TP2 remains the final tracked target.",
-                         False, 1.5)
-                    tp1_hit = True
-                if price <= target2:
-                    if not tp1_hit:
-                        signal["tp1_hit_ts"] = now
-                        emit("TP1", "TP1_HIT", target1, "Price crossed TP1 and TP2 in the same market update.", False, 1.5)
-                    signal["tp2_hit_ts"] = now
-                    signal["lifecycle"] = "TARGET_REACHED"
-                    signal["lifecycle_stage"] = "TP2_HIT"
-                    emit("TP2", "TP2_HIT", target2, "Final tracked target reached.", True, float(signal.get("rr") or 0.0))
-                    resolved_ids.add(signal_id)
-                elif price >= stop:
-                    signal["sl_hit_ts"] = now
-                    signal["lifecycle"] = "INVALIDATED"
-                    signal["lifecycle_stage"] = "SL_HIT"
-                    emit("SL", "SL_HIT", stop,
-                         "Stop/invalidation level reached.",
-                         True, 0.0 if tp1_hit else -1.0)
-                    resolved_ids.add(signal_id)
-
-            signal["last_price_seen"] = price
-            self.last_lifecycle_events.extend(events)
-
-            if events:
-                final = next((x for x in reversed(events) if x.get("final")), None)
-                if final:
-                    lesson = self.learning.resolve(
-                        signal,
-                        "TP2_REACHED" if final["type"] == "TP2_HIT" else "SL_HIT",
-                        float(final["result_r"]),
-                    )
-                    final["learning_review"] = lesson
-                    signal["learning_review"] = lesson
-                    self.last_lifecycle_event = {
-                        "signal": dict(signal),
-                        "event": final,
-                        "outcome": "TARGET_REACHED" if final["type"] == "TP2_HIT" else "INVALIDATED",
-                        "result_r": float(final.get("result_r") or 0.0),
-                    }
-                    for row in self.signal_history:
-                        if row.get("id") == signal_id:
-                            row["status"] = signal.get("lifecycle")
-                            row["resolved_ts"] = now
-                            row["result_r"] = float(final.get("result_r") or 0.0)
-                            row["tp1_hit"] = bool(signal.get("tp1_hit_ts"))
-                            row["learning_review"] = lesson
-                            break
+            self.active_signal = signal
+            self.signal_status = "ACTIVE"
+            self._multi_cycle_events = []
+            self._update_one_signal_lifecycle(state)
+            self.last_lifecycle_events.extend(self._multi_cycle_events)
+            if self.signal_status != "ACTIVE":
+                resolved_ids.add(signal_id)
+            if self.last_lifecycle_event:
+                latest_event = self.last_lifecycle_event
 
         for signal_id in resolved_ids:
             self.active_signals.pop(signal_id, None)
 
         if self.active_signals:
-            latest = max(self.active_signals.values(), key=lambda row: int(row.get("created_ts") or 0))
-            self.active_signal = latest
+            self.active_signal = max(
+                self.active_signals.values(),
+                key=lambda row: int(row.get("created_ts") or 0),
+            )
             self.signal_status = "ACTIVE"
         else:
             self.active_signal = None
             self.signal_status = "NONE"
+
+        if latest_event:
+            self.last_lifecycle_event = latest_event
 
     def resolve_external_execution(self, event: dict):
         """Resolve exactly the strategy signal represented by an exchange close."""
@@ -1865,8 +2509,14 @@
         status = "TARGET_REACHED" if reason == "TP" else "EXECUTION_FAILED" if reason == "FAILED" else "INVALIDATED"
         ts = int(event.get("ts") or time.time() * 1000)
         result_r = float(event.get("result_r") or 0.0)
+
         signal["lifecycle"] = status
-        signal["lifecycle_stage"] = "TP2_HIT" if reason == "TP" else "SL_HIT" if reason == "SL" else "EXECUTION_FAILED" if reason == "FAILED" else "RESOLVED"
+        signal["lifecycle_stage"] = (
+            "TP2_HIT" if reason == "TP" else
+            "SL_HIT" if reason == "SL" else
+            "EXECUTION_FAILED" if reason == "FAILED" else
+            "RESOLVED"
+        )
         signal["resolved_ts"] = ts
         signal["execution_managed"] = True
         signal["close_reason"] = reason or "UNKNOWN"
@@ -1892,8 +2542,12 @@
             "outcome": "TARGET_REACHED" if reason == "TP" else "INVALIDATED",
             "result_r": result_r,
         }
+
         if self.active_signals:
-            self.active_signal = max(self.active_signals.values(), key=lambda row: int(row.get("created_ts") or 0))
+            self.active_signal = max(
+                self.active_signals.values(),
+                key=lambda row: int(row.get("created_ts") or 0),
+            )
             self.signal_status = "ACTIVE"
             self.governor_lock_reason = f"ACTIVE: {len(self.active_signals)} signal(s) still being managed."
         else:
@@ -1960,6 +2614,7 @@
             return None
         self.last_signal_id = signal.id
         self.daily_signal_count += 1
+
         new_active = signal.to_dict()
         new_active["lifecycle"] = "ACTIVE"
         new_active["lifecycle_stage"] = "ACTIVE"
@@ -1969,6 +2624,7 @@
         self.learning.record_open(new_active)
         self.signal_status = "ACTIVE"
         self.governor_lock_reason = f"ACTIVE: {len(self.active_signals)} signal(s) being managed."
+
         self.signal_history.insert(0, {
             "id": signal.id,
             "direction": signal.direction,
