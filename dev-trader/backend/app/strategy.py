@@ -2429,14 +2429,14 @@ class StrategyEngine:
         if str(event.get("signal_id") or event.get("execution_signal_id") or "") not in {"", str(self.active_signal.get("id"))}:
             return
         reason = str(event.get("close_reason") or "").upper()
-        status = "TARGET_REACHED" if reason == "TP" else "INVALIDATED"
+        status = "TARGET_REACHED" if reason == "TP" else "EXECUTION_FAILED" if reason == "FAILED" else "INVALIDATED"
         ts = int(event.get("ts") or time.time() * 1000)
         result_r = float(event.get("result_r") or 0.0)
         self.signal_status = status
         self.last_resolved_ts = ts
         self.governor_lock_reason = "RESOLVED: quality cooldown is active before the next signal."
         self.active_signal["lifecycle"] = status
-        self.active_signal["lifecycle_stage"] = "TP2_HIT" if reason == "TP" else "SL_HIT" if reason == "SL" else "RESOLVED"
+        self.active_signal["lifecycle_stage"] = "TP2_HIT" if reason == "TP" else "SL_HIT" if reason == "SL" else "EXECUTION_FAILED" if reason == "FAILED" else "RESOLVED"
         self.active_signal["resolved_ts"] = ts
         self.active_signal["execution_managed"] = True
         self.active_signal["close_reason"] = reason or "UNKNOWN"
