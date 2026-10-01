@@ -182,13 +182,12 @@ def test_price_normalization_uses_bitget_price_step():
     ) == "82400.1"
 
 
-class ReplaceClient(FakeClient):
+class MultiSignalClient(FakeClient):
     def __init__(self):
-        self.open_positions = []
         self.close_calls = []
 
     def positions(self, symbol):
-        return list(self.open_positions)
+        return []
 
     def position_history(self, symbol, start_ms, end_ms, limit):
         return []
@@ -200,31 +199,28 @@ class ReplaceClient(FakeClient):
         return {
             "ready": True,
             "available_balance_usdt": 1000.0,
-            "open_positions": self.open_positions,
+            "open_positions": [],
         }
 
     def place_market_close(self, symbol, direction, size, client_oid):
         self.close_calls.append((symbol, direction, size, client_oid))
-        self.open_positions = []
         return {"code": "00000", "data": {"orderId": "close-123", "clientOid": client_oid}}
 
 
-def test_every_new_signal_replaces_existing_demo_position(monkeypatch):
+def test_every_new_signal_is_submitted_without_replacing_existing_position(monkeypatch):
     monkeypatch.setenv("BITGET_DEMO_TRADING", "true")
-    monkeypatch.setenv("BITGET_EXECUTION_STATE_FILE", "/tmp/dev-trader-test-replace.json")
+    monkeypatch.setenv("BITGET_EXECUTION_STATE_FILE", "/tmp/dev-trader-test-multi.json")
     monkeypatch.setenv("BITGET_DEMO_MAX_DAILY_TRADES", "3")
     try:
-        os.remove("/tmp/dev-trader-test-replace.json")
+        os.remove("/tmp/dev-trader-test-multi.json")
     except FileNotFoundError:
         pass
 
     learner = FakeLearning()
     executor = DemoExecutionEngine(learner)
-    client = ReplaceClient()
-    executor.client = client
+    executor.client = MultiSignalClient()
 
     base = {
-        "direction": "LONG",
         "setup": "TEST",
         "entry": 100000,
         "stop": 99900,
@@ -237,16 +233,12 @@ def test_every_new_signal_replaces_existing_demo_position(monkeypatch):
         "evidence": {},
     }
 
-    first = dict(base, id="SIG-1")
-    assert asyncio.run(executor.handle_signal(first))["ok"] is True
-    client.open_positions = [
-        {"holdSide": "long", "total": "0.1", "openPriceAvg": "100000", "posId": "p1"}
-    ]
+    first = dict(base, id="SIG-1", direction="LONG")
+    second = dict(base, id="SIG-2", direction="LONG", entry=100100, stop=100000)
 
-    second = dict(base, id="SIG-2", direction="SHORT", entry=100100, stop=100200, target1=99800, target2=99800)
+    assert asyncio.run(executor.handle_signal(first))["ok"] is True
     result = asyncio.run(executor.handle_signal(second))
 
     assert result["ok"] is True
-    assert client.close_calls[-1][1] == "LONG"
-    assert result["trade"]["signal_id"] == "SIG-2"
-    assert result["trade"]["status"] == "OPEN"
+    assert len(executor.history(5)) >= 2
+    assert executor.client.close_calls == []
