@@ -179,7 +179,7 @@ async def on_state(s: MarketState):
         fast_status = fast_move.get("status")
         fast_direction = fast_move.get("direction")
         if fast_status in {"ARMED", "TRIGGERED"} and fast_direction in {"LONG", "SHORT"}:
-            fast_key = f"fast:{fast_direction}:{fast_status}:{int(now_alert // 7_60_000)}"
+            fast_key = f"fast:{fast_direction}:{fast_status}:{int(now_alert // (7 * 60_000))}"
             if fast_key != last_opportunity_alert["key"] or now_alert - last_opportunity_alert["ts"] > 7 * 60_000:
                 alert = {
                     "key": fast_key,
