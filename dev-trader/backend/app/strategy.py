@@ -615,6 +615,7 @@ class StrategyEngine:
         self.last_signal_id = None
         self.active_signal = None
         self.active_signals: dict[str, dict] = {}
+        self._legacy_single_signal_mode = False
         self.signal_status = "NONE"
         self.signal_history: list[dict] = []
         self.last_evaluated_ts = 0
@@ -2456,11 +2457,11 @@ class StrategyEngine:
         self._multi_cycle_events = []
         if os.getenv("BITGET_DEMO_TRADING", "false").lower() in {"1", "true", "yes", "on"}:
             return
-        legacy_single = False
         if not self.active_signals and self.active_signal and self.signal_status == "ACTIVE":
             sid = str(self.active_signal.get("id") or "legacy-active")
             self.active_signals[sid] = self.active_signal
-            legacy_single = True
+            self._legacy_single_signal_mode = True
+        legacy_single = self._legacy_single_signal_mode
         if not self.active_signals or state.last_price is None:
             return
 
