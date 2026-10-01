@@ -314,6 +314,7 @@ class BitgetDemoClient:
 
     def status(self, symbol: str = "BTCUSDT") -> dict[str, Any]:
         result = {
+            "diagnostic_stage": "start",
             "demo_enabled": self.demo,
             "configured": self.configured,
             "api_version": "UTA_V3",
@@ -326,9 +327,13 @@ class BitgetDemoClient:
             result["reason"] = "Bitget Demo API credentials are not configured."
             return result
         try:
+            result["diagnostic_stage"] = "account_settings"
             settings = self.account_settings()
+            result["diagnostic_stage"] = "positions"
             positions = self.positions(symbol)
+            result["diagnostic_stage"] = "assets"
             balance = self.available_balance(symbol)
+            result["diagnostic_stage"] = "complete"
             result.update({
                 "ready": balance > 0,
                 "available_balance_usdt": round(balance, 4),
@@ -351,4 +356,9 @@ class BitgetDemoClient:
         except Exception as exc:
             result["ready"] = False
             result["reason"] = str(exc)
+            result["error_type"] = type(exc).__name__
+            try:
+                print(f"BITGET_DEMO_STATUS_ERROR stage={result.get('diagnostic_stage')} type={type(exc).__name__} reason={str(exc)[:300]}", flush=True)
+            except Exception:
+                pass
         return result
