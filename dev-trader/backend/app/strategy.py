@@ -1402,7 +1402,11 @@ class StrategyEngine:
         # A fully closed 5m impulse is considered mature at a lower threshold
         # than a still-forming candle. This preserves early capture while
         # preventing a completed multi-ATR impulse from being chased.
-        extension_threshold = 2.50 if forming is None else 3.00
+        extension_threshold = (
+            2.50
+            if forming is None
+            else (3.00 if body_fraction >= 0.55 else 99.0)
+        )
         if move_atr > extension_threshold:
             return {
                 "status": "EXTENDED",
