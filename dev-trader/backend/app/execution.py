@@ -148,6 +148,8 @@ class DemoExecutionEngine:
         if entry <= 0 or stop <= 0 or entry == stop:
             raise BitgetDemoError("Signal has invalid entry/stop prices.")
         balance = await asyncio.to_thread(self.client.available_balance, self.symbol)
+        if balance <= 0:
+            raise BitgetDemoError("Bitget Demo futures balance is 0 USDT. Add demo funds before autonomous execution can open a position.")
         risk_usdt = balance * self.risk_pct / 100.0
         distance = abs(entry - stop)
         raw_qty = risk_usdt / distance
