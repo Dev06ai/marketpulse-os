@@ -429,17 +429,29 @@ class SignalService : Service() {
             "TP1_HIT" -> "BTC $direction • TP1 HIT"
             "TP2_HIT" -> "BTC $direction • TP2 HIT"
             "SL_HIT" -> "BTC $direction • STOP / INVALIDATION"
+            "EXECUTION_PENDING" -> "BTC $direction • DEMO ORDER SUBMITTED"
             "EXECUTION_OPEN" -> "BTC $direction • DEMO TRADE OPENED"
             "EXECUTION_CLOSED" -> "BTC $direction • DEMO TRADE CLOSED"
             "EXECUTION_FAILED" -> "BTC $direction • DEMO TRADE FAILED"
             else -> "BTC $direction • " + type.replace('_', ' ')
         }
         var body = "$setup\nPrice $price • Level $level"
-        if (type == "EXECUTION_OPEN") {
-            val entry = event.optDouble("entry_price", Double.NaN)
+        if (type == "EXECUTION_PENDING") {
+            val plannedEntry = event.optDouble("entry_plan", event.optDouble("entry_price", Double.NaN))
             val stop = event.optDouble("stop_loss", Double.NaN)
             val tp = event.optDouble("take_profit", Double.NaN)
-            body = "$setup\nEntry " + format(entry) + " • SL " + format(stop) + " • TP " + format(tp) + "\nBitget Demo execution"
+            body = "$setup\nPlanned entry " + format(plannedEntry) + " • SL " + format(stop) + " • TP " + format(tp) + "\nBitget Demo order submitted; waiting for exchange fill"
+        } else if (type == "EXECUTION_OPEN") {
+            val entry = event.optDouble("entry_price", Double.NaN)
+            val plannedEntry = event.optDouble("entry_plan", Double.NaN)
+            val stop = event.optDouble("stop_loss", Double.NaN)
+            val tp = event.optDouble("take_profit", Double.NaN)
+            val qty = event.optDouble("filled_qty", Double.NaN)
+            body = "$setup\nActual fill " + format(entry) +
+                " • SL " + format(stop) + " • TP " + format(tp) +
+                (if (qty.isFinite()) "\nFilled " + String.format(Locale.US, "%.6f BTC", qty) else "") +
+                "\nBitget Demo execution" +
+                (if (plannedEntry.isFinite()) "\nPlanned entry " + format(plannedEntry) else "")
         } else if (type == "EXECUTION_CLOSED") {
             val entry = event.optDouble("entry_price", Double.NaN)
             val exit = event.optDouble("exit_price", Double.NaN)
