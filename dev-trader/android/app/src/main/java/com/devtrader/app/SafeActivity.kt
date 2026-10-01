@@ -707,73 +707,106 @@ class SafeActivity : Activity() {
         val signalObj = root.optJSONObject("signal")
         val engine = root.optJSONObject("engine")
         val f = root.optJSONObject("features")
-
-        val nowMs = System.currentTimeMillis()
-        val receivedTs = root.optLong("received_ts", 0L)
-        val marketUpdateTs = root.optLong("last_market_update_ts", 0L)
-        val freshestTs = maxOf(receivedTs, marketUpdateTs)
-        val freshMarket = priceValue.isFinite() && freshestTs > 0L && (nowMs - freshestTs) <= 8_000L
-
-        // REST/bootstrap can be fresh while the WebSocket is negotiating. Show the
-        // truth about market-data freshness rather than briefly calling fresh data
-        // "DATA RECOVERY".
-        status.text = when {
-            freshMarket && health == "DEGRADED" -> "LIVE  •  REST FALLBACK"
-            freshMarket -> "LIVE"
-            health == "HEALTHY" -> "LIVE"
-            health == "DEGRADED" -> "LIVE  •  REST FALLBACK"
-            health == "CONNECTING" -> "CONNECTING…"
-            health == "RECONNECTING" -> "RECONNECTING…"
-            else -> health
+        val execution = root.optJSONObject("execution")
+        val recentTrades = execution?.optJSONArray("recent_trades")
+        var openExecution: JSONObject? = null
+        if (recentTrades != null) {
+            for (i in 0 until recentTrades.length()) {
+                val trade = recentTrades.optJSONObject(i) ?: continue
+                if (trade.optString("status").uppercase(Locale.US) == "OPEN") {
+                    if (signalObj == null || trade.optString("signal_id") == signalObj.optString("id")) {
+                        openExecution = trade
+                        break
+                    }
+                }
+            }
         }
-        price.text = priceBtcAccent(
-            "BTC  " + if (priceValue.isNaN()) "—"
-                else String.format(Locale.US, "%,.2f", priceValue) +
-                    "\nOI   " + if (oi.isNaN()) "—"
-                else String.format(Locale.US, "%,.2f", oi)
-        )
-        val upstream = root.optJSONObject("upstream")
-        val source = upstream?.optString("source", "").orEmpty()
-        integrity.text = "WebSocket  •  " + if (ws) "CONNECTED" else "DISCONNECTED" +
-            if (source.isBlank()) "" else "  •  " + source.replace("_", " ")
 
-        if (signalObj == null) {
-            val radar = engine?.optJSONArray("opportunity_radar")
-            val lead = radar?.optJSONObject(0)
-            val second = radar?.optJSONObject(1)
-            val scenario = engine?.optJSONArray("scenario_tree")?.let { arr ->
-                (0 until minOf(2, arr.length())).mapNotNull { arr.optJSONObject(it) }
-                    .joinToString("  •  ") { it.optString("name") + " " + it.optString("state") }
-            }.orEmpty()
-            val leadText = if (lead != null) {
-                lead.optString("direction") + " " + lead.optString("tier") + " " +
-                    lead.optInt("score") + "/" + lead.optInt("max_score") +
-                    " • " + lead.optString("setup") +
-                    " • " + lead.optString("action", "watch")
-            } else "No live opportunity detected"
-            val secondText = if (second != null) {
-                second.optString("direction") + " " + second.optString("tier") + " " +
-                    second.optInt("score") + "/" + second.optInt("max_score") +
-                    " • " + second.optString("action", "watch")
-            } else ""
-            val sfp = engine?.optJSONObject("sfp_hunter")
-            val breakout = engine?.optJSONObject("breakout_watch")
-            val sfpText = if (sfp != null) {
-                "SFP  •  " + sfp.optString("status", "WATCH") + "  •  " +
-                    sfp.optString("direction", "—") + " @ " +
-                    String.format(Locale.US, "%.2f", sfp.optDouble("target_level", Double.NaN))
-            } else ""
-            val breakoutText = if (breakout != null) {
-                "BREAKOUT  •  " + breakout.optString("status", "WATCH") + "  •  " +
-                    breakout.optString("event", "NONE")
-            } else ""
-            setTradeSetupText("OPPORTUNITY RADAR  •  ACTIVE SCAN\n" +
-                leadText + if (secondText.isBlank()) "" else "\n" + secondText +
-                if (sfpText.isBlank()) "" else "\n" + sfpText +
-                if (breakoutText.isBlank()) "" else "\n" + breakoutText +
-                if (scenario.isBlank()) "" else "\nSCENARIOS  •  " + scenario +
-                "\nNO CONFIRMED TRADE YET • radar is actively monitoring triggers.")
-            risk.text = "USDT P&L calculator • quantity or cost • long/short • leverage"
+        val signalLifecycle = signalObj?.optString(
+            "lifecycle",
+            signalObj.optString("lifecycle_stage", "ACTIVE")
+        )?.uppercase(Locale.US).orEmpty()
+        val signalResolved = signalLifecycle in setOf(
+            "TARGET_REACHED", "INVALIDATED", "EXECUTION_FAILED",
+            "CLOSED", "RESOLVED", "TP2_HIT", "SL_HIT", "EXECUTION_FAILED"
+        )
+
+        if (signalObj == null || signalResolved) {
+            if (signalObj != null && signalResolved) {
+                val direction = signalObj.optString("direction", "—")
+                val setupName = signalObj.optString("setup", "Trade")
+                val outcome = when (signalLifecycle) {
+                    "TARGET_REACHED", "TP2_HIT" -> "TARGET REACHED"
+                    "INVALIDATED", "SL_HIT" -> "STOP / INVALIDATED"
+                    "EXECUTION_FAILED" -> "EXECUTION FAILED"
+                    else -> signalLifecycle.replace('_', ' ')
+                }
+                val executionClosed = execution?.optJSONArray("recent_trades")
+                var closedMatch: JSONObject? = null
+                if (executionClosed != null) {
+                    for (i in 0 until executionClosed.length()) {
+                        val trade = executionClosed.optJSONObject(i) ?: continue
+                        if (trade.optString("signal_id") == signalObj.optString("id") &&
+                            trade.optString("status").uppercase(Locale.US) == "CLOSED"
+                        ) {
+                            closedMatch = trade
+                            break
+                        }
+                    }
+                }
+                val entry = closedMatch?.optDouble("entry_price", signalObj.optDouble("entry", Double.NaN))
+                    ?: signalObj.optDouble("entry", Double.NaN)
+                val exit = closedMatch?.optDouble("exit_price", Double.NaN) ?: Double.NaN
+                val pnl = closedMatch?.optDouble("net_profit_usdt", Double.NaN) ?: Double.NaN
+                setTradeSetupText(
+                    "TRADE CLOSED  •  $direction  •  $outcome" +
+                        "\n$setupName" +
+                        "\nEntry  " + if (entry.isFinite()) String.format(Locale.US, "%.2f", entry) else "—" +
+                        "    Exit  " + if (exit.isFinite() && exit > 0) String.format(Locale.US, "%.2f", exit) else "—" +
+                        "\nResult  " + if (pnl.isFinite()) String.format(Locale.US, "%+.2f USDT", pnl) else signalLifecycle.replace('_', ' ') +
+                        "\nWaiting for the next confirmed setup."
+                )
+                risk.text = "Exchange lifecycle resolved • no active demo position"
+            } else {
+                val radar = engine?.optJSONArray("opportunity_radar")
+                val lead = radar?.optJSONObject(0)
+                val second = radar?.optJSONObject(1)
+                val scenario = engine?.optJSONArray("scenario_tree")?.let { arr ->
+                    (0 until minOf(2, arr.length())).mapNotNull { arr.optJSONObject(it) }
+                        .joinToString("  •  ") { it.optString("name") + " " + it.optString("state") }
+                }.orEmpty()
+                val leadText = if (lead != null) {
+                    lead.optString("direction") + " " + lead.optString("tier") + " " +
+                        lead.optInt("score") + "/" + lead.optInt("max_score") +
+                        " • " + lead.optString("setup") +
+                        " • " + lead.optString("action", "watch")
+                } else "No live opportunity detected"
+                val secondText = if (second != null) {
+                    second.optString("direction") + " " + second.optString("tier") + " " +
+                        second.optInt("score") + "/" + second.optInt("max_score") +
+                        " • " + second.optString("action", "watch")
+                } else ""
+                val sfp = engine?.optJSONObject("sfp_hunter")
+                val breakout = engine?.optJSONObject("breakout_watch")
+                val sfpText = if (sfp != null) {
+                    "SFP  •  " + sfp.optString("status", "WATCH") + "  •  " +
+                        sfp.optString("direction", "—") + " @ " +
+                        String.format(Locale.US, "%.2f", sfp.optDouble("target_level", Double.NaN))
+                } else ""
+                val breakoutText = if (breakout != null) {
+                    "BREAKOUT  •  " + breakout.optString("status", "WATCH") + "  •  " +
+                        breakout.optString("event", "NONE")
+                } else ""
+                setTradeSetupText(
+                    "OPPORTUNITY RADAR  •  ACTIVE SCAN\n" +
+                        leadText + if (secondText.isBlank()) "" else "\n" + secondText +
+                        if (sfpText.isBlank()) "" else "\n" + sfpText +
+                        if (breakoutText.isBlank()) "" else "\n" + breakoutText +
+                        if (scenario.isBlank()) "" else "\nSCENARIOS  •  " + scenario +
+                        "\nNO CONFIRMED TRADE YET • radar is actively monitoring triggers."
+                )
+                risk.text = "USDT P&L calculator • quantity or cost • long/short • leverage"
+            }
         } else {
             val lifecycle = signalObj.optString("lifecycle_stage", signalObj.optString("lifecycle", "ACTIVE"))
             val thesis = signalObj.optJSONArray("thesis")
@@ -788,18 +821,30 @@ class SafeActivity : Activity() {
             val styleReason = signalObj.optString("style_reason", signalObj.optJSONObject("evidence")?.optString("style_reason", ""))
             val evidenceObj = signalObj.optJSONObject("evidence")
             val riskDistance = evidenceObj?.optDouble("risk_distance", Double.NaN) ?: Double.NaN
-            setTradeSetupText("TRADE CALL  •  " + signalObj.optString("direction") + "  •  " + tradeStyle + "  •  " + lifecycle +
-                "\n" + signalObj.optString("setup") +
-                "\nEntry  " + String.format(Locale.US, "%.2f", signalObj.optDouble("entry")) +
-                "    SL  " + String.format(Locale.US, "%.2f", signalObj.optDouble("stop")) +
-                "\nTP1  " + String.format(Locale.US, "%.2f", signalObj.optDouble("target1")) +
-                "    TP2  " + String.format(Locale.US, "%.2f", signalObj.optDouble("target2")) +
-                "\nRisk  " + (if (riskDistance.isNaN()) "—" else String.format(Locale.US, "%.2f pts", riskDistance)) +
-                "  •  RR  " + String.format(Locale.US, "%.2f", signalObj.optDouble("rr")) +
-                "  •  Conf " + String.format(Locale.US, "%.0f%%", signalObj.optDouble("confidence") * 100) +
-                if (styleReason.isBlank()) "" else "\n" + styleReason +
-                if (reason.isBlank()) "" else "\n" + reason +
-                managementText)
+
+            val plannedEntry = signalObj.optDouble("entry", Double.NaN)
+            val actualEntry = openExecution?.optDouble("entry_price", Double.NaN) ?: Double.NaN
+            val entryLine = if (actualEntry.isFinite() && actualEntry > 0) {
+                "Planned  " + String.format(Locale.US, "%.2f", plannedEntry) +
+                    "    Actual fill  " + String.format(Locale.US, "%.2f", actualEntry)
+            } else {
+                "Planned entry  " + if (plannedEntry.isFinite()) String.format(Locale.US, "%.2f", plannedEntry) else "—"
+            }
+
+            setTradeSetupText(
+                "TRADE CALL  •  " + signalObj.optString("direction") + "  •  " + tradeStyle + "  •  " + lifecycle +
+                    "\n" + signalObj.optString("setup") +
+                    "\n" + entryLine +
+                    "\nSL  " + String.format(Locale.US, "%.2f", signalObj.optDouble("stop")) +
+                    "\nTP1  " + String.format(Locale.US, "%.2f", signalObj.optDouble("target1")) +
+                    "    TP2  " + String.format(Locale.US, "%.2f", signalObj.optDouble("target2")) +
+                    "\nRisk  " + (if (riskDistance.isNaN()) "—" else String.format(Locale.US, "%.2f pts", riskDistance)) +
+                    "  •  RR  " + String.format(Locale.US, "%.2f", signalObj.optDouble("rr")) +
+                    "  •  Conf " + String.format(Locale.US, "%.0f%%", signalObj.optDouble("confidence") * 100) +
+                    if (styleReason.isBlank()) "" else "\n" + styleReason +
+                    if (reason.isBlank()) "" else "\n" + reason +
+                    managementText
+            )
 
             val id = signalObj.optString("id")
             if (id.isNotBlank() && id != lastSignalId) {
@@ -809,7 +854,6 @@ class SafeActivity : Activity() {
             }
         }
 
-        val execution = root.optJSONObject("execution")
         val executionEvent = execution?.optJSONObject("last_event")
         val executionEventKey = executionEvent?.optString("key").orEmpty()
         if (executionEventKey.isNotBlank() && executionEventKey != lastExecutionEventKey) {
