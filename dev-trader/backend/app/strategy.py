@@ -1559,6 +1559,53 @@ class StrategyEngine:
         def near(level, pct=0.45):
             return level is not None and abs(price - float(level)) / max(price, 1.0) * 100 <= pct
 
+        def converging_structure(candles: list[Candle]) -> dict:
+            cs = [c for c in candles if c.confirmed]
+            if len(cs) < 20:
+                return {"status": "WATCH", "upper": None, "lower": None, "width_pct": None, "reason": "Not enough pivots."}
+            highs, lows = pivots(cs, 2)
+            if len(highs) < 2 or len(lows) < 2:
+                return {"status": "WATCH", "upper": None, "lower": None, "width_pct": None, "reason": "Need two clear highs and lows."}
+
+            h1_idx, h1 = highs[-2]
+            h2_idx, h2 = highs[-1]
+            l1_idx, l1 = lows[-2]
+            l2_idx, l2 = lows[-1]
+            h_slope = (float(h2) - float(h1)) / max(1, h2_idx - h1_idx)
+            l_slope = (float(l2) - float(l1)) / max(1, l2_idx - l1_idx)
+
+            last_idx = len(cs) - 1
+            upper_proj = float(h2) + h_slope * max(0, last_idx - h2_idx)
+            lower_proj = float(l2) + l_slope * max(0, last_idx - l2_idx)
+            if upper_proj <= lower_proj:
+                return {"status": "WATCH", "upper": upper_proj, "lower": lower_proj, "width_pct": None, "reason": "Projected boundaries crossed."}
+
+            width_pct = (upper_proj - lower_proj) / max(price, 1.0) * 100
+            converging = h_slope < 0 and l_slope > 0
+            status = "WATCH"
+            if converging and width_pct <= 1.20:
+                status = "ARMED"
+            if converging and width_pct <= 0.75:
+                status = "DEVELOPING"
+
+            edge = min(abs(price - upper_proj), abs(price - lower_proj)) / max(price, 1.0) * 100
+            return {
+                "status": status,
+                "upper": round(upper_proj, 2),
+                "lower": round(lower_proj, 2),
+                "width_pct": round(width_pct, 3),
+                "upper_slope": round(h_slope, 5),
+                "lower_slope": round(l_slope, 5),
+                "near_edge_pct": round(edge, 3),
+                "reason": (
+                    "Descending resistance + ascending support are converging."
+                    if status != "WATCH"
+                    else "Trendline compression is not sufficiently validated."
+                ),
+            }
+
+        triangle = converging_structure(state.candles_5 if len(state.candles_5) >= 20 else state.candles_15)
+
         bearish_context = (
             f.trend_60 == "DOWN"
             or f.trend_240 == "DOWN"
@@ -1648,6 +1695,23 @@ class StrategyEngine:
             "reason": "15m countertrend bounce against a weaker 1H context can represent a B-wave retest before another C-leg.",
             "trigger": "B-wave reaches prior swing/resistance, then rejects with bearish MSS/displacement.",
             "invalidation": "The B-wave accepts beyond the higher-degree invalidation level.",
+        })
+
+        triangle_state = triangle.get("status", "WATCH")
+        if triangle_state == "ARMED" and triangle.get("near_edge_pct", 99.0) <= 0.45:
+            triangle_state = "DEVELOPING"
+        scenarios.append({
+            "name": "Reference: converging trendline compression / triangle",
+            "direction": "BOTH",
+            "state": triangle_state,
+            "setup_family": "converging_trendlines",
+            "reason": triangle.get("reason", "Watching converging boundaries."),
+            "upper_boundary": triangle.get("upper"),
+            "lower_boundary": triangle.get("lower"),
+            "width_pct": triangle.get("width_pct"),
+            "trigger": "Body-close breakout beyond a validated boundary followed by displacement/retest; alternatively, SFP rejection at a boundary for a mean-reversion setup.",
+            "invalidation": "Breakout that closes back inside the structure, or a boundary that loses repeated-touch validation.",
+            "warning": "Do not predict the breakout direction solely from the triangle shape.",
         })
 
         range_state = "WATCH"
