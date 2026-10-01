@@ -707,6 +707,32 @@ class SafeActivity : Activity() {
         val signalObj = root.optJSONObject("signal")
         val engine = root.optJSONObject("engine")
         val f = root.optJSONObject("features")
+
+        val nowMs = System.currentTimeMillis()
+        val receivedTs = root.optLong("received_ts", 0L)
+        val marketUpdateTs = root.optLong("last_market_update_ts", 0L)
+        val freshestTs = maxOf(receivedTs, marketUpdateTs)
+        val freshMarket = priceValue.isFinite() && freshestTs > 0L && (nowMs - freshestTs) <= 8_000L
+        status.text = when {
+            freshMarket && health == "DEGRADED" -> "LIVE  •  REST FALLBACK"
+            freshMarket -> "LIVE"
+            health == "HEALTHY" -> "LIVE"
+            health == "DEGRADED" -> "LIVE  •  REST FALLBACK"
+            health == "CONNECTING" -> "CONNECTING…"
+            health == "RECONNECTING" -> "RECONNECTING…"
+            else -> health
+        }
+        price.text = priceBtcAccent(
+            "BTC  " + if (priceValue.isNaN()) "—"
+                else String.format(Locale.US, "%,.2f", priceValue) +
+                    "\nOI   " + if (oi.isNaN()) "—"
+                else String.format(Locale.US, "%,.2f", oi)
+        )
+        val upstream = root.optJSONObject("upstream")
+        val source = upstream?.optString("source", "").orEmpty()
+        integrity.text = "Primary WS  •  " + if (ws) "CONNECTED" else "DISCONNECTED" +
+            if (source.isBlank()) "" else "  •  " + source.replace("_", " ")
+
         val execution = root.optJSONObject("execution")
         val recentTrades = execution?.optJSONArray("recent_trades")
         var openExecution: JSONObject? = null
