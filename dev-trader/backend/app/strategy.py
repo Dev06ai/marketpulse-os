@@ -1309,7 +1309,10 @@ class StrategyEngine:
         if atr5 <= 0:
             return {"status": "WATCH", "direction": "NONE", "score": 0.0, "reason": "5m ATR unavailable."}
 
-        reference = cs[-7].close
+        # Use the recent 15-minute window rather than a 30-minute anchor so
+        # sudden 5m expansions are recognized early instead of only after most
+        # of the move has already happened.
+        reference = cs[-4].close
         price = float(state.last_price)
         move = price - float(reference)
         move_atr = abs(move) / atr5
@@ -1318,7 +1321,7 @@ class StrategyEngine:
         current_volume = float(forming.volume if forming is not None else cs[-1].volume)
         volume_ratio = current_volume / avg_volume if avg_volume > 0 else 1.0
 
-        prior = cs[-7:-1]
+        prior = cs[-4:-1]
         recent_high = max((c.high for c in prior), default=price)
         recent_low = min((c.low for c in prior), default=price)
         hi = max(price, float(forming.high)) if forming is not None else float(cs[-1].high)
