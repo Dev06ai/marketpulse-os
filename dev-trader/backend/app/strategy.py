@@ -1329,6 +1329,21 @@ class StrategyEngine:
         bullish_break = hi > recent_high and move > 0
         bearish_break = lo < recent_low and move < 0
 
+        live_open = float(forming.open) if forming is not None else float(cs[-1].open)
+        live_hi = float(forming.high) if forming is not None else float(cs[-1].high)
+        live_lo = float(forming.low) if forming is not None else float(cs[-1].low)
+        live_close = price
+        body_fraction = abs(live_close - live_open) / max(live_hi - live_lo, 1e-9)
+        bullish_acceptance = (
+            (forming is None and float(cs[-1].close) > recent_high)
+            or (forming is not None and price > recent_high and body_fraction >= 0.55)
+        )
+        bearish_acceptance = (
+            (forming is None and float(cs[-1].close) < recent_low)
+            or (forming is not None and price < recent_low and body_fraction >= 0.55)
+        )
+        bullish_break = bullish_acceptance and move > 0
+        bearish_break = bearish_acceptance and move < 0
         direction = "LONG" if bullish_break else "SHORT" if bearish_break else ("LONG" if move > 0 else "SHORT")
         if move_atr < 1.10:
             return {
@@ -1383,7 +1398,7 @@ class StrategyEngine:
                 reasons.append("CVD impulse is negative")
 
         score = min(1.0, score)
-        if move_atr > 3.50:
+        if move_atr > 3.00:
             return {
                 "status": "EXTENDED",
                 "direction": direction,
@@ -1396,7 +1411,17 @@ class StrategyEngine:
                 "reason": "Move is already extended; do not chase the impulse. Wait for pullback/retest.",
             }
 
-        status = "TRIGGERED" if score >= 0.70 and move_atr >= 1.35 else ("ARMED" if score >= 0.45 else "WATCH")
+        flow_confirmation = (
+            (direction == "LONG" and (f.cvd_impulse > 0 or f.book_imbalance > 0.08 or f.oi_change_5m_pct > 0.10))
+            or
+            (direction == "SHORT" and (f.cvd_impulse < 0 or f.book_imbalance < -0.08 or f.oi_change_5m_pct > 0.10))
+        )
+        status = "TRIGGERED" if (
+            score >= 0.70
+            and move_atr >= 1.35
+            and (bullish_break or bearish_break)
+            and (volume_ratio >= 1.25 or flow_confirmation)
+        ) else ("ARMED" if score >= 0.45 else "WATCH")
         return {
             "status": status,
             "direction": direction,
@@ -1417,6 +1442,11 @@ class StrategyEngine:
     def _momentum_signal(self, state: MarketState, f: MarketFeatures) -> Optional[Signal]:
         ctx = self._build_fast_move_context(state, f)
         if ctx.get("status") != "TRIGGERED" or state.last_price is None:
+            return None
+
+        # Notify early through the radar, but never chase a mature impulse.
+        # A trade candidate must come from the first expansion or a clean retest.
+        if float(ctx.get("move_atr") or 0.0) > 3.00:
             return None
 
         direction = str(ctx.get("direction") or "").upper()
