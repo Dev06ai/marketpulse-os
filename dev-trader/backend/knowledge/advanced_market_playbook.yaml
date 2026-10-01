@@ -216,3 +216,26 @@ reference_scenario_training:
       nearest execution level -> 1H reaction zone -> daily reaction zone ->
       range POC/nPOC or Fibonacci extension if confluence exists.
     minimum_rule: "Never promote a projected target to a trade target until the entry/invalidation structure is confirmed."
+
+
+video_reference_training:
+  source_status: "Derived from the user-provided screenshots/captions of the linked BTC analysis video; full transcript was not retrievable in this environment."
+  role: "Scenario-recognition knowledge only. Live confirmation and risk rules still control trades."
+  lessons:
+    - "A local decline can remain either an ABC correction or a five-wave impulse until structure resolves."
+    - "A 1H order-block bounce can be a temporary Wave-2/B reaction rather than a full reversal."
+    - "After a corrective bounce into higher resistance, a bearish impulse can develop through Waves 3-4-5."
+    - "A Wave-C endpoint is more meaningful when it overlaps lower-timeframe support/OB plus higher-timeframe or Fibonacci confluence."
+    - "A flat correction can use a B-wave retest before the C-wave continues."
+    - "A harmonic X-A-B-C-D completion stays a watch condition until the D-zone confirms rejection or MSS."
+    - "Range POC and order blocks are context levels; acceptance or rejection is required before directional entry."
+    - "Map multiple scenarios first, define invalidation, then wait for price action to select the active branch."
+  scenario_matrix:
+    bearish_continuation: "Rejection from higher resistance -> possible Wave-2/B bounce into 1H/15m OB -> rejection/MSS -> continuation."
+    five_wave_down: "Wave 1 displacement -> Wave 2 relief bounce -> Wave 3 continuation -> Wave 4 correction -> Wave 5 into confluence."
+    confluence_bottom: "1H OB + daily OB + POC/nPOC + Fibonacci overlap becomes a watch zone; require sweep/rejection and bullish MSS/flow."
+    bounce_then_dump: "Do not short the first 1H OB touch; allow the bounce, then evaluate the next rejection zone for B/Wave-2 completion."
+  notification_policy:
+    early_watch: "Notify when a scenario becomes ARMED around a clear trigger zone."
+    setup_trigger: "Notify immediately when confirmation conditions are met."
+    extended_move: "Do not chase a mature impulse; wait for the next corrective entry."
