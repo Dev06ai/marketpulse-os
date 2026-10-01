@@ -475,18 +475,25 @@ class DemoExecutionEngine:
         else:
             try:
                 available = self._num(self.client.available_balance(self.symbol), 0.0)
-            except Exception:
+            except Exception as exc:
+                status["balance_error"] = str(exc)
+                status["readiness_reason"] = "Bitget Demo balance check failed."
+                try:
+                    print(f"BITGET_DEMO_BALANCE_ERROR type={type(exc).__name__} reason={str(exc)[:400]}", flush=True)
+                except Exception:
+                    pass
                 available = 0.0
         status["available_balance_usdt"] = round(available, 4)
         status["funded"] = available > 0
         status["ready"] = bool(self.enabled and self.ready and available > 0)
-        status["readiness_reason"] = (
-            "READY"
-            if status["ready"]
-            else "Add Bitget Demo USDT funds to the futures account."
-            if self.enabled and self.ready and available <= 0
-            else "Bitget Demo API credentials are not configured."
-        )
+        if status["ready"]:
+            status["readiness_reason"] = "READY"
+        elif status.get("balance_error"):
+            status["readiness_reason"] = "Bitget Demo balance check failed."
+        elif self.enabled and self.ready and available <= 0:
+            status["readiness_reason"] = "Add Bitget Demo USDT funds to the futures account."
+        else:
+            status["readiness_reason"] = "Bitget Demo API credentials are not configured."
         return status
 
     def _local_demo_trades(self) -> list[dict[str, Any]]:
