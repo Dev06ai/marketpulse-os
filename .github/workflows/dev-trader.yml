@@ -62,7 +62,7 @@ jobs:
           DEV_TRADER_KEY_PASSWORD: ${{ secrets.DEV_TRADER_KEY_PASSWORD }}
         run: |
           echo "${{ secrets.DEV_TRADER_KEYSTORE_BASE64 }}" | base64 --decode > "$DEV_TRADER_KEYSTORE_PATH"
-          gradle assembleRelease --stacktrace -PdevTraderVersionCode=86 -PdevTraderVersionName=0.11.8
+          gradle assembleRelease --stacktrace -PdevTraderVersionCode=87 -PdevTraderVersionName=0.11.9
       - name: Stage Android artifacts
         if: steps.changed.outputs.android_changed == 'true'
         run: |
@@ -107,6 +107,8 @@ jobs:
         env:
           SHA256: "${{ steps.release.outputs.sha256 }}"
         run: |
+          git fetch origin dev-trader-v1
+          git reset --hard origin/dev-trader-v1
           SHA256="$SHA256" python - <<'PY'
           import json, os
           from pathlib import Path
