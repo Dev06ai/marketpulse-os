@@ -226,7 +226,12 @@ class SignalService : Service() {
                     val owned = socket === ws
                     if (owned) socket = null
                     if (owned) {
-                        updateServiceNotification("Reconnecting to live signal feed…")
+                        // Keep the persistent service quiet during a single transient
+                        // socket failure; the reconnect loop is automatic. Surface the
+                        // reconnect state only after repeated failures.
+                        if (reconnectAttempt >= 2) {
+                            updateServiceNotification("Reconnecting to live signal feed…")
+                        }
                         scheduleReconnect()
                     }
                 }
@@ -302,10 +307,18 @@ class SignalService : Service() {
                                 receivedAge < 10_000L
 
                             if (backendHealthy) {
-                                // The backend is alive; rebuild only our stale socket.
+                                // A healthy backend plus an existing socket means the
+                                // connection is not proven dead. Do not churn/rebuild the
+                                // socket on every quiet period; send a keepalive and let
+                                // the normal WebSocket callbacks handle real disconnects.
                                 if (!stopped) {
                                     staleChecks = 0
-                                    connect(force = true)
+                                    socket?.send(
+                                        JSONObject().apply {
+                                            put("type", "keepalive")
+                                            put("client_ts", System.currentTimeMillis())
+                                        }.toString()
+                                    )
                                 }
                             } else if (!stopped && staleChecks >= 3) {
                                 updateServiceNotification("Live feed reconnecting…")

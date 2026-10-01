@@ -137,18 +137,22 @@ async def broadcast_loop():
             payload = mobile_payload()
         except Exception:
             continue
-        for ws in list(clients):
+        async def push(ws):
             try:
-                await asyncio.wait_for(ws.send_json(payload), timeout=2.5)
+                await asyncio.wait_for(ws.send_json(payload), timeout=1.5)
                 client_failures[ws] = 0
+                return
             except Exception:
                 failures = client_failures.get(ws, 0) + 1
                 client_failures[ws] = failures
-                # Tolerate transient mobile/network stalls. A single slow send must
-                # not destroy an otherwise healthy long-lived WebSocket.
-                if failures >= 5:
+                if failures >= 8:
                     clients.discard(ws)
                     client_failures.pop(ws, None)
+
+        # Send to clients concurrently so one slow mobile connection can never
+        # block the other connection or starve the broadcast loop.
+        if clients:
+            await asyncio.gather(*(push(ws) for ws in list(clients)), return_exceptions=True)
 
 
 async def on_state(s: MarketState):
@@ -160,7 +164,7 @@ async def on_state(s: MarketState):
     # The feed can arrive many times per second; the engine only needs a
     # bounded evaluation cadence to keep the event loop responsive.
     should_evaluate = (
-        now - last_engine_eval_ms >= 350
+        now - last_engine_eval_ms >= 1000
         or s.last_kline_5_ts == now
         or s.last_kline_15_ts == now
     )
