@@ -364,7 +364,7 @@ class SafeActivity : Activity() {
         journalButton.setOnClickListener { loadJournal() }
         root.addView(journalButton, margins(bottom = 12))
 
-        val tradeHistoryCard = card("BITGET DEMO  /  EXECUTED TRADES", "Demo execution is not configured yet.", 12f)
+        val tradeHistoryCard = card("BITGET DEMO  /  EXECUTED TRADE HISTORY", "Connecting to Bitget Demo execution status…", 12f)
         tradeHistory = tradeHistoryCard.value
         root.addView(tradeHistoryCard.container, margins(bottom = 10))
         val tradeHistoryButton = actionButton("REFRESH DEMO TRADE HISTORY")
