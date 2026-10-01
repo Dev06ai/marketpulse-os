@@ -22,8 +22,8 @@ def test_demo_signature_matches_hmac_sha256():
         "",
     )
     expected_pre = (
-        "1730000000123GET/api/v2/mix/account/account"
-        "?marginCoin=USDT&productType=USDT-FUTURES&symbol=BTCUSDT"
+        "1730000000123GET/api/v3/account/assets"
+        "?coin=USDT"
     )
     expected = base64.b64encode(
         hmac.new(
