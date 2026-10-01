@@ -595,17 +595,41 @@ class DemoExecutionEngine:
                 if current:
                     trade["status"] = "OPEN"
                     trade["position_id"] = str(current.get("posId") or current.get("positionId") or "")
-                    trade["filled_qty"] = self._num(current.get("total") or trade.get("filled_qty"))
-                    trade["entry_price"] = self._num(
-                        current.get("openPriceAvg") or current.get("openAvgPrice"),
-                        self._num(trade.get("entry_price") or trade.get("entry_plan"))
-                    )
+
+                    # In one-way mode Bitget aggregates same-direction entries
+                    # into one exchange position. Never overwrite an individual
+                    # signal's actual fill with that aggregate position average.
+                    if not trade.get("actual_fill_confirmed"):
+                        trade["filled_qty"] = self._num(
+                            trade.get("filled_qty")
+                            or current.get("total")
+                            or current.get("positionSize")
+                        )
+                        trade["entry_price"] = self._num(
+                            trade.get("entry_price"),
+                            self._num(current.get("openPriceAvg") or current.get("openAvgPrice") or trade.get("entry_plan"))
+                        )
+                        trade["actual_fill_confirmed"] = True
+                    else:
+                        trade["filled_qty"] = self._num(trade.get("filled_qty"))
+                        trade["entry_price"] = self._num(trade.get("entry_price") or trade.get("entry_plan"))
+
                     trade["exit_price"] = 0.0
                     trade["closed_ts"] = 0
                     trade["close_reason"] = ""
-                    trade["actual_fill_confirmed"] = True
-                    trade["unrealized_pnl_usdt"] = self._num(current.get("unrealizedPL"))
-                    trade["funding_usdt"] = abs(self._num(current.get("totalFee") or current.get("deductedFee")))
+
+                    aggregate_qty = self._num(
+                        current.get("total")
+                        or current.get("positionSize")
+                        or current.get("available"),
+                        0.0,
+                    )
+                    aggregate_unrealized = self._num(current.get("unrealizedPL"), 0.0)
+                    aggregate_fee = abs(self._num(current.get("totalFee") or current.get("deductedFee"), 0.0))
+                    local_qty = self._num(trade.get("filled_qty"), 0.0)
+                    share = (local_qty / aggregate_qty) if aggregate_qty > 0 and local_qty > 0 else 0.0
+                    trade["unrealized_pnl_usdt"] = aggregate_unrealized * share if share > 0 else 0.0
+                    trade["funding_usdt"] = aggregate_fee * share if share > 0 else 0.0
                     continue
 
                 closed = self._match_history_position(history, trade)
@@ -737,16 +761,29 @@ class DemoExecutionEngine:
         return candidates[0]
 
     def _finalize_trade(self, trade: dict[str, Any], closed: dict[str, Any], orders: list[dict[str, Any]]) -> dict[str, Any] | None:
-        net = self._num(closed.get("netProfit"), self._num(closed.get("pnl"), 0.0))
-        pnl = self._num(closed.get("pnl"), net)
-        funding = self._num(closed.get("totalFunding"), 0.0)
-        fees = self._num(closed.get("openFee"), 0.0) + self._num(closed.get("closeFee"), 0.0)
+        aggregate_net = self._num(closed.get("netProfit"), self._num(closed.get("pnl"), 0.0))
+        aggregate_pnl = self._num(closed.get("pnl"), aggregate_net)
+        aggregate_funding = self._num(closed.get("totalFunding"), 0.0)
+        aggregate_fees = self._num(closed.get("openFee"), 0.0) + self._num(closed.get("closeFee"), 0.0)
         exit_price = self._num(closed.get("closeAvgPrice"))
-        entry_price = self._num(closed.get("openAvgPrice"), self._num(trade.get("entry_price") or trade.get("entry_plan")))
+        entry_price = self._num(trade.get("entry_price") or closed.get("openAvgPrice") or trade.get("entry_plan"))
+        local_qty = self._num(trade.get("filled_qty"), 0.0)
+        aggregate_qty = self._num(closed.get("closeTotalPos"), 0.0)
+
+        # Bitget may report one aggregate position-history PnL for several
+        # same-direction entries. Attribute that result proportionally by each
+        # signal's actual filled quantity instead of copying the full PnL to
+        # every local trade.
+        share = (local_qty / aggregate_qty) if aggregate_qty > 0 and local_qty > 0 else 1.0
+        pnl = aggregate_pnl * share
+        funding = aggregate_funding * share
+        fees = aggregate_fees * share
+        net = aggregate_net * share
+
         trade["status"] = "CLOSED"
         trade["entry_price"] = entry_price
         trade["exit_price"] = exit_price
-        trade["filled_qty"] = self._num(closed.get("closeTotalPos"), self._num(trade.get("filled_qty")))
+        trade["filled_qty"] = local_qty if local_qty > 0 else aggregate_qty
         trade["realized_pnl_usdt"] = pnl
         trade["net_profit_usdt"] = net
         trade["fees_usdt"] = fees
