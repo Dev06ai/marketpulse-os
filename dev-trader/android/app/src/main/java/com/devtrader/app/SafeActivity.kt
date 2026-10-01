@@ -379,7 +379,7 @@ class SafeActivity : Activity() {
         root.addView(replayButton, margins(bottom = 16))
 
         root.addView(label(
-            "AUTO-START  •  FAST SETUP SCAN  •  MANUAL TRADING ONLY  •  NO AUTO EXECUTION",
+            "AUTO-START  •  FAST SETUP SCAN  •  BITGET DEMO AUTO-EXECUTION  •  LIVE MONEY DISABLED",
             9f, Color.rgb(112, 116, 126), 0.06f
         ).apply { gravity = Gravity.CENTER })
     }
@@ -1376,11 +1376,22 @@ class SafeActivity : Activity() {
                     val strategyText = if (scanning) "SCANNING" else "NOT READY"
                     val alertText = if (notifications) "READY" else "NOT ENABLED"
                     val featureJson = j.optJSONObject("features")
+                    val demo = strategy?.optJSONObject("demo_execution")
+                    val demoSummary = demo?.optJSONObject("summary")
+                    val demoReady = demoSummary?.optBoolean("ready", false) == true
+                    val demoClient = demoSummary?.optJSONObject("client_status")
+                    val demoBalance = demoClient?.optDouble("available_balance_usdt", Double.NaN) ?: Double.NaN
+                    val demoText = when {
+                        demoReady -> "READY" + if (!demoBalance.isNaN()) " • " + String.format(Locale.US, "%.2f USDT", demoBalance) else ""
+                        !demoBalance.isNaN() && demoBalance <= 0.0 -> "WAITING FOR FUNDS"
+                        else -> "CHECK CONNECTION"
+                    }
                     check.text = "API  " + apiText +
                         "\nBybit  " + bybitText +
                         "\nEngine WS  " + wsText +
                         "\nStrategy  " + strategyText +
                         "\nSignal  " + (strategy?.optString("signal_state", "NONE") ?: "NONE") +
+                        "\nBitget Demo  " + demoText +
                         "\nRegime  " + (featureJson?.optString("regime", "—") ?: "—") +
                         "\nStructure  " + (featureJson?.optString("market_structure", "—") ?: "—") +
                         "\nAlerts  " + alertText
