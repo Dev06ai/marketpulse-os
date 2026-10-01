@@ -302,15 +302,15 @@ class SignalService : Service() {
                             val receivedAge = root.optJSONObject("ages_ms")
                                 ?.optLong("received_ms", Long.MAX_VALUE)
                                 ?: Long.MAX_VALUE
-                            val backendHealthy = marketWs &&
+                            // market_ws is the backend's upstream exchange feed, not
+                            // the phone-to-backend WebSocket. A fresh REST fallback is
+                            // still a healthy backend market feed and must not trigger
+                            // needless mobile socket churn.
+                            val backendHealthy =
                                 dataHealth in setOf("HEALTHY", "DEGRADED") &&
-                                receivedAge < 10_000L
+                                    receivedAge < 10_000L
 
                             if (backendHealthy) {
-                                // A healthy backend plus an existing socket means the
-                                // connection is not proven dead. Do not churn/rebuild the
-                                // socket on every quiet period; send a keepalive and let
-                                // the normal WebSocket callbacks handle real disconnects.
                                 if (!stopped) {
                                     staleChecks = 0
                                     socket?.send(
@@ -319,6 +319,9 @@ class SignalService : Service() {
                                             put("client_ts", System.currentTimeMillis())
                                         }.toString()
                                     )
+                                    if (!marketWs && dataHealth == "DEGRADED") {
+                                        updateServiceNotification("Market feed on REST fallback")
+                                    }
                                 }
                             } else if (!stopped && staleChecks >= 3) {
                                 updateServiceNotification("Live feed reconnecting…")
