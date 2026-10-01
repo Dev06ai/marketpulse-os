@@ -180,3 +180,72 @@ def test_price_normalization_uses_bitget_price_step():
     assert DemoExecutionEngine._format_price(
         82400.16, config, "SHORT", "tp"
     ) == "82400.1"
+
+
+class ReplaceClient(FakeClient):
+    def __init__(self):
+        self.open_positions = []
+        self.close_calls = []
+
+    def positions(self, symbol):
+        return list(self.open_positions)
+
+    def position_history(self, symbol, start_ms, end_ms, limit):
+        return []
+
+    def orders_history(self, symbol, limit, start_ms, end_ms):
+        return []
+
+    def status(self, symbol):
+        return {
+            "ready": True,
+            "available_balance_usdt": 1000.0,
+            "open_positions": self.open_positions,
+        }
+
+    def place_market_close(self, symbol, direction, size, client_oid):
+        self.close_calls.append((symbol, direction, size, client_oid))
+        self.open_positions = []
+        return {"code": "00000", "data": {"orderId": "close-123", "clientOid": client_oid}}
+
+
+def test_every_new_signal_replaces_existing_demo_position(monkeypatch):
+    monkeypatch.setenv("BITGET_DEMO_TRADING", "true")
+    monkeypatch.setenv("BITGET_EXECUTION_STATE_FILE", "/tmp/dev-trader-test-replace.json")
+    monkeypatch.setenv("BITGET_DEMO_MAX_DAILY_TRADES", "3")
+    try:
+        os.remove("/tmp/dev-trader-test-replace.json")
+    except FileNotFoundError:
+        pass
+
+    learner = FakeLearning()
+    executor = DemoExecutionEngine(learner)
+    client = ReplaceClient()
+    executor.client = client
+
+    base = {
+        "direction": "LONG",
+        "setup": "TEST",
+        "entry": 100000,
+        "stop": 99900,
+        "target1": 100300,
+        "target2": 100300,
+        "rr": 3.0,
+        "confidence": 0.80,
+        "grade": "A",
+        "trade_style": "SCALP",
+        "evidence": {},
+    }
+
+    first = dict(base, id="SIG-1")
+    assert asyncio.run(executor.handle_signal(first))["ok"] is True
+    client.open_positions = [
+        {"holdSide": "long", "total": "0.1", "openPriceAvg": "100000", "posId": "p1"}
+    ]
+
+    second = dict(base, id="SIG-2", direction="SHORT", entry=100100, stop=100200, target1=99800, target2=99800)
+    result = asyncio.run(executor.handle_signal(second))
+
+    assert result["ok"] is True
+    assert client.close_calls[-1][1] == "LONG"
+    assert [row["signal_id"] for row in executor.history(5) if row.get("status") == "OPEN"] == ["SIG-2"]
