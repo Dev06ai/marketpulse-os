@@ -1207,6 +1207,11 @@ class SafeActivity : Activity() {
                     val summary = root.optJSONObject("summary") ?: JSONObject()
                     val ready = summary.optBoolean("ready", false)
                     val configured = summary.optBoolean("configured", false)
+                    val clientStatus = summary.optJSONObject("client_status") ?: JSONObject()
+                    val clientReason = clientStatus.optString(
+                        "reason",
+                        clientStatus.optString("readiness_reason", "")
+                    )
                     val total = summary.optInt("trades", 0)
                     val wins = summary.optInt("wins", 0)
                     val losses = summary.optInt("losses", 0)
@@ -1222,9 +1227,21 @@ class SafeActivity : Activity() {
                         return@safe
                     }
 
+                    val demoState = when {
+                        ready -> "READY"
+                        clientReason.contains("40099") ||
+                            clientReason.contains("exchange environment is incorrect", ignoreCase = true) ->
+                            "WRONG DEMO ENVIRONMENT"
+                        clientReason.contains("credentials", ignoreCase = true) ->
+                            "CREDENTIALS ISSUE"
+                        clientReason.contains("balance", ignoreCase = true) ->
+                            "BALANCE CHECK ISSUE"
+                        else -> "CONNECTION ISSUE"
+                    }
                     val header =
-                        "BITGET DEMO  •  " + if (ready) "READY" else "CONNECTION ISSUE" +
+                        "BITGET DEMO  •  " + demoState +
                         "\nClosed  $total  •  Open  $openTrades  •  W $wins / L $losses" +
+                        if (!ready && clientReason.isNotBlank()) "\n" + clientReason.take(180) else "" +
                         "\nWin rate  " + if (winRate.isNaN()) "—" else String.format(Locale.US, "%.1f%%", winRate * 100.0) +
                         "  •  Net P&L  " + String.format(Locale.US, "%+.2f USDT", totalNet)
 
@@ -1391,8 +1408,15 @@ class SafeActivity : Activity() {
                     val demoReady = demoSummary?.optBoolean("ready", false) == true
                     val demoClient = demoSummary?.optJSONObject("client_status")
                     val demoBalance = demoClient?.optDouble("available_balance_usdt", Double.NaN) ?: Double.NaN
+                    val demoClientReason = demoClient?.optString(
+                        "reason",
+                        demoClient?.optString("readiness_reason", "")
+                    ) ?: ""
                     val demoText = when {
                         demoReady -> "READY" + if (!demoBalance.isNaN()) " • " + String.format(Locale.US, "%.2f USDT", demoBalance) else ""
+                        demoClientReason.contains("40099") ||
+                            demoClientReason.contains("exchange environment is incorrect", ignoreCase = true) ->
+                            "WRONG DEMO ENVIRONMENT"
                         !demoBalance.isNaN() && demoBalance <= 0.0 -> "WAITING FOR FUNDS"
                         else -> "CHECK CONNECTION"
                     }
