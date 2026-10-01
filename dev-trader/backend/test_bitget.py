@@ -74,3 +74,52 @@ def test_uta_place_market_order_payload(monkeypatch):
     assert sent["payload"]["posSide"] == "short"
     assert sent["payload"]["takeProfit"] == "82400"
     assert sent["payload"]["stopLoss"] == "84300"
+
+
+def test_uta_close_market_order_payload(monkeypatch):
+    monkeypatch.setenv("BITGET_DEMO_TRADING", "true")
+    client = BitgetDemoClient("k", "s", "p")
+    sent = {}
+
+    def fake_settings():
+        return {"holdMode": "one_way_mode"}
+
+    def fake_post(path, payload):
+        sent["path"] = path
+        sent["payload"] = payload
+        return {"code": "00000", "data": {"orderId": "close-123"}}
+
+    monkeypatch.setattr(client, "account_settings", fake_settings)
+    monkeypatch.setattr(client, "_post", fake_post)
+
+    client.place_market_close("BTCUSDT", "LONG", "0.003", "DTDEMO-CLOSE-test")
+
+    assert sent["path"] == "/api/v3/trade/place-order"
+    assert sent["payload"]["category"] == "USDT-FUTURES"
+    assert sent["payload"]["symbol"] == "BTCUSDT"
+    assert sent["payload"]["side"] == "sell"
+    assert sent["payload"]["qty"] == "0.003"
+    assert sent["payload"]["reduceOnly"] == "yes"
+    assert "posSide" not in sent["payload"]
+
+
+def test_uta_close_market_order_hedge_mode(monkeypatch):
+    monkeypatch.setenv("BITGET_DEMO_TRADING", "true")
+    client = BitgetDemoClient("k", "s", "p")
+    sent = {}
+
+    def fake_settings():
+        return {"holdMode": "hedge_mode"}
+
+    def fake_post(path, payload):
+        sent["payload"] = payload
+        return {"code": "00000", "data": {"orderId": "close-456"}}
+
+    monkeypatch.setattr(client, "account_settings", fake_settings)
+    monkeypatch.setattr(client, "_post", fake_post)
+
+    client.place_market_close("BTCUSDT", "SHORT", "0.004", "DTDEMO-CLOSE-test")
+
+    assert sent["payload"]["side"] == "buy"
+    assert sent["payload"]["posSide"] == "short"
+    assert "reduceOnly" not in sent["payload"]
