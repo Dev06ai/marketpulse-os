@@ -1,8 +1,8 @@
 {
   "enabled": true,
-  "versionCode": 80,
-  "versionName": "0.11.2",
-  "apkUrl": "https://github.com/Dev06ai/marketpulse-os/releases/download/dev-trader-v0.11.2-80/app-release.apk",
-  "sha256": "57c119a0fdc6976469e7b402ec89ac9806496da49c8ada22d18c544e0ffc1579",
-  "notes": "Signed Dev Trader release 0.11.2 \u2022 no false DATA RECOVERY during healthy HTTP fallback"
+  "versionCode": 81,
+  "versionName": "0.11.3",
+  "apkUrl": "https://github.com/Dev06ai/marketpulse-os/releases/download/dev-trader-v0.11.3-81/app-release.apk",
+  "sha256": "7bb3e28c03ce448ba651853ddf92f129a783d0f70240414c7ddc9d69d02c91d1",
+  "notes": "Signed Dev Trader release 0.11.3 \u2022 persistent connection supervisor"
 }
