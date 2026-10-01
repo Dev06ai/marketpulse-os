@@ -211,13 +211,21 @@ class BitgetDemoClient:
             )
         )
 
-    def orders_history(self, symbol: str = "BTCUSDT", limit: int = 100) -> list[dict[str, Any]]:
+    def orders_history(
+        self,
+        symbol: str = "BTCUSDT",
+        limit: int = 100,
+        start_ms: int | None = None,
+        end_ms: int | None = None,
+    ) -> list[dict[str, Any]]:
         return self._list(
             self._get(
                 "/api/v3/trade/history-orders",
                 {
                     "category": self.product_type,
                     "symbol": symbol,
+                    "startTime": start_ms,
+                    "endTime": end_ms,
                     "limit": max(1, min(int(limit), 100)),
                 },
             )
