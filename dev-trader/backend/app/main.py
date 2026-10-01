@@ -516,6 +516,13 @@ async def system_check():
                 "last_kline_15_ts": int(state.last_kline_15_ts) if state.last_kline_15_ts is not None else None,
                 "last_kline_60_ts": int(state.last_kline_60_ts) if state.last_kline_60_ts is not None else None,
             },
+            "market_feed": {
+                "primary_ws_connected": bool(state.ws_connected),
+                "rest_ok": bool(stream.last_rest_ok) if stream else False,
+                "source": stream.last_data_source if stream else "NONE",
+                "last_rest_sync_ts": stream.last_rest_sync_ms if stream else 0,
+                "last_error": stream.last_upstream_error if stream else "",
+            },
             "features": {
                 "trend_15": f.trend_15,
                 "trend_60": f.trend_60,
