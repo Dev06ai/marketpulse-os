@@ -6,7 +6,7 @@ import time
 
 from .analytics import MarketFeatures, compute_features
 from .models import Candle, MarketState
-from .knowledge import RULES, knowledge_summary
+from .knowledge import RULES, MARKET_KNOWLEDGE, knowledge_summary
 from .learning import AdaptiveLearning
 
 
@@ -1315,6 +1315,145 @@ class StrategyEngine:
             })
         radar.sort(key=lambda x: (-x["score"], 0 if x["tier"] == "CONFIRMED" else 1))
         return radar
+    def _build_reference_scenarios(self, state: MarketState, f: MarketFeatures) -> list[dict]:
+        """Translate the uploaded TradingView examples into dynamic watch states."""
+        if state.last_price is None:
+            return []
+
+        price = float(state.last_price)
+
+        def last_ob(candles: list[Candle]):
+            cs = [c for c in candles if c.confirmed]
+            if len(cs) < 5:
+                return None
+            for i in range(len(cs) - 2, max(-1, len(cs) - 9), -1):
+                base, nxt = cs[i], cs[i + 1]
+                if nxt.close > base.high and nxt.close > nxt.open:
+                    return ("BULLISH", (base.open + base.close) / 2.0)
+                if nxt.close < base.low and nxt.close < nxt.open:
+                    return ("BEARISH", (base.open + base.close) / 2.0)
+            return None
+
+        ob15 = last_ob(state.candles_15)
+        ob1h = last_ob(state.candles_60)
+        confirmed15 = [c for c in state.candles_15 if c.confirmed]
+        recent_high = max((c.high for c in confirmed15[-20:]), default=None)
+        recent_low = min((c.low for c in confirmed15[-20:]), default=None)
+
+        upper = (ob15[1] if ob15 else None) or recent_high
+        lower = (ob1h[1] if ob1h else None) or recent_low
+        daily_low = f.previous_day_low
+        daily_high = f.previous_day_high
+
+        def near(level, pct=0.45):
+            return level is not None and abs(price - float(level)) / max(price, 1.0) * 100 <= pct
+
+        bearish_context = (
+            f.trend_60 == "DOWN"
+            or f.trend_240 == "DOWN"
+            or f.elliott_phase == "IMPULSE_DOWN"
+            or f.elliott_direction == "SHORT"
+        )
+        bullish_context = (
+            f.trend_60 == "UP"
+            or f.trend_240 == "UP"
+            or f.elliott_phase == "IMPULSE_UP"
+            or f.elliott_direction == "LONG"
+        )
+
+        scenarios = []
+
+        # Reference 1/5/6/7: bearish local sequence with an eventual 1H/daily
+        # reaction, including the possibility of a temporary Wave-2/B bounce.
+        down_state = "WATCH"
+        down_reason = "Waiting for rejection plus a confirmed bearish structure shift."
+        if near(upper) and bearish_context:
+            down_state = "ARMED"
+            down_reason = "Price is near a dynamic resistance/15m-2H style zone while bearish context is present."
+        if (
+            f.market_structure == "BEARISH"
+            and bearish_context
+            and (f.elliott_phase == "IMPULSE_DOWN" or f.trend_15 == "DOWN")
+        ):
+            down_state = "DEVELOPING"
+            down_reason = "Bearish structure and Elliott/HTF context support monitoring a 5-wave or ABC continuation."
+        scenarios.append({
+            "name": "Reference: bearish ABC / 5-wave continuation",
+            "direction": "SHORT",
+            "state": down_state,
+            "setup_family": "bearish_five_wave_to_confluence",
+            "reason": down_reason,
+            "trigger": "15m/5m rejection at the upper zone followed by bearish MSS/SFP and acceptance below the reaction low.",
+            "wave_plan": "1 displacement → 2 corrective bounce → 3 continuation → 4 corrective bounce → 5 into confluence, only if each structural rule survives.",
+            "target_ladder": [x for x in [lower, daily_low] if x is not None][:3],
+            "invalidation": "Acceptance above the source resistance or a Wave-2 retracement that breaks the impulse structure.",
+        })
+
+        bounce_state = "WATCH"
+        bounce_reason = "Waiting for price to interact with the dynamic 1H order-block proxy."
+        if near(lower):
+            bounce_state = "ARMED"
+            bounce_reason = "Price is at/near the dynamic 1H order-block proxy; a reaction is possible."
+        if near(lower) and bullish_context and f.market_structure == "BULLISH":
+            bounce_state = "DEVELOPING"
+            bounce_reason = "1H-zone reaction has bullish structure support; monitor whether this is reversal or only a corrective bounce."
+        scenarios.append({
+            "name": "Reference: 1H OB bounce → possible Wave-2/B → continuation",
+            "direction": "BOTH",
+            "state": bounce_state,
+            "setup_family": "one_hour_ob_bounce_then_continuation",
+            "reason": bounce_reason,
+            "trigger": "Lower-timeframe reclaim inside the 1H OB for the bounce; rejection at the next upper zone re-activates the bearish continuation thesis.",
+            "invalidation": "Clean acceptance below the 1H OB for a bullish bounce thesis, or acceptance above the higher-degree resistance for a bearish continuation thesis.",
+        })
+
+        harmonic_state = "WATCH"
+        harmonic_reason = f.harmonic_reason
+        if f.harmonic_pattern != "NONE" and f.harmonic_confidence >= 0.70:
+            harmonic_state = "ARMED"
+        if f.harmonic_pattern != "NONE" and near(lower):
+            harmonic_state = "DEVELOPING"
+        scenarios.append({
+            "name": "Reference: harmonic X-A-B-C-D completion",
+            "direction": f.harmonic_direction if f.harmonic_direction in {"LONG", "SHORT"} else "BOTH",
+            "state": harmonic_state,
+            "setup_family": "harmonic_completion",
+            "reason": harmonic_reason,
+            "trigger": "D-point reaction + MSS/rejection + flow confirmation at the structural confluence zone.",
+            "invalidation": "Price accepts beyond D-point/structural invalidation without reversal confirmation.",
+            "note": "Ratio match alone stays WATCH; the bot must see price-action confirmation.",
+        })
+
+        flat_state = "WATCH"
+        if f.trend_60 == "DOWN" and f.trend_15 == "UP" and near(upper):
+            flat_state = "ARMED"
+        if f.trend_60 == "DOWN" and f.trend_15 == "UP" and near(upper) and f.elliott_phase in {"CORRECTION_UP", "RANGE_OR_AMBIGUOUS"}:
+            flat_state = "DEVELOPING"
+        scenarios.append({
+            "name": "Reference: flat B retest → C continuation",
+            "direction": "SHORT",
+            "state": flat_state,
+            "setup_family": "flat_b_retest_then_c",
+            "reason": "15m countertrend bounce against a weaker 1H context can represent a B-wave retest before another C-leg.",
+            "trigger": "B-wave reaches prior swing/resistance, then rejects with bearish MSS/displacement.",
+            "invalidation": "The B-wave accepts beyond the higher-degree invalidation level.",
+        })
+
+        range_state = "WATCH"
+        if f.regime == "RANGE" and lower is not None and upper is not None:
+            range_state = "ARMED" if (near(lower, 0.75) or near(upper, 0.75)) else "WATCH"
+        scenarios.append({
+            "name": "Reference: zone-to-zone range rotation",
+            "direction": "BOTH",
+            "state": range_state,
+            "setup_family": "range_rotation_between_zones",
+            "reason": "Use the upper/lower dynamic zones as range boundaries until price proves acceptance outside them.",
+            "trigger": "Sweep/reclaim at the lower zone for long-side rotation or sweep/rejection at the upper zone for short-side rotation.",
+            "invalidation": "Body-close acceptance outside the range plus retest confirmation.",
+        })
+
+        return scenarios
+
     def _build_scenarios(self, state: MarketState, f: MarketFeatures, radar: list[dict]) -> list[dict]:
         long = next(x for x in radar if x["direction"] == "LONG")
         short = next(x for x in radar if x["direction"] == "SHORT")
@@ -1343,6 +1482,7 @@ class StrategyEngine:
             "trigger": "sweep one side of a range and rotate back",
             "invalidation": "clean acceptance outside the range",
         })
+        scenarios.extend(self._build_reference_scenarios(state, f))
         return scenarios
 
     def _build_evidence_matrix(self, f: MarketFeatures, state: MarketState) -> dict:
@@ -1554,6 +1694,11 @@ class StrategyEngine:
                 "elliott_1h_direction": f0.elliott_60_direction,
                 "elliott_1h_confidence": round(f0.elliott_60_confidence, 3),
                 "elliott_1h_reason": f0.elliott_60_reason,
+                "harmonic_pattern": f0.harmonic_pattern,
+                "harmonic_direction": f0.harmonic_direction,
+                "harmonic_confidence": round(f0.harmonic_confidence, 3),
+                "harmonic_reason": f0.harmonic_reason,
+                "reference_scenario_training": MARKET_KNOWLEDGE.get("reference_scenario_training", {}).get("source", "loaded"),
                 "previous_day_high": f0.previous_day_high,
                 "previous_day_low": f0.previous_day_low,
                 "previous_week_high": f0.previous_week_high,
