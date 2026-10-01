@@ -224,8 +224,8 @@ class DemoExecutionEngine:
                 self.symbol,
                 signal.get("direction"),
                 self._format_qty(qty, config),
-                self._format_price(stop),
-                self._format_price(tp),
+                self._format_price(stop, config, str(signal.get("direction")), "sl"),
+                self._format_price(tp, config, str(signal.get("direction")), "tp"),
                 client_oid,
             )
             order_id = self.client.extract_order_id(result)
@@ -659,8 +659,66 @@ class DemoExecutionEngine:
         return f"{value:.{max(0, min(12, places))}f}".rstrip("0").rstrip(".") or "0"
 
     @staticmethod
-    def _format_price(value: float) -> str:
-        return f"{value:.8f}".rstrip("0").rstrip(".")
+    def _price_step(config: dict[str, Any]) -> Decimal:
+        """Return Bitget's exact exchange price step for this instrument.
+
+        Bitget exposes priceEndStep as the price step length. Fall back to
+        pricePlace only when priceEndStep is unavailable.
+        """
+        raw_step = config.get("priceEndStep")
+        try:
+            step = Decimal(str(raw_step))
+        except (TypeError, ValueError, ArithmeticError):
+            step = Decimal("0")
+        if step > 0:
+            return step
+
+        try:
+            places = max(0, int(DemoExecutionEngine._num(config.get("pricePlace"), 0)))
+        except (TypeError, ValueError):
+            places = 0
+        return Decimal("1").scaleb(-places)
+
+    @staticmethod
+    def _format_price(
+        value: float,
+        config: dict[str, Any] | None = None,
+        direction: str = "",
+        role: str = "",
+    ) -> str:
+        """Format a protective price as an exact Bitget tick multiple.
+
+        For a LONG, SL is rounded down and TP up; for a SHORT, SL is rounded
+        up and TP down. This keeps protection on the intended side of the
+        planned level while satisfying Bitget's price-step constraint.
+        """
+        try:
+            decimal_value = Decimal(str(value))
+        except (TypeError, ValueError, ArithmeticError):
+            raise BitgetDemoError("Invalid protective price.")
+
+        step = DemoExecutionEngine._price_step(config or {})
+        if step <= 0:
+            return f"{decimal_value:.8f}".rstrip("0").rstrip(".")
+
+        direction = str(direction).upper()
+        role = str(role).lower()
+        from decimal import ROUND_CEILING, ROUND_FLOOR
+
+        rounding = ROUND_DOWN
+        if role == "sl" and direction == "LONG":
+            rounding = ROUND_FLOOR
+        elif role == "tp" and direction == "LONG":
+            rounding = ROUND_CEILING
+        elif role == "sl" and direction == "SHORT":
+            rounding = ROUND_CEILING
+        elif role == "tp" and direction == "SHORT":
+            rounding = ROUND_FLOOR
+
+        normalized = (decimal_value / step).to_integral_value(rounding=rounding) * step
+        places = max(0, -step.as_tuple().exponent)
+        quantized = normalized.quantize(step)
+        return format(quantized, f".{places}f").rstrip("0").rstrip(".")
 
     def history(self, limit: int = 100) -> list[dict[str, Any]]:
         with self.lock:
