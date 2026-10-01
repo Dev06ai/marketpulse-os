@@ -369,7 +369,7 @@ def test_video_reference_training_is_loaded_and_wave_c_scenario_exists():
         data_health="HEALTHY",
     )
     diagnostics = engine.diagnostics(state)
-    features = diagnostics["features"]
+    features = diagnostics["market_features"]
     scenarios = diagnostics["scenario_tree"]
 
     assert features["video_reference_training"] is True
