@@ -51,7 +51,7 @@ jobs:
           gradle-version: '9.6.0'
       - name: Build Android debug APK
         working-directory: dev-trader/android
-        run: gradle assembleDebug --stacktrace -PdevTraderVersionCode=84 -PdevTraderVersionName=0.11.6
+        run: gradle assembleDebug --stacktrace -PdevTraderVersionCode=85 -PdevTraderVersionName=0.11.7
       - name: Build signed Android release APK
         if: steps.changed.outputs.android_changed == 'true'
         working-directory: dev-trader/android
@@ -95,14 +95,14 @@ jobs:
           mkdir -p release
           cp dist/app-release.apk release/app-release.apk
           sha256sum release/app-release.apk | awk '{print $1}' > release/app-release.sha256
-          echo "tag=dev-trader-v0.11.6-84" >> "$GITHUB_OUTPUT"
+          echo "tag=dev-trader-v0.11.7-85" >> "$GITHUB_OUTPUT"
           echo "sha256=$(cat release/app-release.sha256)" >> "$GITHUB_OUTPUT"
       - name: Create GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release delete "${{ steps.release.outputs.tag }}" --yes --cleanup-tag || true
-          gh release create "${{ steps.release.outputs.tag }}"             release/app-release.apk             --title "Dev Trader 0.11.6 (84)"             --notes "Connection supervisor: persistent REST fallback, lower engine load, and non-churning WebSocket recovery."
+          gh release create "${{ steps.release.outputs.tag }}"             release/app-release.apk             --title "Dev Trader 0.11.7 (85)"             --notes "Connection supervisor: persistent REST fallback, lower engine load, and non-churning WebSocket recovery."
       - name: Publish verified update manifest
         env:
           SHA256: "${{ steps.release.outputs.sha256 }}"
@@ -118,7 +118,7 @@ jobs:
               "versionName": "0.11.6",
               "apkUrl": "https://github.com/Dev06ai/marketpulse-os/releases/download/dev-trader-v0.11.6-84/app-release.apk",
               "sha256": os.environ["SHA256"],
-              "notes": "Signed Dev Trader release 0.11.6 • Bitget Demo environment diagnostics"
+              "notes": "Signed Dev Trader release 0.11.7 • canonical Bitget Demo fill reconciliation and trade-history fix"
           })
           p.write_text(json.dumps(data, indent=2) + "\n")
           PY
