@@ -49,6 +49,7 @@ import java.util.Locale
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 
+// Build 87: backend executes every emitted trade call; Android client remains signal/event driven.
 class SafeActivity : Activity() {
     private val btcOrange = Color.rgb(247, 147, 26)
 
