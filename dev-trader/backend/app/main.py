@@ -98,6 +98,10 @@ def mobile_payload():
             "fvg_direction": f.fvg_direction,
             "order_block_direction": f.order_block_direction,
             "golden_pocket": f.golden_pocket,
+            "harmonic_pattern": f.harmonic_pattern,
+            "harmonic_direction": f.harmonic_direction,
+            "harmonic_confidence": round(f.harmonic_confidence, 3),
+            "harmonic_reason": f.harmonic_reason,
             "weekly_open": f.weekly_open,
         },
         "opportunity_alert": {

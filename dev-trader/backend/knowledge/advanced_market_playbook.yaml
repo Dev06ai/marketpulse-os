@@ -136,3 +136,83 @@ execution:
   principle: >
     The engine should prefer WAIT over a marginal setup. A valid market
     opportunity is not automatically a valid trade.
+
+
+reference_scenario_training:
+  source: "Seven uploaded BTC/USDT TradingView reference images supplied for Dev Trader scenario training."
+  purpose: >
+    Convert the visual examples into reusable scenario templates. These are
+    pattern-recognition and watch-state templates, not guaranteed forecasts
+    and never bypass the elite quality governor.
+  levels:
+    hierarchy:
+      - "2H order block = higher resistance/support anchor."
+      - "15m order block = execution / reaction zone."
+      - "1H order block = major reaction zone and possible corrective bounce."
+      - "Daily order block = higher-timeframe target/confluence zone."
+      - "Range POC / nPOC = confluence levels used to confirm or reject a projected target."
+    rule: "Use dynamically detected zones; do not hardcode the exact prices from the reference screenshots."
+  scenarios:
+    local_abc_or_impulse:
+      idea: "A local correction may be an ABC or the start/continuation of a five-wave impulse."
+      watch_for:
+        - "Rejection from a higher-timeframe 2H/15m resistance zone."
+        - "Bearish MSS or lower-timeframe displacement."
+        - "Sequential lower highs/lower lows after the first leg."
+      invalidation:
+        - "Strong acceptance back above the source resistance."
+        - "Impulse rules fail or the wave count becomes ambiguous."
+    bearish_five_wave_to_confluence:
+      idea: "After a confirmed bearish reaction, watch for a five-wave decline toward a stacked 1H/daily/confluence zone."
+      subwave_logic:
+        - "Wave 1 = initial displacement."
+        - "Wave 2 = countertrend bounce; do not chase it."
+        - "Wave 3 = continuation with strongest momentum potential."
+        - "Wave 4 = corrective bounce that should respect impulse structure."
+        - "Wave 5 = final push into target/confluence, subject to confirmation."
+      confirmation:
+        - "Wave 2 remains below the origin/invalidation level."
+        - "Wave 3 breaks the wave-1 extreme with acceptance."
+        - "CVD/OI/order flow support the continuation."
+      invalidation:
+        - "Wave-2 retraces the entire wave-1 move."
+        - "Structure accepts back above the source zone."
+    one_hour_ob_bounce_then_continuation:
+      idea: "A 1H order block can produce a temporary bounce that becomes a corrective Wave 2/B rather than a full reversal."
+      watch_for:
+        - "Price enters the 1H OB and rejects its lower boundary."
+        - "5m/15m bullish MSS creates a reaction."
+        - "Countertrend bounce retests a nearby 15m/2H resistance or prior support."
+        - "Failure there can restart the higher-degree bearish sequence."
+      no_trade:
+        - "Buying the first touch without reclaim/structure confirmation."
+        - "Treating the bounce as a full reversal while the higher-degree count remains bearish."
+    flat_b_retest_then_c:
+      idea: "A flat correction can produce a B-wave retest of the prior swing area before the C-wave continuation."
+      watch_for:
+        - "A-wave decline into a structural demand zone."
+        - "B-wave retrace toward the prior support/resistance."
+        - "B-wave rejection followed by C-wave displacement."
+      invalidation:
+        - "B-wave permanently accepts beyond the higher-degree invalidation level."
+    harmonic_completion:
+      idea: "A harmonic-like X-A-B-C-D completion can become relevant when Fibonacci ratios cluster at a structural zone."
+      requirements:
+        - "At least five meaningful alternating pivots."
+        - "Ratio cluster is within tolerant pattern ranges."
+        - "D point overlaps an order block, liquidity pool, FVG, POC/nPOC or Fibonacci confluence."
+      confirmation:
+        - "Reversal candle/MSS at D."
+        - "CVD/order-flow divergence supports rejection."
+      warning: "A harmonic ratio match without structural confirmation is only a WATCH state."
+    range_rotation_between_zones:
+      idea: "When price is trapped between a 15m/2H resistance zone and a 1H/daily support zone, expect rotation until acceptance resolves the range."
+      long_condition: "Sweep/reclaim at the lower zone plus bullish structure confirmation."
+      short_condition: "Sweep/rejection at the upper zone plus bearish structure confirmation."
+      breakout_condition: "Body-close acceptance outside the range followed by a retest."
+  target_ladder:
+    principle: >
+      Project targets as a ladder rather than a single magical price:
+      nearest execution level -> 1H reaction zone -> daily reaction zone ->
+      range POC/nPOC or Fibonacci extension if confluence exists.
+    minimum_rule: "Never promote a projected target to a trade target until the entry/invalidation structure is confirmed."
