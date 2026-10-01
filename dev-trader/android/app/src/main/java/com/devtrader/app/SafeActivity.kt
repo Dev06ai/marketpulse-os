@@ -1,3 +1,4 @@
+// Build 83: show Bitget Demo funding readiness and demo execution state.
 package com.devtrader.app
 
 import android.Manifest
