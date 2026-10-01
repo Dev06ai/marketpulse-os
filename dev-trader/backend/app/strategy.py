@@ -2300,6 +2300,12 @@ class StrategyEngine:
     def _update_signal_lifecycle(self, state: MarketState):
         self.last_lifecycle_event = None
         self.last_lifecycle_events = []
+        # In Bitget Demo execution mode, the exchange's actual TP/SL/order
+        # lifecycle is authoritative. Do not resolve the signal from a local
+        # price touch, or the learner could count a theoretical result before
+        # the exchange position actually closes.
+        if os.getenv("BITGET_DEMO_TRADING", "false").lower() in {"1", "true", "yes", "on"}:
+            return
         if not self.active_signal or state.last_price is None or self.signal_status != "ACTIVE":
             return
 
@@ -2415,6 +2421,37 @@ class StrategyEngine:
                         row["learning_review"] = self.active_signal.get("learning_review")
                         break
 
+
+    def resolve_external_execution(self, event: dict):
+        """Resolve the active strategy signal from an actual exchange demo close."""
+        if not self.active_signal:
+            return
+        if str(event.get("signal_id") or event.get("execution_signal_id") or "") not in {"", str(self.active_signal.get("id"))}:
+            return
+        reason = str(event.get("close_reason") or "").upper()
+        status = "TARGET_REACHED" if reason == "TP" else "INVALIDATED"
+        ts = int(event.get("ts") or time.time() * 1000)
+        result_r = float(event.get("result_r") or 0.0)
+        self.signal_status = status
+        self.last_resolved_ts = ts
+        self.governor_lock_reason = "RESOLVED: quality cooldown is active before the next signal."
+        self.active_signal["lifecycle"] = status
+        self.active_signal["lifecycle_stage"] = "TP2_HIT" if reason == "TP" else "SL_HIT" if reason == "SL" else "RESOLVED"
+        self.active_signal["resolved_ts"] = ts
+        self.active_signal["execution_managed"] = True
+        self.active_signal["close_reason"] = reason or "UNKNOWN"
+        self.active_signal["realized_pnl_usdt"] = event.get("net_profit_usdt")
+        self.active_signal["actual_result_r"] = result_r
+        self.active_signal["learning_review"] = event.get("learning_review")
+        for row in self.signal_history:
+            if row.get("id") == self.active_signal.get("id"):
+                row["status"] = status
+                row["resolved_ts"] = ts
+                row["result_r"] = result_r
+                row["close_reason"] = reason or "UNKNOWN"
+                row["realized_pnl_usdt"] = event.get("net_profit_usdt")
+                row["learning_review"] = event.get("learning_review")
+                break
 
     def evaluate(self, state: MarketState) -> Optional[Signal]:
         self.last_evaluated_ts = int(time.time() * 1000)
