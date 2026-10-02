@@ -446,8 +446,8 @@ class SafeActivity : Activity() {
             overScrollMode = View.OVER_SCROLL_IF_CONTENT_SCROLLS
             isVerticalScrollBarEnabled = true
             isScrollbarFadingEnabled = true
-            scrollbarFadeDuration = 250
-            scrollbarDefaultDelayBeforeFade = 500
+            scrollBarFadeDuration = 250
+            scrollBarDefaultDelayBeforeFade = 500
             scrollBarStyle = View.SCROLLBARS_INSIDE_INSET
         }
         historyScroll.addView(
