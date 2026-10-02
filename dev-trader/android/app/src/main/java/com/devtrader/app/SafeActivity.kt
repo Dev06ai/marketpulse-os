@@ -260,10 +260,10 @@ class SafeActivity : Activity() {
         header.addView(brand, LinearLayout.LayoutParams(0, dp(44), 1f))
         alertsButton = compactPillButton("ALERTS")
         alertsButton.setOnClickListener { safe { requestAlertPermission() } }
-        header.addView(alertsButton, LinearLayout.LayoutParams(dp(84), dp(36)).apply { rightMargin = dp(6) })
+        header.addView(alertsButton, LinearLayout.LayoutParams(dp(92), dp(40)).apply { rightMargin = dp(6) })
         retryButton = compactPillButton("↻")
         retryButton?.setOnClickListener { safe { forceReconnectFromUser() } }
-        header.addView(retryButton, LinearLayout.LayoutParams(dp(46), dp(36)))
+        header.addView(retryButton, LinearLayout.LayoutParams(dp(50), dp(40)))
         root.addView(header, margins(bottom = 7))
 
         // Hero market card
@@ -303,7 +303,7 @@ class SafeActivity : Activity() {
                 requestChartIfNeeded(force = true)
                 bootstrap(true)
             }
-            tfRow.addView(b, LinearLayout.LayoutParams(0, dp(34), 1f).apply {
+            tfRow.addView(b, LinearLayout.LayoutParams(0, dp(42), 1f).apply {
                 leftMargin = dp(2)
                 rightMargin = dp(2)
             })
@@ -409,7 +409,7 @@ class SafeActivity : Activity() {
         label(text, 9.5f, Color.rgb(130, 136, 149), 0.13f)
 
     private fun weightButton(): LinearLayout.LayoutParams =
-        LinearLayout.LayoutParams(0, dp(38), 1f).apply {
+        LinearLayout.LayoutParams(0, dp(44), 1f).apply {
             leftMargin = dp(2)
             rightMargin = dp(2)
         }
@@ -1885,15 +1885,32 @@ class SafeActivity : Activity() {
         }
     }
 
+    private fun setUpdateStatus(message: String) {
+        update.text = message
+        if (::updateButton.isInitialized) {
+            updateButton.text = when {
+                message.startsWith("Checking") -> "CHECKING…"
+                message.startsWith("DOWNLOADING") -> "DOWNLOADING…"
+                message.startsWith("UPDATE VERIFIED") -> "INSTALLING…"
+                message.startsWith("UP TO DATE") -> "UP TO DATE"
+                message.contains("FAILED", ignoreCase = true) ||
+                    message.contains("BLOCKED", ignoreCase = true) ||
+                    message.contains("INVALID", ignoreCase = true) -> "RETRY UPDATE"
+                else -> "UPDATE"
+            }
+        }
+    }
+
     private fun checkUpdate() {
         updateButton.isEnabled = false
-        update.text = "Checking release channel…"
+        setUpdateStatus("Checking release channel…")
 
-        getJson("https://raw.githubusercontent.com/Dev06ai/marketpulse-os/dev-trader-v1/dev-trader/update.json") { ok, body ->
+        val manifestUrl = "https://raw.githubusercontent.com/Dev06ai/marketpulse-os/dev-trader-v1/dev-trader/update.json?ts=" + System.currentTimeMillis()
+        getJson(manifestUrl) { ok, body ->
             handler.post {
-                updateButton.isEnabled = true
                 if (!ok) {
-                    update.text = "Update check unavailable."
+                    updateButton.isEnabled = true
+                    setUpdateStatus("UPDATE CHECK FAILED • TAP RETRY")
                     return@post
                 }
 
@@ -1904,15 +1921,18 @@ class SafeActivity : Activity() {
                     val remoteName = j.optString("versionName", "new")
 
                     if (!j.optBoolean("enabled", false) || remoteCode <= currentCode) {
-                        update.text = "UP TO DATE  •  build " + currentCode
+                        updateButton.isEnabled = true
+                        setUpdateStatus("UP TO DATE  • build " + currentCode)
                     } else {
                         val apkUrl = j.optString("apkUrl", "")
                         val expectedSha = j.optString("sha256", "")
                         if (apkUrl.isBlank() || expectedSha.length < 32) {
-                            update.text = "UPDATE METADATA INVALID"
+                            updateButton.isEnabled = true
+                            setUpdateStatus("UPDATE METADATA INVALID")
                         } else {
-                            update.text = "DOWNLOADING  •  v" + remoteName
-                            downloadAndInstallUpdate(apkUrl, expectedSha, remoteName)
+                            setUpdateStatus("DOWNLOADING • v" + remoteName)
+                            val freshApkUrl = apkUrl + if (apkUrl.contains("?")) "&" else "?" + "ts=" + System.currentTimeMillis()
+                            downloadAndInstallUpdate(freshApkUrl, expectedSha, remoteName)
                         }
                     }
                 }
@@ -1925,13 +1945,19 @@ class SafeActivity : Activity() {
             val request = Request.Builder().url(apkUrl).get().build()
             client.newCall(request).enqueue(object : okhttp3.Callback {
                 override fun onFailure(call: okhttp3.Call, e: java.io.IOException) {
-                    handler.post { update.text = "UPDATE DOWNLOAD FAILED  •  RETRY" }
+                    handler.post {
+                        updateButton.isEnabled = true
+                        setUpdateStatus("UPDATE DOWNLOAD FAILED • RETRY")
+                    }
                 }
 
                 override fun onResponse(call: okhttp3.Call, response: Response) {
                     response.use {
                         if (!it.isSuccessful || it.body == null) {
-                            handler.post { update.text = "UPDATE DOWNLOAD FAILED  •  HTTP " + it.code }
+                            handler.post {
+                                updateButton.isEnabled = true
+                                setUpdateStatus("UPDATE DOWNLOAD FAILED • HTTP " + it.code)
+                            }
                             return
                         }
                         val dir = File(cacheDir, "updates")
@@ -1952,31 +1978,56 @@ class SafeActivity : Activity() {
                         val actualSha = digest.digest().joinToString("") { b -> "%02x".format(b) }
                         if (!actualSha.equals(expectedSha, ignoreCase = true)) {
                             apk.delete()
-                            handler.post { update.text = "UPDATE BLOCKED  •  CHECKSUM FAILED" }
+                            handler.post {
+                                updateButton.isEnabled = true
+                                setUpdateStatus("UPDATE BLOCKED • CHECKSUM FAILED")
+                            }
                             return
                         }
                         handler.post {
-                            update.text = "UPDATE VERIFIED  •  INSTALLING v" + versionName
+                            updateButton.isEnabled = true
+                            setUpdateStatus("UPDATE VERIFIED • INSTALLING v" + versionName)
                             installApk(apk)
                         }
                     }
                 }
             })
         }.onFailure {
-            update.text = "UPDATE FAILED  •  RETRY"
+            handler.post {
+                updateButton.isEnabled = true
+                setUpdateStatus("UPDATE FAILED • RETRY")
+            }
         }
     }
 
     private fun installApk(apk: File) {
         runCatching {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
+                !packageManager.canRequestPackageInstalls()
+            ) {
+                val settings = Intent(
+                    android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+                    android.net.Uri.parse("package:$packageName")
+                ).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                startActivity(settings)
+                updateButton.isEnabled = true
+                setUpdateStatus("ALLOW INSTALLS • THEN TAP UPDATE AGAIN")
+                return
+            }
+
             val uri = FileProvider.getUriForFile(this, packageName + ".fileprovider", apk)
-            val intent = Intent(Intent.ACTION_VIEW).apply {
+            val intent = Intent(Intent.ACTION_INSTALL_PACKAGE).apply {
                 setDataAndType(uri, "application/vnd.android.package-archive")
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+                clipData = android.content.ClipData.newRawUri("Dev Trader update", uri)
             }
             startActivity(intent)
+            setUpdateStatus("INSTALLER OPEN • v" + apk.name.substringAfter("dev-trader-").removeSuffix(".apk"))
         }.onFailure {
-            update.text = "INSTALL BLOCKED  •  ALLOW INSTALLING FROM THIS SOURCE"
+            updateButton.isEnabled = true
+            setUpdateStatus("INSTALL BLOCKED • CHECK ANDROID PERMISSION")
         }
     }
 
