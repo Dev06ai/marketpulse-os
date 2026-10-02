@@ -3,6 +3,6 @@
   "versionCode": 92,
   "versionName": "0.11.14",
   "apkUrl": "https://github.com/Dev06ai/marketpulse-os/releases/download/dev-trader-v0.11.14-92/app-release.apk",
-  "sha256": "80e4982a3fbc29d2892ab4413de9976562f2799bb73414b7fbf0ad39afab5a64",
+  "sha256": "3f9c03ccb37534265e58dc562f6081106b6479ef5c96fa20b4edb589ccc6502f",
   "notes": "Signed Dev Trader release 0.11.14 \u2022 fixed self-update installer and enlarged controls"
 }
