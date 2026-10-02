@@ -969,9 +969,11 @@ class StrategyEngine:
                 f"only {confirmations} independent confirmations; need {required}"
             )
 
-        # Anti-chase timing. A mature impulse is not an entry just because its
-        # direction is obvious.
-        if state.last_price is not None and f.atr_15 > 0:
+        # Anti-chase timing. Mature continuation/retest entries should not
+        # chase a move that is already stretched. The early momentum path is
+        # already protected by the 5m extension threshold upstream, so the
+        # slower 15m veto should not delay that early-entry path.
+        if not is_early_momentum and state.last_price is not None and f.atr_15 > 0:
             confirmed = [c for c in state.candles_15 if c.confirmed]
             if len(confirmed) >= 4:
                 move = abs(confirmed[-1].close - confirmed[-4].close) / f.atr_15
@@ -1065,15 +1067,14 @@ class StrategyEngine:
         if f.golden_pocket == ("LONG_ZONE" if direction == "LONG" else "SHORT_ZONE"):
             confirmations += 1
         required = max(
-            0,
+            2 if momentum_exception else 0,
             int(cfg.get("momentum_min_confirmations", 2)) if momentum_exception
             else int(cfg.get("minimum_extra_confirmations", 2))
         )
         if momentum_exception:
-            # The fast detector itself counts as one confirmation; the live
-            # microstructure context must still provide at least one additional
-            # directional confirmation.
-            confirmations += 2
+            # Count the fast detector once. Any additional confirmation must
+            # come from a separate live market-evidence bucket.
+            confirmations += 1
         if confirmations < required:
             reasons.append(f"only {confirmations} extra confirmations; need {required}")
         if reasons:
@@ -1264,8 +1265,8 @@ class StrategyEngine:
             score += 1; reasons.append("price + OI supports continuation")
         elif direction == "SHORT" and f.oi_change_5m_pct > 0.15 and f.price_impulse < 0:
             score += 1; reasons.append("price + OI supports continuation")
-        elif f.liquidation_pressure == ("LONG_LIQUIDATIONS" if direction == "LONG" else "SHORT_LIQUIDATIONS"):
-            score += 1; reasons.append("directional liquidation pressure")
+        elif f.liquidation_pressure == ("SHORT_LIQUIDATIONS" if direction == "LONG" else "LONG_LIQUIDATIONS"):
+            score += 1; reasons.append("opposite-side liquidation pressure supports continuation")
         if memory_match:
             score += 1; reasons.append("saved setup memory is nearby")
         return min(score, 8), reasons
