@@ -164,6 +164,20 @@ class BitgetDemoClient:
                     return rows
         return []
 
+    def market_ticker(self, symbol: str = "BTCUSDT") -> dict[str, Any]:
+        """Read the public Bitget UTA ticker for execution-price validation."""
+        result = self._request(
+            "GET",
+            "/api/v3/market/tickers",
+            params={"category": self.product_type, "symbol": symbol},
+            private=False,
+        )
+        rows = result.get("data") or []
+        if not isinstance(rows, list) or not rows:
+            raise BitgetDemoError("Bitget market ticker returned no data.")
+        row = rows[0]
+        return row if isinstance(row, dict) else {}
+
     def account(self, symbol: str = "BTCUSDT") -> dict[str, Any]:
         # UTA assets is a single unified endpoint. Fetch the asset list and
         # filter for the configured margin coin locally.
