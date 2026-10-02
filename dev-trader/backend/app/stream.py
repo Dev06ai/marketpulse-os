@@ -756,9 +756,11 @@ class BitgetMarketStream:
         if not topic:
             return
 
-        # A real market message proves the live Bitget websocket is flowing
-        # again. This flips the source back from any REST continuity state.
-        self.last_data_source = "BITGET_WS"
+        # Only ticker/public-trade traffic proves the live price/trade path
+        # is flowing again. A liquidation-only or acknowledgement message must
+        # not let REST-refreshed state appear HEALTHY.
+        if topic in {"ticker", "publicTrade"}:
+            self.last_data_source = "BITGET_WS"
 
         rows = msg.get("data") or []
         if topic == "ticker":
