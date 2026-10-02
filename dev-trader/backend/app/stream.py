@@ -667,8 +667,10 @@ class BitgetMarketStream:
         self._apply_ticker(rows[0], int(payload.get("requestTime") or time.time() * 1000))
         self.last_rest_sync_ms = int(time.time() * 1000)
         self.last_rest_ok = True
-        if not self.state.ws_connected:
-            self.last_data_source = "BITGET_REST"
+        # REST is continuity only. Mark it explicitly so the health gate cannot
+        # accidentally call a REST-refreshed snapshot "HEALTHY" while WS data
+        # is stale.
+        self.last_data_source = "BITGET_REST"
 
     def _apply_ticker(self, d: dict, exchange_ts: int):
         for attr, keys in {
@@ -755,6 +757,10 @@ class BitgetMarketStream:
         if not topic:
             return
 
+        # A real market message proves the live Bitget websocket is flowing
+        # again. This flips the source back from any REST continuity state.
+        self.last_data_source = "BITGET_WS"
+
         rows = msg.get("data") or []
         if topic == "ticker":
             if rows and isinstance(rows[0], dict):
@@ -839,9 +845,18 @@ class BitgetMarketStream:
         market_age = now - self.state.last_market_update_ts if self.state.last_market_update_ts else 10**9
         trade_age = now - self.state.last_trade_ts if self.state.last_trade_ts else 10**9
         kline_age = now - self.state.last_kline_15_ts if self.state.last_kline_15_ts else 10**9
-        if self.state.ws_connected and market_age < 3000 and trade_age < 3000 and kline_age < 120_000:
+        if (
+            self.state.ws_connected
+            and self.last_data_source == "BITGET_WS"
+            and market_age < 3000
+            and trade_age < 3000
+            and kline_age < 120_000
+        ):
             self.state.data_health = "HEALTHY"
         elif self.state.ws_connected and market_age < 5000:
+            # A connected socket with stale/REST-refreshed state is only
+            # degraded; actionable strategy must not treat REST continuity as
+            # an equivalent live microstructure feed.
             self.state.data_health = "DEGRADED"
         elif self.last_rest_ok and self.state.last_price is not None:
             self.state.data_health = "DEGRADED"
