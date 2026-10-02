@@ -381,7 +381,10 @@ class SafeActivity : Activity() {
         checkButton.setOnClickListener { safe { systemCheck() } }
         actions.addView(checkButton, weightButton())
 
-        updateButton = compactPillButton("UPDATE")
+        updateButton = compactPillButton("UPDATE").apply {
+            textSize = 11.2f
+            minHeight = dp(44)
+        }
         updateButton.setOnClickListener { safe { checkUpdate() } }
         actions.addView(updateButton, weightButton())
 
