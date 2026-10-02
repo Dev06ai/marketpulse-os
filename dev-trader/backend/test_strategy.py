@@ -563,3 +563,60 @@ def test_direction_evidence_uses_opposite_side_liquidations():
     assert "opposite-side liquidation pressure supports continuation" in short_reasons
     assert long_score == 0
     assert not long_reasons
+
+
+def test_early_momentum_keeps_the_15m_antichase_veto_off(monkeypatch):
+    import app.strategy as strategy_module
+    from app.strategy import Signal, StrategyEngine
+
+    now = int(time.time() * 1000)
+    state = MarketState(
+        candles_15=[
+            c(0, 100.0, 101.0, 99.0, 100.0),
+            c(1, 100.0, 106.0, 99.0, 105.0),
+            c(2, 105.0, 111.0, 104.0, 110.0),
+            c(3, 110.0, 141.0, 109.0, 140.0),
+        ],
+        last_price=140.0,
+        data_health="HEALTHY",
+        last_market_update_ts=now,
+        last_trade_ts=now,
+    )
+    features = MarketFeatures(
+        atr_15=10.0,
+        trend_15="UP",
+        trend_60="UP",
+        trend_240="UP",
+        market_structure="BULLISH",
+        regime="TREND_UP",
+        spread_bps=1.0,
+        cvd_price_divergence="BULLISH",
+        fvg_direction="BULLISH",
+    )
+    monkeypatch.setattr(strategy_module, "compute_features", lambda _state: features)
+
+    engine = StrategyEngine()
+    engine.learning.decision_filter = lambda _signal: {"allow": True, "reason": ""}
+
+    signal = Signal(
+        id="momentum-antichase-test",
+        direction="LONG",
+        setup="Momentum Capture • FAST",
+        entry=140.0,
+        stop=132.0,
+        target1=151.0,
+        target2=164.0,
+        rr=3.0,
+        confidence=0.90,
+        grade="A",
+        regime="TREND_UP",
+        invalidation="test",
+        thesis=[],
+        evidence={},
+        timeframe="5m",
+        trade_style="SCALP",
+        style_reason="test",
+    )
+
+    allowed, reason = engine._elite_decision_gate(signal, state)
+    assert allowed, reason
