@@ -128,7 +128,10 @@ def test_bitget_rest_fallback_cannot_report_healthy():
     import time as _time
     import asyncio as _asyncio
 
-    stream = BitgetMarketStream("BTCUSDT", lambda _state: None)
+    async def on_state(_state):
+        return None
+
+    stream = BitgetMarketStream("BTCUSDT", on_state)
     now = int(_time.time() * 1000)
     stream.state.ws_connected = True
     stream.state.last_market_update_ts = now - 100
