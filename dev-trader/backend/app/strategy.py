@@ -860,9 +860,17 @@ class StrategyEngine:
         setup = signal.setup.upper()
         reasons: list[str] = []
 
-        # Data quality.
-        if state.data_health not in {"HEALTHY", "DEGRADED"}:
-            reasons.append("market feed is not healthy enough")
+        # Radar may continue on degraded data, but actionable signals require
+        # a healthy and fresh primary market feed.
+        now_ms = int(time.time() * 1000)
+        market_age = (now_ms - int(state.last_market_update_ts)) if state.last_market_update_ts else 10**9
+        trade_age = (now_ms - int(state.last_trade_ts)) if state.last_trade_ts else 10**9
+        if state.data_health != "HEALTHY":
+            reasons.append("primary market feed is not fully healthy")
+        if market_age > 3000:
+            reasons.append(f"market price feed is stale ({market_age}ms)")
+        if trade_age > 3000:
+            reasons.append(f"trade feed is stale ({trade_age}ms)")
 
         # Higher-timeframe alignment is mandatory for continuation/breakout paths.
         is_reversal = "SFP" in setup or "HARMONIC" in setup
@@ -1525,6 +1533,7 @@ class StrategyEngine:
         bullish_break = bullish_acceptance and move > 0
         bearish_break = bearish_acceptance and move < 0
         direction = "LONG" if bullish_break else "SHORT" if bearish_break else ("LONG" if move > 0 else "SHORT")
+        extension_threshold = 2.50 if forming is None else (3.00 if body_fraction >= 0.55 else 99.0)
         if move_atr < 1.10:
             return {
                 "status": "WATCH",
@@ -1582,11 +1591,6 @@ class StrategyEngine:
         # A fully closed 5m impulse is considered mature at a lower threshold
         # than a still-forming candle. This preserves early capture while
         # preventing a completed multi-ATR impulse from being chased.
-        extension_threshold = (
-            2.50
-            if forming is None
-            else (3.00 if body_fraction >= 0.55 else 99.0)
-        )
         if move_atr >= extension_threshold:
             return {
                 "status": "EXTENDED",
