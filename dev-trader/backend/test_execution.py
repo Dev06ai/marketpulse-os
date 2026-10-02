@@ -38,6 +38,9 @@ class FakeClient:
     def available_balance(self, symbol):
         return 1000.0
 
+    def market_ticker(self, symbol):
+        return {"lastPrice": "100000"}
+
     def contract_config(self, symbol):
         return {
             "sizeMultiplier": "0.001",
@@ -242,3 +245,40 @@ def test_every_new_signal_is_submitted_without_replacing_existing_position(monke
     assert result["ok"] is True
     assert len(executor.history(5)) >= 2
     assert executor.client.close_calls == []
+
+
+def test_execution_rejects_large_bitget_price_drift(monkeypatch):
+    monkeypatch.setenv("BITGET_DEMO_TRADING", "true")
+    monkeypatch.setenv("BITGET_EXECUTION_STATE_FILE", "/tmp/dev-trader-test-drift.json")
+    monkeypatch.setenv("BITGET_MAX_ENTRY_DRIFT_PCT", "0.15")
+    try:
+        os.remove("/tmp/dev-trader-test-drift.json")
+    except FileNotFoundError:
+        pass
+
+    class DriftClient(FakeClient):
+        def market_ticker(self, symbol):
+            return {"lastPrice": "100250"}
+
+    executor = DemoExecutionEngine(FakeLearning())
+    executor.client = DriftClient()
+
+    signal = {
+        "id": "SIG-DRIFT",
+        "direction": "LONG",
+        "setup": "TEST",
+        "entry": 100000,
+        "stop": 99500,
+        "target1": 101500,
+        "target2": 101500,
+        "rr": 3.0,
+        "confidence": 0.80,
+        "grade": "A",
+        "trade_style": "SCALP",
+        "evidence": {},
+    }
+
+    result = asyncio.run(executor.handle_signal(signal))
+    assert result["ok"] is False
+    assert result["skipped"] is True
+    assert "price drift" in result["reason"].lower()
