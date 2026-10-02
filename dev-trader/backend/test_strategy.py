@@ -538,3 +538,13 @@ def test_duplicate_setup_cluster_is_blocked_for_recent_nearby_signal():
     )
     assert blocked is True
     assert "duplicate" in reason
+
+
+def test_fast_move_context_low_displacement_does_not_crash():
+    from app.strategy import StrategyEngine
+    cs = [Candle(i*300000,(i+1)*300000,100,100.4,99.8,100.1,100,True) for i in range(20)]
+    state = MarketState(candles_5=cs, last_price=100.1, data_health="HEALTHY")
+    engine = StrategyEngine()
+    ctx = engine._build_fast_move_context(state, MarketFeatures(atr_15=1.0))
+    assert ctx["status"] == "WATCH"
+    assert ctx["extension_threshold"] > 0
