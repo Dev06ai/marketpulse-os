@@ -1,4 +1,4 @@
-// Build 93 UI refinement: balanced action sizing + fixed bottom-bar layout.
+// Build 94 UI refinement: true edge-to-edge safe-area layout for status/navigation bars.
 // Build 83: show Bitget Demo funding readiness and demo execution state.
 package com.devtrader.app
 
@@ -175,9 +175,13 @@ class SafeActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        WindowCompat.setDecorFitsSystemWindows(window, true)
-        window.statusBarColor = Color.rgb(8, 9, 12)
-        window.navigationBarColor = Color.rgb(8, 9, 12)
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+        window.statusBarColor = Color.TRANSPARENT
+        window.navigationBarColor = Color.TRANSPARENT
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            window.isStatusBarContrastEnforced = false
+            window.isNavigationBarContrastEnforced = false
+        }
         installCrashReporter()
         buildUi()
         registerNetworkCallback()
@@ -242,12 +246,17 @@ class SafeActivity : Activity() {
             isFillViewportCompat()
         }
 
-        ViewCompat.setOnApplyWindowInsetsListener(root) { view, _ ->
-            // Content is already laid out inside the system bars because
-            // decorFitsSystemWindows=true. Do not double-apply status/navigation
-            // bar sizes or the bottom controls get pushed/clipped.
-            view.setPadding(dp(12), dp(8), dp(12), dp(10))
-            WindowInsetsCompat.CONSUMED
+        ViewCompat.setOnApplyWindowInsetsListener(root) { view, insets ->
+            // Android 15+/targetSdk 35+ can lay the app edge-to-edge. Apply the
+            // system-bar safe area exactly once so the header never sits beneath
+            // the clock/battery area and the action row never touches navigation.
+            val bars = insets.getInsets(
+                WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout()
+            )
+            val safeTop = maxOf(dp(8), bars.top + dp(6))
+            val safeBottom = maxOf(dp(10), bars.bottom + dp(8))
+            view.setPadding(dp(12), safeTop, dp(12), safeBottom)
+            insets
         }
         setContentView(root)
 
