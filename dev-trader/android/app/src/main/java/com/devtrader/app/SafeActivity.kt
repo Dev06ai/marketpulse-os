@@ -80,6 +80,7 @@ class SafeActivity : Activity() {
 
     private lateinit var status: TextView
     private lateinit var price: TextView
+    private lateinit var oiView: TextView
     private lateinit var signal: TextView
     private lateinit var integrity: TextView
     private lateinit var features: TextView
@@ -257,7 +258,7 @@ class SafeActivity : Activity() {
         header.addView(brand, LinearLayout.LayoutParams(0, dp(44), 1f))
         alertsButton = compactPillButton("ALERTS")
         alertsButton.setOnClickListener { safe { requestAlertPermission() } }
-        header.addView(alertsButton, LinearLayout.LayoutParams(dp(72), dp(36)).apply { rightMargin = dp(6) })
+        header.addView(alertsButton, LinearLayout.LayoutParams(dp(84), dp(36)).apply { rightMargin = dp(6) })
         retryButton = compactPillButton("↻")
         retryButton?.setOnClickListener { safe { forceReconnectFromUser() } }
         header.addView(retryButton, LinearLayout.LayoutParams(dp(40), dp(36)))
@@ -266,8 +267,9 @@ class SafeActivity : Activity() {
         // Hero market card
         val hero = heroCard()
         price = hero.first
+        oiView = hero.oi
         status = hero.second
-        root.addView(hero.third, margins(bottom = 8))
+        root.addView(hero.container, margins(bottom = 8))
 
         // Price action
         root.addView(sectionLabel("PRICE ACTION"), margins(bottom = 4))
@@ -309,8 +311,11 @@ class SafeActivity : Activity() {
         // Trade setup hero
         val setup = premiumCard("TRADE SETUP", "SCANNING  •  READY\nWaiting for the next qualified signal.", 13.5f)
         signal = setup.second
-        signal.maxLines = 7
+        signal.maxLines = 6
         signal.ellipsize = android.text.TextUtils.TruncateAt.END
+        signal.textSize = 12.3f
+        signal.setLineSpacing(0f, 1.04f)
+        signal.setHorizontallyScrolling(false)
         root.addView(setup.first, margins(bottom = 7))
 
         // Two compact information panels
@@ -322,12 +327,16 @@ class SafeActivity : Activity() {
         features = story.value
         features.maxLines = 4
         features.ellipsize = android.text.TextUtils.TruncateAt.END
+        features.setLineSpacing(0f, 1.02f)
+        features.setHorizontallyScrolling(false)
         infoRow.addView(story.container, LinearLayout.LayoutParams(0, dp(76), 1f).apply { rightMargin = dp(4) })
 
         val execution = compactCard("EXECUTION", "Bitget Demo  •  READY\nOpen 0  •  Closed 0", 10.5f)
         tradeHistory = execution.value
         tradeHistory.maxLines = 4
         tradeHistory.ellipsize = android.text.TextUtils.TruncateAt.END
+        tradeHistory.setLineSpacing(0f, 1.02f)
+        tradeHistory.setHorizontallyScrolling(false)
         infoRow.addView(execution.container, LinearLayout.LayoutParams(0, dp(76), 1f).apply { leftMargin = dp(4) })
         root.addView(infoRow, margins(bottom = 7))
 
@@ -450,7 +459,14 @@ class SafeActivity : Activity() {
             }
         }
 
-    private fun heroCard(): Triple<TextView, TextView, LinearLayout> {
+    private data class HeroRefs(
+        val price: TextView,
+        val oi: TextView,
+        val status: TextView,
+        val container: LinearLayout
+    )
+
+    private fun heroCard(): HeroRefs {
         val box = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(14), dp(10), dp(14), dp(10))
@@ -501,9 +517,9 @@ class SafeActivity : Activity() {
         row.addView(statusView, LinearLayout.LayoutParams(dp(112), dp(30)))
         box.addView(row)
 
-        val oi = label("OI  —", 10f, Color.rgb(133, 139, 151), 0.02f)
+        val oi = label("OI  —", 9f, Color.rgb(133, 139, 151), 0.02f)
         box.addView(oi, margins(top = 1))
-        return Triple(priceView, statusView, box)
+        return HeroRefs(priceView, oi, statusView, box)
     }
 
     private fun compactCard(title: String, initial: String, valueSize: Float): CardRefs {
@@ -971,10 +987,10 @@ class SafeActivity : Activity() {
         }
         price.text = priceBtcAccent(
             "BTC  " + if (priceValue.isNaN()) "—"
-                else String.format(Locale.US, "%,.2f", priceValue) +
-                    "\nOI   " + if (oi.isNaN()) "—"
-                else String.format(Locale.US, "%,.2f", oi)
+            else String.format(Locale.US, "%,.2f", priceValue)
         )
+        oiView.text = "OI  " + if (oi.isNaN()) "—"
+            else String.format(Locale.US, "%,.2f", oi)
         val upstream = root.optJSONObject("upstream")
         val source = upstream?.optString("source", "").orEmpty()
         integrity.text = "Primary WS  •  " + if (ws) "CONNECTED" else "DISCONNECTED" +
@@ -1267,17 +1283,17 @@ class SafeActivity : Activity() {
         if (Build.VERSION.SDK_INT >= 33 &&
             checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
         ) {
-            alertsButton.text = "ALLOW SIGNAL ALERTS"
+            alertsButton.text = "ALLOW ALERTS"
             alertsButton.isEnabled = true
             requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 4101)
             return
         }
         runCatching {
             ContextCompat.startForegroundService(this, Intent(this, SignalService::class.java))
-            alertsButton.text = "BACKGROUND ALERTS ACTIVE"
+            alertsButton.text = "ALERTS ON"
             alertsButton.isEnabled = false
         }.onFailure {
-            alertsButton.text = "START ALERTS AGAIN"
+            alertsButton.text = "ALERTS RETRY"
             alertsButton.isEnabled = true
         }
     }
@@ -1296,7 +1312,7 @@ class SafeActivity : Activity() {
             if (grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED || Build.VERSION.SDK_INT < 33) {
                 startBackgroundAlerts()
             } else {
-                alertsButton.text = "ALLOW SIGNAL ALERTS IN SETTINGS"
+                alertsButton.text = "ALLOW ALERTS"
                 alertsButton.isEnabled = true
             }
         }
