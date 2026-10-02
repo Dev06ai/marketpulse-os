@@ -548,3 +548,18 @@ def test_fast_move_context_low_displacement_does_not_crash():
     ctx = engine._build_fast_move_context(state, MarketFeatures(atr_15=1.0))
     assert ctx["status"] == "WATCH"
     assert ctx["extension_threshold"] > 0
+
+
+def test_direction_evidence_uses_opposite_side_liquidations():
+    from app.strategy import StrategyEngine
+
+    engine = StrategyEngine()
+    features = MarketFeatures(liquidation_pressure="LONG_LIQUIDATIONS")
+
+    short_score, short_reasons = engine._direction_evidence("SHORT", features)
+    long_score, long_reasons = engine._direction_evidence("LONG", features)
+
+    assert short_score == 1
+    assert "opposite-side liquidation pressure supports continuation" in short_reasons
+    assert long_score == 0
+    assert not long_reasons
