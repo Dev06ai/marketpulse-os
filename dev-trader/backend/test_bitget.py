@@ -123,3 +123,29 @@ def test_uta_close_market_order_hedge_mode(monkeypatch):
     assert sent["payload"]["side"] == "buy"
     assert sent["payload"]["posSide"] == "short"
     assert "reduceOnly" not in sent["payload"]
+
+
+def test_public_market_ticker_uses_uta_market_endpoint(monkeypatch):
+    client = BitgetDemoClient("k", "s", "p")
+    seen = {}
+
+    def fake_request(method, path, params=None, payload=None, private=True):
+        seen["method"] = method
+        seen["path"] = path
+        seen["params"] = params
+        seen["private"] = private
+        return {
+            "code": "00000",
+            "data": [{"symbol": "BTCUSDT", "lastPrice": "100123.4"}],
+        }
+
+    monkeypatch.setattr(client, "_request", fake_request)
+
+    ticker = client.market_ticker("BTCUSDT")
+
+    assert ticker["lastPrice"] == "100123.4"
+    assert seen["method"] == "GET"
+    assert seen["path"] == "/api/v3/market/tickers"
+    assert seen["params"]["category"] == "USDT-FUTURES"
+    assert seen["params"]["symbol"] == "BTCUSDT"
+    assert seen["private"] is False
