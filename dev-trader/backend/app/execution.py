@@ -810,6 +810,8 @@ class DemoExecutionEngine:
                 "requested_qty": self._num(order.get("qty")),
                 "filled_qty": self._num(order.get("cumExecQty")),
                 "status": "OPEN" if status == "filled" else "ORDER_PENDING",
+                "actual_fill_confirmed": status == "filled",
+                "exchange_order_status": status,
                 "opened_ts": self._num(order.get("createdTime"), int(time.time() * 1000)),
                 "closed_ts": 0,
                 "realized_pnl_usdt": 0.0,
