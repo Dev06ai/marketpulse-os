@@ -1,4 +1,5 @@
 // Build 94 UI refinement: true edge-to-edge safe-area layout for status/navigation bars.
+// Release trigger: keep Android release pipeline aligned with the verified v0.11.16 safe-area build.
 // Build 83: show Bitget Demo funding readiness and demo execution state.
 package com.devtrader.app
 
