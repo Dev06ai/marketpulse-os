@@ -430,3 +430,419 @@ class BybitStream:
         self._trim_windows(now)
         self._refresh_data_health(now)
         await self.on_state(self.state)
+
+
+class BitgetMarketStream:
+    """Bitget UTA public market-data stream used as the execution venue authority.
+
+    Critical execution inputs come from Bitget itself: last/mark/index price,
+    open interest, best bid/ask, order book imbalance, public-trade CVD and
+    liquidation flow. Candles are also backfilled from Bitget REST and updated
+    from the Bitget WebSocket.
+    """
+
+    def __init__(self, symbol: str, on_state):
+        self.symbol = symbol
+        self.on_state = on_state
+        self.state = MarketState(symbol=symbol)
+        demo = str(os.getenv("BITGET_DEMO_TRADING", "false")).lower() in {"1", "true", "yes", "on"}
+        self.url = os.getenv(
+            "BITGET_PUBLIC_WS_URL",
+            "wss://wspap.bitget.com/v3/ws/public" if demo else "wss://ws.bitget.com/v3/ws/public",
+        )
+        self.rest_base = os.getenv("BITGET_BASE_URL", "https://api.bitget.com").rstrip("/")
+        self.product_type = os.getenv("BITGET_PRODUCT_TYPE", "USDT-FUTURES")
+        self.stop = False
+        self.last_rest_sync_ms = 0
+        self.last_rest_candle_sync_ms = 0
+        self.last_rest_ok = False
+        self.last_upstream_error = ""
+        self.last_data_source = "NONE"
+        self.bids: dict[float, float] = {}
+        self.asks: dict[float, float] = {}
+        self.last_trade_minute: int | None = None
+        self.delta_base = 0.0
+        self.recent_exec_ids: set[str] = set()
+
+    @staticmethod
+    def _interval_ms(interval: str) -> int:
+        return {
+            "1m": 60_000,
+            "3m": 180_000,
+            "5m": 300_000,
+            "15m": 900_000,
+            "30m": 1_800_000,
+            "1H": 3_600_000,
+            "4H": 14_400_000,
+            "6H": 21_600_000,
+            "12H": 43_200_000,
+            "1D": 86_400_000,
+        }.get(interval, 60_000)
+
+    async def run(self):
+        while not self.stop:
+            try:
+                async with websockets.connect(
+                    self.url,
+                    ping_interval=None,
+                    ping_timeout=None,
+                    max_queue=10000,
+                    open_timeout=8,
+                    close_timeout=3,
+                ) as ws:
+                    self.state.ws_connected = True
+                    self.state.data_health = "CONNECTING"
+                    self.last_data_source = "BITGET_WS"
+                    await ws.send(json.dumps({
+                        "op": "subscribe",
+                        "args": [
+                            {"instType": self.product_type.lower(), "topic": "ticker", "symbol": self.symbol},
+                            {"instType": self.product_type.lower(), "topic": "publicTrade", "symbol": self.symbol},
+                            {"instType": self.product_type.lower(), "topic": "books5", "symbol": self.symbol},
+                            {"instType": self.product_type.lower(), "topic": "liquidation"},
+                            {"instType": self.product_type.lower(), "topic": "kline", "symbol": self.symbol, "interval": "5m"},
+                            {"instType": self.product_type.lower(), "topic": "kline", "symbol": self.symbol, "interval": "15m"},
+                            {"instType": self.product_type.lower(), "topic": "kline", "symbol": self.symbol, "interval": "1H"},
+                        ],
+                    }))
+                    await self.backfill()
+                    await self.on_state(self.state)
+                    heartbeat = asyncio.create_task(self._heartbeat(ws))
+                    try:
+                        async for raw in ws:
+                            if self.stop:
+                                break
+                            if raw == "pong":
+                                continue
+                            if raw == "ping":
+                                await ws.send("pong")
+                                continue
+                            await self.handle(raw)
+                    finally:
+                        heartbeat.cancel()
+                        self.state.ws_connected = False
+                        self._refresh_data_health(int(time.time() * 1000))
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                self.last_upstream_error = f"Bitget WS: {str(exc)[:220]}"
+                self.state.ws_connected = False
+                self._refresh_data_health(int(time.time() * 1000))
+                await self.on_state(self.state)
+                await asyncio.sleep(2.0)
+
+    async def _heartbeat(self, ws):
+        while not self.stop:
+            await asyncio.sleep(30)
+            try:
+                await ws.send("ping")
+            except Exception:
+                return
+
+    async def rest_fallback_loop(self):
+        while not self.stop:
+            try:
+                now = int(time.time() * 1000)
+                if not self.state.ws_connected or not self.state.last_market_update_ts or now - self.state.last_market_update_ts > 2500:
+                    await asyncio.to_thread(self._rest_market_sync)
+                    await self.on_state(self.state)
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                self.last_upstream_error = f"Bitget REST: {str(exc)[:220]}"
+            await asyncio.sleep(2.0)
+
+    async def backfill(self):
+        try:
+            await asyncio.gather(
+                *(self._backfill_interval(interval, dest_name, 240)
+                  for interval, dest_name in (("5m", "candles_5"), ("15m", "candles_15"), ("1H", "candles_60"))),
+                self._backfill_trades(),
+            )
+            self.last_rest_candle_sync_ms = int(time.time() * 1000)
+            self.last_rest_ok = True
+            self.last_data_source = "BITGET_WS"
+        except Exception as exc:
+            self.last_upstream_error = f"Bitget backfill: {str(exc)[:220]}"
+
+    async def _backfill_interval(self, interval: str, dest_name: str, limit: int):
+        def fetch():
+            query = urlencode({
+                "category": self.product_type,
+                "symbol": self.symbol,
+                "interval": interval,
+                "limit": str(min(limit, 1000)),
+            })
+            req = UrlRequest(
+                self.rest_base + "/api/v3/market/candles?" + query,
+                headers={"User-Agent": "Dev-Trader-Bitget/1.0", "Accept": "application/json"},
+            )
+            with urlopen(req, timeout=5) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+            if str(payload.get("code", "")) not in {"", "00000", "0"}:
+                raise RuntimeError(f"Bitget candle error: {payload.get('msg')}")
+            return payload.get("data") or []
+
+        rows = await asyncio.to_thread(fetch)
+        interval_ms = self._interval_ms(interval)
+        dest = getattr(self.state, dest_name)
+        now = int(time.time() * 1000)
+        merged = {c.start: c for c in dest}
+        for row in rows:
+            start = int(row[0])
+            candle = Candle(
+                start=start,
+                end=start + interval_ms - 1,
+                open=float(row[1]),
+                high=float(row[2]),
+                low=float(row[3]),
+                close=float(row[4]),
+                volume=float(row[5]) if len(row) > 5 else 0.0,
+                confirmed=start < (now // interval_ms) * interval_ms,
+            )
+            merged[start] = candle
+        values = sorted(merged.values(), key=lambda x: x.start)
+        dest.clear()
+        dest.extend(values[-240:])
+        setattr(self.state, {
+            "5m": "last_kline_5_ts",
+            "15m": "last_kline_15_ts",
+            "1H": "last_kline_60_ts",
+        }[interval], now)
+
+    async def _backfill_trades(self):
+        def fetch():
+            query = urlencode({
+                "category": self.product_type,
+                "symbol": self.symbol,
+                "limit": "100",
+            })
+            req = UrlRequest(
+                self.rest_base + "/api/v3/market/fills?" + query,
+                headers={"User-Agent": "Dev-Trader-Bitget/1.0", "Accept": "application/json"},
+            )
+            with urlopen(req, timeout=5) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+            if str(payload.get("code", "")) not in {"", "00000", "0"}:
+                raise RuntimeError(f"Bitget fills error: {payload.get('msg')}")
+            return payload.get("data") or []
+
+        rows = await asyncio.to_thread(fetch)
+        ordered = sorted(rows, key=lambda x: int(x.get("ts", 0)))
+        self.state.cvd = 0.0
+        self.state.cvd_history.clear()
+        self.recent_exec_ids.clear()
+        now = int(time.time() * 1000)
+        for row in ordered:
+            exec_id = str(row.get("execId") or row.get("i") or "")
+            if exec_id:
+                self.recent_exec_ids.add(exec_id)
+            size = float(row.get("size") or row.get("v") or 0.0)
+            side = str(row.get("side") or row.get("S") or "").lower()
+            ts = int(row.get("ts") or row.get("T") or now)
+            self.state.cvd += size if side == "buy" else -size if side == "sell" else 0.0
+            self.state.cvd_history.append((ts, self.state.cvd))
+        self.delta_base = self.state.cvd
+        self.last_trade_minute = None
+        if ordered:
+            self.state.last_trade_ts = int(ordered[-1].get("ts") or now)
+
+    def _rest_market_sync(self):
+        query = urlencode({
+            "category": self.product_type,
+            "symbol": self.symbol,
+        })
+        req = UrlRequest(
+            self.rest_base + "/api/v3/market/tickers?" + query,
+            headers={"User-Agent": "Dev-Trader-Bitget/1.0", "Accept": "application/json"},
+        )
+        with urlopen(req, timeout=4) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+        if str(payload.get("code", "")) not in {"", "00000", "0"}:
+            raise RuntimeError(f"Bitget ticker error: {payload.get('msg')}")
+        rows = payload.get("data") or []
+        if not rows:
+            raise RuntimeError("Bitget ticker returned no rows")
+        self._apply_ticker(rows[0], int(payload.get("requestTime") or time.time() * 1000))
+        self.last_rest_sync_ms = int(time.time() * 1000)
+        self.last_rest_ok = True
+        if not self.state.ws_connected:
+            self.last_data_source = "BITGET_REST"
+
+    def _apply_ticker(self, d: dict, exchange_ts: int):
+        for attr, keys in {
+            "last_price": ("lastPrice", "lastPr"),
+            "mark_price": ("markPrice",),
+            "index_price": ("indexPrice",),
+            "open_interest": ("openInterest", "holdingAmount"),
+            "funding_rate": ("fundingRate",),
+            "bid": ("bid1Price", "bidPr"),
+            "ask": ("ask1Price", "askPr"),
+        }.items():
+            for key in keys:
+                if d.get(key) not in (None, ""):
+                    setattr(self.state, attr, float(d[key]))
+                    break
+        now = int(time.time() * 1000)
+        self.state.received_ts = now
+        self.state.exchange_ts = exchange_ts
+        self.state.last_market_update_ts = now
+        if self.state.open_interest is not None:
+            self.state.oi_window.append((now, self.state.open_interest))
+
+    def _apply_book(self, data: dict, action: str):
+        if action == "snapshot":
+            self.bids.clear()
+            self.asks.clear()
+        for row in data.get("b", []) or []:
+            p, q = float(row[0]), float(row[1])
+            if q == 0:
+                self.bids.pop(p, None)
+            else:
+                self.bids[p] = q
+        for row in data.get("a", []) or []:
+            p, q = float(row[0]), float(row[1])
+            if q == 0:
+                self.asks.pop(p, None)
+            else:
+                self.asks[p] = q
+        bids = sorted(self.bids.items(), reverse=True)[:5]
+        asks = sorted(self.asks.items())[:5]
+        bid_qty = sum(q for _, q in bids)
+        ask_qty = sum(q for _, q in asks)
+        total = bid_qty + ask_qty
+        self.state.book_bid_qty = bid_qty
+        self.state.book_ask_qty = ask_qty
+        self.state.book_imbalance = ((bid_qty - ask_qty) / total) if total else 0.0
+        if bids and asks:
+            mid = (bids[0][0] + asks[0][0]) / 2.0
+            self.state.spread_bps = ((asks[0][0] - bids[0][0]) / mid * 10_000) if mid else 0.0
+
+    def _trim_windows(self, now: int):
+        cutoff = now - 15 * 60_000
+        self.state.oi_window = [(ts, v) for ts, v in self.state.oi_window if ts >= cutoff]
+        self.state.cvd_history = [(ts, v) for ts, v in self.state.cvd_history if ts >= cutoff]
+        self.state.liquidation_window = [(ts, side, size) for ts, side, size in self.state.liquidation_window if ts >= cutoff]
+        self.state.liquidation_long_5m = sum(
+            v for ts, side, v in self.state.liquidation_window
+            if side == "LONG" and ts >= now - 5 * 60_000
+        )
+        self.state.liquidation_short_5m = sum(
+            v for ts, side, v in self.state.liquidation_window
+            if side == "SHORT" and ts >= now - 5 * 60_000
+        )
+        self.recent_exec_ids = set(list(self.recent_exec_ids)[-2000:])
+
+    async def handle(self, raw):
+        if isinstance(raw, bytes):
+            return
+        if raw == "pong":
+            return
+        try:
+            msg = json.loads(raw)
+        except (TypeError, ValueError):
+            return
+        if msg.get("event") in {"subscribe", "error"}:
+            if msg.get("event") == "error":
+                self.last_upstream_error = f"Bitget subscription error: {msg.get('msg', '')}"
+            return
+
+        now = int(time.time() * 1000)
+        self.state.received_ts = now
+        self.state.exchange_ts = int(msg.get("ts", now) or now)
+        topic = str((msg.get("arg") or {}).get("topic") or "")
+        if not topic:
+            return
+
+        rows = msg.get("data") or []
+        if topic == "ticker":
+            if rows and isinstance(rows[0], dict):
+                self._apply_ticker(rows[0], self.state.exchange_ts)
+        elif topic == "publicTrade":
+            for trade in rows:
+                exec_id = str(trade.get("i", ""))
+                if exec_id and exec_id in self.recent_exec_ids:
+                    continue
+                if exec_id:
+                    self.recent_exec_ids.add(exec_id)
+                size = float(trade.get("v", 0.0))
+                side = str(trade.get("S") or "").lower()
+                ts = int(trade.get("T", self.state.exchange_ts) or self.state.exchange_ts)
+                if side == "buy":
+                    self.state.cvd += size
+                elif side == "sell":
+                    self.state.cvd -= size
+                self.state.last_trade_ts = ts
+                self.state.last_market_update_ts = now
+                minute = ts // 60_000
+                if self.last_trade_minute != minute:
+                    self.last_trade_minute = minute
+                    self.delta_base = self.state.cvd - size if side == "buy" else self.state.cvd + size if side == "sell" else self.state.cvd
+                self.state.delta_1m = self.state.cvd - self.delta_base
+                self.state.cvd_history.append((ts, self.state.cvd))
+        elif topic == "books5":
+            if rows and isinstance(rows[0], dict):
+                data = rows[0]
+                self.state.orderbook_seq = int(data.get("seq", self.state.orderbook_seq or 0))
+                self._apply_book(data, str(msg.get("action") or "snapshot"))
+        elif topic == "liquidation":
+            for liq in rows:
+                side = str(liq.get("side") or "").lower()
+                amount = float(liq.get("amount", 0.0))
+                ts = int(liq.get("ts", self.state.exchange_ts) or self.state.exchange_ts)
+                if side == "buy":
+                    liquidation_side = "LONG"
+                elif side == "sell":
+                    liquidation_side = "SHORT"
+                else:
+                    continue
+                self.state.liquidation_window.append((ts, liquidation_side, amount))
+        elif topic == "kline":
+            interval = str((msg.get("arg") or {}).get("interval") or "")
+            if interval in {"5m", "15m", "1H"}:
+                dest = (
+                    self.state.candles_5 if interval == "5m"
+                    else self.state.candles_15 if interval == "15m"
+                    else self.state.candles_60
+                )
+                interval_ms = self._interval_ms(interval)
+                for row in rows:
+                    start = int(row.get("start", self.state.exchange_ts))
+                    candle = Candle(
+                        start=start,
+                        end=start + interval_ms - 1,
+                        open=float(row.get("open", 0.0)),
+                        high=float(row.get("high", 0.0)),
+                        low=float(row.get("low", 0.0)),
+                        close=float(row.get("close", 0.0)),
+                        volume=float(row.get("volume", 0.0)),
+                        confirmed=start < ((now // interval_ms) * interval_ms),
+                    )
+                    if dest and dest[-1].start == candle.start:
+                        dest[-1] = candle
+                    else:
+                        dest.append(candle)
+                    del dest[:-240]
+                if interval == "5m":
+                    self.state.last_kline_5_ts = now
+                elif interval == "15m":
+                    self.state.last_kline_15_ts = now
+                else:
+                    self.state.last_kline_60_ts = now
+
+        self._trim_windows(now)
+        self._refresh_data_health(now)
+        await self.on_state(self.state)
+
+    def _refresh_data_health(self, now: int):
+        market_age = now - self.state.last_market_update_ts if self.state.last_market_update_ts else 10**9
+        trade_age = now - self.state.last_trade_ts if self.state.last_trade_ts else 10**9
+        kline_age = now - self.state.last_kline_15_ts if self.state.last_kline_15_ts else 10**9
+        if self.state.ws_connected and market_age < 3000 and trade_age < 3000 and kline_age < 120_000:
+            self.state.data_health = "HEALTHY"
+        elif self.state.ws_connected and market_age < 5000:
+            self.state.data_health = "DEGRADED"
+        elif self.last_rest_ok and self.state.last_price is not None:
+            self.state.data_health = "DEGRADED"
+        else:
+            self.state.data_health = "STALE"
