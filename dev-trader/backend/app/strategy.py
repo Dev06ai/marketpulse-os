@@ -218,12 +218,12 @@ def _score(direction: str, setup: str, f: MarketFeatures) -> tuple[float, list[s
         score += 0.07
         reasons.append("ask-side depth supports shorts")
 
-    if direction == "LONG" and f.liquidation_pressure == "LONG_LIQUIDATIONS":
+    if direction == "LONG" and f.liquidation_pressure == "SHORT_LIQUIDATIONS":
         score += 0.05
-        reasons.append("long liquidation pressure present")
-    elif direction == "SHORT" and f.liquidation_pressure == "SHORT_LIQUIDATIONS":
+        reasons.append("short-liquidation pressure supports long continuation")
+    elif direction == "SHORT" and f.liquidation_pressure == "LONG_LIQUIDATIONS":
         score += 0.05
-        reasons.append("short liquidation pressure present")
+        reasons.append("long-liquidation pressure supports short continuation")
 
     if f.spread_bps > 5:
         score -= 0.08
@@ -935,7 +935,7 @@ class StrategyEngine:
             confirmations += 1; confirmation_names.append("FIB")
         if f.elliott_direction == direction and f.elliott_confidence >= 0.55:
             confirmations += 1; confirmation_names.append("ELLIOTT")
-        if f.liquidation_pressure == ("LONG_LIQUIDATIONS" if direction == "LONG" else "SHORT_LIQUIDATIONS"):
+        if f.liquidation_pressure == ("SHORT_LIQUIDATIONS" if direction == "LONG" else "LONG_LIQUIDATIONS"):
             confirmations += 1; confirmation_names.append("LIQ")
 
         required = _decision_min_confirmations()
@@ -1569,7 +1569,7 @@ class StrategyEngine:
             if f.book_imbalance > 0.08:
                 score += 0.05
                 reasons.append("orderbook supports buyers")
-            if f.liquidation_pressure == "LONG_LIQUIDATIONS":
+            if f.liquidation_pressure == "SHORT_LIQUIDATIONS":
                 score += 0.05
             if f.cvd_impulse > 0:
                 score += 0.05
@@ -1581,7 +1581,7 @@ class StrategyEngine:
             if f.book_imbalance < -0.08:
                 score += 0.05
                 reasons.append("orderbook supports sellers")
-            if f.liquidation_pressure == "SHORT_LIQUIDATIONS":
+            if f.liquidation_pressure == "LONG_LIQUIDATIONS":
                 score += 0.05
             if f.cvd_impulse < 0:
                 score += 0.05
