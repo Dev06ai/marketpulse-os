@@ -1065,34 +1065,32 @@ class SafeActivity : Activity() {
                         .joinToString("  •  ") { it.optString("name") + " " + it.optString("state") }
                 }.orEmpty()
                 val leadText = if (lead != null) {
-                    lead.optString("direction") + " " + lead.optString("tier") + " " +
-                        lead.optInt("score") + "/" + lead.optInt("max_score") +
-                        " • " + lead.optString("setup") +
-                        " • " + lead.optString("action", "watch")
-                } else "No live opportunity detected"
+                    lead.optString("direction", "—") + " " +
+                        lead.optString("action", "WATCH").uppercase(Locale.US) +
+                        " " + lead.optInt("score") + "/" + lead.optInt("max_score") +
+                        " • " + lead.optString("setup", "Opportunity").take(20)
+                } else "LONG WATCH  •  —"
                 val secondText = if (second != null) {
-                    second.optString("direction") + " " + second.optString("tier") + " " +
-                        second.optInt("score") + "/" + second.optInt("max_score") +
-                        " • " + second.optString("action", "watch")
-                } else ""
+                    second.optString("direction", "—") + " " +
+                        second.optString("action", "WATCH").uppercase(Locale.US) +
+                        " " + second.optInt("score") + "/" + second.optInt("max_score")
+                } else "SHORT WATCH  •  —"
                 val sfp = engine?.optJSONObject("sfp_hunter")
                 val breakout = engine?.optJSONObject("breakout_watch")
                 val sfpText = if (sfp != null) {
-                    "SFP  •  " + sfp.optString("status", "WATCH") + "  •  " +
-                        sfp.optString("direction", "—") + " @ " +
-                        String.format(Locale.US, "%.2f", sfp.optDouble("target_level", Double.NaN))
-                } else ""
+                    "SFP  •  " + sfp.optString("status", "WATCH").uppercase(Locale.US)
+                } else "SFP  •  WATCH"
                 val breakoutText = if (breakout != null) {
-                    "BREAKOUT  •  " + breakout.optString("status", "WATCH") + "  •  " +
-                        breakout.optString("event", "NONE")
-                } else ""
+                    "BREAKOUT  •  " + breakout.optString("status", "WATCH").uppercase(Locale.US)
+                } else "BREAKOUT  •  WATCH"
+                val scenarioCompact = scenario.replace("  •  ", " • ").take(46)
                 setTradeSetupText(
-                    "OPPORTUNITY RADAR  •  ACTIVE SCAN\n" +
-                        leadText + if (secondText.isBlank()) "" else "\n" + secondText +
-                        if (sfpText.isBlank()) "" else "\n" + sfpText +
-                        if (breakoutText.isBlank()) "" else "\n" + breakoutText +
-                        if (scenario.isBlank()) "" else "\nSCENARIOS  •  " + scenario +
-                        "\nNO CONFIRMED TRADE YET • radar is actively monitoring triggers."
+                    "OPPORTUNITY RADAR  •  LIVE\n" +
+                        leadText +
+                        "\n" + secondText +
+                        "\n" + sfpText + "  •  " + breakoutText +
+                        (if (scenarioCompact.isBlank()) "" else "\nSCENARIOS  •  " + scenarioCompact) +
+                        "\nNO CONFIRMED TRADE  •  monitoring"
                 )
                 risk.text = "USDT P&L calculator • quantity or cost • long/short • leverage"
             }
@@ -1190,24 +1188,17 @@ class SafeActivity : Activity() {
         val longScore = storyObj?.optInt("long_score", 0) ?: 0
         val shortScore = storyObj?.optInt("short_score", 0) ?: 0
 
+        val mtf15 = wave15Obj?.optString("direction", "UNKNOWN") ?: "UNKNOWN"
+        val mtf1h = wave1hObj?.optString("direction", "UNKNOWN") ?: "UNKNOWN"
+        val mtf4h = f?.optString("trend_240", "UNKNOWN") ?: "UNKNOWN"
+        val regime = f?.optString("regime", "—") ?: "—"
+        val structure = f?.optString("market_structure", "—") ?: "—"
+        val triggerCompact = triggerText.replace("\n", " ").trim().take(32)
         features.text =
-            "BIAS  " + storyBias +
-            "\n" + (if (storySummary.isBlank()) compactStory else storySummary) +
-            "\n15m WAVE  " + (wave15Obj?.optString("phase", "UNKNOWN") ?: "UNKNOWN") +
-                " • " + (wave15Obj?.optString("wave", "UNCOUNTED") ?: "UNCOUNTED") +
-                " • " + (wave15Obj?.optString("direction", "NEUTRAL") ?: "NEUTRAL") +
-            "\n1h WAVE  " + (wave1hObj?.optString("phase", "UNKNOWN") ?: "UNKNOWN") +
-                " • " + (wave1hObj?.optString("direction", "NEUTRAL") ?: "NEUTRAL") +
-            "\nTRIGGERS  " + triggerText +
-            "\nSCENARIO SCORE  L " + longScore + "  •  S " + shortScore +
-            "\n" + narrativeText +
-            (if (noTradeReason.isBlank()) "" else "\nNO-TRADE RULE  " + noTradeReason) +
-            "\nREGIME  " + (f?.optString("regime") ?: "—") +
-            "  •  STRUCTURE  " + (f?.optString("market_structure") ?: "—") +
-            "\nCVD  " + (f?.optString("cvd_price_divergence") ?: "NONE") +
-            "  •  OI 5m  " + String.format(Locale.US, "%.2f%%", f?.optDouble("oi_change_5m_pct", 0.0) ?: 0.0) +
-            "  •  FVG  " + (f?.optString("fvg_direction") ?: "NONE") +
-            "  •  OB  " + (f?.optString("order_block_direction") ?: "NONE")
+            "BIAS  $storyBias" +
+            "\nMTF   4H $mtf4h  •  1H $mtf1h  •  15m $mtf15" +
+            "\nREGIME  $regime  •  $structure" +
+            "\nTRIGGERS  " + if (triggerCompact.isBlank()) "WATCH" else triggerCompact
 
         chart.setLivePrice(priceValue)
         if (requestChart) requestChartIfNeeded()
