@@ -3,6 +3,6 @@
   "versionCode": 93,
   "versionName": "0.11.15",
   "apkUrl": "https://github.com/Dev06ai/marketpulse-os/releases/download/dev-trader-v0.11.15-93/app-release.apk",
-  "sha256": "747dff0bc4c9d30dc03eb07b8597cc0a2ebbda231afa8132646b27e532fce218",
+  "sha256": "1eefe322e661aa964793f8a7f714ebf5974483e5c77479e609b87c370e956995",
   "notes": "Signed Dev Trader release 0.11.15 \u2022 corrected button sizing and bottom-bar layout"
 }
