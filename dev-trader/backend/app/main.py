@@ -38,6 +38,70 @@ last_trade_event = {}
 last_learning_rehydrate_ts = 0.0
 
 
+def reconcile_execution_truth():
+    """Make exchange execution state authoritative over cached strategy signals."""
+    try:
+        snapshot = execution.snapshot()
+        trades = list(snapshot.get("recent_trades") or [])
+    except Exception:
+        return
+    if not trades:
+        return
+
+    by_signal = {}
+    for trade in trades:
+        sid = str(trade.get("signal_id") or "").strip()
+        if not sid:
+            continue
+        current = by_signal.get(sid)
+        # history() is newest-first; keep the first matching record.
+        if current is None:
+            by_signal[sid] = trade
+
+    for signal_id, signal in list(engine.active_signals.items()):
+        trade = by_signal.get(str(signal_id))
+        if not trade:
+            continue
+        status = str(trade.get("status") or "").upper()
+        signal["execution_status"] = status
+        signal["actual_fill_confirmed"] = bool(trade.get("actual_fill_confirmed"))
+        if trade.get("entry_price") not in (None, 0, 0.0):
+            signal["actual_entry"] = float(trade.get("entry_price"))
+        if status == "CLOSED":
+            engine.resolve_external_execution({
+                "type": "EXECUTION_CLOSED",
+                "key": f"EXECUTION_CLOSED:{trade.get('execution_id')}",
+                "execution_id": trade.get("execution_id"),
+                "signal_id": signal_id,
+                "direction": trade.get("direction"),
+                "setup": trade.get("setup"),
+                "entry_price": trade.get("entry_price"),
+                "exit_price": trade.get("exit_price"),
+                "realized_pnl_usdt": trade.get("realized_pnl_usdt"),
+                "net_profit_usdt": trade.get("net_profit_usdt"),
+                "result_r": trade.get("result_r"),
+                "close_reason": trade.get("close_reason"),
+                "status": "CLOSED",
+                "ts": trade.get("closed_ts"),
+                "learning_review": trade.get("learning_review"),
+            })
+        elif status == "FAILED":
+            engine.resolve_external_execution({
+                "type": "EXECUTION_FAILED",
+                "key": f"EXECUTION_FAILED:{trade.get('execution_id')}",
+                "execution_id": trade.get("execution_id"),
+                "signal_id": signal_id,
+                "direction": trade.get("direction"),
+                "setup": trade.get("setup"),
+                "net_profit_usdt": trade.get("net_profit_usdt"),
+                "result_r": trade.get("result_r"),
+                "close_reason": "FAILED",
+                "status": "FAILED",
+                "ts": trade.get("closed_ts"),
+                "learning_review": trade.get("learning_review"),
+            })
+
+
 class PushTestPayload(BaseModel):
     token: str | None = None
 
@@ -52,6 +116,8 @@ class RiskPayload(BaseModel):
 
 def mobile_payload():
     now = int(time.time() * 1000)
+    # Reconcile any exchange-side close before broadcasting cached signal state.
+    reconcile_execution_truth()
     f = compute_features(state)
     diag = engine.last_diagnostics or {}
     return {
@@ -257,6 +323,18 @@ async def on_state(s: MarketState):
                 if execution_event.get("type") == "EXECUTION_FAILED":
                     execution_event["close_reason"] = "FAILED"
                 engine.resolve_external_execution(execution_event)
+                # Keep the durable bridge state synchronized with the exchange.
+                # Otherwise an old OPEN prediction can be rehydrated on the next
+                # memory-refresh cycle and resurrect a trade that Bitget already closed.
+                resolved = getattr(engine, "last_lifecycle_event", None)
+                if resolved and bridge.enabled:
+                    asyncio.create_task(
+                        bridge.post_outcome(
+                            resolved["signal"],
+                            resolved["outcome"],
+                            float(resolved.get("result_r", 0.0)),
+                        )
+                    )
             if push.ready and not clients:
                 push.send_trade_event(execution_event)
 
@@ -343,7 +421,11 @@ async def setup_memory_refresh_loop():
                 if open_predictions:
                     for open_row in open_predictions[:10]:
                         engine.restore_external_active_signal(open_row)
-                if state.last_price is not None:
+                # In Bitget Demo mode the exchange order/position lifecycle is
+                # authoritative. Never resolve the durable prediction from a local
+                # last-price touch because the attached exchange TP/SL may have a
+                # different trigger price, fill, or execution state.
+                if os.getenv("BITGET_DEMO_TRADING", "false").lower() not in {"1", "true", "yes", "on"} and state.last_price is not None:
                     current_price = float(state.last_price)
                     for row in open_predictions[:20]:
                         side = str(row.get("side") or "").upper()
