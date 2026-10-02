@@ -234,8 +234,13 @@ class AdaptiveLearning:
             if not trade:
                 return {"what_worked": [], "do_next_time": [], "avoid_next_time": []}
 
-            win = outcome in {"TP2_REACHED", "TARGET_REACHED"} and result_r > 0
-            trade["status"] = "WIN" if win else outcome
+            realized_r = float(result_r)
+            win = realized_r > 0
+            loss = realized_r < 0
+            # Realized R is authoritative. Profitable reversal/manual/unknown
+            # closes must not be learned as losses merely because the close
+            # reason was not the exchange's TP label.
+            trade["status"] = "WIN" if win else ("LOSS" if loss else outcome)
             trade["result_r"] = float(result_r)
             trade["resolved_ts"] = int(time.time() * 1000)
 
@@ -245,7 +250,7 @@ class AdaptiveLearning:
             profile["total_r"] += float(result_r)
             if win:
                 profile["wins"] += 1
-            else:
+            elif loss:
                 profile["losses"] += 1
             if trade.get("tp1_hit"):
                 profile["tp1_hits"] += 1
@@ -256,7 +261,7 @@ class AdaptiveLearning:
                 s["total_r"] += float(result_r)
                 if win:
                     s["wins"] += 1
-                else:
+                elif loss:
                     s["losses"] += 1
 
             ctx = self.context(signal)
