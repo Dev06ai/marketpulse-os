@@ -1,3 +1,4 @@
+// Build 91 UI refinement: fixed viewport + responsive chart + deterministic timeframe loading.
 // Build 83: show Bitget Demo funding readiness and demo execution state.
 package com.devtrader.app
 
