@@ -195,6 +195,9 @@ class MultiSignalClient(FakeClient):
     def position_history(self, symbol, start_ms, end_ms, limit):
         return []
 
+    def market_ticker(self, symbol):
+        return {"lastPrice": "100100"}
+
     def orders_history(self, symbol, limit, start_ms, end_ms):
         return []
 
