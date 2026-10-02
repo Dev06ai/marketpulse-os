@@ -207,6 +207,34 @@ class DemoExecutionEngine:
             return False, f"R:R {rr:.2f} is below demo execution threshold."
         return True, ""
 
+    async def _validate_execution_price(self, signal: dict[str, Any]) -> tuple[float, float]:
+        """Validate the signal against Bitget's live public execution market."""
+        entry = self._num(signal.get("entry"))
+        stop = self._num(signal.get("stop"))
+        target = self._num(signal.get("target2") or signal.get("target") or signal.get("target1"))
+        direction = str(signal.get("direction") or "").upper()
+        if entry <= 0 or stop <= 0 or target <= 0 or direction not in {"LONG", "SHORT"}:
+            raise BitgetDemoError("Signal has invalid execution-price geometry.")
+
+        ticker = await asyncio.to_thread(self.client.market_ticker, self.symbol)
+        exchange_price = self._num(ticker.get("lastPrice") or ticker.get("lastPr"))
+        if exchange_price <= 0:
+            raise BitgetDemoError("Bitget execution ticker returned an invalid price.")
+
+        drift_pct = abs(exchange_price - entry) / entry * 100.0
+        max_drift_pct = max(0.01, float(os.getenv("BITGET_MAX_ENTRY_DRIFT_PCT", "0.15")))
+        if drift_pct > max_drift_pct:
+            raise BitgetDemoError(
+                f"Bitget price drift {drift_pct:.3f}% exceeds {max_drift_pct:.3f}% execution guard."
+            )
+
+        if direction == "LONG" and not (stop < exchange_price < target):
+            raise BitgetDemoError("LONG signal is no longer valid at the Bitget execution price.")
+        if direction == "SHORT" and not (target < exchange_price < stop):
+            raise BitgetDemoError("SHORT signal is no longer valid at the Bitget execution price.")
+
+        return exchange_price, drift_pct
+
     async def handle_signal(self, signal: dict[str, Any]) -> dict[str, Any]:
         # Sync first so a just-closed position is not mistaken for an active one.
         try:
@@ -229,6 +257,11 @@ class DemoExecutionEngine:
 
         try:
             qty, risk_usdt, config = await self._risk_size(signal)
+            try:
+                reference_price, reference_drift_pct = await self._validate_execution_price(signal)
+            except BitgetDemoError as exc:
+                return {"ok": False, "skipped": True, "reason": str(exc)}
+
             entry_plan = self._num(signal.get("entry"))
             stop = self._num(signal.get("stop"))
             tp = self._num(signal.get("target2") or signal.get("target") or signal.get("target1"))
@@ -257,6 +290,8 @@ class DemoExecutionEngine:
                 "confidence": signal.get("confidence"),
                 "rr": signal.get("rr"),
                 "entry_plan": entry_plan,
+                "execution_reference_price": reference_price,
+                "execution_reference_drift_pct": round(reference_drift_pct, 5),
                 "stop_loss": stop,
                 "take_profit": tp,
                 "target1": signal.get("target1"),
@@ -293,6 +328,8 @@ class DemoExecutionEngine:
                     "setup": trade["setup"],
                     "status": "ORDER_PENDING",
                     "entry_plan": entry_plan,
+                    "execution_reference_price": reference_price,
+                    "execution_reference_drift_pct": round(reference_drift_pct, 5),
                     "entry_price": 0.0,
                     "stop_loss": stop,
                     "take_profit": tp,
