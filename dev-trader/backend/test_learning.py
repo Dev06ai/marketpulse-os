@@ -83,6 +83,7 @@ def test_sl_after_tp1_is_learned_as_partial_then_reversal():
 def test_profitable_manual_close_is_learned_as_win(tmp_path):
     learner = AdaptiveLearning()
     learner.path = tmp_path / "learning.json"
+    learner.data = {"version": 1, "trades": [], "profiles": {}, "conditions": {}, "lessons": []}
     signal = base_signal()
     learner.record_open(signal)
     lesson = learner.resolve(signal, "CLOSED", 0.8)
