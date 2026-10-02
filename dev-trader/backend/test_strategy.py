@@ -447,3 +447,48 @@ def test_additional_reference_training_is_loaded():
 
     assert features["additional_reference_training"] is True
     assert any("converging trendline compression" in s.get("name", "").lower() for s in scenarios)
+
+
+def test_learning_vetoes_repeatedly_bad_setup_context(tmp_path):
+    from app.learning import AdaptiveLearning
+    learner = AdaptiveLearning()
+    learner.path = tmp_path / "learning.json"
+    signal = base_signal()
+    for i in range(5):
+        signal_i = dict(signal, id=f"bad-{i}")
+        learner.record_open(signal_i)
+        learner.resolve(signal_i, "SL_HIT", -1.0)
+    decision = learner.decision_filter(signal)
+    assert decision["allow"] is False
+    assert "historical setup edge is weak" in decision["reason"]
+
+
+def test_duplicate_setup_cluster_is_blocked_for_recent_nearby_signal():
+    from app.strategy import StrategyEngine, Signal
+    engine = StrategyEngine()
+    now = int(time.time() * 1000)
+    existing = Signal(
+        id="existing",
+        direction="LONG",
+        setup="MSS Continuation",
+        entry=100.0,
+        stop=98.0,
+        target1=103.0,
+        target2=106.0,
+        rr=3.0,
+        confidence=0.90,
+        grade="A",
+        regime="TREND_UP",
+        invalidation="test",
+        thesis=[],
+        evidence={},
+        timeframe="15m",
+        trade_style="SWING",
+        style_reason="test",
+    ).to_dict()
+    existing["created_ts"] = now
+    engine.active_signals["existing"] = existing
+    candidate = Signal(**{**existing, "id": "candidate", "entry": 100.3})
+    blocked, reason = engine._duplicate_setup_blocked(candidate, MarketState(last_price=100.3, data_health="HEALTHY"))
+    assert blocked is True
+    assert "duplicate" in reason
