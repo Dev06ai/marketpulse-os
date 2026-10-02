@@ -242,10 +242,12 @@ class SafeActivity : Activity() {
             isFillViewportCompat()
         }
 
-        ViewCompat.setOnApplyWindowInsetsListener(root) { view, insets ->
-            val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
-            view.setPadding(dp(12), bars.top + dp(6), dp(12), bars.bottom + dp(6))
-            insets
+        ViewCompat.setOnApplyWindowInsetsListener(root) { view, _ ->
+            // Content is already laid out inside the system bars because
+            // decorFitsSystemWindows=true. Do not double-apply status/navigation
+            // bar sizes or the bottom controls get pushed/clipped.
+            view.setPadding(dp(12), dp(8), dp(12), dp(10))
+            WindowInsetsCompat.CONSUMED
         }
         setContentView(root)
 
@@ -303,7 +305,7 @@ class SafeActivity : Activity() {
                 requestChartIfNeeded(force = true)
                 bootstrap(true)
             }
-            tfRow.addView(b, LinearLayout.LayoutParams(0, dp(42), 1f).apply {
+            tfRow.addView(b, LinearLayout.LayoutParams(0, dp(40), 1f).apply {
                 leftMargin = dp(2)
                 rightMargin = dp(2)
             })
@@ -383,7 +385,7 @@ class SafeActivity : Activity() {
 
         updateButton = compactPillButton("UPDATE").apply {
             textSize = 11.2f
-            minHeight = dp(44)
+            minHeight = dp(42)
         }
         updateButton.setOnClickListener { safe { checkUpdate() } }
         actions.addView(updateButton, weightButton())
@@ -412,7 +414,7 @@ class SafeActivity : Activity() {
         label(text, 9.5f, Color.rgb(130, 136, 149), 0.13f)
 
     private fun weightButton(): LinearLayout.LayoutParams =
-        LinearLayout.LayoutParams(0, dp(44), 1f).apply {
+        LinearLayout.LayoutParams(0, dp(42), 1f).apply {
             leftMargin = dp(2)
             rightMargin = dp(2)
         }
