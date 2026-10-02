@@ -3,6 +3,6 @@
   "versionCode": 91,
   "versionName": "0.11.13",
   "apkUrl": "https://github.com/Dev06ai/marketpulse-os/releases/download/dev-trader-v0.11.13-91/app-release.apk",
-  "sha256": "c56b73ca6641dba52e1bc39c586c43b28da1084f33c1813101dd0ebb45c44d02",
+  "sha256": "4940047586df490826a0d67d52c726c0afcadfe3c96299e41c34c044b4232a29",
   "notes": "Signed Dev Trader release 0.11.13 \u2022 execute every emitted trade signal with position replacement"
 }
