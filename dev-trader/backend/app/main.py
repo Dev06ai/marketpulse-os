@@ -9,7 +9,7 @@ from pydantic import BaseModel
 from dotenv import load_dotenv
 
 from .models import MarketState
-from .stream import BybitStream
+from .stream import BitgetMarketStream, BybitStream
 from .strategy import StrategyEngine
 from .bridge import MarketPulseBridge
 from .push import PushService
@@ -372,7 +372,14 @@ async def setup_memory_refresh_loop():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global stream
-    stream = BybitStream(WS_URL, SYMBOL, on_state)
+    # Bitget is the execution venue, so its public market stream is the
+    # authoritative source for price/OI/orderbook/CVD/liquidations and candles.
+    # Bybit remains available in code for compatibility, but is not used to
+    # define actionable execution levels.
+    if str(os.getenv("MARKET_DATA_PRIMARY", "bitget")).lower() == "bitget":
+        stream = BitgetMarketStream(SYMBOL, on_state)
+    else:
+        stream = BybitStream(WS_URL, SYMBOL, on_state)
     tasks = [
         asyncio.create_task(stream.run()),
         asyncio.create_task(stream.rest_fallback_loop()),
