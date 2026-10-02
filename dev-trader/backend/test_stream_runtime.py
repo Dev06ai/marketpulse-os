@@ -104,14 +104,15 @@ def test_bitget_books5_and_liquidation_direction_mapping():
     }
     _asyncio.run(stream.handle(__import__("json").dumps(books)))
 
+    now_ms = int(__import__("time").time() * 1000)
     liq = {
         "arg": {"topic": "liquidation", "instType": "usdt-futures"},
         "action": "update",
         "data": [
-            {"symbol": "BTCUSDT", "side": "buy", "amount": "4", "ts": "1770000000100"},
-            {"symbol": "BTCUSDT", "side": "sell", "amount": "3", "ts": "1770000000200"},
+            {"symbol": "BTCUSDT", "side": "buy", "amount": "4", "ts": str(now_ms - 1000)},
+            {"symbol": "BTCUSDT", "side": "sell", "amount": "3", "ts": str(now_ms - 500)},
         ],
-        "ts": 1770000000200,
+        "ts": now_ms,
     }
     _asyncio.run(stream.handle(__import__("json").dumps(liq)))
 
