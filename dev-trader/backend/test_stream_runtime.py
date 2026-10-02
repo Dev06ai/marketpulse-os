@@ -37,7 +37,9 @@ def test_stream_marks_rest_only_feed_as_degraded():
 
 def test_bitget_stream_uses_demo_public_endpoint(monkeypatch):
     monkeypatch.setenv("BITGET_DEMO_TRADING", "true")
-    stream = BitgetMarketStream("BTCUSDT", lambda state: None)
+    async def on_state(_state):
+        return None
+    stream = BitgetMarketStream("BTCUSDT", on_state)
     assert stream.url == "wss://wspap.bitget.com/v3/ws/public"
     assert stream.product_type == "USDT-FUTURES"
 
@@ -79,14 +81,16 @@ def test_bitget_ticker_and_public_trade_are_authoritative():
     assert stream.state.open_interest == 12345.0
     assert stream.state.bid == 100099.0
     assert stream.state.ask == 100101.0
-    assert stream.state.cvd == 0.15
+    assert abs(stream.state.cvd - 0.15) < 1e-9
     assert stream.state.last_trade_ts == 1770000000200
     assert events
 
 
 def test_bitget_books5_and_liquidation_direction_mapping():
     import asyncio as _asyncio
-    stream = BitgetMarketStream("BTCUSDT", lambda state: None)
+    async def on_state(_state):
+        return None
+    stream = BitgetMarketStream("BTCUSDT", on_state)
 
     books = {
         "arg": {"topic": "books5", "instType": "usdt-futures", "symbol": "BTCUSDT"},
