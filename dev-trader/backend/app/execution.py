@@ -548,7 +548,28 @@ class DemoExecutionEngine:
                     trade["filled_qty"] = filled
                 if avg > 0:
                     trade["entry_price"] = avg
-                if status in {"filled", "full_fill", "full-filled"} or filled > 0:
+                normalized_status = status.replace("-", "_").replace(" ", "_")
+
+                # Bitget can report a non-zero cumulative fill while an order is
+                # still only partially filled. That is NOT an executable OPEN
+                # position yet: promoting it here would make the app emit
+                # EXECUTION_OPEN too early and learn from a position that is not
+                # actually established in full.
+                trade["exchange_order_status"] = normalized_status
+                if normalized_status in {"partially_filled", "partial_fill", "live", "new", "open"}:
+                    # Keep ORDER_PENDING until Bitget confirms a full fill.
+                    # Preserve the observed cumulative quantity/average only as
+                    # diagnostic information for the UI.
+                    if filled > 0:
+                        trade["filled_qty"] = filled
+                    if avg > 0:
+                        trade["entry_price"] = avg
+                    with self.lock:
+                        self._save()
+                    await asyncio.sleep(0.75)
+                    continue
+
+                if normalized_status in {"filled", "full_fill", "full_filled"}:
                     # The exchange fill is the single source of truth for the
                     # executed entry. Keep the original signal entry separately
                     # as entry_plan so the UI never confuses a plan with a fill.
