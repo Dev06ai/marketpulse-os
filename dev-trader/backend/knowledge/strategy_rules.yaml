@@ -3,7 +3,7 @@ mode: Klein-manual-only
 risk:
   hard_cap_risk_pct: 1.0
   preferred_min_rr: 1.5
-  elite_min_rr: 3.0
+  elite_min_rr: 2.2
   dline_reference_min_rr: 1.5
   never_auto_execute: true
 htf:
@@ -50,22 +50,25 @@ signal_policy:
   manual_execution_only: true
   quality_governor:
     enabled: true
-    max_signals_per_utc_day: 3
-    cooldown_minutes_after_resolution: 120
-    min_confidence: 0.44
+    max_signals_per_utc_day: 6
+    cooldown_minutes_after_resolution: 45
+    min_confidence: 0.70
     min_rr: 3.0
     require_grade_a: true
     require_1h_alignment: true
     require_4h_alignment: true
     require_structure_alignment: true
-    minimum_extra_confirmations: 2
+    minimum_extra_confirmations: 3
     block_high_vol: true
     block_range_non_sfp: true
-    max_spread_bps: 5.0
-    elliott_min_confidence: 0.55
+    max_spread_bps: 4.0
+    elliott_min_confidence: 0.60
     require_elliott_alignment_when_confident: true
-    momentum_min_confidence: 0.74
-    momentum_min_confirmations: 2
+    momentum_min_confidence: 0.82
+    momentum_min_confirmations: 3
+    decision_min_confidence: 0.78
+    decision_min_confirmations: 3
+    duplicate_setup_cooldown_minutes: 45
 
 scan:
   mode: loose
