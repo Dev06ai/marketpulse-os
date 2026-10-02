@@ -266,9 +266,9 @@ class SafeActivity : Activity() {
 
         // Hero market card
         val hero = heroCard()
-        price = hero.first
+        price = hero.price
         oiView = hero.oi
-        status = hero.second
+        status = hero.status
         root.addView(hero.container, margins(bottom = 8))
 
         // Price action
