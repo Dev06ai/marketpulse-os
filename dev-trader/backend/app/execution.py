@@ -381,26 +381,37 @@ class DemoExecutionEngine:
         if str(evidence.get("market_structure") or "").upper() == expected_structure:
             aligned += 1
 
-        should_close = False
         reasons: list[str] = []
+        eligible_for_basket_close = bool(opposite)
+        candidate_count = 0
+
+        # Bitget aggregates same-side entries at the exchange-position level.
+        # Therefore a reversal can close an entire side, but only when every
+        # local trade on that side independently agrees that the thesis is weak.
         for old in opposite:
             old_entry = self._num(old.get("entry_price") or old.get("entry_plan"))
             old_stop = self._num(old.get("stop_loss"))
             old_conf = self._num(old.get("confidence"))
             if old_entry <= 0 or old_stop <= 0:
+                eligible_for_basket_close = False
+                reasons.append(f"{old.get('signal_id')}: missing valid entry/stop")
                 continue
+
             risk = abs(old_entry - old_stop)
             if risk <= 0:
+                eligible_for_basket_close = False
+                reasons.append(f"{old.get('signal_id')}: invalid risk distance")
                 continue
+
             old_direction = str(old.get("direction") or "").upper()
             progress_r = (
                 (float(current_price) - old_entry) / risk
                 if old_direction == "LONG"
                 else (old_entry - float(current_price)) / risk
             )
-            # Once a trade has already established roughly +1.25R, do not churn
-            # it merely because a counter-signal appears.
+
             if progress_r >= 1.25:
+                eligible_for_basket_close = False
                 reasons.append(f"{old.get('signal_id')}: protected profit {progress_r:.2f}R")
                 continue
 
@@ -408,12 +419,16 @@ class DemoExecutionEngine:
             strong_rr = new_rr >= 3.0
             market_flip = aligned >= 3
             if materially_stronger and strong_rr and market_flip:
-                should_close = True
+                candidate_count += 1
                 reasons.append(
                     f"{old.get('signal_id')}: reversal {new_conf:.2f} confidence, "
                     f"{aligned}/4 directional evidence, old progress {progress_r:.2f}R"
                 )
+            else:
+                eligible_for_basket_close = False
+                reasons.append(f"{old.get('signal_id')}: reversal evidence is not strong enough")
 
+        should_close = eligible_for_basket_close and candidate_count == len(opposite)
         if not should_close:
             return {"action": "KEEP", "reason": "; ".join(reasons) or "reversal gate not strong enough"}
 
