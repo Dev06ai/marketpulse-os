@@ -82,8 +82,27 @@ def _quality_min_confidence() -> float:
 def _quality_min_rr() -> float:
     return float(os.getenv(
         "QUALITY_MIN_RR",
-        str(_quality_rules().get("min_rr", 3.0)),
+        str(_quality_rules().get("min_rr", 2.2)),
     ))
+
+def _decision_min_confidence() -> float:
+    return float(os.getenv(
+        "DECISION_MIN_CONFIDENCE",
+        str(_quality_rules().get("decision_min_confidence", 0.78)),
+    ))
+
+def _decision_min_confirmations() -> int:
+    return max(2, int(os.getenv(
+        "DECISION_MIN_CONFIRMATIONS",
+        str(_quality_rules().get("decision_min_confirmations", 3)),
+    )))
+
+def _duplicate_setup_cooldown_ms() -> int:
+    minutes = float(os.getenv(
+        "DUPLICATE_SETUP_COOLDOWN_MINUTES",
+        str(_quality_rules().get("duplicate_setup_cooldown_minutes", 45)),
+    ))
+    return max(0, int(minutes * 60_000))
 
 
 def _trade_style(direction: str, setup: str, timeframe: str, f: MarketFeatures) -> tuple[str, str]:
@@ -792,6 +811,30 @@ class StrategyEngine:
             "min_rr": _quality_min_rr(),
         }
 
+    def _duplicate_setup_blocked(self, signal: Signal, state: MarketState) -> tuple[bool, str]:
+        """Block repeated copies of the same nearby setup while allowing distinct ideas."""
+        now = self.last_evaluated_ts or int(time.time() * 1000)
+        cooldown = _duplicate_setup_cooldown_ms()
+        atr = max(compute_features(state).atr_15, abs(signal.entry) * 0.0005)
+
+        for row in self.active_signals.values():
+            if str(row.get("direction") or "").upper() != signal.direction.upper():
+                continue
+            if str(row.get("setup") or "").upper() != signal.setup.upper():
+                continue
+            age = now - int(row.get("created_ts") or 0)
+            if age < 0 or age > cooldown:
+                continue
+            old_entry = float(row.get("entry") or 0.0)
+            if old_entry <= 0:
+                continue
+            if abs(signal.entry - old_entry) <= atr * 0.65:
+                return True, (
+                    f"duplicate {signal.setup} {signal.direction} near an active entry; "
+                    f"existing setup is only {age / 60_000:.0f}m old"
+                )
+        return False, ""
+
     def _governor_allows_new_signal(self) -> bool:
         self._rotate_governor_day()
         cfg = _quality_rules()
@@ -809,6 +852,127 @@ class StrategyEngine:
                 return False
         self.governor_lock_reason = ""
         return True
+
+    def _elite_decision_gate(self, signal: Signal, state: MarketState) -> tuple[bool, str]:
+        """High-conviction decision layer designed to reject marginal entries."""
+        f = compute_features(state)
+        direction = signal.direction.upper()
+        setup = signal.setup.upper()
+        reasons: list[str] = []
+
+        # Data quality.
+        if state.data_health not in {"HEALTHY", "DEGRADED"}:
+            reasons.append("market feed is not healthy enough")
+
+        # Higher-timeframe alignment is mandatory for continuation/breakout paths.
+        is_reversal = "SFP" in setup or "HARMONIC" in setup
+        if not is_reversal:
+            if direction == "LONG":
+                if f.trend_15 != "UP": reasons.append("15m trend is not aligned")
+                if f.trend_60 != "UP": reasons.append("1h trend is not aligned")
+                if f.trend_240 != "UP": reasons.append("4h trend is not aligned")
+                if f.market_structure != "BULLISH": reasons.append("15m market structure is not bullish")
+            else:
+                if f.trend_15 != "DOWN": reasons.append("15m trend is not aligned")
+                if f.trend_60 != "DOWN": reasons.append("1h trend is not aligned")
+                if f.trend_240 != "DOWN": reasons.append("4h trend is not aligned")
+                if f.market_structure != "BEARISH": reasons.append("15m market structure is not bearish")
+
+        # Never enter a continuation setup against a strong flow divergence.
+        if direction == "LONG" and f.cvd_price_divergence == "BEARISH" and not is_reversal:
+            reasons.append("CVD is materially bearish against the long")
+        if direction == "SHORT" and f.cvd_price_divergence == "BULLISH" and not is_reversal:
+            reasons.append("CVD is materially bullish against the short")
+
+        # Order-book imbalance is directional confirmation, not just a generic
+        # confidence booster.
+        if abs(f.book_imbalance) >= 0.16:
+            if direction == "LONG" and f.book_imbalance < -0.16:
+                reasons.append("order book is materially seller-heavy")
+            if direction == "SHORT" and f.book_imbalance > 0.16:
+                reasons.append("order book is materially buyer-heavy")
+
+        # High-confidence Elliott/harmonic context is a hard directional filter.
+        if f.elliott_confidence >= 0.68 and f.elliott_direction in {"LONG", "SHORT"}:
+            if f.elliott_direction != direction and not is_reversal:
+                reasons.append("Elliott context strongly disagrees with the trade")
+        if f.harmonic_confidence >= 0.72 and f.harmonic_direction in {"LONG", "SHORT"}:
+            if f.harmonic_direction != direction:
+                reasons.append("harmonic context strongly disagrees with the trade")
+
+        # Volatility/spread guard.
+        if f.spread_bps > 4.0:
+            reasons.append(f"spread {f.spread_bps:.2f} bps is too wide")
+        if f.regime == "HIGH_VOL" and "SFP" not in setup:
+            reasons.append("high-volatility chase is blocked")
+
+        # Require independent confirmation buckets. OI alone is deliberately
+        # not treated as directional proof because rising OI has no direction
+        # by itself.
+        confirmations = 0
+        confirmation_names: list[str] = []
+        if direction == "LONG" and f.cvd_price_divergence == "BULLISH":
+            confirmations += 1; confirmation_names.append("CVD")
+        if direction == "SHORT" and f.cvd_price_divergence == "BEARISH":
+            confirmations += 1; confirmation_names.append("CVD")
+        if direction == "LONG" and f.book_imbalance > 0.10:
+            confirmations += 1; confirmation_names.append("BOOK")
+        if direction == "SHORT" and f.book_imbalance < -0.10:
+            confirmations += 1; confirmation_names.append("BOOK")
+        if f.fvg_direction == ("BULLISH" if direction == "LONG" else "BEARISH"):
+            confirmations += 1; confirmation_names.append("FVG")
+        if f.order_block_direction == ("BULLISH" if direction == "LONG" else "BEARISH"):
+            confirmations += 1; confirmation_names.append("OB")
+        if f.golden_pocket == ("LONG_ZONE" if direction == "LONG" else "SHORT_ZONE"):
+            confirmations += 1; confirmation_names.append("FIB")
+        if f.elliott_direction == direction and f.elliott_confidence >= 0.55:
+            confirmations += 1; confirmation_names.append("ELLIOTT")
+        if f.liquidation_pressure == ("LONG_LIQUIDATIONS" if direction == "LONG" else "SHORT_LIQUIDATIONS"):
+            confirmations += 1; confirmation_names.append("LIQ")
+
+        required = _decision_min_confirmations()
+        # A live SFP can use structural sweep/reclaim as one confirmation, but
+        # still needs at least two independent flow/context confirmations.
+        if "SFP" in setup:
+            required = max(2, required - 1)
+        if confirmations < required:
+            reasons.append(
+                f"only {confirmations} independent confirmations; need {required}"
+            )
+
+        # Anti-chase timing. A mature impulse is not an entry just because its
+        # direction is obvious.
+        if state.last_price is not None and f.atr_15 > 0:
+            confirmed = [c for c in state.candles_15 if c.confirmed]
+            if len(confirmed) >= 4:
+                move = abs(confirmed[-1].close - confirmed[-4].close) / f.atr_15
+                body = abs(confirmed[-1].close - confirmed[-1].open) / max(
+                    confirmed[-1].high - confirmed[-1].low, 1e-9
+                )
+                if move >= 1.90 and "SFP" not in setup and "RETEST" not in setup:
+                    reasons.append(f"late entry: recent 15m move is {move:.2f} ATR")
+                if body >= 0.78 and move >= 1.35 and "SFP" not in setup:
+                    reasons.append("entry candle is a high-body impulse; wait for a retest")
+
+        # Historical learning veto.
+        learned = self.learning.decision_filter(signal.to_dict())
+        signal.evidence["decision_engine"] = {
+            "confirmations": confirmations,
+            "confirmation_names": confirmation_names[:8],
+            "required_confirmations": required,
+            "historical_filter": learned,
+            "decision_min_confidence": _decision_min_confidence(),
+        }
+        if not learned["allow"]:
+            reasons.append(learned["reason"])
+
+        # Explicit confidence gate after all bounded learning adjustments.
+        if signal.confidence < _decision_min_confidence():
+            reasons.append(
+                f"decision confidence {signal.confidence:.0%} < {_decision_min_confidence():.0%}"
+            )
+
+        return (not reasons, "; ".join(reasons))
 
     def _quality_gate(self, signal: Signal, state: MarketState) -> tuple[bool, str]:
         cfg = _quality_rules()
@@ -2610,7 +2774,15 @@ class StrategyEngine:
             self._apply_learning_context(candidate, state)
             ok, reason = self._quality_gate(candidate, state)
             if ok:
-                qualified.append(candidate)
+                elite_ok, elite_reason = self._elite_decision_gate(candidate, state)
+                if elite_ok:
+                    duplicate, duplicate_reason = self._duplicate_setup_blocked(candidate, state)
+                    if not duplicate:
+                        qualified.append(candidate)
+                    else:
+                        rejected.append(f"{candidate.setup}: {duplicate_reason}")
+                else:
+                    rejected.append(f"{candidate.setup}: {elite_reason}")
             else:
                 rejected.append(f"{candidate.setup}: {reason}")
         if not qualified:
@@ -2621,7 +2793,19 @@ class StrategyEngine:
             self.last_diagnostics["blocked_by"] = ["quality_governor"]
             return None
 
-        signal = max(qualified, key=lambda s: (s.confidence, s.rr))
+        def decision_rank(s: Signal) -> tuple[float, float, float]:
+            evidence = s.evidence.get("decision_engine") or {}
+            confirmations = float(evidence.get("confirmations") or 0)
+            history_ctx = ((evidence.get("historical_filter") or {}).get("context") or {})
+            avg_r = float(history_ctx.get("avg_r") or 0.0)
+            # Prefer clean confluence first, then confidence, then realized
+            # historical edge where it actually has enough samples.
+            return (
+                confirmations,
+                s.confidence + min(0.06, max(-0.06, avg_r * 0.02)),
+                s.rr,
+            )
+        signal = max(qualified, key=decision_rank)
         self.governor_last_quality_rejection = ""
         previous_signal = dict(self.active_signal) if self.active_signal else None
         self.position_management = self._build_position_management(previous_signal, signal, state)
