@@ -517,8 +517,8 @@ def test_duplicate_setup_cluster_is_blocked_for_recent_nearby_signal():
         id="candidate",
         direction="LONG",
         setup="MSS Continuation",
-        entry=100.3,
-        stop=98.3,
+        entry=100.02,
+        stop=98.02,
         target1=103.3,
         target2=106.3,
         rr=3.0,
@@ -534,7 +534,7 @@ def test_duplicate_setup_cluster_is_blocked_for_recent_nearby_signal():
     )
     blocked, reason = engine._duplicate_setup_blocked(
         candidate,
-        MarketState(last_price=100.3, data_health="HEALTHY"),
+        MarketState(last_price=100.02, data_health="HEALTHY"),
     )
     assert blocked is True
     assert "duplicate" in reason
