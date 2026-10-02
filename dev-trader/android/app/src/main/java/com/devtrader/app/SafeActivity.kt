@@ -981,13 +981,16 @@ class SafeActivity : Activity() {
         val marketUpdateTs = root.optLong("last_market_update_ts", 0L)
         val freshestTs = maxOf(receivedTs, marketUpdateTs)
         val freshMarket = priceValue.isFinite() && freshestTs > 0L && (nowMs - freshestTs) <= 8_000L
+        val upstream = root.optJSONObject("upstream")
+        val source = upstream?.optString("source", "").orEmpty()
+        val authoritativeFeedHealthy = health == "HEALTHY" && ws && source == "BITGET_WS" && freshMarket
         status.text = when {
-            freshMarket && health == "DEGRADED" -> "LIVE  •  REST FALLBACK"
-            freshMarket -> "LIVE"
-            health == "HEALTHY" -> "LIVE"
-            health == "DEGRADED" -> "LIVE  •  REST FALLBACK"
+            authoritativeFeedHealthy -> "LIVE"
+            health == "DEGRADED" -> "DATA DEGRADED"
             health == "CONNECTING" -> "CONNECTING…"
             health == "RECONNECTING" -> "RECONNECTING…"
+            !ws -> "BACKEND WS OFFLINE"
+            !freshMarket -> "DATA STALE"
             else -> health
         }
         price.text = priceBtcAccent(
@@ -996,28 +999,30 @@ class SafeActivity : Activity() {
         )
         oiView.text = "OI  " + if (oi.isNaN()) "—"
             else String.format(Locale.US, "%,.2f", oi)
-        val upstream = root.optJSONObject("upstream")
-        val source = upstream?.optString("source", "").orEmpty()
         integrity.text = when {
-            ws -> "WS  •  CONNECTED"
-            source.contains("REST", ignoreCase = true) -> "WS  •  OFF  •  REST OK"
-            else -> "WS  •  OFF"
+            authoritativeFeedHealthy -> "BITGET WS  •  LIVE"
+            health == "DEGRADED" && source.contains("REST", ignoreCase = true) -> "BITGET REST  •  DEGRADED"
+            health == "DEGRADED" -> "BITGET FEED  •  DEGRADED"
+            health == "CONNECTING" || health == "RECONNECTING" -> "BITGET WS  •  CONNECTING"
+            !ws -> "BACKEND WS  •  OFFLINE"
+            else -> "BITGET FEED  •  " + health
         }
 
-        val execution = root.optJSONObject("execution")
         val recentTrades = execution?.optJSONArray("recent_trades")
-        var openExecution: JSONObject? = null
-        if (recentTrades != null) {
+        var signalExecution: JSONObject? = null
+        if (recentTrades != null && signalObj != null) {
             for (i in 0 until recentTrades.length()) {
                 val trade = recentTrades.optJSONObject(i) ?: continue
-                if (trade.optString("status").uppercase(Locale.US) == "OPEN") {
-                    if (signalObj == null || trade.optString("signal_id") == signalObj.optString("id")) {
-                        openExecution = trade
-                        break
-                    }
+                val tradeSignalId = trade.optString("signal_id")
+                val tradeStatus = trade.optString("status").uppercase(Locale.US)
+                if (tradeSignalId == signalObj.optString("id") && tradeStatus in setOf("OPEN", "ORDER_PENDING", "CLOSED", "FAILED")) {
+                    signalExecution = trade
+                    break
                 }
             }
         }
+        val executionStatus = signalExecution?.optString("status", "NONE")?.uppercase(Locale.US) ?: "NONE"
+        val openExecution = if (executionStatus == "OPEN") signalExecution else null
 
         val signalLifecycle = signalObj?.optString(
             "lifecycle",
@@ -1118,16 +1123,31 @@ class SafeActivity : Activity() {
             val riskDistance = evidenceObj?.optDouble("risk_distance", Double.NaN) ?: Double.NaN
 
             val plannedEntry = signalObj.optDouble("entry", Double.NaN)
-            val actualEntry = openExecution?.optDouble("entry_price", Double.NaN) ?: Double.NaN
+            val actualEntry = openExecution?.optDouble("entry_price", Double.NaN) ?: signalExecution?.optDouble("entry_price", Double.NaN) ?: Double.NaN
             val entryLine = if (actualEntry.isFinite() && actualEntry > 0) {
                 "Planned  " + String.format(Locale.US, "%.2f", plannedEntry) +
                     "    Actual fill  " + String.format(Locale.US, "%.2f", actualEntry)
             } else {
                 "Planned entry  " + if (plannedEntry.isFinite()) String.format(Locale.US, "%.2f", plannedEntry) else "—"
             }
+            val title = when {
+                executionStatus == "OPEN" && authoritativeFeedHealthy ->
+                    "POSITION OPEN  •  " + signalObj.optString("direction") + "  •  " + tradeStyle + "  •  ACTIVE"
+                executionStatus == "OPEN" ->
+                    "POSITION OPEN  •  " + signalObj.optString("direction") + "  •  RECONCILING"
+                executionStatus == "ORDER_PENDING" ->
+                    "ORDER PENDING  •  " + signalObj.optString("direction") + "  •  AWAITING FILL"
+                !authoritativeFeedHealthy ->
+                    "SIGNAL UNCONFIRMED  •  " + signalObj.optString("direction") + "  •  FEED DEGRADED"
+                else ->
+                    "TRADE CALL  •  " + signalObj.optString("direction") + "  •  " + tradeStyle + "  •  " + lifecycle
+            }
+            val feedGuard = if (!authoritativeFeedHealthy) {
+                "\n⚠ Exchange state is authoritative; waiting for healthy Bitget feed." 
+            } else ""
 
             setTradeSetupText(
-                "TRADE CALL  •  " + signalObj.optString("direction") + "  •  " + tradeStyle + "  •  " + lifecycle +
+                title +
                     "\n" + signalObj.optString("setup") +
                     "\n" + entryLine +
                     "\nSL  " + String.format(Locale.US, "%.2f", signalObj.optDouble("stop")) +
@@ -1138,7 +1158,8 @@ class SafeActivity : Activity() {
                     "  •  Conf " + String.format(Locale.US, "%.0f%%", signalObj.optDouble("confidence") * 100) +
                     if (styleReason.isBlank()) "" else "\n" + styleReason +
                     if (reason.isBlank()) "" else "\n" + reason +
-                    managementText
+                    managementText +
+                    feedGuard
             )
 
             val id = signalObj.optString("id")
