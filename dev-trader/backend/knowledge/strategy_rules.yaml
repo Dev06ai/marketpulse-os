@@ -65,7 +65,7 @@ signal_policy:
     elliott_min_confidence: 0.60
     require_elliott_alignment_when_confident: true
     momentum_min_confidence: 0.82
-    momentum_min_confirmations: 3
+    momentum_min_confirmations: 2
     decision_min_confidence: 0.78
     decision_min_confirmations: 3
     duplicate_setup_cooldown_minutes: 45
