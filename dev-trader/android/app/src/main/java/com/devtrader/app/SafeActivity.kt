@@ -366,7 +366,12 @@ class SafeActivity : Activity() {
         journalButton.setOnClickListener { loadJournal() }
         root.addView(journalButton, margins(bottom = 12))
 
-        val tradeHistoryCard = card("BITGET DEMO  /  EXECUTED TRADE HISTORY", "Connecting to Bitget Demo execution status…", 12f)
+        val tradeHistoryCard = scrollableCard(
+            "BITGET DEMO  /  EXECUTED TRADE HISTORY",
+            "Connecting to Bitget Demo execution status…",
+            12f,
+            dp(360)
+        )
         tradeHistory = tradeHistoryCard.value
         root.addView(tradeHistoryCard.container, margins(bottom = 10))
         val tradeHistoryButton = actionButton("REFRESH DEMO TRADE HISTORY")
@@ -398,6 +403,70 @@ class SafeActivity : Activity() {
     }
 
     private data class CardRefs(val container: LinearLayout, val value: TextView)
+
+    private fun scrollableCard(
+        title: String,
+        initial: String,
+        valueSize: Float,
+        scrollHeightPx: Int
+    ): CardRefs {
+        val box = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(17), dp(15), dp(17), dp(16))
+            background = gradient(
+                intArrayOf(Color.rgb(30, 31, 38), Color.rgb(17, 18, 23)),
+                GradientDrawable.Orientation.TL_BR
+            ).apply {
+                cornerRadius = dp(18).toFloat()
+                setStroke(dp(1), Color.rgb(55, 57, 66))
+            }
+        }
+
+        val heading = TextView(this).apply {
+            text = marketAssetAccent(title)
+            textSize = 11f
+            setTextColor(Color.rgb(150, 154, 164))
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            letterSpacing = 0.11f
+            includeFontPadding = false
+        }
+        box.addView(heading)
+
+        val value = TextView(this).apply {
+            text = marketAssetAccent(initial)
+            textSize = valueSize
+            setTextColor(Color.WHITE)
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            includeFontPadding = false
+            setLineSpacing(0f, 1.24f)
+        }
+
+        val historyScroll = ScrollView(this).apply {
+            isFillViewport = true
+            overScrollMode = View.OVER_SCROLL_IF_CONTENT_SCROLLS
+            isVerticalScrollBarEnabled = true
+            scrollBarStyle = View.SCROLLBARS_INSIDE_INSET
+        }
+        historyScroll.addView(
+            value,
+            ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+        )
+
+        box.addView(
+            historyScroll,
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                scrollHeightPx
+            ).apply {
+                topMargin = dp(8)
+            }
+        )
+
+        return CardRefs(box, value)
+    }
 
     private fun card(title: String, initial: String, valueSize: Float): CardRefs {
         val box = LinearLayout(this).apply {
