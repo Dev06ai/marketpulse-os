@@ -134,7 +134,7 @@ def test_quality_governor_enforces_daily_cap():
         data_health="HEALTHY",
     )
     engine = StrategyEngine()
-    engine.daily_signal_count = 3
+    engine.daily_signal_count = 6
     assert engine.evaluate(state) is None
     assert "DAILY CAP" in engine.governor_status()["lock_reason"]
 
@@ -455,7 +455,30 @@ def test_learning_vetoes_repeatedly_bad_setup_context(tmp_path):
     from app.learning import AdaptiveLearning
     learner = AdaptiveLearning()
     learner.path = tmp_path / "learning.json"
-    signal = base_signal()
+    signal = {
+        "id": "bad-base",
+        "setup": "MSS Continuation",
+        "direction": "LONG",
+        "timeframe": "15m",
+        "entry": 100.0,
+        "stop": 98.0,
+        "target1": 103.0,
+        "target2": 104.5,
+        "rr": 2.25,
+        "confidence": 0.82,
+        "grade": "A",
+        "regime": "TREND_UP",
+        "evidence": {
+            "trend_15": "UP",
+            "trend_60": "UP",
+            "trend_240": "UP",
+            "market_structure": "BULLISH",
+            "cvd_price_divergence": "NONE",
+            "fvg_direction": "NONE",
+            "order_block_direction": "NONE",
+            "golden_pocket": "NONE",
+        },
+    }
     for i in range(5):
         signal_i = dict(signal, id=f"bad-{i}")
         learner.record_open(signal_i)
