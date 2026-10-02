@@ -104,6 +104,7 @@ class SafeActivity : Activity() {
     private var lastUiRenderMs = 0L
     private var lastChartRequestMs = 0L
     private var chartRequestInFlight = false
+    private var chartRequestToken = 0L
     private var lastBootstrapMs = 0L
     private var lastBootstrapSuccessMs = 0L
     private var bootstrapInFlight = false
@@ -261,7 +262,7 @@ class SafeActivity : Activity() {
         header.addView(alertsButton, LinearLayout.LayoutParams(dp(84), dp(36)).apply { rightMargin = dp(6) })
         retryButton = compactPillButton("↻")
         retryButton?.setOnClickListener { safe { forceReconnectFromUser() } }
-        header.addView(retryButton, LinearLayout.LayoutParams(dp(40), dp(36)))
+        header.addView(retryButton, LinearLayout.LayoutParams(dp(46), dp(36)))
         root.addView(header, margins(bottom = 7))
 
         // Hero market card
@@ -274,14 +275,14 @@ class SafeActivity : Activity() {
         // Price action
         root.addView(sectionLabel("PRICE ACTION"), margins(bottom = 4))
         chart = MarketChartView(this).apply {
-            minimumHeight = dp(210)
+            minimumHeight = dp(280)
             isClickable = false
             isFocusable = false
             setOnTouchListener { _, _ -> false }
         }
         root.addView(
             chart,
-            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(210)).apply {
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(280)).apply {
                 bottomMargin = dp(5)
             }
         )
@@ -298,6 +299,7 @@ class SafeActivity : Activity() {
                 selectedTf = tf
                 chart.setTimeframe(tf)
                 refreshTimeframeButtons(tfRow)
+                requestChartIfNeeded(force = true)
                 bootstrap(true)
             }
             tfRow.addView(b, LinearLayout.LayoutParams(0, dp(34), 1f).apply {
@@ -305,6 +307,7 @@ class SafeActivity : Activity() {
                 rightMargin = dp(2)
             })
         }
+        timeframeButtonRow = tfRow
         root.addView(tfRow, margins(bottom = 7))
         refreshTimeframeButtons(tfRow)
 
@@ -325,15 +328,15 @@ class SafeActivity : Activity() {
 
         val story = compactCard("MARKET STORY", "BIAS —\n4H —  •  1H —  •  15m —", 10.5f)
         features = story.value
-        features.maxLines = 4
+        features.maxLines = 3
         features.ellipsize = android.text.TextUtils.TruncateAt.END
         features.setLineSpacing(0f, 1.02f)
         features.setHorizontallyScrolling(false)
-        infoRow.addView(story.container, LinearLayout.LayoutParams(0, dp(76), 1f).apply { rightMargin = dp(4) })
+        infoRow.addView(story.container, LinearLayout.LayoutParams(0, dp(86), 1f).apply { rightMargin = dp(4) })
 
         val execution = compactCard("EXECUTION", "Bitget Demo  •  READY\nOpen 0  •  Closed 0", 10.5f)
         tradeHistory = execution.value
-        tradeHistory.maxLines = 4
+        tradeHistory.maxLines = 3
         tradeHistory.ellipsize = android.text.TextUtils.TruncateAt.END
         tradeHistory.setLineSpacing(0f, 1.02f)
         tradeHistory.setHorizontallyScrolling(false)
@@ -541,7 +544,8 @@ class SafeActivity : Activity() {
             setTextColor(Color.WHITE)
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
             includeFontPadding = false
-            setLineSpacing(0f, 1.06f)
+            setLineSpacing(0f, 1.02f)
+            setHorizontallyScrolling(false)
         }
         box.addView(heading)
         box.addView(value, margins(top = 5))
@@ -874,7 +878,7 @@ class SafeActivity : Activity() {
         reconnectAttempt = 0
         lastSocketRebuildMs = now
         retryButton?.isEnabled = false
-        retryButton?.text = "RETRYING…"
+        retryButton?.text = "…  "
         status.text = "DATA RECOVERY"
         integrity.text = "MANUAL RETRY  •  REBUILDING LIVE CONNECTION"
         bootstrap(true)
@@ -993,8 +997,11 @@ class SafeActivity : Activity() {
             else String.format(Locale.US, "%,.2f", oi)
         val upstream = root.optJSONObject("upstream")
         val source = upstream?.optString("source", "").orEmpty()
-        integrity.text = "Primary WS  •  " + if (ws) "CONNECTED" else "DISCONNECTED" +
-            if (source.isBlank()) "" else "  •  " + source.replace("_", " ")
+        integrity.text = when {
+            ws -> "WS  •  CONNECTED"
+            source.contains("REST", ignoreCase = true) -> "WS  •  OFF  •  REST OK"
+            else -> "WS  •  OFF"
+        }
 
         val execution = root.optJSONObject("execution")
         val recentTrades = execution?.optJSONArray("recent_trades")
@@ -1206,24 +1213,48 @@ class SafeActivity : Activity() {
 
     private fun requestChartIfNeeded(force: Boolean = false) {
         val now = System.currentTimeMillis()
-        if (chartRequestInFlight) return
+        if (!force && chartRequestInFlight) return
         if (!force && now - lastChartRequestMs < 900L) return
+
         lastChartRequestMs = now
         chartRequestInFlight = true
-        getJson(backendBase + "/chart?interval=" + selectedTf) { ok, body ->
+        val requestTf = selectedTf
+        val token = ++chartRequestToken
+
+        getJson(backendBase + "/chart?interval=" + requestTf) { ok, body ->
             handler.post {
-                chartRequestInFlight = false
-                if (!ok) return@post
+                if (token == chartRequestToken) {
+                    chartRequestInFlight = false
+                }
+                if (!ok || token != chartRequestToken) return@post
+
                 safe {
                     val j = JSONObject(body)
                     val candles = j.optJSONArray("candles") ?: JSONArray()
                     val live = latestRoot?.optDouble("last_price", Double.NaN) ?: Double.NaN
                     val lastPrice = if (!live.isNaN()) live else j.optDouble("last_price", Double.NaN)
-                    chart.setTimeframe(selectedTf)
-                    chart.setData(candles, latestRoot?.optJSONObject("signal"), calculateEma(candles, 50), lastPrice)
+
+                    // Never let an older timeframe response overwrite the
+                    // currently selected timeframe.
+                    if (selectedTf != requestTf) return@safe
+
+                    chart.setTimeframe(requestTf)
+                    chart.setData(
+                        candles,
+                        latestRoot?.optJSONObject("signal"),
+                        calculateEma(candles, 50),
+                        lastPrice
+                    )
+                    refreshTimeframeButtonsForCurrentSelection()
                 }
             }
         }
+    }
+
+    private var timeframeButtonRow: LinearLayout? = null
+
+    private fun refreshTimeframeButtonsForCurrentSelection() {
+        timeframeButtonRow?.let { refreshTimeframeButtons(it) }
     }
 
     private fun renderChartFromState() {
