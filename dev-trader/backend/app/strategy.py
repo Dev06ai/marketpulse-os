@@ -963,7 +963,7 @@ class StrategyEngine:
         if "SFP" in setup:
             required = max(2, required - 1)
         elif is_early_momentum:
-            required = 1
+            required = 2
         if confirmations < required:
             reasons.append(
                 f"only {confirmations} independent confirmations; need {required}"
