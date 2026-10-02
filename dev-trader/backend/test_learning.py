@@ -77,3 +77,14 @@ def test_sl_after_tp1_is_learned_as_partial_then_reversal():
     assert engine.signal_status == "INVALIDATED"
     assert engine.last_lifecycle_events[-1]["type"] == "SL_HIT"
     assert engine.active_signal["learning_review"]["outcome"] == "SL_HIT"
+
+
+def test_profitable_manual_close_is_learned_as_win(tmp_path):
+    learner = AdaptiveLearning()
+    learner.path = tmp_path / "learning.json"
+    signal = base_signal()
+    learner.record_open(signal)
+    lesson = learner.resolve(signal, "CLOSED", 0.8)
+    assert lesson["outcome"] == "CLOSED"
+    assert learner.summary()["wins"] == 1
+    assert learner.summary()["losses"] == 0
