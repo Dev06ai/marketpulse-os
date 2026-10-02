@@ -677,6 +677,14 @@ class DemoExecutionEngine:
                 direction = str(trade.get("direction", "")).upper()
                 current = self._match_current_position(position_rows, direction)
                 if current:
+                    # A pending order can already have a partial exchange
+                    # position. Do not promote the local trade to OPEN until
+                    # order_detail has confirmed a full fill; otherwise the
+                    # aggregate Bitget position can hide a partial fill.
+                    if trade.get("status") == "ORDER_PENDING" and not trade.get("actual_fill_confirmed"):
+                        trade["partial_position_detected"] = True
+                        continue
+
                     trade["status"] = "OPEN"
                     trade["position_id"] = str(current.get("posId") or current.get("positionId") or "")
 
