@@ -122,3 +122,34 @@ def test_bitget_books5_and_liquidation_direction_mapping():
     assert stream.state.book_imbalance == 3.0 / 11.0
     assert stream.state.liquidation_long_5m == 4.0
     assert stream.state.liquidation_short_5m == 3.0
+
+
+def test_bitget_rest_fallback_cannot_report_healthy():
+    import time as _time
+    import asyncio as _asyncio
+
+    stream = BitgetMarketStream("BTCUSDT", lambda _state: None)
+    now = int(_time.time() * 1000)
+    stream.state.ws_connected = True
+    stream.state.last_market_update_ts = now - 100
+    stream.state.last_trade_ts = now - 100
+    stream.state.last_kline_15_ts = now - 100
+    stream.last_rest_ok = True
+    stream.last_data_source = "BITGET_REST"
+
+    stream._refresh_data_health(now)
+    assert stream.state.data_health == "DEGRADED"
+
+    ticker = {
+        "arg": {"topic": "ticker", "instType": "usdt-futures", "symbol": "BTCUSDT"},
+        "data": [{"lastPrice": "100100", "bid1Price": "100099", "ask1Price": "100101"}],
+        "ts": now,
+    }
+    _asyncio.run(stream.handle(__import__("json").dumps(ticker)))
+    # Ticker alone restores the live source, but trade/kline freshness is still
+    # checked independently before the strategy can declare the feed healthy.
+    stream.state.last_trade_ts = now
+    stream.state.last_kline_15_ts = now
+    stream._refresh_data_health(int(_time.time() * 1000))
+    assert stream.last_data_source == "BITGET_WS"
+    assert stream.state.data_health == "HEALTHY"
