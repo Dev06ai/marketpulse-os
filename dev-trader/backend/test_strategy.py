@@ -620,3 +620,47 @@ def test_early_momentum_keeps_the_15m_antichase_veto_off(monkeypatch):
 
     allowed, reason = engine._elite_decision_gate(signal, state)
     assert allowed, reason
+
+
+def test_position_management_uses_opposite_side_liquidations():
+    from app.strategy import StrategyEngine, Signal
+
+    engine = StrategyEngine()
+    engine.signal_status = "ACTIVE"
+
+    previous = {
+        "id": "old-long",
+        "direction": "LONG",
+        "entry": 100.0,
+        "stop": 98.0,
+    }
+    new_short = Signal(
+        id="new-short",
+        direction="SHORT",
+        setup="Bearish SFP",
+        entry=99.0,
+        stop=101.0,
+        target1=96.0,
+        target2=93.0,
+        rr=3.0,
+        confidence=0.9,
+        grade="A",
+        regime="TREND_DOWN",
+        invalidation="above",
+        thesis=[],
+        evidence={},
+        timeframe="15m",
+        trade_style="SCALP",
+        style_reason="test",
+    )
+
+    state = MarketState(
+        last_price=99.0,
+        liquidation_long_5m=50.0,
+        liquidation_short_5m=5.0,
+        data_health="HEALTHY",
+    )
+    management = engine._build_position_management(previous, new_short, state)
+
+    assert management is not None
+    assert any("Long-side liquidation pressure supports the short." in r for r in management["reasons"])
