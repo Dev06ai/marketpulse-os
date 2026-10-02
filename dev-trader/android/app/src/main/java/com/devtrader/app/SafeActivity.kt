@@ -89,6 +89,7 @@ class SafeActivity : Activity() {
     private lateinit var journal: TextView
     private lateinit var tradeHistory: TextView
     private lateinit var replay: TextView
+    private var fullTradeHistoryText = "No executed demo trades yet."
     private lateinit var chart: MarketChartView
     private lateinit var updateButton: Button
     private lateinit var checkButton: Button
@@ -228,167 +229,315 @@ class SafeActivity : Activity() {
     }
 
     private fun buildUi() {
-        val scroll = ScrollView(this).apply {
-            setBackgroundColor(Color.rgb(7, 8, 11))
-            isFillViewport = true
-            overScrollMode = View.OVER_SCROLL_NEVER
-            isClickable = false
-            isFocusable = false
-            descendantFocusability = ViewGroup.FOCUS_AFTER_DESCENDANTS
-        }
-
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            isClickable = false
-            isFocusable = false
-            setPadding(dp(16), dp(18), dp(16), dp(30))
+            setPadding(dp(12), dp(8), dp(12), dp(8))
             background = gradient(
-                intArrayOf(Color.rgb(7, 8, 11), Color.rgb(17, 18, 23), Color.rgb(8, 9, 12)),
+                intArrayOf(Color.rgb(7, 8, 11), Color.rgb(13, 15, 20), Color.rgb(7, 8, 11)),
                 GradientDrawable.Orientation.TL_BR
             )
+            isFillViewportCompat()
         }
 
-        ViewCompat.setOnApplyWindowInsetsListener(scroll) { _, insets ->
+        ViewCompat.setOnApplyWindowInsetsListener(root) { view, insets ->
             val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
-            root.setPadding(dp(16), bars.top + dp(12), dp(16), bars.bottom + dp(28))
+            view.setPadding(dp(12), bars.top + dp(6), dp(12), bars.bottom + dp(6))
             insets
         }
+        setContentView(root)
 
-        scroll.addView(root)
-        setContentView(scroll)
-
-        val topRow = LinearLayout(this).apply {
+        // Header
+        val header = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
         }
-        topRow.addView(
-            label("DEV TRADER  •  BTCUSDT PERPETUAL", 11f, Color.rgb(154, 158, 170), 0.09f),
-            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
-        )
-        retryButton = actionButton("↻ RETRY").apply {
-            textSize = 11f
-            minHeight = dp(38)
-            minWidth = dp(86)
-            setPadding(dp(8), 0, dp(8), 0)
-            setOnClickListener { safe { forceReconnectFromUser() } }
-        }
-        topRow.addView(retryButton, LinearLayout.LayoutParams(dp(92), dp(40)).apply {
-            leftMargin = dp(8)
-        })
-        root.addView(topRow, margins(bottom = 2))
-        root.addView(label("BTC trading bot", 32f, Color.WHITE, 0f), margins(top = 5, bottom = 2))
-        // 0.9.6 release: directional SFP radar + clearer active-scan state
-        // 0.9.4 release: stable WebSocket supervisor + manual retry + cleaner MTF story
-        root.addView(label("FAST SETUP SCANNER  •  MANUAL EXECUTION", 13f, Color.rgb(173, 177, 188), 0f), margins(bottom = 14))
+        val brand = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        brand.addView(label("DEV TRADER", 18f, Color.WHITE, 0.04f))
+        brand.addView(label("BTCUSDT  •  PERPETUAL", 9f, Color.rgb(126, 132, 145), 0.08f), margins(top = 2))
+        header.addView(brand, LinearLayout.LayoutParams(0, dp(44), 1f))
+        alertsButton = compactPillButton("ALERTS")
+        alertsButton.setOnClickListener { safe { requestAlertPermission() } }
+        header.addView(alertsButton, LinearLayout.LayoutParams(dp(72), dp(36)).apply { rightMargin = dp(6) })
+        retryButton = compactPillButton("↻")
+        retryButton?.setOnClickListener { safe { forceReconnectFromUser() } }
+        header.addView(retryButton, LinearLayout.LayoutParams(dp(40), dp(36)))
+        root.addView(header, margins(bottom = 7))
 
-        val live = card("MARKET STATUS", "LIVE  •  DATA CONNECTING", 16f)
-        status = live.value
-        root.addView(live.container, margins(bottom = 10))
+        // Hero market card
+        val hero = heroCard()
+        price = hero.first
+        status = hero.second
+        root.addView(hero.third, margins(bottom = 8))
 
-        val market = card("BTCUSDT  /  LIVE MARKET", "BTC  —\nOI  —", 25f)
-        price = market.value
-        root.addView(market.container, margins(bottom = 12))
-
-        root.addView(label("PRICE ACTION", 11f, Color.rgb(156, 160, 171), 0.11f), margins(bottom = 6))
+        // Price action
+        root.addView(sectionLabel("PRICE ACTION"), margins(bottom = 4))
         chart = MarketChartView(this).apply {
-            minimumHeight = dp(410)
+            minimumHeight = dp(210)
             isClickable = false
             isFocusable = false
             setOnTouchListener { _, _ -> false }
         }
-        root.addView(chart, LinearLayout.LayoutParams(-1, dp(410)).apply { bottomMargin = dp(10) })
+        root.addView(
+            chart,
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(210)).apply {
+                bottomMargin = dp(5)
+            }
+        )
 
+        // Timeframe selector
         val tfRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
-            setPadding(0, 0, 0, 0)
+            gravity = Gravity.CENTER_VERTICAL
         }
         listOf("5m", "15m", "1h", "4h").forEach { tf ->
-            val b = actionButton(tf)
-            b.isClickable = true
-            b.isFocusable = true
+            val b = compactPillButton(tf)
+            b.textSize = 11f
             b.setOnClickListener {
                 selectedTf = tf
                 chart.setTimeframe(tf)
+                refreshTimeframeButtons(tfRow)
                 bootstrap(true)
             }
-            tfRow.addView(b, LinearLayout.LayoutParams(0, dp(46), 1f).apply {
-                leftMargin = dp(3)
-                rightMargin = dp(3)
+            tfRow.addView(b, LinearLayout.LayoutParams(0, dp(34), 1f).apply {
+                leftMargin = dp(2)
+                rightMargin = dp(2)
             })
         }
-        root.addView(tfRow, margins(bottom = 14))
+        root.addView(tfRow, margins(bottom = 7))
+        refreshTimeframeButtons(tfRow)
 
-        val setup = card("TRADE SETUP", "SCANNING  •  LOOSE MODE\nSFP  •  D-Line  •  MSS", 18f)
-        signal = setup.value
-        root.addView(setup.container, margins(bottom = 12))
+        // Trade setup hero
+        val setup = premiumCard("TRADE SETUP", "SCANNING  •  READY\nWaiting for the next qualified signal.", 13.5f)
+        signal = setup.second
+        signal.maxLines = 7
+        signal.ellipsize = android.text.TextUtils.TruncateAt.END
+        root.addView(setup.first, margins(bottom = 7))
 
-        val context = card("MARKET STORY", "BIAS —\n4H —  •  1H —  •  15m —\nWAVE 15m —  •  1H —\nTRIGGERS —", 13f)
-        features = context.value
-        root.addView(context.container, margins(bottom = 12))
+        // Two compact information panels
+        val infoRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+        }
 
-        val data = card("DATA FEED", "WebSocket  •  CONNECTING", 14f)
-        integrity = data.value
-        root.addView(data.container, margins(bottom = 12))
+        val story = compactCard("MARKET STORY", "BIAS —\n4H —  •  1H —  •  15m —", 10.5f)
+        features = story.second
+        features.maxLines = 4
+        features.ellipsize = android.text.TextUtils.TruncateAt.END
+        infoRow.addView(story.first, LinearLayout.LayoutParams(0, dp(76), 1f).apply { rightMargin = dp(4) })
 
-        val riskCard = card("PNL CALCULATOR  /  USDT", "Measure profit or loss from entry to exit.", 14f)
-        risk = riskCard.value
-        root.addView(riskCard.container, margins(bottom = 8))
+        val execution = compactCard("EXECUTION", "Bitget Demo  •  READY\nOpen 0  •  Closed 0", 10.5f)
+        tradeHistory = execution.second
+        tradeHistory.maxLines = 4
+        tradeHistory.ellipsize = android.text.TextUtils.TruncateAt.END
+        infoRow.addView(execution.first, LinearLayout.LayoutParams(0, dp(76), 1f).apply { leftMargin = dp(4) })
+        root.addView(infoRow, margins(bottom = 7))
 
-        val pnlButton = actionButton("OPEN PNL CALCULATOR")
-        pnlButton.setOnClickListener { safe { showPnlCalculator() } }
-        root.addView(pnlButton, margins(bottom = 12))
+        // Feed/system strip
+        val statusRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        val feed = compactCard("DATA FEED", "Primary WS  •  CONNECTING", 10.2f)
+        integrity = feed.second
+        integrity.maxLines = 2
+        integrity.ellipsize = android.text.TextUtils.TruncateAt.END
+        statusRow.addView(feed.first, LinearLayout.LayoutParams(0, dp(58), 1f).apply { rightMargin = dp(4) })
 
-        val toolsRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        updateButton = actionButton("UPDATE")
-        updateButton.setOnClickListener { safe { checkUpdate() } }
-        checkButton = actionButton("SYSTEM CHECK")
+        val sys = compactCard("SYSTEM", "Ready", 10.2f)
+        check = sys.second
+        check.maxLines = 2
+        check.ellipsize = android.text.TextUtils.TruncateAt.END
+        statusRow.addView(sys.first, LinearLayout.LayoutParams(0, dp(58), 1f).apply { leftMargin = dp(4) })
+        root.addView(statusRow, margins(bottom = 7))
+
+        // Quick action bar: no page scrolling required.
+        val actions = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+
+        val pnl = compactPillButton("PNL")
+        pnl.setOnClickListener { safe { showPnlCalculator() } }
+        actions.addView(pnl, weightButton())
+
+        val journalButton = compactPillButton("JOURNAL")
+        journalButton.setOnClickListener { safe { loadJournal(); showInfoDialog("Trading Journal", journal.text.toString()) } }
+        actions.addView(journalButton, weightButton())
+
+        val historyButton = compactPillButton("HISTORY")
+        historyButton.setOnClickListener { safe { loadTradeHistory(); showInfoDialog("Bitget Demo History", fullTradeHistoryText) } }
+        actions.addView(historyButton, weightButton())
+
+        checkButton = compactPillButton("SYSTEM")
         checkButton.setOnClickListener { safe { systemCheck() } }
-        toolsRow.addView(updateButton, LinearLayout.LayoutParams(0, dp(50), 1f).apply { rightMargin = dp(5) })
-        toolsRow.addView(checkButton, LinearLayout.LayoutParams(0, dp(50), 1f).apply { leftMargin = dp(5) })
-        root.addView(toolsRow, margins(bottom = 10))
+        actions.addView(checkButton, weightButton())
 
-        val appUpdate = card("APP UPDATE", "Ready", 13f)
-        update = appUpdate.value
-        root.addView(appUpdate.container, margins(bottom = 12))
+        updateButton = compactPillButton("UPDATE")
+        updateButton.setOnClickListener { safe { checkUpdate() } }
+        actions.addView(updateButton, weightButton())
 
-        val diagnostics = card("SYSTEM CHECK", "Not run yet", 13f)
-        check = diagnostics.value
-        root.addView(diagnostics.container, margins(bottom = 12))
+        root.addView(actions, margins(bottom = 4))
 
-        alertsButton = actionButton("ENABLE SIGNAL ALERTS")
-        alertsButton.setOnClickListener { requestAlertPermission() }
-        root.addView(alertsButton, margins(bottom = 12))
+        // Keep these references initialized without adding extra tall cards.
+        update = TextView(this)
+        risk = TextView(this)
+        journal = TextView(this)
+        replay = TextView(this)
+        journal.visibility = View.GONE
+        risk.visibility = View.GONE
+        replay.visibility = View.GONE
 
-        val journalCard = card("TRADING JOURNAL", "No setups recorded yet.", 13f)
-        journal = journalCard.value
-        root.addView(journalCard.container, margins(bottom = 10))
-        val journalButton = actionButton("REFRESH JOURNAL")
-        journalButton.setOnClickListener { loadJournal() }
-        root.addView(journalButton, margins(bottom = 12))
+        // Initial state.
+        loadJournal()
+        loadTradeHistory()
+    }
 
-        val tradeHistoryCard = scrollableCard(
-            "BITGET DEMO  /  EXECUTED TRADE HISTORY",
-            "Connecting to Bitget Demo execution status…",
-            12f,
-            dp(360)
-        )
-        tradeHistory = tradeHistoryCard.value
-        root.addView(tradeHistoryCard.container, margins(bottom = 10))
-        val tradeHistoryButton = actionButton("REFRESH DEMO TRADE HISTORY")
-        tradeHistoryButton.setOnClickListener { safe { loadTradeHistory() } }
-        root.addView(tradeHistoryButton, margins(bottom = 12))
+    private fun LinearLayout.isFillViewportCompat() {
+        // Kept as a no-op marker so the main root remains a normal fixed viewport.
+    }
 
-        val replayCard = card("REPLAY  /  BACKTEST", "Ready", 13f)
-        replay = replayCard.value
-        root.addView(replayCard.container, margins(bottom = 8))
-        val replayButton = actionButton("RUN RECENT REPLAY")
-        replayButton.setOnClickListener { safe { runReplay() } }
-        root.addView(replayButton, margins(bottom = 16))
+    private fun sectionLabel(text: String): TextView =
+        label(text, 9.5f, Color.rgb(130, 136, 149), 0.13f)
 
-        root.addView(label(
-            "AUTO-START  •  FAST SETUP SCAN  •  BITGET DEMO AUTO-EXECUTION  •  LIVE MONEY DISABLED",
-            9f, Color.rgb(112, 116, 126), 0.06f
-        ).apply { gravity = Gravity.CENTER })
+    private fun weightButton(): LinearLayout.LayoutParams =
+        LinearLayout.LayoutParams(0, dp(38), 1f).apply {
+            leftMargin = dp(2)
+            rightMargin = dp(2)
+        }
+
+    private fun compactPillButton(text: String): Button =
+        Button(this).apply {
+            this.text = text
+            textSize = 10.5f
+            setTextColor(Color.rgb(236, 239, 245))
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            isAllCaps = false
+            isEnabled = true
+            isClickable = true
+            isFocusable = true
+            minHeight = 0
+            minWidth = 0
+            stateListAnimator = null
+            elevation = 0f
+            setPadding(dp(5), 0, dp(5), 0)
+            background = gradient(
+                intArrayOf(Color.rgb(40, 43, 52), Color.rgb(24, 26, 33)),
+                GradientDrawable.Orientation.LEFT_RIGHT
+            ).apply {
+                cornerRadius = dp(12).toFloat()
+                setStroke(dp(1), Color.rgb(65, 70, 82))
+            }
+        }
+
+    private fun heroCard(): Triple<TextView, TextView, LinearLayout> {
+        val box = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(14), dp(10), dp(14), dp(10))
+            background = gradient(
+                intArrayOf(Color.rgb(24, 26, 33), Color.rgb(12, 14, 19)),
+                GradientDrawable.Orientation.TL_BR
+            ).apply {
+                cornerRadius = dp(18).toFloat()
+                setStroke(dp(1), Color.rgb(52, 57, 68))
+            }
+        }
+
+        val top = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        top.addView(label("BTCUSDT", 10f, Color.rgb(152, 158, 171), 0.08f),
+            LinearLayout.LayoutParams(0, dp(22), 1f))
+        val livePill = label("●  LIVE", 9.5f, Color.rgb(54, 211, 153), 0.08f)
+        top.addView(livePill, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(22)))
+        box.addView(top)
+
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        val priceView = TextView(this).apply {
+            text = priceBtcAccent("BTC  —")
+            textSize = 26f
+            setTextColor(Color.WHITE)
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            includeFontPadding = false
+        }
+        row.addView(priceView, LinearLayout.LayoutParams(0, dp(38), 1f))
+
+        val statusView = TextView(this).apply {
+            text = "DATA CONNECTING"
+            textSize = 9.5f
+            setTextColor(Color.rgb(179, 185, 198))
+            gravity = Gravity.CENTER
+            setPadding(dp(9), 0, dp(9), 0)
+            background = GradientDrawable().apply {
+                cornerRadius = dp(10).toFloat()
+                setColor(Color.rgb(29, 32, 40))
+                setStroke(dp(1), Color.rgb(69, 74, 87))
+            }
+        }
+        row.addView(statusView, LinearLayout.LayoutParams(dp(112), dp(30)))
+        box.addView(row)
+
+        val oi = label("OI  —", 10f, Color.rgb(133, 139, 151), 0.02f)
+        box.addView(oi, margins(top = 1))
+        return Triple(priceView, statusView, box)
+    }
+
+    private fun compactCard(title: String, initial: String, valueSize: Float): CardRefs {
+        val box = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(12), dp(9), dp(12), dp(8))
+            background = gradient(
+                intArrayOf(Color.rgb(24, 26, 33), Color.rgb(15, 17, 22)),
+                GradientDrawable.Orientation.TL_BR
+            ).apply {
+                cornerRadius = dp(15).toFloat()
+                setStroke(dp(1), Color.rgb(48, 53, 64))
+            }
+        }
+        val heading = label(title, 8.5f, Color.rgb(125, 131, 144), 0.11f)
+        val value = TextView(this).apply {
+            text = initial
+            textSize = valueSize
+            setTextColor(Color.WHITE)
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            includeFontPadding = false
+            setLineSpacing(0f, 1.06f)
+        }
+        box.addView(heading)
+        box.addView(value, margins(top = 5))
+        return CardRefs(box, value)
+    }
+
+    private fun premiumCard(title: String, initial: String, valueSize: Float): Pair<LinearLayout, TextView> {
+        val box = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(14), dp(11), dp(14), dp(10))
+            background = gradient(
+                intArrayOf(Color.rgb(33, 31, 47), Color.rgb(16, 17, 23)),
+                GradientDrawable.Orientation.TL_BR
+            ).apply {
+                cornerRadius = dp(17).toFloat()
+                setStroke(dp(1), Color.rgb(74, 66, 96))
+            }
+        }
+        val header = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        header.addView(label(title, 9f, Color.rgb(157, 149, 181), 0.12f),
+            LinearLayout.LayoutParams(0, dp(18), 1f))
+        header.addView(label("AI SUPERVISOR", 8.5f, Color.rgb(167, 139, 250), 0.08f))
+        box.addView(header)
+
+        val value = TextView(this).apply {
+            text = initial
+            textSize = valueSize
+            setTextColor(Color.WHITE)
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            includeFontPadding = false
+            setLineSpacing(0f, 1.10f)
+        }
+        box.addView(value, margins(top = 5))
+        return Pair(box, value)
     }
 
     private fun label(text: String, size: Float, color: Int, spacing: Float): TextView {
@@ -1342,7 +1491,8 @@ class SafeActivity : Activity() {
         getJson(backendBase + "/trades?limit=20") { ok, body ->
             handler.post {
                 if (!ok) {
-                    tradeHistory.text = "Bitget Demo trade history unavailable."
+                    tradeHistory.text = "Bitget Demo history unavailable."
+                    fullTradeHistoryText = tradeHistory.text.toString()
                     return@post
                 }
                 safe {
@@ -1363,10 +1513,9 @@ class SafeActivity : Activity() {
                     val openTrades = summary.optInt("open_trades", 0)
 
                     if (!configured) {
-                        tradeHistory.text =
-                            "BITGET DEMO  •  NOT CONFIGURED\n" +
-                            "Add a Bitget Demo API key, secret and passphrase on the backend.\n" +
-                            "No live-money execution is enabled."
+                        val text = "NOT CONFIGURED\nBitget Demo credentials required."
+                        tradeHistory.text = text
+                        fullTradeHistoryText = text
                         return@safe
                     }
 
@@ -1374,64 +1523,91 @@ class SafeActivity : Activity() {
                         ready -> "READY"
                         clientReason.contains("40099") ||
                             clientReason.contains("exchange environment is incorrect", ignoreCase = true) ->
-                            "WRONG DEMO ENVIRONMENT"
+                            "WRONG ENVIRONMENT"
                         clientReason.contains("credentials", ignoreCase = true) ->
                             "CREDENTIALS ISSUE"
                         clientReason.contains("balance", ignoreCase = true) ->
                             "BALANCE CHECK ISSUE"
                         else -> "CONNECTION ISSUE"
                     }
-                    val header =
-                        "BITGET DEMO  •  " + demoState +
-                        "\nClosed  $total  •  Open  $openTrades  •  W $wins / L $losses" +
-                        if (!ready && clientReason.isNotBlank()) "\n" + clientReason.take(180) else "" +
-                        "\nWin rate  " + if (winRate.isNaN()) "—" else String.format(Locale.US, "%.1f%%", winRate * 100.0) +
-                        "  •  Net P&L  " + String.format(Locale.US, "%+.2f USDT", totalNet)
+
+                    val summaryLine =
+                        "BITGET DEMO  •  $demoState\n" +
+                        "Open $openTrades  •  Closed $total  •  W $wins / L $losses\n" +
+                        "Win " + if (winRate.isNaN()) "—" else String.format(Locale.US, "%.1f%%", winRate * 100.0) +
+                        "  •  Net " + String.format(Locale.US, "%+.2f USDT", totalNet)
 
                     val rows = root.optJSONArray("trades") ?: JSONArray()
-                    val out = StringBuilder(header)
+                    val full = StringBuilder(summaryLine)
+                    val preview = StringBuilder(summaryLine)
+
                     val count = minOf(10, rows.length())
-                    if (count == 0) {
-                        out.append("\n\nNo executed demo trades yet.")
-                    } else {
-                        out.append("\n")
-                        for (i in 0 until count) {
-                            val t = rows.optJSONObject(i) ?: continue
-                            val direction = t.optString("direction", "—")
-                            val setup = t.optString("setup", "BITGET DEMO")
-                            val status = t.optString("status", "—")
-                            val entry = t.optDouble("entry_price", t.optDouble("entry_plan", Double.NaN))
-                            val exit = t.optDouble("exit_price", Double.NaN)
-                            val sl = t.optDouble("stop_loss", Double.NaN)
-                            val tp = t.optDouble("take_profit", Double.NaN)
-                            val qty = t.optDouble("filled_qty", t.optDouble("requested_qty", Double.NaN))
-                            val pnl = t.optDouble("net_profit_usdt", 0.0)
-                            val resultR = t.optDouble("result_r", Double.NaN)
-                            val reason = t.optString("close_reason", "")
-                            val sign = if (pnl >= 0) "+" else ""
-                            out.append("\n")
-                                .append(direction).append(" • ").append(status).append(" • ").append(setup)
-                                .append("\nEntry  ").append(formatCompact(entry))
-                                .append("   Exit  ").append(
-                                    if (status == "CLOSED" && exit.isFinite() && exit > 0) formatCompact(exit) else "—"
-                                )
-                                .append("\nSL  ").append(formatCompact(sl))
-                                .append("   TP  ").append(formatCompact(tp))
-                                .append("\nQty  ").append(if (qty.isFinite()) String.format(Locale.US, "%.6f BTC", qty) else "—")
-                                .append("   P&L  ").append(sign).append(String.format(Locale.US, "%.2f USDT", pnl))
-                                .append("   R  ").append(if (resultR.isFinite()) String.format(Locale.US, "%.2f", resultR) else "—")
-                            if (reason.isNotBlank()) out.append("\nClose  ").append(reason)
-                            val fee = t.optDouble("fees_usdt", 0.0)
-                            val funding = t.optDouble("funding_usdt", 0.0)
-                            out.append("\nFees  ").append(String.format(Locale.US, "%.2f", fee))
-                                .append("  Funding  ").append(String.format(Locale.US, "%.2f", funding))
-                                .append("\n")
-                        }
+                    for (i in 0 until count) {
+                        val t = rows.optJSONObject(i) ?: continue
+                        val direction = t.optString("direction", "—")
+                        val setup = t.optString("setup", "BITGET DEMO")
+                        val status = t.optString("status", "—")
+                        val entry = t.optDouble("entry_price", t.optDouble("entry_plan", Double.NaN))
+                        val exit = t.optDouble("exit_price", Double.NaN)
+                        val sl = t.optDouble("stop_loss", Double.NaN)
+                        val tp = t.optDouble("take_profit", Double.NaN)
+                        val qty = t.optDouble("filled_qty", t.optDouble("requested_qty", Double.NaN))
+                        val pnl = t.optDouble("net_profit_usdt", 0.0)
+                        val resultR = t.optDouble("result_r", Double.NaN)
+                        val reason = t.optString("close_reason", "")
+                        val sign = if (pnl >= 0) "+" else ""
+                        val block = StringBuilder()
+                            .append("\n\n")
+                            .append(direction).append(" • ").append(status).append(" • ").append(setup)
+                            .append("\nEntry ").append(formatCompact(entry))
+                            .append("   Exit ").append(
+                                if (status == "CLOSED" && exit.isFinite() && exit > 0) formatCompact(exit) else "—"
+                            )
+                            .append("\nSL ").append(formatCompact(sl))
+                            .append("   TP ").append(formatCompact(tp))
+                            .append("\nQty ").append(if (qty.isFinite()) String.format(Locale.US, "%.6f", qty) else "—")
+                            .append("   P&L ").append(sign).append(String.format(Locale.US, "%.2f", pnl))
+                            .append("   R ").append(if (resultR.isFinite()) String.format(Locale.US, "%.2f", resultR) else "—")
+                        if (reason.isNotBlank()) block.append("\nClose ").append(reason)
+                        full.append(block)
+                        if (i < 2) preview.append(block)
                     }
-                    tradeHistory.text = out.toString().trim()
+
+                    if (rows.length() == 0) {
+                        full.append("\n\nNo executed demo trades yet.")
+                    }
+
+                    fullTradeHistoryText = full.toString()
+                    tradeHistory.text = preview.toString().trim()
                 }
             }
         }
+    }
+
+    private fun showInfoDialog(title: String, body: String) {
+        val content = TextView(this).apply {
+            text = body
+            textSize = 12f
+            setTextColor(Color.WHITE)
+            setPadding(dp(18), dp(14), dp(18), dp(14))
+            setLineSpacing(0f, 1.12f)
+        }
+        val dialog = android.app.AlertDialog.Builder(this)
+            .setTitle(title)
+            .setView(content)
+            .setPositiveButton("CLOSE", null)
+            .create()
+        dialog.setOnShowListener {
+            dialog.window?.setBackgroundDrawable(
+                GradientDrawable().apply {
+                    setColor(Color.rgb(18, 20, 26))
+                    cornerRadius = dp(18).toFloat()
+                    setStroke(dp(1), Color.rgb(63, 68, 80))
+                }
+            )
+            dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE)?.setTextColor(Color.rgb(167, 139, 250))
+        }
+        dialog.show()
     }
 
     private fun formatCompact(value: Double): String =
