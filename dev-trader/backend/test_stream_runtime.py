@@ -176,3 +176,33 @@ def test_bitget_rest_candle_backfill_does_not_mark_live_kline_fresh(monkeypatch)
 
     assert stream.state.candles_15
     assert stream.state.last_kline_15_ts is None
+
+
+def test_liquidation_message_cannot_restore_healthy_after_rest_fallback():
+    import asyncio as _asyncio
+    import time as _time
+
+    async def on_state(_state):
+        return None
+
+    stream = BitgetMarketStream("BTCUSDT", on_state)
+    now = int(_time.time() * 1000)
+    stream.state.ws_connected = True
+    stream.state.last_market_update_ts = now - 100
+    stream.state.last_trade_ts = now - 100
+    stream.state.last_kline_15_ts = now - 100
+    stream.last_rest_ok = True
+    stream.last_data_source = "BITGET_REST"
+    stream._refresh_data_health(now)
+    assert stream.state.data_health == "DEGRADED"
+
+    liq = {
+        "arg": {"topic": "liquidation", "instType": "usdt-futures"},
+        "action": "update",
+        "data": [{"symbol": "BTCUSDT", "side": "buy", "amount": "1", "ts": str(now)}],
+        "ts": now,
+    }
+    _asyncio.run(stream.handle(__import__("json").dumps(liq)))
+
+    assert stream.last_data_source == "BITGET_REST"
+    assert stream.state.data_health == "DEGRADED"
