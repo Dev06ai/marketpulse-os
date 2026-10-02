@@ -285,3 +285,53 @@ def test_execution_rejects_large_bitget_price_drift(monkeypatch):
     assert result["ok"] is False
     assert result["skipped"] is True
     assert "price drift" in result["reason"].lower()
+
+
+def test_partial_bitget_fill_does_not_become_open(monkeypatch):
+    monkeypatch.setenv("BITGET_DEMO_TRADING", "true")
+    monkeypatch.setenv("BITGET_EXECUTION_STATE_FILE", "/tmp/dev-trader-test-partial.json")
+    try:
+        os.remove("/tmp/dev-trader-test-partial.json")
+    except FileNotFoundError:
+        pass
+
+    class PartialFillClient(FakeClient):
+        def __init__(self):
+            self.calls = 0
+
+        def order_detail(self, symbol, order_id):
+            self.calls += 1
+            return {
+                "orderStatus": "partially_filled" if self.calls < 3 else "filled",
+                "baseVolume": "0.05" if self.calls < 3 else "0.1",
+                "priceAvg": "100000",
+            }
+
+    learner = FakeLearning()
+    executor = DemoExecutionEngine(learner)
+    client = PartialFillClient()
+    executor.client = client
+
+    signal = {
+        "id": "SIG-PARTIAL",
+        "direction": "LONG",
+        "setup": "TEST",
+        "entry": 100000,
+        "stop": 99900,
+        "target1": 100300,
+        "target2": 100300,
+        "rr": 3.0,
+        "confidence": 0.80,
+        "grade": "A",
+        "trade_style": "SCALP",
+        "evidence": {},
+    }
+
+    result = asyncio.run(executor.handle_signal(signal))
+    assert result["ok"] is True
+    trade = executor.history(1)[0]
+    assert trade["status"] == "OPEN"
+    assert trade["filled_qty"] == 0.1
+    assert trade["actual_fill_confirmed"] is True
+    assert client.calls >= 3
+    assert [event[0] for event in learner.events].count("EXECUTION_OPEN") == 1
