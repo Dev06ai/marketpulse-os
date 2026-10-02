@@ -335,3 +335,56 @@ def test_partial_bitget_fill_does_not_become_open(monkeypatch):
     assert trade["actual_fill_confirmed"] is True
     assert client.calls >= 3
     assert [event[0] for event in learner.events].count("EXECUTION_OPEN") == 1
+
+
+def test_sync_does_not_promote_partial_exchange_position(monkeypatch):
+    monkeypatch.setenv("BITGET_DEMO_TRADING", "true")
+    monkeypatch.setenv("BITGET_EXECUTION_STATE_FILE", "/tmp/dev-trader-test-sync-partial.json")
+    try:
+        os.remove("/tmp/dev-trader-test-sync-partial.json")
+    except FileNotFoundError:
+        pass
+
+    class PartialPositionClient(FakeClient):
+        def positions(self, symbol):
+            return [{"holdSide": "long", "total": "0.05", "openPriceAvg": "100000", "posId": "p1"}]
+
+        def position_history(self, symbol, start_ms, end_ms, limit):
+            return []
+
+        def orders_history(self, symbol, limit, start_ms, end_ms):
+            return []
+
+        def status(self, symbol):
+            return {"ready": True, "available_balance_usdt": 1000.0}
+
+    executor = DemoExecutionEngine(FakeLearning())
+    executor.client = PartialPositionClient()
+    trade = {
+        "execution_id": "DTDEMO-PARTIAL",
+        "client_oid": "DTDEMO-PARTIAL",
+        "signal_id": "SIG-PARTIAL-SYNC",
+        "symbol": "BTCUSDT",
+        "direction": "LONG",
+        "setup": "TEST",
+        "status": "ORDER_PENDING",
+        "opened_ts": 1770000000000,
+        "entry_plan": 100000,
+        "entry_price": 0.0,
+        "stop_loss": 99900,
+        "take_profit": 100300,
+        "requested_qty": 0.1,
+        "filled_qty": 0.05,
+        "actual_fill_confirmed": False,
+    }
+    executor.data["trades"] = [trade]
+
+    async def no_poll(_execution_id):
+        return None
+
+    executor._poll_fill = no_poll
+    asyncio.run(executor.sync())
+
+    assert trade["status"] == "ORDER_PENDING"
+    assert trade.get("partial_position_detected") is True
+    assert trade.get("actual_fill_confirmed") is False
