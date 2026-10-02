@@ -513,7 +513,28 @@ def test_duplicate_setup_cluster_is_blocked_for_recent_nearby_signal():
     ).to_dict()
     existing["created_ts"] = now
     engine.active_signals["existing"] = existing
-    candidate = Signal(**{**existing, "id": "candidate", "entry": 100.3})
-    blocked, reason = engine._duplicate_setup_blocked(candidate, MarketState(last_price=100.3, data_health="HEALTHY"))
+    candidate = Signal(
+        id="candidate",
+        direction="LONG",
+        setup="MSS Continuation",
+        entry=100.3,
+        stop=98.3,
+        target1=103.3,
+        target2=106.3,
+        rr=3.0,
+        confidence=0.90,
+        grade="A",
+        regime="TREND_UP",
+        invalidation="test",
+        thesis=[],
+        evidence={},
+        timeframe="15m",
+        trade_style="SWING",
+        style_reason="test",
+    )
+    blocked, reason = engine._duplicate_setup_blocked(
+        candidate,
+        MarketState(last_price=100.3, data_health="HEALTHY"),
+    )
     assert blocked is True
     assert "duplicate" in reason
