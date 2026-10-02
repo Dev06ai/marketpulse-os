@@ -33,6 +33,7 @@ def base_signal():
 def test_learning_is_bounded_and_generates_next_time_advice(tmp_path):
     learner = AdaptiveLearning()
     learner.path = tmp_path / "learning.json"
+    learner.data = {"version": 1, "trades": [], "profiles": {}, "conditions": {}, "lessons": []}
     signal = base_signal()
     learner.record_open(signal)
     learner.record_event(signal, "TP1_HIT", 107.5, "TP1 reached")
