@@ -2450,8 +2450,8 @@ class StrategyEngine:
                 reasons.append("Bearish price/CVD divergence supports the reversal.")
             if f.book_imbalance < -0.12:
                 reasons.append("Order-book imbalance favors sellers.")
-            if f.liquidation_pressure == "SHORT_LIQUIDATIONS":
-                reasons.append("Short-side liquidation pressure is present.")
+            if f.liquidation_pressure == "LONG_LIQUIDATIONS":
+                reasons.append("Long-side liquidation pressure supports the short.")
         else:
             if f.trend_60 == "UP":
                 reasons.append("1h trend has bullish alignment.")
@@ -2463,8 +2463,8 @@ class StrategyEngine:
                 reasons.append("Bullish price/CVD divergence supports the reversal.")
             if f.book_imbalance > 0.12:
                 reasons.append("Order-book imbalance favors buyers.")
-            if f.liquidation_pressure == "LONG_LIQUIDATIONS":
-                reasons.append("Long-side liquidation pressure is present.")
+            if f.liquidation_pressure == "SHORT_LIQUIDATIONS":
+                reasons.append("Short-side liquidation pressure supports the long.")
 
         if memory:
             reasons.append(f"Saved human setup memory matches: {memory.get('title', memory.get('setup_key', 'mapped setup'))}.")
