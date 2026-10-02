@@ -319,31 +319,31 @@ class SafeActivity : Activity() {
         }
 
         val story = compactCard("MARKET STORY", "BIAS —\n4H —  •  1H —  •  15m —", 10.5f)
-        features = story.second
+        features = story.value
         features.maxLines = 4
         features.ellipsize = android.text.TextUtils.TruncateAt.END
-        infoRow.addView(story.first, LinearLayout.LayoutParams(0, dp(76), 1f).apply { rightMargin = dp(4) })
+        infoRow.addView(story.container, LinearLayout.LayoutParams(0, dp(76), 1f).apply { rightMargin = dp(4) })
 
         val execution = compactCard("EXECUTION", "Bitget Demo  •  READY\nOpen 0  •  Closed 0", 10.5f)
-        tradeHistory = execution.second
+        tradeHistory = execution.value
         tradeHistory.maxLines = 4
         tradeHistory.ellipsize = android.text.TextUtils.TruncateAt.END
-        infoRow.addView(execution.first, LinearLayout.LayoutParams(0, dp(76), 1f).apply { leftMargin = dp(4) })
+        infoRow.addView(execution.container, LinearLayout.LayoutParams(0, dp(76), 1f).apply { leftMargin = dp(4) })
         root.addView(infoRow, margins(bottom = 7))
 
         // Feed/system strip
         val statusRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         val feed = compactCard("DATA FEED", "Primary WS  •  CONNECTING", 10.2f)
-        integrity = feed.second
+        integrity = feed.value
         integrity.maxLines = 2
         integrity.ellipsize = android.text.TextUtils.TruncateAt.END
-        statusRow.addView(feed.first, LinearLayout.LayoutParams(0, dp(58), 1f).apply { rightMargin = dp(4) })
+        statusRow.addView(feed.container, LinearLayout.LayoutParams(0, dp(58), 1f).apply { rightMargin = dp(4) })
 
         val sys = compactCard("SYSTEM", "Ready", 10.2f)
-        check = sys.second
+        check = sys.value
         check.maxLines = 2
         check.ellipsize = android.text.TextUtils.TruncateAt.END
-        statusRow.addView(sys.first, LinearLayout.LayoutParams(0, dp(58), 1f).apply { leftMargin = dp(4) })
+        statusRow.addView(sys.container, LinearLayout.LayoutParams(0, dp(58), 1f).apply { leftMargin = dp(4) })
         root.addView(statusRow, margins(bottom = 7))
 
         // Quick action bar: no page scrolling required.
@@ -400,6 +400,31 @@ class SafeActivity : Activity() {
             leftMargin = dp(2)
             rightMargin = dp(2)
         }
+
+    private fun refreshTimeframeButtons(row: LinearLayout) {
+        for (i in 0 until row.childCount) {
+            val child = row.getChildAt(i) as? Button ?: continue
+            val tf = child.text.toString()
+            val selected = tf == selectedTf
+            child.setTextColor(
+                if (selected) Color.WHITE else Color.rgb(154, 160, 174)
+            )
+            child.background = gradient(
+                if (selected) {
+                    intArrayOf(Color.rgb(86, 76, 132), Color.rgb(48, 64, 101))
+                } else {
+                    intArrayOf(Color.rgb(36, 39, 48), Color.rgb(22, 24, 31))
+                },
+                GradientDrawable.Orientation.LEFT_RIGHT
+            ).apply {
+                cornerRadius = dp(11).toFloat()
+                setStroke(
+                    dp(1),
+                    if (selected) Color.rgb(124, 108, 180) else Color.rgb(55, 60, 72)
+                )
+            }
+        }
+    }
 
     private fun compactPillButton(text: String): Button =
         Button(this).apply {
