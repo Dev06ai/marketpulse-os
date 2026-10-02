@@ -874,7 +874,8 @@ class StrategyEngine:
 
         # Higher-timeframe alignment is mandatory for continuation/breakout paths.
         is_reversal = "SFP" in setup or "HARMONIC" in setup
-        if not is_reversal:
+        is_early_momentum = "MOMENTUM CAPTURE" in setup
+        if not is_reversal and not is_early_momentum:
             if direction == "LONG":
                 if f.trend_15 != "UP": reasons.append("15m trend is not aligned")
                 if f.trend_60 != "UP": reasons.append("1h trend is not aligned")
@@ -885,6 +886,14 @@ class StrategyEngine:
                 if f.trend_60 != "DOWN": reasons.append("1h trend is not aligned")
                 if f.trend_240 != "DOWN": reasons.append("4h trend is not aligned")
                 if f.market_structure != "BEARISH": reasons.append("15m market structure is not bearish")
+
+        # Early momentum is specifically allowed to front-run higher-timeframe
+        # confirmation. It still cannot fight a hard 15m structure break.
+        if is_early_momentum:
+            if direction == "LONG" and f.trend_15 == "DOWN" and f.market_structure == "BEARISH":
+                reasons.append("5m momentum conflicts with established 15m bearish structure")
+            if direction == "SHORT" and f.trend_15 == "UP" and f.market_structure == "BULLISH":
+                reasons.append("5m momentum conflicts with established 15m bullish structure")
 
         # Never enter a continuation setup against a strong flow divergence.
         if direction == "LONG" and f.cvd_price_divergence == "BEARISH" and not is_reversal:
@@ -919,30 +928,42 @@ class StrategyEngine:
         # by itself.
         confirmations = 0
         confirmation_names: list[str] = []
-        if direction == "LONG" and f.cvd_price_divergence == "BULLISH":
-            confirmations += 1; confirmation_names.append("CVD")
-        if direction == "SHORT" and f.cvd_price_divergence == "BEARISH":
-            confirmations += 1; confirmation_names.append("CVD")
-        if direction == "LONG" and f.book_imbalance > 0.10:
-            confirmations += 1; confirmation_names.append("BOOK")
-        if direction == "SHORT" and f.book_imbalance < -0.10:
-            confirmations += 1; confirmation_names.append("BOOK")
-        if f.fvg_direction == ("BULLISH" if direction == "LONG" else "BEARISH"):
-            confirmations += 1; confirmation_names.append("FVG")
-        if f.order_block_direction == ("BULLISH" if direction == "LONG" else "BEARISH"):
-            confirmations += 1; confirmation_names.append("OB")
-        if f.golden_pocket == ("LONG_ZONE" if direction == "LONG" else "SHORT_ZONE"):
-            confirmations += 1; confirmation_names.append("FIB")
-        if f.elliott_direction == direction and f.elliott_confidence >= 0.55:
-            confirmations += 1; confirmation_names.append("ELLIOTT")
-        if f.liquidation_pressure == ("SHORT_LIQUIDATIONS" if direction == "LONG" else "LONG_LIQUIDATIONS"):
-            confirmations += 1; confirmation_names.append("LIQ")
 
+        flow = False
+        if direction == "LONG" and f.cvd_price_divergence == "BULLISH":
+            flow = True; confirmation_names.append("CVD")
+        if direction == "SHORT" and f.cvd_price_divergence == "BEARISH":
+            flow = True; confirmation_names.append("CVD")
+        if direction == "LONG" and f.book_imbalance > 0.10:
+            flow = True; confirmation_names.append("BOOK")
+        if direction == "SHORT" and f.book_imbalance < -0.10:
+            flow = True; confirmation_names.append("BOOK")
+        if f.liquidation_pressure == ("SHORT_LIQUIDATIONS" if direction == "LONG" else "LONG_LIQUIDATIONS"):
+            flow = True; confirmation_names.append("LIQ")
+        if flow:
+            confirmations += 1
+
+        location = False
+        if f.fvg_direction == ("BULLISH" if direction == "LONG" else "BEARISH"):
+            location = True; confirmation_names.append("FVG")
+        if f.order_block_direction == ("BULLISH" if direction == "LONG" else "BEARISH"):
+            location = True; confirmation_names.append("OB")
+        if f.golden_pocket == ("LONG_ZONE" if direction == "LONG" else "SHORT_ZONE"):
+            location = True; confirmation_names.append("FIB")
+        if location:
+            confirmations += 1
+
+        if f.elliott_direction == direction and f.elliott_confidence >= 0.55:
+            confirmations += 1
+            confirmation_names.append("ELLIOTT")
         required = _decision_min_confirmations()
-        # A live SFP can use structural sweep/reclaim as one confirmation, but
-        # still needs at least two independent flow/context confirmations.
+        # A live SFP and an early momentum expansion have different timing:
+        # they are allowed to act before full HTF alignment, but still need
+        # independent confirmation.
         if "SFP" in setup:
             required = max(2, required - 1)
+        elif is_early_momentum:
+            required = 1
         if confirmations < required:
             reasons.append(
                 f"only {confirmations} independent confirmations; need {required}"
