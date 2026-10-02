@@ -1008,6 +1008,7 @@ class SafeActivity : Activity() {
             else -> "BITGET FEED  •  " + health
         }
 
+        val execution = root.optJSONObject("execution")
         val recentTrades = execution?.optJSONArray("recent_trades")
         var signalExecution: JSONObject? = null
         if (recentTrades != null && signalObj != null) {
