@@ -605,11 +605,10 @@ class BitgetMarketStream:
         values = sorted(merged.values(), key=lambda x: x.start)
         dest.clear()
         dest.extend(values[-240:])
-        setattr(self.state, {
-            "5m": "last_kline_5_ts",
-            "15m": "last_kline_15_ts",
-            "1H": "last_kline_60_ts",
-        }[interval], now)
+        # Historical REST candles warm the strategy, but they must not make the
+        # live-feed health gate believe the websocket kline channel is fresh.
+        # The live timestamp is updated only by Bitget websocket kline messages.
+
 
     async def _backfill_trades(self):
         def fetch():
