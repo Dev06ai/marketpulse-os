@@ -119,16 +119,54 @@ class AdaptiveLearning:
                 elif wr <= 0.35:
                     caution.append(row)
 
+            avg_r = float(profile.get("total_r", 0.0)) / total if total else 0.0
             return {
                 "profile_key": key,
                 "samples": total,
                 "wins": wins,
                 "losses": losses,
                 "win_rate": round(win_rate, 3) if win_rate is not None else None,
+                "avg_r": round(avg_r, 3),
                 "confidence_delta": delta,
                 "favorable_conditions": sorted(favorable, key=lambda x: (-x["win_rate"], -x["samples"]))[:3],
                 "caution_conditions": sorted(caution, key=lambda x: (x["win_rate"], -x["samples"]))[:3],
             }
+
+    def decision_filter(self, signal: dict[str, Any]) -> dict[str, Any]:
+        """Return a conservative historical-edge filter for a new signal.
+
+        Learning is never allowed to manufacture a signal. It can only veto a
+        setup when the bot has enough resolved samples to show that the exact
+        setup/context has recently behaved poorly.
+        """
+        ctx = self.context(signal)
+        samples = int(ctx.get("samples") or 0)
+        avg_r = float(ctx.get("avg_r") or 0.0)
+        wr = ctx.get("win_rate")
+        reasons: list[str] = []
+
+        # Require enough evidence before allowing history to veto.
+        if samples >= 5 and ((wr is not None and float(wr) < 0.45) or avg_r < -0.10):
+            reasons.append(
+                f"historical setup edge is weak ({samples} samples, "
+                f"win-rate {float(wr or 0.0):.0%}, avg {avg_r:.2f}R)"
+            )
+
+        weak_conditions = [
+            x for x in (ctx.get("caution_conditions") or [])
+            if int(x.get("samples") or 0) >= 5 and float(x.get("win_rate") or 0.0) < 0.40
+        ]
+        if len(weak_conditions) >= 2:
+            reasons.append(
+                "multiple high-sample context tags are historically weak: " +
+                ", ".join(x.get("tag", "unknown") for x in weak_conditions[:3])
+            )
+
+        return {
+            "allow": not reasons,
+            "reason": "; ".join(reasons),
+            "context": ctx,
+        }
 
     def record_open(self, signal: dict[str, Any]):
         with self.lock:
