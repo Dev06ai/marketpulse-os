@@ -156,3 +156,23 @@ def test_bitget_rest_fallback_cannot_report_healthy():
     stream._refresh_data_health(int(_time.time() * 1000))
     assert stream.last_data_source == "BITGET_WS"
     assert stream.state.data_health == "HEALTHY"
+
+
+def test_bitget_rest_candle_backfill_does_not_mark_live_kline_fresh(monkeypatch):
+    import asyncio as _asyncio
+
+    async def on_state(_state):
+        return None
+
+    stream = BitgetMarketStream("BTCUSDT", on_state)
+
+    async def fake_to_thread(fn, *args, **kwargs):
+        return [["1770000000000", "100000", "100100", "99900", "100050", "12.5"]]
+
+    import app.stream as stream_module
+    monkeypatch.setattr(stream_module.asyncio, "to_thread", fake_to_thread)
+
+    _asyncio.run(stream._backfill_interval("15m", "candles_15", 1))
+
+    assert stream.state.candles_15
+    assert stream.state.last_kline_15_ts is None
