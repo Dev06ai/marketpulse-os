@@ -537,6 +537,7 @@ async def bootstrap(interval: str = "15m"):
         "rest_ok": bool(stream.last_rest_ok) if stream else False,
         "last_error": stream.last_upstream_error if stream else "",
         "last_rest_sync_ts": stream.last_rest_sync_ms if stream else 0,
+        "source": stream.last_data_source if stream else "NONE",
     }
     return payload
 

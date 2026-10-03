@@ -1,4 +1,4 @@
-// Build 95: responsive Trade / Positions / Insights workspaces.
+// Build 96: responsive Trade / Positions / Insights workspaces.
 // Build 83: show Bitget Demo funding readiness and demo execution state.
 package com.devtrader.app
 
@@ -207,7 +207,7 @@ class SafeActivity : Activity() {
             renderState(preview, requestChart = false)
             val candles = preview.getJSONObject("chart").getJSONArray("candles")
             chart.setData(candles, preview.optJSONObject("signal"), calculateEma(candles, 50), preview.getDouble("last_price"))
-            check.text = "Build 95  •  Visual verification"
+            check.text = "Build 96  •  Visual verification"
             selectWorkspace(intent.getIntExtra("visual_workspace", 0).coerceIn(0, 2))
             return
         }
@@ -360,7 +360,7 @@ class SafeActivity : Activity() {
         val feed = compactCard("CONNECTION", "BITGET  •  CONNECTING", 11.5f)
         integrity = feed.value
         insightsPage.addView(feed.container, margins(bottom = 10))
-        val sys = compactCard("SYSTEM", "Build 95  •  Checking…", 11.5f)
+        val sys = compactCard("SYSTEM", "Build 96  •  Checking…", 11.5f)
         check = sys.value
         insightsPage.addView(sys.container, margins(bottom = 10))
         val tools = LinearLayout(this)
@@ -407,10 +407,15 @@ class SafeActivity : Activity() {
         }
         val thesis = s.optJSONArray("thesis") ?: JSONArray()
         val explanation = (0 until thesis.length()).joinToString("\n") { "• " + thesis.optString(it) }
+        val entries = latestRoot?.optJSONObject("execution")?.optJSONArray("recent_trades") ?: JSONArray()
+        val actual = (0 until entries.length()).mapNotNull { entries.optJSONObject(it) }
+            .firstOrNull { it.optString("signal_id") == s.optString("id") }
+        val fillDetails = if (actual != null && actual.optBoolean("actual_fill_confirmed"))
+            "\nExchange fill  ${formatCompact(actual.optDouble("entry_price"))}\nQuantity  ${actual.optDouble("filled_qty")} BTC\n" else ""
         showInfoDialog("Trade plan", "${s.optString("direction")}  •  ${s.optString("trade_style")}\n${s.optString("setup")}\n\n" +
             "Planned entry  ${formatCompact(s.optDouble("entry"))}\nStop  ${formatCompact(s.optDouble("stop"))}\n" +
             "Target 1  ${formatCompact(s.optDouble("target1"))}\nTarget 2  ${formatCompact(s.optDouble("target2"))}\n" +
-            "Evidence score  ${String.format(Locale.US, "%.0f", s.optDouble("confidence") * 100)}/100 (heuristic)\n\n" +
+            "Evidence score  ${String.format(Locale.US, "%.0f", s.optDouble("confidence") * 100)}/100 (heuristic)\n$fillDetails\n" +
             "Execution  ${s.optString("execution_status", "PENDING CHECK")}\n${s.optString("execution_reason")}\n\n" +
             "Invalidation\n${s.optString("invalidation")}\n\n$explanation")
     }
@@ -1134,7 +1139,7 @@ class SafeActivity : Activity() {
                     "\nWhy: " + management.optString("reason", "")
             } else ""
             val tradeStyle = signalObj.optString("trade_style", "SCALP")
-            val styleReason = signalObj.optString("style_reason", signalObj.optJSONObject("evidence")?.optString("style_reason", ""))
+            val styleReason = signalObj.optString("style_reason", signalObj.optJSONObject("evidence")?.optString("style_reason", "") ?: "").orEmpty()
             val evidenceObj = signalObj.optJSONObject("evidence")
             val riskDistance = evidenceObj?.optDouble("risk_distance", Double.NaN) ?: Double.NaN
 
@@ -1265,6 +1270,7 @@ class SafeActivity : Activity() {
         val positions = clientStatus.optJSONArray("open_positions") ?: JSONArray()
         val decision = execution.optJSONObject("last_decision") ?: JSONObject()
         val unresolved = summary.optInt("unreconciled_entries")
+        val unknown = summary.optInt("unknown_submissions")
         val openCount = summary.optInt("open_trades")
         val age = System.currentTimeMillis() - root.optLong("received_ts", 0L)
         val sourceHealthy = root.optString("data_health") == "HEALTHY" && root.optBoolean("ws_connected") &&
@@ -1280,6 +1286,7 @@ class SafeActivity : Activity() {
             "Fees ${money(ledger.optDouble("fees_usdt", Double.NaN))}  •  Excludes funding / transfers\n" +
             "Risk ≤ ${summary.optDouble("risk_pct", 0.25)}%  •  Entries ${summary.optInt("daily_executions")}/${summary.optInt("daily_cap", 3)} today\n" +
             (if (ledger.optString("error").isNotBlank() && !ledger.isNull("error")) "Accounting refresh failed; showing last snapshot"
+             else if (unknown > 0) "$unknown order submissions await exchange confirmation"
              else if (unresolved > 0) "$unresolved historical entries need attribution"
              else if (!ledger.optBoolean("complete_window", false) || !ledger.optBoolean("fee_accounting_complete", false)) "Fill accounting window is incomplete"
              else "30-day fill accounting  •  Updated ${formatClock(ledger.optLong("window_end_ts"))}")
@@ -1301,6 +1308,7 @@ class SafeActivity : Activity() {
         val rejection = e.optJSONObject("trade_governor")?.optString("last_quality_rejection").orEmpty()
         val reason = when {
             !sourceHealthy -> "Waiting for healthy, fresh market data."
+            unknown > 0 -> "Order response is uncertain. Awaiting exchange confirmation; additional entries are blocked."
             unresolved > 0 -> "Historical partial exits need reconciliation. New exposure is blocked."
             openCount > 0 -> "Existing exchange exposure is being tracked. Additional entries are blocked."
             decision.optString("status") == "SKIPPED" || decision.optString("status") == "ERROR" -> decision.optString("reason")
@@ -1321,11 +1329,17 @@ class SafeActivity : Activity() {
             val lifecycle = s.optString("lifecycle", "ACTIVE")
             val resolved = lifecycle in setOf("TARGET_REACHED", "INVALIDATED", "CLOSED", "EXECUTION_FAILED", "RESOLVED")
             val executionStatus = s.optString("execution_status", "CHECKING")
-            val heading = if (resolved) "SETUP RESOLVED" else if (openCount > 0) "EXPOSURE OPEN" else if (executionStatus == "SKIPPED") "SETUP WATCH" else "TRADE SETUP"
+            val entries = execution.optJSONArray("recent_trades") ?: JSONArray()
+            val actual = (0 until entries.length()).mapNotNull { entries.optJSONObject(it) }
+                .firstOrNull { it.optString("signal_id") == s.optString("id") }
+            val filled = actual != null && actual.optString("status") == "OPEN" && actual.optBoolean("actual_fill_confirmed")
+            val heading = if (filled) "EXPOSURE OPEN" else if (resolved) "SETUP RESOLVED" else if (openCount > 0 || executionStatus in setOf("SKIPPED", "FAILED")) "SETUP WATCH" else "TRADE SETUP"
+            val entry = if (filled) actual!!.optDouble("entry_price", Double.NaN) else s.optDouble("entry", Double.NaN)
+            val stop = if (filled) actual!!.optDouble("stop_loss", Double.NaN) else s.optDouble("stop", Double.NaN)
             setTradeSetupText("$heading  •  $direction  •  ${s.optString("trade_style", "SCALP")}\n" +
-                "${s.optString("setup")}\nEntry ${money(s.optDouble("entry", Double.NaN))}  •  Stop ${money(s.optDouble("stop", Double.NaN))}\n" +
+                "${s.optString("setup")}\n${if (filled) "Fill" else "Plan"} ${money(entry)}  •  Stop ${money(stop)}\n" +
                 "TP1 ${money(s.optDouble("target1", Double.NaN))}  •  TP2 ${money(s.optDouble("target2", Double.NaN))}\n" +
-                (if (!sourceHealthy || unresolved > 0 || executionStatus == "SKIPPED") reason else "Evidence ${money(s.optDouble("confidence", 0.0) * 100)} / 100  •  Heuristic score"))
+                (if (!sourceHealthy || unresolved > 0 || executionStatus in setOf("SKIPPED", "FAILED")) reason else "Evidence ${money(s.optDouble("confidence", 0.0) * 100)} / 100  •  Heuristic score"))
         } else {
             setTradeSetupText("NO TRADE  •  ${if (openCount > 0) "EXPOSURE OPEN" else "SCANNING"}\n$reason\nTap details for entry checks.")
         }
@@ -1985,6 +1999,7 @@ class SafeActivity : Activity() {
 
     private fun setUpdateStatus(message: String) {
         update.text = message
+        if (::check.isInitialized) check.text = message
         if (::updateButton.isInitialized) {
             updateButton.text = when {
                 message.startsWith("Checking") -> "CHECKING…"

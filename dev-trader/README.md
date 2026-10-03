@@ -2,7 +2,7 @@
 
 Personal Android trading workspace with a FastAPI market engine and **Bitget UTA v3 demo-only** BTCUSDT execution. The app receives Bitget market data and exchange execution snapshots; financial values are never substituted with sample values in a release build.
 
-## Version 0.12.0 / build 95
+## Version 0.12.0 / build 96
 
 - **Trade:** live quote, interactive multi-timeframe candles, compact decision center, complete setup details and a P&L calculator.
 - **Positions:** exchange equity and available collateral shown separately, aggregate positions, fill-based realized P&L curve, fees and risk controls.

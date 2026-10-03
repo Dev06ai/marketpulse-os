@@ -22,7 +22,7 @@ for viewport in compact tall; do
 done
 adb logcat -d > ui-check/logcat.txt
 if grep -q 'FATAL EXCEPTION' ui-check/logcat.txt; then
-  cat ui-check/logcat.txt
+  grep -A 22 'FATAL EXCEPTION' ui-check/logcat.txt | head -n 100
   exit 1
 fi
 python3 - <<'PY'
