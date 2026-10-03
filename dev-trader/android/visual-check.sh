@@ -1,8 +1,18 @@
 #!/usr/bin/env bash
 set -euo pipefail
 mkdir -p ui-check
+collect_diagnostics() {
+  adb logcat -d > ui-check/logcat.txt || true
+  adb exec-out screencap -p > ui-check/last-screen.png || true
+  if grep -q 'FATAL EXCEPTION' ui-check/logcat.txt; then
+    grep -A 22 'FATAL EXCEPTION' ui-check/logcat.txt | head -n 100 || true
+  fi
+}
+trap collect_diagnostics EXIT
 adb install -r dist/app-debug.apk
 adb logcat -c
+adb shell input keyevent 82
+adb shell settings put system screen_off_timeout 600000
 for viewport in compact tall; do
   if [[ "$viewport" == compact ]]; then
     adb shell wm size 720x1280
@@ -12,11 +22,22 @@ for viewport in compact tall; do
     adb shell wm density 420
   fi
   for workspace in 0 1 2; do
-    adb shell am start -S -n com.devtrader.app.debug/com.devtrader.app.SafeActivity \
+    adb shell am start -S -W -n com.devtrader.app.debug/com.devtrader.app.SafeActivity \
       --ez visual_preview true --ei visual_workspace "$workspace"
-    sleep 2
-    adb shell uiautomator dump /sdcard/dev-trader-ui.xml
-    adb pull /sdcard/dev-trader-ui.xml "ui-check/${viewport}-${workspace}.xml"
+    captured=false
+    for attempt in {1..8}; do
+      sleep 1
+      adb shell rm -f /sdcard/dev-trader-ui.xml
+      adb shell uiautomator dump /sdcard/dev-trader-ui.xml
+      if adb pull /sdcard/dev-trader-ui.xml "ui-check/${viewport}-${workspace}.xml"; then
+        captured=true
+        break
+      fi
+    done
+    if [[ "$captured" != true ]]; then
+      echo "Unable to capture workspace ${workspace} at ${viewport}."
+      exit 1
+    fi
     adb exec-out screencap -p > "ui-check/${viewport}-${workspace}.png"
   done
 done
