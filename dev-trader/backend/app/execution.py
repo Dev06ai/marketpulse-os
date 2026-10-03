@@ -223,6 +223,12 @@ class DemoExecutionEngine:
         if len(closed_today) >= 2 and all(self._num(r.get("net_profit_usdt")) < 0 for r in closed_today[:2]):
             return False, "Two consecutive demo losses today; entries paused until the next UTC day."
         daily_net = sum(self._num(r.get("net_profit_usdt")) for r in closed_today)
+        ledger = self.data.get("fill_ledger") or {}
+        if ledger.get("complete_window") and ledger.get("fee_accounting_complete"):
+            # Fill accounting includes opening fees and partial exits omitted
+            # by unresolved per-entry records. Do not sum both representations.
+            fill_net = self._num((ledger.get("daily_net_usdt") or {}).get(str(day_start)))
+            daily_net = min(daily_net, fill_net)
         balance = self._num((self.data.get("client_status") or {}).get("available_balance_usdt"))
         loss_limit = max(0.0, float(os.getenv("BITGET_DEMO_MAX_DAILY_LOSS_PCT", "1.0")))
         if balance > 0 and daily_net < 0 and abs(daily_net) >= balance * loss_limit / 100:

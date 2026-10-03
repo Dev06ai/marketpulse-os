@@ -620,3 +620,16 @@ def test_filled_status_without_actual_values_stays_unconfirmed(monkeypatch, tmp_
     assert not trade.get('actual_fill_confirmed')
     assert trade['entry_price'] == 0
     assert 'missing exchange' in trade['error']
+
+
+def test_exchange_fill_losses_cannot_bypass_daily_limit(monkeypatch, tmp_path):
+    import time
+    executor = audit_executor(monkeypatch, tmp_path)
+    day_start = int(time.time()) // 86400 * 86400000
+    executor.data['client_status'] = dict(available_balance_usdt=1000)
+    executor.data['fill_ledger'] = dict(complete_window=True, fee_accounting_complete=True,
+        daily_net_usdt={str(day_start): -10.1})
+    # Per-entry history is empty because historical partial exits are ambiguous.
+    assert not executor.data['trades']
+    allowed, reason = executor._signal_allowed(audit_signal())
+    assert not allowed and 'daily loss limit' in reason
