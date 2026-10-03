@@ -1,4 +1,4 @@
-// Build 97: responsive Trade / Positions / Insights workspaces.
+// Build 98: responsive Trade / Positions / Insights workspaces.
 // Build 83: show Bitget Demo funding readiness and demo execution state.
 package com.devtrader.app
 
@@ -207,7 +207,7 @@ class SafeActivity : Activity() {
             renderState(preview, requestChart = false)
             val candles = preview.getJSONObject("chart").getJSONArray("candles")
             chart.setData(candles, preview.optJSONObject("signal"), calculateEma(candles, 50), preview.getDouble("last_price"))
-            check.text = "Build 97  •  Visual verification"
+            check.text = "Build 98  •  Visual verification"
             selectWorkspace(intent.getIntExtra("visual_workspace", 0).coerceIn(0, 2))
             return
         }
@@ -247,7 +247,8 @@ class SafeActivity : Activity() {
         }
     }
 
-    private fun setTradeSetupText(text: String) {
+    private fun setTradeSetupText(rawText: String) {
+        val text = rawText.trimEnd()
         val styled = SpannableString(text)
         fun colorAll(term: String, color: Int) {
             var start = text.indexOf(term)
@@ -316,7 +317,7 @@ class SafeActivity : Activity() {
         tradePage.addView(chart, LinearLayout.LayoutParams(-1, 0, 1f).apply { bottomMargin = dp(8) })
         val setup = premiumCard("DECISION CENTER", "NO TRADE  •  SCANNING\nWaiting for verified market data.", if (compactViewport) 11.5f else 13f)
         signal = setup.second
-        signal.maxLines = 5
+        signal.maxLines = if (compactViewport) 4 else 5
         signal.ellipsize = android.text.TextUtils.TruncateAt.END
         setup.first.setOnClickListener { showTradeDetails() }
         setup.first.contentDescription = "Open complete trade setup"
@@ -361,7 +362,7 @@ class SafeActivity : Activity() {
         val feed = compactCard("CONNECTION", "BITGET  •  CONNECTING", 11.5f)
         integrity = feed.value
         insightsPage.addView(feed.container, margins(bottom = 10))
-        val sys = compactCard("SYSTEM", "Build 97  •  Checking…", 11.5f)
+        val sys = compactCard("SYSTEM", "Build 98  •  Checking…", 11.5f)
         check = sys.value
         insightsPage.addView(sys.container, margins(bottom = 10))
         val tools = LinearLayout(this)
@@ -1341,7 +1342,9 @@ class SafeActivity : Activity() {
             setTradeSetupText("$heading  •  $direction  •  ${s.optString("trade_style", "SCALP")}\n" +
                 "${s.optString("setup")}\n${if (filled) "Fill" else "Plan"} ${money(entry)}  •  Stop ${money(stop)}\n" +
                 "TP1 ${money(s.optDouble("target1", Double.NaN))}  •  TP2 ${money(s.optDouble("target2", Double.NaN))}\n" +
-                (if (!sourceHealthy || unresolved > 0 || executionStatus in setOf("SKIPPED", "FAILED")) reason else "Evidence ${money(s.optDouble("confidence", 0.0) * 100)} / 100  •  Heuristic score"))
+                (if (!sourceHealthy || unresolved > 0 || executionStatus in setOf("SKIPPED", "FAILED")) reason
+                 else if (resources.configuration.screenHeightDp < 760) ""
+                 else "Evidence ${money(s.optDouble("confidence", 0.0) * 100)} / 100  •  Heuristic score"))
         } else {
             setTradeSetupText("NO TRADE  •  ${if (openCount > 0) "EXPOSURE OPEN" else "SCANNING"}\n$reason\nTap details for entry checks.")
         }
