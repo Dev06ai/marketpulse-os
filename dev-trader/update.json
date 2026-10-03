@@ -1,8 +1,8 @@
 {
   "enabled": true,
-  "versionCode": 94,
-  "versionName": "0.11.16",
-  "apkUrl": "https://github.com/Dev06ai/marketpulse-os/releases/download/dev-trader-v0.11.16-94/app-release.apk",
-  "sha256": "c09c2eb189761a789dca4a7b3645c7739fa64a6151076f5a70351b38f320fb93",
-  "notes": "Signed Dev Trader release 0.11.16 \u2022 fixed Android edge-to-edge safe-area layout"
+  "versionCode": 96,
+  "versionName": "0.12.0",
+  "apkUrl": "https://github.com/Dev06ai/marketpulse-os/releases/download/dev-trader-v0.12.0-96/app-release.apk",
+  "sha256": "c256760c995278221846066603e0b061c3db5ace1335db1ce399f7f71ba37214",
+  "notes": "Dev Trader 0.12.0 \u2022 Trade / Positions / Insights \u2022 exchange fill ledger \u2022 stronger execution checks"
 }
