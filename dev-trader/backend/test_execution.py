@@ -82,9 +82,9 @@ def test_demo_executor_sizes_from_stop_distance_and_opens_once(monkeypatch):
         "direction": "LONG",
         "setup": "TEST",
         "entry": 100000,
-        "stop": 99900,
-        "target1": 100300,
-        "target2": 100300,
+        "stop": 99500,
+        "target1": 102000,
+        "target2": 102000,
         "rr": 3.0,
         "confidence": 0.80,
         "grade": "A",
@@ -213,7 +213,7 @@ class MultiSignalClient(FakeClient):
         return {"code": "00000", "data": {"orderId": "close-123", "clientOid": client_oid}}
 
 
-def test_every_new_signal_is_submitted_without_replacing_existing_position(monkeypatch):
+def test_new_signal_is_blocked_while_existing_position_is_unresolved(monkeypatch):
     monkeypatch.setenv("BITGET_DEMO_TRADING", "true")
     monkeypatch.setenv("BITGET_EXECUTION_STATE_FILE", "/tmp/dev-trader-test-multi.json")
     monkeypatch.setenv("BITGET_DEMO_MAX_DAILY_TRADES", "3")
@@ -229,9 +229,9 @@ def test_every_new_signal_is_submitted_without_replacing_existing_position(monke
     base = {
         "setup": "TEST",
         "entry": 100000,
-        "stop": 99900,
-        "target1": 100300,
-        "target2": 100300,
+        "stop": 99500,
+        "target1": 102000,
+        "target2": 102000,
         "rr": 3.0,
         "confidence": 0.80,
         "grade": "A",
@@ -245,8 +245,9 @@ def test_every_new_signal_is_submitted_without_replacing_existing_position(monke
     assert asyncio.run(executor.handle_signal(first))["ok"] is True
     result = asyncio.run(executor.handle_signal(second))
 
-    assert result["ok"] is True
-    assert len(executor.history(5)) >= 2
+    assert result["ok"] is False
+    assert "exposure" in result["reason"]
+    assert len(executor.history(5)) == 1
     assert executor.client.close_calls == []
 
 
@@ -317,9 +318,9 @@ def test_partial_bitget_fill_does_not_become_open(monkeypatch):
         "direction": "LONG",
         "setup": "TEST",
         "entry": 100000,
-        "stop": 99900,
-        "target1": 100300,
-        "target2": 100300,
+        "stop": 99500,
+        "target1": 102000,
+        "target2": 102000,
         "rr": 3.0,
         "confidence": 0.80,
         "grade": "A",
@@ -388,3 +389,109 @@ def test_sync_does_not_promote_partial_exchange_position(monkeypatch):
     assert trade["status"] == "ORDER_PENDING"
     assert trade.get("partial_position_detected") is True
     assert trade.get("actual_fill_confirmed") is False
+
+
+def audit_executor(monkeypatch, tmp_path):
+    monkeypatch.setenv('BITGET_DEMO_TRADING', 'true')
+    monkeypatch.setenv('BITGET_EXECUTION_STATE_FILE', str(tmp_path / 'execution.json'))
+    executor = DemoExecutionEngine(FakeLearning())
+    executor.client = MultiSignalClient()
+    return executor
+
+
+def audit_signal():
+    return dict(id='AUDIT', direction='LONG', setup='TEST', entry=100000,
+                stop=99500, target2=102000, rr=4, confidence=.85, grade='A')
+
+
+def test_integer_precision_does_not_strip_significant_zeroes():
+    assert DemoExecutionEngine._format_price(100000, {'pricePlace': 0}) == '100000'
+    assert DemoExecutionEngine._format_qty(10, {'volumePlace': 0}) == '10'
+
+
+def test_utc_trade_count_is_independent_of_local_timezone(monkeypatch, tmp_path):
+    import time
+    executor = audit_executor(monkeypatch, tmp_path)
+    now = int(time.time())
+    executor.data['trades'] = [{'opened_ts': now * 1000, 'status': 'OPEN'}]
+    monkeypatch.setattr(time, 'mktime', lambda _: now + 43200)
+    assert executor._count_today() == 1
+
+
+def test_concurrent_signal_submissions_only_open_once(monkeypatch, tmp_path):
+    executor = audit_executor(monkeypatch, tmp_path)
+    async def run():
+        return await asyncio.gather(executor.handle_signal(audit_signal()),
+                                    executor.handle_signal(audit_signal()))
+    results = asyncio.run(run())
+    assert sum(r['ok'] for r in results) == 1
+    assert len(executor.data['trades']) == 1
+
+
+def test_execution_recomputes_fee_adjusted_rr(monkeypatch, tmp_path):
+    executor = audit_executor(monkeypatch, tmp_path)
+    signal = dict(audit_signal(), stop=99900, target2=100300, rr=3)
+    result = asyncio.run(executor.handle_signal(signal))
+    assert not result['ok']
+    assert 'estimated fees' in result['reason']
+    assert not executor.data['trades']
+
+
+def test_actual_sized_risk_includes_fees(monkeypatch, tmp_path):
+    executor = audit_executor(monkeypatch, tmp_path)
+    qty, risk, _ = asyncio.run(executor._risk_size(audit_signal()))
+    assert risk <= 2.5
+    assert abs(risk - qty * (500 + (100000 + 99500) * .0006)) < 1e-8
+
+
+def test_two_losses_pause_new_entries(monkeypatch, tmp_path):
+    import time
+    executor = audit_executor(monkeypatch, tmp_path)
+    executor.data['trades'] = [dict(status='CLOSED', closed_ts=time.time()*1000,
+                                  net_profit_usdt=-1) for _ in range(2)]
+    allowed, reason = executor._signal_allowed(audit_signal())
+    assert not allowed and 'consecutive' in reason
+
+
+def test_nonfinite_confidence_and_missing_grade_are_rejected(monkeypatch, tmp_path):
+    executor = audit_executor(monkeypatch, tmp_path)
+    assert not executor._signal_allowed(dict(audit_signal(), confidence=float('nan')))[0]
+    assert not executor._signal_allowed(dict(audit_signal(), grade=''))[0]
+
+
+def test_close_orders_are_never_imported_as_new_entries(monkeypatch, tmp_path):
+    executor = audit_executor(monkeypatch, tmp_path)
+    executor._merge_exchange_open_orders([
+        dict(clientOid='DTDEMO-CLOSE-1', orderStatus='filled', side='sell'),
+        dict(clientOid='DTDEMO-2', orderStatus='filled', side='sell', tradeSide='close_long'),
+        dict(clientOid='DTDEMO-3', orderStatus='filled', side='sell', reduceOnly='YES'),
+    ])
+    assert not executor.data['trades']
+
+
+def test_history_match_does_not_use_position_closed_before_entry(monkeypatch, tmp_path):
+    executor = audit_executor(monkeypatch, tmp_path)
+    rows = [dict(symbol='BTCUSDT', holdSide='long', ctime=1000, utime=2000),
+            dict(symbol='BTCUSDT', holdSide='long', ctime=10000, utime=20000)]
+    assert executor._match_history_position(rows, dict(direction='LONG', opened_ts=12000)) == rows[1]
+    assert executor._match_history_position(rows, dict(direction='LONG', opened_ts=30000)) is None
+
+
+def test_closed_lifecycle_reconciles_while_new_same_side_position_exists(monkeypatch, tmp_path):
+    executor = audit_executor(monkeypatch, tmp_path)
+    class LifecycleClient(MultiSignalClient):
+        def positions(self, symbol):
+            return [dict(holdSide='long', total='.005', ctime=30000, unrealizedPL='1')]
+        def position_history(self, *args):
+            return [dict(symbol='BTCUSDT', holdSide='long', ctime=10000, utime=20000,
+                         closeTotalPos='.005', openAvgPrice='100000', closeAvgPrice='99500',
+                         pnl='-2.5', netProfit='-3.1', positionId='old')]
+    executor.client = LifecycleClient()
+    executor.data['trades'] = [dict(execution_id='DTDEMO-old', client_oid='DTDEMO-old',
+        signal_id='old', status='OPEN', direction='LONG', opened_ts=11000,
+        filled_qty=.005, entry_price=100000, stop_loss=99500, planned_risk_usdt=3.1)]
+    events = asyncio.run(executor.sync())
+    assert len(events) == 1
+    assert executor.data['trades'][0]['status'] == 'CLOSED'
+    assert executor.data['trades'][0]['net_profit_usdt'] == -3.1
+    assert executor.data['trades'][0]['result_r'] == -1

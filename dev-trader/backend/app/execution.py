@@ -26,6 +26,8 @@ class DemoExecutionEngine:
         self.client = BitgetDemoClient()
         self.symbol = os.getenv("SYMBOL", "BTCUSDT")
         self.risk_pct = float(os.getenv("BITGET_DEMO_RISK_PCT", "0.25"))
+        if not math.isfinite(self.risk_pct) or not 0 < self.risk_pct <= 1:
+            raise ValueError("BITGET_DEMO_RISK_PCT must be finite and between 0 and 1 percent.")
         self.max_notional = float(os.getenv("BITGET_DEMO_MAX_NOTIONAL_USDT", "500"))
         self.max_daily = int(os.getenv("BITGET_DEMO_MAX_DAILY_TRADES", "3"))
         # Multiple emitted signals may remain open together. A reversal is
@@ -36,6 +38,7 @@ class DemoExecutionEngine:
         self.sync_seconds = max(3.0, float(os.getenv("BITGET_EXECUTION_SYNC_SECONDS", "5")))
         self.path = Path(os.getenv("BITGET_EXECUTION_STATE_FILE", "/tmp/dev_trader_execution.json"))
         self.lock = threading.RLock()
+        self._submission_lock = asyncio.Lock()
         self.data = {
             "version": 1,
             "trades": [],
@@ -59,7 +62,7 @@ class DemoExecutionEngine:
             self._daily_count = self._count_today()
 
     def _count_today(self) -> int:
-        day_start = int(time.mktime(time.gmtime())) - (int(time.time()) % 86400)
+        day_start = int(time.time()) // 86400 * 86400
         count = 0
         for row in self.data.get("trades", []):
             ts = int(row.get("opened_ts") or row.get("created_ts") or 0) // 1000
@@ -107,7 +110,8 @@ class DemoExecutionEngine:
     @staticmethod
     def _num(value: Any, default: float = 0.0) -> float:
         try:
-            return float(value)
+            number = float(value)
+            return number if math.isfinite(number) else default
         except (TypeError, ValueError):
             return default
 
@@ -162,7 +166,8 @@ class DemoExecutionEngine:
             raise BitgetDemoError("Bitget Demo futures balance is 0 USDT. Add demo funds before autonomous execution can open a position.")
         risk_usdt = balance * self.risk_pct / 100.0
         distance = abs(entry - stop)
-        raw_qty = risk_usdt / distance
+        fee_rate = max(0.0, float(os.getenv("BITGET_DEMO_TAKER_FEE_RATE", "0.0006")))
+        raw_qty = risk_usdt / (distance + (entry + stop) * fee_rate)
         raw_qty = min(raw_qty, self.max_notional / entry)
         config = await self._contract()
         qty = self._normalize_qty(raw_qty, config)
@@ -175,7 +180,7 @@ class DemoExecutionEngine:
             raise BitgetDemoError("Calculated demo position is below Bitget's minimum quantity.")
         if min_usdt > 0 and qty * entry < min_usdt:
             raise BitgetDemoError(f"Calculated position is below Bitget minimum notional ({min_usdt:g} USDT).")
-        return qty, risk_usdt, config
+        return qty, qty * (distance + (entry + stop) * fee_rate), config
 
     def _signal_allowed(self, signal: dict[str, Any]) -> tuple[bool, str]:
         if not self.enabled:
@@ -191,6 +196,19 @@ class DemoExecutionEngine:
         self._rotate_day()
         if self._daily_count >= self.max_daily:
             return False, "Demo daily execution cap reached."
+        day_start = int(time.time()) // 86400 * 86400000
+        closed_today = sorted(
+            [r for r in self.data.get("trades", []) if r.get("status") == "CLOSED" and self._num(r.get("closed_ts")) >= day_start],
+            key=lambda r: self._num(r.get("closed_ts")), reverse=True,
+        )
+        # Two losing executions pause entries until the next UTC risk day.
+        if len(closed_today) >= 2 and all(self._num(r.get("net_profit_usdt")) < 0 for r in closed_today[:2]):
+            return False, "Two consecutive demo losses today; entries paused until the next UTC day."
+        daily_net = sum(self._num(r.get("net_profit_usdt")) for r in closed_today)
+        balance = self._num((self.data.get("client_status") or {}).get("available_balance_usdt"))
+        loss_limit = max(0.0, float(os.getenv("BITGET_DEMO_MAX_DAILY_LOSS_PCT", "1.0")))
+        if balance > 0 and daily_net < 0 and abs(daily_net) >= balance * loss_limit / 100:
+            return False, "Demo daily loss limit reached; entries paused until the next UTC day."
         direction = str(signal.get("direction", "")).upper()
         grade = str(signal.get("grade", "")).upper()
         rr = self._num(signal.get("rr"))
@@ -199,12 +217,17 @@ class DemoExecutionEngine:
             return False, "Signal direction is not executable."
         min_conf = float(os.getenv("QUALITY_MIN_CONFIDENCE", "0.70"))
         min_rr = float(os.getenv("QUALITY_MIN_RR", "3.0"))
-        if grade and grade != "A":
+        if not signal_id:
+            return False, "An execution signal ID is required."
+        if grade != "A":
             return False, "Only Grade-A signals are eligible for demo execution."
         if confidence < min_conf:
             return False, f"Confidence {confidence:.2f} is below demo execution threshold."
         if rr < min_rr:
             return False, f"R:R {rr:.2f} is below demo execution threshold."
+        created = self._num(signal.get("created_ts"))
+        if created and (int(time.time() * 1000) - created > 60000 or created > int(time.time() * 1000) + 5000):
+            return False, "Signal timestamp is stale or invalid."
         return True, ""
 
     async def _validate_execution_price(self, signal: dict[str, Any]) -> tuple[float, float]:
@@ -233,9 +256,22 @@ class DemoExecutionEngine:
         if direction == "SHORT" and not (target < exchange_price < stop):
             raise BitgetDemoError("SHORT signal is no longer valid at the Bitget execution price.")
 
+        # Recompute tradable reward/risk at the actual execution quote.
+        fee_rate = max(0.0, float(os.getenv("BITGET_DEMO_TAKER_FEE_RATE", "0.0006")))
+        loss_per_unit = abs(exchange_price - stop) + (exchange_price + stop) * fee_rate
+        reward_per_unit = abs(target - exchange_price) - (exchange_price + target) * fee_rate
+        net_rr = reward_per_unit / loss_per_unit
+        if net_rr < float(os.getenv("BITGET_DEMO_MIN_NET_RR", "1.5")):
+            raise BitgetDemoError(f"Executable R:R after estimated fees is too low ({net_rr:.2f}).")
+
         return exchange_price, drift_pct
 
     async def handle_signal(self, signal: dict[str, Any]) -> dict[str, Any]:
+        # Concurrent tasks must not pass the same cap/duplicate check together.
+        async with self._submission_lock:
+            return await self._handle_signal(signal)
+
+    async def _handle_signal(self, signal: dict[str, Any]) -> dict[str, Any]:
         # Sync first so a just-closed position is not mistaken for an active one.
         try:
             await self.sync()
@@ -255,16 +291,25 @@ class DemoExecutionEngine:
         except Exception as exc:
             return {"ok": False, "reason": f"Unable to verify Bitget position: {exc}"}
 
+        if any(self._num(p.get("total")) > 0 for p in positions) or self._open_local_trade():
+            return {"ok": False, "skipped": True, "reason": "Existing demo exposure must close and reconcile before another entry."}
+        if (self.data.get("client_status") or {}).get("history_reconciliation") == "DEGRADED":
+            return {"ok": False, "skipped": True, "reason": "Exchange reconciliation is degraded; new entries are blocked."}
+
         try:
-            qty, risk_usdt, config = await self._risk_size(signal)
             try:
                 reference_price, reference_drift_pct = await self._validate_execution_price(signal)
             except BitgetDemoError as exc:
                 return {"ok": False, "skipped": True, "reason": str(exc)}
 
+            qty, risk_usdt, config = await self._risk_size(dict(signal, entry=reference_price))
+
             entry_plan = self._num(signal.get("entry"))
             stop = self._num(signal.get("stop"))
             tp = self._num(signal.get("target2") or signal.get("target") or signal.get("target1"))
+            stop = float(self._format_price(stop, config, str(signal.get("direction")), "sl"))
+            tp = float(self._format_price(tp, config, str(signal.get("direction")), "tp"))
+            qty, risk_usdt, config = await self._risk_size(dict(signal, entry=reference_price, stop=stop))
             client_oid = f"DTDEMO-{str(signal.get('id', 'signal'))[:24]}-{int(time.time() * 1000) % 100000000}"
             result = await asyncio.to_thread(
                 self.client.place_market_order,
@@ -389,8 +434,15 @@ class DemoExecutionEngine:
         opposite signal can coexist; in one-way mode Bitget will naturally net
         the position, so the decision is made conservatively before submission.
         """
+        allowed, reason = self._signal_allowed(signal)
+        if not allowed:
+            return {"action": "KEEP", "reason": reason}
         if not self.smart_reversal_enabled or current_price is None:
             return {"action": "KEEP", "reason": "smart reversal disabled"}
+        try:
+            await self._validate_execution_price(signal)
+        except Exception as exc:
+            return {"action": "KEEP", "reason": f"Replacement signal is not executable: {exc}"}
         new_direction = str(signal.get("direction") or "").upper()
         if new_direction not in {"LONG", "SHORT"}:
             return {"action": "KEEP", "reason": "invalid direction"}
@@ -676,6 +728,19 @@ class DemoExecutionEngine:
                     await self._poll_fill(str(trade.get("execution_id")))
                 direction = str(trade.get("direction", "")).upper()
                 current = self._match_current_position(position_rows, direction)
+                closed = self._match_history_position(history, trade)
+                # A new same-side position must not resurrect a prior lifecycle.
+                current_created = self._num((current or {}).get("ctime") or (current or {}).get("createdTime"))
+                closed_updated = self._num((closed or {}).get("utime") or (closed or {}).get("updatedTime"))
+                if closed and (not current or (current_created > 0 and closed_updated <= current_created)):
+                    event = self._finalize_trade(trade, closed, orders)
+                    if event:
+                        newly_closed.append(event)
+                    continue
+                if current_created > 0 and self._num(trade.get("opened_ts")) < current_created - 5000:
+                    trade["reconciliation_warning"] = "Trade predates current position; awaiting matching exchange history."
+                    reconciliation_warnings.append(str(trade.get("execution_id")) + ": unmatched older lifecycle")
+                    continue
                 if current:
                     # A pending order can already have a partial exchange
                     # position. Do not promote the local trade to OPEN until
@@ -717,11 +782,11 @@ class DemoExecutionEngine:
                         0.0,
                     )
                     aggregate_unrealized = self._num(current.get("unrealizedPL"), 0.0)
-                    aggregate_fee = abs(self._num(current.get("totalFee") or current.get("deductedFee"), 0.0))
+                    aggregate_funding = self._num(current.get("totalFunding"), 0.0)
                     local_qty = self._num(trade.get("filled_qty"), 0.0)
                     share = (local_qty / aggregate_qty) if aggregate_qty > 0 and local_qty > 0 else 0.0
                     trade["unrealized_pnl_usdt"] = aggregate_unrealized * share if share > 0 else 0.0
-                    trade["funding_usdt"] = aggregate_fee * share if share > 0 else 0.0
+                    trade["funding_usdt"] = aggregate_funding * share if share > 0 else 0.0
                     continue
 
                 closed = self._match_history_position(history, trade)
@@ -729,6 +794,8 @@ class DemoExecutionEngine:
                     event = self._finalize_trade(trade, closed, orders)
                     if event:
                         newly_closed.append(event)
+                elif trade.get("status") == "OPEN":
+                    reconciliation_warnings.append(str(trade.get("execution_id")) + ": missing exchange position/history")
 
             with self.lock:
                 self.data["last_sync_ts"] = now
@@ -791,6 +858,10 @@ class DemoExecutionEngine:
             oid = str(order.get("clientOid") or "")
             if not oid.startswith("DTDEMO-") or oid in known:
                 continue
+            if oid.startswith("DTDEMO-CLOSE-") or "close" in str(order.get("tradeSide") or "").lower() or str(order.get("reduceOnly") or "").upper() in {"YES", "TRUE"}:
+                continue
+            if str(order.get("orderStatus") or "").lower() in {"cancelled", "canceled", "rejected"} and self._num(order.get("cumExecQty")) <= 0:
+                continue
             side = str(order.get("side") or "").lower()
             direction = "LONG" if side == "buy" else "SHORT" if side == "sell" else ""
             status = str(order.get("orderStatus") or "").lower()
@@ -819,7 +890,7 @@ class DemoExecutionEngine:
                 "fees_usdt": 0.0,
                 "funding_usdt": 0.0,
                 "risk_pct": self.risk_pct,
-                "planned_risk_usdt": 0.0,
+                "planned_risk_usdt": abs(self._num(order.get("avgPrice")) - self._num(order.get("stopLoss"))) * self._num(order.get("cumExecQty")) if self._num(order.get("stopLoss")) > 0 else 0.0,
                 "close_reason": "",
                 "signal_snapshot": {"id": oid, "setup": "BITGET DEMO", "direction": direction, "entry": self._num(order.get("avgPrice") or order.get("price")), "stop": self._num(order.get("stopLoss")), "target2": self._num(order.get("takeProfit")), "rr": 0.0, "evidence": {}},
             }
@@ -845,13 +916,17 @@ class DemoExecutionEngine:
             hold = self._direction_from_position(row)
             if hold and hold != direction:
                 continue
-            ctime = self._num(row.get("ctime") or row.get("openTime"), 0)
-            if opened and ctime and abs(ctime - opened) > 12 * 60 * 60 * 1000:
+            ctime = self._num(row.get("ctime") or row.get("createdTime") or row.get("openTime"), 0)
+            closed = self._num(row.get("utime") or row.get("updatedTime"), 0)
+            if opened and ctime and opened < ctime - 5000:
+                continue
+            if opened and closed and opened > closed:
                 continue
             candidates.append(row)
         if not candidates:
             return None
-        candidates.sort(key=lambda r: self._num(r.get("utime") or r.get("ctime"), 0), reverse=True)
+        # Earliest containing lifecycle, never the newest unrelated position.
+        candidates.sort(key=lambda r: self._num(r.get("utime") or r.get("updatedTime") or r.get("ctime"), 0))
         return candidates[0]
 
     def _finalize_trade(self, trade: dict[str, Any], closed: dict[str, Any], orders: list[dict[str, Any]]) -> dict[str, Any] | None:
@@ -971,7 +1046,8 @@ class DemoExecutionEngine:
     @staticmethod
     def _format_qty(value: float, config: dict[str, Any]) -> str:
         places = int(DemoExecutionEngine._num(config.get("volumePlace"), 6))
-        return f"{value:.{max(0, min(12, places))}f}".rstrip("0").rstrip(".") or "0"
+        text = f"{value:.{max(0, min(12, places))}f}"
+        return text.rstrip("0").rstrip(".") if "." in text else text
 
     @staticmethod
     def _price_step(config: dict[str, Any]) -> Decimal:
@@ -1033,7 +1109,8 @@ class DemoExecutionEngine:
         normalized = (decimal_value / step).to_integral_value(rounding=rounding) * step
         places = max(0, -step.as_tuple().exponent)
         quantized = normalized.quantize(step)
-        return format(quantized, f".{places}f").rstrip("0").rstrip(".")
+        text = format(quantized, f".{places}f")
+        return text.rstrip("0").rstrip(".") if "." in text else text
 
     def history(self, limit: int = 100) -> list[dict[str, Any]]:
         with self.lock:
@@ -1068,6 +1145,10 @@ class DemoExecutionEngine:
             "daily_cap": self.max_daily,
             "risk_pct": self.risk_pct,
             "max_notional_usdt": self.max_notional,
+            "execution_policy": "ONE_POSITION_FEE_ADJUSTED",
+            "max_daily_loss_pct": float(os.getenv("BITGET_DEMO_MAX_DAILY_LOSS_PCT", "1.0")),
+            "consecutive_loss_pause": 2,
+            "min_net_rr": float(os.getenv("BITGET_DEMO_MIN_NET_RR", "1.5")),
             "last_sync_ts": self.data.get("last_sync_ts", 0),
             "client_status": self.data.get("client_status") or {},
         }

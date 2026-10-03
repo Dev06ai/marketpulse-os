@@ -149,3 +149,16 @@ def test_public_market_ticker_uses_uta_market_endpoint(monkeypatch):
     assert seen["params"]["category"] == "USDT-FUTURES"
     assert seen["params"]["symbol"] == "BTCUSDT"
     assert seen["private"] is False
+
+
+def test_uta_position_fields_are_normalized_without_losing_originals():
+    row = BitgetDemoClient._normalize_position(dict(posSide='long', avgPrice='100000',
+        unrealisedPnl='-7', createdTime='10000', updatedTime='20000',
+        closePriceAvg='99500', cumRealisedPnl='-2.5', openFeeTotal='-.3', closeFeeTotal='-.3'))
+    assert row['holdSide'] == 'long'
+    assert row['openPriceAvg'] == '100000'
+    assert row['unrealizedPL'] == '-7'
+    assert row['ctime'] == '10000' and row['utime'] == '20000'
+    assert row['closeAvgPrice'] == '99500' and row['pnl'] == '-2.5'
+    assert row['openFee'] == '-.3' and row['closeFee'] == '-.3'
+    assert row['avgPrice'] == '100000'

@@ -718,27 +718,13 @@ async def risk(
 
 @app.get("/backtest/recent")
 async def backtest_recent(lookback: int = 240):
-    c15 = [c for c in state.candles_15 if c.confirmed][-max(60, min(int(lookback), 600)):]
-    c60 = [c for c in state.candles_60 if c.confirmed]
-    if len(c15) < 40:
-        return {"ready": False, "reason": f"Need 40 confirmed 15m candles; have {len(c15)}."}
-    report = run_walk_forward(c15, c60)
-    wins = sum(t.result_r for t in report.trades if t.result_r > 0)
-    losses = abs(sum(t.result_r for t in report.trades if t.result_r < 0))
-    profit_factor = (wins / losses) if losses else None
-    expectancy = report.total_r / len(report.trades) if report.trades else 0.0
+    # The live strategy requires historical trade/book/OI snapshots and 5m/4h
+    # context. A candle-only replay cannot validate this execution strategy.
     return {
-        "ready": True,
-        "trades": [t.__dict__ for t in report.trades[-50:]],
-        "stats": {
-            "trades": len(report.trades),
-            "total_r": round(report.total_r, 3),
-            "win_rate_pct": round(report.win_rate, 2),
-            "max_drawdown_r": round(report.max_drawdown_r, 3),
-            "profit_factor": round(profit_factor, 3) if profit_factor is not None else None,
-            "expectancy_r": round(expectancy, 4),
-        },
-        "manual_execution_only": True,
+        "ready": False,
+        "profitability_validated": False,
+        "reason": "Candle-only replay cannot validate the live order-flow strategy. Historical synchronized market snapshots and fee/slippage-aware execution replay are required.",
+        "validation_source": "BITGET_DEMO_FORWARD_TEST",
     }
 
 

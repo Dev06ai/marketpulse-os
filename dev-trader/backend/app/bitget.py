@@ -198,15 +198,35 @@ class BitgetDemoClient:
                 {"category": self.product_type, "symbol": symbol},
             )
         )
-        return rows[0] if rows else {}
+        row = dict(rows[0]) if rows else {}
+        for old, new in {"volumePlace": "quantityPrecision", "pricePlace": "pricePrecision", "minTradeNum": "minOrderQty"}.items():
+            if new in row:
+                row[old] = row[new]
+        return row
+
+    @staticmethod
+    def _normalize_position(row: dict[str, Any]) -> dict[str, Any]:
+        """Map UTA v3 fields at the boundary; retain the exchange originals."""
+        result = dict(row)
+        aliases = {
+            "holdSide": "posSide", "openPriceAvg": "avgPrice",
+            "openAvgPrice": "openPriceAvg", "closeAvgPrice": "closePriceAvg",
+            "unrealizedPL": "unrealisedPnl", "pnl": "cumRealisedPnl",
+            "openFee": "openFeeTotal", "closeFee": "closeFeeTotal",
+            "ctime": "createdTime", "utime": "updatedTime",
+        }
+        for old, new in aliases.items():
+            if new in result:
+                result[old] = result[new]
+        return result
 
     def positions(self, symbol: str = "BTCUSDT") -> list[dict[str, Any]]:
-        return self._list(
+        return [self._normalize_position(row) for row in self._list(
             self._get(
                 "/api/v3/position/current-position",
                 {"category": self.product_type, "symbol": symbol},
             )
-        )
+        )]
 
     def position_history(
         self,
@@ -215,7 +235,7 @@ class BitgetDemoClient:
         end_ms: int | None = None,
         limit: int = 100,
     ) -> list[dict[str, Any]]:
-        return self._list(
+        return [self._normalize_position(row) for row in self._list(
             self._get(
                 "/api/v3/position/history-position",
                 {
@@ -226,7 +246,7 @@ class BitgetDemoClient:
                     "limit": max(1, min(int(limit), 100)),
                 },
             )
-        )
+        )]
 
     def orders_history(
         self,

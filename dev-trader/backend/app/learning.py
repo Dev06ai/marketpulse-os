@@ -234,6 +234,23 @@ class AdaptiveLearning:
             if not trade:
                 return {"what_worked": [], "do_next_time": [], "avoid_next_time": []}
 
+            # Reconciliation may deliver an outcome repeatedly, or replace a
+            # chart-based estimate with an actual exchange result. Replace the
+            # previous contribution instead of learning the same trade twice.
+            previous = trade.get("resolution_accounting")
+            if previous:
+                for bucket in [self.data["profiles"].get(previous["profile_key"])] + [self.data["conditions"].get(tag) for tag in previous["tags"]]:
+                    if bucket is None:
+                        continue
+                    bucket["trades"] -= 1
+                    bucket["wins"] -= int(previous["result_r"] > 0)
+                    bucket["losses"] -= int(previous["result_r"] < 0)
+                    bucket["total_r"] -= previous["result_r"]
+                old_profile = self.data["profiles"].get(previous["profile_key"])
+                if old_profile is not None:
+                    old_profile["tp1_hits"] -= int(previous["tp1_hit"])
+                self.data["lessons"] = [row for row in self.data["lessons"] if row.get("signal_id") != sid]
+
             realized_r = float(result_r)
             win = realized_r > 0
             loss = realized_r < 0
@@ -263,6 +280,11 @@ class AdaptiveLearning:
                     s["wins"] += 1
                 elif loss:
                     s["losses"] += 1
+
+            trade["resolution_accounting"] = {
+                "profile_key": key, "tags": self._tags(signal),
+                "result_r": realized_r, "tp1_hit": bool(trade.get("tp1_hit")),
+            }
 
             ctx = self.context(signal)
             worked = [x["tag"] for x in ctx["favorable_conditions"]]

@@ -90,3 +90,19 @@ def test_profitable_manual_close_is_learned_as_win(tmp_path):
     assert lesson["outcome"] == "CLOSED"
     assert learner.summary()["wins"] == 1
     assert learner.summary()["losses"] == 0
+
+
+def test_repeated_and_corrected_outcomes_do_not_double_count(tmp_path):
+    learner = AdaptiveLearning()
+    learner.path = tmp_path / 'learning.json'
+    learner.data = {'version': 1, 'trades': [], 'profiles': {}, 'conditions': {}, 'lessons': []}
+    signal = base_signal()
+    learner.resolve(signal, 'TP2_REACHED', 3)
+    learner.resolve(signal, 'TP2_REACHED', 3)
+    assert learner.summary()['trades_learned'] == 1
+    learner.resolve(signal, 'CLOSED', -1.2)
+    assert learner.summary()['trades_learned'] == 1
+    assert learner.summary()['wins'] == 0
+    assert learner.summary()['losses'] == 1
+    assert learner.context(signal)['avg_r'] == -1.2
+    assert len(learner.data['lessons']) == 1

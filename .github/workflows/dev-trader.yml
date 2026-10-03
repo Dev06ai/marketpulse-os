@@ -80,7 +80,7 @@ jobs:
     concurrency:
       group: dev-trader-release
       cancel-in-progress: false
-    needs: android
+    needs: [android, backend]
     if: needs.android.outputs.android_changed == 'true'
     runs-on: ubuntu-latest
     steps:

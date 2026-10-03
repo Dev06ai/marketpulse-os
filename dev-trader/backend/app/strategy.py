@@ -890,9 +890,9 @@ class StrategyEngine:
         # Early momentum is specifically allowed to front-run higher-timeframe
         # confirmation. It still cannot fight a hard 15m structure break.
         if is_early_momentum:
-            if direction == "LONG" and f.trend_15 == "DOWN" and f.market_structure == "BEARISH":
+            if direction == "LONG" and f.trend_15 == "DOWN":
                 reasons.append("5m momentum conflicts with established 15m bearish structure")
-            if direction == "SHORT" and f.trend_15 == "UP" and f.market_structure == "BULLISH":
+            if direction == "SHORT" and f.trend_15 == "UP":
                 reasons.append("5m momentum conflicts with established 15m bullish structure")
 
         # Never enter a continuation setup against a strong flow divergence.
@@ -1635,7 +1635,9 @@ class StrategyEngine:
             score >= 0.70
             and move_atr >= 1.35
             and (bullish_break or bearish_break)
-            and (volume_ratio >= 1.25 or flow_confirmation)
+            # Order book alone must not turn a weak-volume move into a trade.
+            and volume_ratio >= 1.0
+            and flow_confirmation
         ) else ("ARMED" if score >= 0.45 else "WATCH")
         return {
             "status": status,
