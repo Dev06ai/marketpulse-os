@@ -166,7 +166,7 @@ class MarketChartView @JvmOverloads constructor(
 
         val left = dp(10f)
         val right = width - dp(60f)
-        val top = dp(44f)
+        val top = dp(if (height < dp(190f)) 32f else 44f)
         val bottom = height - dp(24f)
         val priceBottom = top + (bottom - top) * .76f
         val volumeTop = priceBottom + dp(4f)
@@ -279,14 +279,18 @@ class MarketChartView @JvmOverloads constructor(
             if (value in low..high) {
                 val y = mapY(value, low, high, top, priceBottom)
                 canvas.drawLine(left, y, right, y, emaPaint)
-                canvas.drawText("EMA 50", right - dp(44f), y - dp(4f), labelPaint)
+                if (priceBottom - top >= dp(120f)) canvas.drawText("EMA 50", right - dp(44f), y - dp(4f), labelPaint)
             }
         }
 
         signal?.let { s ->
-            drawLevel(canvas, left, right, mapY(s.optDouble("entry"), low, high, top, priceBottom), "ENTRY")
-            drawLevel(canvas, left, right, mapY(s.optDouble("stop"), low, high, top, priceBottom), "SL")
-            drawLevel(canvas, left, right, mapY(s.optDouble("target2"), low, high, top, priceBottom), "TP")
+            listOf("entry" to "ENTRY", "stop" to "SL", "target2" to "TP").forEach { (key, label) ->
+                val value = s.optDouble(key, Double.NaN)
+                if (value.isFinite() && value in low..high) {
+                    val text = if (key == "entry" && priceBottom - top < dp(120f)) "" else label
+                    drawLevel(canvas, left, right, mapY(value, low, high, top, priceBottom), text)
+                }
+            }
         }
 
         if (!livePrice.isNaN() && visibleLive) {
@@ -302,7 +306,7 @@ class MarketChartView @JvmOverloads constructor(
 
     private fun drawHeader(canvas: Canvas, left: Float, top: Float) {
         canvas.drawText("PRICE  •  $timeframe", left, dp(17f), strongLabelPaint)
-        canvas.drawText("BB(20,2)  •  EMA 50  •  VOL", left, dp(32f), axisLabelPaint)
+        if (top > dp(40f)) canvas.drawText("BB(20,2)  •  EMA 50  •  VOL", left, dp(32f), axisLabelPaint)
 
         val chipWidth = dp(54f)
         val chipLeft = width - chipWidth - dp(10f)
@@ -315,8 +319,9 @@ class MarketChartView @JvmOverloads constructor(
     }
 
     private fun drawGrid(canvas: Canvas, left: Float, top: Float, right: Float, bottom: Float) {
-        for (i in 0..5) {
-            val y = top + (bottom - top) * i / 5f
+        val ticks = ((bottom - top) / dp(28f)).toInt().coerceIn(2, 5)
+        for (i in 0..ticks) {
+            val y = top + (bottom - top) * i / ticks
             canvas.drawLine(left, y, right, y, gridPaint)
         }
         for (i in 0..5) {
@@ -335,13 +340,15 @@ class MarketChartView @JvmOverloads constructor(
         high: Double
     ) {
         canvas.drawLine(right, top, right, bottom, axisPaint)
-        for (i in 0..5) {
-            val y = top + (priceBottom - top) * i / 5f
-            val value = high - (high - low) * i / 5.0
+        val ticks = ((priceBottom - top) / dp(28f)).toInt().coerceIn(2, 5)
+        val liveY = if (livePrice.isFinite() && livePrice in low..high) mapY(livePrice, low, high, top, priceBottom) else Float.NaN
+        for (i in 0..ticks) {
+            val y = top + (priceBottom - top) * i / ticks
+            if (liveY.isFinite() && abs(y - liveY) < dp(14f)) continue
+            val value = high - (high - low) * i / ticks
             val label = compactPrice(value)
             canvas.drawText(label, right + dp(5f), y + dp(3.5f), axisLabelPaint)
         }
-        canvas.drawText("VOL", dp(10f), bottom + dp(16f), axisLabelPaint)
     }
 
     private fun drawTimeAxis(
@@ -360,7 +367,9 @@ class MarketChartView @JvmOverloads constructor(
             val x = left + ((idx - start) + 0.5f) * step
             val ts = c.optLong("start", 0L)
             val label = formatAxisTime(ts)
-            canvas.drawText(label, x - dp(16f), bottom + dp(12f), axisLabelPaint)
+            val labelWidth = axisLabelPaint.measureText(label)
+            val labelX = (x - labelWidth / 2f).coerceIn(left, max(left, right - labelWidth))
+            canvas.drawText(label, labelX, bottom + dp(14f), axisLabelPaint)
         }
     }
 

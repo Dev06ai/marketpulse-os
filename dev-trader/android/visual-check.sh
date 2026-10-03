@@ -58,6 +58,10 @@ for path in Path('ui-check').glob('*.xml'):
     assert any(n.get('text') == headings[workspace] for n in nodes), path
     nav = [n for n in nodes if n.get('content-desc', '').startswith('Workspace ')]
     assert len(nav) == 3, path
+    if workspace == 0:
+        chart = next(n for n in nodes if n.get('content-desc') == 'Interactive price chart')
+        _, chart_top, _, chart_bottom = map(int, re.findall(r'\d+', chart.get('bounds')))
+        assert chart_bottom-chart_top >= 280, (path, 'Chart is too compressed', chart.attrib)
     height = 1280 if path.stem.startswith('compact') else 2400
     width = 720 if path.stem.startswith('compact') else 1080
     for node in nav:

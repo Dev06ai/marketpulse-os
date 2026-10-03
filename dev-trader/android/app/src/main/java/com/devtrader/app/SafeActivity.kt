@@ -1,4 +1,4 @@
-// Build 96: responsive Trade / Positions / Insights workspaces.
+// Build 97: responsive Trade / Positions / Insights workspaces.
 // Build 83: show Bitget Demo funding readiness and demo execution state.
 package com.devtrader.app
 
@@ -207,7 +207,7 @@ class SafeActivity : Activity() {
             renderState(preview, requestChart = false)
             val candles = preview.getJSONObject("chart").getJSONArray("candles")
             chart.setData(candles, preview.optJSONObject("signal"), calculateEma(candles, 50), preview.getDouble("last_price"))
-            check.text = "Build 96  •  Visual verification"
+            check.text = "Build 97  •  Visual verification"
             selectWorkspace(intent.getIntExtra("visual_workspace", 0).coerceIn(0, 2))
             return
         }
@@ -263,6 +263,7 @@ class SafeActivity : Activity() {
     }
 
     private fun buildUi() {
+        val compactViewport = resources.configuration.screenHeightDp < 760
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(Color.rgb(10, 11, 15))
@@ -307,19 +308,19 @@ class SafeActivity : Activity() {
                 refreshTimeframeButtons(tfRow)
                 requestChartIfNeeded(force = true)
             }
-            tfRow.addView(button, LinearLayout.LayoutParams(0, dp(40), 1f).apply { leftMargin = dp(2); rightMargin = dp(2) })
+            tfRow.addView(button, LinearLayout.LayoutParams(0, dp(if (compactViewport) 36 else 40), 1f).apply { leftMargin = dp(2); rightMargin = dp(2) })
         }
         timeframeButtonRow = tfRow
         tradePage.addView(tfRow, margins(bottom = 6))
         chart = MarketChartView(this).apply { minimumHeight = 0; contentDescription = "Interactive price chart" }
         tradePage.addView(chart, LinearLayout.LayoutParams(-1, 0, 1f).apply { bottomMargin = dp(8) })
-        val setup = premiumCard("DECISION CENTER", "NO TRADE  •  SCANNING\nWaiting for verified market data.", 13f)
+        val setup = premiumCard("DECISION CENTER", "NO TRADE  •  SCANNING\nWaiting for verified market data.", if (compactViewport) 11.5f else 13f)
         signal = setup.second
         signal.maxLines = 5
         signal.ellipsize = android.text.TextUtils.TruncateAt.END
         setup.first.setOnClickListener { showTradeDetails() }
         setup.first.contentDescription = "Open complete trade setup"
-        tradePage.addView(setup.first, LinearLayout.LayoutParams(-1, dp(132)).apply { bottomMargin = dp(8) })
+        tradePage.addView(setup.first, LinearLayout.LayoutParams(-1, dp(if (compactViewport) 110 else 132)).apply { bottomMargin = dp(8) })
         val tradeTools = LinearLayout(this)
         val details = compactPillButton("SETUP DETAILS")
         details.setOnClickListener { showTradeDetails() }
@@ -335,7 +336,7 @@ class SafeActivity : Activity() {
         positionSummary = overview.second
         positionsPage.addView(overview.first, margins(bottom = 10))
         curve = PerformanceCurveView(this)
-        positionsPage.addView(curve, LinearLayout.LayoutParams(-1, dp(130)).apply { bottomMargin = dp(10) })
+        positionsPage.addView(curve, LinearLayout.LayoutParams(-1, dp(if (compactViewport) 90 else 130)).apply { bottomMargin = dp(10) })
         val ledgerCard = compactCard("ACCOUNTING & RISK", "Checking fills and exposure…", 12f)
         ledgerView = ledgerCard.value
         positionsPage.addView(ledgerCard.container, margins(bottom = 10))
@@ -360,7 +361,7 @@ class SafeActivity : Activity() {
         val feed = compactCard("CONNECTION", "BITGET  •  CONNECTING", 11.5f)
         integrity = feed.value
         insightsPage.addView(feed.container, margins(bottom = 10))
-        val sys = compactCard("SYSTEM", "Build 96  •  Checking…", 11.5f)
+        val sys = compactCard("SYSTEM", "Build 97  •  Checking…", 11.5f)
         check = sys.value
         insightsPage.addView(sys.container, margins(bottom = 10))
         val tools = LinearLayout(this)
@@ -490,9 +491,10 @@ class SafeActivity : Activity() {
     )
 
     private fun heroCard(): HeroRefs {
+        val compactViewport = resources.configuration.screenHeightDp < 760
         val box = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(14), dp(10), dp(14), dp(10))
+            setPadding(dp(14), dp(if (compactViewport) 8 else 10), dp(14), dp(if (compactViewport) 8 else 10))
             background = gradient(
                 intArrayOf(Color.rgb(24, 26, 33), Color.rgb(12, 14, 19)),
                 GradientDrawable.Orientation.TL_BR
@@ -507,9 +509,9 @@ class SafeActivity : Activity() {
             gravity = Gravity.CENTER_VERTICAL
         }
         top.addView(label("BTCUSDT", 10f, Color.rgb(152, 158, 171), 0.08f),
-            LinearLayout.LayoutParams(0, dp(22), 1f))
+            LinearLayout.LayoutParams(0, dp(if (compactViewport) 18 else 22), 1f))
         val livePill = label("USDT", 10f, Color.rgb(54, 211, 153), 0.08f)
-        top.addView(livePill, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(22)))
+        top.addView(livePill, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(if (compactViewport) 18 else 22)))
         box.addView(top)
 
         val row = LinearLayout(this).apply {
@@ -518,12 +520,12 @@ class SafeActivity : Activity() {
         }
         val priceView = TextView(this).apply {
             text = priceBtcAccent("BTC  —")
-            textSize = 26f
+            textSize = if (compactViewport) 22f else 26f
             setTextColor(Color.WHITE)
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
             includeFontPadding = false
         }
-        row.addView(priceView, LinearLayout.LayoutParams(0, dp(38), 1f))
+        row.addView(priceView, LinearLayout.LayoutParams(0, dp(if (compactViewport) 32 else 38), 1f))
 
         val statusView = TextView(this).apply {
             text = "DATA CONNECTING"
@@ -1238,8 +1240,8 @@ class SafeActivity : Activity() {
         val longScore = storyObj?.optInt("long_score", 0) ?: 0
         val shortScore = storyObj?.optInt("short_score", 0) ?: 0
 
-        val mtf15 = wave15Obj?.optString("direction", "UNKNOWN") ?: "UNKNOWN"
-        val mtf1h = wave1hObj?.optString("direction", "UNKNOWN") ?: "UNKNOWN"
+        val mtf15 = wave15Obj?.optString("direction")?.takeUnless { it.isBlank() || it == "UNKNOWN" } ?: f?.optString("trend_15", "UNKNOWN") ?: "UNKNOWN"
+        val mtf1h = wave1hObj?.optString("direction")?.takeUnless { it.isBlank() || it == "UNKNOWN" } ?: f?.optString("trend_60", "UNKNOWN") ?: "UNKNOWN"
         val mtf4h = f?.optString("trend_240", "UNKNOWN") ?: "UNKNOWN"
         val regime = f?.optString("regime", "—") ?: "—"
         val structure = f?.optString("market_structure", "—") ?: "—"
