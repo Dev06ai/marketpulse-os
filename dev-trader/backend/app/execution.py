@@ -103,7 +103,7 @@ class DemoExecutionEngine:
 
     def _open_local_trade(self) -> dict[str, Any] | None:
         for row in self.data["trades"]:
-            if row.get("status") in {"ORDER_PENDING", "OPEN"}:
+            if row.get("status") in {"ORDER_PENDING", "OPEN", "RECONCILIATION_PENDING"}:
                 return row
         return None
 
@@ -741,6 +741,7 @@ class DemoExecutionEngine:
                         newly_closed.append(event)
                     continue
                 if current_created > 0 and self._num(trade.get("opened_ts")) < current_created - 5000:
+                    trade["status"] = "RECONCILIATION_PENDING"
                     trade["reconciliation_warning"] = "Trade predates current position; awaiting matching exchange history."
                     reconciliation_warnings.append(str(trade.get("execution_id")) + ": unmatched older lifecycle")
                     continue
@@ -797,8 +798,26 @@ class DemoExecutionEngine:
                     event = self._finalize_trade(trade, closed, orders)
                     if event:
                         newly_closed.append(event)
-                elif trade.get("status") == "OPEN":
+                elif trade.get("status") in {"OPEN", "RECONCILIATION_PENDING"}:
+                    trade["status"] = "RECONCILIATION_PENDING"
                     reconciliation_warnings.append(str(trade.get("execution_id")) + ": missing exchange position/history")
+
+            # Several older orders can share a continuously open Bitget side,
+            # with partial exits that do not produce a closed-position record.
+            # The remaining aggregate quantity cannot prove each entry is open.
+            for position in position_rows:
+                direction = self._direction_from_position(position)
+                side_entries = [row for row in self._local_demo_trades()
+                                if row.get("status") == "OPEN" and row.get("direction") == direction]
+                local_qty = sum(self._num(row.get("filled_qty")) for row in side_entries)
+                exchange_qty = self._num(position.get("total"))
+                if local_qty > exchange_qty + max(1e-8, exchange_qty * 1e-6):
+                    warning = f"{direction}: local entry quantity {local_qty:g} exceeds remaining exchange quantity {exchange_qty:g}; partial exits require fill attribution."
+                    reconciliation_warnings.append(warning)
+                    for row in side_entries:
+                        row["status"] = "RECONCILIATION_PENDING"
+                        row["reconciliation_warning"] = warning
+                        row["unrealized_pnl_usdt"] = None
 
             with self.lock:
                 self.data["last_sync_ts"] = now
@@ -946,7 +965,7 @@ class DemoExecutionEngine:
         # same-direction entries. Attribute that result proportionally by each
         # signal's actual filled quantity instead of copying the full PnL to
         # every local trade.
-        share = (local_qty / aggregate_qty) if aggregate_qty > 0 and local_qty > 0 else 1.0
+        share = min(1.0, local_qty / aggregate_qty) if aggregate_qty > 0 and local_qty > 0 else 1.0
         pnl = aggregate_pnl * share
         funding = aggregate_funding * share
         fees = aggregate_fees * share
@@ -1130,12 +1149,19 @@ class DemoExecutionEngine:
         gross_loss = abs(sum(self._num(r.get("net_profit_usdt")) for r in losses))
         total_net = sum(self._num(r.get("net_profit_usdt")) for r in closed)
         total_r = sum(self._num(r.get("result_r")) for r in closed)
+        exchange_positions = (self.data.get("client_status") or {}).get("open_positions") or []
+        unresolved = [r for r in rows if r.get("status") == "RECONCILIATION_PENDING"]
         return {
             "demo_enabled": self.enabled,
             "configured": self.ready,
             "ready": bool((self.data.get("client_status") or {}).get("ready", False)),
             "trades": len(closed),
-            "open_trades": len([r for r in rows if r.get("status") in {"OPEN", "ORDER_PENDING"}]),
+            "open_trades": len(exchange_positions) if unresolved else len([r for r in rows if r.get("status") in {"OPEN", "ORDER_PENDING"}]),
+            "exchange_open_positions": len(exchange_positions),
+            "unreconciled_entries": len(unresolved),
+            "unrealized_pnl_usdt": round(sum(self._num(p.get("unrealizedPL")) for p in exchange_positions), 6),
+            "accounting_complete": not unresolved and (self.data.get("client_status") or {}).get("history_reconciliation") == "HEALTHY",
+            "accounting_scope": "RECONCILED_CLOSED_ENTRIES",
             "wins": len(wins),
             "losses": len(losses),
             "win_rate": round(len(wins) / len(closed), 3) if closed else None,

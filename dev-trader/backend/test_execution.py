@@ -510,3 +510,23 @@ def test_recovered_exchange_entries_restore_daily_cap(monkeypatch, tmp_path):
     assert executor._today_trades() == 3
     allowed, reason = executor._signal_allowed(audit_signal())
     assert not allowed and 'daily execution cap' in reason
+
+
+def test_partial_aggregate_exits_are_not_reported_as_all_entries_open(monkeypatch, tmp_path):
+    executor = audit_executor(monkeypatch, tmp_path)
+    class PartialExitClient(MultiSignalClient):
+        def positions(self, symbol):
+            return [dict(holdSide='long', total='.001', unrealizedPL='-2')]
+    executor.client = PartialExitClient()
+    executor.data['trades'] = [dict(client_oid=f'DTDEMO-{i}', execution_id=f'DTDEMO-{i}',
+        direction='LONG', status='OPEN', filled_qty=.001, actual_fill_confirmed=True,
+        opened_ts=10000, entry_price=100000) for i in range(3)]
+    asyncio.run(executor.sync())
+    assert all(t['status'] == 'RECONCILIATION_PENDING' for t in executor.data['trades'])
+    summary = executor.summary()
+    assert summary['open_trades'] == 1
+    assert summary['unreconciled_entries'] == 3
+    assert summary['unrealized_pnl_usdt'] == -2
+    assert summary['accounting_complete'] is False
+    assert summary['client_status']['history_reconciliation'] == 'DEGRADED'
+    assert executor._open_local_trade() is not None
