@@ -6,11 +6,13 @@ import math
 import os
 import threading
 import time
+import hashlib
 from decimal import Decimal, ROUND_DOWN
 from pathlib import Path
 from typing import Any, Awaitable, Callable
 
 from .bitget import BitgetDemoClient, BitgetDemoError
+from .ledger import build_fill_ledger
 
 
 class DemoExecutionEngine:
@@ -30,15 +32,14 @@ class DemoExecutionEngine:
             raise ValueError("BITGET_DEMO_RISK_PCT must be finite and between 0 and 1 percent.")
         self.max_notional = float(os.getenv("BITGET_DEMO_MAX_NOTIONAL_USDT", "500"))
         self.max_daily = int(os.getenv("BITGET_DEMO_MAX_DAILY_TRADES", "3"))
-        # Multiple emitted signals may remain open together. A reversal is
-        # handled explicitly by the strategy/execution supervisor rather than
-        # automatically replacing every existing position.
+        # The feed does not force reversals: admission requires flat exposure.
         self.replace_position_on_signal = False
         self.smart_reversal_enabled = os.getenv("BITGET_DEMO_SMART_REVERSAL", "true").lower() == "true"
         self.sync_seconds = max(3.0, float(os.getenv("BITGET_EXECUTION_SYNC_SECONDS", "5")))
         self.path = Path(os.getenv("BITGET_EXECUTION_STATE_FILE", "/tmp/dev_trader_execution.json"))
         self.lock = threading.RLock()
         self._submission_lock = asyncio.Lock()
+        self._sync_lock = asyncio.Lock()
         self.data = {
             "version": 1,
             "trades": [],
@@ -103,7 +104,7 @@ class DemoExecutionEngine:
 
     def _open_local_trade(self) -> dict[str, Any] | None:
         for row in self.data["trades"]:
-            if row.get("status") in {"ORDER_PENDING", "OPEN", "RECONCILIATION_PENDING"}:
+            if row.get("status") in {"ORDER_PENDING", "OPEN", "RECONCILIATION_PENDING", "SUBMISSION_UNKNOWN"}:
                 return row
         return None
 
@@ -151,7 +152,10 @@ class DemoExecutionEngine:
             return rows[0]
         if isinstance(rows, dict):
             return rows
-        return {}
+        # The client already unwraps and normalizes the v3 instrument response.
+        if isinstance(result, dict) and result:
+            return result
+        raise BitgetDemoError("Bitget instrument rules are unavailable; position sizing is blocked.")
 
     async def _current_positions(self) -> list[dict[str, Any]]:
         return await asyncio.to_thread(self.client.positions, self.symbol)
@@ -164,7 +168,14 @@ class DemoExecutionEngine:
         balance = await asyncio.to_thread(self.client.available_balance, self.symbol)
         if balance <= 0:
             raise BitgetDemoError("Bitget Demo futures balance is 0 USDT. Add demo funds before autonomous execution can open a position.")
-        risk_usdt = balance * self.risk_pct / 100.0
+        account = self.data.get("account_metrics") or {}
+        equity = self._num(account.get("equity_usdt"))
+        balance = min(balance, equity) if equity > 0 else balance
+        # Scale risk down after an observed equity drawdown; never scale above
+        # the configured cap to recover losses.
+        peak = self._num(account.get("observed_peak_usdt"), equity)
+        risk_factor = 0.5 if peak > 0 and equity > 0 and equity < peak * 0.98 else 1.0
+        risk_usdt = balance * self.risk_pct * risk_factor / 100.0
         distance = abs(entry - stop)
         fee_rate = max(0.0, float(os.getenv("BITGET_DEMO_TAKER_FEE_RATE", "0.0006")))
         raw_qty = risk_usdt / (distance + (entry + stop) * fee_rate)
@@ -183,6 +194,8 @@ class DemoExecutionEngine:
         return qty, qty * (distance + (entry + stop) * fee_rate), config
 
     def _signal_allowed(self, signal: dict[str, Any]) -> tuple[bool, str]:
+        if self._sync_lock.locked():
+            return False, "Exchange reconciliation is in progress; wait for a verified snapshot."
         if not self.enabled:
             return False, "Demo execution disabled."
         if not self.ready:
@@ -194,6 +207,11 @@ class DemoExecutionEngine:
         ):
             return False, "This signal has already been submitted to Bitget Demo."
         self._rotate_day()
+        account = self.data.get("account_metrics") or {}
+        day_equity = self._num(account.get("utc_day_open_equity_usdt"))
+        equity = self._num(account.get("equity_usdt"))
+        if account.get("utc_day") == self._utc_day() and day_equity > 0 and 0 < equity <= day_equity * 0.99:
+            return False, "Observed account equity fell 1% today; entries paused until the next UTC day."
         if self._daily_count >= self.max_daily:
             return False, "Demo daily execution cap reached."
         day_start = int(time.time()) // 86400 * 86400000
@@ -225,6 +243,9 @@ class DemoExecutionEngine:
             return False, f"Confidence {confidence:.2f} is below demo execution threshold."
         if rr < min_rr:
             return False, f"R:R {rr:.2f} is below demo execution threshold."
+        learned = self.learning.decision_filter(signal) if hasattr(self.learning, "decision_filter") else {}
+        if learned.get("allow") is False:
+            return False, "Historical setup veto: " + str(learned.get("reason") or "negative observed edge")
         created = self._num(signal.get("created_ts"))
         if created and (int(time.time() * 1000) - created > 60000 or created > int(time.time() * 1000) + 5000):
             return False, "Signal timestamp is stale or invalid."
@@ -241,6 +262,15 @@ class DemoExecutionEngine:
 
         ticker = await asyncio.to_thread(self.client.market_ticker, self.symbol)
         exchange_price = self._num(ticker.get("lastPrice") or ticker.get("lastPr"))
+        bid = self._num(ticker.get("bid1Price") or ticker.get("bidPrice") or ticker.get("bidPr"))
+        ask = self._num(ticker.get("ask1Price") or ticker.get("askPrice") or ticker.get("askPr"))
+        if bid > 0 and ask > 0 and ask < bid:
+            raise BitgetDemoError("Bitget execution quote is crossed; wait for a valid order book.")
+        if bid > 0 and ask >= bid:
+            spread_bps = (ask - bid) / ((ask + bid) / 2) * 10000
+            if spread_bps > 4.0:
+                raise BitgetDemoError(f"Execution spread is too wide ({spread_bps:.2f} bps).")
+            exchange_price = ask if direction == "LONG" else bid
         if exchange_price <= 0:
             raise BitgetDemoError("Bitget execution ticker returned an invalid price.")
 
@@ -269,9 +299,16 @@ class DemoExecutionEngine:
     async def handle_signal(self, signal: dict[str, Any]) -> dict[str, Any]:
         # Concurrent tasks must not pass the same cap/duplicate check together.
         async with self._submission_lock:
-            return await self._handle_signal(signal)
+            result = await self._handle_signal(signal)
+            self.data["last_decision"] = {"signal_id": signal.get("id"), "direction": signal.get("direction"),
+                "status": "SUBMITTED" if result.get("ok") else "SKIPPED" if result.get("skipped") else "ERROR",
+                "reason": result.get("reason", "Exchange accepted the order; fill reconciliation is tracked separately."),
+                "ts": int(time.time() * 1000)}
+            self._save()
+            return result
 
     async def _handle_signal(self, signal: dict[str, Any]) -> dict[str, Any]:
+        submission_oid = ""
         # Sync first so a just-closed position is not mistaken for an active one.
         try:
             await self.sync()
@@ -282,10 +319,8 @@ class DemoExecutionEngine:
         if not allowed:
             return {"ok": False, "skipped": True, "reason": reason}
 
-        # Every emitted StrategyEngine signal is actionable. Existing
-        # same-direction trades stay open; a smart reversal, when warranted,
-        # is performed by manage_signal_transition() before this method opens
-        # the new signal.
+        # Strategy candidates still need exchange admission. Existing exposure
+        # must close and reconcile before any new entry is submitted.
         try:
             positions = await self._current_positions()
         except Exception as exc:
@@ -310,7 +345,10 @@ class DemoExecutionEngine:
             stop = float(self._format_price(stop, config, str(signal.get("direction")), "sl"))
             tp = float(self._format_price(tp, config, str(signal.get("direction")), "tp"))
             qty, risk_usdt, config = await self._risk_size(dict(signal, entry=reference_price, stop=stop))
-            client_oid = f"DTDEMO-{str(signal.get('id', 'signal'))[:24]}-{int(time.time() * 1000) % 100000000}"
+            # Bitget UTA permits at most 32 characters; use a deterministic ID
+            # for retry/recovery rather than truncating the setup unpredictably.
+            client_oid = "DTDEMO-" + hashlib.sha256(str(signal.get("id")).encode()).hexdigest()[:24]
+            submission_oid = client_oid
             result = await asyncio.to_thread(
                 self.client.place_market_order,
                 self.symbol,
@@ -393,27 +431,28 @@ class DemoExecutionEngine:
         except Exception as exc:
             now = int(time.time() * 1000)
             failed = {
-                "execution_id": f"DTDEMO-FAILED-{now}",
+                "execution_id": submission_oid or f"DTDEMO-FAILED-{now}",
                 "signal_id": signal.get("id"),
-                "client_oid": "",
+                "client_oid": submission_oid,
                 "symbol": self.symbol,
                 "direction": str(signal.get("direction") or "").upper(),
                 "setup": signal.get("setup"),
-                "status": "FAILED",
+                "status": "SUBMISSION_UNKNOWN" if submission_oid else "FAILED",
                 "opened_ts": now,
-                "closed_ts": now,
+                "closed_ts": 0 if submission_oid else now,
                 "error": str(exc),
+                "signal_snapshot": dict(signal),
             }
             with self.lock:
                 self.data["trades"].insert(0, failed)
                 self.data["trades"] = self.data["trades"][:500]
                 self.data["last_event"] = {
                     "key": f"EXECUTION_FAILED:{failed['execution_id']}",
-                    "type": "EXECUTION_FAILED",
+                    "type": "EXECUTION_RECONCILING" if submission_oid else "EXECUTION_FAILED",
                     "execution_id": failed["execution_id"],
                     "direction": failed["direction"],
                     "setup": failed["setup"],
-                    "status": "FAILED",
+                    "status": failed["status"],
                     "note": str(exc),
                     "ts": now,
                 }
@@ -622,12 +661,16 @@ class DemoExecutionEngine:
                     continue
 
                 if normalized_status in {"filled", "full_fill", "full_filled"}:
+                    if filled <= 0 or avg <= 0:
+                        trade["error"] = "Filled order is missing exchange quantity or average price; awaiting reconciliation."
+                        await asyncio.sleep(0.75)
+                        continue
                     # The exchange fill is the single source of truth for the
                     # executed entry. Keep the original signal entry separately
                     # as entry_plan so the UI never confuses a plan with a fill.
                     trade["status"] = "OPEN"
-                    trade["entry_price"] = avg if avg > 0 else self._num(trade.get("entry_price") or trade.get("entry_plan"))
-                    trade["filled_qty"] = filled if filled > 0 else self._num(trade.get("filled_qty") or trade.get("requested_qty"))
+                    trade["entry_price"] = avg
+                    trade["filled_qty"] = filled
                     trade["exit_price"] = 0.0
                     trade["closed_ts"] = 0
                     trade["close_reason"] = ""
@@ -680,6 +723,12 @@ class DemoExecutionEngine:
         return None
 
     async def sync(self) -> list[dict[str, Any]]:
+        if self._sync_lock.locked():
+            return []
+        async with self._sync_lock:
+            return await self._sync()
+
+    async def _sync(self) -> list[dict[str, Any]]:
         if not self.enabled or not self.ready:
             return []
         newly_closed: list[dict[str, Any]] = []
@@ -721,11 +770,36 @@ class DemoExecutionEngine:
                 reconciliation_warnings.append(f"orders_history: {exc}")
 
             self._merge_exchange_open_orders(orders)
+            if now - int(self.data.get("ledger_refresh_ts") or 0) >= 60000:
+                self.data["ledger_refresh_ts"] = now
+                try:
+                    if hasattr(self.client, "fills_history"):
+                        fills = await asyncio.to_thread(self.client.fills_history, history_start, now)
+                        self.data["fill_ledger"] = build_fill_ledger(fills.get("rows", []), orders, self.symbol,
+                            history_start, now, fills.get("complete", False))
+                    if hasattr(self.client, "account_metrics"):
+                        account = await asyncio.to_thread(self.client.account_metrics, self.symbol)
+                        prior = self.data.get("account_metrics") or {}
+                        equity = self._num(account.get("equity_usdt"))
+                        day = self._utc_day()
+                        if equity <= 0:
+                            raise BitgetDemoError("Bitget account equity is missing or invalid.")
+                        day_open = self._num(prior.get("utc_day_open_equity_usdt")) if prior.get("utc_day") == day else 0
+                        account.update({"observed_peak_usdt": max(equity, self._num(prior.get("observed_peak_usdt"))),
+                            "utc_day": day, "utc_day_open_equity_usdt": day_open or equity,
+                            "updated_ts": now})
+                        self.data["account_metrics"] = account
+                    self.data.pop("ledger_error", None)
+                except Exception as exc:
+                    self.data["ledger_error"] = str(exc)
             # Recovered exchange orders must consume the daily cap after a
             # restart even when the local file was erased by deployment.
             self._daily_count = self._count_today()
             for trade in self._local_demo_trades():
                 if trade.get("status") in {"FAILED", "CLOSED"}:
+                    continue
+                if trade.get("status") == "SUBMISSION_UNKNOWN":
+                    reconciliation_warnings.append(str(trade.get("execution_id")) + ": submission outcome unknown; awaiting order history")
                     continue
                 if trade.get("status") == "ORDER_PENDING":
                     await self._poll_fill(str(trade.get("execution_id")))
@@ -878,7 +952,15 @@ class DemoExecutionEngine:
         known = {str(t.get("client_oid")) for t in self.data["trades"] if t.get("client_oid")}
         for order in orders:
             oid = str(order.get("clientOid") or "")
-            if not oid.startswith("DTDEMO-") or oid in known:
+            if not oid.startswith("DTDEMO-"):
+                continue
+            if oid in known:
+                unknown = next((t for t in self.data["trades"] if t.get("client_oid") == oid and t.get("status") == "SUBMISSION_UNKNOWN"), None)
+                if unknown is not None:
+                    unknown.update({"order_id": str(order.get("orderId") or ""),
+                        "status": "ORDER_PENDING", "requested_qty": self._num(order.get("qty")),
+                        "entry_plan": self._num(order.get("avgPrice")),
+                        "stop_loss": self._num(order.get("stopLoss")), "take_profit": self._num(order.get("takeProfit"))})
                 continue
             if oid.startswith("DTDEMO-CLOSE-") or "close" in str(order.get("tradeSide") or "").lower() or str(order.get("reduceOnly") or "").upper() in {"YES", "TRUE"}:
                 continue
@@ -1150,7 +1232,7 @@ class DemoExecutionEngine:
         total_net = sum(self._num(r.get("net_profit_usdt")) for r in closed)
         total_r = sum(self._num(r.get("result_r")) for r in closed)
         exchange_positions = (self.data.get("client_status") or {}).get("open_positions") or []
-        unresolved = [r for r in rows if r.get("status") == "RECONCILIATION_PENDING"]
+        unresolved = [r for r in rows if r.get("status") in {"RECONCILIATION_PENDING", "SUBMISSION_UNKNOWN"}]
         return {
             "demo_enabled": self.enabled,
             "configured": self.ready,
@@ -1159,6 +1241,7 @@ class DemoExecutionEngine:
             "open_trades": len(exchange_positions) if unresolved else len([r for r in rows if r.get("status") in {"OPEN", "ORDER_PENDING"}]),
             "exchange_open_positions": len(exchange_positions),
             "unreconciled_entries": len(unresolved),
+            "unknown_submissions": len([r for r in unresolved if r.get("status") == "SUBMISSION_UNKNOWN"]),
             "unrealized_pnl_usdt": round(sum(self._num(p.get("unrealizedPL")) for p in exchange_positions), 6),
             "accounting_complete": not unresolved and (self.data.get("client_status") or {}).get("history_reconciliation") == "HEALTHY",
             "accounting_scope": "RECONCILED_CLOSED_ENTRIES",
@@ -1188,7 +1271,20 @@ class DemoExecutionEngine:
             "summary": self.summary(),
             "recent_trades": self.history(8),
             "last_event": self.data.get("last_event"),
+            "last_decision": self.data.get("last_decision"),
+            "account": self.data.get("account_metrics") or {},
+            "performance": self.performance(),
         }
+
+    def performance(self) -> dict[str, Any]:
+        closed = [r for r in self.history(500) if r.get("status") == "CLOSED"]
+        values = [self._num(r.get("net_profit_usdt")) for r in closed]
+        ledger = dict(self.data.get("fill_ledger") or {})
+        ledger["error"] = self.data.get("ledger_error")
+        return {"ledger": ledger, "account": self.data.get("account_metrics") or {},
+            "closed_sample_count": len(values), "expectancy_usdt": round(sum(values)/len(values), 6) if values else None,
+            "sample_status": "SMALL_SAMPLE" if len(values) < 30 else "OBSERVED_DEMO_SAMPLE",
+            "profitability_validated": False}
 
     async def run(self):
         if not self.enabled or not self.ready:

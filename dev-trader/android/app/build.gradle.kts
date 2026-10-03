@@ -9,8 +9,8 @@ android {
         applicationId = "com.devtrader.app"
         minSdk = 26
         targetSdk = 37
-        versionCode = (providers.gradleProperty("devTraderVersionCode").orNull ?: "94").toInt()
-        versionName = providers.gradleProperty("devTraderVersionName").orNull ?: "0.11.16"
+        versionCode = (providers.gradleProperty("devTraderVersionCode").orNull ?: "95").toInt()
+        versionName = providers.gradleProperty("devTraderVersionName").orNull ?: "0.12.0"
     }
     signingConfigs {
         create("devTraderRelease") {
@@ -31,6 +31,7 @@ android {
         debug { applicationIdSuffix = ".debug" }
     }
     packaging { resources.excludes += "/META-INF/{AL2.0,LGPL2.1}" }
+    buildFeatures { buildConfig = true }
 }
 dependencies {
     implementation("androidx.core:core-ktx:1.17.0")

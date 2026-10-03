@@ -4,6 +4,7 @@ import base64
 import hashlib
 import hmac
 import json
+import math
 import os
 import time
 import urllib.error
@@ -202,6 +203,9 @@ class BitgetDemoClient:
         for old, new in {"volumePlace": "quantityPrecision", "pricePlace": "pricePrecision", "minTradeNum": "minOrderQty"}.items():
             if new in row:
                 row[old] = row[new]
+        for old, new in {"sizeMultiplier": "quantityMultiplier", "priceEndStep": "priceMultiplier"}.items():
+            if new in row:
+                row[old] = row[new]
         return row
 
     @staticmethod
@@ -276,6 +280,39 @@ class BitgetDemoClient:
             )
         )
         return data if isinstance(data, dict) else {}
+
+    def fills_history(self, start_ms: int, end_ms: int, max_pages: int = 10) -> dict[str, Any]:
+        """Read a bounded, paginated 30-day window; never claim truncation is complete."""
+        rows, cursor, seen = [], None, set()
+        for _ in range(max_pages):
+            result = self._get("/api/v3/trade/fills", {
+                "category": self.product_type, "startTime": start_ms,
+                "endTime": end_ms, "limit": 100, "cursor": cursor,
+            })
+            page = self._list(result)
+            rows.extend(page)
+            data = self._data(result)
+            next_cursor = str(data.get("cursor") or "") if isinstance(data, dict) else ""
+            if len(page) < 100 or not next_cursor:
+                return {"rows": rows, "complete": True, "start_ts": start_ms, "end_ts": end_ms}
+            if next_cursor in seen:
+                break
+            seen.add(next_cursor)
+            cursor = next_cursor
+        return {"rows": rows, "complete": False, "start_ts": start_ms, "end_ts": end_ms}
+
+    def account_metrics(self, symbol: str = "BTCUSDT") -> dict[str, Any]:
+        data = self._data(self.account(symbol))
+        if not isinstance(data, dict):
+            return {}
+        asset = next((r for r in (data.get("assets") or []) if isinstance(r, dict)
+                      and str(r.get("coin")).upper() == self.margin_coin), {})
+        return {
+            "equity_usdt": self.numeric(data.get("usdtEquity"), None),
+            "balance_usdt": self.numeric(asset.get("balance"), None),
+            "available_balance_usdt": self.numeric(asset.get("available"), None),
+            "account_unrealized_usdt": self.numeric(data.get("usdtUnrealisedPnl"), None),
+        }
 
     def fills(self, symbol: str = "BTCUSDT", order_id: str | None = None, limit: int = 100) -> list[dict[str, Any]]:
         return self._list(
@@ -367,7 +404,8 @@ class BitgetDemoClient:
     @staticmethod
     def numeric(value: Any, default: float = 0.0) -> float:
         try:
-            return float(value)
+            number = float(value)
+            return number if math.isfinite(number) else default
         except (TypeError, ValueError):
             return default
 

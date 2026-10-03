@@ -84,6 +84,9 @@ class MarketChartView @JvmOverloads constructor(
     private var ema50: Double? = null
     private var timeframe = "15m"
     private var livePrice = Double.NaN
+    private var feedHealthy = false
+
+    fun setFeedHealthy(value: Boolean) { feedHealthy = value; invalidate() }
 
     private var followLive = true
     private var candleShift = 0f
@@ -116,7 +119,7 @@ class MarketChartView @JvmOverloads constructor(
         this.candles = candles
         this.signal = signal
         this.ema50 = ema50
-        if (!price.isNaN()) this.livePrice = price
+        if (price.isFinite()) this.livePrice = price
 
         val newCount = candles.length()
         if (followLive) {
@@ -133,7 +136,7 @@ class MarketChartView @JvmOverloads constructor(
     }
 
     fun setLivePrice(price: Double) {
-        if (price.isNaN()) return
+        if (!price.isFinite()) return
         livePrice = price
         if (followLive) verticalOffset = 0.0
         invalidate()
@@ -163,10 +166,10 @@ class MarketChartView @JvmOverloads constructor(
 
         val left = dp(10f)
         val right = width - dp(60f)
-        val top = dp(48f)
-        val priceBottom = height * 0.73f
-        val volumeTop = priceBottom + dp(18f)
-        val bottom = height - dp(28f)
+        val top = dp(44f)
+        val bottom = height - dp(24f)
+        val priceBottom = top + (bottom - top) * .76f
+        val volumeTop = priceBottom + dp(4f)
 
         drawHeader(canvas, left, top)
 
@@ -219,6 +222,7 @@ class MarketChartView @JvmOverloads constructor(
         val basePad = range * 0.075
         high += basePad
         low -= basePad
+        range = high - low
 
         val center = (high + low) / 2.0 + verticalOffset
         val zoomedRange = range / zoomY
@@ -305,8 +309,9 @@ class MarketChartView @JvmOverloads constructor(
         val chipTop = dp(8f)
         val rect = android.graphics.RectF(chipLeft, chipTop, width - dp(10f), chipTop + dp(24f))
         canvas.drawRoundRect(rect, dp(12f), dp(12f), liveChipPaint)
+        liveDotPaint.color = if (feedHealthy) Color.rgb(71, 191, 149) else Color.rgb(146, 151, 166)
         canvas.drawCircle(chipLeft + dp(11f), chipTop + dp(12f), dp(3.5f), liveDotPaint)
-        canvas.drawText("LIVE", chipLeft + dp(19f), chipTop + dp(16f), strongLabelPaint)
+        canvas.drawText(if (feedHealthy) "LIVE" else "WAIT", chipLeft + dp(19f), chipTop + dp(16f), strongLabelPaint)
     }
 
     private fun drawGrid(canvas: Canvas, left: Float, top: Float, right: Float, bottom: Float) {

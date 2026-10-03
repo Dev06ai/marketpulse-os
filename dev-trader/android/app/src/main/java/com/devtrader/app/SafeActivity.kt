@@ -1,5 +1,4 @@
-// Build 94 UI refinement: true edge-to-edge safe-area layout for status/navigation bars.
-// Release trigger: keep Android release pipeline aligned with the verified v0.11.16 safe-area build.
+// Build 95: responsive Trade / Positions / Insights workspaces.
 // Build 83: show Bitget Demo funding readiness and demo execution state.
 package com.devtrader.app
 
@@ -26,6 +25,7 @@ import android.text.InputType
 import android.text.SpannableString
 import android.text.style.ForegroundColorSpan
 import android.widget.Button
+import android.widget.FrameLayout
 import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ScrollView
@@ -67,7 +67,7 @@ class SafeActivity : Activity() {
             styled.setSpan(
                 ForegroundColorSpan(btcOrange),
                 index,
-                index + 3,
+                text.length,
                 SpannableString.SPAN_EXCLUSIVE_EXCLUSIVE
             )
         }
@@ -92,6 +92,15 @@ class SafeActivity : Activity() {
     private lateinit var journal: TextView
     private lateinit var tradeHistory: TextView
     private lateinit var replay: TextView
+    private lateinit var workspaceHost: FrameLayout
+    private val workspacePages = mutableListOf<LinearLayout>()
+    private val navigationButtons = mutableListOf<Button>()
+    private lateinit var positionSummary: TextView
+    private lateinit var ledgerView: TextView
+    private lateinit var decisionView: TextView
+    private lateinit var insightContext: TextView
+    private lateinit var curve: PerformanceCurveView
+    private var selectedWorkspace = 0
     private var fullTradeHistoryText = "No executed demo trades yet."
     private lateinit var chart: MarketChartView
     private lateinit var updateButton: Button
@@ -174,6 +183,8 @@ class SafeActivity : Activity() {
             .build()
     }
 
+    private var debugPreview = false
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         WindowCompat.setDecorFitsSystemWindows(window, false)
@@ -185,6 +196,21 @@ class SafeActivity : Activity() {
         }
         installCrashReporter()
         buildUi()
+        // The fixture exists only in src/debug/assets. Release builds cannot
+        // enter this path or package synthetic account/market data.
+        debugPreview = BuildConfig.DEBUG && intent.getBooleanExtra("visual_preview", false)
+        if (debugPreview) {
+            val preview = JSONObject(assets.open("ui_preview.json").bufferedReader().use { it.readText() })
+            val now = System.currentTimeMillis()
+            preview.put("received_ts", now).put("last_market_update_ts", now)
+            latestRoot = preview
+            renderState(preview, requestChart = false)
+            val candles = preview.getJSONObject("chart").getJSONArray("candles")
+            chart.setData(candles, preview.optJSONObject("signal"), calculateEma(candles, 50), preview.getDouble("last_price"))
+            check.text = "Build 95  •  Visual verification"
+            selectWorkspace(intent.getIntExtra("visual_workspace", 0).coerceIn(0, 2))
+            return
+        }
         registerNetworkCallback()
         ensureChannel()
         startBackgroundAlerts()
@@ -232,188 +258,161 @@ class SafeActivity : Activity() {
         }
         colorAll("LONG", Color.rgb(54, 211, 153))
         colorAll("SHORT", Color.rgb(255, 82, 105))
-        colorAll("NO CONFIRMED TRADE YET", Color.rgb(167, 139, 250))
+        colorAll("NO TRADE", Color.rgb(167, 139, 250))
         signal.text = styled
     }
 
     private fun buildUi() {
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(12), dp(8), dp(12), dp(8))
-            background = gradient(
-                intArrayOf(Color.rgb(7, 8, 11), Color.rgb(13, 15, 20), Color.rgb(7, 8, 11)),
-                GradientDrawable.Orientation.TL_BR
-            )
-            isFillViewportCompat()
+            setBackgroundColor(Color.rgb(10, 11, 15))
+            setPadding(dp(14), dp(8), dp(14), dp(8))
         }
-
         ViewCompat.setOnApplyWindowInsetsListener(root) { view, insets ->
-            // Android 15+/targetSdk 35+ can lay the app edge-to-edge. Apply the
-            // system-bar safe area exactly once so the header never sits beneath
-            // the clock/battery area and the action row never touches navigation.
-            val bars = insets.getInsets(
-                WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout()
-            )
-            val safeTop = maxOf(dp(8), bars.top + dp(6))
-            val safeBottom = maxOf(dp(10), bars.bottom + dp(8))
-            view.setPadding(dp(12), safeTop, dp(12), safeBottom)
+            val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
+            view.setPadding(dp(14), bars.top + dp(8), dp(14), bars.bottom + dp(8))
             insets
         }
         setContentView(root)
-
-        // Header
-        val header = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-        }
+        val header = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
         val brand = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        brand.addView(label("DEV TRADER", 18f, Color.WHITE, 0.04f))
-        brand.addView(label("BTCUSDT  •  PERPETUAL", 9f, Color.rgb(126, 132, 145), 0.08f), margins(top = 2))
-        header.addView(brand, LinearLayout.LayoutParams(0, dp(44), 1f))
-        alertsButton = compactPillButton("ALERTS")
+        brand.addView(label("DEV TRADER", 19f, Color.WHITE, 0.045f))
+        brand.addView(label("PERSONAL TRADING WORKSPACE", 8.5f, Color.rgb(136, 142, 161), 0.06f), margins(top = 4))
+        header.addView(brand, LinearLayout.LayoutParams(0, dp(48), 1f))
+        alertsButton = compactPillButton("ALERTS").apply { contentDescription = "Enable trade alerts" }
         alertsButton.setOnClickListener { safe { requestAlertPermission() } }
-        header.addView(alertsButton, LinearLayout.LayoutParams(dp(92), dp(40)).apply { rightMargin = dp(6) })
-        retryButton = compactPillButton("↻")
+        header.addView(alertsButton, LinearLayout.LayoutParams(dp(66), dp(44)).apply { rightMargin = dp(6) })
+        retryButton = compactPillButton("RETRY").apply { contentDescription = "Reconnect market data" }
         retryButton?.setOnClickListener { safe { forceReconnectFromUser() } }
-        header.addView(retryButton, LinearLayout.LayoutParams(dp(50), dp(40)))
-        root.addView(header, margins(bottom = 7))
+        header.addView(retryButton, LinearLayout.LayoutParams(dp(56), dp(44)))
+        root.addView(header, margins(bottom = 8))
 
-        // Hero market card
+        workspaceHost = FrameLayout(this)
+        root.addView(workspaceHost, LinearLayout.LayoutParams(-1, 0, 1f))
+        fun page(): LinearLayout = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            workspacePages.add(this)
+            workspaceHost.addView(this, FrameLayout.LayoutParams(-1, -1))
+        }
+        val tradePage = page()
         val hero = heroCard()
-        price = hero.price
-        oiView = hero.oi
-        status = hero.status
-        root.addView(hero.container, margins(bottom = 8))
-
-        // Price action
-        root.addView(sectionLabel("PRICE ACTION"), margins(bottom = 4))
-        chart = MarketChartView(this).apply {
-            minimumHeight = dp(280)
-            isClickable = false
-            isFocusable = false
-            setOnTouchListener { _, _ -> false }
-        }
-        root.addView(
-            chart,
-            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(280)).apply {
-                bottomMargin = dp(5)
-            }
-        )
-
-        // Timeframe selector
-        val tfRow = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-        }
+        price = hero.price; oiView = hero.oi; status = hero.status
+        tradePage.addView(hero.container, margins(bottom = 8))
+        val tfRow = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
         listOf("5m", "15m", "1h", "4h").forEach { tf ->
-            val b = compactPillButton(tf)
-            b.textSize = 11f
-            b.setOnClickListener {
+            val button = compactPillButton(tf).apply { contentDescription = "Chart $tf" }
+            button.setOnClickListener {
                 selectedTf = tf
                 chart.setTimeframe(tf)
                 refreshTimeframeButtons(tfRow)
                 requestChartIfNeeded(force = true)
-                bootstrap(true)
             }
-            tfRow.addView(b, LinearLayout.LayoutParams(0, dp(40), 1f).apply {
-                leftMargin = dp(2)
-                rightMargin = dp(2)
-            })
+            tfRow.addView(button, LinearLayout.LayoutParams(0, dp(40), 1f).apply { leftMargin = dp(2); rightMargin = dp(2) })
         }
         timeframeButtonRow = tfRow
-        root.addView(tfRow, margins(bottom = 7))
+        tradePage.addView(tfRow, margins(bottom = 6))
+        chart = MarketChartView(this).apply { minimumHeight = 0; contentDescription = "Interactive price chart" }
+        tradePage.addView(chart, LinearLayout.LayoutParams(-1, 0, 1f).apply { bottomMargin = dp(8) })
+        val setup = premiumCard("DECISION CENTER", "NO TRADE  •  SCANNING\nWaiting for verified market data.", 13f)
+        signal = setup.second
+        signal.maxLines = 5
+        signal.ellipsize = android.text.TextUtils.TruncateAt.END
+        setup.first.setOnClickListener { showTradeDetails() }
+        setup.first.contentDescription = "Open complete trade setup"
+        tradePage.addView(setup.first, LinearLayout.LayoutParams(-1, dp(132)).apply { bottomMargin = dp(8) })
+        val tradeTools = LinearLayout(this)
+        val details = compactPillButton("SETUP DETAILS")
+        details.setOnClickListener { showTradeDetails() }
+        tradeTools.addView(details, LinearLayout.LayoutParams(0, dp(44), 1f).apply { rightMargin = dp(6) })
+        val pnl = compactPillButton("P&L CALCULATOR")
+        pnl.setOnClickListener { safe { showPnlCalculator() } }
+        tradeTools.addView(pnl, LinearLayout.LayoutParams(0, dp(44), 1f))
+        tradePage.addView(tradeTools)
         refreshTimeframeButtons(tfRow)
 
-        // Trade setup hero
-        val setup = premiumCard("TRADE SETUP", "SCANNING  •  READY\nWaiting for the next qualified signal.", 13.5f)
-        signal = setup.second
-        signal.maxLines = 6
-        signal.ellipsize = android.text.TextUtils.TruncateAt.END
-        signal.textSize = 12.3f
-        signal.setLineSpacing(0f, 1.04f)
-        signal.setHorizontallyScrolling(false)
-        root.addView(setup.first, margins(bottom = 7))
+        val positionsPage = page()
+        val overview = premiumCard("DEMO PERFORMANCE", "Waiting for exchange accounting…", 18f)
+        positionSummary = overview.second
+        positionsPage.addView(overview.first, margins(bottom = 10))
+        curve = PerformanceCurveView(this)
+        positionsPage.addView(curve, LinearLayout.LayoutParams(-1, dp(130)).apply { bottomMargin = dp(10) })
+        val ledgerCard = compactCard("ACCOUNTING & RISK", "Checking fills and exposure…", 12f)
+        ledgerView = ledgerCard.value
+        positionsPage.addView(ledgerCard.container, margins(bottom = 10))
+        val exposureCard = scrollableCard("EXCHANGE POSITIONS", "No verified position data yet.", 13f, dp(120))
+        tradeHistory = exposureCard.value
+        positionsPage.addView(exposureCard.container, LinearLayout.LayoutParams(-1, 0, 1f).apply { bottomMargin = dp(10) })
+        val historyButton = compactPillButton("OPEN EXECUTION HISTORY")
+        historyButton.setOnClickListener { safe { loadTradeHistory(); showInfoDialog("Execution history", fullTradeHistoryText) } }
+        positionsPage.addView(historyButton, LinearLayout.LayoutParams(-1, dp(44)))
 
-        // Two compact information panels
-        val infoRow = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-        }
-
-        val story = compactCard("MARKET STORY", "BIAS —\n4H —  •  1H —  •  15m —", 10.5f)
-        features = story.value
-        features.maxLines = 3
-        features.ellipsize = android.text.TextUtils.TruncateAt.END
-        features.setLineSpacing(0f, 1.02f)
-        features.setHorizontallyScrolling(false)
-        infoRow.addView(story.container, LinearLayout.LayoutParams(0, dp(86), 1f).apply { rightMargin = dp(4) })
-
-        val execution = compactCard("EXECUTION", "Bitget Demo  •  READY\nOpen 0  •  Closed 0", 10.5f)
-        tradeHistory = execution.value
-        tradeHistory.maxLines = 3
-        tradeHistory.ellipsize = android.text.TextUtils.TruncateAt.END
-        tradeHistory.setLineSpacing(0f, 1.02f)
-        tradeHistory.setHorizontallyScrolling(false)
-        infoRow.addView(execution.container, LinearLayout.LayoutParams(0, dp(76), 1f).apply { leftMargin = dp(4) })
-        root.addView(infoRow, margins(bottom = 7))
-
-        // Feed/system strip
-        val statusRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        val feed = compactCard("DATA FEED", "Primary WS  •  CONNECTING", 10.2f)
+        val insightsPage = page()
+        val story = premiumCard("MARKET CONTEXT", "Building the market picture…", 13f)
+        features = story.second
+        features.maxLines = 5
+        insightsPage.addView(story.first, margins(bottom = 10))
+        val decisions = scrollableCard("ENTRY CHECKS", "Waiting for a qualified setup…", 12f, dp(150))
+        decisionView = decisions.value
+        insightsPage.addView(decisions.container, LinearLayout.LayoutParams(-1, 0, 1f).apply { bottomMargin = dp(10) })
+        val levels = compactCard("LEVELS & FLOW", "Loading confirmed context…", 12f)
+        insightContext = levels.value
+        insightsPage.addView(levels.container, margins(bottom = 10))
+        val feed = compactCard("CONNECTION", "BITGET  •  CONNECTING", 11.5f)
         integrity = feed.value
-        integrity.maxLines = 2
-        integrity.ellipsize = android.text.TextUtils.TruncateAt.END
-        statusRow.addView(feed.container, LinearLayout.LayoutParams(0, dp(58), 1f).apply { rightMargin = dp(4) })
-
-        val sys = compactCard("SYSTEM", "Ready", 10.2f)
+        insightsPage.addView(feed.container, margins(bottom = 10))
+        val sys = compactCard("SYSTEM", "Build 95  •  Checking…", 11.5f)
         check = sys.value
-        check.maxLines = 2
-        check.ellipsize = android.text.TextUtils.TruncateAt.END
-        statusRow.addView(sys.container, LinearLayout.LayoutParams(0, dp(58), 1f).apply { leftMargin = dp(4) })
-        root.addView(statusRow, margins(bottom = 7))
-
-        // Quick action bar: no page scrolling required.
-        val actions = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-        }
-
-        val pnl = compactPillButton("PNL")
-        pnl.setOnClickListener { safe { showPnlCalculator() } }
-        actions.addView(pnl, weightButton())
-
-        val journalButton = compactPillButton("JOURNAL")
-        journalButton.setOnClickListener { safe { loadJournal(); showInfoDialog("Trading Journal", journal.text.toString()) } }
-        actions.addView(journalButton, weightButton())
-
-        val historyButton = compactPillButton("HISTORY")
-        historyButton.setOnClickListener { safe { loadTradeHistory(); showInfoDialog("Bitget Demo History", fullTradeHistoryText) } }
-        actions.addView(historyButton, weightButton())
-
-        checkButton = compactPillButton("SYSTEM")
+        insightsPage.addView(sys.container, margins(bottom = 10))
+        val tools = LinearLayout(this)
+        checkButton = compactPillButton("SYSTEM CHECK")
         checkButton.setOnClickListener { safe { systemCheck() } }
-        actions.addView(checkButton, weightButton())
-
-        updateButton = compactPillButton("UPDATE").apply {
-            textSize = 11.2f
-            minHeight = dp(42)
-        }
+        tools.addView(checkButton, LinearLayout.LayoutParams(0, dp(44), 1f).apply { rightMargin = dp(6) })
+        updateButton = compactPillButton("UPDATE")
         updateButton.setOnClickListener { safe { checkUpdate() } }
-        actions.addView(updateButton, weightButton())
+        tools.addView(updateButton, LinearLayout.LayoutParams(0, dp(44), 1f))
+        insightsPage.addView(tools)
 
-        root.addView(actions, margins(bottom = 4))
+        val navigation = LinearLayout(this).apply { setPadding(0, dp(10), 0, 0) }
+        listOf("TRADE", "POSITIONS", "INSIGHTS").forEachIndexed { index, title ->
+            val button = compactPillButton(title).apply { contentDescription = "Workspace $title"; textSize = 11.5f }
+            button.setOnClickListener { selectWorkspace(index) }
+            navigationButtons.add(button)
+            navigation.addView(button, LinearLayout.LayoutParams(0, dp(48), 1f).apply { leftMargin = dp(3); rightMargin = dp(3) })
+        }
+        root.addView(navigation)
+        update = TextView(this); risk = TextView(this); journal = TextView(this); replay = TextView(this)
+        selectWorkspace(0)
+    }
 
-        // Keep these references initialized without adding extra tall cards.
-        update = TextView(this)
-        risk = TextView(this)
-        journal = TextView(this)
-        replay = TextView(this)
-        journal.visibility = View.GONE
-        risk.visibility = View.GONE
-        replay.visibility = View.GONE
+    private fun selectWorkspace(index: Int) {
+        selectedWorkspace = index
+        workspacePages.forEachIndexed { i, page -> page.visibility = if (i == index) View.VISIBLE else View.GONE }
+        navigationButtons.forEachIndexed { i, button ->
+            button.setTextColor(if (i == index) Color.WHITE else Color.rgb(138, 145, 162))
+            button.background = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,
+                if (i == index) intArrayOf(Color.rgb(68, 60, 118), Color.rgb(37, 64, 103))
+                else intArrayOf(Color.rgb(24, 27, 36), Color.rgb(20, 23, 31))).apply {
+                cornerRadius = dp(14).toFloat()
+                setStroke(dp(1), if (i == index) Color.rgb(121, 107, 198) else Color.rgb(46, 52, 67))
+            }
+        }
+        latestRoot?.let { renderWorkspace(it) }
+    }
 
-        // Initial state.
-        loadJournal()
-        loadTradeHistory()
+    private fun showTradeDetails() {
+        val s = latestRoot?.optJSONObject("signal")
+        if (s == null) {
+            showInfoDialog("Decision center", decisionView.text.toString())
+            return
+        }
+        val thesis = s.optJSONArray("thesis") ?: JSONArray()
+        val explanation = (0 until thesis.length()).joinToString("\n") { "• " + thesis.optString(it) }
+        showInfoDialog("Trade plan", "${s.optString("direction")}  •  ${s.optString("trade_style")}\n${s.optString("setup")}\n\n" +
+            "Planned entry  ${formatCompact(s.optDouble("entry"))}\nStop  ${formatCompact(s.optDouble("stop"))}\n" +
+            "Target 1  ${formatCompact(s.optDouble("target1"))}\nTarget 2  ${formatCompact(s.optDouble("target2"))}\n" +
+            "Evidence score  ${String.format(Locale.US, "%.0f", s.optDouble("confidence") * 100)}/100 (heuristic)\n\n" +
+            "Execution  ${s.optString("execution_status", "PENDING CHECK")}\n${s.optString("execution_reason")}\n\n" +
+            "Invalidation\n${s.optString("invalidation")}\n\n$explanation")
     }
 
     private fun LinearLayout.isFillViewportCompat() {
@@ -504,7 +503,7 @@ class SafeActivity : Activity() {
         }
         top.addView(label("BTCUSDT", 10f, Color.rgb(152, 158, 171), 0.08f),
             LinearLayout.LayoutParams(0, dp(22), 1f))
-        val livePill = label("●  LIVE", 9.5f, Color.rgb(54, 211, 153), 0.08f)
+        val livePill = label("USDT", 10f, Color.rgb(54, 211, 153), 0.08f)
         top.addView(livePill, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(22)))
         box.addView(top)
 
@@ -586,7 +585,7 @@ class SafeActivity : Activity() {
         }
         header.addView(label(title, 9f, Color.rgb(157, 149, 181), 0.12f),
             LinearLayout.LayoutParams(0, dp(18), 1f))
-        header.addView(label("AI SUPERVISOR", 8.5f, Color.rgb(167, 139, 250), 0.08f))
+        header.addView(label(if (title == "DECISION CENTER") "DETAILS  ›" else "DEMO", 8.5f, Color.rgb(167, 139, 250), 0.08f))
         box.addView(header)
 
         val value = TextView(this).apply {
@@ -672,7 +671,7 @@ class SafeActivity : Activity() {
             historyScroll,
             LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
-                scrollHeightPx
+                0, 1f
             ).apply {
                 topMargin = dp(8)
             }
@@ -999,6 +998,7 @@ class SafeActivity : Activity() {
         val upstream = root.optJSONObject("upstream")
         val source = upstream?.optString("source", "").orEmpty()
         val authoritativeFeedHealthy = health == "HEALTHY" && ws && source == "BITGET_WS" && freshMarket
+        chart.setFeedHealthy(authoritativeFeedHealthy)
         status.text = when {
             authoritativeFeedHealthy -> "LIVE"
             health == "DEGRADED" -> "DATA DEGRADED"
@@ -1247,6 +1247,88 @@ class SafeActivity : Activity() {
 
         chart.setLivePrice(priceValue)
         if (requestChart) requestChartIfNeeded()
+        renderWorkspace(root)
+    }
+
+    private fun formatClock(timestamp: Long): String = if (timestamp <= 0) "—" else
+        java.text.SimpleDateFormat("HH:mm:ss", Locale.US).format(java.util.Date(timestamp))
+
+    private fun renderWorkspace(root: JSONObject) {
+        fun money(value: Double, signed: Boolean = false): String =
+            if (!value.isFinite()) "—" else String.format(Locale.US, if (signed) "%+.2f" else "%,.2f", value)
+        val execution = root.optJSONObject("execution") ?: JSONObject()
+        val summary = execution.optJSONObject("summary") ?: JSONObject()
+        val performance = execution.optJSONObject("performance") ?: JSONObject()
+        val account = execution.optJSONObject("account") ?: JSONObject()
+        val ledger = performance.optJSONObject("ledger") ?: JSONObject()
+        val clientStatus = summary.optJSONObject("client_status") ?: JSONObject()
+        val positions = clientStatus.optJSONArray("open_positions") ?: JSONArray()
+        val decision = execution.optJSONObject("last_decision") ?: JSONObject()
+        val unresolved = summary.optInt("unreconciled_entries")
+        val openCount = summary.optInt("open_trades")
+        val age = System.currentTimeMillis() - root.optLong("received_ts", 0L)
+        val sourceHealthy = root.optString("data_health") == "HEALTHY" && root.optBoolean("ws_connected") &&
+            root.optJSONObject("upstream")?.optString("source") == "BITGET_WS" && age in 0L..8000L
+        val equity = account.optDouble("equity_usdt", Double.NaN)
+        val available = account.optDouble("available_balance_usdt", clientStatus.optDouble("available_balance_usdt", Double.NaN))
+        val fillNet = ledger.optDouble("realized_after_fees_usdt", Double.NaN)
+        val unrealized = summary.optDouble("unrealized_pnl_usdt", Double.NaN)
+        positionSummary.text = "EQUITY  ${money(equity)} USDT\nAvailable  ${money(available)}  •  Unrealized  ${money(unrealized, true)}"
+        positionSummary.textSize = 15f
+        curve.setPoints(ledger.optJSONArray("curve") ?: JSONArray())
+        ledgerView.text = "FILLS  ${ledger.optInt("fill_count")}  •  Net ${money(fillNet, true)} USDT\n" +
+            "Fees ${money(ledger.optDouble("fees_usdt", Double.NaN))}  •  Excludes funding / transfers\n" +
+            "Risk ≤ ${summary.optDouble("risk_pct", 0.25)}%  •  Entries ${summary.optInt("daily_executions")}/${summary.optInt("daily_cap", 3)} today\n" +
+            (if (ledger.optString("error").isNotBlank() && !ledger.isNull("error")) "Accounting refresh failed; showing last snapshot"
+             else if (unresolved > 0) "$unresolved historical entries need attribution"
+             else if (!ledger.optBoolean("complete_window", false) || !ledger.optBoolean("fee_accounting_complete", false)) "Fill accounting window is incomplete"
+             else "30-day fill accounting  •  Updated ${formatClock(ledger.optLong("window_end_ts"))}")
+        ledgerView.setTextColor(if (unresolved > 0) Color.rgb(240, 194, 110) else Color.rgb(196, 204, 222))
+        val positionText = StringBuilder()
+        for (i in 0 until positions.length()) {
+            val p = positions.optJSONObject(i) ?: continue
+            if (positionText.isNotEmpty()) positionText.append("\n\n")
+            positionText.append(p.optString("holdSide", "—").uppercase(Locale.US))
+                .append("  •  ").append(p.optString("total", "—")).append(" BTC")
+                .append("\nAverage entry  ").append(money(p.optDouble("openPriceAvg", Double.NaN)))
+                .append("\nUnrealized  ").append(money(p.optDouble("unrealizedPL", Double.NaN), true)).append(" USDT")
+        }
+        tradeHistory.text = if (positionText.isEmpty()) "No exchange position confirmed.\nEntry checks remain active." else positionText.toString()
+
+        val e = root.optJSONObject("engine") ?: JSONObject()
+        val f = root.optJSONObject("features") ?: JSONObject()
+        val s = root.optJSONObject("signal")
+        val rejection = e.optJSONObject("trade_governor")?.optString("last_quality_rejection").orEmpty()
+        val reason = when {
+            !sourceHealthy -> "Waiting for healthy, fresh market data."
+            unresolved > 0 -> "Historical partial exits need reconciliation. New exposure is blocked."
+            openCount > 0 -> "Existing exchange exposure is being tracked. Additional entries are blocked."
+            decision.optString("status") == "SKIPPED" || decision.optString("status") == "ERROR" -> decision.optString("reason")
+            rejection.isNotBlank() -> rejection
+            else -> e.optString("wait_reason", "Scanning for a confirmed setup.")
+        }
+        val details = StringBuilder("ENTRY STATUS\n$reason\n\n")
+        details.append("MARKET CONTEXT\n15m ${f.optString("trend_15", "—")}  •  1h ${f.optString("trend_60", "—")}  •  4h ${f.optString("trend_240", "—")}\n")
+            .append("${f.optString("regime", "—")}  •  ${f.optString("market_structure", "—")}\n\n")
+            .append("EXECUTION POLICY\nOne position at a time\nFee-adjusted reward / risk ≥ ${summary.optDouble("min_net_rr", 1.5)}\nPause after 2 consecutive daily losses\nObserved daily equity loss limit 1%\n\n")
+            .append("EVIDENCE\nScores rank setups; they are not win probabilities.\n")
+        decisionView.text = details.toString()
+        insightContext.text = "CVD  ${f.optString("cvd_price_divergence", "—")}\n" +
+            "OI 5m  ${money(f.optDouble("oi_change_5m_pct", Double.NaN), true)}%\n" +
+            "Structure  ${f.optString("market_structure", "—")}"
+        if (s != null) {
+            val direction = s.optString("direction", "WAIT")
+            val lifecycle = s.optString("lifecycle", "ACTIVE")
+            val resolved = lifecycle in setOf("TARGET_REACHED", "INVALIDATED", "CLOSED", "EXECUTION_FAILED", "RESOLVED")
+            val executionStatus = s.optString("execution_status", "CHECKING")
+            val heading = if (resolved) "SETUP RESOLVED" else if (openCount > 0) "EXPOSURE OPEN" else if (executionStatus == "SKIPPED") "SETUP WATCH" else "TRADE SETUP"
+            setTradeSetupText("$heading  •  $direction  •  ${s.optString("trade_style", "SCALP")}\n" +
+                "${s.optString("setup")}\nEntry ${money(s.optDouble("entry", Double.NaN))}  •  Stop ${money(s.optDouble("stop", Double.NaN))}\n" +
+                "TP1 ${money(s.optDouble("target1", Double.NaN))}  •  TP2 ${money(s.optDouble("target2", Double.NaN))}\n" +
+                (if (!sourceHealthy || unresolved > 0 || executionStatus == "SKIPPED") reason else "Evidence ${money(s.optDouble("confidence", 0.0) * 100)} / 100  •  Heuristic score"))
+        } else {
+            setTradeSetupText("NO TRADE  •  ${if (openCount > 0) "EXPOSURE OPEN" else "SCANNING"}\n$reason\nTap details for entry checks.")
+        }
     }
 
     private fun requestChartIfNeeded(force: Boolean = false) {
@@ -1679,7 +1761,7 @@ class SafeActivity : Activity() {
                     }
 
                     fullTradeHistoryText = full.toString()
-                    tradeHistory.text = preview.toString().trim()
+                    latestRoot?.let { renderWorkspace(it) }
                 }
             }
         }
@@ -1695,7 +1777,7 @@ class SafeActivity : Activity() {
         }
         val dialog = android.app.AlertDialog.Builder(this)
             .setTitle(title)
-            .setView(content)
+            .setView(ScrollView(this).apply { addView(content) })
             .setPositiveButton("CLOSE", null)
             .create()
         dialog.setOnShowListener {
@@ -1709,6 +1791,7 @@ class SafeActivity : Activity() {
             dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE)?.setTextColor(Color.rgb(167, 139, 250))
         }
         dialog.show()
+        dialog.window?.setLayout((resources.displayMetrics.widthPixels * 0.94).toInt(), (resources.displayMetrics.heightPixels * 0.80).toInt())
     }
 
     private fun formatCompact(value: Double): String =
@@ -2073,6 +2156,7 @@ class SafeActivity : Activity() {
 
     override fun onStart() {
         super.onStart()
+        if (debugPreview) return
         stopped = false
 
         // Always rebuild the market snapshot when the activity returns to the

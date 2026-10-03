@@ -530,3 +530,93 @@ def test_partial_aggregate_exits_are_not_reported_as_all_entries_open(monkeypatc
     assert summary['accounting_complete'] is False
     assert summary['client_status']['history_reconciliation'] == 'DEGRADED'
     assert executor._open_local_trade() is not None
+
+
+def test_v3_instrument_rules_reach_sizing(monkeypatch, tmp_path):
+    executor = audit_executor(monkeypatch, tmp_path)
+    config = dict(sizeMultiplier='.002', volumePlace=3, minTradeNum='.002',
+                  priceEndStep='.5', pricePlace=1, minOrderAmount='5')
+    executor.client.contract_config = lambda _: config
+    qty, risk, actual = asyncio.run(executor._risk_size(audit_signal()))
+    assert actual == config
+    assert qty == .004
+    assert risk <= 2.5
+    executor.client.contract_config = lambda _: dict(config, minTradeNum='.01')
+    import pytest
+    with pytest.raises(Exception, match='minimum quantity'):
+        asyncio.run(executor._risk_size(audit_signal()))
+
+
+def test_execution_uses_v3_ask_and_rejects_wide_spread(monkeypatch, tmp_path):
+    import pytest
+    executor = audit_executor(monkeypatch, tmp_path)
+    executor.client.market_ticker = lambda _: dict(lastPrice='100000', bid1Price='99999', ask1Price='100001')
+    price, drift = asyncio.run(executor._validate_execution_price(audit_signal()))
+    assert price == 100001 and drift > 0
+    executor.client.market_ticker = lambda _: dict(lastPrice='100000', bid1Price='99900', ask1Price='100100')
+    with pytest.raises(Exception, match='spread'):
+        asyncio.run(executor._validate_execution_price(audit_signal()))
+
+
+def test_timeout_blocks_new_exposure_and_recovers_by_stable_client_id(monkeypatch, tmp_path):
+    import hashlib
+    executor = audit_executor(monkeypatch, tmp_path)
+    def timeout(*args):
+        raise TimeoutError('response lost after submission')
+    executor.client.place_market_order = timeout
+    result = asyncio.run(executor.handle_signal(audit_signal()))
+    trade = executor.history(1)[0]
+    assert not result['ok'] and trade['status'] == 'SUBMISSION_UNKNOWN'
+    oid = 'DTDEMO-' + hashlib.sha256(b'AUDIT').hexdigest()[:24]
+    assert trade['client_oid'] == oid and len(oid) <= 32
+    assert executor._open_local_trade() is not None
+    executor._merge_exchange_open_orders([dict(clientOid=oid, orderId='accepted',
+        qty='.004', avgPrice='100000', stopLoss='99500', takeProfit='102000', orderStatus='filled')])
+    assert len(executor.data['trades']) == 1
+    assert executor.data['trades'][0]['order_id'] == 'accepted'
+    assert executor.data['trades'][0]['status'] == 'ORDER_PENDING'
+
+
+def test_observed_equity_guard_and_drawdown_risk_reduction(monkeypatch, tmp_path):
+    executor = audit_executor(monkeypatch, tmp_path)
+    executor.data['account_metrics'] = dict(equity_usdt=980, observed_peak_usdt=1000,
+        utc_day=executor._utc_day(), utc_day_open_equity_usdt=1000)
+    allowed, reason = executor._signal_allowed(audit_signal())
+    assert not allowed and 'equity fell' in reason
+    executor.data['account_metrics']['equity_usdt'] = 970
+    qty, risk, _ = asyncio.run(executor._risk_size(audit_signal()))
+    assert risk <= 970 * .0025 * .5
+    assert qty < .004
+
+
+def test_feed_execution_is_scheduled_without_waiting_for_exchange(monkeypatch):
+    from app import main
+    async def scenario():
+        entered, finish = asyncio.Event(), asyncio.Event()
+        async def slow_exchange(payload):
+            entered.set()
+            await finish.wait()
+            return dict(ok=False, skipped=True, reason='test')
+        monkeypatch.setattr(main.execution, 'handle_signal', slow_exchange)
+        main.schedule_execution(audit_signal())
+        await asyncio.wait_for(entered.wait(), .5)
+        assert main.execution_tasks
+        finish.set()
+        await asyncio.gather(*list(main.execution_tasks))
+    asyncio.run(scenario())
+    assert not main.execution_tasks
+
+
+def test_filled_status_without_actual_values_stays_unconfirmed(monkeypatch, tmp_path):
+    executor = audit_executor(monkeypatch, tmp_path)
+    executor.client.order_detail = lambda *args: dict(orderStatus='filled', cumExecQty='0', avgPrice='0')
+    async def no_delay(_seconds):
+        pass
+    monkeypatch.setattr(asyncio, 'sleep', no_delay)
+    result = asyncio.run(executor.handle_signal(audit_signal()))
+    assert result['ok']
+    trade = executor.history(1)[0]
+    assert trade['status'] == 'ORDER_PENDING'
+    assert not trade.get('actual_fill_confirmed')
+    assert trade['entry_price'] == 0
+    assert 'missing exchange' in trade['error']

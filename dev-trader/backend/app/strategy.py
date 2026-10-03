@@ -1627,9 +1627,9 @@ class StrategyEngine:
             }
 
         flow_confirmation = (
-            (direction == "LONG" and (f.cvd_impulse > 0 or f.book_imbalance > 0.08 or f.oi_change_5m_pct > 0.10))
+            (direction == "LONG" and (f.cvd_impulse > 0 or f.book_imbalance > 0.08))
             or
-            (direction == "SHORT" and (f.cvd_impulse < 0 or f.book_imbalance < -0.08 or f.oi_change_5m_pct > 0.10))
+            (direction == "SHORT" and (f.cvd_impulse < 0 or f.book_imbalance < -0.08))
         )
         status = "TRIGGERED" if (
             score >= 0.70

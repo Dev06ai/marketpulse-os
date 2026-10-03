@@ -51,7 +51,7 @@ jobs:
           gradle-version: '9.6.0'
       - name: Build Android debug APK
         working-directory: dev-trader/android
-        run: gradle assembleDebug --stacktrace -PdevTraderVersionCode=94 -PdevTraderVersionName=0.11.16
+        run: gradle assembleDebug --stacktrace -PdevTraderVersionCode=95 -PdevTraderVersionName=0.12.0
       - name: Build signed Android release APK
         if: steps.changed.outputs.android_changed == 'true'
         working-directory: dev-trader/android
@@ -62,7 +62,11 @@ jobs:
           DEV_TRADER_KEY_PASSWORD: ${{ secrets.DEV_TRADER_KEY_PASSWORD }}
         run: |
           echo "${{ secrets.DEV_TRADER_KEYSTORE_BASE64 }}" | base64 --decode > "$DEV_TRADER_KEYSTORE_PATH"
-          gradle assembleRelease --stacktrace -PdevTraderVersionCode=94 -PdevTraderVersionName=0.11.16
+          gradle assembleRelease --stacktrace -PdevTraderVersionCode=95 -PdevTraderVersionName=0.12.0
+          if unzip -l app/build/outputs/apk/release/app-release.apk | grep -q ui_preview.json; then
+            echo 'Debug preview data must never be included in release APKs.'
+            exit 1
+          fi
       - name: Stage Android artifacts
         if: steps.changed.outputs.android_changed == 'true'
         run: |
@@ -76,11 +80,45 @@ jobs:
           path: release-artifacts/
           if-no-files-found: error
 
+  visual-check:
+    needs: android
+    if: needs.android.outputs.android_changed == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/download-artifact@v4
+        with:
+          name: dev-trader-builds
+          path: dist
+      - name: Enable emulator acceleration
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          profile: pixel_6
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+          script: bash dev-trader/android/visual-check.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: dev-trader-ui-check
+          path: ui-check/
+          if-no-files-found: error
+
   publish-release:
     concurrency:
       group: dev-trader-release
       cancel-in-progress: false
-    needs: [android, backend]
+    needs: [android, backend, visual-check]
     if: needs.android.outputs.android_changed == 'true'
     runs-on: ubuntu-latest
     steps:
@@ -95,14 +133,14 @@ jobs:
           mkdir -p release
           cp dist/app-release.apk release/app-release.apk
           sha256sum release/app-release.apk | awk '{print $1}' > release/app-release.sha256
-          echo "tag=dev-trader-v0.11.16-94" >> "$GITHUB_OUTPUT"
+          echo "tag=dev-trader-v0.12.0-95" >> "$GITHUB_OUTPUT"
           echo "sha256=$(cat release/app-release.sha256)" >> "$GITHUB_OUTPUT"
       - name: Create GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release delete "${{ steps.release.outputs.tag }}" --yes --cleanup-tag || true
-          gh release create "${{ steps.release.outputs.tag }}"             release/app-release.apk             --title "Dev Trader 0.11.16 (94)"             --notes "Full charcoal UI redesign • fixed viewport • no dashboard scrolling • compact execution workspace."
+          gh release create "${{ steps.release.outputs.tag }}" release/app-release.apk --title "Dev Trader 0.12.0 (95)" --notes "Trade, Positions and Insights workspaces; verified exchange fill accounting; fee-aware execution and drawdown controls. Backend regression tests and six native emulator layouts must pass before publication."
       - name: Publish verified update manifest
         env:
           SHA256: "${{ steps.release.outputs.sha256 }}"
@@ -116,16 +154,16 @@ jobs:
           data = json.loads(p.read_text())
           data.update({
               "enabled": True,
-              "versionCode": 94,
-              "versionName": "0.11.16",
-              "apkUrl": "https://github.com/Dev06ai/marketpulse-os/releases/download/dev-trader-v0.11.16-94/app-release.apk",
+              "versionCode": 95,
+              "versionName": "0.12.0",
+              "apkUrl": "https://github.com/Dev06ai/marketpulse-os/releases/download/dev-trader-v0.12.0-95/app-release.apk",
               "sha256": os.environ["SHA256"],
-              "notes": "Signed Dev Trader release 0.11.16 • fixed Android edge-to-edge safe-area layout"
+              "notes": "Dev Trader 0.12.0 • Trade / Positions / Insights • exchange fill ledger • stronger execution checks"
           })
           p.write_text(json.dumps(data, indent=2) + "\n")
           PY
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add dev-trader/update.json
-          git commit -m "Publish Dev Trader self-update manifest dev-trader-release-0.11.16-94 [skip ci]" || exit 0
+          git commit -m "Publish Dev Trader self-update manifest dev-trader-release-0.12.0-95 [skip ci]" || exit 0
           git push origin dev-trader-v1

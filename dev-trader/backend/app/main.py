@@ -224,6 +224,34 @@ async def broadcast_loop():
             await asyncio.gather(*(push(ws) for ws in list(clients)), return_exceptions=True)
 
 
+execution_tasks: set[asyncio.Task] = set()
+
+
+def schedule_execution(signal_payload: dict):
+    # Private REST calls must not block processing the market WebSocket.
+    payload = dict(signal_payload)
+    payload["created_ts"] = engine.last_evaluated_ts
+    task = asyncio.create_task(execute_signal(payload))
+    execution_tasks.add(task)
+    task.add_done_callback(execution_tasks.discard)
+
+
+async def execute_signal(payload: dict):
+    sid = str(payload.get("id") or "")
+    try:
+        result = await execution.handle_signal(payload)
+        active = engine.active_signals.get(sid)
+        if active is not None:
+            active["execution_status"] = result.get("trade", {}).get("status") if result.get("ok") else "SKIPPED" if result.get("skipped") else "FAILED"
+            active["execution_reason"] = result.get("reason", "Exchange submission accepted")
+        reconcile_execution_truth()
+    except Exception as exc:
+        active = engine.active_signals.get(sid)
+        if active is not None:
+            active["execution_status"] = "FAILED"
+            active["execution_reason"] = str(exc)
+
+
 async def on_state(s: MarketState):
     global state, last_engine_eval_ms
     state = s
@@ -341,48 +369,6 @@ async def on_state(s: MarketState):
         if sig:
             signal_payload = sig.to_dict()
 
-            # Every qualified signal is actionable. The execution supervisor may
-            # close older opposite-direction trades only when the new signal has
-            # materially stronger evidence; otherwise existing trades stay open.
-            transition = {"action": "KEEP", "reason": "no execution supervisor"}
-            if execution.enabled and execution.ready:
-                try:
-                    transition = await execution.manage_signal_transition(
-                        signal_payload,
-                        float(state.last_price) if state.last_price is not None else None,
-                    )
-                except Exception as exc:
-                    transition = {"action": "KEEP", "reason": f"transition check failed: {exc}"}
-                signal_payload["execution_management"] = transition
-
-                # A smart reversal may have closed one or more older exchange
-                # trades. Resolve those exact strategy signals and feed the
-                # closure back into learning before the new trade is opened.
-                if transition.get("action") == "REVERSE":
-                    for closed_trade in execution.history(100):
-                        if str(closed_trade.get("status") or "").upper() != "CLOSED":
-                            continue
-                        closed_signal_id = str(closed_trade.get("signal_id") or "")
-                        if not closed_signal_id or closed_signal_id not in engine.active_signals:
-                            continue
-                        engine.resolve_external_execution({
-                            "type": "EXECUTION_CLOSED",
-                            "key": f"EXECUTION_CLOSED:{closed_trade.get('execution_id')}",
-                            "execution_id": closed_trade.get("execution_id"),
-                            "signal_id": closed_signal_id,
-                            "direction": closed_trade.get("direction"),
-                            "setup": closed_trade.get("setup"),
-                            "entry_price": closed_trade.get("entry_price"),
-                            "exit_price": closed_trade.get("exit_price"),
-                            "realized_pnl_usdt": closed_trade.get("realized_pnl_usdt"),
-                            "net_profit_usdt": closed_trade.get("net_profit_usdt"),
-                            "result_r": closed_trade.get("result_r"),
-                            "close_reason": closed_trade.get("close_reason"),
-                            "status": "CLOSED",
-                            "ts": closed_trade.get("closed_ts"),
-                            "learning_review": closed_trade.get("learning_review"),
-                        })
-
             if bridge.enabled:
                 asyncio.create_task(
                     bridge.post_open_signal(
@@ -393,7 +379,7 @@ async def on_state(s: MarketState):
             if not clients:
                 push.send_signal(signal_payload)
             if execution.enabled and execution.ready:
-                asyncio.create_task(execution.handle_signal(signal_payload))
+                schedule_execution(signal_payload)
 
 
 async def setup_memory_refresh_loop():
@@ -471,11 +457,11 @@ async def lifespan(app: FastAPI):
     ]
     yield
     stream.stop = True
-    for t in tasks:
+    for t in tasks + list(execution_tasks):
         t.cancel()
 
 
-app = FastAPI(title="Dev Trader BTC Trading Bot", version="0.6.0", lifespan=lifespan)
+app = FastAPI(title="Dev Trader BTC Trading Bot", version="0.12.0", lifespan=lifespan)
 
 
 @app.get("/health")
@@ -600,6 +586,11 @@ async def execution_status():
     if execution.enabled and execution.ready:
         await execution.sync()
     return execution.snapshot()
+
+
+@app.get("/performance")
+async def performance():
+    return execution.performance()
 
 
 @app.get("/signal-history")

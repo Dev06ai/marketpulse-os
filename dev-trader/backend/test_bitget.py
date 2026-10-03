@@ -6,6 +6,43 @@ import os
 from app.bitget import BitgetDemoClient
 
 
+def test_fills_history_paginates_and_does_not_claim_truncation_complete(monkeypatch):
+    client = BitgetDemoClient('k', 's', 'p')
+    pages = [{'data': {'list': [{}] * 100, 'cursor': 'next'}},
+             {'data': {'list': [{}], 'cursor': 'last'}}]
+    cursors = []
+    def get(path, params):
+        assert path == '/api/v3/trade/fills'
+        cursors.append(params['cursor'])
+        return pages[len(cursors)-1]
+    monkeypatch.setattr(client, '_get', get)
+    result = client.fills_history(1000, 2000)
+    assert result['complete'] and len(result['rows']) == 101
+    assert cursors == [None, 'next']
+    monkeypatch.setattr(client, '_get', lambda *args: pages[0])
+    assert not client.fills_history(1000, 2000, max_pages=1)['complete']
+
+
+def test_account_metrics_distinguishes_equity_from_available(monkeypatch):
+    client = BitgetDemoClient('k', 's', 'p')
+    monkeypatch.setattr(client, 'account', lambda _: {'data': dict(usdtEquity='880',
+        usdtUnrealisedPnl='-20', assets=[dict(coin='USDT', balance='900', available='840')])})
+    metrics = client.account_metrics()
+    assert metrics['equity_usdt'] == 880
+    assert metrics['available_balance_usdt'] == 840
+    assert metrics['account_unrealized_usdt'] == -20
+
+
+def test_instrument_multipliers_are_normalized(monkeypatch):
+    client = BitgetDemoClient('k', 's', 'p')
+    monkeypatch.setattr(client, '_get', lambda *args: {'data': [dict(symbol='BTCUSDT',
+        quantityPrecision='3', pricePrecision='1', minOrderQty='.001',
+        quantityMultiplier='.002', priceMultiplier='.5')]})
+    config = client.contract_config()
+    assert config['sizeMultiplier'] == '.002'
+    assert config['priceEndStep'] == '.5'
+
+
 def test_demo_signature_matches_hmac_sha256():
     client = BitgetDemoClient(
         api_key="demo-key",
