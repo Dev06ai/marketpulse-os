@@ -495,3 +495,18 @@ def test_closed_lifecycle_reconciles_while_new_same_side_position_exists(monkeyp
     assert executor.data['trades'][0]['status'] == 'CLOSED'
     assert executor.data['trades'][0]['net_profit_usdt'] == -3.1
     assert executor.data['trades'][0]['result_r'] == -1
+
+
+def test_recovered_exchange_entries_restore_daily_cap(monkeypatch, tmp_path):
+    import time
+    executor = audit_executor(monkeypatch, tmp_path)
+    class RecoveryClient(MultiSignalClient):
+        def orders_history(self, *args):
+            return [dict(clientOid=f'DTDEMO-recovered-{i}', orderStatus='filled',
+                         side='buy', avgPrice='100000', qty='.001', cumExecQty='.001',
+                         createdTime=int(time.time()*1000), stopLoss='99500') for i in range(3)]
+    executor.client = RecoveryClient()
+    asyncio.run(executor.sync())
+    assert executor._today_trades() == 3
+    allowed, reason = executor._signal_allowed(audit_signal())
+    assert not allowed and 'daily execution cap' in reason

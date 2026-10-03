@@ -721,6 +721,9 @@ class DemoExecutionEngine:
                 reconciliation_warnings.append(f"orders_history: {exc}")
 
             self._merge_exchange_open_orders(orders)
+            # Recovered exchange orders must consume the daily cap after a
+            # restart even when the local file was erased by deployment.
+            self._daily_count = self._count_today()
             for trade in self._local_demo_trades():
                 if trade.get("status") in {"FAILED", "CLOSED"}:
                     continue
