@@ -1,6 +1,11 @@
 name: Dev Trader CI
 
 on:
+  pull_request:
+    branches: [dev-trader-v1]
+    paths:
+      - 'dev-trader/**'
+      - '.github/workflows/dev-trader.yml'
   push:
     branches: [dev-trader-v1]
     paths:
@@ -119,7 +124,7 @@ jobs:
       group: dev-trader-release
       cancel-in-progress: false
     needs: [android, backend, visual-check]
-    if: needs.android.outputs.android_changed == 'true'
+    if: github.event_name != 'pull_request' && needs.android.outputs.android_changed == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

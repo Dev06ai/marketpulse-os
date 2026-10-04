@@ -18,7 +18,7 @@ class Candle:
 
 
 def aggregate_candles(candles: list[Candle], multiplier: int) -> list[Candle]:
-    cs = [c for c in candles if c.confirmed]
+    cs = sorted({c.start:c for c in candles if c.confirmed and c.end-c.start+1 == 3_600_000}.values(), key=lambda c:c.start)
     if not cs:
         return []
     bucket_ms = multiplier * 60 * 60_000
@@ -27,8 +27,8 @@ def aggregate_candles(candles: list[Candle], multiplier: int) -> list[Candle]:
         groups.setdefault(c.start // bucket_ms, []).append(c)
 
     out: list[Candle] = []
-    for _, group in sorted(groups.items()):
-        if len(group) < multiplier:
+    for bucket, group in sorted(groups.items()):
+        if len(group) != multiplier or [c.start for c in group] != [bucket*bucket_ms+i*3_600_000 for i in range(multiplier)]:
             continue
         out.append(Candle(
             start=group[0].start,
@@ -80,18 +80,19 @@ class MarketState:
     candles_5: list[Candle] = field(default_factory=list)
     candles_15: list[Candle] = field(default_factory=list)
     candles_60: list[Candle] = field(default_factory=list)
+    trade_volume_profile: dict = field(default_factory=dict)
 
     def candles_4h(self) -> list[Candle]:
         return aggregate_candles(self.candles_60, 4)
 
-    def snapshot(self) -> dict[str, Any]:
+    def snapshot(self, history: bool=False) -> dict[str, Any]:
         d = asdict(self)
-        d["candles_5"] = [c.to_dict() for c in self.candles_5[-180:]]
-        d["candles_15"] = [c.to_dict() for c in self.candles_15[-120:]]
-        d["candles_60"] = [c.to_dict() for c in self.candles_60[-120:]]
+        d["candles_5"] = [c.to_dict() for c in self.candles_5[-(240 if history else 180):]]
+        d["candles_15"] = [c.to_dict() for c in self.candles_15[-(240 if history else 120):]]
+        d["candles_60"] = [c.to_dict() for c in self.candles_60[-(720 if history else 120):]]
         d["candles_4h"] = [c.to_dict() for c in self.candles_4h()[-80:]]
         d["oi_window"] = self.oi_window[-120:]
         d["cvd_history"] = self.cvd_history[-120:]
-        d["flow_history"] = self.flow_history[-120:]
+        d["flow_history"] = self.flow_history[-(5000 if history else 120):]
         d["liquidation_window"] = self.liquidation_window[-240:]
         return d

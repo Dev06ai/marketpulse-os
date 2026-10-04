@@ -8,6 +8,7 @@ from urllib.request import Request as UrlRequest, urlopen
 import websockets
 
 from .models import Candle, MarketState
+from .trade_profile import TradeVolumeProfile
 
 
 class BybitStream:
@@ -468,6 +469,7 @@ class BitgetMarketStream:
         self.subscription_status: dict[str, dict] = {}
         self.channel_packets: dict[str, int] = {}
         self.binary_packets = 0
+        self.volume_profile = TradeVolumeProfile("BITGET_DEMO_USDT_FUTURES" if demo else "BITGET_USDT_FUTURES")
 
     @staticmethod
     def _interval_ms(interval: str) -> int:
@@ -532,12 +534,14 @@ class BitgetMarketStream:
                         warmup.cancel()
                         await asyncio.gather(heartbeat, warmup, return_exceptions=True)
                         self.state.ws_connected = False
+                        self.volume_profile.gap(int(time.time()*1000))
                         self._refresh_data_health(int(time.time() * 1000))
             except asyncio.CancelledError:
                 raise
             except Exception as exc:
                 self.last_upstream_error = f"Bitget WS: {str(exc)[:220]}"
                 self.state.ws_connected = False
+                self.volume_profile.gap(int(time.time()*1000))
                 self._refresh_data_health(int(time.time() * 1000))
                 await self.on_state(self.state)
                 await asyncio.sleep(2.0)
@@ -574,7 +578,7 @@ class BitgetMarketStream:
     async def backfill(self):
         try:
             await asyncio.gather(
-                *(self._backfill_interval(interval, dest_name, 240)
+                *(self._backfill_interval(interval, dest_name, 720 if interval == "1H" else 240)
                   for interval, dest_name in (("5m", "candles_5"), ("15m", "candles_15"), ("1H", "candles_60"))),
                 self._backfill_trades(),
             )
@@ -624,7 +628,7 @@ class BitgetMarketStream:
                 merged[start] = candle
         values = sorted(merged.values(), key=lambda x: x.start)
         dest.clear()
-        dest.extend(values[-240:])
+        dest.extend(values[-limit:])
         # Historical REST candles warm the strategy, but they must not make the
         # live-feed health gate believe the websocket kline channel is fresh.
         # The live timestamp is updated only by Bitget websocket kline messages.
@@ -774,6 +778,10 @@ class BitgetMarketStream:
                                                "message": str(msg.get("msg") or "")[:220]}
             if msg.get("event") == "error":
                 self.last_upstream_error = f"Bitget subscription error: {msg.get('msg', '')}"
+                if topic == "publicTrade":
+                    self.volume_profile.gap(int(time.time()*1000))
+            elif topic == "publicTrade":
+                self.volume_profile.connect(int(time.time()*1000))
             return
 
         now = int(time.time() * 1000)
@@ -812,6 +820,7 @@ class BitgetMarketStream:
                 self.state.last_trade_ts = ts
                 price = float(trade.get("p") or 0.0)
                 if price > 0:
+                    self.volume_profile.ingest(exec_id,ts,price,size,now)
                     self.state.last_price = price
                     self.state.flow_history.append((ts, price, self.state.cvd, size))
                 self.state.last_market_update_ts = now
@@ -864,7 +873,7 @@ class BitgetMarketStream:
                         dest[-1] = candle
                     else:
                         dest.append(candle)
-                    del dest[:-240]
+                    del dest[:-(720 if interval=="1H" else 240)]
                 if interval == "5m":
                     self.state.last_kline_5_ts = now
                 elif interval == "15m":
@@ -872,6 +881,7 @@ class BitgetMarketStream:
                 else:
                     self.state.last_kline_60_ts = now
 
+        self.state.trade_volume_profile = self.volume_profile.snapshot(now)
         self._trim_windows(now)
         self._refresh_data_health(now)
         await self.on_state(self.state)
