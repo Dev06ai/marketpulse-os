@@ -10,7 +10,9 @@ Deployed: [Deplexo Free](https://deplexo.com/plans), currently one app, 0.25 CPU
 128 MB RAM, 250 MB disk and 100 GB monthly transfer (sent plus received).
 Signup advertises no payment details. The tier has no uptime guarantee.
 The public host passed the native-client staging checks on 4 October 2026.
-Trading credentials and final cutover remain pending.
+Demo credentials, session settings and risk limits have been migrated with owner
+approval. Exchange reconciliation passed before activation. Android 0.14.1 / build
+99 is published through the signed update channel. No payment card was added.
 
 The running source is commit `a213518675b7f96770f374cd080015ddd2570dc0` from the
 public repository `https://github.com/Dev06ai/marketpulse-os`. The host's public-Git
@@ -59,8 +61,8 @@ HTTP responses larger than 700 bytes support gzip.
 Both Android services now use one HTTPS origin supplied at build time:
 `-PdevTraderBackendUrl=https://THE-VERIFIED-HOST`.
 The default is now `https://dev-trader-engine.de.deplexo.com`, verified by the
-same OkHttp 4.12.0 client used by Android. Version 0.14.1 / build 99 is prepared;
-no APK update has yet been published by this migration branch.
+same OkHttp 4.12.0 client used by Android. Version 0.14.1 / build 99 is published;
+the update manifest and GitHub release asset have matching SHA-256 checksums.
 
 ## Cutover procedure
 
@@ -124,7 +126,25 @@ setting changes are used. Run it with:
 
 CI also builds and probes the Docker image under a 128 MB / 0.25 CPU limit with
 a read-only root, verifies mounted data across a restart, and builds Android with
-its existing visual validation gate. Final demo-account migration and Android
-publication remain pending. The old Render pause request was rejected because
-the service is suspended; verify and save that setting in its dashboard before
-unpausing the replacement.
+its existing visual validation gate. All checks and release publication passed
+in run 37231743142 on merge commit `1d4ab883de446889e57b1706922eb5fc1ffb6b9f`.
+The final native probe observed 7 healthy and 14 degraded samples, with a maximum
+order-book age of 64,550 ms. Stale-data entry gates remain active.
+
+The saved Render `DEMO_EXECUTION_PAUSED=true` setting was confirmed in its
+dashboard: the earlier API error referred to deploying the suspended service,
+not failure to save the setting. Render remains billing-suspended. Its free plan
+denies shell access, so the original local execution/learning files remain
+unrecovered. The new host recovered exchange fills and preserved the existing
+session baseline/cutoff; this is not recovery of the full local learning history.
+Account checks found no open positions, unresolved entries, unknown submissions
+or protection halt, and confirmed healthy history reconciliation and fee
+accounting. The new mounted journal also survived the credential redeployment.
+
+Cutover completed on 4 October 2026 UTC (5 October in India). The replacement
+reports `BITGET_DEMO`, configured/ready true, and operator pause false after its
+final redeployment. Existing limits remain three entries per UTC day, 0.25% risk,
+and 500 USDT maximum notional. The post-cutover dashboard showed about 48 MiB of
+128 MiB memory, 0.04 of 0.25 vCPU, and 489 MiB of 100 GiB monthly transfer.
+The owner still needs to install build 99 on the phone; a physical-device check
+has not been performed by this migration.

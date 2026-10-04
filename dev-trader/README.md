@@ -2,11 +2,13 @@
 
 Personal Android trading workspace with a FastAPI market engine and **Bitget UTA v3 demo-only** BTCUSDT execution. The app receives Bitget market data and exchange execution snapshots; financial values are never substituted with sample values in a release build.
 
-## Prepared version 0.14.1 / build 99
+## Published version 0.14.1 / build 99
 
-The next Android update uses the verified Deplexo free host. Publication is pending
-demo-account reconciliation and the migration cutover; the update manifest still
-points to the previously published version. See `FREE_MIGRATION.md`.
+Android now uses the verified Deplexo free host. The signed build 99 and its
+checksum-verified update manifest are published. Use the app's Update button to
+install it; that check works independently of the suspended Render backend.
+Demo credentials and session/risk settings have been migrated, and exchange
+reconciliation passed. See `FREE_MIGRATION.md` for the cutover and storage limits.
 
 - **Trade:** live quote, interactive multi-timeframe candles, compact decision center, complete setup details and a P&L calculator.
 - **Positions:** exchange equity and available collateral shown separately, aggregate positions, fill-based realized P&L curve, fees and risk controls.
@@ -30,7 +32,11 @@ GET /performance and the mobile snapshot expose a paginated 30-day BTC fill ledg
 
 Confidence is a heuristic evidence score, not a calibrated probability. Candle-only replay cannot validate the live order-flow strategy; no fabricated win rate is presented. Forward demo results are required to assess expectancy, net P&L and drawdown.
 
-The free Render deployment uses temporary local state. Exchange history reconstructs execution records after restarts, but original signal context and observed equity peaks/day anchors can be lost. This is not durable learning. No paid storage is provisioned by this release.
+The Deplexo deployment mounts execution, learning and journal files at `/data`.
+This survives replacement on the same worker, but is not a backup or a guarantee
+across worker moves. Render's old local files could not be recovered. Exchange
+fills were reconciled; original signal context and learning observations may be
+missing. No paid storage is provisioned by this release.
 
 Versioned exchange IDs preserve strategy family, timeframe, regime and approximate planned risk within the engine's 30-day recovery window. An operator test session can persist its cutoff and initial equity in deployment configuration; GET /performance exposes session results separately from historical fill losses. Prior losses still count toward UTC daily risk limits.
 
