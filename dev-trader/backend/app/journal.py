@@ -16,6 +16,9 @@ ENGINE_REVISION = "market-decision-v3"
 class DecisionJournal:
     def __init__(self, path=None):
         self.path = Path(path or os.getenv("DECISION_JOURNAL_FILE","/tmp/dev_trader_decisions.sqlite3"))
+        self.retention_days = max(1, int(os.getenv("DECISION_JOURNAL_RETENTION_DAYS", "30")))
+        self.max_records = max(1, int(os.getenv("DECISION_JOURNAL_MAX_RECORDS", "10000")))
+        self.max_blob_bytes = max(0, int(os.getenv("DECISION_JOURNAL_MAX_BLOB_MB", "0"))) * 1024 * 1024
         self.lock = threading.RLock()
         self.error = ""
         self.last_sample = 0
@@ -26,7 +29,10 @@ class DecisionJournal:
         try:
             self.path.parent.mkdir(parents=True,exist_ok=True)
             self.db = sqlite3.connect(str(self.path),check_same_thread=False,timeout=2)
+            # Applied to new databases. Reclaim freed pages on bounded free volumes.
+            self.db.execute("PRAGMA auto_vacuum=FULL")
             self.db.execute("PRAGMA journal_mode=WAL")
+            self.db.execute("PRAGMA journal_size_limit=4194304")
             self.db.executescript("""
                 CREATE TABLE IF NOT EXISTS decisions(id TEXT PRIMARY KEY, ts INTEGER, kind TEXT, data BLOB);
                 CREATE INDEX IF NOT EXISTS decisions_ts ON decisions(ts);
@@ -45,10 +51,19 @@ class DecisionJournal:
         try:
             raw = json.dumps(body,separators=(",",":"),allow_nan=False,sort_keys=True)
             oid = identity or hashlib.sha256((kind+str(ts)+raw).encode()).hexdigest()
+            compressed = zlib.compress(raw.encode())
+            if self.max_blob_bytes and len(compressed) > self.max_blob_bytes:
+                self.error = "RECORD_EXCEEDS_JOURNAL_BUDGET"
+                return False
             with self.lock,self.db:
                 self.db.execute("INSERT OR REPLACE INTO decisions VALUES(?,?,?,?)",
-                                (oid,ts,kind,zlib.compress(raw.encode())))
+                                (oid,ts,kind,compressed))
                 self._maintain(ts)
+                if self.max_blob_bytes:
+                    self.db.execute("""DELETE FROM decisions WHERE id IN (
+                        SELECT id FROM (SELECT id, SUM(length(data)) OVER
+                        (ORDER BY ts DESC, id DESC) AS bytes FROM decisions) WHERE bytes > ?)
+                    """, (self.max_blob_bytes,))
             self.error = ""
             return True
         except Exception as exc:
@@ -85,10 +100,10 @@ class DecisionJournal:
         if ts-self.last_maintenance < 300_000:
             return
         self.last_maintenance = ts
-        cutoff = ts-30*86_400_000
+        cutoff = ts-self.retention_days*86_400_000
         self.db.execute("DELETE FROM ticks WHERE ts < ?",(cutoff,))
         self.db.execute("DELETE FROM decisions WHERE ts < ?",(cutoff,))
-        self.db.execute("DELETE FROM decisions WHERE id IN (SELECT id FROM decisions ORDER BY ts DESC LIMIT -1 OFFSET 10000)")
+        self.db.execute("DELETE FROM decisions WHERE id IN (SELECT id FROM decisions ORDER BY ts DESC LIMIT -1 OFFSET ?)", (self.max_records,))
 
     def records(self, limit=100, kind=None, since=0):
         if not self.ready:
@@ -124,7 +139,8 @@ class DecisionJournal:
             except Exception as exc:
                 self.error=type(exc).__name__
         return dict(ready=self.ready,error=self.error,records=counts[0],price_samples=counts[1],
-                    first_ts=counts[2],last_ts=counts[3],retention_days=30,max_records=10000,
+                    first_ts=counts[2],last_ts=counts[3],retention_days=self.retention_days,max_records=self.max_records,
+                    max_blob_bytes=self.max_blob_bytes or None,
                     storage="LOCAL_SQLITE",durability="EPHEMERAL_UNLESS_PERSISTENT_VOLUME_CONFIGURED",
                     engine_revision=ENGINE_REVISION)
 

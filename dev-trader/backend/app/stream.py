@@ -493,7 +493,7 @@ class BitgetMarketStream:
                     self.url,
                     ping_interval=None,
                     ping_timeout=None,
-                    max_queue=10000,
+                    max_queue=max(8, min(10000, int(os.getenv("BITGET_WS_MAX_QUEUE", "64")))),
                     open_timeout=8,
                     close_timeout=3,
                 ) as ws:

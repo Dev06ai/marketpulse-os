@@ -17,6 +17,55 @@ permissions:
   contents: write
 
 jobs:
+  native-host:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.6.0'
+      - name: Verify the live host with Android's HTTP and socket library
+        run: gradle -p dev-trader/tools/host-probe run --args='https://dev-trader-engine.de.deplexo.com' --stacktrace
+  free-container:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Test the core build without Firebase
+        working-directory: dev-trader/backend
+        run: |
+          pip install -r requirements-core.txt pytest httpx
+          pytest -q
+          python tools/benchmark_free_host.py
+      - name: Build and probe the constrained container
+        run: |
+          docker build -t dev-trader-free dev-trader/backend
+          docker volume create dev-trader-smoke-data
+          docker run -d --name dev-trader-smoke --memory=128m --cpus=.25 \
+            --read-only --tmpfs /tmp:rw,noexec,size=100m \
+            -v dev-trader-smoke-data:/data -p 3000:3000 dev-trader-free
+          for attempt in {1..30}; do
+            if curl -fsS http://127.0.0.1:3000/health >/dev/null; then break; fi
+            sleep 1
+          done
+          python dev-trader/backend/tools/smoke_host.py --url http://127.0.0.1:3000
+          docker exec dev-trader-smoke python -c 'from pathlib import Path; p=Path("/data/smoke-persistence"); p.write_text("saved")'
+          docker restart dev-trader-smoke
+          docker exec dev-trader-smoke python -c 'from pathlib import Path; assert Path("/data/smoke-persistence").read_text()=="saved"'
+          docker stats --no-stream dev-trader-smoke
+          test "$(docker inspect -f '{{.State.OOMKilled}}' dev-trader-smoke)" = false
+      - name: Container logs and cleanup
+        if: always()
+        run: |
+          docker logs --tail 50 dev-trader-smoke || true
+          docker rm -f dev-trader-smoke || true
+          docker volume rm dev-trader-smoke-data || true
   backend:
     runs-on: ubuntu-latest
     defaults:
@@ -56,7 +105,7 @@ jobs:
           gradle-version: '9.6.0'
       - name: Build Android debug APK
         working-directory: dev-trader/android
-        run: gradle assembleDebug --stacktrace -PdevTraderVersionCode=98 -PdevTraderVersionName=0.12.2
+        run: gradle assembleDebug --stacktrace -PdevTraderVersionCode=99 -PdevTraderVersionName=0.14.1
       - name: Build signed Android release APK
         if: steps.changed.outputs.android_changed == 'true'
         working-directory: dev-trader/android
@@ -67,7 +116,7 @@ jobs:
           DEV_TRADER_KEY_PASSWORD: ${{ secrets.DEV_TRADER_KEY_PASSWORD }}
         run: |
           echo "${{ secrets.DEV_TRADER_KEYSTORE_BASE64 }}" | base64 --decode > "$DEV_TRADER_KEYSTORE_PATH"
-          gradle assembleRelease --stacktrace -PdevTraderVersionCode=98 -PdevTraderVersionName=0.12.2
+          gradle assembleRelease --stacktrace -PdevTraderVersionCode=99 -PdevTraderVersionName=0.14.1
           if unzip -l app/build/outputs/apk/release/app-release.apk | grep -q ui_preview.json; then
             echo 'Debug preview data must never be included in release APKs.'
             exit 1
@@ -123,7 +172,7 @@ jobs:
     concurrency:
       group: dev-trader-release
       cancel-in-progress: false
-    needs: [android, backend, visual-check]
+    needs: [android, backend, visual-check, free-container, native-host]
     if: github.event_name != 'pull_request' && needs.android.outputs.android_changed == 'true'
     runs-on: ubuntu-latest
     steps:
@@ -138,14 +187,17 @@ jobs:
           mkdir -p release
           cp dist/app-release.apk release/app-release.apk
           sha256sum release/app-release.apk | awk '{print $1}' > release/app-release.sha256
-          echo "tag=dev-trader-v0.12.2-98" >> "$GITHUB_OUTPUT"
+          echo "tag=dev-trader-v0.14.1-99" >> "$GITHUB_OUTPUT"
           echo "sha256=$(cat release/app-release.sha256)" >> "$GITHUB_OUTPUT"
       - name: Create GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release delete "${{ steps.release.outputs.tag }}" --yes --cleanup-tag || true
-          gh release create "${{ steps.release.outputs.tag }}" release/app-release.apk --title "Dev Trader 0.12.2 (98)" --notes "Trade, Positions and Insights workspaces; verified exchange fill accounting; fee-aware execution and drawdown controls. Backend regression tests and six native emulator layouts must pass before publication."
+          if gh release view "${{ steps.release.outputs.tag }}" >/dev/null 2>&1; then
+            echo "This release already exists; refusing to replace a published APK."
+            exit 1
+          fi
+          gh release create "${{ steps.release.outputs.tag }}" release/app-release.apk --target "$GITHUB_SHA" --title "Dev Trader 0.14.1 (99)" --notes "Move Dev Trader to the verified free host; reduce mobile traffic and improve reconnect behavior. Backend tests, constrained-container checks, native host verification and six emulator layouts must pass before publication."
       - name: Publish verified update manifest
         env:
           SHA256: "${{ steps.release.outputs.sha256 }}"
@@ -159,16 +211,16 @@ jobs:
           data = json.loads(p.read_text())
           data.update({
               "enabled": True,
-              "versionCode": 98,
-              "versionName": "0.12.2",
-              "apkUrl": "https://github.com/Dev06ai/marketpulse-os/releases/download/dev-trader-v0.12.2-98/app-release.apk",
+              "versionCode": 99,
+              "versionName": "0.14.1",
+              "apkUrl": "https://github.com/Dev06ai/marketpulse-os/releases/download/dev-trader-v0.14.1-99/app-release.apk",
               "sha256": os.environ["SHA256"],
-              "notes": "Dev Trader 0.12.2 • Trade / Positions / Insights • exchange fill ledger • stronger execution checks"
+              "notes": "Dev Trader 0.14.1 • free host • lower bandwidth • reliable mobile reconnects"
           })
           p.write_text(json.dumps(data, indent=2) + "\n")
           PY
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add dev-trader/update.json
-          git commit -m "Publish Dev Trader self-update manifest dev-trader-release-0.12.2-98 [skip ci]" || exit 0
+          git commit -m "Publish Dev Trader self-update manifest dev-trader-release-0.14.1-99 [skip ci]" || exit 0
           git push origin dev-trader-v1

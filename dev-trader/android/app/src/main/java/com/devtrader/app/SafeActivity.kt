@@ -1,4 +1,4 @@
-// Build 98: responsive Trade / Positions / Insights workspaces.
+// Build 99: free-host migration with compact mobile delivery.
 // Build 83: show Bitget Demo funding readiness and demo execution state.
 package com.devtrader.app
 
@@ -119,10 +119,13 @@ class SafeActivity : Activity() {
     private var lastBootstrapMs = 0L
     private var lastBootstrapSuccessMs = 0L
     private var bootstrapInFlight = false
+    private val healthWatchdogRunnable = Runnable { safe { watchdog() } }
     private val snapshotPollRunnable = object : Runnable {
         override fun run() {
             if (stopped) return
-            bootstrap(false)
+            val now = System.currentTimeMillis()
+            if (socket == null || now - lastStateReceivedMs > 5000L) bootstrap(false)
+            else requestChartIfNeeded()
             handler.postDelayed(this, 3000L)
         }
     }
@@ -161,7 +164,7 @@ class SafeActivity : Activity() {
         private const val KEEPALIVE_INTERVAL_MS = 15_000L
     }
 
-    private val backendBase = "https://dev-trader-engine.onrender.com"
+    private val backendBase = BackendEndpoint.base
 
     private val client by lazy {
         OkHttpClient.Builder()
@@ -207,7 +210,7 @@ class SafeActivity : Activity() {
             renderState(preview, requestChart = false)
             val candles = preview.getJSONObject("chart").getJSONArray("candles")
             chart.setData(candles, preview.optJSONObject("signal"), calculateEma(candles, 50), preview.getDouble("last_price"))
-            check.text = "Build 98  •  Visual verification"
+            check.text = "Build ${BuildConfig.VERSION_CODE}  •  Visual verification"
             selectWorkspace(intent.getIntExtra("visual_workspace", 0).coerceIn(0, 2))
             return
         }
@@ -362,7 +365,7 @@ class SafeActivity : Activity() {
         val feed = compactCard("CONNECTION", "BITGET  •  CONNECTING", 11.5f)
         integrity = feed.value
         insightsPage.addView(feed.container, margins(bottom = 10))
-        val sys = compactCard("SYSTEM", "Build 98  •  Checking…", 11.5f)
+        val sys = compactCard("SYSTEM", "Build ${BuildConfig.VERSION_CODE}  •  Checking…", 11.5f)
         check = sys.value
         insightsPage.addView(sys.container, margins(bottom = 10))
         val tools = LinearLayout(this)
@@ -795,35 +798,51 @@ class SafeActivity : Activity() {
         integrity.text = "WebSocket  •  CONNECTING •  SECURE RETRY LOOP"
         socket = client.newWebSocket(
             Request.Builder()
-                .url("wss://dev-trader-engine.onrender.com/ws")
+                .url(BackendEndpoint.socket("dashboard"))
                 .build(),
             object : WebSocketListener() {
                 override fun onOpen(ws: WebSocket, response: Response) {
-                    socket = ws
-                    reconnectAttempt = 0
-                    reconnectScheduled.set(false)
-                    lastSocketActivityMs = System.currentTimeMillis()
-                    runCatching {
-                        ws.send(
-                            JSONObject().apply {
+                    handler.post {
+                        if (stopped || socket !== ws) {
+                            ws.cancel()
+                            return@post
+                        }
+                        reconnectAttempt = 0
+                        reconnectScheduled.set(false)
+                        lastSocketActivityMs = System.currentTimeMillis()
+                        runCatching {
+                            ws.send(JSONObject().apply {
                                 put("type", "keepalive")
                                 put("client_ts", System.currentTimeMillis())
-                            }.toString()
-                        )
-                    }
-                    handler.post {
+                            }.toString())
+                        }
                         status.text = "SYNCING…"
                         integrity.text = "WebSocket  •  CONNECTED  •  LIVE FEED SUPERVISOR"
+                        if (latestRoot == null) bootstrap(false)
                     }
-                    bootstrap(true)
                 }
 
                 override fun onMessage(ws: WebSocket, text: String) {
-                    lastSocketActivityMs = System.currentTimeMillis()
-                    safe {
+                    handler.post {
+                      if (stopped || socket !== ws) return@post
+                      lastSocketActivityMs = System.currentTimeMillis()
+                      safe {
                         val root = JSONObject(text)
-                        if (root.optString("type") == "state") {
-                            latestRoot = root
+                        val type = root.optString("type")
+                        if (type == "state" || type == "market_tick") {
+                            val previous = latestRoot
+                            if (previous != null && root.optLong("server_ts") < previous.optLong("server_ts")) return@safe
+                            val merged = if (type == "market_tick") {
+                                if (previous == null) return@safe
+                                JSONObject(previous.toString()).apply {
+                                    val keys = root.keys()
+                                    while (keys.hasNext()) {
+                                        val key = keys.next()
+                                        if (key != "type") put(key, root.get(key))
+                                    }
+                                }
+                            } else root
+                            latestRoot = merged
                             lastStateReceivedMs = System.currentTimeMillis()
                             val now = System.currentTimeMillis()
                             if (now - lastUiRenderMs >= 350L && !pendingUiUpdate) {
@@ -831,10 +850,11 @@ class SafeActivity : Activity() {
                                 handler.post {
                                     pendingUiUpdate = false
                                     lastUiRenderMs = System.currentTimeMillis()
-                                    safe { renderState(root, requestChart = false) }
+                                    if (!stopped) safe { latestRoot?.let { renderState(it, requestChart = false) } }
                                 }
                             }
                         }
+                      }
                     }
                 }
 
@@ -953,9 +973,11 @@ class SafeActivity : Activity() {
         lastBootstrapMs = now
         bootstrapInFlight = true
         integrity.text = "HTTP  •  SYNCING MARKET SNAPSHOT"
-        getJson(backendBase + "/bootstrap?interval=" + selectedTf) { ok, body ->
+        val requestTf = selectedTf
+        getJson(backendBase + "/bootstrap?profile=dashboard&interval=" + requestTf) { ok, body ->
             handler.post {
                 bootstrapInFlight = false
+                if (stopped) return@post
                 if (!ok) {
                     val nowFail = System.currentTimeMillis()
                     if (lastBootstrapSuccessMs == 0L || nowFail - lastBootstrapSuccessMs > 10_000L) {
@@ -966,20 +988,24 @@ class SafeActivity : Activity() {
                 }
                 safe {
                     val root = JSONObject(body)
-                    latestRoot = root
                     val receivedAt = System.currentTimeMillis()
-                    lastStateReceivedMs = receivedAt
                     lastBootstrapSuccessMs = receivedAt
-                    renderState(root, requestChart = false)
+                    if (latestRoot == null || root.optLong("server_ts") >= latestRoot!!.optLong("server_ts")) {
+                        latestRoot = root
+                        lastStateReceivedMs = receivedAt
+                        renderState(root, requestChart = false)
+                    }
                     val chartObj = root.optJSONObject("chart")
                     val candles = chartObj?.optJSONArray("candles") ?: JSONArray()
-                    if (candles.length() > 0) {
-                        val lastPrice = chartObj.optDouble("last_price", root.optDouble("last_price", Double.NaN))
-                        chart.setTimeframe(selectedTf)
+                    if (candles.length() > 0 && selectedTf == requestTf) {
+                        lastChartRequestMs = receivedAt
+                        val lastPrice = latestRoot?.optDouble("last_price", Double.NaN)
+                            ?: chartObj.optDouble("last_price", Double.NaN)
+                        chart.setTimeframe(requestTf)
                         chart.setLivePrice(lastPrice)
                         chart.setData(
                             candles,
-                            root.optJSONObject("signal"),
+                            latestRoot?.optJSONObject("signal"),
                             calculateEma(candles, 50),
                             lastPrice
                         )
@@ -1353,7 +1379,7 @@ class SafeActivity : Activity() {
     private fun requestChartIfNeeded(force: Boolean = false) {
         val now = System.currentTimeMillis()
         if (!force && chartRequestInFlight) return
-        if (!force && now - lastChartRequestMs < 900L) return
+        if (!force && now - lastChartRequestMs < 30_000L) return
 
         lastChartRequestMs = now
         chartRequestInFlight = true
@@ -1534,7 +1560,7 @@ class SafeActivity : Activity() {
             reconnect(immediate = true)
         }
 
-        handler.postDelayed({ safe { watchdog() } }, 2000L)
+        handler.postDelayed(healthWatchdogRunnable, 2000L)
     }
 
     private fun showPnlCalculator() {
@@ -2178,6 +2204,9 @@ class SafeActivity : Activity() {
         super.onStart()
         if (debugPreview) return
         stopped = false
+        handler.removeCallbacks(keepaliveRunnable)
+        handler.postDelayed(keepaliveRunnable, KEEPALIVE_INTERVAL_MS)
+        handler.removeCallbacks(snapshotPollRunnable)
 
         // Always rebuild the market snapshot when the activity returns to the
         // foreground. A previously-open socket can survive while its stream data
@@ -2188,10 +2217,23 @@ class SafeActivity : Activity() {
         handler.postDelayed({
             safe { connect() }
         }, 450L)
-        handler.postDelayed({
-            safe { watchdog() }
-        }, 1800L)
+        handler.removeCallbacks(healthWatchdogRunnable)
+        handler.postDelayed(healthWatchdogRunnable, 1800L)
         handler.postDelayed(snapshotPollRunnable, 1200L)
+    }
+
+    override fun onStop() {
+        stopped = true
+        handler.removeCallbacks(snapshotPollRunnable)
+        handler.removeCallbacks(keepaliveRunnable)
+        handler.removeCallbacks(healthWatchdogRunnable)
+        reconnectRunnable?.let { handler.removeCallbacks(it) }
+        reconnectRunnable = null
+        reconnectScheduled.set(false)
+        val old = socket
+        socket = null
+        runCatching { old?.close(1000, "dashboard in background") }
+        super.onStop()
     }
 
     override fun onDestroy() {

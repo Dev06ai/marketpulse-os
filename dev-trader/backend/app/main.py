@@ -5,6 +5,7 @@ import time
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from starlette.middleware.gzip import GZipMiddleware
 from pydantic import BaseModel
 from dotenv import load_dotenv
 
@@ -19,6 +20,7 @@ from .backtest import run_walk_forward
 from .execution import DemoExecutionEngine
 from .journal import ENGINE_REVISION, performance_scorecard
 from .evaluation import ShadowEvaluator, chronological_split, replay_decisions
+from .transport import Subscription, alert_payload, dashboard_payload, event_key
 
 load_dotenv()
 
@@ -27,6 +29,8 @@ WS_URL = os.getenv("BYBIT_WS_URL", "wss://stream.bybit.com/v5/public/linear")
 SNAPSHOT = float(os.getenv("SNAPSHOT_SECONDS", "1"))
 clients = set()
 client_failures = {}
+subscriptions = {}
+DASHBOARD_SECONDS = max(1.0, float(os.getenv("DASHBOARD_SECONDS", "5")))
 state = MarketState(symbol=SYMBOL)
 engine = StrategyEngine()
 bridge = MarketPulseBridge()
@@ -118,12 +122,13 @@ class RiskPayload(BaseModel):
     target: float | None = None
 
 
-def mobile_payload():
+def mobile_payload(include_research=True):
     now = int(time.time() * 1000)
     # Reconcile any exchange-side close before broadcasting cached signal state.
     reconcile_execution_truth()
     f = compute_features(state)
     diag = engine.last_diagnostics or {}
+    execution_state = execution.snapshot()
     return {
         "type": "state",
         "symbol": state.symbol,
@@ -138,6 +143,7 @@ def mobile_payload():
         "ws_connected": state.ws_connected,
         "exchange_ts": state.exchange_ts,
         "received_ts": state.received_ts,
+        "last_market_update_ts": state.last_market_update_ts,
         "server_ts": now,
         "signal": engine.active_signal,
         "engine": {
@@ -187,11 +193,11 @@ def mobile_payload():
             "body": last_opportunity_alert.get("body", ""),
             "ts": last_opportunity_alert.get("ts", 0),
         },
-        "trade_event": dict(last_trade_event) if last_trade_event else (execution.snapshot().get("last_event") or {}),
-        "execution": execution.snapshot(),
+        "trade_event": dict(last_trade_event) if last_trade_event else (execution_state.get("last_event") or {}),
+        "execution": execution_state,
         "learning": diag.get("learning", {}),
         "learning_context": diag.get("learning_context"),
-        "evaluation": shadow.summary(),
+        "evaluation": shadow.summary() if include_research else None,
         "upstream": {
             "rest_ok": bool(stream.last_rest_ok) if stream else False,
             "last_error": stream.last_upstream_error if stream else "",
@@ -209,17 +215,60 @@ def mobile_payload():
     }
 
 
+def market_tick():
+    return dict(type="market_tick", symbol=state.symbol, last_price=state.last_price,
+        mark_price=state.mark_price, index_price=state.index_price,
+        open_interest=state.open_interest, funding_rate=state.funding_rate,
+        bid=state.bid, ask=state.ask, data_health=state.data_health,
+        ws_connected=state.ws_connected, exchange_ts=state.exchange_ts,
+        received_ts=state.received_ts, last_market_update_ts=state.last_market_update_ts,
+        server_ts=int(time.time()*1000), upstream={
+            "rest_ok": bool(stream.last_rest_ok) if stream else False,
+            "last_error": stream.last_upstream_error if stream else "",
+            "last_rest_sync_ts": stream.last_rest_sync_ms if stream else 0,
+            "source": stream.last_data_source if stream else "NONE",
+        })
+
+
+def current_alerts():
+    return alert_payload(engine.active_signal, last_opportunity_alert,
+        last_trade_event or execution.data.get("last_event"), int(time.time()*1000))
+
+
 async def broadcast_loop():
     while True:
         await asyncio.sleep(max(0.5, min(SNAPSHOT, 1.0)))
         try:
-            payload = mobile_payload()
+            # Reconciliation must keep running even when no phone is connected.
+            reconcile_execution_truth()
+            if not clients:
+                continue
+            now = time.monotonic()
+            alerts = current_alerts()
+            key = event_key(alerts)
+            kinds = {ws: subscriptions.get(ws, Subscription()).next_kind(now, key, DASHBOARD_SECONDS)
+                     for ws in list(clients)}
+            frames = {"alerts": alerts}
+            if "legacy" in kinds.values() or "dashboard" in kinds.values():
+                full = mobile_payload(include_research="legacy" in kinds.values())
+                frames["legacy"] = full
+                frames["dashboard"] = dashboard_payload(full)
+            if "market_tick" in kinds.values():
+                frames["market_tick"] = market_tick()
+            # Serialize once per profile, rather than once per connected phone.
+            encoded = {k: json.dumps(v, separators=(",", ":"), allow_nan=False)
+                       for k, v in frames.items()}
         except Exception:
             continue
         async def push(ws):
+            kind = kinds.get(ws)
+            if kind is None:
+                return
             try:
-                await asyncio.wait_for(ws.send_json(payload), timeout=1.5)
+                await asyncio.wait_for(ws.send_text(encoded[kind]), timeout=1.5)
                 client_failures[ws] = 0
+                if ws in subscriptions:
+                    subscriptions[ws].delivered(kind, now, key)
                 return
             except Exception:
                 failures = client_failures.get(ws, 0) + 1
@@ -227,6 +276,7 @@ async def broadcast_loop():
                 if failures >= 8:
                     clients.discard(ws)
                     client_failures.pop(ws, None)
+                    subscriptions.pop(ws, None)
 
         # Send to clients concurrently so one slow mobile connection can never
         # block the other connection or starve the broadcast loop.
@@ -483,6 +533,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Dev Trader BTC Trading Bot", version="0.14.0", lifespan=lifespan)
+app.add_middleware(GZipMiddleware, minimum_size=700)
 
 
 @app.get("/health")
@@ -536,14 +587,16 @@ async def diagnostics():
 
 
 @app.get("/bootstrap")
-async def bootstrap(interval: str = "15m"):
+async def bootstrap(interval: str = "15m", profile: str = "legacy"):
     if stream is not None:
         try:
             if state.last_price is None or not state.candles_15:
                 await asyncio.wait_for(stream.bootstrap_rest(), timeout=8.0)
         except Exception:
             pass
-    payload = mobile_payload()
+    payload = mobile_payload(include_research=profile != "dashboard")
+    if profile == "dashboard":
+        payload = dashboard_payload(payload)
     pools = {
         "5m": state.candles_5,
         "15m": state.candles_15,
@@ -846,10 +899,18 @@ async def socket(ws: WebSocket):
     await ws.accept()
     clients.add(ws)
     client_failures[ws] = 0
+    profile = ws.query_params.get("profile", "legacy")
+    profile = profile if profile in {"dashboard", "alerts"} else "legacy"
+    sub = subscriptions[ws] = Subscription(profile=profile)
     try:
         # Send immediately so the phone gets price/OI/chart state without waiting for
         # the next periodic broadcast tick.
-        await ws.send_json(mobile_payload())
+        alerts = current_alerts()
+        initial = alerts if profile == "alerts" else mobile_payload(include_research=profile != "dashboard")
+        if profile == "dashboard":
+            initial = dashboard_payload(initial)
+        await ws.send_json(initial)
+        sub.delivered(profile, time.monotonic(), event_key(alerts))
         # The server is the publisher. Transport-level ping/pong is handled by the
         # WebSocket stack; the client does not need to send keepalive text frames.
         # Keep a lightweight receive loop so disconnects are detected cleanly
@@ -887,3 +948,4 @@ async def socket(ws: WebSocket):
     finally:
         clients.discard(ws)
         client_failures.pop(ws, None)
+        subscriptions.pop(ws, None)

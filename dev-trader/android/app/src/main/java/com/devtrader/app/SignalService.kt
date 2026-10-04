@@ -33,8 +33,6 @@ class SignalService : Service() {
         private const val PREF_LAST_SIGNAL_ID = "last_signal_id"
         private const val PREF_LAST_ALERT_KEY = "last_alert_key"
         private const val PREF_LAST_TRADE_EVENT_KEY = "last_trade_event_key"
-        private const val WS_URL = "wss://dev-trader-engine.onrender.com/ws"
-        private const val HEARTBEAT_URL = "https://dev-trader-engine.onrender.com/heartbeat"
         private const val KEEPALIVE_INTERVAL_MS = 15_000L
     }
 
@@ -75,6 +73,10 @@ class SignalService : Service() {
             .pingInterval(10, TimeUnit.SECONDS)
             .retryOnConnectionFailure(true)
             .build()
+    }
+    private val restClient by lazy {
+        client.newBuilder().readTimeout(8, TimeUnit.SECONDS)
+            .callTimeout(12, TimeUnit.SECONDS).build()
     }
 
     override fun onCreate() {
@@ -156,9 +158,13 @@ class SignalService : Service() {
         if (socket != null) return
         lastMessageMs = System.currentTimeMillis()
         socket = client.newWebSocket(
-            Request.Builder().url(WS_URL).build(),
+            Request.Builder().url(BackendEndpoint.socket("alerts")).build(),
             object : WebSocketListener() {
                 override fun onOpen(ws: WebSocket, response: Response) {
+                    if (stopped || socket !== ws) {
+                        ws.cancel()
+                        return
+                    }
                     reconnectAttempt = 0
                     reconnectScheduled = false
                     socket = ws
@@ -261,7 +267,7 @@ class SignalService : Service() {
             val age = if (lastMessageMs == 0L) Long.MAX_VALUE
             else System.currentTimeMillis() - lastMessageMs
 
-            if (age > 12_000L) {
+            if (age > 30_000L) {
                 staleChecks += 1
                 checkHeartbeatAndRecover()
             } else if (socket == null) {
@@ -275,8 +281,8 @@ class SignalService : Service() {
     private fun checkHeartbeatAndRecover() {
         if (stopped) return
         runCatching {
-            client.newCall(
-                Request.Builder().url(HEARTBEAT_URL).get().build()
+            restClient.newCall(
+                Request.Builder().url(BackendEndpoint.base + "/heartbeat").get().build()
             ).enqueue(object : okhttp3.Callback {
                 override fun onFailure(call: okhttp3.Call, e: java.io.IOException) {
                     if (!stopped && staleChecks >= 3) {
