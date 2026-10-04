@@ -194,6 +194,8 @@ class DemoExecutionEngine:
         return qty, qty * (distance + (entry + stop) * fee_rate), config
 
     def _signal_allowed(self, signal: dict[str, Any]) -> tuple[bool, str]:
+        if os.getenv("DEMO_EXECUTION_PAUSED", "false").lower() == "true" or os.getenv("DEMO_RESET_REQUEST_MS", ""):
+            return False, "Operator demo reset/test preparation is paused; no new exposure is admitted."
         if self._sync_lock.locked():
             return False, "Exchange reconciliation is in progress; wait for a verified snapshot."
         if not self.enabled:
@@ -1269,6 +1271,8 @@ class DemoExecutionEngine:
             "min_net_rr": float(os.getenv("BITGET_DEMO_MIN_NET_RR", "1.5")),
             "last_sync_ts": self.data.get("last_sync_ts", 0),
             "client_status": self.data.get("client_status") or {},
+            "operator_paused": os.getenv("DEMO_EXECUTION_PAUSED", "false").lower() == "true" or bool(os.getenv("DEMO_RESET_REQUEST_MS", "")),
+            "reset_receipt": self.data.get("reset_receipt"),
         }
 
     def snapshot(self) -> dict[str, Any]:
@@ -1295,6 +1299,16 @@ class DemoExecutionEngine:
     async def run(self):
         if not self.enabled or not self.ready:
             return
+        request = os.getenv("DEMO_RESET_REQUEST_MS", "")
+        if request:
+            from .demo_reset import reset_demo_session
+            try:
+                async with self._submission_lock:
+                    async with self._sync_lock:
+                        self.data["reset_receipt"] = await reset_demo_session(self.client, self.symbol, int(request))
+            except Exception as exc:
+                self.data["reset_receipt"] = {"status": "FAILED_PAUSED", "error": str(exc), "request_ts": request}
+            self._save()
         while not self._stop:
             await self.sync()
             await asyncio.sleep(self.sync_seconds)

@@ -281,6 +281,31 @@ class BitgetDemoClient:
         )
         return data if isinstance(data, dict) else {}
 
+    def pending_orders(self, symbol: str = "BTCUSDT") -> list[dict[str, Any]]:
+        result = self._get("/api/v3/trade/unfilled-orders", {
+            "category": self.product_type, "symbol": symbol, "limit": 100,
+        })
+        rows = self._list(result)
+        if len(rows) >= 100:
+            raise BitgetDemoError("Pending-order snapshot may be truncated; reset is blocked.")
+        return rows
+
+    def strategy_orders(self, symbol: str = "BTCUSDT") -> list[dict[str, Any]]:
+        rows = self._list(self._get("/api/v3/trade/unfilled-strategy-orders", {
+            "category": self.product_type,
+        }))
+        return [r for r in rows if str(r.get("symbol", "")).upper() == symbol.upper()]
+
+    def cancel_order(self, order_id: str) -> dict[str, Any]:
+        if not order_id:
+            raise BitgetDemoError("Cannot cancel an order without its exchange ID.")
+        return self._post("/api/v3/trade/cancel-order", {"orderId": order_id})
+
+    def cancel_strategy_order(self, order_id: str) -> dict[str, Any]:
+        if not order_id:
+            raise BitgetDemoError("Cannot cancel a strategy order without its exchange ID.")
+        return self._post("/api/v3/trade/cancel-strategy-order", {"orderId": order_id})
+
     def fills_history(self, start_ms: int, end_ms: int, max_pages: int = 10) -> dict[str, Any]:
         """Read a bounded, paginated 30-day window; never claim truncation is complete."""
         rows, cursor, seen = [], None, set()
