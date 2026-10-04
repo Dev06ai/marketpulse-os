@@ -6,14 +6,18 @@ the engine on a free service without adding a payment card.
 
 ## Prepared configuration
 
-Candidate: [Deplexo Free](https://deplexo.com/plans), currently one app, 0.25 CPU,
+Deployed: [Deplexo Free](https://deplexo.com/plans), currently one app, 0.25 CPU,
 128 MB RAM, 250 MB disk and 100 GB monthly transfer (sent plus received).
 Signup advertises no payment details. The tier has no uptime guarantee.
-This is a candidate until a deployment passes the checks below.
+The public host passed the native-client staging checks on 4 October 2026.
+Trading credentials and final cutover remain pending.
 
-Deploy the public repository `https://github.com/Dev06ai/marketpulse-os`, selecting
-the tested migration branch and root `dev-trader/backend`. The root contains
-`Dockerfile` and `deplexo.yaml`; listen on port 3000. Mount the named volume at
+The running source is commit `a213518675b7f96770f374cd080015ddd2570dc0` from the
+public repository `https://github.com/Dev06ai/marketpulse-os`. The host's public-Git
+form had no branch selector, so the exact tested backend was uploaded as a ZIP:
+`git archive --format=zip --output=backend.zip HEAD:dev-trader/backend`.
+Use `.` as Root directory and `Dockerfile` as Dockerfile path. Avoid enclosing
+the backend in wrapper folders. Listen on port 3000 and mount the named volume at
 `/data`. [Deployment docs](https://docs.deplexo.com/getting-started/quickstart/)
 and [storage docs](https://docs.deplexo.com/operations/storage/) describe the setup.
 
@@ -54,8 +58,9 @@ HTTP responses larger than 700 bytes support gzip.
 
 Both Android services now use one HTTPS origin supplied at build time:
 `-PdevTraderBackendUrl=https://THE-VERIFIED-HOST`.
-The default remains Render until a replacement has passed staging checks. No APK
-update has been published by this preparation branch.
+The default is now `https://dev-trader-engine.de.deplexo.com`, verified by the
+same OkHttp 4.12.0 client used by Android. Version 0.14.1 / build 99 is prepared;
+no APK update has yet been published by this migration branch.
 
 ## Cutover procedure
 
@@ -103,7 +108,23 @@ for the legacy protocol, about 98% less. These figures exclude HTTP, protocol
 overhead, incoming exchange traffic and live events. They are not an uptime,
 profitability or total monthly transfer guarantee.
 
+Live staging passed HTTPS, both socket profiles, keepalive acknowledgements,
+chart history and journal readiness using the native HTTP client. The one-minute
+feed observation recorded 15 HEALTHY and 6 DEGRADED samples, with exchange packet
+age 84 ms at completion and maximum order-book age 13,762 ms. The demo order book
+has update gaps; entry freshness thresholds remain unchanged. The host dashboard
+reported about 48–50 MiB memory and 0.03–0.05 vCPU during staging, below its limits.
+These observations do not establish uninterrupted availability.
+
+The host's Cloudflare edge rejects the default Python urllib client with error
+1010. The deployed-host gate therefore uses `dev-trader/tools/host-probe`, with
+OkHttp's normal defaults and TLS validation; no browser impersonation or security
+setting changes are used. Run it with:
+`gradle -p dev-trader/tools/host-probe run --args='https://dev-trader-engine.de.deplexo.com'`.
+
 CI also builds and probes the Docker image under a 128 MB / 0.25 CPU limit with
 a read-only root, verifies mounted data across a restart, and builds Android with
-its existing visual validation gate. Deployment and cutover remain pending until
-the new account and host are available.
+its existing visual validation gate. Final demo-account migration and Android
+publication remain pending. The old Render pause request was rejected because
+the service is suspended; verify and save that setting in its dashboard before
+unpausing the replacement.

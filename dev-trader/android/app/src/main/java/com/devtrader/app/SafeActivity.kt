@@ -1,4 +1,4 @@
-// Build 98: responsive Trade / Positions / Insights workspaces.
+// Build 99: free-host migration with compact mobile delivery.
 // Build 83: show Bitget Demo funding readiness and demo execution state.
 package com.devtrader.app
 
@@ -210,7 +210,7 @@ class SafeActivity : Activity() {
             renderState(preview, requestChart = false)
             val candles = preview.getJSONObject("chart").getJSONArray("candles")
             chart.setData(candles, preview.optJSONObject("signal"), calculateEma(candles, 50), preview.getDouble("last_price"))
-            check.text = "Build 98  •  Visual verification"
+            check.text = "Build ${BuildConfig.VERSION_CODE}  •  Visual verification"
             selectWorkspace(intent.getIntExtra("visual_workspace", 0).coerceIn(0, 2))
             return
         }
@@ -365,7 +365,7 @@ class SafeActivity : Activity() {
         val feed = compactCard("CONNECTION", "BITGET  •  CONNECTING", 11.5f)
         integrity = feed.value
         insightsPage.addView(feed.container, margins(bottom = 10))
-        val sys = compactCard("SYSTEM", "Build 98  •  Checking…", 11.5f)
+        val sys = compactCard("SYSTEM", "Build ${BuildConfig.VERSION_CODE}  •  Checking…", 11.5f)
         check = sys.value
         insightsPage.addView(sys.container, margins(bottom = 10))
         val tools = LinearLayout(this)
