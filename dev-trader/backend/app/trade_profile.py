@@ -30,9 +30,10 @@ class TradeVolumeProfile:
         self.connected_since=None
 
     def ingest(self, exec_id, ts, price, size, received_ms):
-        if not exec_id or exec_id in self.seen:
+        if exec_id in self.seen:
             return False
-        if not all(math.isfinite(float(v)) for v in (price,size)) or price <= 0 or size <= 0 or ts > received_ms+5000:
+        if not exec_id or not all(math.isfinite(float(v)) for v in (price,size)) or price <= 0 or size <= 0 or ts > received_ms+5000:
+            self.gap(received_ms)
             return False
         if self.connected_since is None:
             self.connect(received_ms)
@@ -68,6 +69,7 @@ class TradeVolumeProfile:
         current=self.sessions.get(day)
         previous=self.sessions.get(day-DAY_MS)
         result=dict(source="EXECUTED_TRADES",venue=self.venue,session="UTC_DAY",bin_width_usdt=self.width,
+                    coverage_assurance="OBSERVED_CONNECTION_COVERAGE_NOT_EXCHANGE_AUDITED",
                     exact_npoc=False,profile_status="WARMING",previous_day_poc=None,untouched_poc=None,
                     session_vwap=None,observed_session_vwap=None,touch_history_complete=False,
                     revision=self.revision,previous_session_complete=False,current_session_complete=False)

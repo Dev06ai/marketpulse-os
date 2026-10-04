@@ -134,6 +134,13 @@ def test_disconnect_across_midnight_invalidates_previous_coverage():
     assert not p.snapshot(day+1000)["exact_npoc"]
 
 
+def test_malformed_or_unidentified_trade_invalidates_profile_coverage():
+    p,day=complete_profile()
+    assert p.snapshot(day+1000)["exact_npoc"]
+    assert not p.ingest("",day+2000,100000,1,day+2000)
+    assert not p.snapshot(day+2000)["exact_npoc"]
+
+
 def test_v3_continuation_requires_one_hour_context_without_wave_votes():
     f=features();s=setup();state=MarketState(last_price=100000,data_health="HEALTHY",
         last_market_update_ts=1000,last_trade_ts=1000,last_book_ts=1000)
