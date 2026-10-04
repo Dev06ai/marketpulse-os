@@ -465,6 +465,9 @@ class BitgetMarketStream:
         self.delta_base = 0.0
         self.recent_exec_ids: set[str] = set()
         self.last_ws_packet_ms = 0
+        self.subscription_status: dict[str, dict] = {}
+        self.channel_packets: dict[str, int] = {}
+        self.binary_packets = 0
 
     @staticmethod
     def _interval_ms(interval: str) -> int:
@@ -756,6 +759,7 @@ class BitgetMarketStream:
 
     async def handle(self, raw):
         if isinstance(raw, bytes):
+            self.binary_packets += 1
             return
         if raw == "pong":
             return
@@ -764,6 +768,10 @@ class BitgetMarketStream:
         except (TypeError, ValueError):
             return
         if msg.get("event") in {"subscribe", "error"}:
+            arg = msg.get("arg") or {}
+            topic = str(arg.get("topic") or arg.get("channel") or "unknown")
+            self.subscription_status[topic] = {"event": msg.get("event"), "code": msg.get("code"),
+                                               "message": str(msg.get("msg") or "")[:220]}
             if msg.get("event") == "error":
                 self.last_upstream_error = f"Bitget subscription error: {msg.get('msg', '')}"
             return
@@ -774,6 +782,8 @@ class BitgetMarketStream:
         topic = str((msg.get("arg") or {}).get("topic") or "")
         if not topic:
             return
+        if len(self.channel_packets) < 12 or topic in self.channel_packets:
+            self.channel_packets[topic] = self.channel_packets.get(topic, 0)+1
 
         # Only ticker/public-trade traffic proves the live price/trade path
         # is flowing again. A liquidation-only or acknowledgement message must
@@ -865,6 +875,10 @@ class BitgetMarketStream:
         self._trim_windows(now)
         self._refresh_data_health(now)
         await self.on_state(self.state)
+
+    def feed_diagnostics(self) -> dict:
+        return {"subscriptions": self.subscription_status, "packets": self.channel_packets,
+                "binary_packets": self.binary_packets, "last_book_ts": self.state.last_book_ts}
 
     def _refresh_data_health(self, now: int):
         market_age = now - self.state.last_market_update_ts if self.state.last_market_update_ts else 10**9

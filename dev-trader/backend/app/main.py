@@ -651,6 +651,7 @@ async def system_check():
                 "source": stream.last_data_source if stream else "NONE",
                 "last_rest_sync_ts": stream.last_rest_sync_ms if stream else 0,
                 "last_error": stream.last_upstream_error if stream else "",
+                "public_channels": stream.feed_diagnostics() if stream and hasattr(stream, "feed_diagnostics") else {},
             },
             "features": {
                 "trend_15": f.trend_15,

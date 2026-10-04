@@ -1,4 +1,5 @@
 import asyncio
+import json
 import time
 
 import pytest
@@ -198,6 +199,17 @@ def test_bitget_flow_history_is_bounded_and_expired():
     stream._trim_windows(now)
     assert len(stream.state.flow_history) == 5000
     assert stream.state.flow_history[0][0] == now-5000
+
+
+def test_public_channel_diagnostics_distinguish_acknowledgement_from_data():
+    async def on_state(_):
+        pass
+    stream = BitgetMarketStream("BTCUSDT",on_state)
+    asyncio.run(stream.handle(json.dumps(dict(event="subscribe",arg=dict(topic="books5")))))
+    asyncio.run(stream.handle(b"binary packet"))
+    diag = stream.feed_diagnostics()
+    assert diag["subscriptions"]["books5"]["event"] == "subscribe"
+    assert diag["packets"] == {} and diag["last_book_ts"] is None and diag["binary_packets"] == 1
 
 
 def test_old_remote_predictions_do_not_resurrect_reset_session(monkeypatch,tmp_path):
