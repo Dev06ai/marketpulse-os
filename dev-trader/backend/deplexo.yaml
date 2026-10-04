@@ -1,0 +1,4 @@
+# Select dev-trader/backend as the deployment root in the dashboard.
+framework: dockerfile
+dockerfile: Dockerfile
+port: 3000

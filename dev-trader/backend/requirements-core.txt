@@ -1,0 +1,7 @@
+# Core bot and mobile WebSocket alerts; Firebase is optional and not bundled.
+fastapi==0.116.1
+uvicorn==0.35.0
+websockets==15.0.1
+pydantic==2.11.7
+pyyaml==6.0.2
+python-dotenv==1.1.1

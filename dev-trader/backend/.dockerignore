@@ -1,0 +1,8 @@
+.env*
+__pycache__/
+*.pyc
+*.sqlite3*
+*.json
+!knowledge/**/*.json
+.pytest_cache/
+test_*.py

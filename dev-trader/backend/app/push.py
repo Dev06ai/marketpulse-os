@@ -1,20 +1,20 @@
 import os,json
-try:
-    import firebase_admin
-    from firebase_admin import credentials,messaging
-except Exception:
-    firebase_admin=credentials=messaging=None
+firebase_admin=credentials=messaging=None
 
 class PushService:
     def __init__(self):
+        global firebase_admin, credentials, messaging
         self.tokens=set(); self.ready=False
         self.last_test_ts=None; self.last_test_sent=0; self.last_error=None
-        if os.getenv("PUSH_ENABLED","false").lower()=="true" and firebase_admin and os.getenv("FIREBASE_SERVICE_ACCOUNT_JSON"):
+        if os.getenv("PUSH_ENABLED","false").lower()=="true" and os.getenv("FIREBASE_SERVICE_ACCOUNT_JSON"):
             try:
+                import firebase_admin
+                from firebase_admin import credentials, messaging
                 data=json.loads(os.environ["FIREBASE_SERVICE_ACCOUNT_JSON"])
                 if not firebase_admin._apps: firebase_admin.initialize_app(credentials.Certificate(data))
                 self.ready=True
-            except Exception as exc: print(f"FCM disabled: {exc}")
+            except Exception as exc:
+                self.last_error = "FCM initialization failed: " + type(exc).__name__
     def register(self,token):
         if token: self.tokens.add(token)
 
