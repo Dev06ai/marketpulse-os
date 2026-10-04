@@ -692,12 +692,16 @@ class DemoExecutionEngine:
                         trade["filled_qty"] = filled
                     if avg > 0:
                         trade["entry_price"] = avg
+                    if filled > 0 and avg > 0:
+                        trade["partial_fill_confirmed"]=True
+                        await self._ensure_trade_protection(trade)
                     with self.lock:
                         self._save()
                     await asyncio.sleep(0.75)
                     continue
 
-                if normalized_status in {"filled", "full_fill", "full_filled"}:
+                terminal_partial=normalized_status in {"cancelled","canceled","rejected"} and filled>0
+                if normalized_status in {"filled", "full_fill", "full_filled"} or terminal_partial:
                     if filled <= 0 or avg <= 0:
                         trade["error"] = "Filled order is missing exchange quantity or average price; awaiting reconciliation."
                         await asyncio.sleep(0.75)
@@ -712,6 +716,8 @@ class DemoExecutionEngine:
                     trade["closed_ts"] = 0
                     trade["close_reason"] = ""
                     trade["actual_fill_confirmed"] = True
+                    trade["entry_order_terminal"]=True
+                    trade["terminal_partial_fill"]=terminal_partial
                     trade["exchange_order_detail"] = detail
                     trade["last_exchange_ts"] = int(time.time() * 1000)
                     fill_ts = trade["last_exchange_ts"]
@@ -941,6 +947,8 @@ class DemoExecutionEngine:
                     continue
                 if trade.get("status") == "ORDER_PENDING":
                     await self._poll_fill(str(trade.get("execution_id")))
+                    if trade.get("status")=="FAILED":
+                        continue
                 direction = str(trade.get("direction", "")).upper()
                 current = self._match_current_position(position_rows, direction)
                 closed = self._match_history_position(history, trade)
@@ -964,6 +972,8 @@ class DemoExecutionEngine:
                     # aggregate Bitget position can hide a partial fill.
                     if trade.get("status") == "ORDER_PENDING" and not trade.get("actual_fill_confirmed"):
                         trade["partial_position_detected"] = True
+                        if self._num(trade.get("filled_qty"))>0:
+                            await self._ensure_trade_protection(trade)
                         continue
 
                     trade["status"] = "OPEN"
@@ -1146,6 +1156,18 @@ class DemoExecutionEngine:
                     trade.update(recovered)
                     trade["trade_style"] = "SCALP" if recovered["timeframe"] == "5m" else "SWING"
                     trade["signal_snapshot"].update(recovered)
+                journal=getattr(self,"journal",None)
+                if journal:
+                    retained=next((r for r in journal.records(500,"EXECUTION")
+                        if (r.get("trade") or {}).get("execution_id")==oid),None)
+                    original=(retained or {}).get("trade") or {}
+                    snapshot=original.get("signal_snapshot") or {}
+                    if snapshot.get("direction")==direction and original.get("client_oid")==oid:
+                        trade["signal_snapshot"]=snapshot
+                        trade["signal_id"]=snapshot.get("id",oid)
+                        for key in ("setup","grade","confidence","rr","trade_style","planned_risk_usdt","target1"):
+                            if key in original: trade[key]=original[key]
+                        trade["recovery_scope"]="RETAINED_JOURNAL_PLUS_EXCHANGE_TRUTH"
                 self.data["trades"].insert(0, trade)
                 known.add(oid)
         self.data["trades"] = self.data["trades"][:500]
@@ -1227,6 +1249,12 @@ class DemoExecutionEngine:
         outcome = "TP2_REACHED" if trade["close_reason"] == "TP" else "SL_HIT" if trade["close_reason"] == "SL" else "CLOSED"
         lesson = self.learning.resolve(snapshot, outcome, result_r)
         trade["learning_review"] = lesson
+        journal=getattr(self,"journal",None)
+        if journal:
+            journal.record("EXCHANGE_OUTCOME",dict(execution_id=trade["execution_id"],
+                signal_id=trade.get("signal_id"),setup=trade.get("setup"),net_profit_usdt=net,
+                fees_usdt=fees,funding_usdt=funding,result_r=result_r,signal_snapshot=snapshot),
+                int(trade["closed_ts"]),identity="outcome:"+trade["execution_id"])
 
         now = int(time.time() * 1000)
         event = {

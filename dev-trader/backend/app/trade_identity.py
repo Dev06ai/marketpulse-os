@@ -5,10 +5,11 @@ It does not pretend to store the full order-flow thesis or an unlimited history.
 """
 import hashlib
 
-FAMILIES = {"S": "SFP", "D": "D-LINE", "B": "BREAKOUT RETEST", "M": "MSS",
+FAMILIES = {"S": "SFP", "D": "D-LINE", "B": "BREAKOUT RETEST", "M": "MSS", "P":"TREND PULLBACK",
             "F": "MOMENTUM CAPTURE", "H": "HARMONIC", "U": "UNKNOWN"}
 TIMEFRAMES = {"5": "5m", "F": "15m", "H": "1h", "U": "UNKNOWN"}
-REGIMES = {"U": "TREND_UP", "D": "TREND_DOWN", "R": "RANGE", "V": "HIGH_VOL", "X": "UNKNOWN"}
+REGIMES = {"U": "TREND_UP", "D": "TREND_DOWN", "R": "RANGE", "V": "HIGH_VOL", "X": "UNKNOWN",
+           "L":"BREAKOUT_LONG","S":"BREAKOUT_SHORT"}
 DIGITS = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
 
@@ -28,11 +29,12 @@ def client_identity(signal: dict, risk_usdt: float) -> str:
     risk = "".join(DIGITS[(cents // (36**p)) % 36] for p in (2,1,0))
     direction = "L" if signal.get("direction") == "LONG" else "S"
     digest = hashlib.sha256(str(signal.get("id")).encode()).hexdigest()[:16]
-    return f"DTDEMO-V2{fam}{tf}{reg}{direction}{risk}{digest}"
+    version="V3" if signal.get("engine_revision")=="market-decision-v3" else "V2"
+    return f"DTDEMO-{version}{fam}{tf}{reg}{direction}{risk}{digest}"
 
 
 def decode_identity(oid: str) -> dict:
-    if len(oid) != 32 or not oid.startswith("DTDEMO-V2"):
+    if len(oid) != 32 or not oid.startswith(("DTDEMO-V2","DTDEMO-V3")):
         return {}
     if oid[9] not in FAMILIES or oid[10] not in TIMEFRAMES or oid[11] not in REGIMES or oid[12] not in "LS":
         return {}
@@ -42,5 +44,6 @@ def decode_identity(oid: str) -> dict:
     except ValueError:
         return {}
     return {"setup": FAMILIES[oid[9]], "timeframe": TIMEFRAMES[oid[10]],
+            "engine_revision":"market-decision-v3" if oid.startswith("DTDEMO-V3") else "refined-demo-v2",
             "regime": REGIMES[oid[11]], "direction": "LONG" if oid[12] == "L" else "SHORT",
             "planned_risk_usdt": risk, "recovery_scope": "EXCHANGE_FAMILY_CONTEXT"}

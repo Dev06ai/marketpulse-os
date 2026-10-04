@@ -8,6 +8,9 @@ from .analytics import MarketFeatures, compute_features
 from .models import Candle, MarketState
 from .knowledge import RULES, MARKET_KNOWLEDGE, knowledge_summary
 from .learning import AdaptiveLearning
+from .structure import RegimeSelector
+from .playbooks import policy as playbook_policy, admission as playbook_admission, experimental_pattern_adjustment
+from .journal import DecisionJournal, ENGINE_REVISION
 
 
 @dataclass
@@ -147,7 +150,7 @@ def _trade_plan(
     anchor_risk = abs(entry - raw_stop)
 
     if style == "SWING":
-        min_risk = max(atr * 1.00, abs(entry) * 0.0010)
+        min_risk = max(atr * 1.00, float(f.atr_60 or 0)*.4, abs(entry) * 0.0010)
         tp1_rr = 1.60
         tp2_rr = 3.50
         max_rr = 5.00
@@ -674,6 +677,35 @@ def detect_breakout_retest(state: MarketState) -> Optional[Signal]:
     return signal
 
 
+def detect_trend_pullback(state: MarketState) -> Optional[Signal]:
+    """1h bias plus a closed 15m rejection of its execution moving average."""
+    from .analytics import ema
+    cs=[c for c in state.candles_15 if c.confirmed]
+    hourly=[c for c in state.candles_60 if c.confirmed]
+    if len(cs)<24 or len(hourly)<24 or state.last_price is None:
+        return None
+    f=compute_features(state)
+    average=ema(cs[:-1],20)
+    if average is None or f.atr_15<=0:
+        return None
+    last=cs[-1]
+    if abs(state.last_price-last.close)>.5*f.atr_15:
+        return None
+    direction=""
+    if f.trend_60=="UP" and f.trend_240!="DOWN" and last.low<=average<last.close and last.close>last.open:
+        direction="LONG";stop=min(c.low for c in cs[-4:])-.15*f.atr_15
+    elif f.trend_60=="DOWN" and f.trend_240!="UP" and last.high>=average>last.close and last.close<last.open:
+        direction="SHORT";stop=max(c.high for c in cs[-4:])+.15*f.atr_15
+    if not direction:
+        return None
+    target=state.last_price+(1 if direction=="LONG" else -1)*abs(state.last_price-stop)*3.5
+    return _signal(id=f"pullback-{direction.lower()}-{last.end}",direction=direction,
+        setup="Trend Pullback",entry=state.last_price,stop=stop,target=target,timeframe="15m",f=f,
+        invalidation="15m close through the confirmed pullback extreme",
+        thesis=["1h trend supplies directional context","Closed 15m candle rejects the execution average",
+                "Stop sits beyond the pullback extreme with a volatility allowance"])
+
+
 def entry_room(signal: Signal, state: MarketState, f: MarketFeatures) -> dict:
     """Measure room to opposing 1h/day/week structure before accepting a target."""
     levels = []
@@ -687,7 +719,14 @@ def entry_room(signal: Signal, state: MarketState, f: MarketFeatures) -> dict:
         levels.extend(("1h swing low", price) for _, price in lows)
         levels.extend((name, price) for name, price in (("previous day low", f.previous_day_low),
                      ("previous week low", f.previous_week_low)))
-    levels.append(("estimated untouched candle-volume POC", f.volume_context.get("untouched_poc")))
+    if signal.evidence.get("playbook"):
+        kind="HIGH" if signal.direction=="LONG" else "LOW"
+        levels=[(f"{tf} confirmed swing",l["price"]) for tf in ("1h","4h","daily")
+                for l in f.structure_map.get(tf,{}).get("levels",[]) if l["kind"]==kind and l["status"] in {"ACTIVE","TOUCHED"}]
+        levels.extend((name,price) for name,price in (("previous day high",f.previous_day_high),("previous week high",f.previous_week_high)) if signal.direction=="LONG")
+        levels.extend((name,price) for name,price in (("previous day low",f.previous_day_low),("previous week low",f.previous_week_low)) if signal.direction=="SHORT")
+    if f.volume_context.get("source")=="EXECUTED_TRADES" and f.volume_context.get("exact_npoc"):
+        levels.append(("untouched executed-volume POC",f.volume_context.get("untouched_poc")))
     sign = 1 if signal.direction == "LONG" else -1
     ahead = [(name, price) for name, price in levels if price is not None and sign*(price-signal.entry) > 0]
     if not ahead:
@@ -726,6 +765,11 @@ class StrategyEngine:
         self.governor_lock_reason = ""
         self.governor_last_quality_rejection = ""
         self._rehydrate_signal_governor()
+        self.regime_selector=RegimeSelector()
+        self.regime_state={"regime":"UNKNOWN","stable":False}
+        self.journal=DecisionJournal()
+        self.candidate_decisions=[]
+        self.shadow_candidates=[]
 
     def _rotate_governor_day(self):
         today = datetime.now(timezone.utc).date().isoformat()
@@ -942,6 +986,18 @@ class StrategyEngine:
     def _elite_decision_gate(self, signal: Signal, state: MarketState) -> tuple[bool, str]:
         """High-conviction decision layer designed to reject marginal entries."""
         f = compute_features(state)
+        if signal.evidence.get("playbook"):
+            allowed,reason=playbook_admission(signal,state,f,int(time.time()*1000))
+            room=entry_room(signal,state,f)
+            signal.evidence["entry_room"]=room
+            learned=self.learning.decision_filter(signal.to_dict())
+            signal.evidence["decision_engine"]={"historical_filter":learned,"policy":"PLAYBOOK_V3",
+                "confirmations":int(signal.evidence["playbook"]["trend_aligned"])+int(signal.evidence["playbook"]["at_htf_level"]),
+                "decision_min_confidence":.78}
+            failures=[reason] if not allowed else []
+            if not room["allow"]: failures.append(room["reason"])
+            if not learned["allow"]: failures.append(learned["reason"])
+            return not failures,"; ".join(failures)
         direction = signal.direction.upper()
         setup = signal.setup.upper()
         reasons: list[str] = []
@@ -1105,6 +1161,8 @@ class StrategyEngine:
         return (not reasons, "; ".join(reasons))
 
     def _quality_gate(self, signal: Signal, state: MarketState) -> tuple[bool, str]:
+        if signal.evidence.get("playbook"):
+            return True,""  # One playbook-specific admission gate replaces overlapping votes.
         cfg = _quality_rules()
         if not bool(cfg.get("enabled", True)):
             return True, ""
@@ -2872,29 +2930,40 @@ class StrategyEngine:
         self._update_signal_lifecycle(state)
         self._rotate_governor_day()
         self.last_diagnostics = self.diagnostics(state)
+        f=compute_features(state)
+        self.regime_state=self.regime_selector.update(f)
+        self.candidate_decisions=[]
+        self.shadow_candidates=[]
+        self.last_diagnostics.update(engine_revision=ENGINE_REVISION,structure_map=f.structure_map,
+                                     regime_selector=self.regime_state,decision_journal=self.journal.status())
         if os.getenv("DEMO_EXECUTION_PAUSED", "false").lower() in {"true", "1", "yes"}:
             self.last_diagnostics["status"] = "PAUSED"
             self.last_diagnostics["wait_reason"] = "New demo entries are paused while the test session is prepared."
             self.last_diagnostics["blocked_by"] = ["operator_pause"]
+            self._journal_decision(state)
             return None
         if not self._governor_allows_new_signal():
             self.last_diagnostics["status"] = "QUALITY_LOCK"
             self.last_diagnostics["wait_reason"] = self.governor_lock_reason
             self.last_diagnostics["blocked_by"] = ["quality_governor"]
+            self._journal_decision(state)
             return None
         # Continue analyzing candle setups during reduced market-data freshness.
         # Execution gates still require fresh quotes, trades and depth.
         if state.data_health not in {"HEALTHY", "DEGRADED"}:
+            self._journal_decision(state)
             return None
         candidates = [
             detect_sfp(state),
             detect_dline(state),
             detect_mss(state),
             detect_breakout_retest(state),
+            detect_trend_pullback(state),
             self._momentum_signal(state, compute_features(state)),
         ]
         signals = [s for s in candidates if s is not None]
         if not signals:
+            self._journal_decision(state)
             return None
 
         # The base detector can find several setups; only keep candidates that
@@ -2905,6 +2974,17 @@ class StrategyEngine:
         for candidate in signals:
             self._apply_memory_context(candidate, state)
             self._apply_learning_context(candidate, state)
+            # Retain the previous admission result on the SAME candidate for
+            # a clearly labeled gate comparison; this is not a full old-engine backtest.
+            legacy_quality,legacy_reason=self._quality_gate(candidate,state)
+            legacy_elite,legacy_elite_reason=self._elite_decision_gate(candidate,state)
+            candidate.evidence["legacy_gate_comparison"]={"allow":legacy_quality and legacy_elite,
+                "reason":"; ".join(x for x in (legacy_reason,legacy_elite_reason) if x),"scope":"SAME_CANDIDATE_GATE_COMPARISON"}
+            candidate.confidence=max(0.0,min(.99,candidate.confidence+experimental_pattern_adjustment(f,candidate.direction)))
+            candidate.regime=self.regime_state["regime"]
+            candidate.evidence["playbook"]=playbook_policy(candidate,state,f,self.regime_state)
+            candidate.evidence["structure_map"]=f.structure_map
+            candidate.evidence["score_meaning"]="HEURISTIC_EVIDENCE_SCORE_NOT_WIN_PROBABILITY"
             ok, reason = self._quality_gate(candidate, state)
             if ok:
                 elite_ok, elite_reason = self._elite_decision_gate(candidate, state)
@@ -2918,12 +2998,20 @@ class StrategyEngine:
                     rejected.append(f"{candidate.setup}: {elite_reason}")
             else:
                 rejected.append(f"{candidate.setup}: {reason}")
+            allow=candidate in qualified
+            reason="" if allow else rejected[-1] if rejected else "No executable edge"
+            self.candidate_decisions.append(dict(id=candidate.id,setup=candidate.setup,direction=candidate.direction,
+                family=candidate.evidence["playbook"]["family"],allow=allow,reason=reason,
+                legacy_gate=candidate.evidence["legacy_gate_comparison"],signal=candidate.to_dict()))
+            self.shadow_candidates.append(dict(signal=candidate.to_dict(),v3_allow=allow,
+                legacy_allow=candidate.evidence["legacy_gate_comparison"]["allow"]))
         if not qualified:
             self.governor_last_quality_rejection = " | ".join(rejected[:3])
             self.governor_lock_reason = "WAITING: no candidate met the elite quality gate."
             self.last_diagnostics["status"] = "QUALITY_LOCK"
             self.last_diagnostics["wait_reason"] = "No candidate met the elite quality gate."
             self.last_diagnostics["blocked_by"] = ["quality_governor"]
+            self._journal_decision(state)
             return None
 
         def decision_rank(s: Signal) -> tuple[float, float, float]:
@@ -2952,6 +3040,7 @@ class StrategyEngine:
         self.daily_signal_count += 1
 
         new_active = signal.to_dict()
+        new_active["engine_revision"]=ENGINE_REVISION
         new_active["lifecycle"] = "ACTIVE"
         new_active["lifecycle_stage"] = "ACTIVE"
         new_active["created_ts"] = self.last_evaluated_ts
@@ -2981,4 +3070,12 @@ class StrategyEngine:
         self.last_diagnostics["signal_state"] = self.signal_status
         self.last_diagnostics["active_signal"] = self.active_signal
         self.last_diagnostics["signal_history"] = self.signal_history
+        self.last_diagnostics.update(status="SIGNAL",wait_reason="",blocked_by=[])
+        self._journal_decision(state,signal.id)
         return signal
+
+    def _journal_decision(self,state,selected=None):
+        self.last_diagnostics["candidate_decisions"]=self.candidate_decisions
+        self.journal.observe(state,dict(ts=self.last_evaluated_ts,status=self.last_diagnostics.get("status"),
+            wait_reason=self.last_diagnostics.get("wait_reason"),regime=self.regime_state,
+            selected=selected,governor=self.governor_status()),self.candidate_decisions)

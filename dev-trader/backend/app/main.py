@@ -17,6 +17,8 @@ from .analytics import compute_features
 from .risk import calculate_risk
 from .backtest import run_walk_forward
 from .execution import DemoExecutionEngine
+from .journal import ENGINE_REVISION, performance_scorecard
+from .evaluation import ShadowEvaluator, chronological_split, replay_decisions
 
 load_dotenv()
 
@@ -29,6 +31,8 @@ state = MarketState(symbol=SYMBOL)
 engine = StrategyEngine()
 bridge = MarketPulseBridge()
 execution = DemoExecutionEngine(engine.learning, bridge=bridge)
+execution.journal=engine.journal
+shadow=ShadowEvaluator(engine.journal)
 push = PushService()
 stream = None
 server_started_ms = int(time.time() * 1000)
@@ -154,6 +158,10 @@ def mobile_payload():
             "sfp_hunter": diag.get("sfp_hunter", {}),
             "breakout_watch": diag.get("breakout_watch", {}),
             "data_quality": diag.get("data_quality", state.data_health),
+            "engine_revision": ENGINE_REVISION,
+            "regime_selector": engine.regime_state,
+            "structure_map": f.structure_map,
+            "candidate_decisions": engine.candidate_decisions,
         },
         "features": {
             "trend_15": f.trend_15,
@@ -183,6 +191,7 @@ def mobile_payload():
         "execution": execution.snapshot(),
         "learning": diag.get("learning", {}),
         "learning_context": diag.get("learning_context"),
+        "evaluation": shadow.summary(),
         "upstream": {
             "rest_ok": bool(stream.last_rest_ok) if stream else False,
             "last_error": stream.last_upstream_error if stream else "",
@@ -232,6 +241,7 @@ def schedule_execution(signal_payload: dict):
     # Private REST calls must not block processing the market WebSocket.
     payload = dict(signal_payload)
     payload["created_ts"] = engine.last_evaluated_ts
+    payload["engine_revision"] = ENGINE_REVISION
     task = asyncio.create_task(execute_signal(payload))
     execution_tasks.add(task)
     task.add_done_callback(execution_tasks.discard)
@@ -241,6 +251,9 @@ async def execute_signal(payload: dict):
     sid = str(payload.get("id") or "")
     try:
         result = await execution.handle_signal(payload)
+        engine.journal.record("EXECUTION",dict(signal_id=sid,ok=result.get("ok"),
+            skipped=result.get("skipped"),reason=result.get("reason"),trade=result.get("trade")),
+            identity="execution:"+sid)
         active = engine.active_signals.get(sid)
         if active is not None:
             active["execution_status"] = result.get("trade", {}).get("status") if result.get("ok") else "SKIPPED" if result.get("skipped") else "FAILED"
@@ -268,7 +281,14 @@ async def on_state(s: MarketState):
     )
     if should_evaluate:
         last_engine_eval_ms = now
+        if state.last_market_update_ts and now-state.last_market_update_ts<=3000:
+            engine.journal.tick(now,state.last_price)
         sig = engine.evaluate(state)
+        shadow.tick(state,now,compute_features(state).structure_map)
+        for candidate in engine.shadow_candidates:
+            shadow.observe_candidate(candidate["signal"],now,
+                selected=bool(sig and candidate["signal"]["id"]==sig.id),
+                legacy_allow=candidate["legacy_allow"])
 
         # Notify only on meaningful opportunity transitions, not on every radar refresh.
         global last_opportunity_alert
@@ -462,7 +482,7 @@ async def lifespan(app: FastAPI):
         t.cancel()
 
 
-app = FastAPI(title="Dev Trader BTC Trading Bot", version="0.13.0", lifespan=lifespan)
+app = FastAPI(title="Dev Trader BTC Trading Bot", version="0.14.0", lifespan=lifespan)
 
 
 @app.get("/health")
@@ -472,7 +492,7 @@ async def health():
     data_age = now - state.last_market_update_ts if state.last_market_update_ts else None
     return {
         "ok": True,
-        "engine_revision": "refined-demo-v2",
+        "engine_revision": ENGINE_REVISION,
         "symbol": state.symbol,
         "data_health": state.data_health,
         "ws_connected": state.ws_connected,
@@ -595,7 +615,32 @@ async def execution_status():
 
 @app.get("/performance")
 async def performance():
-    return execution.performance()
+    return dict(execution.performance(),playbook_scorecard=performance_scorecard(execution.history(500)),
+                exit_experiments=shadow.summary(),decision_journal=engine.journal.status())
+
+
+@app.get("/evaluation")
+async def evaluation():
+    return dict(engine_revision=ENGINE_REVISION,journal=engine.journal.status(),shadow=shadow.summary(),
+                chronological_windows=chronological_split(engine.journal.records(500,"DECISION")),
+                scorecard=performance_scorecard(execution.history(500)))
+
+
+@app.get("/decisions")
+async def decisions(limit: int=25):
+    records=engine.journal.records(limit,"DECISION")
+    # Compact review omits full recorded candles; export is explicit below.
+    return dict(status=engine.journal.status(),records=[{k:v for k,v in r.items() if k!="market"} for r in records])
+
+
+@app.get("/decisions/export")
+async def decision_export(limit: int=100):
+    return dict(status=engine.journal.status(),records=engine.journal.records(limit,"DECISION"))
+
+
+@app.get("/evaluation/replay")
+async def decision_replay(limit: int=25):
+    return replay_decisions(engine.journal.records(min(100,max(1,limit)),"DECISION"))
 
 
 @app.get("/signal-history")
@@ -634,6 +679,9 @@ async def system_check():
         }
         return {
             "backend_ok": True,
+            "engine_revision": ENGINE_REVISION,
+            "decision_journal": engine.journal.status(),
+            "strategy_evaluation": shadow.summary(),
             "market": {
                 "data_health": str(state.data_health or "UNKNOWN"),
                 "ws_connected": bool(state.ws_connected),
@@ -768,6 +816,9 @@ async def app_config():
 async def config():
     return {
         "symbol": SYMBOL,
+        "engine_revision": ENGINE_REVISION,
+        "decision_policy": "PLAYBOOK_V3",
+        "exit_experiments": "SHADOW_ONLY",
         "snapshot_seconds": SNAPSHOT,
         "manual_execution_only": not execution.enabled,
         "demo_execution_enabled": execution.enabled,

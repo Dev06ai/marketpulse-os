@@ -2,10 +2,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+import time
 
 from .models import Candle, MarketState
 from .elliott_wave import analyze_elliott
 from .volume_context import volume_context
+from .structure import structure_map
 
 
 @dataclass
@@ -52,6 +54,7 @@ class MarketFeatures:
     harmonic_confidence: float = 0.0
     harmonic_reason: str = ""
     volume_context: dict = field(default_factory=dict)
+    structure_map: dict = field(default_factory=dict)
 
 
 def _atr(candles: list[Candle], n: int = 14) -> float:
@@ -224,43 +227,50 @@ def _harmonic_context(candles: list[Candle]) -> tuple[str, str, float, str]:
 
     return "NONE", "NEUTRAL", 0.0, "No conservative harmonic ratio cluster confirmed."
 
-def _htf_levels(candles: list[Candle]):
-    cs = [c for c in candles if c.confirmed]
-    if not cs:
-        return None, None, None, None, None
-
-    daily: dict[str, list[Candle]] = {}
-    weekly: dict[str, list[Candle]] = {}
-    for c in cs:
-        dt = datetime.fromtimestamp(c.start / 1000, tz=timezone.utc)
-        daily.setdefault(dt.strftime("%Y-%m-%d"), []).append(c)
-        key = f"{dt.isocalendar().year}-W{dt.isocalendar().week:02d}"
-        weekly.setdefault(key, []).append(c)
-
-    days = sorted(daily)
-    prev_day_high = prev_day_low = None
-    if len(days) >= 2:
-        prev = daily[days[-2]]
-        prev_day_high = max(c.high for c in prev)
-        prev_day_low = min(c.low for c in prev)
-
-    weeks = sorted(weekly)
-    prev_week_high = prev_week_low = None
-    if len(weeks) >= 2:
-        prev = weekly[weeks[-2]]
-        prev_week_high = max(c.high for c in prev)
-        prev_week_low = min(c.low for c in prev)
-
-    current_dt = datetime.fromtimestamp(cs[-1].start / 1000, tz=timezone.utc)
-    current_key = f"{current_dt.isocalendar().year}-W{current_dt.isocalendar().week:02d}"
-    current_week = weekly.get(current_key, [])
-    weekly_open = current_week[0].open if current_week else None
-    return prev_day_high, prev_day_low, prev_week_high, prev_week_low, weekly_open
+def _htf_levels(candles: list[Candle], as_of_ms: int | None = None):
+    from .structure import closed_bars
+    now=int(as_of_ms if as_of_ms is not None else time.time()*1000)
+    cs=closed_bars(candles,3_600_000,now)
+    hourly={c.start:c for c in cs}
+    day=now//86_400_000*86_400_000
+    dt=datetime.fromtimestamp(now/1000,tz=timezone.utc)
+    week=day-dt.weekday()*86_400_000
+    def complete_range(start,end):
+        expected=set(range(start,end,3_600_000))
+        return [hourly[t] for t in sorted(expected)] if expected.issubset(hourly) else []
+    previous_day=complete_range(day-86_400_000,day)
+    previous_week=complete_range(week-7*86_400_000,week)
+    return (max((c.high for c in previous_day),default=None),min((c.low for c in previous_day),default=None),
+            max((c.high for c in previous_week),default=None),min((c.low for c in previous_week),default=None),
+            hourly[week].open if week in hourly else None)
 
 
 def compute_features(state: MarketState) -> MarketFeatures:
+    # Several detectors and mobile requests share one feature computation.
+    # All inputs affecting a result are in the key, including candle corrections.
+    candles = tuple(tuple((c.start,c.end,c.open,c.high,c.low,c.close,c.volume,c.confirmed) for c in pool)
+                    for pool in (state.candles_5,state.candles_15,state.candles_60))
+    key = (candles,state.last_price,state.book_imbalance,state.spread_bps,
+           state.liquidation_long_5m,state.liquidation_short_5m,tuple(state.oi_window),
+           tuple(state.flow_history),repr(state.trade_volume_profile),int(getattr(state,"_as_of_ms",time.time()*1000))//60_000)
+    cached = getattr(state,"_features_cache",None)
+    if cached and cached[0] == key:
+        return cached[1]
+    result = _compute_features(state)
+    state._features_cache = (key,result)
+    return result
+
+
+def _compute_features(state: MarketState) -> MarketFeatures:
     f = MarketFeatures()
-    f.volume_context = volume_context(state)
+    as_of=int(getattr(state,"_as_of_ms",time.time()*1000))
+    f.structure_map = structure_map(state,as_of)
+    f.volume_context = volume_context(state,as_of)
+    if state.trade_volume_profile:
+        # Only the trade profile can establish an actionable POC; estimates
+        # remain available explicitly for display and comparison.
+        estimate = f.volume_context
+        f.volume_context = dict(state.trade_volume_profile, candle_estimate=estimate)
     f.atr_15 = _atr(state.candles_15)
     f.atr_60 = _atr(state.candles_60)
     f.trend_15 = trend(state.candles_15)
@@ -316,7 +326,7 @@ def compute_features(state: MarketState) -> MarketFeatures:
         f.previous_week_high,
         f.previous_week_low,
         f.weekly_open,
-    ) = _htf_levels(state.candles_60)
+    ) = _htf_levels(state.candles_60,as_of)
 
     if f.trend_60 == "UP" and f.volatility_pct < 1.5:
         f.regime = "TREND_UP"
