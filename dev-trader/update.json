@@ -1,8 +1,8 @@
 {
   "enabled": true,
-  "versionCode": 98,
-  "versionName": "0.12.2",
-  "apkUrl": "https://github.com/Dev06ai/marketpulse-os/releases/download/dev-trader-v0.12.2-98/app-release.apk",
-  "sha256": "9417c6184dd8ed6b695b900b19f2ba241d3393c5a3cc626f6dcf99b7dfeaf7b4",
-  "notes": "Dev Trader 0.12.2 \u2022 Trade / Positions / Insights \u2022 exchange fill ledger \u2022 stronger execution checks"
+  "versionCode": 99,
+  "versionName": "0.14.1",
+  "apkUrl": "https://github.com/Dev06ai/marketpulse-os/releases/download/dev-trader-v0.14.1-99/app-release.apk",
+  "sha256": "584ec36125c41e07788d1c715547fa7de756dd96907925ccabcbf4634205fdea",
+  "notes": "Dev Trader 0.14.1 \u2022 free host \u2022 lower bandwidth \u2022 reliable mobile reconnects"
 }
