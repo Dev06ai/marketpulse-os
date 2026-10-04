@@ -2301,7 +2301,7 @@ class StrategyEngine:
         result = {
             "status": "SCANNING" if state.data_health == "HEALTHY" else ("DEGRADED_SCANNING" if state.data_health == "DEGRADED" else "CONNECTING"),
             "wait_reason": "" if state.data_health == "HEALTHY" else "Opportunity radar remains active while the live feed recovers.",
-            "blocked_by": ["data_health"] if state.data_health not in {"HEALTHY", "DEGRADED"} else [],
+            "blocked_by": ["data_health"] if state.data_health != "HEALTHY" else [],
             "setups": {},
             "min_rr": _min_rr(),
             "min_confidence": _min_confidence(),
@@ -2513,7 +2513,7 @@ class StrategyEngine:
             elif detail.get("status") == "CANDIDATE":
                 waits.append(f"{name}: candidate awaiting quality gates")
         if state.data_health == "DEGRADED":
-            waits.insert(0, "Primary feed unavailable: using secondary market data; microstructure freshness is reduced.")
+            waits.insert(0, "Market data freshness is reduced; automatic entries require fresh quotes, trades and depth.")
         result["wait_reason"] = " | ".join(waits) if waits else "At least one setup passed all diagnostic gates."
         result["signal_state"] = self.signal_status
         result["active_signal"] = self.active_signal
@@ -2882,9 +2882,8 @@ class StrategyEngine:
             self.last_diagnostics["wait_reason"] = self.governor_lock_reason
             self.last_diagnostics["blocked_by"] = ["quality_governor"]
             return None
-        # Keep loose mode active on the secondary REST feed. Candle-based setups
-        # can still be evaluated with reduced microstructure freshness rather than
-        # freezing the bot until the primary WebSocket is perfect.
+        # Continue analyzing candle setups during reduced market-data freshness.
+        # Execution gates still require fresh quotes, trades and depth.
         if state.data_health not in {"HEALTHY", "DEGRADED"}:
             return None
         candidates = [
