@@ -119,6 +119,7 @@ class SafeActivity : Activity() {
     private var lastBootstrapMs = 0L
     private var lastBootstrapSuccessMs = 0L
     private var bootstrapInFlight = false
+    private val healthWatchdogRunnable = Runnable { safe { watchdog() } }
     private val snapshotPollRunnable = object : Runnable {
         override fun run() {
             if (stopped) return
@@ -801,23 +802,24 @@ class SafeActivity : Activity() {
                 .build(),
             object : WebSocketListener() {
                 override fun onOpen(ws: WebSocket, response: Response) {
-                    socket = ws
-                    reconnectAttempt = 0
-                    reconnectScheduled.set(false)
-                    lastSocketActivityMs = System.currentTimeMillis()
-                    runCatching {
-                        ws.send(
-                            JSONObject().apply {
+                    handler.post {
+                        if (stopped || socket !== ws) {
+                            ws.cancel()
+                            return@post
+                        }
+                        reconnectAttempt = 0
+                        reconnectScheduled.set(false)
+                        lastSocketActivityMs = System.currentTimeMillis()
+                        runCatching {
+                            ws.send(JSONObject().apply {
                                 put("type", "keepalive")
                                 put("client_ts", System.currentTimeMillis())
-                            }.toString()
-                        )
-                    }
-                    handler.post {
+                            }.toString())
+                        }
                         status.text = "SYNCING…"
                         integrity.text = "WebSocket  •  CONNECTED  •  LIVE FEED SUPERVISOR"
+                        if (latestRoot == null) bootstrap(false)
                     }
-                    if (latestRoot == null) bootstrap(false)
                 }
 
                 override fun onMessage(ws: WebSocket, text: String) {
@@ -848,7 +850,7 @@ class SafeActivity : Activity() {
                                 handler.post {
                                     pendingUiUpdate = false
                                     lastUiRenderMs = System.currentTimeMillis()
-                                    safe { latestRoot?.let { renderState(it, requestChart = false) } }
+                                    if (!stopped) safe { latestRoot?.let { renderState(it, requestChart = false) } }
                                 }
                             }
                         }
@@ -1558,7 +1560,7 @@ class SafeActivity : Activity() {
             reconnect(immediate = true)
         }
 
-        handler.postDelayed({ safe { watchdog() } }, 2000L)
+        handler.postDelayed(healthWatchdogRunnable, 2000L)
     }
 
     private fun showPnlCalculator() {
@@ -2215,9 +2217,8 @@ class SafeActivity : Activity() {
         handler.postDelayed({
             safe { connect() }
         }, 450L)
-        handler.postDelayed({
-            safe { watchdog() }
-        }, 1800L)
+        handler.removeCallbacks(healthWatchdogRunnable)
+        handler.postDelayed(healthWatchdogRunnable, 1800L)
         handler.postDelayed(snapshotPollRunnable, 1200L)
     }
 
@@ -2225,6 +2226,7 @@ class SafeActivity : Activity() {
         stopped = true
         handler.removeCallbacks(snapshotPollRunnable)
         handler.removeCallbacks(keepaliveRunnable)
+        handler.removeCallbacks(healthWatchdogRunnable)
         reconnectRunnable?.let { handler.removeCallbacks(it) }
         reconnectRunnable = null
         reconnectScheduled.set(false)

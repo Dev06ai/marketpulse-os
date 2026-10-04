@@ -161,6 +161,10 @@ class SignalService : Service() {
             Request.Builder().url(BackendEndpoint.socket("alerts")).build(),
             object : WebSocketListener() {
                 override fun onOpen(ws: WebSocket, response: Response) {
+                    if (stopped || socket !== ws) {
+                        ws.cancel()
+                        return
+                    }
                     reconnectAttempt = 0
                     reconnectScheduled = false
                     socket = ws
