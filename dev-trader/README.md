@@ -10,11 +10,15 @@ Personal Android trading workspace with a FastAPI market engine and **Bitget UTA
 
 ## Execution policy
 
+Hosted engine **0.13.0 / refined-demo-v2** includes confirmed breakout/retest candidates alongside SFP, D-Line, MSS and early momentum. Opposing major levels can veto cramped entries; higher-timeframe structure supplies independent confirmation. Elliott and harmonic classifications remain heuristic context. Candle-derived POC/VWAP estimates are labeled explicitly and do not claim exact trade-level NPOC.
+
 Default risk is 0.25% of available collateral, bounded by observed equity. Estimated entry/exit taker fees count toward stop risk. Observed equity drawdown above 2% halves the configured risk budget. Exchange minimum quantities, quantity increments, price increments and notional rules govern sizing.
 
 Only fresh Grade-A candidates with configured quality thresholds can reach execution. The executor checks Bitget bid/ask, rejects wide/crossed quotes, excessive entry drift and net reward/risk below 1.5 after estimated fees. Rising open interest alone does not establish directional momentum. A historical setup veto is checked again at admission.
 
 One unresolved position is allowed at a time. New entries pause after two consecutive daily losses, the realized daily loss cap, a 1% fall from the first observed equity of the UTC day, the three-entry daily cap, or degraded exposure reconciliation. Stable client IDs and SUBMISSION_UNKNOWN recovery prevent treating a timeout as proof that no order was accepted. The market callback schedules execution asynchronously; slow private exchange calls do not hold up incoming market messages.
+
+Filled positions require verified exchange stop coverage. Missing coverage is repaired with a full-position market stop; uncertainty halts entries and permits one close only after verifying remaining quantity. Pending orders, incomplete fill/fee accounting and decisions that expire during sizing block new exposure. Planned stop risk is bounded by the remaining daily loss budget.
 
 ## Accounting and evidence
 
@@ -23,6 +27,10 @@ GET /performance and the mobile snapshot expose a paginated 30-day BTC fill ledg
 Confidence is a heuristic evidence score, not a calibrated probability. Candle-only replay cannot validate the live order-flow strategy; no fabricated win rate is presented. Forward demo results are required to assess expectancy, net P&L and drawdown.
 
 The free Render deployment uses temporary local state. Exchange history reconstructs execution records after restarts, but original signal context and observed equity peaks/day anchors can be lost. This is not durable learning. No paid storage is provisioned by this release.
+
+Versioned exchange IDs preserve strategy family, timeframe, regime and approximate planned risk within the engine's 30-day recovery window. An operator test session can persist its cutoff and initial equity in deployment configuration; GET /performance exposes session results separately from historical fill losses. Prior losses still count toward UTC daily risk limits.
+
+The current measured demo session began after verified flat exposure at 1791076124654 ms UTC with 975.29249645 USDT equity. See [the execution audit](AUDIT-2026-10-04.md) for closure evidence, regression coverage and limits.
 
 ## Validation and release
 

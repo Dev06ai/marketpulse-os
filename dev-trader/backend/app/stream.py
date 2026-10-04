@@ -464,6 +464,7 @@ class BitgetMarketStream:
         self.last_trade_minute: int | None = None
         self.delta_base = 0.0
         self.recent_exec_ids: set[str] = set()
+        self.last_ws_packet_ms = 0
 
     @staticmethod
     def _interval_ms(interval: str) -> int:
@@ -494,6 +495,7 @@ class BitgetMarketStream:
                     self.state.ws_connected = True
                     self.state.data_health = "CONNECTING"
                     self.last_data_source = "BITGET_WS"
+                    self.last_ws_packet_ms = int(time.time() * 1000)
                     await ws.send(json.dumps({
                         "op": "subscribe",
                         "args": [
@@ -506,11 +508,14 @@ class BitgetMarketStream:
                             {"instType": self.product_type.lower(), "topic": "kline", "symbol": self.symbol, "interval": "1H"},
                         ],
                     }))
-                    await self.backfill()
+                    # Consume live packets while REST history warms up. Slow
+                    # backfill must not leave the socket's input queue stalled.
+                    warmup = asyncio.create_task(self.backfill())
                     await self.on_state(self.state)
                     heartbeat = asyncio.create_task(self._heartbeat(ws))
                     try:
                         async for raw in ws:
+                            self.last_ws_packet_ms = int(time.time() * 1000)
                             if self.stop:
                                 break
                             if raw == "pong":
@@ -521,6 +526,8 @@ class BitgetMarketStream:
                             await self.handle(raw)
                     finally:
                         heartbeat.cancel()
+                        warmup.cancel()
+                        await asyncio.gather(heartbeat, warmup, return_exceptions=True)
                         self.state.ws_connected = False
                         self._refresh_data_health(int(time.time() * 1000))
             except asyncio.CancelledError:
@@ -533,10 +540,18 @@ class BitgetMarketStream:
                 await asyncio.sleep(2.0)
 
     async def _heartbeat(self, ws):
+        last_ping_ms = int(time.time() * 1000)
         while not self.stop:
-            await asyncio.sleep(30)
+            await asyncio.sleep(5)
             try:
-                await ws.send("ping")
+                now = int(time.time() * 1000)
+                if now - self.last_ws_packet_ms > 45_000:
+                    self.last_upstream_error = "Bitget WS stopped receiving packets; reconnecting."
+                    await ws.close()
+                    return
+                if now - last_ping_ms >= 30_000:
+                    await ws.send("ping")
+                    last_ping_ms = now
             except Exception:
                 return
 
@@ -562,7 +577,6 @@ class BitgetMarketStream:
             )
             self.last_rest_candle_sync_ms = int(time.time() * 1000)
             self.last_rest_ok = True
-            self.last_data_source = "BITGET_WS"
         except Exception as exc:
             self.last_upstream_error = f"Bitget backfill: {str(exc)[:220]}"
 
@@ -601,7 +615,10 @@ class BitgetMarketStream:
                 volume=float(row[5]) if len(row) > 5 else 0.0,
                 confirmed=start < (now // interval_ms) * interval_ms,
             )
-            merged[start] = candle
+            # Do not overwrite a concurrently received live forming candle
+            # with the older REST snapshot. Past unconfirmed bars can mature.
+            if start not in merged or (not merged[start].confirmed and start < (now // interval_ms) * interval_ms):
+                merged[start] = candle
         values = sorted(merged.values(), key=lambda x: x.start)
         dest.clear()
         dest.extend(values[-240:])
@@ -628,6 +645,8 @@ class BitgetMarketStream:
             return payload.get("data") or []
 
         rows = await asyncio.to_thread(fetch)
+        if self.recent_exec_ids:
+            return  # Live trades already established CVD; never reset it mid-stream.
         ordered = sorted(rows, key=lambda x: int(x.get("ts", 0)))
         self.state.cvd = 0.0
         self.state.cvd_history.clear()
@@ -644,8 +663,7 @@ class BitgetMarketStream:
             self.state.cvd_history.append((ts, self.state.cvd))
         self.delta_base = self.state.cvd
         self.last_trade_minute = None
-        if ordered:
-            self.state.last_trade_ts = int(ordered[-1].get("ts") or now)
+        # REST tape warms CVD only. Live trade freshness requires a WS packet.
 
     def _rest_market_sync(self):
         query = urlencode({
@@ -724,6 +742,7 @@ class BitgetMarketStream:
         cutoff = now - 15 * 60_000
         self.state.oi_window = [(ts, v) for ts, v in self.state.oi_window if ts >= cutoff]
         self.state.cvd_history = [(ts, v) for ts, v in self.state.cvd_history if ts >= cutoff]
+        self.state.flow_history = [row for row in self.state.flow_history if row[0] >= cutoff][-5000:]
         self.state.liquidation_window = [(ts, side, size) for ts, side, size in self.state.liquidation_window if ts >= cutoff]
         self.state.liquidation_long_5m = sum(
             v for ts, side, v in self.state.liquidation_window
@@ -781,6 +800,10 @@ class BitgetMarketStream:
                 elif side == "sell":
                     self.state.cvd -= size
                 self.state.last_trade_ts = ts
+                price = float(trade.get("p") or 0.0)
+                if price > 0:
+                    self.state.last_price = price
+                    self.state.flow_history.append((ts, price, self.state.cvd, size))
                 self.state.last_market_update_ts = now
                 minute = ts // 60_000
                 if self.last_trade_minute != minute:
@@ -793,6 +816,7 @@ class BitgetMarketStream:
                 data = rows[0]
                 self.state.orderbook_seq = int(data.get("seq", self.state.orderbook_seq or 0))
                 self._apply_book(data, str(msg.get("action") or "snapshot"))
+                self.state.last_book_ts = now
         elif topic == "liquidation":
             for liq in rows:
                 side = str(liq.get("side") or "").lower()
@@ -845,12 +869,14 @@ class BitgetMarketStream:
     def _refresh_data_health(self, now: int):
         market_age = now - self.state.last_market_update_ts if self.state.last_market_update_ts else 10**9
         trade_age = now - self.state.last_trade_ts if self.state.last_trade_ts else 10**9
+        book_age = now - self.state.last_book_ts if self.state.last_book_ts else 10**9
         kline_age = now - self.state.last_kline_15_ts if self.state.last_kline_15_ts else 10**9
         if (
             self.state.ws_connected
             and self.last_data_source == "BITGET_WS"
             and market_age < 3000
-            and trade_age < 3000
+            and trade_age < 15000
+            and book_age < 5000
             and kline_age < 120_000
         ):
             self.state.data_health = "HEALTHY"

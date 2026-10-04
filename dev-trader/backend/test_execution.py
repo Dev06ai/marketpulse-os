@@ -35,6 +35,15 @@ class FakeClient:
     def positions(self, symbol):
         return []
 
+    def pending_orders(self, symbol):
+        return []
+
+    def strategy_orders(self, symbol):
+        return [dict(orderId=f"sl-{i}", posSide=str(p.get("holdSide") or p.get("posSide")).lower(),
+                     stopLoss="1" if str(p.get("holdSide") or p.get("posSide")).lower() == "long" else "999999",
+                     qty=p["total"], status="pending", slOrderType="market")
+                for i, p in enumerate(self.positions(symbol)) if float(p.get("total", 0)) > 0]
+
     def available_balance(self, symbol):
         return 1000.0
 
@@ -559,7 +568,7 @@ def test_execution_uses_v3_ask_and_rejects_wide_spread(monkeypatch, tmp_path):
 
 
 def test_timeout_blocks_new_exposure_and_recovers_by_stable_client_id(monkeypatch, tmp_path):
-    import hashlib
+    from app.trade_identity import client_identity
     executor = audit_executor(monkeypatch, tmp_path)
     def timeout(*args):
         raise TimeoutError('response lost after submission')
@@ -567,7 +576,8 @@ def test_timeout_blocks_new_exposure_and_recovers_by_stable_client_id(monkeypatc
     result = asyncio.run(executor.handle_signal(audit_signal()))
     trade = executor.history(1)[0]
     assert not result['ok'] and trade['status'] == 'SUBMISSION_UNKNOWN'
-    oid = 'DTDEMO-' + hashlib.sha256(b'AUDIT').hexdigest()[:24]
+    reference, _ = asyncio.run(executor._validate_execution_price(audit_signal()))
+    oid = client_identity(audit_signal(), asyncio.run(executor._risk_size(dict(audit_signal(), entry=reference)))[1])
     assert trade['client_oid'] == oid and len(oid) <= 32
     assert executor._open_local_trade() is not None
     executor._merge_exchange_open_orders([dict(clientOid=oid, orderId='accepted',

@@ -77,7 +77,7 @@ def test_bitget_ticker_and_public_trade_are_authoritative():
     }
     _asyncio.run(stream.handle(__import__("json").dumps(trade)))
 
-    assert stream.state.last_price == 100100.0
+    assert stream.state.last_price == 100101.0
     assert stream.state.open_interest == 12345.0
     assert stream.state.bid == 100099.0
     assert stream.state.ask == 100101.0
@@ -137,6 +137,7 @@ def test_bitget_rest_fallback_cannot_report_healthy():
     stream.state.last_market_update_ts = now - 100
     stream.state.last_trade_ts = now - 100
     stream.state.last_kline_15_ts = now - 100
+    stream.state.last_book_ts = now - 100
     stream.last_rest_ok = True
     stream.last_data_source = "BITGET_REST"
 

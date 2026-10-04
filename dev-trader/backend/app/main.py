@@ -171,6 +171,7 @@ def mobile_payload():
             "harmonic_confidence": round(f.harmonic_confidence, 3),
             "harmonic_reason": f.harmonic_reason,
             "weekly_open": f.weekly_open,
+            "volume_context": f.volume_context,
         },
         "opportunity_alert": {
             "key": last_opportunity_alert.get("key", ""),
@@ -461,23 +462,25 @@ async def lifespan(app: FastAPI):
         t.cancel()
 
 
-app = FastAPI(title="Dev Trader BTC Trading Bot", version="0.12.0", lifespan=lifespan)
+app = FastAPI(title="Dev Trader BTC Trading Bot", version="0.13.0", lifespan=lifespan)
 
 
 @app.get("/health")
 async def health():
     now = int(time.time() * 1000)
     latency = (state.received_ts - state.exchange_ts) if state.received_ts and state.exchange_ts else None
-    recent_market = [x for x in (state.last_trade_ts, state.last_kline_15_ts, state.last_kline_60_ts) if x]
-    data_age = max([now - x for x in recent_market], default=None)
+    data_age = now - state.last_market_update_ts if state.last_market_update_ts else None
     return {
         "ok": True,
+        "engine_revision": "refined-demo-v2",
         "symbol": state.symbol,
         "data_health": state.data_health,
         "ws_connected": state.ws_connected,
         "last_price": state.last_price,
         "latency_ms": latency,
         "data_age_ms": data_age,
+        "book_age_ms": now - state.last_book_ts if state.last_book_ts else None,
+        "trade_age_ms": now - state.last_trade_ts if state.last_trade_ts else None,
         "signal": engine.active_signal,
         "signal_state": engine.signal_status,
     }
@@ -487,6 +490,7 @@ async def health():
 async def heartbeat():
     now = int(time.time() * 1000)
     ages = {
+        "book_ms": (now - state.last_book_ts) if state.last_book_ts else None,
         "trade_ms": (now - state.last_trade_ts) if state.last_trade_ts else None,
         "kline_15_ms": (now - state.last_kline_15_ts) if state.last_kline_15_ts else None,
         "kline_60_ms": (now - state.last_kline_60_ts) if state.last_kline_60_ts else None,

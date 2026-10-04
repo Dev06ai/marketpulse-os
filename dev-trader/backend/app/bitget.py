@@ -259,18 +259,29 @@ class BitgetDemoClient:
         start_ms: int | None = None,
         end_ms: int | None = None,
     ) -> list[dict[str, Any]]:
-        return self._list(
-            self._get(
-                "/api/v3/trade/history-orders",
-                {
-                    "category": self.product_type,
-                    "symbol": symbol,
-                    "startTime": start_ms,
-                    "endTime": end_ms,
-                    "limit": max(1, min(int(limit), 100)),
-                },
-            )
-        )
+        page_size = max(1, min(int(limit), 100))
+        cursor = None
+        result = {}
+        for _ in range(10):
+            response = self._get("/api/v3/trade/history-orders", {
+                "category": self.product_type, "symbol": symbol,
+                "startTime": start_ms, "endTime": end_ms,
+                "limit": page_size, "cursor": cursor,
+            })
+            rows = self._list(response)
+            for row in rows:
+                order_id = str(row.get("orderId") or "")
+                if not order_id:
+                    raise BitgetDemoError("Historical order is missing its ID; reconciliation is blocked.")
+                result[order_id] = row
+            if len(rows) < page_size:
+                return list(result.values())
+            data = self._data(response)
+            next_cursor = str(data.get("cursor") or "") if isinstance(data, dict) else ""
+            if not next_cursor or next_cursor == cursor:
+                raise BitgetDemoError("Historical-order pagination is incomplete; reconciliation is blocked.")
+            cursor = next_cursor
+        raise BitgetDemoError("Historical-order window exceeds the verified pagination limit.")
 
     def order_detail(self, symbol: str, order_id: str) -> dict[str, Any]:
         data = self._data(
@@ -305,6 +316,18 @@ class BitgetDemoClient:
         if not order_id:
             raise BitgetDemoError("Cannot cancel a strategy order without its exchange ID.")
         return self._post("/api/v3/trade/cancel-strategy-order", {"orderId": order_id})
+
+    def place_full_stop(self, symbol: str, direction: str, stop: str, client_oid: str) -> dict[str, Any]:
+        if direction not in {"LONG", "SHORT"} or self.numeric(stop) <= 0:
+            raise BitgetDemoError("Full-position stop requires a valid side and trigger price.")
+        payload = {"category": self.product_type, "symbol": symbol, "type": "tpsl",
+                   "tpslMode": "full", "side": "sell" if direction == "LONG" else "buy",
+                   "stopLoss": stop, "slTriggerBy": "mark", "slOrderType": "market", "clientOid": client_oid}
+        if str(self.account_settings().get("holdMode", "")).lower() == "hedge_mode":
+            payload["posSide"] = direction.lower()
+        else:
+            payload["reduceOnly"] = "yes"
+        return self._post("/api/v3/trade/place-strategy-order", payload)
 
     def fills_history(self, start_ms: int, end_ms: int, max_pages: int = 10) -> dict[str, Any]:
         """Read a bounded, paginated 30-day window; never claim truncation is complete."""

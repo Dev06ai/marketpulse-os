@@ -66,6 +66,7 @@ class MarketState:
     exchange_ts: int | None = None
     received_ts: int | None = None
     last_market_update_ts: int | None = None
+    last_book_ts: int | None = None
     last_trade_ts: int | None = None
     last_kline_5_ts: int | None = None
     last_kline_15_ts: int | None = None
@@ -74,6 +75,7 @@ class MarketState:
     ws_connected: bool = False
     oi_window: list[tuple[int, float]] = field(default_factory=list)
     cvd_history: list[tuple[int, float]] = field(default_factory=list)
+    flow_history: list[tuple[int, float, float, float]] = field(default_factory=list)
     liquidation_window: list[tuple[int, str, float]] = field(default_factory=list)
     candles_5: list[Candle] = field(default_factory=list)
     candles_15: list[Candle] = field(default_factory=list)
@@ -90,5 +92,6 @@ class MarketState:
         d["candles_4h"] = [c.to_dict() for c in self.candles_4h()[-80:]]
         d["oi_window"] = self.oi_window[-120:]
         d["cvd_history"] = self.cvd_history[-120:]
+        d["flow_history"] = self.flow_history[-120:]
         d["liquidation_window"] = self.liquidation_window[-240:]
         return d

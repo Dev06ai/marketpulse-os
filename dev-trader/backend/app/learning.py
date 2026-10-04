@@ -5,6 +5,8 @@ import time
 from pathlib import Path
 from typing import Any
 
+from .trade_identity import family
+
 
 class AdaptiveLearning:
     """Small, bounded adaptive learner for Dev Trader setup outcomes.
@@ -46,7 +48,7 @@ class AdaptiveLearning:
     @staticmethod
     def _key(signal: dict[str, Any]) -> str:
         return "|".join([
-            str(signal.get("setup", "UNKNOWN")).upper(),
+            family(signal.get("setup", "UNKNOWN")),
             str(signal.get("direction", "UNKNOWN")).upper(),
             str(signal.get("timeframe", "UNKNOWN")).upper(),
             str(signal.get("regime") or signal.get("evidence", {}).get("regime") or "UNKNOWN").upper(),
@@ -198,6 +200,11 @@ class AdaptiveLearning:
         with self.lock:
             sid = str(signal.get("id", ""))
             trade = next((t for t in self.data["trades"] if t.get("id") == sid), None)
+            eid = signal.get("execution_id")
+            if trade is None and eid:
+                trade = next((t for t in self.data["trades"] if t.get("execution_id") == eid), None)
+                if trade:
+                    sid = trade["id"]
             if not trade:
                 self.record_open(signal)
                 trade = next((t for t in self.data["trades"] if t.get("id") == sid), None)
@@ -228,11 +235,18 @@ class AdaptiveLearning:
         with self.lock:
             sid = str(signal.get("id", ""))
             trade = next((t for t in self.data["trades"] if t.get("id") == sid), None)
+            eid = signal.get("execution_id")
+            if trade is None and eid:
+                trade = next((t for t in self.data["trades"] if t.get("execution_id") == eid), None)
+                if trade:
+                    sid = trade["id"]
             if not trade:
                 self.record_open(signal)
                 trade = next((t for t in self.data["trades"] if t.get("id") == sid), None)
             if not trade:
                 return {"what_worked": [], "do_next_time": [], "avoid_next_time": []}
+            if eid:
+                trade["execution_id"] = eid
 
             # Reconciliation may deliver an outcome repeatedly, or replace a
             # chart-based estimate with an actual exchange result. Replace the

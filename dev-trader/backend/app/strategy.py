@@ -381,6 +381,7 @@ def _signal(
             "weekly_open": f.weekly_open,
             "previous_week_high": f.previous_week_high,
             "previous_week_low": f.previous_week_low,
+            "volume_context": f.volume_context,
             "trade_style": trade_style,
             "style_reason": style_reason,
             "risk_distance": round(risk_distance, 4),
@@ -628,6 +629,78 @@ def detect_mss(state: MarketState) -> Optional[Signal]:
     return None
 
 
+def detect_breakout_retest(state: MarketState) -> Optional[Signal]:
+    """Require closed breakout and retest bars; never buy a wick-only breach."""
+    cs = [c for c in state.candles_15 if c.confirmed]
+    if len(cs) < 14 or state.last_price is None:
+        return None
+    base, breakout, retest = cs[-14:-2], cs[-2], cs[-1]
+    if breakout.start-base[-1].start != 900_000 or retest.start-breakout.start != 900_000:
+        return None
+    f = compute_features(state)
+    atr = f.atr_15
+    if atr <= 0:
+        return None
+    upper, lower = max(c.high for c in base), min(c.low for c in base)
+    average_volume = sum(c.volume for c in base)/len(base)
+    body = abs(breakout.close-breakout.open)/max(breakout.high-breakout.low, 1e-9)
+    if average_volume <= 0 or breakout.volume < average_volume*1.25 or body < .55:
+        return None
+    entry = state.last_price
+    if abs(entry-retest.close) > .5*atr:
+        return None
+    direction, level, stop = "", 0.0, 0.0
+    if (breakout.open <= upper and breakout.close > upper+.1*atr
+            and upper-.2*atr <= retest.low <= upper+.2*atr
+            and retest.close > upper and upper < entry <= upper+.75*atr):
+        direction, level = "LONG", upper
+        stop = min(retest.low, upper)-.15*atr
+    elif (breakout.open >= lower and breakout.close < lower-.1*atr
+            and lower-.2*atr <= retest.high <= lower+.2*atr
+            and retest.close < lower and lower-.75*atr <= entry < lower):
+        direction, level = "SHORT", lower
+        stop = max(retest.high, lower)+.15*atr
+    if not direction:
+        return None
+    target = entry + (1 if direction == "LONG" else -1)*abs(entry-stop)*3.5
+    signal = _signal(id=f"retest-{direction.lower()}-{retest.end}", direction=direction,
+        setup="Breakout Retest", entry=entry, stop=stop, target=target, timeframe="15m", f=f,
+        invalidation=f"15m acceptance back inside the broken range at {level:.2f}",
+        thesis=["Confirmed range breakout with volume expansion", "Confirmed next-bar retest held the level",
+                "Live entry remains near the retest; extended entries are rejected"])
+    if signal:
+        signal.evidence["breakout_retest"] = {"level": level, "breakout_ts": breakout.end,
+            "retest_ts": retest.end, "breakout_volume_multiple": round(breakout.volume/average_volume, 3)}
+    return signal
+
+
+def entry_room(signal: Signal, state: MarketState, f: MarketFeatures) -> dict:
+    """Measure room to opposing 1h/day/week structure before accepting a target."""
+    levels = []
+    confirmed = [c for c in state.candles_60 if c.confirmed][-48:]
+    highs, lows = pivots(confirmed, 2) if len(confirmed) >= 5 else ([], [])
+    if signal.direction == "LONG":
+        levels.extend(("1h swing high", price) for _, price in highs)
+        levels.extend((name, price) for name, price in (("previous day high", f.previous_day_high),
+                     ("previous week high", f.previous_week_high)))
+    else:
+        levels.extend(("1h swing low", price) for _, price in lows)
+        levels.extend((name, price) for name, price in (("previous day low", f.previous_day_low),
+                     ("previous week low", f.previous_week_low)))
+    levels.append(("estimated untouched candle-volume POC", f.volume_context.get("untouched_poc")))
+    sign = 1 if signal.direction == "LONG" else -1
+    ahead = [(name, price) for name, price in levels if price is not None and sign*(price-signal.entry) > 0]
+    if not ahead:
+        return {"allow": True, "nearest_barrier": None, "reason": "No observed opposing major level before the target."}
+    name, price = min(ahead, key=lambda level: abs(level[1]-signal.entry))
+    fee = max(0.0, float(os.getenv("BITGET_DEMO_TAKER_FEE_RATE", "0.0006")))
+    risk = abs(signal.entry-signal.stop)+(signal.entry+signal.stop)*fee
+    net_room_r = (abs(price-signal.entry)-(signal.entry+price)*fee)/risk if risk > 0 else 0
+    blocked = sign*(price-signal.target1) < 0 and net_room_r < 1.25
+    return {"allow": not blocked, "nearest_barrier": name, "price": price, "net_room_r": round(net_room_r, 3),
+            "reason": f"Opposing {name} leaves only {net_room_r:.2f}R after estimated fees." if blocked else "Observed structure leaves room for the planned first target."}
+
+
 class StrategyEngine:
     def __init__(self, learning: AdaptiveLearning | None = None):
         self.learning = learning or AdaptiveLearning()
@@ -673,9 +746,12 @@ class StrategyEngine:
         daily = 0
         last_resolved = 0
         day = self.signal_day_utc
+        session_start_ms = int(os.getenv("DEMO_SESSION_START_MS", "0") or 0)
 
         for row in trades:
             opened = int(row.get("opened_ts") or 0)
+            if session_start_ms and opened < session_start_ms:
+                continue
             resolved = int(row.get("resolved_ts") or 0)
             if opened:
                 opened_day = datetime.fromtimestamp(opened / 1000, tz=timezone.utc).date().isoformat()
@@ -727,11 +803,14 @@ class StrategyEngine:
         daily = 0
         last_resolved = self.last_resolved_ts
         today = self.signal_day_utc
+        session_start_ms = int(os.getenv("DEMO_SESSION_START_MS", "0") or 0)
         for row in rows[:250]:
             try:
                 opened = int(row.get("opened_ts") or row.get("created_ts") or 0)
             except (TypeError, ValueError):
                 opened = 0
+            if session_start_ms and opened < session_start_ms:
+                continue
             if opened:
                 try:
                     opened_day = datetime.fromtimestamp(opened / 1000, tz=timezone.utc).date().isoformat()
@@ -750,6 +829,13 @@ class StrategyEngine:
     def restore_external_active_signal(self, row: dict | None):
         """Restore one durable open prediction without discarding other active signals."""
         if not isinstance(row, dict):
+            return
+        session_start_ms = int(os.getenv("DEMO_SESSION_START_MS", "0") or 0)
+        try:
+            opened = int(row.get("opened_ts") or row.get("created_ts") or row.get("createdAt") or 0)
+        except (TypeError, ValueError):
+            return
+        if session_start_ms and opened < session_start_ms:
             return
 
         direction = str(row.get("direction") or row.get("side") or "").upper()
@@ -780,7 +866,7 @@ class StrategyEngine:
             "grade": row.get("grade") or "A",
             "timeframe": row.get("timeframe") or "15m",
             "trade_style": row.get("trade_style") or "SCALP",
-            "created_ts": int(row.get("opened_ts") or row.get("created_ts") or time.time() * 1000),
+            "created_ts": opened or int(time.time() * 1000),
             "lifecycle": "ACTIVE",
             "lifecycle_stage": "ACTIVE",
         }
@@ -865,12 +951,15 @@ class StrategyEngine:
         now_ms = int(time.time() * 1000)
         market_age = (now_ms - int(state.last_market_update_ts)) if state.last_market_update_ts else 10**9
         trade_age = (now_ms - int(state.last_trade_ts)) if state.last_trade_ts else 10**9
+        book_age = (now_ms - int(state.last_book_ts)) if state.last_book_ts else 10**9
         if state.data_health != "HEALTHY":
             reasons.append("primary market feed is not fully healthy")
         if market_age > 3000:
             reasons.append(f"market price feed is stale ({market_age}ms)")
-        if trade_age > 3000:
+        if trade_age > 15000:
             reasons.append(f"trade feed is stale ({trade_age}ms)")
+        if book_age > 5000:
+            reasons.append(f"order book feed is stale ({book_age}ms)")
 
         # Higher-timeframe alignment is mandatory for continuation/breakout paths.
         is_reversal = "SFP" in setup or "HARMONIC" in setup
@@ -922,6 +1011,10 @@ class StrategyEngine:
             reasons.append(f"spread {f.spread_bps:.2f} bps is too wide")
         if f.regime == "HIGH_VOL" and "SFP" not in setup:
             reasons.append("high-volatility chase is blocked")
+        room = entry_room(signal, state, f)
+        signal.evidence["entry_room"] = room
+        if not room["allow"]:
+            reasons.append(room["reason"])
 
         # Require independent confirmation buckets. OI alone is deliberately
         # not treated as directional proof because rising OI has no direction
@@ -952,6 +1045,12 @@ class StrategyEngine:
             location = True; confirmation_names.append("FIB")
         if location:
             confirmations += 1
+
+        expected_trend = "UP" if direction == "LONG" else "DOWN"
+        expected_structure = "BULLISH" if direction == "LONG" else "BEARISH"
+        if f.trend_60 == expected_trend and f.trend_240 == expected_trend and f.market_structure == expected_structure:
+            confirmations += 1
+            confirmation_names.append("HTF_STRUCTURE")
 
         if f.elliott_direction == direction and f.elliott_confidence >= 0.55:
             confirmations += 1
@@ -2267,6 +2366,7 @@ class StrategyEngine:
                 "previous_week_high": f0.previous_week_high,
                 "previous_week_low": f0.previous_week_low,
                 "weekly_open": f0.weekly_open,
+                "volume_context": f0.volume_context,
             },
             "last_evaluated_ts": self.last_evaluated_ts,
         }
@@ -2772,6 +2872,11 @@ class StrategyEngine:
         self._update_signal_lifecycle(state)
         self._rotate_governor_day()
         self.last_diagnostics = self.diagnostics(state)
+        if os.getenv("DEMO_EXECUTION_PAUSED", "false").lower() in {"true", "1", "yes"}:
+            self.last_diagnostics["status"] = "PAUSED"
+            self.last_diagnostics["wait_reason"] = "New demo entries are paused while the test session is prepared."
+            self.last_diagnostics["blocked_by"] = ["operator_pause"]
+            return None
         if not self._governor_allows_new_signal():
             self.last_diagnostics["status"] = "QUALITY_LOCK"
             self.last_diagnostics["wait_reason"] = self.governor_lock_reason
@@ -2786,6 +2891,7 @@ class StrategyEngine:
             detect_sfp(state),
             detect_dline(state),
             detect_mss(state),
+            detect_breakout_retest(state),
             self._momentum_signal(state, compute_features(state)),
         ]
         signals = [s for s in candidates if s is not None]

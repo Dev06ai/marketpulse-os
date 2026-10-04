@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
 from .models import Candle, MarketState
 from .elliott_wave import analyze_elliott
+from .volume_context import volume_context
 
 
 @dataclass
@@ -50,6 +51,7 @@ class MarketFeatures:
     harmonic_direction: str = "NEUTRAL"
     harmonic_confidence: float = 0.0
     harmonic_reason: str = ""
+    volume_context: dict = field(default_factory=dict)
 
 
 def _atr(candles: list[Candle], n: int = 14) -> float:
@@ -258,6 +260,7 @@ def _htf_levels(candles: list[Candle]):
 
 def compute_features(state: MarketState) -> MarketFeatures:
     f = MarketFeatures()
+    f.volume_context = volume_context(state)
     f.atr_15 = _atr(state.candles_15)
     f.atr_60 = _atr(state.candles_60)
     f.trend_15 = trend(state.candles_15)
@@ -279,21 +282,27 @@ def compute_features(state: MarketState) -> MarketFeatures:
     f.fvg_direction, f.fvg_mid = _fvg(state.candles_15)
     f.order_block_direction, f.order_block_mid = _order_block(state.candles_15)
 
-    cs = [c for c in state.candles_15 if c.confirmed]
-    if len(cs) >= 6:
-        p0, p1 = cs[-6].close, cs[-1].close
-        price_move = (p1 - p0) / p0 * 100.0 if p0 else 0.0
-        cvd_window = state.cvd_history[-6:] if len(state.cvd_history) >= 6 else state.cvd_history
-        cvd_move = 0.0
-        if len(cvd_window) >= 2:
-            cvd0, cvd1 = cvd_window[0][1], cvd_window[-1][1]
-            scale = max(abs(cvd0) + abs(cvd1), 1.0)
-            cvd_move = (cvd1 - cvd0) / scale * 100.0
+    # Compare price and CVD over the same observed five-minute tape. Comparing
+    # ninety minutes of candles to six recent ticks manufactured divergence.
+    tape = sorted(state.flow_history, key=lambda row: row[0])
+    if len(tape) >= 2:
+        end_ts = tape[-1][0]
+        start = min(range(len(tape)), key=lambda i: abs(tape[i][0]-(end_ts-300_000)))
+        window = tape[start:]
+        span = end_ts-window[0][0]
+        volume = sum(row[3] for row in window[1:])
+        gap = max((b[0]-a[0] for a,b in zip(window,window[1:])), default=0)
+        if 240_000 <= span <= 360_000 and gap <= 30_000 and volume > 0 and window[0][1] > 0:
+            p0, p1 = window[0][1], window[-1][1]
+            price_move = (p1-p0)/p0*100
+            cvd_move = (window[-1][2]-window[0][2])/volume*100
+        else:
+            price_move = cvd_move = 0.0
         f.price_impulse = price_move
         f.cvd_impulse = cvd_move
-        if price_move > 0.15 and cvd_move < -0.15:
+        if price_move > 0.15 and cvd_move < -15:
             f.cvd_price_divergence = "BEARISH"
-        elif price_move < -0.15 and cvd_move > 0.15:
+        elif price_move < -0.15 and cvd_move > 15:
             f.cvd_price_divergence = "BULLISH"
 
     if state.liquidation_long_5m > state.liquidation_short_5m * 1.5 and state.liquidation_long_5m > 0:

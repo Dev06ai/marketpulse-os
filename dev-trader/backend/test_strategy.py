@@ -581,6 +581,7 @@ def test_early_momentum_keeps_the_15m_antichase_veto_off(monkeypatch):
         data_health="HEALTHY",
         last_market_update_ts=now,
         last_trade_ts=now,
+        last_book_ts=now,
     )
     features = MarketFeatures(
         atr_15=10.0,

@@ -13,6 +13,8 @@ from typing import Any, Awaitable, Callable
 
 from .bitget import BitgetDemoClient, BitgetDemoError
 from .ledger import build_fill_ledger
+from .protection import stop_coverage
+from .trade_identity import client_identity, decode_identity
 
 
 class DemoExecutionEngine:
@@ -27,6 +29,8 @@ class DemoExecutionEngine:
         self.bridge = bridge
         self.client = BitgetDemoClient()
         self.symbol = os.getenv("SYMBOL", "BTCUSDT")
+        self.session_start_ms = int(os.getenv("DEMO_SESSION_START_MS", "0") or 0)
+        self.session_baseline = self._num(os.getenv("DEMO_SESSION_BASELINE_EQUITY_USDT", "0"))
         self.risk_pct = float(os.getenv("BITGET_DEMO_RISK_PCT", "0.25"))
         if not math.isfinite(self.risk_pct) or not 0 < self.risk_pct <= 1:
             raise ValueError("BITGET_DEMO_RISK_PCT must be finite and between 0 and 1 percent.")
@@ -40,6 +44,7 @@ class DemoExecutionEngine:
         self.lock = threading.RLock()
         self._submission_lock = asyncio.Lock()
         self._sync_lock = asyncio.Lock()
+        self._protection_lock = asyncio.Lock()
         self.data = {
             "version": 1,
             "trades": [],
@@ -66,8 +71,8 @@ class DemoExecutionEngine:
         day_start = int(time.time()) // 86400 * 86400
         count = 0
         for row in self.data.get("trades", []):
-            ts = int(row.get("opened_ts") or row.get("created_ts") or 0) // 1000
-            if ts >= day_start and str(row.get("status")) != "FAILED":
+            opened_ms = int(row.get("opened_ts") or row.get("created_ts") or 0)
+            if opened_ms >= self.session_start_ms and opened_ms // 1000 >= day_start and str(row.get("status")) != "FAILED":
                 count += 1
         return count
 
@@ -104,7 +109,7 @@ class DemoExecutionEngine:
 
     def _open_local_trade(self) -> dict[str, Any] | None:
         for row in self.data["trades"]:
-            if row.get("status") in {"ORDER_PENDING", "OPEN", "RECONCILIATION_PENDING", "SUBMISSION_UNKNOWN"}:
+            if self._num(row.get("opened_ts")) >= self.session_start_ms and row.get("status") in {"ORDER_PENDING", "OPEN", "RECONCILIATION_PENDING", "SUBMISSION_UNKNOWN"}:
                 return row
         return None
 
@@ -176,6 +181,13 @@ class DemoExecutionEngine:
         peak = self._num(account.get("observed_peak_usdt"), equity)
         risk_factor = 0.5 if peak > 0 and equity > 0 and equity < peak * 0.98 else 1.0
         risk_usdt = balance * self.risk_pct * risk_factor / 100.0
+        ledger = self.data.get("fill_ledger") or {}
+        if ledger.get("complete_window") and ledger.get("fee_accounting_complete"):
+            day_start = int(time.time()) // 86400 * 86400000
+            daily_net = self._num((ledger.get("daily_net_usdt") or {}).get(str(day_start)))
+            loss_limit = max(0.0, float(os.getenv("BITGET_DEMO_MAX_DAILY_LOSS_PCT", "1.0")))
+            remaining_budget = max(0.0, balance * loss_limit / 100.0 + min(0.0, daily_net))
+            risk_usdt = min(risk_usdt, remaining_budget)
         distance = abs(entry - stop)
         fee_rate = max(0.0, float(os.getenv("BITGET_DEMO_TAKER_FEE_RATE", "0.0006")))
         raw_qty = risk_usdt / (distance + (entry + stop) * fee_rate)
@@ -196,6 +208,13 @@ class DemoExecutionEngine:
     def _signal_allowed(self, signal: dict[str, Any]) -> tuple[bool, str]:
         if os.getenv("DEMO_EXECUTION_PAUSED", "false").lower() == "true" or os.getenv("DEMO_RESET_REQUEST_MS", ""):
             return False, "Operator demo reset/test preparation is paused; no new exposure is admitted."
+        if self.data.get("protection_halt"):
+            return False, "Exchange stop protection could not be verified; operator review is required."
+        if self.data.get("ledger_error"):
+            return False, "Exchange accounting refresh failed; risk admission waits for verified data."
+        ledger = self.data.get("fill_ledger") or {}
+        if hasattr(self.client, "fills_history") and not (ledger.get("complete_window") and ledger.get("fee_accounting_complete")):
+            return False, "The exchange fill/fee window is incomplete; new risk is blocked."
         if self._sync_lock.locked():
             return False, "Exchange reconciliation is in progress; wait for a verified snapshot."
         if not self.enabled:
@@ -218,7 +237,7 @@ class DemoExecutionEngine:
             return False, "Demo daily execution cap reached."
         day_start = int(time.time()) // 86400 * 86400000
         closed_today = sorted(
-            [r for r in self.data.get("trades", []) if r.get("status") == "CLOSED" and self._num(r.get("closed_ts")) >= day_start],
+            [r for r in self.data.get("trades", []) if r.get("status") == "CLOSED" and self._num(r.get("opened_ts")) >= self.session_start_ms and self._num(r.get("closed_ts")) >= day_start],
             key=lambda r: self._num(r.get("closed_ts")), reverse=True,
         )
         # Two losing executions pause entries until the next UTC risk day.
@@ -255,7 +274,7 @@ class DemoExecutionEngine:
         if learned.get("allow") is False:
             return False, "Historical setup veto: " + str(learned.get("reason") or "negative observed edge")
         created = self._num(signal.get("created_ts"))
-        if created and (int(time.time() * 1000) - created > 60000 or created > int(time.time() * 1000) + 5000):
+        if created and (int(time.time() * 1000) - created > 15000 or created > int(time.time() * 1000) + 5000):
             return False, "Signal timestamp is stale or invalid."
         return True, ""
 
@@ -338,6 +357,11 @@ class DemoExecutionEngine:
             return {"ok": False, "skipped": True, "reason": "Existing demo exposure must close and reconcile before another entry."}
         if (self.data.get("client_status") or {}).get("history_reconciliation") == "DEGRADED":
             return {"ok": False, "skipped": True, "reason": "Exchange reconciliation is degraded; new entries are blocked."}
+        try:
+            if await asyncio.to_thread(self.client.pending_orders, self.symbol) or await asyncio.to_thread(self.client.strategy_orders, self.symbol):
+                return {"ok": False, "skipped": True, "reason": "Pending exchange orders remain; no new position can be opened."}
+        except Exception as exc:
+            return {"ok": False, "skipped": True, "reason": f"Cannot verify pending exchange orders: {exc}"}
 
         try:
             try:
@@ -345,7 +369,7 @@ class DemoExecutionEngine:
             except BitgetDemoError as exc:
                 return {"ok": False, "skipped": True, "reason": str(exc)}
 
-            qty, risk_usdt, config = await self._risk_size(dict(signal, entry=reference_price))
+            config = await self._contract()
 
             entry_plan = self._num(signal.get("entry"))
             stop = self._num(signal.get("stop"))
@@ -353,9 +377,14 @@ class DemoExecutionEngine:
             stop = float(self._format_price(stop, config, str(signal.get("direction")), "sl"))
             tp = float(self._format_price(tp, config, str(signal.get("direction")), "tp"))
             qty, risk_usdt, config = await self._risk_size(dict(signal, entry=reference_price, stop=stop))
+            # Sizing/settings requests can take time. Do not submit an entry
+            # whose decision expired while waiting for those responses.
+            allowed, reason = self._signal_allowed(signal)
+            if not allowed:
+                return {"ok": False, "skipped": True, "reason": reason}
             # Bitget UTA permits at most 32 characters; use a deterministic ID
             # for retry/recovery rather than truncating the setup unpredictably.
-            client_oid = "DTDEMO-" + hashlib.sha256(str(signal.get("id")).encode()).hexdigest()[:24]
+            client_oid = client_identity(signal, risk_usdt)
             submission_oid = client_oid
             result = await asyncio.to_thread(
                 self.client.place_market_order,
@@ -706,6 +735,7 @@ class DemoExecutionEngine:
                     with self.lock:
                         self.data["last_event"] = fill_event
                         self._save()
+                    await self._ensure_trade_protection(trade)
                     self.learning.record_event(
                         trade["signal_snapshot"],
                         "EXECUTION_OPEN",
@@ -729,6 +759,91 @@ class DemoExecutionEngine:
                 if str(row.get("execution_id")) == str(execution_id):
                     return row
         return None
+
+    async def _ensure_trade_protection(self, trade: dict[str, Any]):
+        # Fill polling and the reconciliation loop can observe the same entry.
+        # Serialize repairs so one task cannot close while another verifies it.
+        async with self._protection_lock:
+            await self._ensure_trade_protection_unlocked(trade)
+
+    async def _ensure_trade_protection_unlocked(self, trade: dict[str, Any]):
+        """Repair full SL coverage for our new single-position entries.
+
+        If exchange protection cannot be confirmed, stop admissions and submit
+        one exact-quantity close. Never silently keep trading an unprotected fill.
+        """
+        if trade.get("protection_close_submitted"):
+            return
+        try:
+            positions = await self._current_positions()
+        except Exception as exc:
+            self.data["protection_halt"] = f"Cannot verify filled-position protection: {exc}"
+            self._save()
+            return
+        own = [p for p in positions if self._direction_from_position(p) == trade.get("direction") and self._num(p.get("total")) > 0]
+        if not own:
+            return  # Fill may already have closed; normal reconciliation decides.
+        qty = sum(self._num(p.get("total")) for p in own)
+        if qty-self._num(trade.get("filled_qty")) > max(1e-8,qty*1e-6):
+            self.data["protection_halt"] = "Position ownership/quantity is ambiguous."
+            self._save()
+            return
+        try:
+            ticker = await asyncio.to_thread(self.client.market_ticker, self.symbol)
+            mark = self._num(ticker.get("markPrice") or ticker.get("lastPrice"))
+            orders = await asyncio.to_thread(self.client.strategy_orders, self.symbol)
+            coverage = stop_coverage(own, orders, mark)
+            if not coverage["all_positions_protected"]:
+                sl = self._num(trade.get("stop_loss"))
+                valid = sl > 0 and mark > 0 and ((trade["direction"] == "LONG" and sl < mark) or (trade["direction"] == "SHORT" and sl > mark))
+                if not valid:
+                    raise BitgetDemoError("The planned stop has already been crossed or is invalid.")
+                config = await self._contract()
+                oid = "DTSL-" + hashlib.sha256(str(trade["execution_id"]).encode()).hexdigest()[:24]
+                # If a submission timed out, read its outcome before any retry.
+                if not trade.get("full_stop_attempted"):
+                    trade["full_stop_attempted"] = True
+                    self._save()
+                    try:
+                        await asyncio.to_thread(self.client.place_full_stop, self.symbol, trade["direction"],
+                            self._format_price(sl, config, trade["direction"], "sl"), oid)
+                    except Exception:
+                        pass
+                for _ in range(3):
+                    await asyncio.sleep(0.5)
+                    orders = await asyncio.to_thread(self.client.strategy_orders, self.symbol)
+                    coverage = stop_coverage(own, orders, mark)
+                    if coverage["all_positions_protected"]:
+                        break
+            trade["protection"] = coverage
+            if coverage["all_positions_protected"]:
+                self._save()
+                return
+            raise BitgetDemoError("Full exchange stop quantity remains unverified.")
+        except Exception as exc:
+            self.data["protection_halt"] = str(exc)
+            trade["protection_error"] = str(exc)
+            # Re-read the live position before sending the close. Never close
+            # the original size after a concurrent exchange TP/SL already exited.
+            try:
+                latest = await self._current_positions()
+            except Exception as read_error:
+                trade["protection_close_error"] = f"Cannot verify remaining quantity: {read_error}"
+                self._save()
+                return
+            current = self._match_current_position(latest, trade["direction"])
+            remaining = self._num((current or {}).get("total"))
+            if remaining > 0 and remaining <= self._num(trade.get("filled_qty"))+1e-8:
+                oid = "DTDEMO-CLOSE-" + hashlib.sha256((str(trade["execution_id"])+":protection").encode()).hexdigest()[:16]
+                trade["protection_close_submitted"] = True
+                self._save()
+                try:
+                    config = await self._contract()
+                    await asyncio.to_thread(self.client.place_market_close, self.symbol, trade["direction"],
+                        self._format_qty(remaining, config), oid)
+                except Exception as close_error:
+                    trade["protection_close_error"] = str(close_error)
+            self._save()
 
     async def sync(self) -> list[dict[str, Any]]:
         if self._sync_lock.locked():
@@ -778,6 +893,15 @@ class DemoExecutionEngine:
                 reconciliation_warnings.append(f"orders_history: {exc}")
 
             self._merge_exchange_open_orders(orders)
+            try:
+                strategies = await asyncio.to_thread(self.client.strategy_orders, self.symbol)
+                ticker = await asyncio.to_thread(self.client.market_ticker, self.symbol) if position_rows else {}
+                self.data["stop_protection"] = stop_coverage(position_rows, strategies,
+                    self._num(ticker.get("markPrice") or ticker.get("lastPrice")))
+                self.data["pending_strategy_orders"] = strategies
+            except Exception as exc:
+                self.data["stop_protection"] = {"verified": False, "all_positions_protected": False, "error": str(exc)}
+                reconciliation_warnings.append(f"stop_protection: {exc}")
             if now - int(self.data.get("ledger_refresh_ts") or 0) >= 60000:
                 self.data["ledger_refresh_ts"] = now
                 try:
@@ -785,6 +909,9 @@ class DemoExecutionEngine:
                         fills = await asyncio.to_thread(self.client.fills_history, history_start, now)
                         self.data["fill_ledger"] = build_fill_ledger(fills.get("rows", []), orders, self.symbol,
                             history_start, now, fills.get("complete", False))
+                        if self.session_start_ms:
+                            self.data["session_ledger"] = build_fill_ledger(fills.get("rows", []), orders, self.symbol,
+                                max(history_start,self.session_start_ms), now, fills.get("complete", False))
                     if hasattr(self.client, "account_metrics"):
                         account = await asyncio.to_thread(self.client.account_metrics, self.symbol)
                         prior = self.data.get("account_metrics") or {}
@@ -793,7 +920,10 @@ class DemoExecutionEngine:
                         if equity <= 0:
                             raise BitgetDemoError("Bitget account equity is missing or invalid.")
                         day_open = self._num(prior.get("utc_day_open_equity_usdt")) if prior.get("utc_day") == day else 0
-                        account.update({"observed_peak_usdt": max(equity, self._num(prior.get("observed_peak_usdt"))),
+                        session_today = self.session_start_ms // 86400000 == now // 86400000
+                        if session_today and not day_open:
+                            day_open = self.session_baseline
+                        account.update({"observed_peak_usdt": max(equity, self.session_baseline, self._num(prior.get("observed_peak_usdt"))),
                             "utc_day": day, "utc_day_open_equity_usdt": day_open or equity,
                             "updated_ts": now})
                         self.data["account_metrics"] = account
@@ -873,6 +1003,8 @@ class DemoExecutionEngine:
                     share = (local_qty / aggregate_qty) if aggregate_qty > 0 and local_qty > 0 else 0.0
                     trade["unrealized_pnl_usdt"] = aggregate_unrealized * share if share > 0 else 0.0
                     trade["funding_usdt"] = aggregate_funding * share if share > 0 else 0.0
+                    if not (self.data.get("stop_protection") or {}).get("all_positions_protected"):
+                        await self._ensure_trade_protection(trade)
                     continue
 
                 closed = self._match_history_position(history, trade)
@@ -954,11 +1086,13 @@ class DemoExecutionEngine:
 
     def _local_demo_trades(self) -> list[dict[str, Any]]:
         with self.lock:
-            return [row for row in self.data["trades"] if str(row.get("client_oid", "")).startswith("DTDEMO-")]
+            return [row for row in self.data["trades"] if str(row.get("client_oid", "")).startswith("DTDEMO-") and self._num(row.get("opened_ts")) >= self.session_start_ms]
 
     def _merge_exchange_open_orders(self, orders: list[dict[str, Any]]):
         known = {str(t.get("client_oid")) for t in self.data["trades"] if t.get("client_oid")}
         for order in orders:
+            if self._num(order.get("createdTime")) < self.session_start_ms:
+                continue
             oid = str(order.get("clientOid") or "")
             if not oid.startswith("DTDEMO-"):
                 continue
@@ -977,6 +1111,7 @@ class DemoExecutionEngine:
             side = str(order.get("side") or "").lower()
             direction = "LONG" if side == "buy" else "SHORT" if side == "sell" else ""
             status = str(order.get("orderStatus") or "").lower()
+            recovered = decode_identity(oid)
             trade = {
                 "execution_id": oid,
                 "signal_id": oid,
@@ -1007,6 +1142,10 @@ class DemoExecutionEngine:
                 "signal_snapshot": {"id": oid, "setup": "BITGET DEMO", "direction": direction, "entry": self._num(order.get("avgPrice") or order.get("price")), "stop": self._num(order.get("stopLoss")), "target2": self._num(order.get("takeProfit")), "rr": 0.0, "evidence": {}},
             }
             with self.lock:
+                if recovered:
+                    trade.update(recovered)
+                    trade["trade_style"] = "SCALP" if recovered["timeframe"] == "5m" else "SWING"
+                    trade["signal_snapshot"].update(recovered)
                 self.data["trades"].insert(0, trade)
                 known.add(oid)
         self.data["trades"] = self.data["trades"][:500]
@@ -1079,6 +1218,7 @@ class DemoExecutionEngine:
 
         snapshot = dict(trade.get("signal_snapshot") or {})
         snapshot.update({
+            "execution_id": trade.get("execution_id"),
             "entry": entry_price,
             "stop": trade.get("stop_loss"),
             "target2": trade.get("take_profit"),
@@ -1231,7 +1371,7 @@ class DemoExecutionEngine:
         return rows[: max(1, min(int(limit), 500))]
 
     def summary(self) -> dict[str, Any]:
-        rows = self.history(500)
+        rows = [r for r in self.history(500) if self._num(r.get("opened_ts")) >= self.session_start_ms]
         closed = [r for r in rows if r.get("status") == "CLOSED"]
         wins = [r for r in closed if self._num(r.get("net_profit_usdt")) > 0]
         losses = [r for r in closed if self._num(r.get("net_profit_usdt")) < 0]
@@ -1252,7 +1392,7 @@ class DemoExecutionEngine:
             "unknown_submissions": len([r for r in unresolved if r.get("status") == "SUBMISSION_UNKNOWN"]),
             "unrealized_pnl_usdt": round(sum(self._num(p.get("unrealizedPL")) for p in exchange_positions), 6),
             "accounting_complete": not unresolved and (self.data.get("client_status") or {}).get("history_reconciliation") == "HEALTHY",
-            "accounting_scope": "RECONCILED_CLOSED_ENTRIES",
+            "accounting_scope": "CURRENT_TEST_SESSION" if self.session_start_ms else "RECONCILED_CLOSED_ENTRIES",
             "wins": len(wins),
             "losses": len(losses),
             "win_rate": round(len(wins) / len(closed), 3) if closed else None,
@@ -1273,6 +1413,9 @@ class DemoExecutionEngine:
             "client_status": self.data.get("client_status") or {},
             "operator_paused": os.getenv("DEMO_EXECUTION_PAUSED", "false").lower() == "true" or bool(os.getenv("DEMO_RESET_REQUEST_MS", "")),
             "reset_receipt": self.data.get("reset_receipt"),
+            "session_start_ts": self.session_start_ms,
+            "stop_protection": self.data.get("stop_protection"),
+            "protection_halt": self.data.get("protection_halt"),
         }
 
     def snapshot(self) -> dict[str, Any]:
@@ -1287,11 +1430,16 @@ class DemoExecutionEngine:
         }
 
     def performance(self) -> dict[str, Any]:
-        closed = [r for r in self.history(500) if r.get("status") == "CLOSED"]
+        closed = [r for r in self.history(500) if r.get("status") == "CLOSED" and self._num(r.get("opened_ts")) >= self.session_start_ms]
         values = [self._num(r.get("net_profit_usdt")) for r in closed]
         ledger = dict(self.data.get("fill_ledger") or {})
         ledger["error"] = self.data.get("ledger_error")
         return {"ledger": ledger, "account": self.data.get("account_metrics") or {},
+            "session": {"start_ts": self.session_start_ms, "baseline_equity_usdt": self.session_baseline,
+                "current_equity_change_usdt": round(self._num((self.data.get("account_metrics") or {}).get("equity_usdt"))-self.session_baseline,6) if self.session_baseline and self.data.get("account_metrics") else None,
+                "ledger": self.data.get("session_ledger") or {}, "scope": "NEW_TEST_SESSION"},
+            "learning_recovery": {"source": "BITGET_ORDER_HISTORY", "window_days": 30,
+                "metadata": "strategy family, timeframe, regime, planned risk", "full_thesis_persisted": False},
             "closed_sample_count": len(values), "expectancy_usdt": round(sum(values)/len(values), 6) if values else None,
             "sample_status": "SMALL_SAMPLE" if len(values) < 30 else "OBSERVED_DEMO_SAMPLE",
             "profitability_validated": False}
