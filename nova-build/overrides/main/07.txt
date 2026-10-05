@@ -1,0 +1,36 @@
+NG).show();}catch(Exception e){error(e);}
+    }
+    private void stopNova(){stopVoice();stopService(new Intent(this,CompanionService.class));Toast.makeText(this,"Companion and voice stopped. Your saved reminders remain scheduled.",Toast.LENGTH_LONG).show();}
+    private void startVoice(){
+        if(listening){stopVoice();return;}
+        if(checkSelfPermission(Manifest.permission.RECORD_AUDIO)!=PackageManager.PERMISSION_GRANTED){pendingPermission="voice";requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO},101);return;}
+        boolean local=Build.VERSION.SDK_INT>=31&&SpeechRecognizer.isOnDeviceRecognitionAvailable(this);
+        if(!local&&!state().optBoolean("systemVoice")){new AlertDialog.Builder(this).setTitle("Local speech is unavailable").setMessage("Install a supported offline speech engine or language pack, or allow the Android system speech service in Controls. Text commands work without voice.").setPositiveButton("Controls",(d,w)->show(4)).setNegativeButton("Use text",(d,w)->show(1)).show();return;}
+        if(!local&&!SpeechRecognizer.isRecognitionAvailable(this)){reply("No speech recognition service is installed. You can use text commands.",false);return;}
+        try{
+            if(recognizer!=null)recognizer.destroy();
+            recognizer=local?SpeechRecognizer.createOnDeviceSpeechRecognizer(this):SpeechRecognizer.createSpeechRecognizer(this);
+            final int voiceToken=++voiceSession;
+            recognizer.setRecognitionListener(new RecognitionListener(){
+                @Override public void onReadyForSpeech(Bundle b){if(voiceToken!=voiceSession)return;if(!visible){stopVoice();return;}listening=true;refreshPet();Toast.makeText(MainActivity.this,"Listening · "+state().optString("language"),Toast.LENGTH_SHORT).show();}
+                @Override public void onBeginningOfSpeech(){}@Override public void onRmsChanged(float n){}@Override public void onBufferReceived(byte[] b){}@Override public void onEndOfSpeech(){}
+                @Override public void onError(int code){if(voiceToken!=voiceSession||!listening)return;stopVoice();reply("Speech wasn't completed (code "+code+"). Check the selected language and installed speech packs, or type your command.",false);}
+                @Override public void onResults(Bundle b){if(voiceToken!=voiceSession||!listening)return;ArrayList<String> result=b.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);stopVoice();if(!visible)return;if(result!=null&&!result.isEmpty()){show(1);submit(result.get(0));}else reply("I didn't catch a command. Please try again.",false);}
+                @Override public void onPartialResults(Bundle b){}@Override public void onEvent(int n,Bundle b){}
+            });
+            Intent intent=new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL,RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                .putExtra(RecognizerIntent.EXTRA_LANGUAGE,state().optString("language","en-IN")).putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE,local).putExtra(RecognizerIntent.EXTRA_MAX_RESULTS,1);
+            listening=true;refreshPet();recognizer.startListening(intent);handler.removeCallbacks(voiceTimeout);handler.postDelayed(voiceTimeout,20_000);
+        }catch(Exception e){stopVoice();reply("Voice could not start. Text commands are available.",false);}
+    }
+    private void stopVoice(){handler.removeCallbacks(voiceTimeout);voiceSession++;listening=false;if(recognizer!=null){SpeechRecognizer old=recognizer;recognizer=null;old.cancel();old.destroy();}refreshPet();}
+    @Override public void onRequestPermissionsResult(int request,String[] permissions,int[] result){super.onRequestPermissionsResult(request,permissions,result);String next=pendingPermission;pendingPermission="";
+        if(result.length==0||result[0]!=PackageManager.PERMISSION_GRANTED){Toast.makeText(this,"Permission declined. You can keep using Nova's local features.",Toast.LENGTH_LONG).show();return;}
+        if(request==101&&"voice".equals(next))startVoice();if(request==102){if("overlay".equals(next))startCompanion(true);else if("status".equals(next))startCompanion(false);else Toast.makeText(this,"Notifications enabled. You can now add reminders.",Toast.LENGTH_SHORT).show();}
+    }
+    @Override protected void onActivityResult(int request,int result,Intent data){super.onActivityResult(request,result,data);
+        if(request==300){pendingPermission="";if(Settings.canDrawOverlays(this))handler.post(()->startCompanion(true));}
+        if(request==500){Runnable action=pendingSensitive;pendingSensitive=null;if(result==RESULT_OK&&action!=null)action.run();}
+    }
+    @Override protected void onResume(){super.onResume();visible=true;if(puppy!=null)puppy.animation(true);if(vault!=null){handler.removeCallbacks(petTick);handler.post(petTick);}}
+    @Override protected void onPause(){visible=false;handler.removeCallbacks(petTick);handler.removeCallbacks(captionTimeout);stopVoice();if(subtitle!=null){subtitle.animate()
