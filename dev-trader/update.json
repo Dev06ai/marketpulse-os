@@ -1,8 +1,8 @@
 {
   "enabled": true,
-  "versionCode": 99,
-  "versionName": "0.14.1",
-  "apkUrl": "https://github.com/Dev06ai/marketpulse-os/releases/download/dev-trader-v0.14.1-99/app-release.apk",
-  "sha256": "584ec36125c41e07788d1c715547fa7de756dd96907925ccabcbf4634205fdea",
-  "notes": "Dev Trader 0.14.1 \u2022 free host \u2022 lower bandwidth \u2022 reliable mobile reconnects"
+  "versionCode": 100,
+  "versionName": "0.14.2",
+  "apkUrl": "https://github.com/Dev06ai/marketpulse-os/releases/download/dev-trader-v0.14.2-100/app-release.apk",
+  "sha256": "8f76a56f17df5165a28b6cb535991f76529a933f3fc1f96630a1ff9588c79cb9",
+  "notes": "Dev Trader 0.14.2 \u2022 exchange refresh admission fix \u2022 clear skipped-setup status"
 }
