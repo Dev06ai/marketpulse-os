@@ -7,6 +7,9 @@ import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.PathEffect
 import android.graphics.DashPathEffect
+import android.graphics.LinearGradient
+import android.graphics.RectF
+import android.graphics.Shader
 import android.os.SystemClock
 import android.util.AttributeSet
 import android.view.MotionEvent
@@ -28,31 +31,70 @@ class MarketChartView @JvmOverloads constructor(
     attrs: AttributeSet? = null
 ) : View(context, attrs) {
 
-    private val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(11, 15, 20) }
+    private val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val gridPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.rgb(31, 41, 54)
-        strokeWidth = dp(1f)
+        color = Color.rgb(40, 49, 61)
+        strokeWidth = dp(.72f)
+        alpha = 96
     }
     private val axisPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.rgb(105, 113, 125)
-        strokeWidth = dp(1f)
+        color = Color.rgb(92, 101, 114)
+        strokeWidth = dp(.85f)
+        alpha = 175
     }
-    private val wickPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { strokeWidth = dp(1.15f) }
+    private val plotBorderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.rgb(76, 62, 28)
+        strokeWidth = dp(.8f)
+        style = Paint.Style.STROKE
+        alpha = 155
+    }
+    private val axisPanelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.rgb(9, 13, 18)
+        alpha = 215
+    }
+    private val volumeDividerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.rgb(66, 72, 82)
+        strokeWidth = dp(.7f)
+        alpha = 105
+    }
+    private val wickPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        strokeWidth = dp(1.05f)
+        strokeCap = Paint.Cap.ROUND
+    }
     private val bodyPaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val bbPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.rgb(184, 134, 11)
-        strokeWidth = dp(1.05f)
+        color = Color.rgb(201, 149, 27)
+        strokeWidth = dp(.95f)
         style = Paint.Style.STROKE
+        alpha = 205
+    }
+    private val bbFillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.rgb(184, 134, 11)
+        style = Paint.Style.FILL
+        alpha = 20
     }
     private val emaPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.rgb(247, 201, 72)
-        strokeWidth = dp(1.15f)
+        strokeWidth = dp(1.7f)
         style = Paint.Style.STROKE
+        strokeCap = Paint.Cap.ROUND
+        strokeJoin = Paint.Join.ROUND
     }
     private val currentPricePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.WHITE
-        strokeWidth = dp(1f)
+        color = Color.rgb(247, 201, 72)
+        strokeWidth = dp(.95f)
         style = Paint.Style.STROKE
+        pathEffect = DashPathEffect(floatArrayOf(dp(5f), dp(4f)), 0f)
+        alpha = 225
+    }
+    private val livePriceTagPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.rgb(247, 201, 72)
+        style = Paint.Style.FILL
+    }
+    private val livePriceTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.rgb(11, 15, 20)
+        textSize = dp(9.6f)
+        typeface = android.graphics.Typeface.create(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD)
     }
     private val labelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.rgb(156, 163, 175)
@@ -74,8 +116,8 @@ class MarketChartView @JvmOverloads constructor(
         color = Color.rgb(224, 167, 46)
         strokeWidth = dp(1f)
     }
-    private val volumeUpPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(57, 132, 116) }
-    private val volumeDownPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(164, 73, 90) }
+    private val volumeUpPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(49, 137, 115); alpha = 170 }
+    private val volumeDownPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(167, 70, 86); alpha = 170 }
     private val liveChipPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(18, 24, 33) }
     private val liveDotPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(71, 191, 149) }
 
@@ -162,7 +204,14 @@ class MarketChartView @JvmOverloads constructor(
 
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
+        bgPaint.shader = LinearGradient(
+            0f, 0f, 0f, height.toFloat(),
+            intArrayOf(Color.rgb(13, 18, 24), Color.rgb(8, 12, 17), Color.rgb(10, 14, 19)),
+            null,
+            Shader.TileMode.CLAMP
+        )
         canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), bgPaint)
+        bgPaint.shader = null
 
         val left = dp(10f)
         val right = width - dp(60f)
@@ -231,10 +280,12 @@ class MarketChartView @JvmOverloads constructor(
         range = (high - low).coerceAtLeast(1.0)
 
         drawGrid(canvas, left, top, right, priceBottom)
+        canvas.drawRoundRect(RectF(left, top, right, bottom), dp(3f), dp(3f), plotBorderPaint)
+        canvas.drawLine(left, volumeTop, right, volumeTop, volumeDividerPaint)
         drawAxes(canvas, right, priceBottom, top, bottom, low, high)
 
         val step = (right - left) / actualVisible
-        val candleWidth = max(dp(2.5f), min(dp(10f), step * 0.68f))
+        val candleWidth = max(dp(2.4f), min(dp(9.2f), step * 0.62f))
 
         for (j in 0 until actualVisible) {
             val index = start + j
@@ -246,8 +297,8 @@ class MarketChartView @JvmOverloads constructor(
             val cl = c.optDouble("close")
             val up = cl >= o
 
-            wickPaint.color = if (up) Color.rgb(72, 185, 157) else Color.rgb(214, 86, 105)
-            bodyPaint.color = if (up) Color.rgb(50, 145, 121) else Color.rgb(176, 67, 85)
+            wickPaint.color = if (up) Color.rgb(76, 211, 166) else Color.rgb(242, 91, 111)
+            bodyPaint.color = if (up) Color.rgb(54, 188, 148) else Color.rgb(214, 73, 94)
 
             canvas.drawLine(x, mapY(h, low, high, top, priceBottom), x, mapY(l, low, high, top, priceBottom), wickPaint)
 
@@ -275,13 +326,7 @@ class MarketChartView @JvmOverloads constructor(
         }
 
         drawBollinger(canvas, start, actualVisible, left, top, priceBottom, low, high, step)
-        ema50?.let { value ->
-            if (value in low..high) {
-                val y = mapY(value, low, high, top, priceBottom)
-                canvas.drawLine(left, y, right, y, emaPaint)
-                if (priceBottom - top >= dp(120f)) canvas.drawText("EMA 50", right - dp(44f), y - dp(4f), labelPaint)
-            }
-        }
+        drawEma50(canvas, start, actualVisible, left, top, priceBottom, low, high, step)
 
         signal?.let { s ->
             listOf("entry" to "ENTRY", "stop" to "SL", "target2" to "TP").forEach { (key, label) ->
@@ -295,7 +340,6 @@ class MarketChartView @JvmOverloads constructor(
 
         if (!livePrice.isNaN() && visibleLive) {
             val y = mapY(livePrice, low, high, top, priceBottom)
-            currentPricePaint.color = Color.rgb(247, 201, 72)
             canvas.drawLine(left, y, right, y, currentPricePaint)
             drawPriceTag(canvas, right + dp(4f), y, String.format(Locale.US, "%.2f", livePrice), true)
         }
@@ -339,6 +383,7 @@ class MarketChartView @JvmOverloads constructor(
         low: Double,
         high: Double
     ) {
+        canvas.drawRect(right, top, width.toFloat(), bottom + dp(22f), axisPanelPaint)
         canvas.drawLine(right, top, right, bottom, axisPaint)
         val ticks = ((priceBottom - top) / dp(28f)).toInt().coerceIn(2, 5)
         val liveY = if (livePrice.isFinite() && livePrice in low..high) mapY(livePrice, low, high, top, priceBottom) else Float.NaN
@@ -391,8 +436,11 @@ class MarketChartView @JvmOverloads constructor(
         val clampedX = crosshairX.coerceIn(left, right)
         val clampedY = crosshairY.coerceIn(top, priceBottom)
 
+        val previousEffect = crosshairPaint.pathEffect
+        crosshairPaint.pathEffect = DashPathEffect(floatArrayOf(dp(3f), dp(4f)), 0f)
         canvas.drawLine(clampedX, top, clampedX, bottom, crosshairPaint)
         canvas.drawLine(left, clampedY, right, clampedY, crosshairPaint)
+        crosshairPaint.pathEffect = previousEffect
 
         val candleIndex = (start + ((clampedX - left) / step)).roundToInt().coerceIn(0, candles.length() - 1)
         val candle = candles.optJSONObject(candleIndex) ?: return
@@ -427,13 +475,24 @@ class MarketChartView @JvmOverloads constructor(
     }
 
     private fun drawPriceTag(canvas: Canvas, x: Float, y: Float, text: String, live: Boolean) {
-        val width = if (live) dp(58f) else dp(64f)
-        val rect = android.graphics.RectF(x, y - dp(10f), x + width, y + dp(10f))
-        val paint = if (live) liveChipPaint else Color.rgb(31, 41, 54).let {
-            Paint(Paint.ANTI_ALIAS_FLAG).apply { color = it }
+        val tagWidth = if (live) dp(56f) else dp(64f)
+        val tagLeft = if (live) x + dp(2f) else x
+        val rect = RectF(tagLeft, y - dp(10f), tagLeft + tagWidth, y + dp(10f))
+        if (live) {
+            val pointer = Path().apply {
+                moveTo(x - dp(3f), y)
+                lineTo(tagLeft, y - dp(5f))
+                lineTo(tagLeft, y + dp(5f))
+                close()
+            }
+            canvas.drawPath(pointer, livePriceTagPaint)
+            canvas.drawRoundRect(rect, dp(5.5f), dp(5.5f), livePriceTagPaint)
+            canvas.drawText(text, tagLeft + dp(5f), y + dp(3.5f), livePriceTextPaint)
+        } else {
+            val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(31, 41, 54) }
+            canvas.drawRoundRect(rect, dp(5f), dp(5f), paint)
+            canvas.drawText(text, tagLeft + dp(5f), y + dp(3.5f), strongLabelPaint)
         }
-        canvas.drawRoundRect(rect, dp(5f), dp(5f), paint)
-        canvas.drawText(text, x + dp(5f), y + dp(3.5f), strongLabelPaint)
     }
 
     private fun drawBollinger(
@@ -454,30 +513,83 @@ class MarketChartView @JvmOverloads constructor(
         }
         if (closes.size < 20) return
 
-        fun y(v: Double): Float = mapY(v, low, high, top, bottom)
-        fun draw(mult: Double) {
-            val path = Path()
-            var moved = false
-            for (i in 19 until closes.size) {
-                val window = closes.subList(i - 19, i + 1)
-                val mean = window.average()
-                val variance = window.sumOf { (it - mean) * (it - mean) } / window.size
-                val sd = sqrt(variance)
-                val value = mean + mult * sd
-                val x = left + i * step + step * 0.5f
-                if (!moved) {
-                    path.moveTo(x, y(value))
-                    moved = true
-                } else {
-                    path.lineTo(x, y(value))
-                }
+        val upper = ArrayList<Pair<Float, Float>>()
+        val lower = ArrayList<Pair<Float, Float>>()
+        for (i in 19 until closes.size) {
+            val window = closes.subList(i - 19, i + 1)
+            if (window.any { !it.isFinite() }) continue
+            val mean = window.average()
+            val variance = window.sumOf { (it - mean) * (it - mean) } / window.size
+            val sd = sqrt(variance)
+            val x = left + i * step + step * 0.5f
+            upper.add(x to mapY(mean + 2.0 * sd, low, high, top, bottom))
+            lower.add(x to mapY(mean - 2.0 * sd, low, high, top, bottom))
+        }
+        if (upper.size < 2 || lower.size < 2) return
+
+        val band = Path().apply {
+            moveTo(upper.first().first, upper.first().second)
+            for (i in 1 until upper.size) lineTo(upper[i].first, upper[i].second)
+            for (i in lower.indices.reversed()) lineTo(lower[i].first, lower[i].second)
+            close()
+        }
+        canvas.drawPath(band, bbFillPaint)
+
+        fun drawLine(points: List<Pair<Float, Float>>) {
+            val path = Path().apply {
+                moveTo(points.first().first, points.first().second)
+                for (i in 1 until points.size) lineTo(points[i].first, points[i].second)
             }
-            if (moved) canvas.drawPath(path, bbPaint)
+            canvas.drawPath(path, bbPaint)
+        }
+        drawLine(upper)
+        drawLine(lower)
+    }
+
+    private fun drawEma50(
+        canvas: Canvas,
+        start: Int,
+        visible: Int,
+        left: Float,
+        top: Float,
+        bottom: Float,
+        low: Double,
+        high: Double,
+        step: Float
+    ) {
+        val endExclusive = min(candles.length(), start + visible)
+        if (endExclusive <= 0) return
+
+        val k = 2.0 / 51.0
+        var ema = Double.NaN
+        val path = Path()
+        var moved = false
+        var lastY = Float.NaN
+
+        for (i in 0 until endExclusive) {
+            val close = candles.optJSONObject(i)?.optDouble("close", Double.NaN) ?: Double.NaN
+            if (!close.isFinite()) continue
+            ema = if (!ema.isFinite()) close else close * k + ema * (1.0 - k)
+            if (i < start) continue
+
+            val local = i - start
+            val x = left + local * step + step * 0.5f
+            val y = mapY(ema, low, high, top, bottom)
+            if (!moved) {
+                path.moveTo(x, y)
+                moved = true
+            } else {
+                path.lineTo(x, y)
+            }
+            lastY = y
         }
 
-        draw(2.0)
-        draw(0.0)
-        draw(-2.0)
+        if (moved) {
+            canvas.drawPath(path, emaPaint)
+            if (lastY.isFinite() && lastY in top..bottom && bottom - top >= dp(120f)) {
+                canvas.drawText("EMA 50", left + dp(5f), (lastY - dp(5f)).coerceAtLeast(top + dp(10f)), axisLabelPaint)
+            }
+        }
     }
 
     private fun drawLevel(canvas: Canvas, left: Float, right: Float, y: Float, text: String) {
@@ -502,7 +614,11 @@ class MarketChartView @JvmOverloads constructor(
 
     private fun formatAxisTime(ts: Long): String {
         if (ts <= 0L) return "—"
-        val pattern = if (timeframe == "1h" || timeframe == "4h") "dd/MM" else "HH:mm"
+        val pattern = when (timeframe) {
+            "1h" -> "dd/MM HH'h'"
+            "4h" -> "dd/MM"
+            else -> "HH:mm"
+        }
         return SimpleDateFormat(pattern, Locale.getDefault()).apply {
             timeZone = TimeZone.getDefault()
         }.format(Date(ts))
