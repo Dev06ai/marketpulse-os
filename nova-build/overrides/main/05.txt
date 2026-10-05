@@ -1,0 +1,26 @@
+emory").setView(e).setNegativeButton("Cancel",null).setPositiveButton("Remember",(d,w)->{String value=e.getText().toString().trim();if(!value.isEmpty()){execute(new CommandEngine.Request(CommandEngine.Kind.SAVE_NOTE,value,0));show(3);}}).show();}
+    private void editNote(JSONObject note){EditText e=noteInput(note.optString("text"));String id=note.optString("id");new AlertDialog.Builder(this).setTitle("Edit a memory").setView(e).setNegativeButton("Cancel",null).setPositiveButton("Save",(d,w)->{String value=e.getText().toString().trim();if(value.isEmpty())return;try{vault.change(s->{JSONArray a=s.getJSONArray("notes");for(int n=0;n<a.length();n++)if(id.equals(a.getJSONObject(n).getString("id")))a.getJSONObject(n).put("text",value);});vault.audit("Edit note","Saved by Dev");show(3);}catch(Exception x){error(x);}}).show();}
+    private void reminderDialog(){
+        if(!Reminders.allowed(this)){new AlertDialog.Builder(this).setTitle("Enable notifications first").setMessage("Nova needs notification permission to deliver reminders.").setPositiveButton("Enable",(d,w)->enableNotifications()).setNegativeButton("Later",null).show();return;}
+        LinearLayout l=column();l.setPadding(dp(20),dp(5),dp(20),0);EditText title=noteInput("");title.setHint("Remind me to…");title.setFilters(new android.text.InputFilter[]{new android.text.InputFilter.LengthFilter(300)});l.addView(title);
+        EditText duration=noteInput("10");duration.setMinLines(1);duration.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);duration.setHint("Minutes from now");l.addView(text("Minutes from now (1–10,080)",12,MUTED,false));l.addView(duration);
+        new AlertDialog.Builder(this).setTitle("New reminder").setView(l).setNegativeButton("Cancel",null).setPositiveButton("Save",(d,w)->{try{int minutes=Integer.parseInt(duration.getText().toString());CommandEngine.Request r=new CommandEngine.Request(CommandEngine.Kind.REMIND,title.getText().toString().trim(),minutes);execute(r);show(3);}catch(Exception e){Toast.makeText(this,"Enter a valid number of minutes.",Toast.LENGTH_LONG).show();}}).show();
+    }
+    private void controls(){
+        JSONObject s=state();content.addView(text("Your controls",25,TEXT,true));gap(content,8);content.addView(text("Nova only gets the access you choose.",13,MUTED,false));gap(content,20);
+        LinearLayout voice=card("Voice input · subtitle output","Push-to-talk only. On-device recognition is preferred. Nova never speaks responses in this build; answers appear as subtitles and chat text.");
+        pair(voice,"English",()->setPreference("language","en-IN"),"हिन्दी",()->setPreference("language","hi-IN"));voice.addView(text("Selected: "+("hi-IN".equals(s.optString("language"))?"हिन्दी":"English"),12,MINT,false));
+        toggle(voice,"Allow system speech service",s.optBoolean("systemVoice"),value->{
+            if(!value){setPreference("systemVoice",false);return;}
+            new AlertDialog.Builder(this).setTitle("Allow system voice recognition?").setMessage("When local recognition is unavailable, your Android speech provider may process audio online under its own privacy settings. Nova does not record or store the audio. It only receives the transcript after you tap Speak.")
+                .setNegativeButton("Keep local only",(d,w)->show(4)).setPositiveButton("Allow",(d,w)->setPreference("systemVoice",true)).show();
+        });
+        LinearLayout sleep=card("Nova's rest","Nova naps after 20 minutes of inactivity. An optional bedtime uses your phone's timezone.");
+        toggle(sleep,"Bedtime schedule",s.optBoolean("scheduledSleep"),v->setPreference("scheduledSleep",v));
+        pair(sleep,"Bedtime · "+String.format(Locale.US,"%02d:00",s.optInt("bedtime",23)),()->hourPicker("bedtime",s.optInt("bedtime",23)),"Wake · "+String.format(Locale.US,"%02d:00",s.optInt("wakeHour",7)),()->hourPicker("wakeHour",s.optInt("wakeHour",7)));
+        LinearLayout display=card("Companion permissions",CompanionService.running?"Nova companion is running.":"Nova companion is off.");
+        button(display,"Enable notifications",false,this::enableNotifications);button(display,"Enable screen roaming",true,()->startCompanion(true));button(display,"Stop companion",false,()->{stopNova();show(4);});
+        LinearLayout memory=card("Memory & privacy","AES-GCM vault with an Android Keystore key. Updates retain your puppy and memories when installed over this app with the same signature. Uninstalling or clearing app data removes them. Backup and device transfer are disabled in this build.");
+        button(memory,"View action history",false,this::auditDialog);
+        button(memory,"Forget all notes",false,()->confirmSensitive("Forget all saved notes?","Your puppy's age and bond are kept. All saved notes will be removed.",()->{try{vault.change(v->v.put("notes",new JSONArray()));vault.audit("Forget all notes","Confirmed by Dev");show(4);}catch(Exception e){error(e);}}));
+        LinearLayout updates=card("Update Center","Check the insta
