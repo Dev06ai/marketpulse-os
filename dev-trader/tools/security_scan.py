@@ -8,10 +8,8 @@ from __future__ import annotations
 
 import argparse
 import math
-import os
 import re
 import subprocess
-import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -29,6 +27,9 @@ DIRECT_RULES: list[tuple[str, re.Pattern[str]]] = [
     ("twilio-api-key", re.compile(r"\bSK[a-fA-F0-9]{32}\b")),
 ]
 
+# Keep names specific enough to represent credentials. Generic PRIVATE_KEY is
+# intentionally omitted because this repository also contains harmless DB
+# column names and variables such as VAPID_PRIVATE_KEY loaded from process.env.
 SENSITIVE_NAMES = {
     "BITGET_API_KEY", "BITGET_API_SECRET", "BITGET_API_PASSPHRASE",
     "OPENAI_API_KEY", "STRIPE_SECRET_KEY", "STRIPE_API_KEY",
@@ -36,13 +37,13 @@ SENSITIVE_NAMES = {
     "TWILIO_AUTH_TOKEN", "JWT_SECRET", "JWT_SIGNING_SECRET",
     "DATABASE_URL", "POSTGRES_URL", "POSTGRESQL_URL", "MONGODB_URI",
     "SUPABASE_SERVICE_ROLE_KEY", "FIREBASE_SERVICE_ACCOUNT_JSON",
-    "CLIENT_SECRET", "OAUTH_CLIENT_SECRET", "PRIVATE_KEY",
+    "CLIENT_SECRET", "OAUTH_CLIENT_SECRET",
     "DEV_TRADER_ACCESS_TOKEN", "DEV_TRADER_PAIRING_SECRET",
 }
 
 ASSIGNMENT = re.compile(
     r"(?P<name>" + "|".join(sorted(map(re.escape, SENSITIVE_NAMES), key=len, reverse=True)) +
-    r")\s*(?:=|:)\s*[\"']?(?P<value>[^\"'\s,#}]{6,})",
+    r")\s*(?:=|:)\s*[\"']?(?P<value>[^\\\"'\s,#}]{6,})",
     re.IGNORECASE,
 )
 
@@ -62,8 +63,6 @@ TEXT_SUFFIXES = {
     ".yaml", ".yml", ".toml", ".ini", ".cfg", ".conf", ".sh", ".md", ".txt",
     ".xml", ".properties", ".gradle", ".html", ".css", ".env", "",
 }
-
-# Generated/binary/package content does not belong in the source scan.
 SKIP_PARTS = {".git", "node_modules", "build", ".gradle", "__pycache__", ".pytest_cache"}
 
 
@@ -106,8 +105,6 @@ def inspect_text(text: str) -> set[str]:
         value = match.group("value")
         if placeholder(value):
             continue
-        # Literal credentials are usually long/high-entropy. The lower bound
-        # still catches short exchange passphrases without flagging code refs.
         if len(value) >= 10 or entropy(value) >= 3.0:
             hits.add("literal-" + match.group("name").upper())
     return hits
