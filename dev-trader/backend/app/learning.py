@@ -196,6 +196,14 @@ class AdaptiveLearning:
             self.data["trades"] = self.data["trades"][:250]
             self._save()
 
+    def retire_unexecuted(self, signal_id: str, reason: str, ts: int):
+        """Persist a rejected plan without adding a win, loss, or zero-R sample."""
+        with self.lock:
+            trade = next((t for t in self.data["trades"] if t.get("id") == signal_id), None)
+            if trade and trade.get("status") == "ACTIVE":
+                trade.update(status="NOT_EXECUTED", execution_reason=reason, retired_ts=ts)
+                self._save()
+
     def record_event(self, signal: dict[str, Any], event_type: str, price: float, note: str = ""):
         with self.lock:
             sid = str(signal.get("id", ""))

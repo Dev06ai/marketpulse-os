@@ -53,9 +53,7 @@ def reconcile_execution_truth():
         trades = list(snapshot.get("recent_trades") or [])
     except Exception:
         return
-    if not trades:
-        return
-
+    decision = snapshot.get("last_decision") or {}
     by_signal = {}
     for trade in trades:
         sid = str(trade.get("signal_id") or "").strip()
@@ -69,6 +67,9 @@ def reconcile_execution_truth():
     for signal_id, signal in list(engine.active_signals.items()):
         trade = by_signal.get(str(signal_id))
         if not trade:
+            # Also retire the persisted pre-fix rejection after a restart.
+            if decision.get("signal_id") == signal_id and decision.get("status") == "SKIPPED":
+                engine.retire_unexecuted_signal(signal_id, str(decision.get("reason") or "Entry skipped."))
             continue
         status = str(trade.get("status") or "").upper()
         signal["execution_status"] = status
@@ -94,20 +95,7 @@ def reconcile_execution_truth():
                 "learning_review": trade.get("learning_review"),
             })
         elif status == "FAILED":
-            engine.resolve_external_execution({
-                "type": "EXECUTION_FAILED",
-                "key": f"EXECUTION_FAILED:{trade.get('execution_id')}",
-                "execution_id": trade.get("execution_id"),
-                "signal_id": signal_id,
-                "direction": trade.get("direction"),
-                "setup": trade.get("setup"),
-                "net_profit_usdt": trade.get("net_profit_usdt"),
-                "result_r": trade.get("result_r"),
-                "close_reason": "FAILED",
-                "status": "FAILED",
-                "ts": trade.get("closed_ts"),
-                "learning_review": trade.get("learning_review"),
-            })
+            engine.retire_unexecuted_signal(signal_id, str(trade.get("error") or "Entry failed."), "FAILED")
 
 
 class PushTestPayload(BaseModel):
@@ -292,6 +280,10 @@ def schedule_execution(signal_payload: dict):
     payload = dict(signal_payload)
     payload["created_ts"] = engine.last_evaluated_ts
     payload["engine_revision"] = ENGINE_REVISION
+    active = engine.active_signals.get(str(payload.get("id") or ""))
+    if active is not None:
+        active["execution_status"] = "CHECKING"
+        active["execution_reason"] = "Verifying exchange state and entry conditions."
     task = asyncio.create_task(execute_signal(payload))
     execution_tasks.add(task)
     task.add_done_callback(execution_tasks.discard)
@@ -301,18 +293,18 @@ async def execute_signal(payload: dict):
     sid = str(payload.get("id") or "")
     try:
         result = await execution.handle_signal(payload)
-        engine.journal.record("EXECUTION",dict(signal_id=sid,ok=result.get("ok"),
-            skipped=result.get("skipped"),reason=result.get("reason"),trade=result.get("trade")),
-            identity="execution:"+sid)
         active = engine.active_signals.get(sid)
         if active is not None:
             active["execution_status"] = result.get("trade", {}).get("status") if result.get("ok") else "SKIPPED" if result.get("skipped") else "FAILED"
             active["execution_reason"] = result.get("reason", "Exchange submission accepted")
         reconcile_execution_truth()
+        engine.journal.record("EXECUTION",dict(signal_id=sid,ok=result.get("ok"),
+            skipped=result.get("skipped"),reason=result.get("reason"),trade=result.get("trade")),
+            identity="execution:"+sid)
     except Exception as exc:
         active = engine.active_signals.get(sid)
         if active is not None:
-            active["execution_status"] = "FAILED"
+            active["execution_status"] = "RECONCILIATION_PENDING"
             active["execution_reason"] = str(exc)
 
 
@@ -768,7 +760,7 @@ async def system_check():
             "strategy": {
                 "status": str(diag.get("status", "UNKNOWN")),
                 "wait_reason": str(diag.get("wait_reason", "")),
-                "manual_execution_only": bool(diag.get("manual_execution_only", not execution.enabled)),
+                "manual_execution_only": not execution.enabled,
                 "signal_state": engine.signal_status,
                 "demo_execution": execution.snapshot(),
                 "last_evaluated_ts": engine.last_evaluated_ts,

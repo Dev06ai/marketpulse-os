@@ -10,7 +10,7 @@ import time
 import zlib
 from pathlib import Path
 
-ENGINE_REVISION = "market-decision-v3"
+ENGINE_REVISION = "market-decision-v3.1"
 
 
 class DecisionJournal:

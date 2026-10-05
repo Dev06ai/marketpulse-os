@@ -314,7 +314,7 @@ def test_engine_selects_a_v3_playbook_and_journals_the_decision(monkeypatch,tmp_
     monkeypatch.setattr(engine,"_momentum_signal",lambda state,f:None)
     state=MarketState(last_price=100000,data_health="HEALTHY",last_market_update_ts=now,last_trade_ts=now,last_book_ts=now)
     assert engine.evaluate(state).id==signal.id
-    assert engine.active_signal["engine_revision"]=="market-decision-v3"
+    assert engine.active_signal["engine_revision"]=="market-decision-v3.1"
     record=engine.journal.records(1,"DECISION")[0]
     assert record["report"]["selected"]==signal.id
     assert record["candidates"][0]["family"]=="TREND_PULLBACK"
@@ -324,7 +324,7 @@ def test_engine_selects_a_v3_playbook_and_journals_the_decision(monkeypatch,tmp_
 def test_evaluation_endpoints_keep_shadow_and_real_results_distinct():
     from app import main
     report=asyncio.run(main.evaluation())
-    assert report["engine_revision"]=="market-decision-v3"
+    assert report["engine_revision"]=="market-decision-v3.1"
     assert report["shadow"]["mode"]=="SHADOW_ONLY"
     assert not report["scorecard"]["profitability_proven"]
     replay=asyncio.run(main.decision_replay(1))

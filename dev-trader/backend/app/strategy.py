@@ -1349,7 +1349,7 @@ class StrategyEngine:
             signal.thesis.append("Adaptive learning: historically favorable context — " + ", ".join(x["tag"] for x in favorable[:2]) + ".")
         if caution:
             signal.thesis.append("Adaptive learning caution: weak historical context — " + ", ".join(x["tag"] for x in caution[:2]) + ".")
-        signal.thesis.append("Learning is advisory and bounded; risk gates and manual execution remain unchanged.")
+        signal.thesis.append("Learning is advisory and bounded; execution still requires verified exchange state and risk checks.")
 
     def _pattern_gate(self, state: MarketState, setup: str, direction: str, entry: float, stop: float, target: float, f: MarketFeatures, structural: dict) -> dict:
         gate = _gate_details(direction, setup, entry, stop, target, f)
@@ -2363,7 +2363,7 @@ class StrategyEngine:
             "setups": {},
             "min_rr": _min_rr(),
             "min_confidence": _min_confidence(),
-            "manual_execution_only": True,
+            "manual_execution_only": os.getenv("BITGET_DEMO_TRADING", "false").lower() not in {"1", "true", "yes", "on"},
             "confirmed_15m_candles": len(cs),
             "confirmed_1h_candles": len([c for c in state.candles_60 if c.confirmed]),
             "signal_state": self.signal_status,
@@ -2670,7 +2670,7 @@ class StrategyEngine:
             "reason": " ".join(reason_text) if reason_text else "A new opposite-direction setup has been confirmed.",
             "reasons": reason_text,
             "why_new_trade": f"The new {new_signal.direction} setup is being supported by {strength} independent reversal/context confirmations, not direction alone.",
-            "manual_execution_only": True,
+            "manual_execution_only": os.getenv("BITGET_DEMO_TRADING", "false").lower() not in {"1", "true", "yes", "on"},
             "note": "Advisory position management only. The bot does not place or close exchange orders automatically.",
         }
 
@@ -2860,6 +2860,29 @@ class StrategyEngine:
 
         if latest_event:
             self.last_lifecycle_event = latest_event
+
+    def retire_unexecuted_signal(self, signal_id: str, reason: str, status: str = "SKIPPED"):
+        """Retire a confirmed unfilled rejection, never simulate a trade outcome."""
+        signal = self.active_signals.get(signal_id)
+        if not signal or signal.get("actual_fill_confirmed") or signal.get("execution_status") in {
+            "OPEN", "ORDER_PENDING", "SUBMISSION_UNKNOWN", "RECONCILIATION_PENDING", "CLOSED",
+        }:
+            return
+        ts = int(time.time() * 1000)
+        signal.update(lifecycle="NOT_EXECUTED", lifecycle_stage="NOT_EXECUTED",
+            execution_status=status, execution_reason=reason, retired_ts=ts)
+        self.learning.retire_unexecuted(signal_id, reason, ts)
+        for row in self.signal_history:
+            if row.get("id") == signal_id:
+                row.update(status="NOT_EXECUTED", execution_status=status,
+                    execution_reason=reason, retired_ts=ts)
+                break
+        self.active_signals.pop(signal_id, None)
+        self.active_signal = max(self.active_signals.values(),
+            key=lambda row: int(row.get("created_ts") or 0), default=None)
+        self.signal_status = "ACTIVE" if self.active_signal else "NONE"
+        self.governor_lock_reason = "" if not self.active_signal else f"ACTIVE: {len(self.active_signals)} signal(s) being managed."
+        self.last_diagnostics.update(signal_state=self.signal_status, active_signal=self.active_signal)
 
     def resolve_external_execution(self, event: dict):
         """Resolve exactly the strategy signal represented by an exchange close."""

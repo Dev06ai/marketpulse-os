@@ -29,7 +29,9 @@ def client_identity(signal: dict, risk_usdt: float) -> str:
     risk = "".join(DIGITS[(cents // (36**p)) % 36] for p in (2,1,0))
     direction = "L" if signal.get("direction") == "LONG" else "S"
     digest = hashlib.sha256(str(signal.get("id")).encode()).hexdigest()[:16]
-    version="V3" if signal.get("engine_revision")=="market-decision-v3" else "V2"
+    # The exchange ID stores the strategy generation; the retained journal
+    # carries the exact patch revision. Keep IDs stable across admission fixes.
+    version="V3" if str(signal.get("engine_revision") or "").split(".")[0]=="market-decision-v3" else "V2"
     return f"DTDEMO-{version}{fam}{tf}{reg}{direction}{risk}{digest}"
 
 
