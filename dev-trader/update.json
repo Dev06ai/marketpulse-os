@@ -1,8 +1,8 @@
 {
   "enabled": true,
-  "versionCode": 101,
-  "versionName": "0.15.0",
-  "apkUrl": "https://github.com/Dev06ai/marketpulse-os/releases/download/dev-trader-v0.15.0-101/app-release.apk",
-  "sha256": "0faed758225f7199f348d89f26e7c6925e9b158607e1f29ec92c3a9cb2126b53",
-  "notes": "KYVORIQ 0.15.0 \u2022 gold/charcoal identity \u2022 new angular app mark \u2022 refined mobile trading UI"
+  "versionCode": 102,
+  "versionName": "0.15.1",
+  "apkUrl": "https://github.com/Dev06ai/marketpulse-os/releases/download/dev-trader-v0.15.1-102/app-release.apk",
+  "sha256": "299554b7f7d33ce4adecb35ddc075624d22150fba1e5f38d7188a114096fbef0",
+  "notes": "KYVORIQ 0.15.1 \u2022 Chart Studio \u2022 true EMA-50 curve \u2022 refined Bollinger band \u2022 premium price marker and axis"
 }
