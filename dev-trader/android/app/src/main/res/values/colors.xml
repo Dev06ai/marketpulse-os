@@ -1,4 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="icon_background">#17181F</color>
+    <color name="kyvoriq_gold">#F7C948</color>
+    <color name="kyvoriq_amber">#E0A72E</color>
+    <color name="kyvoriq_deep_gold">#B8860B</color>
+    <color name="kyvoriq_charcoal">#0B0F14</color>
+    <color name="kyvoriq_slate">#121821</color>
+    <color name="kyvoriq_graphite">#1F2936</color>
+    <color name="kyvoriq_gray">#9CA3AF</color>
+    <color name="icon_background">#0B0F14</color>
 </resources>

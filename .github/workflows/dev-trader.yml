@@ -1,4 +1,4 @@
-name: Dev Trader CI
+name: KYVORIQ CI
 
 on:
   pull_request:
@@ -105,7 +105,7 @@ jobs:
           gradle-version: '9.6.0'
       - name: Build Android debug APK
         working-directory: dev-trader/android
-        run: gradle assembleDebug --stacktrace -PdevTraderVersionCode=100 -PdevTraderVersionName=0.14.2
+        run: gradle assembleDebug --stacktrace -PdevTraderVersionCode=101 -PdevTraderVersionName=0.15.0
       - name: Build signed Android release APK
         if: steps.changed.outputs.android_changed == 'true'
         working-directory: dev-trader/android
@@ -116,7 +116,7 @@ jobs:
           DEV_TRADER_KEY_PASSWORD: ${{ secrets.DEV_TRADER_KEY_PASSWORD }}
         run: |
           echo "${{ secrets.DEV_TRADER_KEYSTORE_BASE64 }}" | base64 --decode > "$DEV_TRADER_KEYSTORE_PATH"
-          gradle assembleRelease --stacktrace -PdevTraderVersionCode=100 -PdevTraderVersionName=0.14.2
+          gradle assembleRelease --stacktrace -PdevTraderVersionCode=101 -PdevTraderVersionName=0.15.0
           if unzip -l app/build/outputs/apk/release/app-release.apk | grep -q ui_preview.json; then
             echo 'Debug preview data must never be included in release APKs.'
             exit 1
@@ -187,7 +187,7 @@ jobs:
           mkdir -p release
           cp dist/app-release.apk release/app-release.apk
           sha256sum release/app-release.apk | awk '{print $1}' > release/app-release.sha256
-          echo "tag=dev-trader-v0.14.2-100" >> "$GITHUB_OUTPUT"
+          echo "tag=dev-trader-v0.15.0-101" >> "$GITHUB_OUTPUT"
           echo "sha256=$(cat release/app-release.sha256)" >> "$GITHUB_OUTPUT"
       - name: Create GitHub release
         env:
@@ -197,7 +197,7 @@ jobs:
             echo "This release already exists; refusing to replace a published APK."
             exit 1
           fi
-          gh release create "${{ steps.release.outputs.tag }}" release/app-release.apk --target "$GITHUB_SHA" --title "Dev Trader 0.14.2 (100)" --notes "Fix demo entry admission during exchange reconciliation; retire skipped plans and distinguish historical entry attempts from current scanning status. Backend tests, constrained-container checks, native host verification and six emulator layouts must pass before publication."
+          gh release create "${{ steps.release.outputs.tag }}" release/app-release.apk --target "$GITHUB_SHA" --title "KYVORIQ 0.15.0 (101)" --notes "KYVORIQ visual identity release: gold/charcoal design system, angular brand mark and app icon, refined typography hierarchy, navigation, cards and chart accents. Trading logic and compatibility identifiers remain unchanged. Backend, constrained-container, native host and emulator visual checks must pass before publication."
       - name: Publish verified update manifest
         env:
           SHA256: "${{ steps.release.outputs.sha256 }}"
@@ -211,11 +211,11 @@ jobs:
           data = json.loads(p.read_text())
           data.update({
               "enabled": True,
-              "versionCode": 100,
-              "versionName": "0.14.2",
-              "apkUrl": "https://github.com/Dev06ai/marketpulse-os/releases/download/dev-trader-v0.14.2-100/app-release.apk",
+              "versionCode": 101,
+              "versionName": "0.15.0",
+              "apkUrl": "https://github.com/Dev06ai/marketpulse-os/releases/download/dev-trader-v0.15.0-101/app-release.apk",
               "sha256": os.environ["SHA256"],
-              "notes": "Dev Trader 0.14.2 • exchange refresh admission fix • clear skipped-setup status"
+              "notes": "KYVORIQ 0.15.0 • gold/charcoal identity • new angular app mark • refined mobile trading UI"
           })
           p.write_text(json.dumps(data, indent=2) + "\n")
           PY

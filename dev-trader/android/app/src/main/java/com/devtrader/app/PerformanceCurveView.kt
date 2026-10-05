@@ -12,9 +12,9 @@ import kotlin.math.max
 class PerformanceCurveView(context: Context) : View(context) {
     private var points = JSONArray()
     private val line = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeWidth = 2.5f }
-    private val label = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(147, 157, 184); textSize = 11f * resources.displayMetrics.scaledDensity }
-    private val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(14, 17, 25) }
-    private val grid = Paint().apply { color = Color.rgb(36, 42, 57); strokeWidth = 1f }
+    private val label = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(156, 163, 175); textSize = 11f * resources.displayMetrics.scaledDensity }
+    private val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(18, 24, 33) }
+    private val grid = Paint().apply { color = Color.rgb(31, 41, 54); strokeWidth = 1f }
     fun setPoints(value: JSONArray) { points = value; invalidate() }
     override fun onDraw(canvas: Canvas) {
         val d = resources.displayMetrics.density

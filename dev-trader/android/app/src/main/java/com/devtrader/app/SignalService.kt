@@ -101,7 +101,7 @@ class SignalService : Service() {
         manager.createNotificationChannel(
             NotificationChannel(
                 SERVICE_CHANNEL,
-                "Dev Trader Background Service",
+                "KYVORIQ Background Service",
                 NotificationManager.IMPORTANCE_LOW
             ).apply {
                 description = "Keeps live signal monitoring running in the background."
@@ -111,7 +111,7 @@ class SignalService : Service() {
         manager.createNotificationChannel(
             NotificationChannel(
                 SIGNAL_CHANNEL,
-                "Dev Trader Signal Alerts",
+                "KYVORIQ Signal Alerts",
                 NotificationManager.IMPORTANCE_HIGH
             ).apply {
                 description = "Immediate BTC long/short signal notifications."
@@ -129,7 +129,7 @@ class SignalService : Service() {
         )
         val notification = NotificationCompat.Builder(this, SERVICE_CHANNEL)
             .setSmallIcon(android.R.drawable.ic_popup_sync)
-            .setContentTitle("Dev Trader")
+            .setContentTitle("KYVORIQ")
             .setContentText("Background signal monitoring is active")
             .setContentIntent(pending)
             .setOngoing(true)
@@ -345,7 +345,7 @@ class SignalService : Service() {
         )
         val notification = NotificationCompat.Builder(this, SERVICE_CHANNEL)
             .setSmallIcon(android.R.drawable.ic_popup_sync)
-            .setContentTitle("Dev Trader")
+            .setContentTitle("KYVORIQ")
             .setContentText(text)
             .setContentIntent(pending)
             .setOngoing(true)
@@ -512,7 +512,7 @@ class SignalService : Service() {
         )
         val notification = NotificationCompat.Builder(this, SIGNAL_CHANNEL)
             .setSmallIcon(android.R.drawable.ic_dialog_info)
-            .setContentTitle(title.ifBlank { "Dev Trader Opportunity" })
+            .setContentTitle(title.ifBlank { "KYVORIQ Opportunity" })
             .setContentText(body.ifBlank { "Opportunity developing." })
             .setStyle(NotificationCompat.BigTextStyle().bigText(body))
             .setContentIntent(pending)

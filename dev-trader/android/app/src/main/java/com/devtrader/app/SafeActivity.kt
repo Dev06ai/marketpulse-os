@@ -1,3 +1,4 @@
+// Build 101: KYVORIQ visual identity — gold/charcoal system, branded navigation and mark.
 // Build 99: free-host migration with compact mobile delivery.
 // Build 83: show Bitget Demo funding readiness and demo execution state.
 package com.devtrader.app
@@ -26,6 +27,7 @@ import android.text.SpannableString
 import android.text.style.ForegroundColorSpan
 import android.widget.Button
 import android.widget.FrameLayout
+import android.widget.ImageView
 import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ScrollView
@@ -53,10 +55,19 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 // Build 87: backend executes every emitted trade call; Android client remains signal/event driven.
 class SafeActivity : Activity() {
-    private val btcOrange = Color.rgb(247, 147, 26)
+    private val kyGold = Color.rgb(247, 201, 72)
+    private val kyAmber = Color.rgb(224, 167, 46)
+    private val kyDeepGold = Color.rgb(184, 134, 11)
+    private val kyCharcoal = Color.rgb(11, 15, 20)
+    private val kySlate = Color.rgb(18, 24, 33)
+    private val kyGraphite = Color.rgb(31, 41, 54)
+    private val kyGray = Color.rgb(156, 163, 175)
+    private val kyWhite = Color.rgb(245, 247, 250)
+    private val kyLine = Color.rgb(76, 62, 28)
+    private val btcOrange = kyGold
 
-    // Keep all ordinary asset labels white. Only the BTC ticker immediately
-    // beside the live price receives the Bitcoin-orange accent.
+    // KYVORIQ uses its gold accent for the instrument emphasis while ordinary
+    // asset labels stay neutral so trading semantics remain easy to scan.
     private fun marketAssetAccent(value: CharSequence): CharSequence = value
 
     private fun priceBtcAccent(value: CharSequence): CharSequence {
@@ -262,7 +273,7 @@ class SafeActivity : Activity() {
         }
         colorAll("LONG", Color.rgb(54, 211, 153))
         colorAll("SHORT", Color.rgb(255, 82, 105))
-        colorAll("NO TRADE", Color.rgb(167, 139, 250))
+        colorAll("NO TRADE", kyGold)
         signal.text = styled
     }
 
@@ -270,7 +281,7 @@ class SafeActivity : Activity() {
         val compactViewport = resources.configuration.screenHeightDp < 760
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(Color.rgb(10, 11, 15))
+            setBackgroundColor(kyCharcoal)
             setPadding(dp(14), dp(8), dp(14), dp(8))
         }
         ViewCompat.setOnApplyWindowInsetsListener(root) { view, insets ->
@@ -280,9 +291,18 @@ class SafeActivity : Activity() {
         }
         setContentView(root)
         val header = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
-        val brand = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        brand.addView(label("DEV TRADER", 19f, Color.WHITE, 0.045f))
-        brand.addView(label("PERSONAL TRADING WORKSPACE", 8.5f, Color.rgb(136, 142, 161), 0.06f), margins(top = 4))
+        val brandMark = ImageView(this).apply {
+            setImageResource(R.drawable.kyvoriq_mark)
+            contentDescription = "KYVORIQ"
+            scaleType = ImageView.ScaleType.FIT_CENTER
+        }
+        header.addView(brandMark, LinearLayout.LayoutParams(dp(40), dp(40)).apply { rightMargin = dp(10) })
+        val brand = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        brand.addView(label("KYVORIQ", 19f, kyGold, 0.10f))
+        brand.addView(label("AI POWERED TRADING ASSISTANT", 7.8f, kyGray, 0.11f), margins(top = 3))
         header.addView(brand, LinearLayout.LayoutParams(0, dp(48), 1f))
         alertsButton = compactPillButton("ALERTS").apply { contentDescription = "Enable trade alerts" }
         alertsButton.setOnClickListener { safe { requestAlertPermission() } }
@@ -393,12 +413,12 @@ class SafeActivity : Activity() {
         selectedWorkspace = index
         workspacePages.forEachIndexed { i, page -> page.visibility = if (i == index) View.VISIBLE else View.GONE }
         navigationButtons.forEachIndexed { i, button ->
-            button.setTextColor(if (i == index) Color.WHITE else Color.rgb(138, 145, 162))
+            button.setTextColor(if (i == index) kyCharcoal else kyGray)
             button.background = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,
-                if (i == index) intArrayOf(Color.rgb(68, 60, 118), Color.rgb(37, 64, 103))
-                else intArrayOf(Color.rgb(24, 27, 36), Color.rgb(20, 23, 31))).apply {
+                if (i == index) intArrayOf(kyGold, kyAmber)
+                else intArrayOf(kySlate, kyCharcoal)).apply {
                 cornerRadius = dp(14).toFloat()
-                setStroke(dp(1), if (i == index) Color.rgb(121, 107, 198) else Color.rgb(46, 52, 67))
+                setStroke(dp(1), if (i == index) kyDeepGold else kyGraphite)
             }
         }
         latestRoot?.let { renderWorkspace(it) }
@@ -430,7 +450,7 @@ class SafeActivity : Activity() {
     }
 
     private fun sectionLabel(text: String): TextView =
-        label(text, 9.5f, Color.rgb(130, 136, 149), 0.13f)
+        label(text, 9.5f, kyGray, 0.13f)
 
     private fun weightButton(): LinearLayout.LayoutParams =
         LinearLayout.LayoutParams(0, dp(42), 1f).apply {
@@ -443,22 +463,13 @@ class SafeActivity : Activity() {
             val child = row.getChildAt(i) as? Button ?: continue
             val tf = child.text.toString()
             val selected = tf == selectedTf
-            child.setTextColor(
-                if (selected) Color.WHITE else Color.rgb(154, 160, 174)
-            )
+            child.setTextColor(if (selected) kyCharcoal else kyGray)
             child.background = gradient(
-                if (selected) {
-                    intArrayOf(Color.rgb(86, 76, 132), Color.rgb(48, 64, 101))
-                } else {
-                    intArrayOf(Color.rgb(36, 39, 48), Color.rgb(22, 24, 31))
-                },
+                if (selected) intArrayOf(kyGold, kyAmber) else intArrayOf(kyGraphite, kySlate),
                 GradientDrawable.Orientation.LEFT_RIGHT
             ).apply {
                 cornerRadius = dp(11).toFloat()
-                setStroke(
-                    dp(1),
-                    if (selected) Color.rgb(124, 108, 180) else Color.rgb(55, 60, 72)
-                )
+                setStroke(dp(1), if (selected) kyDeepGold else kyGraphite)
             }
         }
     }
@@ -467,7 +478,7 @@ class SafeActivity : Activity() {
         Button(this).apply {
             this.text = text
             textSize = 10.5f
-            setTextColor(Color.rgb(236, 239, 245))
+            setTextColor(kyWhite)
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
             isAllCaps = false
             isEnabled = true
@@ -479,11 +490,11 @@ class SafeActivity : Activity() {
             elevation = 0f
             setPadding(dp(5), 0, dp(5), 0)
             background = gradient(
-                intArrayOf(Color.rgb(40, 43, 52), Color.rgb(24, 26, 33)),
+                intArrayOf(kyGraphite, kySlate),
                 GradientDrawable.Orientation.LEFT_RIGHT
             ).apply {
                 cornerRadius = dp(12).toFloat()
-                setStroke(dp(1), Color.rgb(65, 70, 82))
+                setStroke(dp(1), kyLine)
             }
         }
 
@@ -500,11 +511,11 @@ class SafeActivity : Activity() {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(14), dp(if (compactViewport) 8 else 10), dp(14), dp(if (compactViewport) 8 else 10))
             background = gradient(
-                intArrayOf(Color.rgb(24, 26, 33), Color.rgb(12, 14, 19)),
+                intArrayOf(kySlate, kyCharcoal),
                 GradientDrawable.Orientation.TL_BR
             ).apply {
                 cornerRadius = dp(18).toFloat()
-                setStroke(dp(1), Color.rgb(52, 57, 68))
+                setStroke(dp(1), kyLine)
             }
         }
 
@@ -512,7 +523,7 @@ class SafeActivity : Activity() {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
         }
-        top.addView(label("BTCUSDT", 10f, Color.rgb(152, 158, 171), 0.08f),
+        top.addView(label("BTCUSDT", 10f, kyGray, 0.08f),
             LinearLayout.LayoutParams(0, dp(if (compactViewport) 18 else 22), 1f))
         val livePill = label("USDT", 10f, Color.rgb(54, 211, 153), 0.08f)
         top.addView(livePill, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(if (compactViewport) 18 else 22)))
@@ -534,19 +545,19 @@ class SafeActivity : Activity() {
         val statusView = TextView(this).apply {
             text = "DATA CONNECTING"
             textSize = 9.5f
-            setTextColor(Color.rgb(179, 185, 198))
+            setTextColor(kyGray)
             gravity = Gravity.CENTER
             setPadding(dp(9), 0, dp(9), 0)
             background = GradientDrawable().apply {
                 cornerRadius = dp(10).toFloat()
-                setColor(Color.rgb(29, 32, 40))
-                setStroke(dp(1), Color.rgb(69, 74, 87))
+                setColor(kySlate)
+                setStroke(dp(1), kyLine)
             }
         }
         row.addView(statusView, LinearLayout.LayoutParams(dp(112), dp(30)))
         box.addView(row)
 
-        val oi = label("OI  —", 9f, Color.rgb(133, 139, 151), 0.02f)
+        val oi = label("OI  —", 9f, kyGray, 0.02f)
         box.addView(oi, margins(top = 1))
         return HeroRefs(priceView, oi, statusView, box)
     }
@@ -556,14 +567,14 @@ class SafeActivity : Activity() {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(12), dp(9), dp(12), dp(8))
             background = gradient(
-                intArrayOf(Color.rgb(24, 26, 33), Color.rgb(15, 17, 22)),
+                intArrayOf(kySlate, kyCharcoal),
                 GradientDrawable.Orientation.TL_BR
             ).apply {
                 cornerRadius = dp(15).toFloat()
-                setStroke(dp(1), Color.rgb(48, 53, 64))
+                setStroke(dp(1), kyGraphite)
             }
         }
-        val heading = label(title, 8.5f, Color.rgb(125, 131, 144), 0.11f)
+        val heading = label(title, 8.5f, kyGray, 0.11f)
         val value = TextView(this).apply {
             text = initial
             textSize = valueSize
@@ -583,20 +594,20 @@ class SafeActivity : Activity() {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(14), dp(11), dp(14), dp(10))
             background = gradient(
-                intArrayOf(Color.rgb(33, 31, 47), Color.rgb(16, 17, 23)),
+                intArrayOf(kySlate, kyCharcoal),
                 GradientDrawable.Orientation.TL_BR
             ).apply {
                 cornerRadius = dp(17).toFloat()
-                setStroke(dp(1), Color.rgb(74, 66, 96))
+                setStroke(dp(1), kyLine)
             }
         }
         val header = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
         }
-        header.addView(label(title, 9f, Color.rgb(157, 149, 181), 0.12f),
+        header.addView(label(title, 9f, kyGray, 0.12f),
             LinearLayout.LayoutParams(0, dp(18), 1f))
-        header.addView(label(if (title == "DECISION CENTER") "DETAILS  ›" else "DEMO", 8.5f, Color.rgb(167, 139, 250), 0.08f))
+        header.addView(label(if (title == "DECISION CENTER") "DETAILS  ›" else "DEMO", 8.5f, kyGold, 0.08f))
         box.addView(header)
 
         val value = TextView(this).apply {
@@ -634,18 +645,18 @@ class SafeActivity : Activity() {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(17), dp(15), dp(17), dp(16))
             background = gradient(
-                intArrayOf(Color.rgb(30, 31, 38), Color.rgb(17, 18, 23)),
+                intArrayOf(kySlate, kyCharcoal),
                 GradientDrawable.Orientation.TL_BR
             ).apply {
                 cornerRadius = dp(18).toFloat()
-                setStroke(dp(1), Color.rgb(55, 57, 66))
+                setStroke(dp(1), kyGraphite)
             }
         }
 
         val heading = TextView(this).apply {
             text = marketAssetAccent(title)
             textSize = 11f
-            setTextColor(Color.rgb(150, 154, 164))
+            setTextColor(kyGray)
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
             letterSpacing = 0.11f
             includeFontPadding = false
@@ -696,18 +707,18 @@ class SafeActivity : Activity() {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(17), dp(15), dp(17), dp(16))
             background = gradient(
-                intArrayOf(Color.rgb(30, 31, 38), Color.rgb(17, 18, 23)),
+                intArrayOf(kySlate, kyCharcoal),
                 GradientDrawable.Orientation.TL_BR
             ).apply {
                 cornerRadius = dp(18).toFloat()
-                setStroke(dp(1), Color.rgb(55, 57, 66))
+                setStroke(dp(1), kyGraphite)
             }
         }
 
         val heading = TextView(this).apply {
             text = marketAssetAccent(title)
             textSize = 11f
-            setTextColor(Color.rgb(150, 154, 164))
+            setTextColor(kyGray)
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
             letterSpacing = 0.11f
         }
@@ -741,11 +752,11 @@ class SafeActivity : Activity() {
             stateListAnimator = null
             elevation = 0f
             background = gradient(
-                intArrayOf(Color.rgb(58, 60, 69), Color.rgb(34, 35, 42)),
+                intArrayOf(kyGraphite, kySlate),
                 GradientDrawable.Orientation.LEFT_RIGHT
             ).apply {
                 cornerRadius = dp(16).toFloat()
-                setStroke(dp(1), Color.rgb(84, 87, 98))
+                setStroke(dp(1), kyLine)
             }
             setPadding(dp(8), 0, dp(8), 0)
             setOnTouchListener { v, event ->
@@ -1319,7 +1330,7 @@ class SafeActivity : Activity() {
              else if (unresolved > 0) "$unresolved historical entries need attribution"
              else if (!ledger.optBoolean("complete_window", false) || !ledger.optBoolean("fee_accounting_complete", false)) "Fill accounting window is incomplete"
              else "30-day fill accounting  •  Updated ${formatClock(ledger.optLong("window_end_ts"))}")
-        ledgerView.setTextColor(if (unresolved > 0) Color.rgb(240, 194, 110) else Color.rgb(196, 204, 222))
+        ledgerView.setTextColor(if (unresolved > 0) kyAmber else kyGray)
         val positionText = StringBuilder()
         for (i in 0 until positions.length()) {
             val p = positions.optJSONObject(i) ?: continue
@@ -1450,15 +1461,15 @@ class SafeActivity : Activity() {
             setText(value)
             textSize = 15f
             setTextColor(Color.WHITE)
-            setHintTextColor(Color.rgb(120, 124, 134))
+            setHintTextColor(kyGray)
             inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL
             setPadding(dp(12), 0, dp(12), 0)
             background = gradient(
-                intArrayOf(Color.rgb(28, 29, 35), Color.rgb(17, 18, 23)),
+                intArrayOf(kySlate, kyCharcoal),
                 GradientDrawable.Orientation.LEFT_RIGHT
             ).apply {
                 cornerRadius = dp(14).toFloat()
-                setStroke(dp(1), Color.rgb(55, 57, 66))
+                setStroke(dp(1), kyGraphite)
             }
         }
     }
@@ -1467,7 +1478,7 @@ class SafeActivity : Activity() {
         getSystemService(NotificationManager::class.java).createNotificationChannel(
             NotificationChannel(
                 "dev_trader_signals",
-                "Dev Trader Signals",
+                "KYVORIQ Signals",
                 NotificationManager.IMPORTANCE_HIGH
             )
         )
@@ -1572,7 +1583,7 @@ class SafeActivity : Activity() {
 
     private fun showPnlCalculator() {
         val scroll = ScrollView(this).apply {
-            setBackgroundColor(Color.rgb(7, 8, 11))
+            setBackgroundColor(kyCharcoal)
             isFillViewport = true
             overScrollMode = View.OVER_SCROLL_NEVER
         }
@@ -1580,7 +1591,7 @@ class SafeActivity : Activity() {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(16), dp(18), dp(16), dp(30))
             background = gradient(
-                intArrayOf(Color.rgb(7, 8, 11), Color.rgb(17, 18, 23), Color.rgb(8, 9, 12)),
+                intArrayOf(kyCharcoal, kyCharcoal, kyCharcoal),
                 GradientDrawable.Orientation.TL_BR
             )
         }
@@ -1610,7 +1621,7 @@ class SafeActivity : Activity() {
         root.addView(header, margins(bottom = 16))
 
         root.addView(label("PNL", 13f, Color.WHITE, 0f), margins(bottom = 8))
-        root.addView(label("BTCUSDT Perpetual  •  USDT settlement", 14f, Color.rgb(168, 171, 181), 0f), margins(bottom = 14))
+        root.addView(label("BTCUSDT Perpetual  •  USDT settlement", 14f, kyGray, 0f), margins(bottom = 14))
 
         var direction = "LONG"
         var unitMode = "COST"
@@ -1630,8 +1641,8 @@ class SafeActivity : Activity() {
         root.addView(sideRow, margins(bottom = 14))
         refreshSides()
 
-        root.addView(label("UNIT SETTINGS", 11f, Color.rgb(154, 158, 170), 0.08f), margins(bottom = 7))
-        val amountLabel = label("Position Cost (USDT)", 12f, Color.rgb(166, 169, 179), 0f)
+        root.addView(label("UNIT SETTINGS", 11f, kyGray, 0.08f), margins(bottom = 7))
+        val amountLabel = label("Position Cost (USDT)", 12f, kyGray, 0f)
         root.addView(amountLabel, margins(bottom = 5))
         val amountEdit = numberField("Cost / Quantity", "100")
         root.addView(amountEdit, margins(bottom = 12))
@@ -1664,12 +1675,12 @@ class SafeActivity : Activity() {
         val defaultPrice = if (livePrice.isFinite()) String.format(Locale.US, "%.2f", livePrice) else ""
         val openEdit = numberField("Open Price", defaultPrice)
         val closeEdit = numberField("Closing Price", defaultPrice)
-        root.addView(label("Open Price (USDT)", 12f, Color.rgb(166, 169, 179), 0f), margins(bottom = 5))
+        root.addView(label("Open Price (USDT)", 12f, kyGray, 0f), margins(bottom = 5))
         root.addView(openEdit, margins(bottom = 12))
-        root.addView(label("Closing Price (USDT)", 12f, Color.rgb(166, 169, 179), 0f), margins(bottom = 5))
+        root.addView(label("Closing Price (USDT)", 12f, kyGray, 0f), margins(bottom = 5))
         root.addView(closeEdit, margins(bottom = 14))
 
-        val leverageLabel = label("Leverage  •  20x", 12f, Color.rgb(166, 169, 179), 0f)
+        val leverageLabel = label("Leverage  •  20x", 12f, kyGray, 0f)
         root.addView(leverageLabel, margins(bottom = 4))
         val leverageBar = SeekBar(this).apply { max = 149; progress = 19; splitTrack = false }
         leverageBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
@@ -1717,7 +1728,7 @@ class SafeActivity : Activity() {
 
         root.addView(label(
             "Note  •  Cost mode treats the entered amount as position margin and scales notional by leverage. A 0.15% reserve is applied. Actual fees, funding and slippage can differ.",
-            12f, Color.rgb(142, 146, 157), 0f
+            12f, kyGray, 0f
         ), margins(bottom = 10))
     }
 
@@ -1835,12 +1846,12 @@ class SafeActivity : Activity() {
         dialog.setOnShowListener {
             dialog.window?.setBackgroundDrawable(
                 GradientDrawable().apply {
-                    setColor(Color.rgb(18, 20, 26))
+                    setColor(kySlate)
                     cornerRadius = dp(18).toFloat()
-                    setStroke(dp(1), Color.rgb(63, 68, 80))
+                    setStroke(dp(1), kyLine)
                 }
             )
-            dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE)?.setTextColor(Color.rgb(167, 139, 250))
+            dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE)?.setTextColor(kyGold)
         }
         dialog.show()
         dialog.window?.setLayout((resources.displayMetrics.widthPixels * 0.94).toInt(), (resources.displayMetrics.heightPixels * 0.80).toInt())
@@ -2172,7 +2183,7 @@ class SafeActivity : Activity() {
             val intent = Intent(Intent.ACTION_INSTALL_PACKAGE).apply {
                 setDataAndType(uri, "application/vnd.android.package-archive")
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
-                clipData = android.content.ClipData.newRawUri("Dev Trader update", uri)
+                clipData = android.content.ClipData.newRawUri("KYVORIQ update", uri)
             }
             startActivity(intent)
             setUpdateStatus("INSTALLER OPEN • v" + apk.name.substringAfter("dev-trader-").removeSuffix(".apk"))

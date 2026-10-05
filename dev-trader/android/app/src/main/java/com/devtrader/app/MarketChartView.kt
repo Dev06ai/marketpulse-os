@@ -28,24 +28,24 @@ class MarketChartView @JvmOverloads constructor(
     attrs: AttributeSet? = null
 ) : View(context, attrs) {
 
-    private val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(9, 10, 13) }
+    private val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(11, 15, 20) }
     private val gridPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.rgb(31, 33, 40)
+        color = Color.rgb(31, 41, 54)
         strokeWidth = dp(1f)
     }
     private val axisPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.rgb(92, 96, 108)
+        color = Color.rgb(105, 113, 125)
         strokeWidth = dp(1f)
     }
     private val wickPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { strokeWidth = dp(1.15f) }
     private val bodyPaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val bbPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.rgb(112, 89, 177)
+        color = Color.rgb(184, 134, 11)
         strokeWidth = dp(1.05f)
         style = Paint.Style.STROKE
     }
     private val emaPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.rgb(218, 171, 71)
+        color = Color.rgb(247, 201, 72)
         strokeWidth = dp(1.15f)
         style = Paint.Style.STROKE
     }
@@ -55,15 +55,15 @@ class MarketChartView @JvmOverloads constructor(
         style = Paint.Style.STROKE
     }
     private val labelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.rgb(164, 168, 179)
+        color = Color.rgb(156, 163, 175)
         textSize = dp(10f)
     }
     private val axisLabelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.rgb(136, 140, 151)
+        color = Color.rgb(126, 135, 148)
         textSize = dp(9.5f)
     }
     private val strongLabelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.rgb(235, 237, 241)
+        color = Color.rgb(245, 247, 250)
         textSize = dp(10f)
         typeface = android.graphics.Typeface.create(
             android.graphics.Typeface.DEFAULT,
@@ -71,12 +71,12 @@ class MarketChartView @JvmOverloads constructor(
         )
     }
     private val crosshairPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.rgb(152, 156, 169)
+        color = Color.rgb(224, 167, 46)
         strokeWidth = dp(1f)
     }
     private val volumeUpPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(57, 132, 116) }
     private val volumeDownPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(164, 73, 90) }
-    private val liveChipPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(45, 48, 58) }
+    private val liveChipPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(18, 24, 33) }
     private val liveDotPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(71, 191, 149) }
 
     private var candles = JSONArray()
@@ -295,7 +295,7 @@ class MarketChartView @JvmOverloads constructor(
 
         if (!livePrice.isNaN() && visibleLive) {
             val y = mapY(livePrice, low, high, top, priceBottom)
-            currentPricePaint.color = Color.rgb(219, 221, 229)
+            currentPricePaint.color = Color.rgb(247, 201, 72)
             canvas.drawLine(left, y, right, y, currentPricePaint)
             drawPriceTag(canvas, right + dp(4f), y, String.format(Locale.US, "%.2f", livePrice), true)
         }
@@ -313,7 +313,7 @@ class MarketChartView @JvmOverloads constructor(
         val chipTop = dp(8f)
         val rect = android.graphics.RectF(chipLeft, chipTop, width - dp(10f), chipTop + dp(24f))
         canvas.drawRoundRect(rect, dp(12f), dp(12f), liveChipPaint)
-        liveDotPaint.color = if (feedHealthy) Color.rgb(71, 191, 149) else Color.rgb(146, 151, 166)
+        liveDotPaint.color = if (feedHealthy) Color.rgb(71, 191, 149) else Color.rgb(156, 163, 175)
         canvas.drawCircle(chipLeft + dp(11f), chipTop + dp(12f), dp(3.5f), liveDotPaint)
         canvas.drawText(if (feedHealthy) "LIVE" else "WAIT", chipLeft + dp(19f), chipTop + dp(16f), strongLabelPaint)
     }
@@ -429,7 +429,7 @@ class MarketChartView @JvmOverloads constructor(
     private fun drawPriceTag(canvas: Canvas, x: Float, y: Float, text: String, live: Boolean) {
         val width = if (live) dp(58f) else dp(64f)
         val rect = android.graphics.RectF(x, y - dp(10f), x + width, y + dp(10f))
-        val paint = if (live) liveChipPaint else Color.rgb(39, 41, 49).let {
+        val paint = if (live) liveChipPaint else Color.rgb(31, 41, 54).let {
             Paint(Paint.ANTI_ALIAS_FLAG).apply { color = it }
         }
         canvas.drawRoundRect(rect, dp(5f), dp(5f), paint)

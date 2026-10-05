@@ -538,7 +538,7 @@ async def lifespan(app: FastAPI):
         t.cancel()
 
 
-app = FastAPI(title="Dev Trader BTC Trading Bot", version="0.14.0", lifespan=lifespan)
+app = FastAPI(title="KYVORIQ AI Trading Assistant", version="0.15.0", lifespan=lifespan)
 app.add_middleware(GZipMiddleware, minimum_size=700)
 
 
@@ -850,7 +850,7 @@ async def app_config():
             "MAX_DAILY_SIGNALS", "SIGNAL_COOLDOWN_MINUTES",
             "QUALITY_MIN_CONFIDENCE", "QUALITY_MIN_RR",
         ],
-        "product": "Dev Trader BTC Trading Bot",
+        "product": "KYVORIQ AI Trading Assistant",
         "scan_mode": "elite_quality",
         "signal_timeframes": ["5m", "15m", "1h"],
         "remote_feature_flags": {

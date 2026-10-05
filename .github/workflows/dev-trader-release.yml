@@ -1,4 +1,4 @@
-name: Dev Trader Release
+name: KYVORIQ Release
 
 on:
   push:
@@ -98,7 +98,7 @@ jobs:
             "versionName": "${VERSION_NAME}",
             "apkUrl": "${APK_URL}",
             "sha256": "${SHA256}",
-            "notes": "Signed Dev Trader release ${VERSION_NAME}"
+            "notes": "Signed KYVORIQ release ${VERSION_NAME}"
           }
           EOF
           echo "version_name=${VERSION_NAME}" >> "$GITHUB_OUTPUT"
@@ -132,8 +132,8 @@ jobs:
               --target "$GITHUB_SHA" \
               "$APK" \
               "dev-trader-update.json#dev-trader-update.json" \
-              --title "Dev Trader ${{ steps.meta.outputs.version_name }}" \
-              --notes "Signed self-update release for Dev Trader."
+              --title "KYVORIQ ${{ steps.meta.outputs.version_name }}" \
+              --notes "Signed self-update release for KYVORIQ."
           fi
 
       - name: Publish update manifest
@@ -145,7 +145,7 @@ jobs:
           CONTENT="$(base64 -w0 dev-trader-update.json)"
           SHA="$(gh api "repos/${GITHUB_REPOSITORY}/contents/dev-trader/update.json?ref=dev-trader-v1" --jq .sha)"
           gh api --method PUT "repos/${GITHUB_REPOSITORY}/contents/dev-trader/update.json" \
-            -f message="Publish Dev Trader self-update manifest ${GITHUB_REF_NAME}" \
+            -f message="Publish KYVORIQ self-update manifest ${GITHUB_REF_NAME}" \
             -f content="${CONTENT}" \
             -f branch="dev-trader-v1" \
             -f sha="${SHA}" >/dev/null
