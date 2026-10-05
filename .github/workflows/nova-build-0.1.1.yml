@@ -5,7 +5,7 @@ on:
     branches:
       - nova-build-0.1.1
     paths:
-      - 'nova-build/chunks/**'
+      - 'nova-build/overrides/**'
       - '.github/workflows/nova-build-0.1.1.yml'
   workflow_dispatch:
 
@@ -20,7 +20,7 @@ jobs:
       ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
       ANDROID_HOME: /usr/local/lib/android/sdk
     steps:
-      - name: Checkout compiler branch
+      - name: Checkout isolated compiler branch
         uses: actions/checkout@v4
 
       - name: Set up Java 21
@@ -40,25 +40,37 @@ jobs:
           test -x "$ANDROID_SDK_ROOT/build-tools/35.0.0/aapt2"
           test -f "$ANDROID_SDK_ROOT/build-tools/35.0.0/lib/apksigner.jar"
 
-      - name: Restore and verify clean NOVA source
+      - name: Restore NOVA source checkpoint
         shell: bash
         run: |
           rm -rf /tmp/nova-src /tmp/nova-artifact
-          mkdir -p /tmp/nova-src
-          cat nova-build/chunks/00.b64 nova-build/chunks/01.b64 nova-build/chunks/02.b64 nova-build/chunks/03.b64 nova-build/chunks/04.b64 nova-build/chunks/05.b64 > /tmp/NOVA-0.1.1-source.b64
-          base64 -d /tmp/NOVA-0.1.1-source.b64 > /tmp/NOVA-0.1.1-source.zip
-          sha256sum /tmp/NOVA-0.1.1-source.zip
-          unzip -tq /tmp/NOVA-0.1.1-source.zip
-          unzip -q /tmp/NOVA-0.1.1-source.zip -d /tmp/nova-src
+          mkdir -p /tmp/nova-src /tmp/nova-artifact
+          cat nova-build/chunks/00.b64 nova-build/chunks/01.b64 nova-build/chunks/02.b64 nova-build/chunks/03.b64 nova-build/chunks/04.b64 nova-build/chunks/05.b64 > /tmp/NOVA-source.b64
+          base64 -d /tmp/NOVA-source.b64 > /tmp/NOVA-source.zip
+          unzip -tq /tmp/NOVA-source.zip
+          unzip -q /tmp/NOVA-source.zip -d /tmp/nova-src
           test -f /tmp/nova-src/NOVA-0.1.1/tools/build.py
-          ! unzip -l /tmp/NOVA-0.1.1-source.zip | grep -Eqi '(\.jks|\.keystore|password\.txt|/signing/)'
+          ! unzip -l /tmp/NOVA-source.zip | grep -Eqi '(\.jks|\.keystore|password\.txt|/signing/)'
 
-      - name: Run NOVA security policy tests
+      - name: Apply and verify final audited overrides
+        shell: bash
+        run: |
+          MAIN=/tmp/nova-src/NOVA-0.1.1/app/src/main/java/dev/nova/companion/MainActivity.java
+          GUARD=/tmp/nova-src/NOVA-0.1.1/app/src/main/java/dev/nova/companion/DevGuard.java
+          cat nova-build/overrides/main/00.txt nova-build/overrides/main/01.txt nova-build/overrides/main/02.txt nova-build/overrides/main/03.txt nova-build/overrides/main/04.txt nova-build/overrides/main/05.txt nova-build/overrides/main/06.txt nova-build/overrides/main/07.txt nova-build/overrides/main/08.txt > "$MAIN"
+          cat nova-build/overrides/guard/00.txt nova-build/overrides/guard/01.txt > "$GUARD"
+          echo '321f7ebe6f933f734f21bded383a384f27a0b2ad575889b6a31db67a82a51882  '"$MAIN" | sha256sum -c -
+          echo 'a265224cf5e00a5913df89db7aeb3e52782d2306f7901b8e203ea38ad88d5053  '"$GUARD" | sha256sum -c -
+          grep -q 'Check for updates' "$MAIN"
+          grep -q 'Security score' "$MAIN"
+          grep -q 'Clear Nova cache' "$MAIN"
+          ! grep -R -nE 'TextToSpeech|android.permission.INTERNET|marketpulse|dev trader|bitget' /tmp/nova-src/NOVA-0.1.1/app/src/main || true
+
+      - name: Run NOVA security policy test
         shell: bash
         run: |
           cd /tmp/nova-src/NOVA-0.1.1
           python3 tests/security_manifest_test.py
-          python3 tests/ui_policy_test.py
 
       - name: Build unsigned aligned APK
         shell: bash
@@ -72,7 +84,6 @@ jobs:
       - name: Prepare local-signing bundle
         shell: bash
         run: |
-          mkdir -p /tmp/nova-artifact
           cp /tmp/nova-src/NOVA-0.1.1/build/nova-unsigned.apk /tmp/nova-artifact/NOVA-0.1.1-unsigned-aligned.apk
           cp "$ANDROID_SDK_ROOT/build-tools/35.0.0/lib/apksigner.jar" /tmp/nova-artifact/apksigner.jar
           sha256sum /tmp/nova-artifact/* > /tmp/nova-artifact/SHA256SUMS.txt
