@@ -1,0 +1,4 @@
+.cancel();subtitle.setVisibility(View.GONE);}if(puppy!=null)puppy.animation(false);super.onPause();}
+    @Override protected void onDestroy(){handler.removeCallbacksAndMessages(null);if(recognizer!=null)recognizer.destroy();pendingSensitive=null;super.onDestroy();}
+    @Override protected void onSaveInstanceState(Bundle b){super.onSaveInstanceState(b);b.putInt("page",page);}
+}
