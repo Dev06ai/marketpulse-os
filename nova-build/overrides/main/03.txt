@@ -1,0 +1,40 @@
+blocked this request. Nova cannot delete phone files, install apps, send money, execute trades, or run arbitrary commands.",true);return;
+        }
+        try{
+            switch(r.kind){
+                case SLEEP:pet("sleep",false);reply("Curling up for a nap. Tap Wake when you need me.",true);break;
+                case WAKE:pet("awake",true);reply("I'm awake, Dev! What shall we do?",true);break;
+                case PLAY:pet("play",true);reply("Ball time! Tap me for a happy tail wag.",true);break;
+                case FEED:pet("feed",true);reply("A little pretend snack. Thank you, Dev!",true);break;
+                case LOVE:pet("happy",true);reply("You're my favourite human. Tail wags!",true);break;
+                case BATTERY:pet("work",false);reply(DevGuard.battery(this),true);pet("awake",false);break;
+                case STORAGE:pet("work",false);reply(DevGuard.storage(),true);pet("awake",false);break;
+                case NETWORK:reply(DevGuard.network(this),true);break;
+                case SCAN:runScan();break;
+                case HELP:reply("Try these:\n• Nova sleep / सो जाओ\n• Play / खेलो / good boy\n• Battery check karo\n• Storage / network / check my phone\n• Remember I prefer Hindi\n• Show notes\n• Remind me in 10 minutes to stretch\n• याद दिलाओ 10 मिनट बाद पानी पीना\n• Open YouTube / WhatsApp / Chrome / settings\n\nVoice language is selectable in Controls. Hinglish recognition depends on your phone's speech engine.",true);break;
+                case NOTES:show(3);reply("Your notes and reminders are in Life. You can edit or forget any note.",true);break;
+                case SAVE_NOTE:
+                    vault.change(s->{JSONArray a=s.getJSONArray("notes");if(a.length()>=100)throw new IllegalStateException("Memory has 100 notes. Forget one before adding another.");a.put(new JSONObject().put("id",UUID.randomUUID().toString()).put("text",r.argument).put("time",System.currentTimeMillis()));});pet("happy",true);reply("Remembered on this phone: "+r.argument,true);break;
+                case REMIND:
+                    if(!Reminders.allowed(this)){reply("Enable Nova notifications in Controls, then add this reminder again. I haven't scheduled it yet.",true);if(Build.VERSION.SDK_INT>=33)requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS},102);break;}
+                    Reminders.add(this,r.argument,r.minutes);reply("Reminder saved for about "+r.minutes+" minutes from now: "+r.argument+". Android battery management can delay delivery.",true);break;
+                case OPEN_APP:
+                    Intent i="settings".equals(r.argument)?new Intent(Settings.ACTION_SETTINGS):getPackageManager().getLaunchIntentForPackage(r.argument);
+                    if(i==null){reply("That app isn't installed or Android isn't exposing its launcher.",true);break;}startActivity(i);reply("Opened the app.",false);break;
+                default:break;
+            }
+            vault.audit(r.kind.name(),"Handled");
+        }catch(Exception e){error(e);reply("I couldn't complete that action. Nothing was reported as done.",false);}
+    }
+    private void guard(){
+        content.addView(text("Dev Guard",25,TEXT,true));gap(content,8);content.addView(text("Small permission footprint. Clear results.",13,MUTED,false));gap(content,20);
+        int score=DevGuard.securityScore(this);LinearLayout scoreCard=card("Security score · "+score+"/100 · "+DevGuard.scoreLabel(this),"A transparent configuration score based on screen lock, patch age, USB debugging and Nova's release posture — not an antivirus verdict.");button(scoreCard,"Run full configuration check",true,this::runScan);
+        LinearLayout device=card("Device health",DevGuard.deviceHealth(this));button(device,"Android security settings",false,()->openSettings(Settings.ACTION_SECURITY_SETTINGS));
+        LinearLayout battery=card("Battery",DevGuard.battery(this));button(battery,"Android battery settings",false,()->openSettings(Settings.ACTION_BATTERY_SAVER_SETTINGS));
+        LinearLayout storage=card("Storage",DevGuard.storage());button(storage,"Android storage settings",false,()->openSettings(Settings.ACTION_INTERNAL_STORAGE_SETTINGS));
+        LinearLayout cleanup=card("Safe cleanup",DevGuard.cacheSummary(this));button(cleanup,"Clear Nova cache",false,this::clearNovaCache);
+        LinearLayout network=card("Connection",DevGuard.network(this));button(network,"Network settings",false,()->openSettings(Settings.ACTION_WIRELESS_SETTINGS));
+        LinearLayout boundaries=card("Nova permission inspector",DevGuard.permissionSummary(this)+"\n\nNo photo, video, contact, camera, Accessibility, notification-reading, root, exchange-key or background-microphone access. Nova has no Internet permission in this build.");
+        button(boundaries,"Review Nova permissions",false,()->{stopService(new Intent(this,CompanionService.class));startActivity(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,Uri.parse("package:"+getPackageName())));});
+    }
+    pri
