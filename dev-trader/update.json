@@ -1,8 +1,8 @@
 {
   "enabled": true,
-  "versionCode": 100,
-  "versionName": "0.14.2",
-  "apkUrl": "https://github.com/Dev06ai/marketpulse-os/releases/download/dev-trader-v0.14.2-100/app-release.apk",
-  "sha256": "8f76a56f17df5165a28b6cb535991f76529a933f3fc1f96630a1ff9588c79cb9",
-  "notes": "Dev Trader 0.14.2 \u2022 exchange refresh admission fix \u2022 clear skipped-setup status"
+  "versionCode": 101,
+  "versionName": "0.15.0",
+  "apkUrl": "https://github.com/Dev06ai/marketpulse-os/releases/download/dev-trader-v0.15.0-101/app-release.apk",
+  "sha256": "0faed758225f7199f348d89f26e7c6925e9b158607e1f29ec92c3a9cb2126b53",
+  "notes": "KYVORIQ 0.15.0 \u2022 gold/charcoal identity \u2022 new angular app mark \u2022 refined mobile trading UI"
 }
