@@ -44,6 +44,7 @@ class DemoExecutionEngine:
         self.lock = threading.RLock()
         self._submission_lock = asyncio.Lock()
         self._sync_lock = asyncio.Lock()
+        self._sync_generation = 0
         self._protection_lock = asyncio.Lock()
         self.data = {
             "version": 1,
@@ -205,7 +206,7 @@ class DemoExecutionEngine:
             raise BitgetDemoError(f"Calculated position is below Bitget minimum notional ({min_usdt:g} USDT).")
         return qty, qty * (distance + (entry + stop) * fee_rate), config
 
-    def _signal_allowed(self, signal: dict[str, Any]) -> tuple[bool, str]:
+    def _signal_allowed(self, signal: dict[str, Any], *, reconciliation_locked: bool = False) -> tuple[bool, str]:
         if os.getenv("DEMO_EXECUTION_PAUSED", "false").lower() == "true" or os.getenv("DEMO_RESET_REQUEST_MS", ""):
             return False, "Operator demo reset/test preparation is paused; no new exposure is admitted."
         if self.data.get("protection_halt"):
@@ -215,7 +216,7 @@ class DemoExecutionEngine:
         ledger = self.data.get("fill_ledger") or {}
         if hasattr(self.client, "fills_history") and not (ledger.get("complete_window") and ledger.get("fee_accounting_complete")):
             return False, "The exchange fill/fee window is incomplete; new risk is blocked."
-        if self._sync_lock.locked():
+        if self._sync_lock.locked() and not reconciliation_locked:
             return False, "Exchange reconciliation is in progress; wait for a verified snapshot."
         if not self.enabled:
             return False, "Demo execution disabled."
@@ -326,7 +327,26 @@ class DemoExecutionEngine:
     async def handle_signal(self, signal: dict[str, Any]) -> dict[str, Any]:
         # Concurrent tasks must not pass the same cap/duplicate check together.
         async with self._submission_lock:
-            result = await self._handle_signal(signal)
+            generation = self._sync_generation
+            created = self._num(signal.get("created_ts"))
+            remaining = min(15.0, (created + 15000 - time.time() * 1000) / 1000) if created else 15.0
+            try:
+                # Join a routine refresh instead of permanently skipping its
+                # coincident setup. Only lock acquisition is timed out: never
+                # cancel a private order request with an uncertain outcome.
+                await asyncio.wait_for(self._sync_lock.acquire(), timeout=max(0.0, remaining))
+            except asyncio.TimeoutError:
+                result = {"ok": False, "skipped": True,
+                    "reason": "Signal expired while waiting for exchange reconciliation; wait for a new setup."}
+            else:
+                try:
+                    if self._sync_generation == generation:
+                        await self._refresh_locked()
+                    # Keep reconciliation and admission mutually exclusive
+                    # through submission, including the second freshness gate.
+                    result = await self._handle_signal(signal)
+                finally:
+                    self._sync_lock.release()
             self.data["last_decision"] = {"signal_id": signal.get("id"), "direction": signal.get("direction"),
                 "status": "SUBMITTED" if result.get("ok") else "SKIPPED" if result.get("skipped") else "ERROR",
                 "reason": result.get("reason", "Exchange accepted the order; fill reconciliation is tracked separately."),
@@ -336,27 +356,22 @@ class DemoExecutionEngine:
 
     async def _handle_signal(self, signal: dict[str, Any]) -> dict[str, Any]:
         submission_oid = ""
-        # Sync first so a just-closed position is not mistaken for an active one.
-        try:
-            await self.sync()
-        except Exception:
-            pass
-
-        allowed, reason = self._signal_allowed(signal)
+        allowed, reason = self._signal_allowed(signal, reconciliation_locked=True)
         if not allowed:
             return {"ok": False, "skipped": True, "reason": reason}
-
         # Strategy candidates still need exchange admission. Existing exposure
         # must close and reconcile before any new entry is submitted.
         try:
             positions = await self._current_positions()
         except Exception as exc:
-            return {"ok": False, "reason": f"Unable to verify Bitget position: {exc}"}
+            return {"ok": False, "skipped": True, "reason": f"Unable to verify Bitget position: {exc}"}
 
         if any(self._num(p.get("total")) > 0 for p in positions) or self._open_local_trade():
             return {"ok": False, "skipped": True, "reason": "Existing demo exposure must close and reconcile before another entry."}
-        if (self.data.get("client_status") or {}).get("history_reconciliation") == "DEGRADED":
-            return {"ok": False, "skipped": True, "reason": "Exchange reconciliation is degraded; new entries are blocked."}
+        status = self.data.get("client_status") or {}
+        if not status.get("ready") or status.get("history_reconciliation") != "HEALTHY":
+            return {"ok": False, "skipped": True,
+                "reason": "Exchange reconciliation is not verified; new entries are blocked."}
         try:
             if await asyncio.to_thread(self.client.pending_orders, self.symbol) or await asyncio.to_thread(self.client.strategy_orders, self.symbol):
                 return {"ok": False, "skipped": True, "reason": "Pending exchange orders remain; no new position can be opened."}
@@ -379,7 +394,7 @@ class DemoExecutionEngine:
             qty, risk_usdt, config = await self._risk_size(dict(signal, entry=reference_price, stop=stop))
             # Sizing/settings requests can take time. Do not submit an entry
             # whose decision expired while waiting for those responses.
-            allowed, reason = self._signal_allowed(signal)
+            allowed, reason = self._signal_allowed(signal, reconciliation_locked=True)
             if not allowed:
                 return {"ok": False, "skipped": True, "reason": reason}
             # Bitget UTA permits at most 32 characters; use a deterministic ID
@@ -855,7 +870,12 @@ class DemoExecutionEngine:
         if self._sync_lock.locked():
             return []
         async with self._sync_lock:
-            return await self._sync()
+            return await self._refresh_locked()
+
+    async def _refresh_locked(self) -> list[dict[str, Any]]:
+        result = await self._sync()
+        self._sync_generation += 1
+        return result
 
     async def _sync(self) -> list[dict[str, Any]]:
         if not self.enabled or not self.ready:

@@ -1334,17 +1334,24 @@ class SafeActivity : Activity() {
         val e = root.optJSONObject("engine") ?: JSONObject()
         val f = root.optJSONObject("features") ?: JSONObject()
         val s = root.optJSONObject("signal")
+        val currentDecision = s != null && decision.optString("signal_id").isNotBlank() &&
+            decision.optString("signal_id") == s.optString("id")
         val rejection = e.optJSONObject("trade_governor")?.optString("last_quality_rejection").orEmpty()
         val reason = when {
             !sourceHealthy -> "Waiting for healthy, fresh market data."
             unknown > 0 -> "Order response is uncertain. Awaiting exchange confirmation; additional entries are blocked."
             unresolved > 0 -> "Historical partial exits need reconciliation. New exposure is blocked."
             openCount > 0 -> "Existing exchange exposure is being tracked. Additional entries are blocked."
-            decision.optString("status") == "SKIPPED" || decision.optString("status") == "ERROR" -> decision.optString("reason")
+            currentDecision && decision.optString("status") in setOf("SKIPPED", "ERROR") -> decision.optString("reason")
             rejection.isNotBlank() -> rejection
             else -> e.optString("wait_reason", "Scanning for a confirmed setup.")
         }
         val details = StringBuilder("ENTRY STATUS\n$reason\n\n")
+        if (decision.optString("status") in setOf("SKIPPED", "ERROR")) {
+            details.append("LAST ENTRY ATTEMPT  •  ${formatClock(decision.optLong("ts"))}\n")
+                .append("${decision.optString("status")}  •  ${decision.optString("reason")}\n")
+                .append("This describes the previous attempt, not a current entry instruction.\n\n")
+        }
         details.append("MARKET CONTEXT\n15m ${f.optString("trend_15", "—")}  •  1h ${f.optString("trend_60", "—")}  •  4h ${f.optString("trend_240", "—")}\n")
             .append("${f.optString("regime", "—")}  •  ${f.optString("market_structure", "—")}\n\n")
             .append("EXECUTION POLICY\nOne position at a time\nFee-adjusted reward / risk ≥ ${summary.optDouble("min_net_rr", 1.5)}\nPause after 2 consecutive daily losses\nObserved daily equity loss limit 1%\n\n")
@@ -1356,7 +1363,7 @@ class SafeActivity : Activity() {
         if (s != null) {
             val direction = s.optString("direction", "WAIT")
             val lifecycle = s.optString("lifecycle", "ACTIVE")
-            val resolved = lifecycle in setOf("TARGET_REACHED", "INVALIDATED", "CLOSED", "EXECUTION_FAILED", "RESOLVED")
+            val resolved = lifecycle in setOf("TARGET_REACHED", "INVALIDATED", "CLOSED", "EXECUTION_FAILED", "RESOLVED", "NOT_EXECUTED")
             val executionStatus = s.optString("execution_status", "CHECKING")
             val entries = execution.optJSONArray("recent_trades") ?: JSONArray()
             val actual = (0 until entries.length()).mapNotNull { entries.optJSONObject(it) }

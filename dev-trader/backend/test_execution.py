@@ -35,6 +35,15 @@ class FakeClient:
     def positions(self, symbol):
         return []
 
+    def position_history(self, *args):
+        return []
+
+    def orders_history(self, *args):
+        return []
+
+    def status(self, symbol):
+        return {"ready": True, "available_balance_usdt": 1000.0}
+
     def pending_orders(self, symbol):
         return []
 
