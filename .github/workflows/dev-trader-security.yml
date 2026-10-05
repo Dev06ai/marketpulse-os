@@ -1,0 +1,22 @@
+name: Dev Trader Security Guard
+
+on:
+  pull_request:
+    branches: [dev-trader-v1]
+  push:
+    branches: [dev-trader-v1]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  secret-history-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out full history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Scan tracked files and Git history for credentials
+        run: python dev-trader/tools/security_scan.py --history
