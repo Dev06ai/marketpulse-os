@@ -59,7 +59,8 @@ jobs:
         run: |
           MAIN=/tmp/nova-src/NOVA-0.1.1/app/src/main/java/dev/nova/companion/MainActivity.java
           GUARD=/tmp/nova-src/NOVA-0.1.1/app/src/main/java/dev/nova/companion/DevGuard.java
-          cat nova-build/overrides/main/00.txt nova-build/overrides/main/01.txt nova-build/overrides/main/02.txt nova-build/overrides/main/03.txt nova-build/overrides/main/04.txt nova-build/overrides/main/05.txt nova-build/overrides/main/06.txt nova-build/overrides/main/07.txt nova-build/overrides/main/08.txt > "$MAIN"
+          head -c 5000 nova-build/overrides/main/00.txt > "$MAIN"
+          cat nova-build/overrides/main/01.txt nova-build/overrides/main/02.txt nova-build/overrides/main/03.txt nova-build/overrides/main/04.txt nova-build/overrides/main/05.txt nova-build/overrides/main/06.txt nova-build/overrides/main/07.txt nova-build/overrides/main/08.txt >> "$MAIN"
           cat nova-build/overrides/guard/00.txt nova-build/overrides/guard/01.txt > "$GUARD"
           echo '321f7ebe6f933f734f21bded383a384f27a0b2ad575889b6a31db67a82a51882  '"$MAIN" | sha256sum -c -
           echo 'a265224cf5e00a5913df89db7aeb3e52782d2306f7901b8e203ea38ad88d5053  '"$GUARD" | sha256sum -c -
