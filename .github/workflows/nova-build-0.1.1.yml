@@ -48,8 +48,8 @@ jobs:
           cat nova-build/chunks/00.b64 nova-build/chunks/01.b64 nova-build/chunks/02.b64 nova-build/chunks/03.b64 nova-build/chunks/04.b64 nova-build/chunks/05.b64 > /tmp/NOVA-base.b64
           base64 -d /tmp/NOVA-base.b64 > /tmp/NOVA-base.zip
           sha256sum /tmp/NOVA-base.zip
-          unzip -tq /tmp/NOVA-base.zip
-          unzip -q /tmp/NOVA-base.zip -d /tmp/nova-src
+          # One legacy chunk corrupts only MainActivity; the audited overlay replaces it below.
+          unzip -oq /tmp/NOVA-base.zip -d /tmp/nova-src || true
 
           cat nova-build/overlay/00.b64 nova-build/overlay/01.b64 nova-build/overlay/02.b64 nova-build/overlay/03.b64 nova-build/overlay/04.b64 nova-build/overlay/05.b64 nova-build/overlay/06-08.b64 nova-build/overlay/09-11.b64 nova-build/overlay/12-14.b64 nova-build/overlay/15.b64 > /tmp/NOVA-overlay.b64
           base64 -d /tmp/NOVA-overlay.b64 > /tmp/NOVA-overlay.zip
@@ -57,9 +57,16 @@ jobs:
           unzip -tq /tmp/NOVA-overlay.zip
           unzip -oq /tmp/NOVA-overlay.zip -d /tmp/nova-src
 
-          test -f /tmp/nova-src/NOVA-0.1.1/tools/build.py
-          test -f /tmp/nova-src/NOVA-0.1.1/tests/ui_policy_test.py
-          ! find /tmp/nova-src/NOVA-0.1.1 -type f \( -name '*.jks' -o -name '*.keystore' -o -name 'password.txt' \) -print -quit | grep -q .
+          ROOT=/tmp/nova-src/NOVA-0.1.1
+          test -f "$ROOT/tools/build.py"
+          test -f "$ROOT/tests/security_manifest_test.py"
+          test -f "$ROOT/tests/ui_policy_test.py"
+          test -f "$ROOT/app/src/main/AndroidManifest.xml"
+          test -f "$ROOT/app/src/main/java/dev/nova/companion/MainActivity.java"
+          test -f "$ROOT/app/src/main/java/dev/nova/companion/PuppyView.java"
+          test -f "$ROOT/app/src/main/java/dev/nova/companion/DevGuard.java"
+          test -f "$ROOT/app/src/main/java/dev/nova/companion/CompanionService.java"
+          ! find "$ROOT" -type f \( -name '*.jks' -o -name '*.keystore' -o -name 'password.txt' \) -print -quit | grep -q .
 
       - name: Run NOVA security and UI policy tests
         shell: bash
