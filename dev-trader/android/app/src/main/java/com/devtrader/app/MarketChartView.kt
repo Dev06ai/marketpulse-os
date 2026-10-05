@@ -66,12 +66,17 @@ class MarketChartView @JvmOverloads constructor(
         color = Color.rgb(201, 149, 27)
         strokeWidth = dp(.95f)
         style = Paint.Style.STROKE
+        strokeCap = Paint.Cap.ROUND
+        strokeJoin = Paint.Join.ROUND
         alpha = 205
     }
-    private val bbFillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.rgb(184, 134, 11)
-        style = Paint.Style.FILL
-        alpha = 20
+    private val bbMiddlePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.rgb(224, 167, 46)
+        strokeWidth = dp(1.0f)
+        style = Paint.Style.STROKE
+        strokeCap = Paint.Cap.ROUND
+        strokeJoin = Paint.Join.ROUND
+        alpha = 175
     }
     private val emaPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.rgb(247, 201, 72)
@@ -79,6 +84,22 @@ class MarketChartView @JvmOverloads constructor(
         style = Paint.Style.STROKE
         strokeCap = Paint.Cap.ROUND
         strokeJoin = Paint.Join.ROUND
+    }
+    private val emaLabelBgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.rgb(18, 24, 33)
+        style = Paint.Style.FILL
+        alpha = 242
+    }
+    private val emaLabelBorderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.rgb(184, 134, 11)
+        style = Paint.Style.STROKE
+        strokeWidth = dp(.75f)
+        alpha = 190
+    }
+    private val emaLabelTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.rgb(247, 201, 72)
+        textSize = dp(8.8f)
+        typeface = android.graphics.Typeface.create(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD)
     }
     private val currentPricePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.rgb(247, 201, 72)
@@ -506,44 +527,53 @@ class MarketChartView @JvmOverloads constructor(
         high: Double,
         step: Float
     ) {
-        if (visible < 20) return
-        val closes = ArrayList<Double>(visible)
-        for (i in start until start + visible) {
-            closes.add(candles.optJSONObject(i)?.optDouble("close") ?: Double.NaN)
-        }
-        if (closes.size < 20) return
+        if (visible <= 1 || candles.length() <= 1) return
+        val endExclusive = min(candles.length(), start + visible)
 
-        val upper = ArrayList<Pair<Float, Float>>()
-        val lower = ArrayList<Pair<Float, Float>>()
-        for (i in 19 until closes.size) {
-            val window = closes.subList(i - 19, i + 1)
-            if (window.any { !it.isFinite() }) continue
+        val upperPath = Path()
+        val middlePath = Path()
+        val lowerPath = Path()
+        var upperMoved = false
+        var middleMoved = false
+        var lowerMoved = false
+
+        for (chartIndex in start until endExclusive) {
+            val windowStart = max(0, chartIndex - 19)
+            val window = ArrayList<Double>(20)
+            for (i in windowStart..chartIndex) {
+                val close = candles.optJSONObject(i)?.optDouble("close", Double.NaN) ?: Double.NaN
+                if (close.isFinite()) window.add(close)
+            }
+            if (window.size < 2) continue
+
             val mean = window.average()
             val variance = window.sumOf { (it - mean) * (it - mean) } / window.size
             val sd = sqrt(variance)
-            val x = left + i * step + step * 0.5f
-            upper.add(x to mapY(mean + 2.0 * sd, low, high, top, bottom))
-            lower.add(x to mapY(mean - 2.0 * sd, low, high, top, bottom))
-        }
-        if (upper.size < 2 || lower.size < 2) return
+            val x = left + (chartIndex - start) * step + step * 0.5f
 
-        val band = Path().apply {
-            moveTo(upper.first().first, upper.first().second)
-            for (i in 1 until upper.size) lineTo(upper[i].first, upper[i].second)
-            for (i in lower.indices.reversed()) lineTo(lower[i].first, lower[i].second)
-            close()
-        }
-        canvas.drawPath(band, bbFillPaint)
+            val upperY = mapY(mean + 2.0 * sd, low, high, top, bottom)
+            val middleY = mapY(mean, low, high, top, bottom)
+            val lowerY = mapY(mean - 2.0 * sd, low, high, top, bottom)
 
-        fun drawLine(points: List<Pair<Float, Float>>) {
-            val path = Path().apply {
-                moveTo(points.first().first, points.first().second)
-                for (i in 1 until points.size) lineTo(points[i].first, points[i].second)
-            }
-            canvas.drawPath(path, bbPaint)
+            if (!upperMoved) {
+                upperPath.moveTo(x, upperY)
+                upperMoved = true
+            } else upperPath.lineTo(x, upperY)
+
+            if (!middleMoved) {
+                middlePath.moveTo(x, middleY)
+                middleMoved = true
+            } else middlePath.lineTo(x, middleY)
+
+            if (!lowerMoved) {
+                lowerPath.moveTo(x, lowerY)
+                lowerMoved = true
+            } else lowerPath.lineTo(x, lowerY)
         }
-        drawLine(upper)
-        drawLine(lower)
+
+        if (upperMoved) canvas.drawPath(upperPath, bbPaint)
+        if (middleMoved) canvas.drawPath(middlePath, bbMiddlePaint)
+        if (lowerMoved) canvas.drawPath(lowerPath, bbPaint)
     }
 
     private fun drawEma50(
@@ -564,6 +594,7 @@ class MarketChartView @JvmOverloads constructor(
         var ema = Double.NaN
         val path = Path()
         var moved = false
+        var lastX = Float.NaN
         var lastY = Float.NaN
 
         for (i in 0 until endExclusive) {
@@ -581,13 +612,30 @@ class MarketChartView @JvmOverloads constructor(
             } else {
                 path.lineTo(x, y)
             }
+            lastX = x
             lastY = y
         }
 
         if (moved) {
             canvas.drawPath(path, emaPaint)
-            if (lastY.isFinite() && lastY in top..bottom && bottom - top >= dp(120f)) {
-                canvas.drawText("EMA 50", left + dp(5f), (lastY - dp(5f)).coerceAtLeast(top + dp(10f)), axisLabelPaint)
+            if (lastX.isFinite() && lastY.isFinite() && lastY in top..bottom && bottom - top >= dp(120f)) {
+                val text = "EMA 50"
+                val textWidth = emaLabelTextPaint.measureText(text)
+                val padX = dp(6f)
+                val chipWidth = textWidth + padX * 2f
+                val chipHeight = dp(18f)
+                val chipRight = (lastX - dp(5f)).coerceAtMost(left + (visible - 1) * step)
+                val chipLeft = (chipRight - chipWidth).coerceAtLeast(left + dp(4f))
+                val preferredTop = if (lastY - chipHeight - dp(6f) >= top) {
+                    lastY - chipHeight - dp(6f)
+                } else {
+                    lastY + dp(6f)
+                }
+                val chipTop = preferredTop.coerceIn(top + dp(3f), bottom - chipHeight - dp(3f))
+                val rect = RectF(chipLeft, chipTop, chipLeft + chipWidth, chipTop + chipHeight)
+                canvas.drawRoundRect(rect, dp(6f), dp(6f), emaLabelBgPaint)
+                canvas.drawRoundRect(rect, dp(6f), dp(6f), emaLabelBorderPaint)
+                canvas.drawText(text, chipLeft + padX, chipTop + dp(12.2f), emaLabelTextPaint)
             }
         }
     }

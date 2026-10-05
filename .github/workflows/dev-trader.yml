@@ -105,7 +105,7 @@ jobs:
           gradle-version: '9.6.0'
       - name: Build Android debug APK
         working-directory: dev-trader/android
-        run: gradle assembleDebug --stacktrace -PdevTraderVersionCode=102 -PdevTraderVersionName=0.15.1
+        run: gradle assembleDebug --stacktrace -PdevTraderVersionCode=103 -PdevTraderVersionName=0.15.2
       - name: Build signed Android release APK
         if: steps.changed.outputs.android_changed == 'true'
         working-directory: dev-trader/android
@@ -116,7 +116,7 @@ jobs:
           DEV_TRADER_KEY_PASSWORD: ${{ secrets.DEV_TRADER_KEY_PASSWORD }}
         run: |
           echo "${{ secrets.DEV_TRADER_KEYSTORE_BASE64 }}" | base64 --decode > "$DEV_TRADER_KEYSTORE_PATH"
-          gradle assembleRelease --stacktrace -PdevTraderVersionCode=102 -PdevTraderVersionName=0.15.1
+          gradle assembleRelease --stacktrace -PdevTraderVersionCode=103 -PdevTraderVersionName=0.15.2
           if unzip -l app/build/outputs/apk/release/app-release.apk | grep -q ui_preview.json; then
             echo 'Debug preview data must never be included in release APKs.'
             exit 1
@@ -187,7 +187,7 @@ jobs:
           mkdir -p release
           cp dist/app-release.apk release/app-release.apk
           sha256sum release/app-release.apk | awk '{print $1}' > release/app-release.sha256
-          echo "tag=dev-trader-v0.15.1-102" >> "$GITHUB_OUTPUT"
+          echo "tag=dev-trader-v0.15.2-103" >> "$GITHUB_OUTPUT"
           echo "sha256=$(cat release/app-release.sha256)" >> "$GITHUB_OUTPUT"
       - name: Create GitHub release
         env:
@@ -197,7 +197,7 @@ jobs:
             echo "This release already exists; refusing to replace a published APK."
             exit 1
           fi
-          gh release create "${{ steps.release.outputs.tag }}" release/app-release.apk --target "$GITHUB_SHA" --title "KYVORIQ 0.15.1 (102)" --notes "Chart Studio refinement: true curved EMA-50, cleaner Bollinger envelope, premium gold live-price marker, subtler exchange grid, improved axis panel, candle spacing, volume separation and clearer 1h time labels. Trading logic is unchanged."
+          gh release create "${{ steps.release.outputs.tag }}" release/app-release.apk --target "$GITHUB_SHA" --title "KYVORIQ 0.15.2 (103)" --notes "Chart refinement: continuous Bollinger upper/middle/lower lines across the visible window, removed BB shading, and a clean dynamic EMA-50 label chip. Trading logic is unchanged."
       - name: Publish verified update manifest
         env:
           SHA256: "${{ steps.release.outputs.sha256 }}"
@@ -211,11 +211,11 @@ jobs:
           data = json.loads(p.read_text())
           data.update({
               "enabled": True,
-              "versionCode": 102,
-              "versionName": "0.15.1",
-              "apkUrl": "https://github.com/Dev06ai/marketpulse-os/releases/download/dev-trader-v0.15.1-102/app-release.apk",
+              "versionCode": 103,
+              "versionName": "0.15.2",
+              "apkUrl": "https://github.com/Dev06ai/marketpulse-os/releases/download/dev-trader-v0.15.2-103/app-release.apk",
               "sha256": os.environ["SHA256"],
-              "notes": "KYVORIQ 0.15.1 • Chart Studio • true EMA-50 curve • refined Bollinger band • premium price marker and axis"
+              "notes": "KYVORIQ 0.15.2 • continuous BB upper/middle/lower lines • no BB shade • improved EMA-50 label"
           })
           p.write_text(json.dumps(data, indent=2) + "\n")
           PY
