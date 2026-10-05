@@ -1,0 +1,61 @@
+package dev.nova.companion;
+
+import android.Manifest;
+import android.app.*;
+import android.content.*;
+import android.content.pm.PackageManager;
+import android.graphics.Color;
+import android.graphics.Typeface;
+import android.graphics.drawable.GradientDrawable;
+import android.net.Uri;
+import android.os.*;
+import android.provider.Settings;
+import android.speech.*;
+import android.view.*;
+import android.view.inputmethod.EditorInfo;
+import android.widget.*;
+import org.json.*;
+import java.text.DateFormat;
+import java.util.*;
+
+public final class MainActivity extends Activity {
+    private static final int BG=0xFF070B12,SURFACE=0xFF0D131D,CARD=0xFF121B28,CARD2=0xFF182435,TEXT=0xFFF7F9FC,MUTED=0xFF8E9CAF,MINT=0xFF79E2C5,GOLD=0xFFF0C986,PINK=0xFFFFA8BC;
+    private LinearLayout root,content,nav,chat;private ScrollView scroll;private EditText input;
+    private TextView status,ageText,subtitle;private PuppyView puppy;private int page=0;
+    private Vault vault;private boolean visible=false;
+    private SpeechRecognizer recognizer;private boolean listening=false;
+    private String pendingPermission="";private Runnable pendingSensitive;private int voiceSession=0;
+    private final Handler handler=new Handler(Looper.getMainLooper());
+    private final ArrayList<String[]> messages=new ArrayList<>();
+    private final Runnable petTick=new Runnable(){@Override public void run(){if(visible){refreshPet();handler.postDelayed(this,2500);}}};
+    private final Runnable voiceTimeout=()->{stopVoice();reply("Listening timed out. Tap the microphone to try again.",false);};
+    private final Runnable captionTimeout=()->{if(subtitle!=null){subtitle.animate().alpha(0f).setDuration(180).withEndAction(()->subtitle.setVisibility(View.GONE)).start();}};
+
+    private int dp(float n){return (int)(n*getResources().getDisplayMetrics().density+0.5f);}
+    private GradientDrawable shape(int color,int radius){GradientDrawable d=new GradientDrawable();d.setColor(color);d.setCornerRadius(dp(radius));return d;}
+    private GradientDrawable outline(int color,int radius,int strokeColor){GradientDrawable d=shape(color,radius);d.setStroke(dp(1),strokeColor);return d;}
+    private TextView text(String value,int size,int color,boolean bold){TextView t=new TextView(this);t.setText(value);t.setTextSize(size);t.setTextColor(color);t.setTypeface(Typeface.create("sans-serif",bold?Typeface.BOLD:Typeface.NORMAL));t.setLineSpacing(dp(3),1f);return t;}
+    private LinearLayout column(){LinearLayout l=new LinearLayout(this);l.setOrientation(LinearLayout.VERTICAL);return l;}
+    private void gap(LinearLayout l,int h){Space s=new Space(this);l.addView(s,new LinearLayout.LayoutParams(1,dp(h)));}
+    private LinearLayout card(String title,String subtitle){
+        LinearLayout l=column();l.setPadding(dp(18),dp(18),dp(18),dp(18));l.setBackground(outline(CARD,20,0xFF1C2A3B));l.setElevation(dp(1));
+        LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,-2);lp.bottomMargin=dp(14);content.addView(l,lp);
+        if(!title.isEmpty())l.addView(text(title,17,TEXT,true));
+        if(!subtitle.isEmpty()){gap(l,7);l.addView(text(subtitle,13,MUTED,false));}return l;
+    }
+    private Button button(LinearLayout parent,String label,boolean primary,Runnable run){
+        Button b=new Button(this);b.setText(label);b.setTextSize(14);b.setAllCaps(false);b.setTextColor(primary?BG:TEXT);
+        b.setTypeface(Typeface.create("sans-serif-medium",Typeface.NORMAL));b.setBackground(outline(primary?MINT:CARD2,14,primary?0xFF9CF0D9:0xFF26364B));b.setPadding(dp(12),dp(10),dp(12),dp(10));b.setMinHeight(dp(48));b.setStateListAnimator(null);
+        LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,-2);lp.topMargin=dp(10);parent.addView(b,lp);b.setOnClickListener(v->run.run());return b;
+    }
+    private void pair(LinearLayout parent,String a,Runnable ra,String b,Runnable rb){
+        LinearLayout row=new LinearLayout(this);row.setOrientation(LinearLayout.HORIZONTAL);parent.addView(row);
+        Button x=button(row,a,false,ra),y=button(row,b,false,rb);LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,dp(48),1);lp.topMargin=dp(10);lp.rightMargin=dp(5);x.setLayoutParams(lp);
+        LinearLayout.LayoutParams rp=new LinearLayout.LayoutParams(0,dp(48),1);rp.topMargin=dp(10);rp.leftMargin=dp(5);y.setLayoutParams(rp);
+    }
+    private JSONObject state(){try{return vault.read();}catch(Exception e){throw new IllegalStateException("Encrypted memory is unavailable");}}
+    private void error(Exception e){new AlertDialog.Builder(this).setTitle("Nova paused safely").setMessage("This action could not be completed. Your memory was not reset. "+(e instanceof IllegalStateException?e.getMessage():"Please try again.")).setPositiveButton("OK",null).show();}
+    @Override public void onCreate(Bundle saved){
+        super.onCreate(saved);getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
+        if(Build.VERSION.SDK_INT>=31)getWindow().setHideOverlayWindows(true);
+       
