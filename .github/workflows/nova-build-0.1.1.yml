@@ -40,6 +40,23 @@ jobs:
           test -x "$ANDROID_SDK_ROOT/build-tools/35.0.0/aapt2"
           test -f "$ANDROID_SDK_ROOT/build-tools/35.0.0/lib/apksigner.jar"
 
+      - name: Export NOVA compiler toolchain
+        shell: bash
+        run: |
+          rm -rf /tmp/nova-toolchain
+          mkdir -p /tmp/nova-toolchain/platforms/android-35 /tmp/nova-toolchain/build-tools
+          cp "$ANDROID_SDK_ROOT/platforms/android-35/android.jar" /tmp/nova-toolchain/platforms/android-35/android.jar
+          cp -a "$ANDROID_SDK_ROOT/build-tools/35.0.0" /tmp/nova-toolchain/build-tools/35.0.0
+          find /tmp/nova-toolchain -type f -exec sha256sum {} \; | sort > /tmp/nova-toolchain/TOOLCHAIN-SHA256SUMS.txt
+
+      - name: Upload isolated compiler toolchain
+        uses: actions/upload-artifact@v4
+        with:
+          name: nova-android35-compiler-toolchain
+          path: /tmp/nova-toolchain/
+          if-no-files-found: error
+          retention-days: 1
+
       - name: Restore verified NOVA source
         shell: bash
         run: |
@@ -48,7 +65,6 @@ jobs:
           cat nova-build/chunks/00.b64 nova-build/chunks/01.b64 nova-build/chunks/02.b64 nova-build/chunks/03.b64 nova-build/chunks/04.b64 nova-build/chunks/05.b64 > /tmp/NOVA-base.b64
           base64 -d /tmp/NOVA-base.b64 > /tmp/NOVA-base.zip
           sha256sum /tmp/NOVA-base.zip
-          # One legacy chunk corrupts only MainActivity; the audited overlay replaces it below.
           unzip -oq /tmp/NOVA-base.zip -d /tmp/nova-src || true
 
           cat nova-build/overlay/00.b64 nova-build/overlay/01.b64 nova-build/overlay/02.b64 nova-build/overlay/03.b64 nova-build/overlay/04.b64 nova-build/overlay/05.b64 nova-build/overlay/06-08.b64 nova-build/overlay/09-11.b64 nova-build/overlay/12-14.b64 nova-build/overlay/15.b64 > /tmp/NOVA-overlay.b64
