@@ -1,0 +1,77 @@
+name: NOVA 0.1.1 isolated build
+
+on:
+  push:
+    branches:
+      - nova-build-0.1.1
+    paths:
+      - 'nova-build/NOVA-0.1.1-source.b64'
+      - '.github/workflows/nova-build-0.1.1.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout compiler branch
+        uses: actions/checkout@v4
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install pinned Android 35 toolchain
+        shell: bash
+        run: |
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager 'platforms;android-35' 'build-tools;35.0.0'
+
+      - name: Restore clean NOVA source
+        shell: bash
+        run: |
+          mkdir -p /tmp/nova-src
+          base64 -d nova-build/NOVA-0.1.1-source.b64 > /tmp/NOVA-0.1.1-source.zip
+          unzip -q /tmp/NOVA-0.1.1-source.zip -d /tmp/nova-src
+          test -f /tmp/nova-src/NOVA-0.1.1/tools/build.py
+          ! unzip -l /tmp/NOVA-0.1.1-source.zip | grep -Eqi '(\.jks|\.keystore|password\.txt|/signing/)'
+
+      - name: Run NOVA security policy tests
+        shell: bash
+        run: |
+          cd /tmp/nova-src/NOVA-0.1.1
+          python3 tests/security_manifest_test.py
+          python3 tests/ui_policy_test.py
+
+      - name: Build unsigned aligned APK
+        shell: bash
+        env:
+          NOVA_ANDROID_SDK: ${{ env.ANDROID_SDK_ROOT }}
+        run: |
+          cd /tmp/nova-src/NOVA-0.1.1
+          python3 tools/build.py --unsigned
+          test -f build/nova-unsigned.apk
+
+      - name: Prepare local-signing bundle
+        shell: bash
+        run: |
+          mkdir -p /tmp/nova-artifact
+          cp /tmp/nova-src/NOVA-0.1.1/build/nova-unsigned.apk /tmp/nova-artifact/NOVA-0.1.1-unsigned-aligned.apk
+          cp "$ANDROID_SDK_ROOT/build-tools/35.0.0/lib/apksigner.jar" /tmp/nova-artifact/apksigner.jar
+          sha256sum /tmp/nova-artifact/* > /tmp/nova-artifact/SHA256SUMS.txt
+
+      - name: Upload compiler output
+        uses: actions/upload-artifact@v4
+        with:
+          name: nova-0.1.1-local-signing-bundle
+          path: /tmp/nova-artifact/
+          if-no-files-found: error
+          retention-days: 1
