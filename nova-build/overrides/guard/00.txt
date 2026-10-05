@@ -1,0 +1,66 @@
+package dev.nova.companion;
+import android.app.*;
+import android.content.*;
+import android.content.pm.*;
+import android.net.*;
+import android.os.*;
+import android.provider.Settings;
+import java.io.File;
+import java.time.LocalDate;
+import java.time.temporal.ChronoUnit;
+import java.util.*;
+
+/** Local-first device diagnostics. No malware-free, booster, or Wi-Fi-safety claims. */
+public final class DevGuard {
+    public static final class Check {
+        public final String title, detail; public final boolean attention;
+        public Check(String t,String d,boolean a){title=t;detail=d;attention=a;}
+    }
+    private static long patchAgeDays(){
+        try{return Math.max(0,ChronoUnit.DAYS.between(LocalDate.parse(Build.VERSION.SECURITY_PATCH),LocalDate.now()));}
+        catch(Exception ignored){return Long.MAX_VALUE;}
+    }
+    public static int securityScore(Context c){
+        int score=100;
+        KeyguardManager kg=c.getSystemService(KeyguardManager.class);if(kg==null||!kg.isDeviceSecure())score-=25;
+        long patch=patchAgeDays();if(patch==Long.MAX_VALUE)score-=12;else if(patch>180)score-=25;else if(patch>90)score-=12;
+        if(Settings.Global.getInt(c.getContentResolver(),Settings.Global.ADB_ENABLED,0)!=0)score-=12;
+        try{ApplicationInfo ai=c.getApplicationInfo();if((ai.flags&ApplicationInfo.FLAG_DEBUGGABLE)!=0)score-=20;}catch(Exception ignored){}
+        return Math.max(0,Math.min(100,score));
+    }
+    public static String scoreLabel(Context c){int s=securityScore(c);return s>=90?"Strong":s>=75?"Good":s>=55?"Review recommended":"Needs attention";}
+    public static String deviceHealth(Context c){
+        PowerManager pm=c.getSystemService(PowerManager.class);
+        String power=pm!=null&&pm.isPowerSaveMode()?"Battery saver on":"Battery saver off";
+        long age=patchAgeDays();String patch=age==Long.MAX_VALUE?"Security patch date unavailable":("Security patch · "+age+" day(s) old");
+        return Build.MANUFACTURER+" "+Build.MODEL+" · Android "+Build.VERSION.RELEASE+" (API "+Build.VERSION.SDK_INT+")\n"+patch+" · "+power;
+    }
+    public static String battery(Context c) {
+        Intent b=c.registerReceiver(null,new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
+        if(b==null)return "Android did not provide a battery reading.";
+        int scale=b.getIntExtra(BatteryManager.EXTRA_SCALE,100), level=b.getIntExtra(BatteryManager.EXTRA_LEVEL,0);
+        int health=b.getIntExtra(BatteryManager.EXTRA_HEALTH,BatteryManager.BATTERY_HEALTH_UNKNOWN);
+        String h=health==BatteryManager.BATTERY_HEALTH_GOOD?"Good":health==BatteryManager.BATTERY_HEALTH_OVERHEAT?"Overheating":health==BatteryManager.BATTERY_HEALTH_COLD?"Cold":"Not reported / needs attention";
+        int plugged=b.getIntExtra(BatteryManager.EXTRA_PLUGGED,0);String charging=plugged==0?"Not charging":"Charging / powered";
+        return String.format(Locale.US,"Battery %d%% · %.1f°C · %s\nAndroid health: %s\nSystem status only — not a laboratory capacity measurement.",scale>0?level*100/scale:0,b.getIntExtra(BatteryManager.EXTRA_TEMPERATURE,0)/10.0,charging,h);
+    }
+    public static String storage() {
+        StatFs s=new StatFs(Environment.getDataDirectory().getAbsolutePath());
+        long total=s.getTotalBytes(),free=s.getAvailableBytes(),used=Math.max(0,total-free);
+        return String.format(Locale.US,"%.1f GB used · %.1f GB free · %.1f GB total\nDevice data partition. Nova does not inspect your photos, videos or downloads.",used/1e9,free/1e9,total/1e9);
+    }
+    public static String network(Context c) {
+        ConnectivityManager cm=c.getSystemService(ConnectivityManager.class);
+        Network n=cm==null?null:cm.getActiveNetwork();NetworkCapabilities caps=n==null||cm==null?null:cm.getNetworkCapabilities(n);
+        if(caps==null)return "No active network detected.";
+        String transport=caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)?"Wi-Fi":caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)?"Mobile data":caps.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)?"Ethernet":"Other connection";
+        String validated=caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)?"Internet validated":"Internet not validated";
+        String metered=cm.isActiveNetworkMetered()?"Metered":"Unmetered";
+        String vpn=caps.hasTransport(NetworkCapabilities.TRANSPORT_VPN)?"VPN active":"No VPN detected";
+        int down=caps.getLinkDownstreamBandwidthKbps(),up=caps.getLinkUpstreamBandwidthKbps();
+        return transport+" · "+validated+" · "+metered+"\n"+vpn+" · Android link estimate "+down+"↓ / "+up+"↑ Kbps\nLink estimates are not an Internet speed test and do not prove a Wi-Fi network is safe.";
+    }
+    public static String permissionSummary(Context c){
+        try{
+            PackageInfo pi=c.getPackageManager().getPackageInfo(c.getPackageName(),PackageManager.GET_PERMISSIONS);
+            String[] p=pi.requestedPermissions;if(p==null||p.length==0)return "Nova requests no runtime permissions.";
