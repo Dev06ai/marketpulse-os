@@ -1,0 +1,1 @@
+NOVA has been retired. The signed update channel has been disabled and no active NOVA release should be distributed from this branch.
