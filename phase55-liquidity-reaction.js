@@ -1,2 +1,0 @@
-/** Phase 55 */
-const V="55.0.0";function detect(i={}){const swept=Boolean(i.swept),reclaimed=Boolean(i.reclaimed),rejected=Boolean(i.rejected),side=["LONG","SHORT"].includes(i.side)?i.side:"WAIT";const valid=swept&&(reclaimed||rejected);return {version:V,setup:valid?"LIQUIDITY_REACTION":"WAIT",side:valid?side:"WAIT",quality:valid?(reclaimed? "RECLAIM":"REJECTION"):"NONE"};}function selfTest(){const x=detect({swept:true,reclaimed:true,side:"LONG"});return {ok:x.side==="LONG",version:V};}module.exports={VERSION:V,detect,selfTest};
