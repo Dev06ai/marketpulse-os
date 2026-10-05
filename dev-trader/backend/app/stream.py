@@ -1,5 +1,6 @@
 import asyncio
 import json
+import math
 import os
 import time
 from urllib.parse import urlencode
@@ -501,6 +502,9 @@ class BitgetMarketStream:
                     self.state.data_health = "CONNECTING"
                     self.last_data_source = "BITGET_WS"
                     self.last_ws_packet_ms = int(time.time() * 1000)
+                    self._invalidate_book()
+                    self.state.last_trade_ts = None
+                    self.state.last_market_update_ts = None
                     await ws.send(json.dumps({
                         "op": "subscribe",
                         "args": [
@@ -545,6 +549,14 @@ class BitgetMarketStream:
                 self._refresh_data_health(int(time.time() * 1000))
                 await self.on_state(self.state)
                 await asyncio.sleep(2.0)
+
+    def _invalidate_book(self):
+        self.bids.clear()
+        self.asks.clear()
+        self.state.last_book_ts = None
+        self.state.orderbook_seq = None
+        self.state.book_bid_qty = self.state.book_ask_qty = self.state.book_imbalance = 0.0
+        self.state.spread_bps = 0.0
 
     async def _heartbeat(self, ws):
         last_ping_ms = int(time.time() * 1000)
@@ -697,6 +709,7 @@ class BitgetMarketStream:
         self.last_data_source = "BITGET_REST"
 
     def _apply_ticker(self, d: dict, exchange_ts: int):
+        parsed = {}
         for attr, keys in {
             "last_price": ("lastPrice", "lastPr"),
             "mark_price": ("markPrice",),
@@ -708,8 +721,18 @@ class BitgetMarketStream:
         }.items():
             for key in keys:
                 if d.get(key) not in (None, ""):
-                    setattr(self.state, attr, float(d[key]))
+                    try:
+                        value = float(d[key])
+                        if not math.isfinite(value) or (attr == "open_interest" and value < 0) or (attr not in {"funding_rate", "open_interest"} and value <= 0):
+                            return
+                    except (TypeError, ValueError):
+                        return
+                    parsed[attr] = value
                     break
+        if not any(key in parsed for key in ("last_price", "bid", "ask")):
+            return
+        for attr, value in parsed.items():
+            setattr(self.state, attr, value)
         now = int(time.time() * 1000)
         self.state.received_ts = now
         self.state.exchange_ts = exchange_ts
@@ -718,6 +741,14 @@ class BitgetMarketStream:
             self.state.oi_window.append((now, self.state.open_interest))
 
     def _apply_book(self, data: dict, action: str):
+        try:
+            for row in [*(data.get("b") or []), *(data.get("a") or [])]:
+                price, size = float(row[0]), float(row[1])
+                if not math.isfinite(price) or not math.isfinite(size) or price <= 0 or size < 0:
+                    raise ValueError("Invalid order-book level")
+        except (ValueError, TypeError, IndexError):
+            self._invalidate_book()
+            return False
         if action == "snapshot":
             self.bids.clear()
             self.asks.clear()
@@ -735,6 +766,9 @@ class BitgetMarketStream:
                 self.asks[p] = q
         bids = sorted(self.bids.items(), reverse=True)[:5]
         asks = sorted(self.asks.items())[:5]
+        if not bids or not asks or bids[0][0] >= asks[0][0]:
+            self._invalidate_book()
+            return False
         bid_qty = sum(q for _, q in bids)
         ask_qty = sum(q for _, q in asks)
         total = bid_qty + ask_qty
@@ -744,6 +778,7 @@ class BitgetMarketStream:
         if bids and asks:
             mid = (bids[0][0] + asks[0][0]) / 2.0
             self.state.spread_bps = ((asks[0][0] - bids[0][0]) / mid * 10_000) if mid else 0.0
+        return True
 
     def _trim_windows(self, now: int):
         cutoff = now - 15 * 60_000
@@ -805,20 +840,25 @@ class BitgetMarketStream:
                 self._apply_ticker(rows[0], self.state.exchange_ts)
         elif topic == "publicTrade":
             for trade in rows:
+                try:
+                    size = float(trade.get("v", 0.0))
+                    price = float(trade.get("p") or 0.0)
+                    side = str(trade.get("S") or "").lower()
+                    ts = int(trade.get("T", self.state.exchange_ts) or self.state.exchange_ts)
+                    if not all(math.isfinite(v) and v > 0 for v in (size, price)) or side not in {"buy", "sell"} or ts <= 0:
+                        continue
+                except (ValueError, TypeError, AttributeError):
+                    continue
                 exec_id = str(trade.get("i", ""))
                 if exec_id and exec_id in self.recent_exec_ids:
                     continue
                 if exec_id:
                     self.recent_exec_ids.add(exec_id)
-                size = float(trade.get("v", 0.0))
-                side = str(trade.get("S") or "").lower()
-                ts = int(trade.get("T", self.state.exchange_ts) or self.state.exchange_ts)
                 if side == "buy":
                     self.state.cvd += size
                 elif side == "sell":
                     self.state.cvd -= size
                 self.state.last_trade_ts = ts
-                price = float(trade.get("p") or 0.0)
                 if price > 0:
                     self.volume_profile.ingest(exec_id,ts,price,size,now)
                     self.state.last_price = price
@@ -834,8 +874,8 @@ class BitgetMarketStream:
             if rows and isinstance(rows[0], dict):
                 data = rows[0]
                 self.state.orderbook_seq = int(data.get("seq", self.state.orderbook_seq or 0))
-                self._apply_book(data, str(msg.get("action") or "snapshot"))
-                self.state.last_book_ts = now
+                if self._apply_book(data, str(msg.get("action") or "snapshot")):
+                    self.state.last_book_ts = now
         elif topic == "liquidation":
             for liq in rows:
                 side = str(liq.get("side") or "").lower()
@@ -857,28 +897,43 @@ class BitgetMarketStream:
                     else self.state.candles_60
                 )
                 interval_ms = self._interval_ms(interval)
+                accepted = False
                 for row in rows:
-                    start = int(row.get("start", self.state.exchange_ts))
-                    candle = Candle(
-                        start=start,
-                        end=start + interval_ms - 1,
-                        open=float(row.get("open", 0.0)),
-                        high=float(row.get("high", 0.0)),
-                        low=float(row.get("low", 0.0)),
-                        close=float(row.get("close", 0.0)),
-                        volume=float(row.get("volume", 0.0)),
-                        confirmed=start < ((now // interval_ms) * interval_ms),
-                    )
+                    try:
+                        start = int(row.get("start", self.state.exchange_ts))
+                        candle = Candle(
+                            start=start,
+                            end=start + interval_ms - 1,
+                            open=float(row.get("open", 0.0)),
+                            high=float(row.get("high", 0.0)),
+                            low=float(row.get("low", 0.0)),
+                            close=float(row.get("close", 0.0)),
+                            volume=float(row.get("volume", 0.0)),
+                            confirmed=start < ((now // interval_ms) * interval_ms),
+                        )
+                    except (TypeError, ValueError, AttributeError):
+                        continue
+                    if (not all(math.isfinite(v) for v in (candle.open,candle.high,candle.low,candle.close,candle.volume))
+                            or not 0 < candle.low <= min(candle.open,candle.close) <= max(candle.open,candle.close) <= candle.high
+                            or candle.volume < 0 or start % interval_ms != 0 or start > now):
+                        continue
+                    accepted = True
                     if dest and dest[-1].start == candle.start:
                         dest[-1] = candle
-                    else:
+                    elif not dest or dest[-1].start < candle.start:
                         dest.append(candle)
+                    else:
+                        # Delayed/replayed bars must not become the newest bar
+                        # or alter the chronological indicator/trigger inputs.
+                        by_start = {c.start: c for c in dest}
+                        by_start[candle.start] = candle
+                        dest[:] = sorted(by_start.values(), key=lambda c: c.start)
                     del dest[:-(720 if interval=="1H" else 240)]
-                if interval == "5m":
+                if accepted and interval == "5m":
                     self.state.last_kline_5_ts = now
-                elif interval == "15m":
+                elif accepted and interval == "15m":
                     self.state.last_kline_15_ts = now
-                else:
+                elif accepted:
                     self.state.last_kline_60_ts = now
 
         self.state.trade_volume_profile = self.volume_profile.snapshot(now)

@@ -36,6 +36,20 @@ engine = StrategyEngine()
 bridge = MarketPulseBridge()
 execution = DemoExecutionEngine(engine.learning, bridge=bridge)
 execution.journal=engine.journal
+
+
+def verify_entry_feed(_signal: dict) -> tuple[bool, str]:
+    now = int(time.time()*1000)
+    if not state.ws_connected or state.data_health != "HEALTHY":
+        return False, "Primary market feed lost health during entry checks; wait for a new setup."
+    for name, ts, limit in (("quote", state.last_market_update_ts, 3000),
+            ("trade", state.last_trade_ts, 15000), ("book", state.last_book_ts, 5000)):
+        if not ts or not -1000 <= now-ts <= limit:
+            return False, f"Primary {name} data expired during entry checks; wait for a new setup."
+    return True, ""
+
+
+execution.entry_guard = verify_entry_feed
 shadow=ShadowEvaluator(engine.journal)
 push = PushService()
 stream = None
