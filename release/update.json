@@ -1,0 +1,9 @@
+{
+  "versionCode": 3,
+  "versionName": "0.2.0",
+  "apkUrl": "https://raw.githubusercontent.com/Dev06ai/marketpulse-os/nova-updates/release/NOVA-0.2.0.apk",
+  "sha256": "5e801b1e5f00f641b75d2a1a5e177b8d931cd7f97b9fae81739b1b5e530bfd9b",
+  "published": "2026-10-05T17:20:28Z",
+  "notes": "Rebuilt companion UI, richer depth-styled puppy, smoother tiny overlay, stronger Dev Guard diagnostics, runtime signing verification, new local status/time/date commands, and a cryptographically verified update channel. Subtitle-only replies remain the default.",
+  "signature": "fUGew6hMk2oFR8xZuEv/YAKMp79jzohYPoe7OGqcl9ACpkoWtqlTciGOFi4OL+L5lG80PcWWR6EuwV0bhwCPyi/WGoMaed34TOpfOgFv6nW5VtGqAmEnHDF2pGnv0rfSx4HgHGROEDttjnm+eAyDvlpmqZe9KL/iiNsLR8apTyO8GVRxr32lbBNRRQ7kL3V1tdsZFb5nDRfWqzgXDFi7M2zd3nVL3Q7PxLunbLzhxMb6WEgrCswUNPjTEIF4vYxAdJQ0Y6rFbOhRA5y/RAmElqWDmZTXSBCpyNGjS3BRo7cSY9y61rjzmDBKMXd0UvGw2HjKUwMP3RP7zCIUtjNlA1d0L0vWFLh1PEmONbV/i2HhkPXWqk01tltVUC6qs0HcjbMQdXQX6FsR21EnLVIQFzfD87+24W5i/3i9kBcnmCTqSrTVLDS4O/9zBQwZ9JBwBFG3f+HDDs0R4vvnIZnjBd53Nh+Ifq+abPy6CAZUqEyMPiVKowP2PlrOSCU4oVwbFUr+Nfnw="
+}
