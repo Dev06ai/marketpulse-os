@@ -1,0 +1,35 @@
+ew LinearLayout.LayoutParams(dp(74),dp(34)));stateCard.addView(row);
+        pair(stateCard,"Play",()->execute(CommandEngine.parse("play")),"Sleep / wake",()->execute(CommandEngine.parse("sleep".equals(PetLife.mode(state(),System.currentTimeMillis()))?"wake up":"sleep")));
+        LinearLayout start=card("Talk to Nova","Voice is input only. Nova replies with clean on-screen subtitles — never spoken audio.");button(start,"Talk  ·  microphone",true,this::startVoice);pair(start,"Type a command",()->show(1),"Phone check",this::runScan);
+        LinearLayout companion=card("Take Nova with you",CompanionService.running?"Companion mode is running. The notification always keeps a Stop control close by.":"Keep a tiny Nova in your notification or let the puppy roam above apps.");pair(companion,"Status mode",()->startCompanion(false),"Screen puppy",()->startCompanion(true));
+        LinearLayout scope=card("NOVA 0.1.1 · refined local build","Smoother motion, quieter responses, smaller puppy proportions and a tighter privacy-first interface.");scope.addView(text("No cloud backend. No Dev Trader connection. No Internet permission.",12,GOLD,false));
+    }
+    private void refreshPet(){
+        if(vault==null)return;JSONObject s=state();String mode=listening?"listen":PetLife.mode(s,System.currentTimeMillis());
+        if(puppy!=null)puppy.state(mode,PetLife.days(s,System.currentTimeMillis()));
+        if(status!=null)status.setText("Nova · "+PetLife.label(mode));
+        if(ageText!=null)ageText.setText(PetLife.stage(s,System.currentTimeMillis())+"  ·  Day "+(PetLife.days(s,System.currentTimeMillis())+1)+"  ·  Bond "+s.optInt("bond")+"/100");
+    }
+    private void ask(){
+        content.addView(text("Ask Nova",25,TEXT,true));gap(content,8);content.addView(text("Local commands · English / हिन्दी / Hinglish",12,MINT,false));gap(content,16);
+        LinearLayout compose=card("I'm listening","Try: battery check karo · sleep · remember buy milk · remind me in 10 minutes to stretch");
+        input=new EditText(this);input.setTextColor(TEXT);input.setHintTextColor(MUTED);input.setHint("Type a command…");input.setTextSize(16);input.setBackground(shape(0xFF0F1723,12));input.setPadding(dp(14),dp(12),dp(14),dp(12));input.setMaxLines(5);input.setInputType(android.text.InputType.TYPE_CLASS_TEXT|android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE);input.setFilters(new android.text.InputFilter[]{new android.text.InputFilter.LengthFilter(4000)});
+        LinearLayout.LayoutParams ep=new LinearLayout.LayoutParams(-1,-2);ep.topMargin=dp(14);compose.addView(input,ep);
+        pair(compose,"Send",()->{String value=input.getText().toString().trim();if(!value.isEmpty()){input.setText("");submit(value);}},"Speak",this::startVoice);
+        chat=column();content.addView(chat);if(messages.isEmpty())messages.add(new String[]{"nova","Hi Dev! I can help with my local commands. Say “help” to see what works in this build."});drawChat();
+        LinearLayout quick=card("Try a quick command","");pair(quick,"Battery",()->submit("battery"),"My notes",()->submit("show notes"));pair(quick,"Network",()->submit("network"),"Help",()->submit("help"));
+    }
+    private void drawChat(){if(chat==null)return;chat.removeAllViews();int begin=Math.max(0,messages.size()-12);for(int n=begin;n<messages.size();n++){
+        String[] m=messages.get(n);LinearLayout bubble=column();bubble.setPadding(dp(16),dp(14),dp(16),dp(14));bubble.setBackground(shape("nova".equals(m[0])?0xFF183234:0xFF212D41,16));
+        bubble.addView(text("nova".equals(m[0])?"NOVA":"YOU",10,"nova".equals(m[0])?MINT:MUTED,true));gap(bubble,6);bubble.addView(text(m[1],14,TEXT,false));LinearLayout.LayoutParams bp=new LinearLayout.LayoutParams(-1,-2);bp.bottomMargin=dp(10);chat.addView(bubble,bp);
+    }}
+    private void submit(String value){messages.add(new String[]{"you",value});if(messages.size()>40)messages.remove(0);drawChat();execute(CommandEngine.parse(value));}
+    private void reply(String value,boolean ignoredAudioFlag){
+        messages.add(new String[]{"nova",value});if(messages.size()>40)messages.remove(0);drawChat();
+        if(subtitle!=null){handler.removeCallbacks(captionTimeout);subtitle.setText("NOVA  ·  "+value);subtitle.setVisibility(View.VISIBLE);subtitle.setAlpha(0f);subtitle.setTranslationY(dp(5));subtitle.animate().alpha(1f).translationY(0).setDuration(160).start();handler.postDelayed(captionTimeout,Math.max(5500,Math.min(14000,2200+value.length()*42L)));}
+    }
+    private void pet(String m,boolean bond){try{vault.pet(m,bond);refreshPet();}catch(Exception e){error(e);}}
+    private void execute(CommandEngine.Request r){
+        if(!Guardian.allow(r)){
+            try{vault.audit(r.kind.name(),"Blocked or unsupported");}catch(Exception e){error(e);return;}
+            reply(r.kind==CommandEngine.Kind.UNKNOWN?"I don't have general AI connected yet. I can run local commands: battery, storage, network, phone check, notes, reminders, play and sleep. Type help for examples.":"Guardian 
