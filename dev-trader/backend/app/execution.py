@@ -46,6 +46,7 @@ class DemoExecutionEngine:
         self._sync_lock = asyncio.Lock()
         self._sync_generation = 0
         self._protection_lock = asyncio.Lock()
+        self.entry_guard: Callable[[dict[str, Any]], tuple[bool, str]] | None = None
         self.data = {
             "version": 1,
             "trades": [],
@@ -86,6 +87,10 @@ class DemoExecutionEngine:
         except Exception:
             pass
         self.data["trades"] = list(self.data.get("trades") or [])[:500]
+        intent = self.data.pop("pending_submission", None)
+        if intent and not any(t.get("client_oid") == intent.get("client_oid") for t in self.data["trades"]):
+            self.data["trades"].insert(0, dict(intent, status="SUBMISSION_UNKNOWN",
+                error="Restart during order submission; exchange outcome must be reconciled."))
 
     def _save(self):
         try:
@@ -93,8 +98,9 @@ class DemoExecutionEngine:
             tmp = self.path.with_suffix(".tmp")
             tmp.write_text(json.dumps(self.data, separators=(",", ":"), ensure_ascii=False))
             tmp.replace(self.path)
+            return True
         except Exception:
-            pass
+            return False
 
     @property
     def enabled(self) -> bool:
@@ -277,6 +283,8 @@ class DemoExecutionEngine:
         created = self._num(signal.get("created_ts"))
         if created and (int(time.time() * 1000) - created > 15000 or created > int(time.time() * 1000) + 5000):
             return False, "Signal timestamp is stale or invalid."
+        if self.entry_guard:
+            return self.entry_guard(signal)
         return True, ""
 
     async def _validate_execution_price(self, signal: dict[str, Any]) -> tuple[float, float]:
@@ -356,6 +364,7 @@ class DemoExecutionEngine:
 
     async def _handle_signal(self, signal: dict[str, Any]) -> dict[str, Any]:
         submission_oid = ""
+        submission_context = {}
         allowed, reason = self._signal_allowed(signal, reconciliation_locked=True)
         if not allowed:
             return {"ok": False, "skipped": True, "reason": reason}
@@ -392,6 +401,20 @@ class DemoExecutionEngine:
             stop = float(self._format_price(stop, config, str(signal.get("direction")), "sl"))
             tp = float(self._format_price(tp, config, str(signal.get("direction")), "tp"))
             qty, risk_usdt, config = await self._risk_size(dict(signal, entry=reference_price, stop=stop))
+            # Private sizing calls can be slow. Re-read the executable quote,
+            # validate the rounded geometry and only reduce quantity if needed.
+            try:
+                reference_price, reference_drift_pct = await self._validate_execution_price(
+                    dict(signal, stop=stop, target2=tp))
+            except BitgetDemoError as exc:
+                return {"ok": False, "skipped": True, "reason": str(exc)}
+            fee_rate = max(0.0, float(os.getenv("BITGET_DEMO_TAKER_FEE_RATE", "0.0006")))
+            unit_risk = abs(reference_price-stop)+(reference_price+stop)*fee_rate
+            if qty*unit_risk > risk_usdt or qty*reference_price > self.max_notional:
+                qty = min(qty, self._normalize_qty(min(risk_usdt/unit_risk, self.max_notional/reference_price), config))
+            if qty <= 0 or qty*reference_price < self._num(config.get("minTradeUSDT") or config.get("minOrderAmount")):
+                return {"ok": False, "skipped": True, "reason": "Updated execution quote leaves less than the exchange minimum position size."}
+            risk_usdt = qty*unit_risk
             # Sizing/settings requests can take time. Do not submit an entry
             # whose decision expired while waiting for those responses.
             allowed, reason = self._signal_allowed(signal, reconciliation_locked=True)
@@ -400,6 +423,20 @@ class DemoExecutionEngine:
             # Bitget UTA permits at most 32 characters; use a deterministic ID
             # for retry/recovery rather than truncating the setup unpredictably.
             client_oid = client_identity(signal, risk_usdt)
+            submission_context = dict(execution_id=client_oid, client_oid=client_oid,
+                signal_id=signal.get("id"), symbol=self.symbol, direction=str(signal.get("direction")).upper(),
+                setup=signal.get("setup"), trade_style=signal.get("trade_style"),
+                entry_plan=entry_plan, execution_reference_price=reference_price,
+                stop_loss=stop, take_profit=tp, target1=signal.get("target1"), requested_qty=qty,
+                filled_qty=0.0, entry_price=0.0, planned_risk_usdt=risk_usdt,
+                opened_ts=int(time.time()*1000), closed_ts=0, status="SUBMISSION_UNKNOWN",
+                signal_snapshot=dict(signal))
+            # Save the exact request context before POST. A crash or timeout
+            # must retain its stable identity and planned exchange protection.
+            self.data["pending_submission"] = submission_context
+            if not self._save():
+                self.data.pop("pending_submission", None)
+                return {"ok": False, "skipped": True, "reason": "Cannot persist order intent; entry blocked until storage recovers."}
             submission_oid = client_oid
             result = await asyncio.to_thread(
                 self.client.place_market_order,
@@ -451,6 +488,7 @@ class DemoExecutionEngine:
                 "signal_snapshot": signal,
             }
             with self.lock:
+                self.data.pop("pending_submission", None)
                 self.data["trades"].insert(0, trade)
                 self.data["trades"] = self.data["trades"][:500]
                 self._daily_count += 1
@@ -483,6 +521,7 @@ class DemoExecutionEngine:
         except Exception as exc:
             now = int(time.time() * 1000)
             failed = {
+                **submission_context,
                 "execution_id": submission_oid or f"DTDEMO-FAILED-{now}",
                 "signal_id": signal.get("id"),
                 "client_oid": submission_oid,
@@ -496,6 +535,7 @@ class DemoExecutionEngine:
                 "signal_snapshot": dict(signal),
             }
             with self.lock:
+                self.data.pop("pending_submission", None)
                 self.data["trades"].insert(0, failed)
                 self.data["trades"] = self.data["trades"][:500]
                 self.data["last_event"] = {
@@ -884,9 +924,11 @@ class DemoExecutionEngine:
         reconciliation_warnings: list[str] = []
         try:
             now = int(time.time() * 1000)
+            positions_verified = True
             try:
                 positions = await self._current_positions()
             except Exception as exc:
+                positions_verified = False
                 positions = []
                 reconciliation_warnings.append(f"current_positions: {exc}")
             position_rows = [p for p in positions if self._num(p.get("total"), 0.0) > 0]
@@ -922,8 +964,9 @@ class DemoExecutionEngine:
             try:
                 strategies = await asyncio.to_thread(self.client.strategy_orders, self.symbol)
                 ticker = await asyncio.to_thread(self.client.market_ticker, self.symbol) if position_rows else {}
-                self.data["stop_protection"] = stop_coverage(position_rows, strategies,
-                    self._num(ticker.get("markPrice") or ticker.get("lastPrice")))
+                self.data["stop_protection"] = (stop_coverage(position_rows, strategies,
+                    self._num(ticker.get("markPrice") or ticker.get("lastPrice"))) if positions_verified else
+                    {"verified": False, "all_positions_protected": False, "error": "Current exchange positions could not be verified."})
                 self.data["pending_strategy_orders"] = strategies
             except Exception as exc:
                 self.data["stop_protection"] = {"verified": False, "all_positions_protected": False, "error": str(exc)}
@@ -962,6 +1005,8 @@ class DemoExecutionEngine:
             for trade in self._local_demo_trades():
                 if trade.get("status") in {"FAILED", "CLOSED"}:
                     continue
+                if not positions_verified:
+                    continue  # Missing position data must not simulate a flat account or close.
                 if trade.get("status") == "SUBMISSION_UNKNOWN":
                     reconciliation_warnings.append(str(trade.get("execution_id")) + ": submission outcome unknown; awaiting order history")
                     continue
@@ -1130,9 +1175,11 @@ class DemoExecutionEngine:
                 unknown = next((t for t in self.data["trades"] if t.get("client_oid") == oid and t.get("status") == "SUBMISSION_UNKNOWN"), None)
                 if unknown is not None:
                     unknown.update({"order_id": str(order.get("orderId") or ""),
-                        "status": "ORDER_PENDING", "requested_qty": self._num(order.get("qty")),
-                        "entry_plan": self._num(order.get("avgPrice")),
-                        "stop_loss": self._num(order.get("stopLoss")), "take_profit": self._num(order.get("takeProfit"))})
+                        "status": "ORDER_PENDING"})
+                    for field, value in (("requested_qty", order.get("qty")),
+                            ("stop_loss", order.get("stopLoss")), ("take_profit", order.get("takeProfit"))):
+                        if self._num(value) > 0:
+                            unknown[field] = self._num(value)
                 continue
             if oid.startswith("DTDEMO-CLOSE-") or "close" in str(order.get("tradeSide") or "").lower() or str(order.get("reduceOnly") or "").upper() in {"YES", "TRUE"}:
                 continue
@@ -1141,6 +1188,7 @@ class DemoExecutionEngine:
             side = str(order.get("side") or "").lower()
             direction = "LONG" if side == "buy" else "SHORT" if side == "sell" else ""
             status = str(order.get("orderStatus") or "").lower()
+            confirmed_fill = status == "filled" and self._num(order.get("cumExecQty")) > 0 and self._num(order.get("avgPrice")) > 0
             recovered = decode_identity(oid)
             trade = {
                 "execution_id": oid,
@@ -1157,8 +1205,8 @@ class DemoExecutionEngine:
                 "take_profit": self._num(order.get("takeProfit") or order.get("presetStopSurplusPrice")),
                 "requested_qty": self._num(order.get("qty")),
                 "filled_qty": self._num(order.get("cumExecQty")),
-                "status": "OPEN" if status == "filled" else "ORDER_PENDING",
-                "actual_fill_confirmed": status == "filled",
+                "status": "OPEN" if confirmed_fill else "ORDER_PENDING",
+                "actual_fill_confirmed": confirmed_fill,
                 "exchange_order_status": status,
                 "opened_ts": self._num(order.get("createdTime"), int(time.time() * 1000)),
                 "closed_ts": 0,
