@@ -1,0 +1,31 @@
+  try{vault=Vault.get(this);Reminders.channels(this);Reminders.restore(this);}catch(Exception e){
+            TextView t=text("Nova's encrypted memory could not be opened.\n\nFor safety, Nova has stopped rather than resetting your memories. Keep the app installed and retain the same signing key for updates.",17,TEXT,false);t.setPadding(dp(24),dp(80),dp(24),dp(24));t.setBackgroundColor(BG);setContentView(t);return;
+        }
+        getWindow().setStatusBarColor(BG);getWindow().setNavigationBarColor(BG);build();if(saved!=null){page=saved.getInt("page",0);show(page);}
+    }
+    private void build(){
+        root=column();root.setBackgroundColor(BG);
+        root.setOnApplyWindowInsetsListener((v,insets)->{int top,bottom;
+            if(Build.VERSION.SDK_INT>=30){android.graphics.Insets bars=insets.getInsets(WindowInsets.Type.systemBars()|WindowInsets.Type.ime());top=bars.top;bottom=bars.bottom;}
+            else{top=insets.getSystemWindowInsetTop();bottom=insets.getSystemWindowInsetBottom();}
+            root.setPadding(0,top,0,bottom);return insets;
+        });
+        LinearLayout header=new LinearLayout(this);header.setGravity(Gravity.CENTER_VERTICAL);header.setPadding(dp(20),dp(13),dp(18),dp(10));
+        LinearLayout brand=column();TextView logo=text("NOVA",22,TEXT,true);logo.setLetterSpacing(.16f);brand.addView(logo);brand.addView(text("DEV GUARD  ·  LOCAL COMPANION",9,MINT,true));header.addView(brand,new LinearLayout.LayoutParams(0,-2,1));
+        TextView privacy=text("PRIVATE",10,MINT,true);privacy.setGravity(Gravity.CENTER);privacy.setBackground(outline(0xFF10231F,99,0xFF22483F));header.addView(privacy,new LinearLayout.LayoutParams(dp(70),dp(36)));root.addView(header);
+        scroll=new ScrollView(this);scroll.setFillViewport(true);scroll.setClipToPadding(false);scroll.setOverScrollMode(View.OVER_SCROLL_NEVER);content=column();content.setPadding(dp(18),dp(8),dp(18),dp(14));scroll.addView(content);root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
+        subtitle=text("",13,TEXT,false);subtitle.setPadding(dp(15),dp(11),dp(15),dp(11));subtitle.setBackground(outline(0xF21A2735,16,0xFF2A4550));subtitle.setVisibility(View.GONE);subtitle.setElevation(dp(6));LinearLayout.LayoutParams sp=new LinearLayout.LayoutParams(-1,-2);sp.leftMargin=dp(16);sp.rightMargin=dp(16);sp.bottomMargin=dp(7);root.addView(subtitle,sp);
+        nav=new LinearLayout(this);nav.setBackground(outline(SURFACE,20,0xFF182332));nav.setPadding(dp(5),dp(6),dp(5),dp(6));LinearLayout.LayoutParams np=new LinearLayout.LayoutParams(-1,dp(66));np.leftMargin=dp(10);np.rightMargin=dp(10);np.bottomMargin=dp(7);root.addView(nav,np);
+        setContentView(root);root.requestApplyInsets();show(page);
+    }
+    private void show(int n){
+        page=n;content.animate().cancel();content.removeAllViews();nav.removeAllViews();puppy=null;status=null;ageText=null;input=null;chat=null;
+        String[] tabs={"Home","Ask","Guard","Life","Controls"};String[] marks={"⌂","✦","◇","♡","≡"};
+        for(int i=0;i<tabs.length;i++){final int p=i;LinearLayout item=column();item.setGravity(Gravity.CENTER);if(i==n)item.setBackground(outline(0xFF142C2B,14,0xFF28504A));TextView mark=text(marks[i],15,i==n?MINT:MUTED,true);mark.setGravity(Gravity.CENTER);TextView label=text(tabs[i],10,i==n?MINT:MUTED,i==n);label.setGravity(Gravity.CENTER);item.addView(mark);item.addView(label);nav.addView(item,new LinearLayout.LayoutParams(0,-1,1));item.setOnClickListener(v->show(p));}
+        if(n==0)home();else if(n==1)ask();else if(n==2)guard();else if(n==3)life();else controls();scroll.scrollTo(0,0);refreshPet();content.setAlpha(0f);content.setTranslationY(dp(8));content.animate().alpha(1f).translationY(0).setDuration(190).start();
+    }
+    private String greeting(){int h=Calendar.getInstance().get(Calendar.HOUR_OF_DAY);return h<12?"Good morning, Dev":h<17?"Good afternoon, Dev":"Good evening, Dev";}
+    private void home(){
+        content.addView(text(greeting(),13,MINT,true));gap(content,5);content.addView(text("Your tiny companion is here",25,TEXT,true));gap(content,6);content.addView(text("Quiet, local, expressive — and always under your control.",13,MUTED,false));gap(content,16);
+        puppy=new PuppyView(this,true);puppy.setBackground(outline(0xFF0E1824,24,0xFF1A3142));LinearLayout.LayoutParams pp=new LinearLayout.LayoutParams(-1,dp(224));content.addView(puppy,pp);puppy.setOnClickListener(v->{pet("happy",true);reply("Tail wags for you, Dev!",true);});gap(content,12);
+        LinearLayout stateCard=card(""," ");stateCard.removeAllViews();LinearLayout row=new LinearLayout(this);row.setGravity(Gravity.CENTER_VERTICAL);LinearLayout copy=column();status=text("Nova · Awake",17,MINT,true);copy.addView(status);ageText=text("",12,MUTED,false);gap(copy,5);copy.addView(ageText);row.addView(copy,new LinearLayout.LayoutParams(0,-2,1));TextView live=text("●  LIVE",10,MINT,true);live.setGravity(Gravity.CENTER);live.setBackground(outline(0xFF10231F,99,0xFF22483F));row.addView(live,n
