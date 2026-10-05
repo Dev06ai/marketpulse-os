@@ -1,0 +1,35 @@
+lled NOVA build and update-signing readiness without giving the app Internet access.");button(updates,"Check for updates",true,this::checkForUpdates);
+        LinearLayout about=card("NOVA 0.1.1 · polish build","An independent app, powered by Dev Guard. This update refines the companion UI, motion, subtitle-only responses and local security tools while keeping the same privacy boundary.");
+        about.addView(text("Local commands only · no Dev Trader link · no cloud model yet.",12,GOLD,false));
+    }
+    private interface ToggleChange{void set(boolean value);}
+    private void toggle(LinearLayout parent,String label,boolean checked,ToggleChange change){Switch sw=new Switch(this);sw.setText(label);sw.setTextSize(14);sw.setTextColor(TEXT);sw.setChecked(checked);sw.setPadding(0,dp(14),0,dp(9));parent.addView(sw,new LinearLayout.LayoutParams(-1,-2));sw.setOnCheckedChangeListener((v,value)->change.set(value));}
+    private void setPreference(String key,Object value){try{vault.change(s->s.put(key,value));show(4);}catch(Exception e){error(e);}}
+    private void hourPicker(String key,int hour){String[] hours=new String[24];for(int n=0;n<24;n++)hours[n]=String.format(Locale.US,"%02d:00",n);new AlertDialog.Builder(this).setTitle("Choose an hour").setSingleChoiceItems(hours,hour,(d,w)->{setPreference(key,w);d.dismiss();}).setNegativeButton("Cancel",null).show();}
+    private void auditDialog(){JSONArray a=state().optJSONArray("audit");StringBuilder b=new StringBuilder();for(int n=a.length()-1;n>=Math.max(0,a.length()-30);n--){JSONObject item=a.optJSONObject(n);b.append(DateFormat.getDateTimeInstance(DateFormat.SHORT,DateFormat.SHORT).format(new Date(item.optLong("time")))).append(" · ").append(item.optString("action")).append("\n").append(item.optString("result")).append("\n\n");}new AlertDialog.Builder(this).setTitle("Action history · latest 30").setMessage(b.length()>0?b.toString():"No actions yet.").setPositiveButton("Done",null).show();}
+    private void confirmSensitive(String title,String detail,Runnable action){
+        new AlertDialog.Builder(this).setTitle(title).setMessage(detail).setNegativeButton("Keep",null).setPositiveButton("Confirm",(d,w)->{
+            KeyguardManager kg=getSystemService(KeyguardManager.class);
+            if(kg.isDeviceSecure()){
+                Intent intent=kg.createConfirmDeviceCredentialIntent("Nova · confirm your choice",detail);
+                if(intent==null){Toast.makeText(this,"Phone authentication unavailable. Nothing removed.",Toast.LENGTH_LONG).show();return;}
+                pendingSensitive=action;startActivityForResult(intent,500);
+            }else action.run();
+        }).show();
+    }
+    private void enableNotifications(){
+        if(Build.VERSION.SDK_INT>=33&&checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)!=PackageManager.PERMISSION_GRANTED){pendingPermission="notifications";requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS},102);}
+        else if(!getSystemService(NotificationManager.class).areNotificationsEnabled())startActivity(new Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE,getPackageName()));
+        else Toast.makeText(this,"Notifications are enabled.",Toast.LENGTH_SHORT).show();
+    }
+    private void startCompanion(boolean overlay){
+        if(!Reminders.companionAllowed(this)){
+            pendingPermission=overlay?"overlay":"status";
+            if(Build.VERSION.SDK_INT>=33&&checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)!=PackageManager.PERMISSION_GRANTED)requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS},102);
+            else new AlertDialog.Builder(this).setTitle("Notifications are disabled").setMessage("Enable Nova notifications in Android settings to show companion status.").setPositiveButton("Settings",(d,w)->startActivity(new Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE,getPackageName()))).setNegativeButton("Later",null).show();return;
+        }
+        if(overlay&&!Settings.canDrawOverlays(this)){
+            new AlertDialog.Builder(this).setTitle("Let Nova roam your screen?").setMessage("Android's display-over-other-apps permission lets a small, draggable puppy appear above apps. Nova cannot read the screen or press buttons in other apps. Stop it anytime from Nova's notification.")
+                .setNegativeButton("Later",null).setPositiveButton("Open permission",(d,w)->{pendingPermission="overlaySettings";stopService(new Intent(this,CompanionService.class));startActivityForResult(new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,Uri.parse("package:"+getPackageName())),300);}).show();return;
+        }
+        try{startForegroundService(new Intent(this,CompanionService.class).setAction(CompanionService.START).putExtra("overlay",overlay));Toast.makeText(this,overlay?"Starting screen Nova. Tap to open; drag to move; hold to pause roaming.":"Starting Nova's status notification.",Toast.LENGTH_LO
