@@ -1,0 +1,31 @@
+
+            StringBuilder b=new StringBuilder();for(int i=0;i<p.length;i++){
+                String name=p[i].substring(p[i].lastIndexOf('.')+1);boolean granted=(pi.requestedPermissionsFlags[i]&PackageInfo.REQUESTED_PERMISSION_GRANTED)!=0;
+                b.append(granted?"✓ ":"○ ").append(name);if(i<p.length-1)b.append("\n");
+            }
+            return b.toString();
+        }catch(Exception e){return "Android did not provide Nova's permission list.";}
+    }
+    private static long dirSize(File f){
+        if(f==null||!f.exists())return 0;if(f.isFile())return f.length();long n=0;File[] kids=f.listFiles();if(kids!=null)for(File k:kids)n+=dirSize(k);return n;
+    }
+    private static boolean clearDir(File f){
+        if(f==null||!f.exists())return true;boolean ok=true;File[] kids=f.listFiles();if(kids!=null)for(File k:kids){if(k.isDirectory())ok&=clearDir(k);ok&=k.delete();}return ok;
+    }
+    public static long cacheBytes(Context c){return dirSize(c.getCacheDir())+(Build.VERSION.SDK_INT>=21?dirSize(c.getCodeCacheDir()):0);}
+    public static String cacheSummary(Context c){return String.format(Locale.US,"Nova cache: %.2f MB\nOnly temporary files belonging to Nova are eligible for cleanup.",cacheBytes(c)/(1024.0*1024.0));}
+    public static long clearOwnCache(Context c){long before=cacheBytes(c);clearDir(c.getCacheDir());if(Build.VERSION.SDK_INT>=21)clearDir(c.getCodeCacheDir());return Math.max(0,before-cacheBytes(c));}
+    public static List<Check> scan(Context c) {
+        List<Check> out=new ArrayList<>();
+        KeyguardManager kg=c.getSystemService(KeyguardManager.class);boolean secure=kg!=null&&kg.isDeviceSecure();
+        out.add(new Check("Screen lock",secure?"Device credential is configured.":"Set a PIN, pattern or password in Android settings.",!secure));
+        long days=patchAgeDays();boolean old=days==Long.MAX_VALUE||days>90;String detail=days==Long.MAX_VALUE?"Patch date unavailable.":"Android reports "+Build.VERSION.SECURITY_PATCH+" · "+days+" day(s) ago";
+        out.add(new Check("Security patch",detail,old));
+        boolean adb=Settings.Global.getInt(c.getContentResolver(),Settings.Global.ADB_ENABLED,0)!=0;
+        out.add(new Check("USB debugging",adb?"Enabled. Turn it off when you are not using it.":"Not enabled according to Android.",adb));
+        out.add(new Check("Nova permission boundary",permissionSummary(c),false));
+        out.add(new Check("Connection",network(c),false));
+        out.add(new Check("Scan coverage","Configuration check only. Nova cannot certify the device as malware-free or inspect other apps' private data. Keep Play Protect and Android security updates enabled.",false));
+        return out;
+    }
+}
