@@ -1,2 +1,0 @@
-/** Phase 58 */
-const V="58.0.0";function analyze(i={}){const p=Number(i.priceChange),c=Number(i.cvdChange),o=Number(i.oiChange),div=Number.isFinite(p)&&Number.isFinite(c)&&Math.sign(p)!==Math.sign(c),agree=Number.isFinite(p)&&Number.isFinite(c)&&Math.sign(p)===Math.sign(c);return {version:V,priceChange:p,cvdChange:c,oiChange:o,divergence:div,agreement:agree};}function selfTest(){const x=analyze({priceChange:1,cvdChange:-1});return {ok:x.divergence,version:V};}module.exports={VERSION:V,analyze,selfTest};

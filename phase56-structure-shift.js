@@ -1,2 +1,0 @@
-/** Phase 56 */
-const V="56.0.0";function detect(i={}){const before=String(i.before||"RANGE").toUpperCase(),after=String(i.after||"RANGE").toUpperCase(),side=after==="UP"&&before!=="UP"?"LONG":after==="DOWN"&&before!=="DOWN"?"SHORT":"WAIT";return {version:V,before,after,side,confirmed:side!=="WAIT"};}function selfTest(){const x=detect({before:"RANGE",after:"UP"});return {ok:x.side==="LONG",version:V};}module.exports={VERSION:V,detect,selfTest};
