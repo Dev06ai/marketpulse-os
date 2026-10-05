@@ -1,4 +1,0 @@
-NOVA 0.2.3 verified release reconstruction
-versionCode=6
-sha256=ecd7168598d3f1d2ceb90c4742d4595d7d02c6ed3580f9d30dfec8b286641ce2
-chunks=25
