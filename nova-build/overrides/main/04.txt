@@ -1,0 +1,36 @@
+vate void runScan(){
+        pet("work",false);List<DevGuard.Check> checks=DevGuard.scan(this);int attention=0;for(DevGuard.Check check:checks)if(check.attention)attention++;
+        page=2;show(2);content.removeAllViews();content.addView(text("Configuration check",24,TEXT,true));gap(content,9);content.addView(text(attention>0?attention+" item(s) worth reviewing":"No issues in the checks performed",14,attention>0?GOLD:MINT,true));gap(content,18);
+        for(DevGuard.Check c:checks){LinearLayout item=card((c.attention?"Review · ":"")+c.title,c.detail);}
+        LinearLayout settings=card("Android security","");button(settings,"Open security settings",true,()->openSettings(Settings.ACTION_SECURITY_SETTINGS));
+        try{vault.audit("Configuration check",attention+" review item(s)");}catch(Exception e){error(e);}pet(attention>0?"alert":"happy",false);
+    }
+    private void openSettings(String action){try{startActivity(new Intent(action));}catch(Exception e){Toast.makeText(this,"This settings page is unavailable on your phone.",Toast.LENGTH_LONG).show();}}
+    private void clearNovaCache(){
+        long removed=DevGuard.clearOwnCache(this);
+        Toast.makeText(this,String.format(Locale.US,"Cleared %.2f MB of Nova temporary cache only.",removed/(1024.0*1024.0)),Toast.LENGTH_LONG).show();
+        show(2);
+    }
+    private void checkForUpdates(){
+        try{
+            android.content.pm.PackageInfo pi=getPackageManager().getPackageInfo(getPackageName(),0);
+            long code=Build.VERSION.SDK_INT>=28?pi.getLongVersionCode():pi.versionCode;
+            String version=pi.versionName==null?"unknown":pi.versionName;
+            String message="Installed: NOVA "+version+" (build "+code+")\nPackage: "+getPackageName()+"\n\nPrivacy mode is active: this build has no Internet permission, so it will never silently contact an update server. Install future NOVA APKs signed with the same update key over this app to preserve Nova's memories and identity.";
+            new AlertDialog.Builder(this).setTitle("NOVA Update Center").setMessage(message).setPositiveButton("OK",null).show();
+            vault.audit("Update check","Local build identity checked · "+version+" ("+code+")");
+        }catch(Exception e){error(e);}
+    }
+    private void life(){
+        JSONObject s=state();content.addView(text("Nova's life",25,TEXT,true));gap(content,8);content.addView(text("Growth, memories, and little things to do.",13,MUTED,false));gap(content,20);
+        LinearLayout growth=card(PetLife.stage(s,System.currentTimeMillis()),"Day "+(PetLife.days(s,System.currentTimeMillis())+1)+" · Bond "+s.optInt("bond")+"/100\nTiny puppy → growing puppy at 7 days → young dog at 30 → grown-up at 90. Growth changes Nova's size. More artwork and emotions are planned.");
+        pair(growth,"Play",()->{pet("play",true);show(0);},"Snack",()->{pet("feed",true);show(0);});
+        JSONArray notes=s.optJSONArray("notes");LinearLayout heading=card("Memories",notes.length()==0?"Nothing saved yet. Say “remember …” or add a note below.":notes.length()+" note(s) saved locally.");button(heading,"Add a memory",true,this::noteDialog);
+        for(int n=notes.length()-1;n>=0;n--){JSONObject note=notes.optJSONObject(n);final String id=note.optString("id");LinearLayout item=card("Note",note.optString("text"));
+            pair(item,"Edit",()->editNote(note),"Forget",()->confirmSensitive("Forget this note?","Only this Nova note will be removed.",()->{try{vault.change(v->{JSONArray a=v.getJSONArray("notes");for(int j=a.length()-1;j>=0;j--)if(id.equals(a.getJSONObject(j).getString("id")))a.remove(j);});vault.audit("Forget note","Confirmed by Dev");show(3);}catch(Exception e){error(e);}}));
+        }
+        JSONArray reminders=s.optJSONArray("reminders");LinearLayout rh=card("Reminders",reminders.length()==0?"No reminders scheduled.":"Delivery is approximate and may be delayed by Android.");button(rh,"Add a reminder",false,this::reminderDialog);
+        for(int n=0;n<reminders.length();n++){JSONObject r=reminders.optJSONObject(n);final String id=r.optString("id");LinearLayout item=card(r.optString("text"),DateFormat.getDateTimeInstance(DateFormat.MEDIUM,DateFormat.SHORT).format(new Date(r.optLong("when"))));button(item,"Cancel reminder",false,()->new AlertDialog.Builder(this).setTitle("Cancel this reminder?").setMessage(r.optString("text")).setNegativeButton("Keep",null).setPositiveButton("Cancel reminder",(d,w)->{try{Reminders.remove(this,id);show(3);}catch(Exception e){error(e);}}).show());}
+    }
+    private EditText noteInput(String value){EditText e=new EditText(this);e.setText(value);e.setTextColor(TEXT);e.setHintTextColor(MUTED);e.setPadding(dp(20),dp(16),dp(20),dp(16));e.setMinLines(2);e.setInputType(131073);e.setFilters(new android.text.InputFilter[]{new android.text.InputFilter.LengthFilter(1000)});return e;}
+    private void noteDialog(){EditText e=noteInput("");e.setHint("Something Nova should remember");new AlertDialog.Builder(this).setTitle("Add a m
