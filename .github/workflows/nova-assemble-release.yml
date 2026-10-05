@@ -4,7 +4,7 @@ on:
   push:
     branches: [nova-standalone]
     paths:
-      - 'public/updates/rebuild-0.2.3.trigger'
+      - 'public/updates/rebuild-0.3.0.trigger'
 
 permissions:
   contents: write
@@ -22,31 +22,33 @@ jobs:
         run: |
           python3 - <<'PY'
           import base64, gzip, hashlib, pathlib
-          root=pathlib.Path('public/updates/apk_gz_parts/0.2.3')
-          parts=[root/f'part{i:02d}.b64' for i in range(25)]
+          version='0.3.0'
+          count=27
+          expected='e7d50396fdd91101bfdb84c89e80dd328e06f08c7f781911781ca1635f606139'
+          root=pathlib.Path(f'public/updates/apk_gz_parts/{version}')
+          parts=[root/f'part{i:02d}.b64' for i in range(count)]
           missing=[str(p) for p in parts if not p.exists()]
           if missing:
               raise SystemExit('missing chunks: '+', '.join(missing))
           encoded=''.join(''.join(p.read_text().split()) for p in parts)
           apk=gzip.decompress(base64.b64decode(encoded))
-          expected='ecd7168598d3f1d2ceb90c4742d4595d7d02c6ed3580f9d30dfec8b286641ce2'
           actual=hashlib.sha256(apk).hexdigest()
           if actual != expected:
               raise SystemExit(f'SHA-256 mismatch: {actual}')
-          out=pathlib.Path('public/updates/NOVA-0.2.3.apk')
+          out=pathlib.Path(f'public/updates/NOVA-{version}.apk')
           out.write_bytes(apk)
           print(f'Wrote {out} ({len(apk)} bytes), SHA-256 {actual}')
           PY
-          unzip -t public/updates/NOVA-0.2.3.apk >/dev/null
+          unzip -t public/updates/NOVA-0.3.0.apk >/dev/null
       - name: Publish reconstructed signed APK
         shell: bash
         run: |
           git config user.name 'NOVA Release Bot'
           git config user.email 'actions@users.noreply.github.com'
-          git add public/updates/NOVA-0.2.3.apk
+          git add public/updates/NOVA-0.3.0.apk
           if git diff --cached --quiet; then
             echo 'Signed APK already published.'
             exit 0
           fi
-          git commit -m 'NOVA: publish verified 0.2.3 signed APK'
+          git commit -m 'NOVA: publish verified 0.3.0 signed APK'
           git push origin HEAD:nova-standalone
