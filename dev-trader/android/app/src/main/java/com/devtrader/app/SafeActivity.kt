@@ -434,7 +434,7 @@ class SafeActivity : FragmentActivity() {
             orientation = LinearLayout.VERTICAL
             setPadding(0, 0, 0, dp(4))
         }
-        insightsScroll.addView(insightsContent, ScrollView.LayoutParams(-1, -2))
+        insightsScroll.addView(insightsContent, FrameLayout.LayoutParams(-1, -2))
         insightsPage.addView(insightsScroll, LinearLayout.LayoutParams(-1, 0, 1f))
 
         val story = premiumCard("MARKET CONTEXT", "Building the market picture…", 13f)
