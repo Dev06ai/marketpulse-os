@@ -1,5 +1,6 @@
 // Build 101: KYVORIQ visual identity — gold/charcoal system, branded navigation and mark.
 // Build 99: free-host migration with compact mobile delivery.
+// Build 114: premium KYVORIQ Privacy Shield bottom sheet.
 // Build 113: reaction-aware chart level map + multi-timeframe OB presentation.
 // Build 112: high-refresh VSYNC price motion for the in-app BTC hero.
 // Price animation follows Android VSYNC; the display-mode request is capped at 120 Hz.
@@ -1868,40 +1869,334 @@ class SafeActivity : FragmentActivity() {
 
     private fun showPrivacyControls() {
         val prefs = privacyPrefs()
-        val enabled = prefs.getBoolean("biometric_enabled", false)
-        val hidden = prefs.getBoolean("hide_amounts", false)
-        val options = arrayOf(
-            if (enabled) "Disable biometric app lock" else "Enable biometric app lock",
-            if (hidden) "Show balances & P&L" else "Hide balances & P&L"
+        val dialog = android.app.Dialog(this)
+        dialog.setCanceledOnTouchOutside(true)
+
+        val sheet = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(18), dp(10), dp(18), dp(18))
+            background = gradient(
+                intArrayOf(Color.rgb(16, 22, 30), kyCharcoal),
+                GradientDrawable.Orientation.TL_BR
+            ).apply {
+                cornerRadius = dp(28).toFloat()
+                setStroke(dp(1), kyDeepGold)
+            }
+        }
+
+        val handle = View(this).apply {
+            background = GradientDrawable().apply {
+                cornerRadius = dp(3).toFloat()
+                setColor(Color.rgb(73, 82, 94))
+            }
+        }
+        sheet.addView(
+            handle,
+            LinearLayout.LayoutParams(dp(42), dp(4)).apply {
+                gravity = Gravity.CENTER_HORIZONTAL
+                bottomMargin = dp(14)
+            }
         )
-        android.app.AlertDialog.Builder(this)
-            .setTitle("KYVORIQ Privacy Shield")
-            .setItems(options) { _, which ->
-                when (which) {
-                    0 -> {
-                        requestPrivacyAuthentication(
-                            title = if (enabled) "Disable Privacy Lock" else "Enable Privacy Lock",
-                            subtitle = "Confirm this security change.",
-                            onSuccess = {
-                                prefs.edit().putBoolean("biometric_enabled", !enabled).apply()
-                                privacyAuthenticated = true
-                                refreshPrivacyButton()
-                                Toast.makeText(this, if (enabled) "Biometric lock disabled" else "Biometric lock enabled", Toast.LENGTH_SHORT).show()
-                            }
-                        )
-                    }
-                    1 -> {
-                        prefs.edit().putBoolean("hide_amounts", !hidden).apply()
-                        refreshPrivacyButton()
-                        latestRoot?.let {
-                            renderWorkspace(it)
-                            KyvoriqWidgetProvider.updateFromState(this, it)
-                        }
-                    }
+
+        val header = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        val logoFrame = FrameLayout(this).apply {
+            background = gradient(
+                intArrayOf(Color.rgb(39, 34, 19), kySlate),
+                GradientDrawable.Orientation.TL_BR
+            ).apply {
+                cornerRadius = dp(14).toFloat()
+                setStroke(dp(1), kyGold)
+            }
+        }
+        logoFrame.addView(
+            ImageView(this).apply {
+                setImageResource(R.drawable.kyvoriq_mark)
+                scaleType = ImageView.ScaleType.CENTER_INSIDE
+                contentDescription = "KYVORIQ Privacy Shield"
+                setPadding(dp(9), dp(9), dp(9), dp(9))
+            },
+            FrameLayout.LayoutParams(-1, -1)
+        )
+        header.addView(logoFrame, LinearLayout.LayoutParams(dp(52), dp(52)))
+
+        val titleStack = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(12), 0, dp(8), 0)
+        }
+        titleStack.addView(label("PRIVACY SHIELD", 15.5f, kyWhite, 0.05f))
+        titleStack.addView(
+            TextView(this).apply {
+                text = "Security & privacy controls"
+                textSize = 10.5f
+                setTextColor(kyGray)
+                includeFontPadding = false
+            },
+            margins(top = 3)
+        )
+        header.addView(titleStack, LinearLayout.LayoutParams(0, -2, 1f))
+
+        val close = TextView(this).apply {
+            text = "×"
+            textSize = 24f
+            setTextColor(kyGray)
+            gravity = Gravity.CENTER
+            contentDescription = "Close Privacy Shield"
+            background = GradientDrawable().apply {
+                cornerRadius = dp(12).toFloat()
+                setColor(kyGraphite)
+                setStroke(dp(1), Color.rgb(55, 64, 76))
+            }
+        }
+        header.addView(close, LinearLayout.LayoutParams(dp(42), dp(42)))
+        sheet.addView(header)
+
+        val summary = TextView(this).apply {
+            textSize = 10.5f
+            includeFontPadding = false
+            setLineSpacing(0f, 1.08f)
+            setPadding(dp(12), dp(10), dp(12), dp(10))
+            background = gradient(
+                intArrayOf(Color.rgb(28, 27, 20), Color.rgb(19, 24, 31)),
+                GradientDrawable.Orientation.LEFT_RIGHT
+            ).apply {
+                cornerRadius = dp(14).toFloat()
+                setStroke(dp(1), kyLine)
+            }
+        }
+        sheet.addView(summary, margins(top = 16, bottom = 12))
+
+        fun styleToggle(chip: TextView, active: Boolean) {
+            chip.text = if (active) "ON" else "OFF"
+            chip.setTextColor(if (active) kyCharcoal else kyGray)
+            chip.background = gradient(
+                if (active) intArrayOf(kyGold, kyAmber) else intArrayOf(kyGraphite, kySlate),
+                GradientDrawable.Orientation.LEFT_RIGHT
+            ).apply {
+                cornerRadius = dp(13).toFloat()
+                setStroke(dp(1), if (active) kyDeepGold else Color.rgb(61, 70, 82))
+            }
+        }
+
+        fun updateSummary() {
+            val biometric = prefs.getBoolean("biometric_enabled", false)
+            val hidden = prefs.getBoolean("hide_amounts", false)
+            val protection = when {
+                biometric && hidden -> "MAX PROTECTION"
+                biometric || hidden -> "PROTECTED"
+                else -> "STANDARD"
+            }
+            summary.text = "$protection\n" +
+                (if (biometric) "Biometric lock armed" else "Biometric lock off") +
+                "  •  " +
+                (if (hidden) "Sensitive values hidden" else "Balances visible")
+            summary.setTextColor(if (biometric || hidden) kyGold else kyGray)
+        }
+
+        fun optionCard(
+            iconText: String,
+            title: String,
+            subtitle: String,
+            active: Boolean
+        ): Pair<LinearLayout, TextView> {
+            val card = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(dp(12), dp(12), dp(12), dp(12))
+                isClickable = true
+                isFocusable = true
+                background = gradient(
+                    intArrayOf(kySlate, Color.rgb(14, 19, 26)),
+                    GradientDrawable.Orientation.TL_BR
+                ).apply {
+                    cornerRadius = dp(18).toFloat()
+                    setStroke(dp(1), Color.rgb(48, 56, 68))
                 }
             }
-            .setNegativeButton("CLOSE", null)
-            .show()
+            val icon = TextView(this).apply {
+                text = iconText
+                textSize = 11f
+                typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                setTextColor(kyGold)
+                gravity = Gravity.CENTER
+                includeFontPadding = false
+                background = GradientDrawable().apply {
+                    cornerRadius = dp(13).toFloat()
+                    setColor(Color.rgb(35, 31, 18))
+                    setStroke(dp(1), kyDeepGold)
+                }
+            }
+            card.addView(icon, LinearLayout.LayoutParams(dp(44), dp(44)))
+
+            val copy = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(dp(12), 0, dp(10), 0)
+            }
+            copy.addView(
+                TextView(this).apply {
+                    text = title
+                    textSize = 12.5f
+                    setTextColor(kyWhite)
+                    typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                    includeFontPadding = false
+                }
+            )
+            copy.addView(
+                TextView(this).apply {
+                    text = subtitle
+                    textSize = 9.5f
+                    setTextColor(kyGray)
+                    maxLines = 2
+                    includeFontPadding = false
+                    setLineSpacing(0f, 1.05f)
+                },
+                margins(top = 4)
+            )
+            card.addView(copy, LinearLayout.LayoutParams(0, -2, 1f))
+
+            val chip = TextView(this).apply {
+                textSize = 9.5f
+                typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                gravity = Gravity.CENTER
+                includeFontPadding = false
+                setPadding(dp(9), 0, dp(9), 0)
+            }
+            styleToggle(chip, active)
+            card.addView(chip, LinearLayout.LayoutParams(dp(54), dp(30)))
+            return card to chip
+        }
+
+        val biometricRow = optionCard(
+            "BIO",
+            "Biometric App Lock",
+            "Require fingerprint, face or device authentication before KYVORIQ reveals your workspace.",
+            prefs.getBoolean("biometric_enabled", false)
+        )
+        sheet.addView(biometricRow.first, margins(bottom = 10))
+
+        val hideRow = optionCard(
+            "••",
+            "Hide Balances & P&L",
+            "Mask balances, P&L and sensitive position values across the app and widget.",
+            prefs.getBoolean("hide_amounts", false)
+        )
+        sheet.addView(hideRow.first, margins(bottom = 14))
+
+        val note = TextView(this).apply {
+            text = "Settings save instantly. KYVORIQ never receives or stores your biometric template."
+            textSize = 8.8f
+            setTextColor(Color.rgb(118, 128, 142))
+            includeFontPadding = false
+            gravity = Gravity.CENTER_HORIZONTAL
+        }
+        sheet.addView(note, margins(bottom = 14))
+
+        val done = Button(this).apply {
+            text = "DONE"
+            textSize = 11.5f
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            setTextColor(kyCharcoal)
+            isAllCaps = false
+            stateListAnimator = null
+            minHeight = 0
+            minWidth = 0
+            background = gradient(
+                intArrayOf(kyGold, kyAmber),
+                GradientDrawable.Orientation.LEFT_RIGHT
+            ).apply {
+                cornerRadius = dp(15).toFloat()
+                setStroke(dp(1), kyDeepGold)
+            }
+        }
+        sheet.addView(done, LinearLayout.LayoutParams(-1, dp(48)))
+
+        fun dismissPremiumSheet() {
+            haptic(done, KyvoriqHaptics.Cue.TAP)
+            sheet.animate().cancel()
+            sheet.animate()
+                .alpha(0f)
+                .translationY(dp(34).toFloat())
+                .setDuration(150L)
+                .withEndAction { if (dialog.isShowing) dialog.dismiss() }
+                .start()
+        }
+
+        close.setOnClickListener { dismissPremiumSheet() }
+        done.setOnClickListener {
+            haptic(it, KyvoriqHaptics.Cue.CONFIRM)
+            sheet.animate().cancel()
+            sheet.animate()
+                .alpha(0f)
+                .translationY(dp(34).toFloat())
+                .setDuration(150L)
+                .withEndAction { if (dialog.isShowing) dialog.dismiss() }
+                .start()
+        }
+
+        biometricRow.first.setOnClickListener {
+            haptic(it, KyvoriqHaptics.Cue.SELECT)
+            val currentlyEnabled = prefs.getBoolean("biometric_enabled", false)
+            requestPrivacyAuthentication(
+                title = if (currentlyEnabled) "Disable Privacy Lock" else "Enable Privacy Lock",
+                subtitle = "Confirm this security change.",
+                onSuccess = {
+                    val next = !currentlyEnabled
+                    prefs.edit().putBoolean("biometric_enabled", next).apply()
+                    privacyAuthenticated = true
+                    styleToggle(biometricRow.second, next)
+                    updateSummary()
+                    refreshPrivacyButton()
+                    Toast.makeText(
+                        this,
+                        if (next) "Biometric lock enabled" else "Biometric lock disabled",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+            )
+        }
+
+        hideRow.first.setOnClickListener {
+            haptic(it, KyvoriqHaptics.Cue.SELECT)
+            val next = !prefs.getBoolean("hide_amounts", false)
+            prefs.edit().putBoolean("hide_amounts", next).apply()
+            styleToggle(hideRow.second, next)
+            updateSummary()
+            refreshPrivacyButton()
+            latestRoot?.let {
+                renderWorkspace(it)
+                KyvoriqWidgetProvider.updateFromState(this, it)
+            }
+        }
+
+        updateSummary()
+        dialog.setContentView(sheet)
+        dialog.window?.apply {
+            setBackgroundDrawableResource(android.R.color.transparent)
+            addFlags(android.view.WindowManager.LayoutParams.FLAG_DIM_BEHIND)
+            attributes = attributes.apply { dimAmount = 0.76f }
+            setGravity(Gravity.BOTTOM)
+        }
+        dialog.setOnShowListener {
+            dialog.window?.apply {
+                setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+                decorView.setPadding(dp(14), 0, dp(14), dp(18))
+            }
+            sheet.alpha = 0f
+            sheet.translationY = dp(48).toFloat()
+            sheet.scaleX = 0.985f
+            sheet.scaleY = 0.985f
+            sheet.animate()
+                .alpha(1f)
+                .translationY(0f)
+                .scaleX(1f)
+                .scaleY(1f)
+                .setDuration(280L)
+                .setInterpolator(android.view.animation.PathInterpolator(0.18f, 0.82f, 0.20f, 1f))
+                .start()
+        }
+        dialog.show()
     }
 
     private fun refreshPrivacyButton() {
