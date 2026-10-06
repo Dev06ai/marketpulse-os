@@ -35,25 +35,72 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="LIVE"
-            android:textColor="#F7C948"
+            android:textColor="#36D399"
             android:textStyle="bold"
             android:textSize="9sp"/>
     </LinearLayout>
 
-    <TextView
-        android:id="@+id/widget_price"
+    <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
-        android:text="BTC  —"
-        android:textColor="#F5F7FA"
-        android:textStyle="bold"
-        android:textSize="19sp"/>
+        android:layout_height="40dp"
+        android:layout_marginTop="7dp"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="BTC"
+            android:textColor="#F5F7FA"
+            android:textStyle="bold"
+            android:textSize="18sp"/>
+
+        <ViewFlipper
+            android:id="@+id/widget_price_flipper"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:layout_marginStart="8dp"
+            android:inAnimation="@anim/widget_price_in"
+            android:outAnimation="@anim/widget_price_out"
+            android:animateFirstView="false">
+
+            <TextView
+                android:id="@+id/widget_price_0"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:gravity="center_vertical"
+                android:text="—"
+                android:textColor="#F5F7FA"
+                android:textStyle="bold"
+                android:textSize="19sp"/>
+
+            <TextView
+                android:id="@+id/widget_price_1"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:gravity="center_vertical"
+                android:text="—"
+                android:textColor="#F5F7FA"
+                android:textStyle="bold"
+                android:textSize="19sp"/>
+        </ViewFlipper>
+
+        <TextView
+            android:id="@+id/widget_delta"
+            android:layout_width="24dp"
+            android:layout_height="match_parent"
+            android:gravity="center"
+            android:text="•"
+            android:textColor="#9CA3AF"
+            android:textStyle="bold"
+            android:textSize="11sp"/>
+    </LinearLayout>
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="5dp"
+        android:layout_marginTop="3dp"
         android:orientation="horizontal">
 
         <TextView

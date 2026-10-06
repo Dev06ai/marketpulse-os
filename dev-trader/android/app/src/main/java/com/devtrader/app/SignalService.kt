@@ -24,6 +24,7 @@ import java.util.Locale
 import java.util.concurrent.TimeUnit
 import kotlin.math.min
 
+// Build 111: 1 Hz live widget stream + animated widget price motion.
 // Build 110: premium alert hierarchy + widget sync.
  // Build 108: confidence-sized 20x demo execution notifications.
 class SignalService : Service() {
@@ -211,7 +212,7 @@ class SignalService : Service() {
         if (socket != null) return
         lastMessageMs = System.currentTimeMillis()
         socket = client.newWebSocket(
-            Request.Builder().url(BackendEndpoint.socket("alerts")).build(),
+            Request.Builder().url(BackendEndpoint.socket("dashboard")).build(),
             object : WebSocketListener() {
                 override fun onOpen(ws: WebSocket, response: Response) {
                     if (stopped || socket !== ws) {
@@ -238,8 +239,19 @@ class SignalService : Service() {
                     lastMessageMs = System.currentTimeMillis()
                     runCatching {
                         val root = JSONObject(text)
-                        if (root.optString("type") != "state") return
-                        KyvoriqWidgetProvider.updateFromState(this@SignalService, root)
+                        when (root.optString("type")) {
+                            "market_tick" -> {
+                                KyvoriqWidgetProvider.updateFromMarketTick(this@SignalService, root)
+                                val health = root.optString("data_health", "UNKNOWN")
+                                updateServiceNotification(
+                                    if (health == "DEGRADED") ServiceUiState.DEGRADED
+                                    else ServiceUiState.LIVE
+                                )
+                                return
+                            }
+                            "state" -> KyvoriqWidgetProvider.updateFromState(this@SignalService, root)
+                            else -> return
+                        }
                         val prefs = getSharedPreferences(PREFS, MODE_PRIVATE)
 
                         val alert = root.optJSONObject("opportunity_alert")
