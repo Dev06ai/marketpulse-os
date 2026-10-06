@@ -4,8 +4,10 @@ import android.animation.ValueAnimator
 import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.LinearGradient
 import android.graphics.Paint
 import android.graphics.RectF
+import android.graphics.Shader
 import android.util.AttributeSet
 import android.view.View
 import android.view.animation.DecelerateInterpolator
@@ -27,11 +29,30 @@ class RiskHeatMeterView @JvmOverloads constructor(
     private var renderedScore = 0f
     private var targetScore = 0f
     private var stateLabel = "IDLE"
+    private var previousState = "IDLE"
     private var animator: ValueAnimator? = null
+    private var pulseAnimator: ValueAnimator? = null
+    private var pulseProgress = 1f
 
     fun setRisk(score: Float, state: String, animate: Boolean = true) {
         targetScore = score.coerceIn(0f, 100f)
-        stateLabel = state
+        val normalizedState = state.uppercase()
+        val stateChanged = normalizedState != stateLabel
+        previousState = stateLabel
+        stateLabel = normalizedState
+        if (stateChanged && normalizedState != "IDLE" && animate) {
+            pulseAnimator?.cancel()
+            pulseProgress = 0f
+            pulseAnimator = ValueAnimator.ofFloat(0f, 1f).apply {
+                duration = 720L
+                interpolator = DecelerateInterpolator()
+                addUpdateListener {
+                    pulseProgress = it.animatedValue as Float
+                    invalidate()
+                }
+                start()
+            }
+        }
         animator?.cancel()
         if (!animate) {
             renderedScore = targetScore
@@ -77,9 +98,40 @@ class RiskHeatMeterView @JvmOverloads constructor(
         }
 
         val x = left + total * (renderedScore / 100f)
+
+        if (pulseProgress < 1f && stateLabel != "IDLE") {
+            val sweepX = left + total * pulseProgress
+            val sweepWidth = dp(22f)
+            val pulseColor = when (stateLabel) {
+                "CRITICAL" -> Color.rgb(255, 82, 105)
+                "HIGH" -> Color.rgb(224, 167, 46)
+                "ELEVATED" -> Color.rgb(247, 201, 72)
+                else -> Color.rgb(54, 211, 153)
+            }
+            val sweepPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                shader = LinearGradient(
+                    sweepX - sweepWidth,
+                    top,
+                    sweepX + sweepWidth,
+                    top,
+                    intArrayOf(Color.TRANSPARENT, pulseColor, Color.TRANSPARENT),
+                    null,
+                    Shader.TileMode.CLAMP
+                )
+                alpha = 150
+            }
+            canvas.drawRoundRect(
+                RectF(left, top - dp(2f), right, top + barHeight + dp(2f)),
+                radius, radius, sweepPaint
+            )
+        }
+
         marker.strokeWidth = dp(2f)
         canvas.drawLine(x, top - dp(4f), x, top + barHeight + dp(4f), marker)
-        canvas.drawCircle(x, top + barHeight / 2f, dp(3f), marker)
+        val markerRadius = if (pulseProgress < 1f && stateLabel != "IDLE") {
+            dp(3f + 1.8f * kotlin.math.sin(pulseProgress * Math.PI).toFloat().coerceAtLeast(0f))
+        } else dp(3f)
+        canvas.drawCircle(x, top + barHeight / 2f, markerRadius, marker)
 
         label.color = when {
             stateLabel == "CRITICAL" -> Color.rgb(255, 82, 105)
@@ -94,6 +146,8 @@ class RiskHeatMeterView @JvmOverloads constructor(
     override fun onDetachedFromWindow() {
         animator?.cancel()
         animator = null
+        pulseAnimator?.cancel()
+        pulseAnimator = null
         super.onDetachedFromWindow()
     }
 

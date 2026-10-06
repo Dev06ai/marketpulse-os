@@ -1,5 +1,6 @@
 // Build 101: KYVORIQ visual identity — gold/charcoal system, branded navigation and mark.
 // Build 99: free-host migration with compact mobile delivery.
+// Build 115: KYVORIQ Motion Studio — launch, decision, chart reaction/execution and Insights motion graphics.
 // Build 114: premium KYVORIQ Privacy Shield bottom sheet.
 // Build 113: reaction-aware chart level map + multi-timeframe OB presentation.
 // Build 112: high-refresh VSYNC price motion for the in-app BTC hero.
@@ -134,6 +135,9 @@ class SafeActivity : FragmentActivity() {
     private lateinit var curve: PerformanceCurveView
     private lateinit var rootSurface: LinearLayout
     private lateinit var decisionContainer: LinearLayout
+    private lateinit var decisionMotionView: DecisionMotionView
+    private val insightsMotionViews = mutableListOf<View>()
+    private var launchSequenceShown = false
     private var selectedWorkspace = 0
     private var fullTradeHistoryText = "No executed demo trades yet."
     private lateinit var chart: MarketChartView
@@ -262,7 +266,9 @@ class SafeActivity : FragmentActivity() {
             selectWorkspace(intent.getIntExtra("visual_workspace", 0).coerceIn(0, 2))
             return
         }
+        val privacyLockEnabled = privacyPrefs().getBoolean("biometric_enabled", false)
         enforceInitialPrivacyGate()
+        if (!privacyLockEnabled) showLaunchSequence()
         registerNetworkCallback()
         ensureChannel()
         startBackgroundAlerts()
@@ -282,6 +288,21 @@ class SafeActivity : FragmentActivity() {
             safe { watchdog() }
         }, 3000L)
         handler.postDelayed(keepaliveRunnable, KEEPALIVE_INTERVAL_MS)
+    }
+
+    private fun showLaunchSequence() {
+        if (debugPreview || launchSequenceShown || isFinishing || isDestroyed) return
+        launchSequenceShown = true
+        val host = findViewById<ViewGroup>(android.R.id.content) ?: return
+        val overlay = KyvoriqLaunchOverlay(this)
+        host.addView(
+            overlay,
+            ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
+        )
+        overlay.bringToFront()
+        overlay.play {
+            if (overlay.parent === host) host.removeView(overlay)
+        }
     }
 
     private fun requestPremiumRefreshRate() {
@@ -417,7 +438,14 @@ class SafeActivity : FragmentActivity() {
             showTradeDetails()
         }
         setup.first.contentDescription = "Open complete trade setup"
-        tradePage.addView(setup.first, LinearLayout.LayoutParams(-1, dp(if (compactViewport) 92 else 132)).apply { bottomMargin = dp(8) })
+        val decisionHost = FrameLayout(this).apply {
+            clipChildren = false
+            clipToPadding = false
+        }
+        decisionHost.addView(setup.first, FrameLayout.LayoutParams(-1, -1))
+        decisionMotionView = DecisionMotionView(this)
+        decisionHost.addView(decisionMotionView, FrameLayout.LayoutParams(-1, -1))
+        tradePage.addView(decisionHost, LinearLayout.LayoutParams(-1, dp(if (compactViewport) 92 else 132)).apply { bottomMargin = dp(8) })
         val tradeTools = LinearLayout(this)
         val details = compactPillButton("SETUP DETAILS")
         details.setOnClickListener {
@@ -530,6 +558,20 @@ class SafeActivity : FragmentActivity() {
         }
         deviceTools.addView(widgetButton, LinearLayout.LayoutParams(0, dp(44), 1f))
         insightsContent.addView(deviceTools)
+        insightsMotionViews.clear()
+        insightsMotionViews.addAll(
+            listOf(
+                story.first,
+                decisions.container,
+                alertCard.container,
+                riskCard.container,
+                levels.container,
+                feed.container,
+                sys.container,
+                tools,
+                deviceTools
+            )
+        )
         refreshPrivacyButton()
 
         val navigation = LinearLayout(this).apply { setPadding(0, dp(10), 0, 0) }
@@ -550,6 +592,7 @@ class SafeActivity : FragmentActivity() {
     }
 
     private fun selectWorkspace(index: Int) {
+        val previous = selectedWorkspace
         selectedWorkspace = index
         workspacePages.forEachIndexed { i, page -> page.visibility = if (i == index) View.VISIBLE else View.GONE }
         navigationButtons.forEachIndexed { i, button ->
@@ -562,6 +605,27 @@ class SafeActivity : FragmentActivity() {
             }
         }
         latestRoot?.let { renderWorkspace(it) }
+        if (index == 2 && previous != 2 && !debugPreview) animateInsightsEntrance()
+    }
+
+    private fun animateInsightsEntrance() {
+        insightsMotionViews.forEachIndexed { index, view ->
+            view.animate().cancel()
+            view.alpha = 0f
+            view.translationY = dp(9).toFloat()
+            view.scaleX = 0.992f
+            view.scaleY = 0.992f
+            view.animate()
+                .alpha(1f)
+                .translationY(0f)
+                .scaleX(1f)
+                .scaleY(1f)
+                .setStartDelay(index * 34L)
+                .setDuration(250L)
+                .setInterpolator(android.view.animation.PathInterpolator(0.18f, 0.82f, 0.20f, 1f))
+                .withLayer()
+                .start()
+        }
     }
 
     private fun showTradeDetails() {
@@ -1180,6 +1244,7 @@ class SafeActivity : FragmentActivity() {
         val source = upstream?.optString("source", "").orEmpty()
         val authoritativeFeedHealthy = health == "HEALTHY" && ws && source == "BITGET_WS" && freshMarket
         chart.setFeedHealthy(authoritativeFeedHealthy)
+        chart.setSignal(signalObj)
         val statusLabel = when {
             authoritativeFeedHealthy -> "LIVE"
             health == "DEGRADED" -> "DATA DEGRADED"
@@ -1373,6 +1438,7 @@ class SafeActivity : FragmentActivity() {
         }
 
         val tradeEvent = root.optJSONObject("trade_event")
+        chart.setTradeEvent(tradeEvent)
         if (tradeEvent != null && tradeEvent.optString("key").isNotBlank()) {
             val eventType = tradeEvent.optString("type", "TRADE_EVENT").replace("_", " ")
             val eventPrice = tradeEvent.optDouble("price", Double.NaN)
@@ -1603,6 +1669,7 @@ class SafeActivity : FragmentActivity() {
     private fun animateDecisionState(root: JSONObject) {
         if (!::signal.isInitialized) return
         val key = decisionVisualKey(root)
+        if (::decisionMotionView.isInitialized) decisionMotionView.setDecisionState(key)
         if (key == lastDecisionVisualKey) return
         lastDecisionVisualKey = key
         signal.animate().cancel()
@@ -1820,6 +1887,7 @@ class SafeActivity : FragmentActivity() {
                 rootSurface.visibility = View.VISIBLE
                 rootSurface.alpha = 0f
                 rootSurface.animate().alpha(1f).setDuration(220L).start()
+                showLaunchSequence()
             },
             onFailure = { finishAndRemoveTask() }
         )
@@ -2237,19 +2305,30 @@ class SafeActivity : FragmentActivity() {
         val out = JSONArray()
         val prices = mutableListOf<Double>()
 
-        fun add(kind: String, label: String, price: Double, status: String = "", direction: String = "") {
+        fun add(
+            kind: String,
+            label: String,
+            price: Double,
+            status: String = "",
+            direction: String = "",
+            playedAtMs: Long = 0L,
+            hideAfterMs: Long = 0L,
+            reaction: String = ""
+        ) {
             if (!price.isFinite() || price <= 0.0) return
             if (prices.any { kotlin.math.abs(it - price) / kotlin.math.max(price, 1.0) < 0.00010 }) return
             if (out.length() >= 14) return
             prices.add(price)
-            out.put(
-                JSONObject()
-                    .put("kind", kind)
-                    .put("label", label)
-                    .put("price", price)
-                    .put("status", status)
-                    .put("direction", direction)
-            )
+            val item = JSONObject()
+                .put("kind", kind)
+                .put("label", label)
+                .put("price", price)
+                .put("status", status)
+                .put("direction", direction)
+            if (playedAtMs > 0L) item.put("played_at_ms", playedAtMs)
+            if (hideAfterMs > 0L) item.put("hide_after_ms", hideAfterMs)
+            if (reaction.isNotBlank()) item.put("reaction", reaction)
+            out.put(item)
         }
 
         // Preferred source: the backend's reaction-aware chart map. It carries
@@ -2263,7 +2342,10 @@ class SafeActivity : FragmentActivity() {
                     row.optString("label", row.optString("kind", "LEVEL")),
                     row.optDouble("price", Double.NaN),
                     row.optString("status", ""),
-                    row.optString("direction", "")
+                    row.optString("direction", ""),
+                    row.optLong("played_at_ms", 0L),
+                    row.optLong("hide_after_ms", 0L),
+                    row.optString("reaction", "")
                 )
             }
         }

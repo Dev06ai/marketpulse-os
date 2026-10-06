@@ -176,6 +176,22 @@ class MarketChartView @JvmOverloads constructor(
         textSize = dp(8.2f)
         typeface = android.graphics.Typeface.create(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD)
     }
+    private val reactionGlowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeCap = Paint.Cap.ROUND
+    }
+    private val reactionChipPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.FILL
+        color = Color.rgb(16, 22, 30)
+    }
+    private val reactionChipTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        textSize = dp(7.8f)
+        typeface = android.graphics.Typeface.create(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD)
+    }
+    private val tradeHitPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeCap = Paint.Cap.ROUND
+    }
 
     private var candles = JSONArray()
     private var signal: JSONObject? = null
@@ -189,10 +205,85 @@ class MarketChartView @JvmOverloads constructor(
     private var showLevels = true
     private var showVolume = true
 
+    private val overlayStatusByKey = mutableMapOf<String, String>()
+    private val overlayMotionStartedAt = mutableMapOf<String, Long>()
+    private var tradeRevealStartedAt = 0L
+    private var lastSignalMotionKey = ""
+    private var tradeEvent: JSONObject? = null
+    private var lastTradeEventMotionKey = ""
+    private var tradeHitStartedAt = 0L
+
     fun setFeedHealthy(value: Boolean) { feedHealthy = value; invalidate() }
 
+    private fun overlayKey(row: JSONObject): String {
+        val price = row.optDouble("price", Double.NaN)
+        return row.optString("kind", "LEVEL").uppercase(Locale.US) + "|" +
+            row.optString("label", "LEVEL").uppercase(Locale.US) + "|" +
+            if (price.isFinite()) String.format(Locale.US, "%.2f", price) else "NA"
+    }
+
+    private fun applyOverlays(value: JSONArray?) {
+        val next = value ?: JSONArray()
+        val now = SystemClock.elapsedRealtime()
+        val activeKeys = mutableSetOf<String>()
+        for (i in 0 until next.length()) {
+            val row = next.optJSONObject(i) ?: continue
+            val key = overlayKey(row)
+            activeKeys += key
+            val status = row.optString("status", "").uppercase(Locale.US)
+            val previous = overlayStatusByKey[key]
+            if (previous != status && status in setOf("ARMED", "PLAYED", "TRIGGERED", "REACTION_CONFIRMED")) {
+                overlayMotionStartedAt[key] = now
+            }
+            overlayStatusByKey[key] = status
+        }
+        overlayStatusByKey.keys.retainAll(activeKeys)
+        overlayMotionStartedAt.keys.retainAll(activeKeys)
+        overlays = next
+    }
+
+    private fun signalMotionKey(value: JSONObject?): String {
+        if (value == null) return ""
+        return listOf("id", "entry", "stop", "target1", "target2")
+            .joinToString("|") { value.optString(it, "") }
+    }
+
+    private fun applySignal(value: JSONObject?) {
+        val key = signalMotionKey(value)
+        if (key.isNotBlank() && key != lastSignalMotionKey) {
+            lastSignalMotionKey = key
+            tradeRevealStartedAt = SystemClock.elapsedRealtime()
+        } else if (key.isBlank()) {
+            lastSignalMotionKey = ""
+            tradeRevealStartedAt = 0L
+        }
+        signal = value
+    }
+
+    fun setSignal(value: JSONObject?) {
+        applySignal(value)
+        invalidate()
+    }
+
+    fun setTradeEvent(value: JSONObject?) {
+        tradeEvent = value
+        if (value == null) return
+        val type = value.optString("type", "").uppercase(Locale.US)
+        if (type !in setOf("TP1_HIT", "TP2_HIT", "SL_HIT", "EXECUTION_OPEN", "EXECUTION_PENDING")) return
+        val key = value.optString("key").ifBlank {
+            type + "|" + value.optString("signal_id") + "|" +
+                value.optString("trade_id") + "|" + value.optString("price") + "|" +
+                value.optString("ts", value.optString("timestamp"))
+        }
+        if (key.isNotBlank() && key != lastTradeEventMotionKey) {
+            lastTradeEventMotionKey = key
+            tradeHitStartedAt = SystemClock.elapsedRealtime()
+            invalidate()
+        }
+    }
+
     fun setOverlays(value: JSONArray?) {
-        overlays = value ?: JSONArray()
+        applyOverlays(value)
         invalidate()
     }
 
@@ -227,9 +318,9 @@ class MarketChartView @JvmOverloads constructor(
         overlays: JSONArray? = null
     ) {
         this.candles = candles
-        this.signal = signal
+        applySignal(signal)
         this.ema50 = ema50
-        this.overlays = overlays ?: JSONArray()
+        applyOverlays(overlays)
         if (price.isFinite()) this.livePrice = price
 
         val newCount = candles.length()
@@ -399,18 +490,34 @@ class MarketChartView @JvmOverloads constructor(
         if (showLevels) {
             drawStructureOverlays(canvas, left, right, top, priceBottom, low, high)
             signal?.let { s ->
+                val revealBase = if (tradeRevealStartedAt > 0L) {
+                    ((SystemClock.elapsedRealtime() - tradeRevealStartedAt) / 820f).coerceIn(0f, 1f)
+                } else 1f
+                if (revealBase < 1f) postInvalidateOnAnimation()
                 listOf(
                     Triple("entry", "ENTRY", Color.rgb(247, 201, 72)),
                     Triple("stop", "SL", Color.rgb(242, 91, 111)),
                     Triple("target1", "TP1", Color.rgb(76, 211, 166)),
                     Triple("target2", "TP2", Color.rgb(76, 211, 166))
-                ).forEach { (key, label, color) ->
+                ).forEachIndexed { index, (key, label, color) ->
                     val value = s.optDouble(key, Double.NaN)
                     if (value.isFinite() && value in low..high) {
-                        drawTradeLevel(canvas, left, right, mapY(value, low, high, top, priceBottom), label, value, color)
+                        val startAt = index * 0.12f
+                        val reveal = ((revealBase - startAt) / 0.58f).coerceIn(0f, 1f)
+                        drawTradeLevel(
+                            canvas,
+                            left,
+                            right,
+                            mapY(value, low, high, top, priceBottom),
+                            label,
+                            value,
+                            color,
+                            reveal
+                        )
                     }
                 }
             }
+            drawTradeHitEffect(canvas, signal, left, right, top, priceBottom, low, high)
         }
 
         if (!livePrice.isNaN() && visibleLive) {
@@ -764,19 +871,98 @@ class MarketChartView @JvmOverloads constructor(
         y: Float,
         label: String,
         value: Double,
-        color: Int
+        color: Int,
+        reveal: Float = 1f
     ) {
+        if (reveal <= 0f) return
         tradeLevelLinePaint.color = color
-        canvas.drawLine(left, y, right, y, tradeLevelLinePaint)
+        tradeLevelLinePaint.alpha = (205f * reveal).toInt().coerceIn(0, 205)
+        val lineRight = left + (right - left) * reveal
+        canvas.drawLine(left, y, lineRight, y, tradeLevelLinePaint)
+        tradeLevelLinePaint.alpha = 200
+
+        if (reveal < 0.48f) return
+        val labelAlpha = (((reveal - 0.48f) / 0.52f) * 255f).toInt().coerceIn(0, 255)
         val text = "$label  " + String.format(Locale.US, "%.2f", value)
         val pad = dp(5f)
         val w = tradeLevelTextPaint.measureText(text) + pad * 2f
         val h = dp(17f)
         val rect = RectF((right - w - dp(4f)).coerceAtLeast(left + dp(4f)), y - h / 2f, right - dp(4f), y + h / 2f)
         tradeLevelBgPaint.color = Color.rgb(13, 18, 24)
+        tradeLevelBgPaint.alpha = (238f * labelAlpha / 255f).toInt()
         tradeLevelTextPaint.color = color
+        tradeLevelTextPaint.alpha = labelAlpha
         canvas.drawRoundRect(rect, dp(5f), dp(5f), tradeLevelBgPaint)
         canvas.drawText(text, rect.left + pad, rect.centerY() + dp(3f), tradeLevelTextPaint)
+        tradeLevelBgPaint.alpha = 238
+        tradeLevelTextPaint.alpha = 255
+    }
+
+    private fun drawTradeHitEffect(
+        canvas: Canvas,
+        signal: JSONObject?,
+        left: Float,
+        right: Float,
+        top: Float,
+        bottom: Float,
+        low: Double,
+        high: Double
+    ) {
+        if (tradeHitStartedAt <= 0L) return
+        val elapsed = SystemClock.elapsedRealtime() - tradeHitStartedAt
+        val duration = 1050f
+        val progress = (elapsed / duration).coerceIn(0f, 1f)
+        if (progress >= 1f) return
+
+        val event = tradeEvent ?: return
+        val type = event.optString("type", "").uppercase(Locale.US)
+        val eventPrice = event.optDouble("price", Double.NaN)
+        val value = if (eventPrice.isFinite()) {
+            eventPrice
+        } else when (type) {
+            "TP1_HIT" -> signal?.optDouble("target1", Double.NaN) ?: Double.NaN
+            "TP2_HIT" -> signal?.optDouble("target2", Double.NaN) ?: Double.NaN
+            "SL_HIT" -> signal?.optDouble("stop", Double.NaN) ?: Double.NaN
+            "EXECUTION_OPEN", "EXECUTION_PENDING" ->
+                signal?.optDouble("entry", Double.NaN) ?: Double.NaN
+            else -> Double.NaN
+        }
+        if (!value.isFinite() || value !in low..high) return
+
+        val color = when (type) {
+            "TP1_HIT", "TP2_HIT" -> Color.rgb(54, 211, 153)
+            "SL_HIT" -> Color.rgb(255, 82, 105)
+            else -> Color.rgb(247, 201, 72)
+        }
+        val y = mapY(value, low, high, top, bottom)
+        val pulse = kotlin.math.sin(progress * Math.PI).toFloat().coerceAtLeast(0f)
+        val sweepRight = left + (right - left) * progress
+        tradeHitPaint.color = color
+        tradeHitPaint.alpha = (210f * pulse).toInt().coerceIn(0, 255)
+        tradeHitPaint.strokeWidth = dp(1.4f + 2.2f * pulse)
+        canvas.drawLine(left, y, sweepRight, y, tradeHitPaint)
+        canvas.drawCircle(sweepRight.coerceIn(left, right), y, dp(3f + 5f * pulse), tradeHitPaint)
+
+        val label = when (type) {
+            "TP1_HIT" -> "TP1 HIT"
+            "TP2_HIT" -> "TP2 HIT"
+            "SL_HIT" -> "SL HIT"
+            "EXECUTION_OPEN" -> "POSITION OPEN"
+            else -> "EXECUTING"
+        }
+        reactionChipTextPaint.color = color
+        reactionChipTextPaint.alpha = (255f * pulse).toInt().coerceIn(0, 255)
+        reactionChipPaint.alpha = (225f * pulse).toInt().coerceIn(0, 225)
+        val pad = dp(5f)
+        val w = reactionChipTextPaint.measureText(label) + pad * 2f
+        val h = dp(16f)
+        val x = (right - w - dp(7f)).coerceAtLeast(left + dp(8f))
+        val chipY = (y - h - dp(7f)).coerceIn(top + dp(2f), bottom - h - dp(2f))
+        canvas.drawRoundRect(RectF(x, chipY, x + w, chipY + h), dp(5f), dp(5f), reactionChipPaint)
+        canvas.drawText(label, x + pad, chipY + dp(11f), reactionChipTextPaint)
+        reactionChipPaint.alpha = 255
+        reactionChipTextPaint.alpha = 255
+        postInvalidateOnAnimation()
     }
 
     private fun drawStructureOverlays(
@@ -797,7 +983,10 @@ class MarketChartView @JvmOverloads constructor(
             .sortedBy { it.third }
             .take(14)
 
+        val elapsedNow = SystemClock.elapsedRealtime()
+        val wallNow = System.currentTimeMillis()
         var lastLabelBottom = top - dp(20f)
+
         rows.forEach { (row, value, lineY) ->
             val kind = row.optString("kind", "LEVEL").uppercase(Locale.US)
             val color = when (kind) {
@@ -808,15 +997,50 @@ class MarketChartView @JvmOverloads constructor(
                 "DAILY" -> Color.rgb(54, 211, 153)
                 else -> Color.rgb(126, 135, 148)
             }
+            val status = row.optString("status", "").uppercase(Locale.US)
+            val motionStart = overlayMotionStartedAt[overlayKey(row)] ?: 0L
+            val motionAge = if (motionStart > 0L) elapsedNow - motionStart else Long.MAX_VALUE
+
+            val hideAfter = row.optLong("hide_after_ms", 0L)
+            if (hideAfter > 0L && wallNow >= hideAfter) return@forEach
+            val remaining = if (hideAfter > 0L) hideAfter - wallNow else Long.MAX_VALUE
+            val retirementFade = if (remaining in 0..4_000L) (remaining / 4_000f).coerceIn(0f, 1f) else 1f
+            if (remaining in 1..4_000L) postInvalidateOnAnimation()
+
+            val armedPulse = if (status == "ARMED" && motionAge in 0..760L) {
+                kotlin.math.sin((motionAge / 760.0) * Math.PI).toFloat().coerceAtLeast(0f)
+            } else 0f
+            val confirmedPulse = if (status in setOf("PLAYED", "TRIGGERED", "REACTION_CONFIRMED") && motionAge in 0..1_450L) {
+                kotlin.math.sin((motionAge / 1450.0) * Math.PI).toFloat().coerceAtLeast(0f)
+            } else 0f
+            if (armedPulse > 0f || confirmedPulse > 0f) postInvalidateOnAnimation()
+
+            val pulse = max(armedPulse, confirmedPulse)
+            val alpha = (150f * retirementFade * (1f + 0.35f * pulse)).toInt().coerceIn(0, 240)
+            val shrink = (1f - retirementFade) * (right - left) * 0.12f
+            val lineLeft = left + shrink
+            val lineRight = right - shrink
+
             structureLinePaint.color = color
-            canvas.drawLine(left, lineY, right, lineY, structureLinePaint)
+            structureLinePaint.alpha = alpha
+            structureLinePaint.strokeWidth = dp(0.8f + 1.25f * pulse)
+            canvas.drawLine(lineLeft, lineY, lineRight, lineY, structureLinePaint)
+
+            if (pulse > 0f) {
+                reactionGlowPaint.color = color
+                reactionGlowPaint.alpha = (150f * pulse * retirementFade).toInt().coerceIn(0, 255)
+                reactionGlowPaint.strokeWidth = dp(1.6f + 2.8f * pulse)
+                canvas.drawCircle(right - dp(8f), lineY, dp(3f + 7f * pulse), reactionGlowPaint)
+            }
 
             val rawLabel = row.optString("label", kind).uppercase(Locale.US)
             val text = rawLabel.take(14)
             structureLabelTextPaint.color = color
+            structureLabelTextPaint.alpha = (255f * retirementFade).toInt().coerceIn(0, 255)
+            structureLabelBgPaint.alpha = (235f * retirementFade).toInt().coerceIn(0, 235)
             val pad = dp(4f)
             val w = structureLabelTextPaint.measureText(text) + pad * 2f
-            val h = dp(15f)
+            val h = dp(15f) * (0.92f + 0.08f * retirementFade)
             var labelTop = (lineY - h / 2f).coerceIn(top + dp(2f), bottom - h - dp(2f))
             if (labelTop < lastLabelBottom + dp(2f)) {
                 labelTop = (lastLabelBottom + dp(2f)).coerceAtMost(bottom - h - dp(2f))
@@ -825,6 +1049,30 @@ class MarketChartView @JvmOverloads constructor(
             canvas.drawRoundRect(rect, dp(4f), dp(4f), structureLabelBgPaint)
             canvas.drawText(text, rect.left + pad, rect.centerY() + dp(2.8f), structureLabelTextPaint)
             lastLabelBottom = rect.bottom
+
+            if (confirmedPulse > 0f) {
+                val confirmedText = "REACTION CONFIRMED"
+                reactionChipTextPaint.color = color
+                reactionChipTextPaint.alpha = (255f * confirmedPulse).toInt().coerceIn(0, 255)
+                reactionChipPaint.alpha = (225f * confirmedPulse).toInt().coerceIn(0, 225)
+                val chipPad = dp(5f)
+                val chipW = reactionChipTextPaint.measureText(confirmedText) + chipPad * 2f
+                val chipH = dp(16f)
+                val chipLeft = (right - chipW - dp(7f)).coerceAtLeast(left + dp(82f))
+                val chipTop = (lineY - chipH - dp(6f)).coerceIn(top + dp(2f), bottom - chipH - dp(2f))
+                canvas.drawRoundRect(
+                    RectF(chipLeft, chipTop, chipLeft + chipW, chipTop + chipH),
+                    dp(5f), dp(5f), reactionChipPaint
+                )
+                canvas.drawText(confirmedText, chipLeft + chipPad, chipTop + dp(11f), reactionChipTextPaint)
+            }
+
+            structureLinePaint.alpha = 150
+            structureLinePaint.strokeWidth = dp(.8f)
+            structureLabelBgPaint.alpha = 235
+            structureLabelTextPaint.alpha = 255
+            reactionChipPaint.alpha = 255
+            reactionChipTextPaint.alpha = 255
         }
     }
 

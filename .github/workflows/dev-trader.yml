@@ -1,4 +1,4 @@
-# Build 113: reaction-aware chart levels + level-following readiness UI.
+# Build 115: KYVORIQ Motion Studio release pipeline.
 name: KYVORIQ CI
 
 on:
@@ -121,7 +121,7 @@ jobs:
           gradle-version: '9.6.0'
       - name: Build Android debug APK
         working-directory: dev-trader/android
-        run: gradle assembleDebug --stacktrace -PdevTraderVersionCode=114 -PdevTraderVersionName=0.17.1
+        run: gradle assembleDebug --stacktrace -PdevTraderVersionCode=115 -PdevTraderVersionName=0.18.0
       - name: Build signed Android release APK
         if: steps.changed.outputs.android_changed == 'true'
         working-directory: dev-trader/android
@@ -132,7 +132,7 @@ jobs:
           DEV_TRADER_KEY_PASSWORD: ${{ secrets.DEV_TRADER_KEY_PASSWORD }}
         run: |
           echo "${{ secrets.DEV_TRADER_KEYSTORE_BASE64 }}" | base64 --decode > "$DEV_TRADER_KEYSTORE_PATH"
-          gradle assembleRelease --stacktrace -PdevTraderVersionCode=114 -PdevTraderVersionName=0.17.1
+          gradle assembleRelease --stacktrace -PdevTraderVersionCode=115 -PdevTraderVersionName=0.18.0
           if unzip -l app/build/outputs/apk/release/app-release.apk | grep -q ui_preview.json; then
             echo 'Debug preview data must never be included in release APKs.'
             exit 1
@@ -203,7 +203,7 @@ jobs:
           mkdir -p release
           cp dist/app-release.apk release/app-release.apk
           sha256sum release/app-release.apk | awk '{print $1}' > release/app-release.sha256
-          echo "tag=dev-trader-v0.17.1-114" >> "$GITHUB_OUTPUT"
+          echo "tag=dev-trader-v0.18.0-115" >> "$GITHUB_OUTPUT"
           echo "sha256=$(cat release/app-release.sha256)" >> "$GITHUB_OUTPUT"
       - name: Create GitHub release
         env:
@@ -213,7 +213,7 @@ jobs:
             echo "This release already exists; refusing to replace a published APK."
             exit 1
           fi
-          gh release create "${{ steps.release.outputs.tag }}" release/app-release.apk --target "$GITHUB_SHA" --title "KYVORIQ 0.17.1 (114)" --notes "Privacy Shield Studio: replaces the stock Android privacy dialog with a branded dark/gold bottom sheet, live protection summary, premium toggle cards, biometric confirmation flow, sensitive-value masking control, haptic feedback and smooth sheet transitions. Trading logic is unchanged."
+          gh release create "${{ steps.release.outputs.tag }}" release/app-release.apk --target "$GITHUB_SHA" --title "KYVORIQ 0.18.0 (115)" --notes "Motion Studio: sub-second branded launch sequence, Decision Center scanning sweeps and state pulses, chart-level reaction pulses with confirmed-reaction chips, sequential trade-line reveals, TP/SL/execution sweeps, risk-heat motion, played-level retirement fades, and staggered Insights entrance motion. Trading logic is unchanged."
       - name: Publish verified update manifest
         env:
           SHA256: "${{ steps.release.outputs.sha256 }}"
@@ -227,11 +227,11 @@ jobs:
           data = json.loads(p.read_text())
           data.update({
               "enabled": True,
-              "versionCode": 114,
-              "versionName": "0.17.1",
-              "apkUrl": "https://github.com/Dev06ai/marketpulse-os/releases/download/dev-trader-v0.17.1-114/app-release.apk",
+              "versionCode": 115,
+              "versionName": "0.18.0",
+              "apkUrl": "https://github.com/Dev06ai/marketpulse-os/releases/download/dev-trader-v0.18.0-115/app-release.apk",
               "sha256": os.environ["SHA256"],
-              "notes": "KYVORIQ 0.17.1 • Privacy Shield Studio • premium dark/gold privacy sheet • biometric lock + sensitive-value controls • polished motion/haptics"
+              "notes": "KYVORIQ 0.18.0 • Motion Studio • launch sequence • chart reaction/execution motion • risk heat animation • Insights motion"
           })
           p.write_text(json.dumps(data, indent=2) + "\n")
           PY
