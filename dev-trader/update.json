@@ -1,8 +1,8 @@
 {
   "enabled": true,
-  "versionCode": 112,
-  "versionName": "0.16.2",
-  "apkUrl": "https://github.com/Dev06ai/marketpulse-os/releases/download/dev-trader-v0.16.2-112/app-release.apk",
-  "sha256": "2a30fbd50ded9294450f515b1c686fbb6bb2fbc6f21e10131136c18ce1f33174",
-  "notes": "KYVORIQ 0.16.2 \u2022 Premium Price Motion \u2022 VSYNC-native BTC transitions \u2022 directional tick flash \u2022 up to 120Hz where supported"
+  "versionCode": 113,
+  "versionName": "0.17.0",
+  "apkUrl": "https://github.com/Dev06ai/marketpulse-os/releases/download/dev-trader-v0.17.0-113/app-release.apk",
+  "sha256": "51c39c7fa32df2f80dfd0ae97d3e25b44a46ef9f328ee4f16390507d4ffa1e30",
+  "notes": "KYVORIQ 0.17.0 \u2022 Reaction Map \u2022 daily/NPOC/W-open/multi-TF OB levels \u2022 semantic dotted colors \u2022 reaction-aware readiness UI"
 }
