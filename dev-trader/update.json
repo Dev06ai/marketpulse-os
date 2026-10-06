@@ -1,8 +1,8 @@
 {
   "enabled": true,
-  "versionCode": 104,
-  "versionName": "0.15.3",
-  "apkUrl": "https://github.com/Dev06ai/marketpulse-os/releases/download/dev-trader-v0.15.3-104/app-release.apk",
-  "sha256": "89141232d154de5809bb08455ef4cbb2bb3c7daf1417e5e7c13a22f04c3d8843",
-  "notes": "KYVORIQ 0.15.3 \u2022 indicator toggles \u2022 rich crosshair \u2022 semantic trade levels \u2022 audited structure overlays \u2022 reset-to-live"
+  "versionCode": 105,
+  "versionName": "0.15.4",
+  "apkUrl": "https://github.com/Dev06ai/marketpulse-os/releases/download/dev-trader-v0.15.4-105/app-release.apk",
+  "sha256": "019eca19dfe3359a2b90c63dbda4c5518f0e92091becb4d18f39fab7d995cebe",
+  "notes": "KYVORIQ 0.15.4 \u2022 live D-Line/OB/exact-NPOC overlays \u2022 indicator toggles \u2022 rich crosshair \u2022 semantic trade levels"
 }
