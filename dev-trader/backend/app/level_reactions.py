@@ -120,17 +120,19 @@ class LevelReactionTracker:
         candle = self._live_candle(state)
         raw_levels = collect_reaction_levels(features, sfp_hunter)
 
-        # Drop completed levels only after their requested visible grace period.
-        self.played = {
-            key: value
-            for key, value in self.played.items()
-            if now < int(value.get("hide_after_ms") or 0)
-        }
+        # Retain played state for as long as the same structural level still
+        # exists. After its grace period the level stays retired/hidden instead
+        # of immediately re-arming on the same candle. A changed daily/OB/NPOC
+        # price naturally creates a new id and becomes eligible again.
+        active_ids = {row["id"] for row in raw_levels}
+        self.played = {key: value for key, value in self.played.items() if key in active_ids}
 
         if price is None or candle is None:
             levels = []
             for row in raw_levels:
                 played = self.played.get(row["id"])
+                if played and now >= int(played.get("hide_after_ms") or 0):
+                    continue
                 if played:
                     row = dict(row, **played, state="PLAYED")
                 else:
@@ -156,6 +158,8 @@ class LevelReactionTracker:
             level = float(row["price"])
             played = self.played.get(row["id"])
             if played:
+                if now >= int(played.get("hide_after_ms") or 0):
+                    continue
                 row.update(played)
                 row["state"] = "PLAYED"
                 levels.append(row)
