@@ -69,6 +69,9 @@ class FakeClient:
             "pricePlace": "1",
         }
 
+    def set_leverage(self, symbol, direction, leverage, margin_mode=None):
+        return {"code": "00000", "data": "success"}
+
     def place_market_order(self, *args):
         return {"code": "00000", "data": {"orderId": "123", "clientOid": args[-1]}}
 
@@ -110,13 +113,21 @@ def test_demo_executor_sizes_from_stop_distance_and_opens_once(monkeypatch):
         "evidence": {},
     }
 
+    leverage_calls = []
+    executor.client.set_leverage = lambda symbol, direction, leverage, margin_mode=None: leverage_calls.append(
+        (symbol, direction, leverage, margin_mode)
+    ) or {"code": "00000"}
     result = asyncio.run(executor.handle_signal(signal))
     assert result["ok"] is True
+    assert leverage_calls == [("BTCUSDT", "LONG", 20, "isolated")]
     trade = executor.history(1)[0]
     assert trade["status"] == "OPEN"
     assert trade["filled_qty"] == 0.1
     assert trade["entry_price"] == 100000
     assert trade["direction"] == "LONG"
+    assert trade["leverage"] == 20
+    assert 50 <= trade["planned_margin_usdt"] <= 75
+    assert trade["confidence_band"] == "MEDIUM"
     assert learner.events[-1][0] == "EXECUTION_OPEN"
 
     duplicate = asyncio.run(executor.handle_signal(signal))
@@ -455,11 +466,26 @@ def test_execution_recomputes_fee_adjusted_rr(monkeypatch, tmp_path):
     assert not executor.data['trades']
 
 
-def test_actual_sized_risk_includes_fees(monkeypatch, tmp_path):
+def test_confidence_margin_sizing_uses_high_band_at_20x(monkeypatch, tmp_path):
     executor = audit_executor(monkeypatch, tmp_path)
     qty, risk, _ = asyncio.run(executor._risk_size(audit_signal()))
-    assert risk <= 2.5
+    margin = qty * 100000 / executor.leverage
+    assert executor.leverage == 20
+    assert 76 <= margin <= 100
     assert abs(risk - qty * (500 + (100000 + 99500) * .0006)) < 1e-8
+
+
+def test_medium_confidence_margin_scales_from_50_to_75(monkeypatch, tmp_path):
+    executor = audit_executor(monkeypatch, tmp_path)
+    low = dict(audit_signal(), confidence=.70)
+    mid = dict(audit_signal(), confidence=.80)
+    qty_low, _, _ = asyncio.run(executor._risk_size(low))
+    qty_mid, _, _ = asyncio.run(executor._risk_size(mid))
+    margin_low = qty_low * 100000 / executor.leverage
+    margin_mid = qty_mid * 100000 / executor.leverage
+    assert 50 <= margin_low <= 75
+    assert 50 <= margin_mid <= 75
+    assert margin_mid > margin_low
 
 
 def test_two_losses_pause_new_entries(monkeypatch, tmp_path):
@@ -557,11 +583,12 @@ def test_v3_instrument_rules_reach_sizing(monkeypatch, tmp_path):
     executor.client.contract_config = lambda _: config
     qty, risk, actual = asyncio.run(executor._risk_size(audit_signal()))
     assert actual == config
-    assert qty == .004
-    assert risk <= 2.5
-    executor.client.contract_config = lambda _: dict(config, minTradeNum='.01')
+    assert qty == .016
+    assert 76 <= qty * 100000 / executor.leverage <= 100
+    assert risk > 0
+    executor.client.contract_config = lambda _: dict(config, minTradeNum='.03')
     import pytest
-    with pytest.raises(Exception, match='minimum quantity'):
+    with pytest.raises(Exception, match='margin band'):
         asyncio.run(executor._risk_size(audit_signal()))
 
 
@@ -603,9 +630,9 @@ def test_observed_equity_guard_and_drawdown_risk_reduction(monkeypatch, tmp_path
     allowed, reason = executor._signal_allowed(audit_signal())
     assert not allowed and 'equity fell' in reason
     executor.data['account_metrics']['equity_usdt'] = 970
-    qty, risk, _ = asyncio.run(executor._risk_size(audit_signal()))
-    assert risk <= 970 * .0025 * .5
-    assert qty < .004
+    import pytest
+    with pytest.raises(Exception, match='risk guard'):
+        asyncio.run(executor._risk_size(audit_signal()))
 
 
 def test_feed_execution_is_scheduled_without_waiting_for_exchange(monkeypatch):

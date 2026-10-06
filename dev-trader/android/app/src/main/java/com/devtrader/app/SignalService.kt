@@ -24,7 +24,7 @@ import java.util.Locale
 import java.util.concurrent.TimeUnit
 import kotlin.math.min
 
-// Build 107: compact notification layout fix for OEM collapsed-height clipping.
+// Build 108: confidence-sized 20x demo execution notifications.
 class SignalService : Service() {
     companion object {
         private const val SERVICE_CHANNEL = "dev_trader_background"
@@ -536,16 +536,25 @@ class SignalService : Service() {
             val plannedEntry = event.optDouble("entry_plan", event.optDouble("entry_price", Double.NaN))
             val stop = event.optDouble("stop_loss", Double.NaN)
             val tp = event.optDouble("take_profit", Double.NaN)
-            body = "$setup\nPlanned entry " + format(plannedEntry) + " • SL " + format(stop) + " • TP " + format(tp) + "\nBitget Demo order submitted; waiting for exchange fill"
+            val margin = event.optDouble("planned_margin_usdt", Double.NaN)
+            val leverage = event.optInt("leverage", 20)
+            val band = event.optString("confidence_band", "")
+            body = "$setup\nPlanned entry " + format(plannedEntry) + " • SL " + format(stop) + " • TP " + format(tp) +
+                (if (margin.isFinite()) "\nMargin " + format(margin) + " USDT • " + leverage + "x" + (if (band.isNotBlank()) " • $band confidence" else "") else "") +
+                "\nBitget Demo order submitted; waiting for exchange fill"
         } else if (type == "EXECUTION_OPEN") {
             val entry = event.optDouble("entry_price", Double.NaN)
             val plannedEntry = event.optDouble("entry_plan", Double.NaN)
             val stop = event.optDouble("stop_loss", Double.NaN)
             val tp = event.optDouble("take_profit", Double.NaN)
             val qty = event.optDouble("filled_qty", Double.NaN)
+            val margin = event.optDouble("planned_margin_usdt", Double.NaN)
+            val leverage = event.optInt("leverage", 20)
+            val band = event.optString("confidence_band", "")
             body = "$setup\nActual fill " + format(entry) +
                 " • SL " + format(stop) + " • TP " + format(tp) +
                 (if (qty.isFinite()) "\nFilled " + String.format(Locale.US, "%.6f BTC", qty) else "") +
+                (if (margin.isFinite()) "\nMargin " + format(margin) + " USDT • " + leverage + "x" + (if (band.isNotBlank()) " • $band confidence" else "") else "") +
                 "\nBitget Demo execution" +
                 (if (plannedEntry.isFinite()) "\nPlanned entry " + format(plannedEntry) else "")
         } else if (type == "EXECUTION_CLOSED") {

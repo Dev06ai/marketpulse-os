@@ -18,13 +18,13 @@ reconciliation passed. See `FREE_MIGRATION.md` for the cutover and storage limit
 
 Hosted engine **0.13.0 / refined-demo-v2** includes confirmed breakout/retest candidates alongside SFP, D-Line, MSS and early momentum. Opposing major levels can veto cramped entries; higher-timeframe structure supplies independent confirmation. Elliott and harmonic classifications remain heuristic context. Candle-derived POC/VWAP estimates are labeled explicitly and do not claim exact trade-level NPOC.
 
-Default risk is 0.25% of available collateral, bounded by observed equity. Estimated entry/exit taker fees count toward stop risk. Observed equity drawdown above 2% halves the configured risk budget. Exchange minimum quantities, quantity increments, price increments and notional rules govern sizing.
+Demo entries use confidence-sized isolated margin at 20x leverage. Medium-confidence Grade-A signals target 50–75 USDT margin; high-confidence signals target 76–100 USDT, scaled within each band by confidence. Estimated entry/exit taker fees and stop distance still pass a separate planned-loss guard, and an observed equity drawdown above 2% halves that guard. Exchange minimum quantities, quantity increments, price increments and notional rules can block a trade rather than silently falling below its confidence band.
 
 Only fresh Grade-A candidates with configured quality thresholds can reach execution. The executor checks Bitget bid/ask, rejects wide/crossed quotes, excessive entry drift and net reward/risk below 1.5 after estimated fees. Rising open interest alone does not establish directional momentum. A historical setup veto is checked again at admission.
 
 One unresolved position is allowed at a time. New entries pause after two consecutive daily losses, the realized daily loss cap, a 1% fall from the first observed equity of the UTC day, the three-entry daily cap, or degraded exposure reconciliation. Stable client IDs and SUBMISSION_UNKNOWN recovery prevent treating a timeout as proof that no order was accepted. The market callback schedules execution asynchronously; slow private exchange calls do not hold up incoming market messages.
 
-Filled positions require verified exchange stop coverage. Missing coverage is repaired with a full-position market stop; uncertainty halts entries and permits one close only after verifying remaining quantity. Pending orders, incomplete fill/fee accounting and decisions that expire during sizing block new exposure. Planned stop risk is bounded by the remaining daily loss budget.
+Filled positions require verified exchange stop coverage. Missing coverage is repaired with a full-position market stop; uncertainty halts entries and permits one close only after verifying remaining quantity. Pending orders, incomplete fill/fee accounting and decisions that expire during sizing block new exposure. Bitget UTA leverage is explicitly set per symbol before submission; if 20x cannot be confirmed, the demo entry is skipped.
 
 ## Accounting and evidence
 

@@ -86,6 +86,40 @@ def test_private_client_is_locked_without_demo_mode():
             os.environ["BITGET_DEMO_TRADING"] = old
 
 
+def test_set_leverage_uses_uta_v3_symbol_and_isolated_side(monkeypatch):
+    monkeypatch.setenv("BITGET_DEMO_TRADING", "true")
+    client = BitgetDemoClient("k", "s", "p")
+    sent = {}
+
+    def fake_post(path, payload):
+        sent["path"] = path
+        sent["payload"] = payload
+        return {"code": "00000", "data": "success"}
+
+    monkeypatch.setattr(client, "_post", fake_post)
+    result = client.set_leverage("BTCUSDT", "LONG", 20, "isolated")
+
+    assert result["code"] == "00000"
+    assert sent["path"] == "/api/v3/account/set-leverage"
+    assert sent["payload"] == {
+        "category": "USDT-FUTURES",
+        "symbol": "BTCUSDT",
+        "leverage": "20",
+        "marginMode": "isolated",
+        "posSide": "long",
+    }
+
+
+def test_set_leverage_crossed_does_not_send_position_side(monkeypatch):
+    monkeypatch.setenv("BITGET_DEMO_TRADING", "true")
+    client = BitgetDemoClient("k", "s", "p")
+    sent = {}
+    monkeypatch.setattr(client, "_post", lambda path, payload: sent.update(path=path, payload=payload) or {"code": "00000"})
+    client.set_leverage("BTCUSDT", "SHORT", 20, "cross")
+    assert sent["payload"]["marginMode"] == "crossed"
+    assert "posSide" not in sent["payload"]
+
+
 def test_uta_place_market_order_payload(monkeypatch):
     monkeypatch.setenv("BITGET_DEMO_TRADING", "true")
     client = BitgetDemoClient("k", "s", "p")

@@ -192,6 +192,41 @@ class BitgetDemoClient:
         data = self._data(self._get("/api/v3/account/settings"))
         return data if isinstance(data, dict) else {}
 
+    def set_leverage(
+        self,
+        symbol: str,
+        direction: str,
+        leverage: int,
+        margin_mode: str | None = None,
+    ) -> dict[str, Any]:
+        """Set futures leverage for one symbol before opening demo exposure.
+
+        Bitget UTA v3 configures leverage per trading pair. Isolated margin also
+        requires the intended position side, so fail closed rather than assuming
+        the exchange account already matches the strategy.
+        """
+        direction = str(direction or "").upper()
+        if direction not in {"LONG", "SHORT"}:
+            raise BitgetDemoError("A LONG or SHORT direction is required to set leverage.")
+        try:
+            leverage_value = int(leverage)
+        except (TypeError, ValueError) as exc:
+            raise BitgetDemoError("Leverage must be an integer.") from exc
+        if leverage_value < 1 or leverage_value > 125:
+            raise BitgetDemoError("Requested leverage is outside the verified 1x-125x guard.")
+
+        raw_mode = str(margin_mode or os.getenv("BITGET_MARGIN_MODE", "isolated")).lower()
+        mode = "isolated" if raw_mode == "isolated" else "crossed"
+        payload = {
+            "category": self.product_type,
+            "symbol": symbol,
+            "leverage": str(leverage_value),
+            "marginMode": mode,
+        }
+        if mode == "isolated":
+            payload["posSide"] = "long" if direction == "LONG" else "short"
+        return self._post("/api/v3/account/set-leverage", payload)
+
     def contract_config(self, symbol: str = "BTCUSDT") -> dict[str, Any]:
         rows = self._list(
             self._get(

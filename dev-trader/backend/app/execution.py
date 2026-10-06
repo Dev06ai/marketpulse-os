@@ -7,7 +7,7 @@ import os
 import threading
 import time
 import hashlib
-from decimal import Decimal, ROUND_DOWN
+from decimal import Decimal, ROUND_DOWN, ROUND_UP
 from pathlib import Path
 from typing import Any, Awaitable, Callable
 
@@ -31,10 +31,30 @@ class DemoExecutionEngine:
         self.symbol = os.getenv("SYMBOL", "BTCUSDT")
         self.session_start_ms = int(os.getenv("DEMO_SESSION_START_MS", "0") or 0)
         self.session_baseline = self._num(os.getenv("DEMO_SESSION_BASELINE_EQUITY_USDT", "0"))
-        self.risk_pct = float(os.getenv("BITGET_DEMO_RISK_PCT", "0.25"))
-        if not math.isfinite(self.risk_pct) or not 0 < self.risk_pct <= 1:
-            raise ValueError("BITGET_DEMO_RISK_PCT must be finite and between 0 and 1 percent.")
-        self.max_notional = float(os.getenv("BITGET_DEMO_MAX_NOTIONAL_USDT", "500"))
+        self.leverage = int(os.getenv("BITGET_DEMO_LEVERAGE", "20"))
+        if not 1 <= self.leverage <= 125:
+            raise ValueError("BITGET_DEMO_LEVERAGE must be between 1 and 125.")
+        self.medium_margin_min = float(os.getenv("BITGET_DEMO_MEDIUM_MARGIN_MIN_USDT", "50"))
+        self.medium_margin_max = float(os.getenv("BITGET_DEMO_MEDIUM_MARGIN_MAX_USDT", "75"))
+        self.high_margin_min = float(os.getenv("BITGET_DEMO_HIGH_MARGIN_MIN_USDT", "76"))
+        self.high_margin_max = float(os.getenv("BITGET_DEMO_HIGH_MARGIN_MAX_USDT", "100"))
+        self.high_confidence_threshold = float(os.getenv("BITGET_DEMO_HIGH_CONFIDENCE", "0.85"))
+        if not (0 < self.medium_margin_min <= self.medium_margin_max < self.high_margin_min <= self.high_margin_max):
+            raise ValueError("Demo confidence-margin bands are invalid.")
+        if not 0.70 <= self.high_confidence_threshold < 1.0:
+            raise ValueError("BITGET_DEMO_HIGH_CONFIDENCE must be between 0.70 and 1.0.")
+        self.max_planned_loss_pct = float(os.getenv("BITGET_DEMO_MAX_PLANNED_LOSS_PCT", "2.0"))
+        if not math.isfinite(self.max_planned_loss_pct) or not 0 < self.max_planned_loss_pct <= 5:
+            raise ValueError("BITGET_DEMO_MAX_PLANNED_LOSS_PCT must be finite and between 0 and 5 percent.")
+        self.risk_pct = self.max_planned_loss_pct
+        self.margin_reserve = max(0.0, float(os.getenv("BITGET_DEMO_MARGIN_RESERVE_USDT", "25")))
+        # New key intentionally supersedes the old 500-USDT notional cap from the
+        # previous risk-sized executor. At 20x, a 100-USDT margin target needs
+        # about 2,000 USDT notional.
+        self.max_notional = float(os.getenv(
+            "BITGET_DEMO_CONFIDENCE_MAX_NOTIONAL_USDT",
+            str(self.high_margin_max * self.leverage),
+        ))
         self.max_daily = int(os.getenv("BITGET_DEMO_MAX_DAILY_TRADES", "3"))
         # The feed does not force reversals: admission requires flat exposure.
         self.replace_position_on_signal = False
@@ -157,6 +177,38 @@ class DemoExecutionEngine:
             return 0.0
         return float(value)
 
+    @staticmethod
+    def _normalize_qty_up(qty: float, config: dict[str, Any]) -> float:
+        step = DemoExecutionEngine._num(config.get("sizeMultiplier"), 0.0)
+        min_qty = DemoExecutionEngine._num(
+            config.get("minTradeNum")
+            or config.get("minOrderSize")
+            or config.get("minimumOrderSize"),
+            0.0,
+        )
+        if step <= 0:
+            places = int(DemoExecutionEngine._num(config.get("volumePlace"), 3))
+            quantum = Decimal("1").scaleb(-max(0, places))
+        else:
+            quantum = Decimal(str(step))
+        base = max(qty, min_qty or 0.0, 0.0)
+        value = (Decimal(str(base)) / quantum).to_integral_value(rounding=ROUND_UP) * quantum
+        return float(value)
+
+    def _confidence_margin_target(self, confidence: float) -> tuple[float, float, float, str]:
+        min_conf = float(os.getenv("QUALITY_MIN_CONFIDENCE", "0.70"))
+        if not math.isfinite(confidence) or confidence < min_conf:
+            raise BitgetDemoError("Signal confidence is below the demo execution threshold.")
+        if confidence < self.high_confidence_threshold:
+            span = max(self.high_confidence_threshold - min_conf, 1e-9)
+            progress = min(1.0, max(0.0, (confidence - min_conf) / span))
+            target = self.medium_margin_min + progress * (self.medium_margin_max - self.medium_margin_min)
+            return target, self.medium_margin_min, self.medium_margin_max, "MEDIUM"
+        span = max(1.0 - self.high_confidence_threshold, 1e-9)
+        progress = min(1.0, max(0.0, (confidence - self.high_confidence_threshold) / span))
+        target = self.high_margin_min + progress * (self.high_margin_max - self.high_margin_min)
+        return target, self.high_margin_min, self.high_margin_max, "HIGH"
+
     async def _contract(self) -> dict[str, Any]:
         result = await asyncio.to_thread(self.client.contract_config, self.symbol)
         rows = result.get("data") if isinstance(result, dict) else None
@@ -175,42 +227,71 @@ class DemoExecutionEngine:
     async def _risk_size(self, signal: dict[str, Any]) -> tuple[float, float, dict[str, Any]]:
         entry = self._num(signal.get("entry"))
         stop = self._num(signal.get("stop"))
+        confidence = self._num(signal.get("confidence"))
         if entry <= 0 or stop <= 0 or entry == stop:
             raise BitgetDemoError("Signal has invalid entry/stop prices.")
+
         balance = await asyncio.to_thread(self.client.available_balance, self.symbol)
         if balance <= 0:
             raise BitgetDemoError("Bitget Demo futures balance is 0 USDT. Add demo funds before autonomous execution can open a position.")
         account = self.data.get("account_metrics") or {}
         equity = self._num(account.get("equity_usdt"))
         balance = min(balance, equity) if equity > 0 else balance
-        # Scale risk down after an observed equity drawdown; never scale above
-        # the configured cap to recover losses.
-        peak = self._num(account.get("observed_peak_usdt"), equity)
-        risk_factor = 0.5 if peak > 0 and equity > 0 and equity < peak * 0.98 else 1.0
-        risk_usdt = balance * self.risk_pct * risk_factor / 100.0
-        ledger = self.data.get("fill_ledger") or {}
-        if ledger.get("complete_window") and ledger.get("fee_accounting_complete"):
-            day_start = int(time.time()) // 86400 * 86400000
-            daily_net = self._num((ledger.get("daily_net_usdt") or {}).get(str(day_start)))
-            loss_limit = max(0.0, float(os.getenv("BITGET_DEMO_MAX_DAILY_LOSS_PCT", "1.0")))
-            remaining_budget = max(0.0, balance * loss_limit / 100.0 + min(0.0, daily_net))
-            risk_usdt = min(risk_usdt, remaining_budget)
+
+        target_margin, band_min, band_max, band = self._confidence_margin_target(confidence)
+        spendable = max(0.0, balance - self.margin_reserve)
+        if spendable < band_min:
+            raise BitgetDemoError(
+                f"Available demo margin is below the {band} confidence minimum ({band_min:.0f} USDT)."
+            )
+        target_margin = min(target_margin, spendable, band_max)
+        target_notional = min(target_margin * self.leverage, self.max_notional)
+        if target_notional < band_min * self.leverage:
+            raise BitgetDemoError(
+                f"Configured notional cap cannot fund the {band} confidence margin band at {self.leverage}x."
+            )
+
+        config = await self._contract()
+        raw_qty = target_notional / entry
+        qty = self._normalize_qty(raw_qty, config)
+        actual_margin = qty * entry / self.leverage if qty > 0 else 0.0
+        if actual_margin < band_min:
+            qty = self._normalize_qty_up((band_min * self.leverage) / entry, config)
+            actual_margin = qty * entry / self.leverage
+        if actual_margin > band_max or qty * entry > self.max_notional:
+            qty = self._normalize_qty(min((band_max * self.leverage) / entry, self.max_notional / entry), config)
+            actual_margin = qty * entry / self.leverage if qty > 0 else 0.0
+
         distance = abs(entry - stop)
         fee_rate = max(0.0, float(os.getenv("BITGET_DEMO_TAKER_FEE_RATE", "0.0006")))
-        raw_qty = risk_usdt / (distance + (entry + stop) * fee_rate)
-        raw_qty = min(raw_qty, self.max_notional / entry)
-        config = await self._contract()
-        qty = self._normalize_qty(raw_qty, config)
-        min_usdt = self._num(
-            config.get("minTradeUSDT")
-            or config.get("minOrderAmount"),
-            0.0,
-        )
+        unit_risk = distance + (entry + stop) * fee_rate
+        peak = self._num(account.get("observed_peak_usdt"), equity)
+        risk_factor = 0.5 if peak > 0 and equity > 0 and equity < peak * 0.98 else 1.0
+        risk_cap = balance * self.max_planned_loss_pct * risk_factor / 100.0
+        planned_risk = qty * unit_risk
+        if planned_risk > risk_cap and unit_risk > 0:
+            reduced = self._normalize_qty(min(risk_cap / unit_risk, self.max_notional / entry), config)
+            reduced_margin = reduced * entry / self.leverage if reduced > 0 else 0.0
+            if reduced_margin < band_min:
+                raise BitgetDemoError(
+                    f"{band.title()}-confidence sizing needs at least {band_min:.0f} USDT margin, "
+                    f"but the stop/fee risk guard allows only {reduced_margin:.2f} USDT at {self.leverage}x."
+                )
+            qty = reduced
+            actual_margin = reduced_margin
+            planned_risk = qty * unit_risk
+
+        min_usdt = self._num(config.get("minTradeUSDT") or config.get("minOrderAmount"), 0.0)
         if qty <= 0:
             raise BitgetDemoError("Calculated demo position is below Bitget's minimum quantity.")
         if min_usdt > 0 and qty * entry < min_usdt:
             raise BitgetDemoError(f"Calculated position is below Bitget minimum notional ({min_usdt:g} USDT).")
-        return qty, qty * (distance + (entry + stop) * fee_rate), config
+        if not (band_min - 1e-6 <= actual_margin <= band_max + 1e-6):
+            raise BitgetDemoError(
+                f"Exchange quantity precision cannot keep the trade inside the {band} margin band "
+                f"({band_min:.0f}-{band_max:.0f} USDT)."
+            )
+        return qty, planned_risk, config
 
     def _signal_allowed(self, signal: dict[str, Any], *, reconciliation_locked: bool = False) -> tuple[bool, str]:
         if os.getenv("DEMO_EXECUTION_PAUSED", "false").lower() == "true" or os.getenv("DEMO_RESET_REQUEST_MS", ""):
@@ -400,6 +481,9 @@ class DemoExecutionEngine:
             tp = self._num(signal.get("target2") or signal.get("target") or signal.get("target1"))
             stop = float(self._format_price(stop, config, str(signal.get("direction")), "sl"))
             tp = float(self._format_price(tp, config, str(signal.get("direction")), "tp"))
+            margin_target, margin_min, margin_max, confidence_band = self._confidence_margin_target(
+                self._num(signal.get("confidence"))
+            )
             qty, risk_usdt, config = await self._risk_size(dict(signal, entry=reference_price, stop=stop))
             # Private sizing calls can be slow. Re-read the executable quote,
             # validate the rounded geometry and only reduce quantity if needed.
@@ -412,14 +496,36 @@ class DemoExecutionEngine:
             unit_risk = abs(reference_price-stop)+(reference_price+stop)*fee_rate
             if qty*unit_risk > risk_usdt or qty*reference_price > self.max_notional:
                 qty = min(qty, self._normalize_qty(min(risk_usdt/unit_risk, self.max_notional/reference_price), config))
+            planned_margin = qty * reference_price / self.leverage if qty > 0 else 0.0
+            if planned_margin < margin_min:
+                raised = self._normalize_qty_up((margin_min * self.leverage) / reference_price, config)
+                if raised * unit_risk <= risk_usdt + 1e-9 and raised * reference_price <= self.max_notional:
+                    qty = raised
+                    planned_margin = qty * reference_price / self.leverage
+            if planned_margin > margin_max:
+                qty = self._normalize_qty((margin_max * self.leverage) / reference_price, config)
+                planned_margin = qty * reference_price / self.leverage if qty > 0 else 0.0
             if qty <= 0 or qty*reference_price < self._num(config.get("minTradeUSDT") or config.get("minOrderAmount")):
                 return {"ok": False, "skipped": True, "reason": "Updated execution quote leaves less than the exchange minimum position size."}
+            if planned_margin < margin_min - 1e-6:
+                return {"ok": False, "skipped": True, "reason": f"Updated quote cannot preserve the {confidence_band} margin band ({margin_min:.0f}-{margin_max:.0f} USDT)."}
             risk_usdt = qty*unit_risk
+            planned_notional = qty * reference_price
             # Sizing/settings requests can take time. Do not submit an entry
             # whose decision expired while waiting for those responses.
             allowed, reason = self._signal_allowed(signal, reconciliation_locked=True)
             if not allowed:
                 return {"ok": False, "skipped": True, "reason": reason}
+            try:
+                await asyncio.to_thread(
+                    self.client.set_leverage,
+                    self.symbol,
+                    str(signal.get("direction")),
+                    self.leverage,
+                    os.getenv("BITGET_MARGIN_MODE", "isolated"),
+                )
+            except Exception as exc:
+                return {"ok": False, "skipped": True, "reason": f"Cannot verify {self.leverage}x Bitget Demo leverage: {exc}"}
             # Bitget UTA permits at most 32 characters; use a deterministic ID
             # for retry/recovery rather than truncating the setup unpredictably.
             client_oid = client_identity(signal, risk_usdt)
@@ -429,6 +535,8 @@ class DemoExecutionEngine:
                 entry_plan=entry_plan, execution_reference_price=reference_price,
                 stop_loss=stop, take_profit=tp, target1=signal.get("target1"), requested_qty=qty,
                 filled_qty=0.0, entry_price=0.0, planned_risk_usdt=risk_usdt,
+                leverage=self.leverage, planned_margin_usdt=round(planned_margin, 4),
+                planned_notional_usdt=round(planned_notional, 4), confidence_band=confidence_band,
                 opened_ts=int(time.time()*1000), closed_ts=0, status="SUBMISSION_UNKNOWN",
                 signal_snapshot=dict(signal))
             # Save the exact request context before POST. A crash or timeout
@@ -473,6 +581,11 @@ class DemoExecutionEngine:
                 "exit_price": 0.0,
                 "risk_pct": self.risk_pct,
                 "planned_risk_usdt": risk_usdt,
+                "leverage": self.leverage,
+                "planned_margin_usdt": round(planned_margin, 4),
+                "planned_notional_usdt": round(planned_notional, 4),
+                "confidence_band": confidence_band,
+                "margin_target_usdt": round(margin_target, 4),
                 "realized_pnl_usdt": 0.0,
                 "net_profit_usdt": 0.0,
                 "fees_usdt": 0.0,
@@ -507,6 +620,10 @@ class DemoExecutionEngine:
                     "stop_loss": stop,
                     "take_profit": tp,
                     "requested_qty": qty,
+                    "leverage": self.leverage,
+                    "planned_margin_usdt": round(planned_margin, 4),
+                    "planned_notional_usdt": round(planned_notional, 4),
+                    "confidence_band": confidence_band,
                     "actual_fill_confirmed": False,
                     "ts": now,
                 }
@@ -789,6 +906,10 @@ class DemoExecutionEngine:
                         "stop_loss": self._num(trade.get("stop_loss")),
                         "take_profit": self._num(trade.get("take_profit")),
                         "filled_qty": trade["filled_qty"],
+                        "leverage": int(trade.get("leverage") or self.leverage),
+                        "planned_margin_usdt": self._num(trade.get("planned_margin_usdt")),
+                        "planned_notional_usdt": self._num(trade.get("planned_notional_usdt")),
+                        "confidence_band": trade.get("confidence_band"),
                         "actual_fill_confirmed": True,
                         "ts": fill_ts,
                         "note": "Bitget Demo market order filled; actual exchange fill price is authoritative.",
@@ -1500,8 +1621,17 @@ class DemoExecutionEngine:
             "daily_executions": self._today_trades(),
             "daily_cap": self.max_daily,
             "risk_pct": self.risk_pct,
+            "max_planned_loss_pct": self.max_planned_loss_pct,
+            "leverage": self.leverage,
             "max_notional_usdt": self.max_notional,
-            "execution_policy": "ONE_POSITION_FEE_ADJUSTED",
+            "margin_sizing": {
+                "medium_min_usdt": self.medium_margin_min,
+                "medium_max_usdt": self.medium_margin_max,
+                "high_min_usdt": self.high_margin_min,
+                "high_max_usdt": self.high_margin_max,
+                "high_confidence_threshold": self.high_confidence_threshold,
+            },
+            "execution_policy": "CONFIDENCE_MARGIN_20X_FEE_ADJUSTED",
             "max_daily_loss_pct": float(os.getenv("BITGET_DEMO_MAX_DAILY_LOSS_PCT", "1.0")),
             "consecutive_loss_pause": 2,
             "min_net_rr": float(os.getenv("BITGET_DEMO_MIN_NET_RR", "1.5")),
