@@ -105,7 +105,7 @@ jobs:
           gradle-version: '9.6.0'
       - name: Build Android debug APK
         working-directory: dev-trader/android
-        run: gradle assembleDebug --stacktrace -PdevTraderVersionCode=104 -PdevTraderVersionName=0.15.3
+        run: gradle assembleDebug --stacktrace -PdevTraderVersionCode=105 -PdevTraderVersionName=0.15.4
       - name: Build signed Android release APK
         if: steps.changed.outputs.android_changed == 'true'
         working-directory: dev-trader/android
@@ -116,7 +116,7 @@ jobs:
           DEV_TRADER_KEY_PASSWORD: ${{ secrets.DEV_TRADER_KEY_PASSWORD }}
         run: |
           echo "${{ secrets.DEV_TRADER_KEYSTORE_BASE64 }}" | base64 --decode > "$DEV_TRADER_KEYSTORE_PATH"
-          gradle assembleRelease --stacktrace -PdevTraderVersionCode=104 -PdevTraderVersionName=0.15.3
+          gradle assembleRelease --stacktrace -PdevTraderVersionCode=105 -PdevTraderVersionName=0.15.4
           if unzip -l app/build/outputs/apk/release/app-release.apk | grep -q ui_preview.json; then
             echo 'Debug preview data must never be included in release APKs.'
             exit 1
@@ -187,7 +187,7 @@ jobs:
           mkdir -p release
           cp dist/app-release.apk release/app-release.apk
           sha256sum release/app-release.apk | awk '{print $1}' > release/app-release.sha256
-          echo "tag=dev-trader-v0.15.3-104" >> "$GITHUB_OUTPUT"
+          echo "tag=dev-trader-v0.15.4-105" >> "$GITHUB_OUTPUT"
           echo "sha256=$(cat release/app-release.sha256)" >> "$GITHUB_OUTPUT"
       - name: Create GitHub release
         env:
@@ -197,7 +197,7 @@ jobs:
             echo "This release already exists; refusing to replace a published APK."
             exit 1
           fi
-          gh release create "${{ steps.release.outputs.tag }}" release/app-release.apk --target "$GITHUB_SHA" --title "KYVORIQ 0.15.3 (104)" --notes "Chart Pro controls: tappable BB/EMA/levels/volume toggles, richer snapped crosshair with OHLC/volume/change, semantic entry-SL-TP overlays, audited SFP/D-Line/OB/NPOC chart levels, and clearer reset-to-live behavior. Trading logic is unchanged."
+          gh release create "${{ steps.release.outputs.tag }}" release/app-release.apk --target "$GITHUB_SHA" --title "KYVORIQ 0.15.4 (105)" --notes "Chart Pro live-overlay completion: D-Line, order-block midpoint and exact NPOC are hydrated from the existing live host diagnostics, while preserving SFP/liquidity fallbacks, indicator toggles, rich crosshair and semantic trade overlays. Trading logic is unchanged."
       - name: Publish verified update manifest
         env:
           SHA256: "${{ steps.release.outputs.sha256 }}"
@@ -211,11 +211,11 @@ jobs:
           data = json.loads(p.read_text())
           data.update({
               "enabled": True,
-              "versionCode": 104,
-              "versionName": "0.15.3",
-              "apkUrl": "https://github.com/Dev06ai/marketpulse-os/releases/download/dev-trader-v0.15.3-104/app-release.apk",
+              "versionCode": 105,
+              "versionName": "0.15.4",
+              "apkUrl": "https://github.com/Dev06ai/marketpulse-os/releases/download/dev-trader-v0.15.4-105/app-release.apk",
               "sha256": os.environ["SHA256"],
-              "notes": "KYVORIQ 0.15.3 • indicator toggles • rich crosshair • semantic trade levels • audited structure overlays • reset-to-live"
+              "notes": "KYVORIQ 0.15.4 • live D-Line/OB/exact-NPOC overlays • indicator toggles • rich crosshair • semantic trade levels"
           })
           p.write_text(json.dumps(data, indent=2) + "\n")
           PY

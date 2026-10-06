@@ -191,6 +191,11 @@ class MarketChartView @JvmOverloads constructor(
 
     fun setFeedHealthy(value: Boolean) { feedHealthy = value; invalidate() }
 
+    fun setOverlays(value: JSONArray?) {
+        overlays = value ?: JSONArray()
+        invalidate()
+    }
+
     private var followLive = true
     private var candleShift = 0f
     private var verticalOffset = 0.0

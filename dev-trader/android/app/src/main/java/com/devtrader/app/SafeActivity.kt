@@ -127,6 +127,9 @@ class SafeActivity : Activity() {
     private var lastChartRequestMs = 0L
     private var chartRequestInFlight = false
     private var chartRequestToken = 0L
+    private var lastOverlayRequestMs = 0L
+    private var overlayFeatures: JSONObject? = null
+    private var overlayStrategy: JSONObject? = null
     private var lastBootstrapMs = 0L
     private var lastBootstrapSuccessMs = 0L
     private var bootstrapInFlight = false
@@ -1021,6 +1024,7 @@ class SafeActivity : Activity() {
                             lastPrice,
                             chartOverlays(latestRoot)
                         )
+                        requestChartOverlays(force)
                     }
                 }
             }
@@ -1396,34 +1400,115 @@ class SafeActivity : Activity() {
     }
 
     private fun chartOverlays(root: JSONObject?): JSONArray {
-        if (root == null) return JSONArray()
-        root.optJSONArray("chart_overlays")?.let { return it }
-
-        // Backward-compatible fallback while a backend rollout is converging:
-        // SFP and the nearest liquidity references already exist in dashboard frames.
         val out = JSONArray()
-        val engine = root.optJSONObject("engine")
-        val sfp = engine?.optJSONObject("sfp_hunter")
-        val sfpLevel = sfp?.optDouble("target_level", Double.NaN) ?: Double.NaN
-        if (sfpLevel.isFinite() && sfpLevel > 0) {
+        val prices = mutableListOf<Double>()
+
+        fun add(kind: String, label: String, price: Double, status: String = "") {
+            if (!price.isFinite() || price <= 0.0) return
+            if (prices.any { kotlin.math.abs(it - price) / kotlin.math.max(price, 1.0) < 0.00015 }) return
+            if (out.length() >= 6) return
+            prices.add(price)
             out.put(JSONObject()
-                .put("kind", "SFP")
-                .put("label", "SFP")
-                .put("price", sfpLevel)
-                .put("status", sfp?.optString("status", "WATCH")))
+                .put("kind", kind)
+                .put("label", label)
+                .put("price", price)
+                .put("status", status))
         }
-        val liquidity = engine?.optJSONObject("liquidity_map")
+
+        // Newer hosts can provide the compact map directly.
+        root?.optJSONArray("chart_overlays")?.let { arr ->
+            for (i in 0 until arr.length()) {
+                val row = arr.optJSONObject(i) ?: continue
+                add(
+                    row.optString("kind", "LEVEL"),
+                    row.optString("label", row.optString("kind", "LEVEL")),
+                    row.optDouble("price", Double.NaN),
+                    row.optString("status", "")
+                )
+            }
+        }
+
+        // Existing dashboard frames already contain SFP + liquidity references.
+        val engine = root?.optJSONObject("engine")
+        val sfp = overlayStrategy?.optJSONObject("sfp_hunter") ?: engine?.optJSONObject("sfp_hunter")
+        add(
+            "SFP",
+            "SFP",
+            sfp?.optDouble("target_level", Double.NaN) ?: Double.NaN,
+            sfp?.optString("status", "WATCH") ?: "WATCH"
+        )
+
+        // The currently deployed host exposes full diagnostics at /strategy.
+        val dline = overlayStrategy?.optJSONObject("setups")?.optJSONObject("D-Line")
+        add(
+            "DLINE",
+            "D-LINE",
+            dline?.optDouble("projected_line", Double.NaN) ?: Double.NaN,
+            dline?.optString("status", "") ?: ""
+        )
+
+        // /features exposes the exact order-block midpoint calculated by the engine.
+        val obMid = overlayFeatures?.optDouble("order_block_mid", Double.NaN) ?: Double.NaN
+        val obDirection = overlayFeatures?.optString("order_block_direction", "NONE") ?: "NONE"
+        if (obDirection != "NONE") {
+            add("OB", if (obDirection == "BULLISH") "BULL OB" else "BEAR OB", obMid)
+        }
+
+        // Never display an estimated candle POC as NPOC. Only the engine's
+        // executed-trade profile may set exact_npoc=true.
+        val volume = overlayFeatures?.optJSONObject("volume_context")
+        if (volume?.optBoolean("exact_npoc", false) == true) {
+            add("NPOC", "NPOC", volume.optDouble("untouched_poc", Double.NaN), "UNTOUCHED")
+        }
+
+        val liquidity = overlayStrategy?.optJSONObject("liquidity_map") ?: engine?.optJSONObject("liquidity_map")
+        val names = mapOf(
+            "recent 15m high" to "15M H",
+            "recent 15m low" to "15M L",
+            "previous day high" to "PDH",
+            "previous day low" to "PDL",
+            "previous week high" to "PWH",
+            "previous week low" to "PWL",
+            "weekly open" to "W OPEN"
+        )
         listOf("above", "below").forEach { side ->
-            val row = liquidity?.optJSONArray(side)?.optJSONObject(0)
-            val price = row?.optDouble("price", Double.NaN) ?: Double.NaN
-            if (price.isFinite() && price > 0) {
-                out.put(JSONObject()
-                    .put("kind", "LIQUIDITY")
-                    .put("label", row?.optString("title", "LIQ") ?: "LIQ")
-                    .put("price", price))
+            val rows = liquidity?.optJSONArray(side)
+            for (i in 0 until minOf(2, rows?.length() ?: 0)) {
+                val row = rows?.optJSONObject(i) ?: continue
+                val raw = row.optString("title", "LIQ")
+                add("LIQUIDITY", names[raw.lowercase(Locale.US)] ?: raw.take(10).uppercase(Locale.US), row.optDouble("price", Double.NaN))
             }
         }
         return out
+    }
+
+    private fun requestChartOverlays(force: Boolean = false) {
+        val now = System.currentTimeMillis()
+        if (!force && now - lastOverlayRequestMs < 60_000L) return
+        lastOverlayRequestMs = now
+
+        fun apply() {
+            if (::chart.isInitialized) chart.setOverlays(chartOverlays(latestRoot))
+        }
+
+        // These endpoints already exist on the deployed free host, so D-Line,
+        // OB and exact NPOC overlays work without waiting for a backend redeploy.
+        getJson(backendBase + "/features") { ok, body ->
+            handler.post {
+                if (ok) safe {
+                    overlayFeatures = JSONObject(body)
+                    apply()
+                }
+            }
+        }
+        getJson(backendBase + "/strategy") { ok, body ->
+            handler.post {
+                if (ok) safe {
+                    overlayStrategy = JSONObject(body)
+                    apply()
+                }
+            }
+        }
     }
 
     private fun requestChartIfNeeded(force: Boolean = false) {
@@ -1462,6 +1547,7 @@ class SafeActivity : Activity() {
                         chartOverlays(latestRoot)
                     )
                     refreshTimeframeButtonsForCurrentSelection()
+                    requestChartOverlays(force)
                 }
             }
         }
