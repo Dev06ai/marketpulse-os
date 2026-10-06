@@ -402,7 +402,10 @@ class SafeActivity : FragmentActivity() {
         }
         timeframeButtonRow = tfRow
         tradePage.addView(tfRow, margins(bottom = 6))
-        chart = MarketChartView(this).apply { minimumHeight = 0; contentDescription = "Interactive price chart" }
+        chart = MarketChartView(this).apply {
+            minimumHeight = dp(if (compactViewport) 140 else 0)
+            contentDescription = "Interactive price chart"
+        }
         tradePage.addView(chart, LinearLayout.LayoutParams(-1, 0, 1f).apply { bottomMargin = dp(8) })
         val setup = premiumCard("DECISION CENTER", "NO TRADE  •  SCANNING\nWaiting for verified market data.", if (compactViewport) 11.5f else 13f)
         decisionContainer = setup.first
@@ -414,7 +417,7 @@ class SafeActivity : FragmentActivity() {
             showTradeDetails()
         }
         setup.first.contentDescription = "Open complete trade setup"
-        tradePage.addView(setup.first, LinearLayout.LayoutParams(-1, dp(if (compactViewport) 110 else 132)).apply { bottomMargin = dp(8) })
+        tradePage.addView(setup.first, LinearLayout.LayoutParams(-1, dp(if (compactViewport) 92 else 132)).apply { bottomMargin = dp(8) })
         val tradeTools = LinearLayout(this)
         val details = compactPillButton("SETUP DETAILS")
         details.setOnClickListener {
