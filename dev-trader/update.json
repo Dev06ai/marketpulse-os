@@ -1,8 +1,8 @@
 {
   "enabled": true,
-  "versionCode": 114,
-  "versionName": "0.17.1",
-  "apkUrl": "https://github.com/Dev06ai/marketpulse-os/releases/download/dev-trader-v0.17.1-114/app-release.apk",
-  "sha256": "a86fcedcd7d19410f4e29eceb078e9ebaa8f2a67629bb83cceec27c9afed5db8",
-  "notes": "KYVORIQ 0.17.1 \u2022 Privacy Shield Studio \u2022 premium dark/gold privacy sheet \u2022 biometric lock + sensitive-value controls \u2022 polished motion/haptics"
+  "versionCode": 115,
+  "versionName": "0.18.0",
+  "apkUrl": "https://github.com/Dev06ai/marketpulse-os/releases/download/dev-trader-v0.18.0-115/app-release.apk",
+  "sha256": "52fd25ff3a7bf6c6bb64e072d175ec7bcdc7981a42fa4e5d9d494906f6779050",
+  "notes": "KYVORIQ 0.18.0 \u2022 Motion Studio \u2022 launch sequence \u2022 chart reaction/execution motion \u2022 risk heat animation \u2022 Insights motion"
 }
