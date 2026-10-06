@@ -1,6 +1,7 @@
 // Build 101: KYVORIQ visual identity — gold/charcoal system, branded navigation and mark.
 // Build 99: free-host migration with compact mobile delivery.
-// Build 110: KYVORIQ Premium Experience Pack — motion, ambience, risk/alert intelligence, privacy and widget.
+// Build 112: high-refresh VSYNC price motion for the in-app BTC hero.
+ // Build 110: KYVORIQ Premium Experience Pack — motion, ambience, risk/alert intelligence, privacy and widget.
 // Build 109: KYVORIQ premium semantic haptics across navigation, chart tools and calculator.
 // Build 108: confidence-sized demo execution UI with live-backend capability detection.
 // Build 83: show Bitget Demo funding readiness and demo execution state.
@@ -106,7 +107,7 @@ class SafeActivity : FragmentActivity() {
     private var stopped = false
 
     private lateinit var status: TextView
-    private lateinit var price: TextView
+    private lateinit var price: PremiumPriceView
     private lateinit var oiView: TextView
     private lateinit var signal: TextView
     private lateinit var integrity: TextView
@@ -241,6 +242,7 @@ class SafeActivity : FragmentActivity() {
             window.isNavigationBarContrastEnforced = false
         }
         installCrashReporter()
+        requestPremiumRefreshRate()
         // Resolve preview mode before building the UI so automated visual checks
         // never inherit a device's privacy-lock preference.
         debugPreview = BuildConfig.DEBUG && intent.getBooleanExtra("visual_preview", false)
@@ -277,6 +279,26 @@ class SafeActivity : FragmentActivity() {
             safe { watchdog() }
         }, 3000L)
         handler.postDelayed(keepaliveRunnable, KEEPALIVE_INTERVAL_MS)
+    }
+
+    private fun requestPremiumRefreshRate() {
+        runCatching {
+            val display = windowManager.defaultDisplay
+            val current = display.mode
+            val sameResolution = display.supportedModes.filter {
+                it.physicalWidth == current.physicalWidth &&
+                    it.physicalHeight == current.physicalHeight
+            }
+            val preferred = sameResolution
+                .filter { it.refreshRate <= 120.5f }
+                .maxByOrNull { it.refreshRate }
+                ?: sameResolution.maxByOrNull { it.refreshRate }
+                ?: current
+            val attrs = window.attributes
+            attrs.preferredDisplayModeId = preferred.modeId
+            attrs.preferredRefreshRate = preferred.refreshRate
+            window.attributes = attrs
+        }
     }
 
     private fun installCrashReporter() {
@@ -611,7 +633,7 @@ class SafeActivity : FragmentActivity() {
         }
 
     private data class HeroRefs(
-        val price: TextView,
+        val price: PremiumPriceView,
         val oi: TextView,
         val status: TextView,
         val container: LinearLayout
@@ -645,14 +667,11 @@ class SafeActivity : FragmentActivity() {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
         }
-        val priceView = TextView(this).apply {
-            text = priceBtcAccent("BTC  —")
-            textSize = if (compactViewport) 22f else 26f
-            setTextColor(Color.WHITE)
-            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-            includeFontPadding = false
+        val priceView = PremiumPriceView(this).apply {
+            setTextSizeSp(if (compactViewport) 22f else 26f)
+            setPrice(Double.NaN, animate = false)
         }
-        row.addView(priceView, LinearLayout.LayoutParams(0, dp(if (compactViewport) 32 else 38), 1f))
+        row.addView(priceView, LinearLayout.LayoutParams(0, dp(if (compactViewport) 34 else 40), 1f))
 
         val statusView = TextView(this).apply {
             text = "DATA CONNECTING"
@@ -1165,10 +1184,7 @@ class SafeActivity : FragmentActivity() {
             else -> health
         }
         setStatusAnimated(statusLabel)
-        price.text = priceBtcAccent(
-            "BTC  " + if (priceValue.isNaN()) "—"
-            else String.format(Locale.US, "%,.2f", priceValue)
-        )
+        price.setPrice(priceValue, animate = !debugPreview)
         oiView.text = "OI  " + if (oi.isNaN()) "—"
             else String.format(Locale.US, "%,.2f", oi)
         integrity.text = when {
