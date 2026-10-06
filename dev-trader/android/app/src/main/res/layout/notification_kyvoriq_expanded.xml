@@ -1,0 +1,118 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:background="@drawable/notification_surface"
+    android:paddingLeft="12dp"
+    android:paddingTop="11dp"
+    android:paddingRight="12dp"
+    android:paddingBottom="10dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+
+        <FrameLayout
+            android:layout_width="44dp"
+            android:layout_height="44dp"
+            android:background="@drawable/notification_logo_bg"
+            android:padding="8dp">
+
+            <ImageView
+                android:id="@+id/notif_logo"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:scaleType="fitCenter"
+                android:contentDescription="KYVORIQ"/>
+        </FrameLayout>
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginStart="11dp"
+            android:orientation="vertical">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="AI POWERED TRADING ASSISTANT"
+                android:textColor="#9CA3AF"
+                android:textSize="8sp"
+                android:fontFamily="sans-serif-medium"
+                android:letterSpacing="0.10"/>
+
+            <TextView
+                android:id="@+id/notif_title"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="1dp"
+                android:text="KYVORIQ"
+                android:textColor="#F7C948"
+                android:textSize="16sp"
+                android:textStyle="bold"
+                android:fontFamily="sans-serif-medium"
+                android:letterSpacing="0.07"/>
+
+            <TextView
+                android:id="@+id/notif_subtitle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:maxLines="1"
+                android:ellipsize="end"
+                android:text="Signal engine online"
+                android:textColor="#F3F4F6"
+                android:textSize="12sp"/>
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/notif_chip"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:minWidth="50dp"
+            android:gravity="center"
+            android:paddingLeft="8dp"
+            android:paddingTop="5dp"
+            android:paddingRight="8dp"
+            android:paddingBottom="5dp"
+            android:text="LIVE"
+            android:textSize="9sp"
+            android:textStyle="bold"
+            android:fontFamily="sans-serif-medium"/>
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/notif_body"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:text="Monitoring BTCUSDT • background alerts armed"
+        android:textColor="#B8C0CC"
+        android:textSize="11sp"
+        android:maxLines="2"
+        android:ellipsize="end"/>
+
+    <ProgressBar
+        android:id="@+id/notif_pulse"
+        style="?android:attr/progressBarStyleHorizontal"
+        android:layout_width="match_parent"
+        android:layout_height="3dp"
+        android:layout_marginTop="9dp"
+        android:indeterminate="true"
+        android:indeterminateTint="@color/kyvoriq_gold"
+        android:indeterminateTintMode="src_in"/>
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="7dp"
+        android:text="DISCIPLINE  •  INTELLIGENCE  •  EXECUTION"
+        android:textColor="#7E8794"
+        android:textSize="8sp"
+        android:fontFamily="sans-serif-medium"
+        android:letterSpacing="0.06"/>
+</LinearLayout>

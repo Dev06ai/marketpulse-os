@@ -11,6 +11,8 @@ import android.os.Build
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
+import android.view.View
+import android.widget.RemoteViews
 import androidx.core.app.NotificationCompat
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -22,7 +24,7 @@ import java.util.Locale
 import java.util.concurrent.TimeUnit
 import kotlin.math.min
 
-// Build 73 release marker: explicit application keepalive + self-healing live connection.
+// Build 106: KYVORIQ branded notification system + static status-bar glyph.
 class SignalService : Service() {
     companion object {
         private const val SERVICE_CHANNEL = "dev_trader_background"
@@ -36,6 +38,23 @@ class SignalService : Service() {
         private const val KEEPALIVE_INTERVAL_MS = 15_000L
     }
 
+    private enum class ServiceUiState {
+        CONNECTING,
+        LIVE,
+        DEGRADED,
+        RECONNECTING
+    }
+
+    private data class ServiceNotificationModel(
+        val chip: String,
+        val subtitle: String,
+        val body: String,
+        val chipBackground: Int,
+        val chipTextColor: Int,
+        val animate: Boolean
+    )
+
+    private var lastServiceUiState: ServiceUiState? = null
     private val handler = Handler(Looper.getMainLooper())
     private val keepaliveRunnable = object : Runnable {
         override fun run() {
@@ -104,8 +123,9 @@ class SignalService : Service() {
                 "KYVORIQ Background Service",
                 NotificationManager.IMPORTANCE_LOW
             ).apply {
-                description = "Keeps live signal monitoring running in the background."
+                description = "KYVORIQ live market and signal monitoring."
                 setShowBadge(false)
+                lockscreenVisibility = Notification.VISIBILITY_PRIVATE
             }
         )
         manager.createNotificationChannel(
@@ -114,28 +134,17 @@ class SignalService : Service() {
                 "KYVORIQ Signal Alerts",
                 NotificationManager.IMPORTANCE_HIGH
             ).apply {
-                description = "Immediate BTC long/short signal notifications."
+                description = "KYVORIQ trade, setup and execution alerts."
                 enableVibration(true)
                 setShowBadge(true)
+                lockscreenVisibility = Notification.VISIBILITY_PRIVATE
             }
         )
     }
 
     private fun startForegroundNotification() {
-        val launchIntent = Intent(this, SafeActivity::class.java)
-        val pending = PendingIntent.getActivity(
-            this, 3100, launchIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-        val notification = NotificationCompat.Builder(this, SERVICE_CHANNEL)
-            .setSmallIcon(android.R.drawable.ic_popup_sync)
-            .setContentTitle("KYVORIQ")
-            .setContentText("Background signal monitoring is active")
-            .setContentIntent(pending)
-            .setOngoing(true)
-            .setCategory(Notification.CATEGORY_SERVICE)
-            .setPriority(NotificationCompat.PRIORITY_LOW)
-            .build()
+        val notification = buildServiceNotification(ServiceUiState.CONNECTING)
+        lastServiceUiState = ServiceUiState.CONNECTING
 
         if (Build.VERSION.SDK_INT >= 29) {
             startForeground(
@@ -178,7 +187,7 @@ class SignalService : Service() {
                             }.toString()
                         )
                     }
-                    updateServiceNotification("Live signal monitoring connected")
+                    updateServiceNotification(ServiceUiState.LIVE)
                 }
 
                 override fun onMessage(ws: WebSocket, text: String) {
@@ -236,7 +245,7 @@ class SignalService : Service() {
                         // socket failure; the reconnect loop is automatic. Surface the
                         // reconnect state only after repeated failures.
                         if (reconnectAttempt >= 2) {
-                            updateServiceNotification("Reconnecting to live signal feed…")
+                            updateServiceNotification(ServiceUiState.RECONNECTING)
                         }
                         scheduleReconnect()
                     }
@@ -286,7 +295,7 @@ class SignalService : Service() {
             ).enqueue(object : okhttp3.Callback {
                 override fun onFailure(call: okhttp3.Call, e: java.io.IOException) {
                     if (!stopped && staleChecks >= 3) {
-                        updateServiceNotification("Live feed reconnecting…")
+                        updateServiceNotification(ServiceUiState.RECONNECTING)
                         connect(force = true)
                     }
                 }
@@ -295,7 +304,7 @@ class SignalService : Service() {
                     response.use {
                         if (!it.isSuccessful || it.body == null) {
                             if (!stopped && staleChecks >= 3) {
-                                updateServiceNotification("Live feed reconnecting…")
+                                updateServiceNotification(ServiceUiState.RECONNECTING)
                                 connect(force = true)
                             }
                             return
@@ -319,6 +328,10 @@ class SignalService : Service() {
                             if (backendHealthy) {
                                 if (!stopped) {
                                     staleChecks = 0
+                                    updateServiceNotification(
+                                        if (dataHealth == "DEGRADED") ServiceUiState.DEGRADED
+                                        else ServiceUiState.LIVE
+                                    )
                                     socket?.send(
                                         JSONObject().apply {
                                             put("type", "keepalive")
@@ -327,7 +340,7 @@ class SignalService : Service() {
                                     )
                                 }
                             } else if (!stopped && staleChecks >= 3) {
-                                updateServiceNotification("Live feed reconnecting…")
+                                updateServiceNotification(ServiceUiState.RECONNECTING)
                                 connect(force = true)
                             }
                         }
@@ -337,23 +350,98 @@ class SignalService : Service() {
         }
     }
 
-    private fun updateServiceNotification(text: String) {
+    private fun serviceNotificationModel(state: ServiceUiState): ServiceNotificationModel =
+        when (state) {
+            ServiceUiState.LIVE -> ServiceNotificationModel(
+                chip = "LIVE",
+                subtitle = "Signal engine online",
+                body = "Monitoring BTCUSDT • background alerts armed",
+                chipBackground = R.drawable.notification_chip_live,
+                chipTextColor = getColor(R.color.kyvoriq_charcoal),
+                animate = true
+            )
+            ServiceUiState.DEGRADED -> ServiceNotificationModel(
+                chip = "DEGRADED",
+                subtitle = "Market feed needs attention",
+                body = "Monitoring continues • fresh data required for entries",
+                chipBackground = R.drawable.notification_chip_degraded,
+                chipTextColor = getColor(R.color.kyvoriq_charcoal),
+                animate = false
+            )
+            ServiceUiState.RECONNECTING -> ServiceNotificationModel(
+                chip = "RECONNECTING",
+                subtitle = "Restoring live monitoring",
+                body = "KYVORIQ is retrying the secure signal channel",
+                chipBackground = R.drawable.notification_chip_reconnecting,
+                chipTextColor = getColor(R.color.kyvoriq_gold),
+                animate = true
+            )
+            ServiceUiState.CONNECTING -> ServiceNotificationModel(
+                chip = "STARTING",
+                subtitle = "Starting signal engine",
+                body = "Opening secure live monitoring channel",
+                chipBackground = R.drawable.notification_chip_connecting,
+                chipTextColor = getColor(R.color.kyvoriq_gold),
+                animate = true
+            )
+        }
+
+    private fun applyServiceRemoteViews(
+        views: RemoteViews,
+        model: ServiceNotificationModel,
+        expanded: Boolean
+    ) {
+        views.setImageViewResource(R.id.notif_logo, R.drawable.kyvoriq_mark)
+        views.setTextViewText(R.id.notif_title, "KYVORIQ")
+        views.setTextViewText(R.id.notif_subtitle, model.subtitle)
+        views.setTextViewText(R.id.notif_chip, model.chip)
+        views.setInt(R.id.notif_chip, "setBackgroundResource", model.chipBackground)
+        views.setTextColor(R.id.notif_chip, model.chipTextColor)
+        views.setViewVisibility(R.id.notif_pulse, if (model.animate) View.VISIBLE else View.INVISIBLE)
+        if (expanded) {
+            views.setTextViewText(R.id.notif_body, model.body)
+        }
+    }
+
+    private fun buildServiceNotification(state: ServiceUiState): Notification {
+        val model = serviceNotificationModel(state)
         val launchIntent = Intent(this, SafeActivity::class.java)
         val pending = PendingIntent.getActivity(
             this, 3100, launchIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
-        val notification = NotificationCompat.Builder(this, SERVICE_CHANNEL)
-            .setSmallIcon(android.R.drawable.ic_popup_sync)
+
+        val collapsed = RemoteViews(packageName, R.layout.notification_kyvoriq_collapsed).apply {
+            applyServiceRemoteViews(this, model, expanded = false)
+        }
+        val expanded = RemoteViews(packageName, R.layout.notification_kyvoriq_expanded).apply {
+            applyServiceRemoteViews(this, model, expanded = true)
+        }
+
+        return NotificationCompat.Builder(this, SERVICE_CHANNEL)
+            .setSmallIcon(R.drawable.ic_stat_kyvoriq)
+            .setColor(getColor(R.color.kyvoriq_gold))
             .setContentTitle("KYVORIQ")
-            .setContentText(text)
+            .setContentText(model.subtitle)
             .setContentIntent(pending)
+            .setCustomContentView(collapsed)
+            .setCustomBigContentView(expanded)
+            .setStyle(NotificationCompat.DecoratedCustomViewStyle())
             .setOngoing(true)
+            .setSilent(true)
+            .setOnlyAlertOnce(true)
+            .setShowWhen(false)
+            .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
             .setCategory(Notification.CATEGORY_SERVICE)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .build()
+    }
+
+    private fun updateServiceNotification(state: ServiceUiState) {
+        if (lastServiceUiState == state) return
+        lastServiceUiState = state
         getSystemService(NotificationManager::class.java)
-            .notify(SERVICE_NOTIFICATION_ID, notification)
+            .notify(SERVICE_NOTIFICATION_ID, buildServiceNotification(state))
     }
 
     private fun notifySignal(signal: JSONObject) {
@@ -403,7 +491,9 @@ class SignalService : Service() {
         )
 
         val notification = NotificationCompat.Builder(this, SIGNAL_CHANNEL)
-            .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .setSmallIcon(R.drawable.ic_stat_kyvoriq)
+            .setColor(getColor(R.color.kyvoriq_gold))
+            .setColorized(false)
             .setContentTitle(title)
             .setContentText(body.replace("\n", " · "))
             .setStyle(NotificationCompat.BigTextStyle().bigText(body))
@@ -486,7 +576,9 @@ class SignalService : Service() {
         )
         val notificationId = 3200 + (event.optString("key").hashCode() and 0x7fffffff) % 50000
         val notification = NotificationCompat.Builder(this, SIGNAL_CHANNEL)
-            .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .setSmallIcon(R.drawable.ic_stat_kyvoriq)
+            .setColor(getColor(R.color.kyvoriq_gold))
+            .setColorized(false)
             .setContentTitle(title)
             .setContentText(body.replace("\n", " · "))
             .setStyle(NotificationCompat.BigTextStyle().bigText(body))
@@ -511,7 +603,9 @@ class SignalService : Service() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
         val notification = NotificationCompat.Builder(this, SIGNAL_CHANNEL)
-            .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .setSmallIcon(R.drawable.ic_stat_kyvoriq)
+            .setColor(getColor(R.color.kyvoriq_gold))
+            .setColorized(false)
             .setContentTitle(title.ifBlank { "KYVORIQ Opportunity" })
             .setContentText(body.ifBlank { "Opportunity developing." })
             .setStyle(NotificationCompat.BigTextStyle().bigText(body))
