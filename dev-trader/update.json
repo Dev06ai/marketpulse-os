@@ -1,8 +1,8 @@
 {
   "enabled": true,
-  "versionCode": 107,
-  "versionName": "0.15.6",
-  "apkUrl": "https://github.com/Dev06ai/marketpulse-os/releases/download/dev-trader-v0.15.6-107/app-release.apk",
-  "sha256": "00ee3f2a5f8d11dafef1181662dd4536b3a6f0a0e1dfbac6e413c0688407e62d",
-  "notes": "KYVORIQ 0.15.6 \u2022 compact notification clipping fix \u2022 cleaner collapsed card \u2022 refined expanded spacing"
+  "versionCode": 108,
+  "versionName": "0.15.7",
+  "apkUrl": "https://github.com/Dev06ai/marketpulse-os/releases/download/dev-trader-v0.15.7-108/app-release.apk",
+  "sha256": "1788714192b745f14aec461e7e9c679d9f64b1aabee27c20f8f3b269bf58ee75",
+  "notes": "KYVORIQ 0.15.7 \u2022 20x confidence-sized demo execution \u2022 50-75 medium margin \u2022 76-100 high margin \u2022 leverage/margin visibility"
 }
