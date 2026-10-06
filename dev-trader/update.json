@@ -1,8 +1,8 @@
 {
   "enabled": true,
-  "versionCode": 109,
-  "versionName": "0.15.8",
-  "apkUrl": "https://github.com/Dev06ai/marketpulse-os/releases/download/dev-trader-v0.15.8-109/app-release.apk",
-  "sha256": "940d094cf3d499d808e9615b08f3731b7bda514c73b76ad0794a0a89492d8cbc",
-  "notes": "KYVORIQ 0.15.8 \u2022 Haptic Studio \u2022 premium semantic tactile feedback \u2022 chart gesture cues \u2022 leverage detents"
+  "versionCode": 110,
+  "versionName": "0.16.0",
+  "apkUrl": "https://github.com/Dev06ai/marketpulse-os/releases/download/dev-trader-v0.16.0-110/app-release.apk",
+  "sha256": "a1df1616d2594918a9b69d7ac9b659d84711bb42f178b000122f6c5ed2db7c79",
+  "notes": "KYVORIQ 0.16.0 \u2022 Premium Experience Pack \u2022 smart alerts + risk heat in Insights \u2022 biometric Privacy Shield \u2022 adaptive widget \u2022 motion/ambience"
 }
