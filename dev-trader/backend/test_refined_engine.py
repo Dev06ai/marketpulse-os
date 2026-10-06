@@ -126,13 +126,18 @@ def test_fresh_session_skips_legacy_entries_but_retains_global_loss_budget(monke
     assert executor._count_today() == 0 and executor._open_local_trade() is None
     executor._merge_exchange_open_orders([dict(clientOid="DTDEMO-old-order", createdTime=epoch-1, orderStatus="filled")])
     assert len(executor.data["trades"]) == 1
+    executor.data["client_status"] = {"available_balance_usdt": 1000.0}
     executor.data["fill_ledger"] = dict(complete_window=True, fee_accounting_complete=True,
         daily_net_usdt={str(epoch//DAY_MS*DAY_MS): -9.5})
-    with pytest.raises(BitgetDemoError, match="minimum quantity"):
-        asyncio.run(executor._risk_size(audit_signal()))
-    executor.data["fill_ledger"]["daily_net_usdt"][str(epoch//DAY_MS*DAY_MS)] = -9.2
     qty, risk, _ = asyncio.run(executor._risk_size(audit_signal()))
-    assert qty > 0 and risk <= .8
+    assert qty > 0
+    assert 76 <= qty * 100000 / executor.leverage <= 100
+    assert risk > 0
+    allowed, reason = executor._signal_allowed(audit_signal())
+    assert allowed, reason
+    executor.data["fill_ledger"]["daily_net_usdt"][str(epoch//DAY_MS*DAY_MS)] = -10.1
+    allowed, reason = executor._signal_allowed(audit_signal())
+    assert not allowed and "daily loss limit" in reason
     executor.data["trades"].append(dict(opened_ts=epoch+1, status="OPEN"))
     assert executor._count_today() == 1
 

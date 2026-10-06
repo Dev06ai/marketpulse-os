@@ -1,6 +1,6 @@
 // Build 101: KYVORIQ visual identity — gold/charcoal system, branded navigation and mark.
 // Build 99: free-host migration with compact mobile delivery.
-// Build 83: show Bitget Demo funding readiness and demo execution state.
+// Build 108: confidence-sized demo execution UI with live-backend capability detection.\n// Build 83: show Bitget Demo funding readiness and demo execution state.
 package com.devtrader.app
 
 import android.Manifest
@@ -1324,19 +1324,25 @@ class SafeActivity : Activity() {
         val available = account.optDouble("available_balance_usdt", clientStatus.optDouble("available_balance_usdt", Double.NaN))
         val fillNet = ledger.optDouble("realized_after_fees_usdt", Double.NaN)
         val unrealized = summary.optDouble("unrealized_pnl_usdt", Double.NaN)
-        val leverage = summary.optInt("leverage", 20)
-        val marginSizing = summary.optJSONObject("margin_sizing") ?: JSONObject()
-        val mediumMin = marginSizing.optDouble("medium_min_usdt", 50.0)
-        val mediumMax = marginSizing.optDouble("medium_max_usdt", 75.0)
-        val highMin = marginSizing.optDouble("high_min_usdt", 76.0)
-        val highMax = marginSizing.optDouble("high_max_usdt", 100.0)
+        val marginSizing = summary.optJSONObject("margin_sizing")
+        val confidenceSized = marginSizing != null && summary.optInt("leverage", 0) > 0
+        val leverage = if (confidenceSized) summary.optInt("leverage") else 0
+        val mediumMin = marginSizing?.optDouble("medium_min_usdt", Double.NaN) ?: Double.NaN
+        val mediumMax = marginSizing?.optDouble("medium_max_usdt", Double.NaN) ?: Double.NaN
+        val highMin = marginSizing?.optDouble("high_min_usdt", Double.NaN) ?: Double.NaN
+        val highMax = marginSizing?.optDouble("high_max_usdt", Double.NaN) ?: Double.NaN
         positionSummary.text = "EQUITY  ${money(equity)} USDT\nAvailable  ${money(available)}  •  Unrealized  ${money(unrealized, true)}"
         positionSummary.textSize = 15f
         curve.setPoints(ledger.optJSONArray("curve") ?: JSONArray())
+        val sizingLine = if (confidenceSized) {
+            "Sizing  ${leverage}x  •  MED ${money(mediumMin)}–${money(mediumMax)}  •  HIGH ${money(highMin)}–${money(highMax)} USDT\n" +
+                "Entries ${summary.optInt("daily_executions")}/${summary.optInt("daily_cap", 3)} today  •  Planned-loss guard ≤ ${summary.optDouble("max_planned_loss_pct", 2.0)}%\n"
+        } else {
+            "Legacy backend sizing  •  Risk ≤ ${summary.optDouble("risk_pct", 0.25)}%  •  Entries ${summary.optInt("daily_executions")}/${summary.optInt("daily_cap", 3)} today\n"
+        }
         ledgerView.text = "FILLS  ${ledger.optInt("fill_count")}  •  Net ${money(fillNet, true)} USDT\n" +
             "Fees ${money(ledger.optDouble("fees_usdt", Double.NaN))}  •  Excludes funding / transfers\n" +
-            "Sizing  ${leverage}x  •  MED ${money(mediumMin)}–${money(mediumMax)}  •  HIGH ${money(highMin)}–${money(highMax)} USDT\n" +
-            "Entries ${summary.optInt("daily_executions")}/${summary.optInt("daily_cap", 3)} today  •  Planned-loss guard ≤ ${summary.optDouble("max_planned_loss_pct", 2.0)}%\n" +
+            sizingLine +
             (if (ledger.optString("error").isNotBlank() && !ledger.isNull("error")) "Accounting refresh failed; showing last snapshot"
              else if (unknown > 0) "$unknown order submissions await exchange confirmation"
              else if (unresolved > 0) "$unresolved historical entries need attribution"
@@ -1375,9 +1381,15 @@ class SafeActivity : Activity() {
                 .append("${decision.optString("status")}  •  ${decision.optString("reason")}\n")
                 .append("This describes the previous attempt, not a current entry instruction.\n\n")
         }
+        val executionPolicy = if (confidenceSized) {
+            "One position at a time\n${leverage}x isolated demo leverage\nMedium confidence: ${money(mediumMin)}–${money(mediumMax)} USDT margin\nHigh confidence: ${money(highMin)}–${money(highMax)} USDT margin\n"
+        } else {
+            "One position at a time\nLegacy backend risk sizing is still active\n"
+        }
         details.append("MARKET CONTEXT\n15m ${f.optString("trend_15", "—")}  •  1h ${f.optString("trend_60", "—")}  •  4h ${f.optString("trend_240", "—")}\n")
             .append("${f.optString("regime", "—")}  •  ${f.optString("market_structure", "—")}\n\n")
-            .append("EXECUTION POLICY\nOne position at a time\n${leverage}x isolated demo leverage\nMedium confidence: ${money(mediumMin)}–${money(mediumMax)} USDT margin\nHigh confidence: ${money(highMin)}–${money(highMax)} USDT margin\nFee-adjusted reward / risk ≥ ${summary.optDouble("min_net_rr", 1.5)}\nPause after 2 consecutive daily losses\nObserved daily equity loss limit 1%\n\n")
+            .append("EXECUTION POLICY\n").append(executionPolicy)
+            .append("Fee-adjusted reward / risk ≥ ${summary.optDouble("min_net_rr", 1.5)}\nPause after 2 consecutive daily losses\nObserved daily equity loss limit 1%\n\n")
             .append("EVIDENCE\nScores rank setups; they are not win probabilities.\n")
         decisionView.text = details.toString()
         insightContext.text = "CVD  ${f.optString("cvd_price_divergence", "—")}\n" +

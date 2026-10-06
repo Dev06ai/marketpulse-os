@@ -19,16 +19,22 @@ def test_price_moves_past_guard_during_sizing_never_submit(monkeypatch, tmp_path
     assert not executor.data['trades']
 
 
-def test_updated_quote_keeps_actual_risk_and_notional_within_caps(monkeypatch, tmp_path):
+def test_updated_quote_keeps_confidence_margin_and_loss_guard_within_caps(monkeypatch, tmp_path):
     executor = audit_executor(monkeypatch, tmp_path)
     prices = iter([100000, 100140])
     executor.client.market_ticker = lambda _: dict(lastPrice=str(next(prices)))
     result = asyncio.run(executor.handle_signal(audit_signal()))
+    assert result['ok']
     trade = result['trade']
-    risk = trade['requested_qty'] * (100140-99500+(100140+99500)*.0006)
-    assert result['ok'] and trade['execution_reference_price'] == 100140
-    assert risk <= 2.5 and trade['requested_qty']*100140 <= 500
-    assert trade['planned_risk_usdt'] == risk
+    risk = trade['requested_qty'] * (100140 - 99500 + (100140 + 99500) * .0006)
+    margin = trade['requested_qty'] * 100140 / executor.leverage
+    assert trade['execution_reference_price'] == 100140
+    assert trade['leverage'] == 20
+    assert trade['confidence_band'] == 'HIGH'
+    assert 76 <= margin <= 100
+    assert risk <= 1000 * executor.max_planned_loss_pct / 100
+    assert trade['requested_qty'] * 100140 <= executor.max_notional
+    assert abs(trade['planned_risk_usdt'] - risk) < 1e-8
 
 
 def test_feed_can_fail_after_initial_gate_and_blocks_order(monkeypatch, tmp_path):

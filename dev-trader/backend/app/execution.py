@@ -224,6 +224,18 @@ class DemoExecutionEngine:
     async def _current_positions(self) -> list[dict[str, Any]]:
         return await asyncio.to_thread(self.client.positions, self.symbol)
 
+    async def _sizing_balance_and_risk_cap(self) -> tuple[float, float]:
+        balance = await asyncio.to_thread(self.client.available_balance, self.symbol)
+        if balance <= 0:
+            raise BitgetDemoError("Bitget Demo futures balance is 0 USDT. Add demo funds before autonomous execution can open a position.")
+        account = self.data.get("account_metrics") or {}
+        equity = self._num(account.get("equity_usdt"))
+        balance = min(balance, equity) if equity > 0 else balance
+        peak = self._num(account.get("observed_peak_usdt"), equity)
+        risk_factor = 0.5 if peak > 0 and equity > 0 and equity < peak * 0.98 else 1.0
+        risk_cap = balance * self.max_planned_loss_pct * risk_factor / 100.0
+        return balance, risk_cap
+
     async def _risk_size(self, signal: dict[str, Any]) -> tuple[float, float, dict[str, Any]]:
         entry = self._num(signal.get("entry"))
         stop = self._num(signal.get("stop"))
@@ -231,12 +243,7 @@ class DemoExecutionEngine:
         if entry <= 0 or stop <= 0 or entry == stop:
             raise BitgetDemoError("Signal has invalid entry/stop prices.")
 
-        balance = await asyncio.to_thread(self.client.available_balance, self.symbol)
-        if balance <= 0:
-            raise BitgetDemoError("Bitget Demo futures balance is 0 USDT. Add demo funds before autonomous execution can open a position.")
-        account = self.data.get("account_metrics") or {}
-        equity = self._num(account.get("equity_usdt"))
-        balance = min(balance, equity) if equity > 0 else balance
+        balance, risk_cap = await self._sizing_balance_and_risk_cap()
 
         target_margin, band_min, band_max, band = self._confidence_margin_target(confidence)
         spendable = max(0.0, balance - self.margin_reserve)
@@ -265,9 +272,6 @@ class DemoExecutionEngine:
         distance = abs(entry - stop)
         fee_rate = max(0.0, float(os.getenv("BITGET_DEMO_TAKER_FEE_RATE", "0.0006")))
         unit_risk = distance + (entry + stop) * fee_rate
-        peak = self._num(account.get("observed_peak_usdt"), equity)
-        risk_factor = 0.5 if peak > 0 and equity > 0 and equity < peak * 0.98 else 1.0
-        risk_cap = balance * self.max_planned_loss_pct * risk_factor / 100.0
         planned_risk = qty * unit_risk
         if planned_risk > risk_cap and unit_risk > 0:
             reduced = self._normalize_qty(min(risk_cap / unit_risk, self.max_notional / entry), config)
@@ -283,7 +287,7 @@ class DemoExecutionEngine:
 
         min_usdt = self._num(config.get("minTradeUSDT") or config.get("minOrderAmount"), 0.0)
         if qty <= 0:
-            raise BitgetDemoError("Calculated demo position is below Bitget's minimum quantity.")
+            raise BitgetDemoError("Exchange minimum quantity cannot fit inside the selected confidence margin band.")
         if min_usdt > 0 and qty * entry < min_usdt:
             raise BitgetDemoError(f"Calculated position is below Bitget minimum notional ({min_usdt:g} USDT).")
         if not (band_min - 1e-6 <= actual_margin <= band_max + 1e-6):
@@ -494,12 +498,13 @@ class DemoExecutionEngine:
                 return {"ok": False, "skipped": True, "reason": str(exc)}
             fee_rate = max(0.0, float(os.getenv("BITGET_DEMO_TAKER_FEE_RATE", "0.0006")))
             unit_risk = abs(reference_price-stop)+(reference_price+stop)*fee_rate
-            if qty*unit_risk > risk_usdt or qty*reference_price > self.max_notional:
-                qty = min(qty, self._normalize_qty(min(risk_usdt/unit_risk, self.max_notional/reference_price), config))
+            _, refreshed_risk_cap = await self._sizing_balance_and_risk_cap()
+            if qty*unit_risk > refreshed_risk_cap or qty*reference_price > self.max_notional:
+                qty = min(qty, self._normalize_qty(min(refreshed_risk_cap/unit_risk, self.max_notional/reference_price), config))
             planned_margin = qty * reference_price / self.leverage if qty > 0 else 0.0
             if planned_margin < margin_min:
                 raised = self._normalize_qty_up((margin_min * self.leverage) / reference_price, config)
-                if raised * unit_risk <= risk_usdt + 1e-9 and raised * reference_price <= self.max_notional:
+                if raised * unit_risk <= refreshed_risk_cap + 1e-9 and raised * reference_price <= self.max_notional:
                     qty = raised
                     planned_margin = qty * reference_price / self.leverage
             if planned_margin > margin_max:
