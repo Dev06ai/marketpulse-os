@@ -143,8 +143,12 @@ accounting. The new mounted journal also survived the credential redeployment.
 
 Cutover completed on 4 October 2026 UTC (5 October in India). The replacement
 reports `BITGET_DEMO`, configured/ready true, and operator pause false after its
-final redeployment. Existing limits remain three entries per UTC day, 0.25% risk,
-and 500 USDT maximum notional. The post-cutover dashboard showed about 48 MiB of
+final redeployment. The current Build 108 source keeps the three-entry UTC-day cap
+and upgrades demo sizing to confidence-based isolated margin at 20x: 50–75 USDT
+for medium-confidence Grade-A entries and 76–100 USDT for high-confidence entries.
+Stop distance plus estimated fees still pass a separate planned-loss guard, so a
+trade is skipped rather than forced when the requested margin band would violate
+the risk cap. The post-cutover dashboard showed about 48 MiB of
 128 MiB memory, 0.04 of 0.25 vCPU, and 489 MiB of 100 GiB monthly transfer.
 The owner still needs to install build 99 on the phone; a physical-device check
 has not been performed by this migration.
