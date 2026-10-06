@@ -11,6 +11,7 @@ from .learning import AdaptiveLearning
 from .structure import RegimeSelector
 from .playbooks import policy as playbook_policy, admission as playbook_admission, experimental_pattern_adjustment
 from .journal import DecisionJournal, ENGINE_REVISION
+from .level_reactions import LevelReactionTracker, TRIGGER_FRESH_MS
 
 
 @dataclass
@@ -770,6 +771,8 @@ class StrategyEngine:
         self.journal=DecisionJournal()
         self.candidate_decisions=[]
         self.shadow_candidates=[]
+        self.level_reaction_tracker = LevelReactionTracker()
+        self.level_reaction_state = {"status": "IDLE", "levels": [], "armed": [], "trigger": None}
 
     def _rotate_governor_day(self):
         today = datetime.now(timezone.utc).date().isoformat()
@@ -1018,7 +1021,7 @@ class StrategyEngine:
             reasons.append(f"order book feed is stale ({book_age}ms)")
 
         # Higher-timeframe alignment is mandatory for continuation/breakout paths.
-        is_reversal = "SFP" in setup or "HARMONIC" in setup
+        is_reversal = "SFP" in setup or "HARMONIC" in setup or "LEVEL REACTION" in setup
         is_early_momentum = "MOMENTUM CAPTURE" in setup
         if not is_reversal and not is_early_momentum:
             if direction == "LONG":
@@ -1099,6 +1102,8 @@ class StrategyEngine:
             location = True; confirmation_names.append("OB")
         if f.golden_pocket == ("LONG_ZONE" if direction == "LONG" else "SHORT_ZONE"):
             location = True; confirmation_names.append("FIB")
+        if signal.evidence.get("level_reaction"):
+            location = True; confirmation_names.append("LEVEL_REACTION")
         if location:
             confirmations += 1
 
@@ -1222,6 +1227,8 @@ class StrategyEngine:
         if f.order_block_direction == ("BULLISH" if direction == "LONG" else "BEARISH"):
             confirmations += 1
         if f.golden_pocket == ("LONG_ZONE" if direction == "LONG" else "SHORT_ZONE"):
+            confirmations += 1
+        if signal.evidence.get("level_reaction"):
             confirmations += 1
         required = max(
             2 if momentum_exception else 0,
@@ -1529,6 +1536,16 @@ class StrategyEngine:
             trigger_candidates.append(f"{sfp_hunter.get('pattern', 'SFP')} at {sfp_hunter.get('target_level', 'liquidity level')}")
         if breakout_watch.get("status") == "BREAKOUT":
             trigger_candidates.append(str(breakout_watch.get("event", "breakout")))
+        level_reactions = self.level_reaction_state or {}
+        if level_reactions.get("status") == "TRIGGERED":
+            trigger = level_reactions.get("trigger") or {}
+            trigger_candidates.append(
+                f"{trigger.get('label','level')} {trigger.get('direction','')} reaction confirmed"
+            )
+        elif level_reactions.get("status") == "ARMED":
+            armed = level_reactions.get("armed") or []
+            if armed:
+                trigger_candidates.append(f"{armed[0].get('label','level')} armed; waiting for reaction")
         for name in ("SFP", "D-Line", "MSS"):
             detail = setups.get(name) or {}
             if detail.get("status") == "VALIDATED":
@@ -2340,6 +2357,82 @@ class StrategyEngine:
             ),
         }
 
+    def _level_reaction_signal(self, state: MarketState, f: MarketFeatures) -> Optional[Signal]:
+        """Turn a confirmed chart-level reaction into a normal gated candidate.
+
+        ARMED proximity is intentionally ignored here. Only a fresh tracker
+        trigger can become a candidate, and every existing quality/freshness/
+        execution/risk gate still runs afterwards.
+        """
+        reaction = (self.level_reaction_state or {}).get("trigger") or {}
+        if not reaction or state.last_price is None:
+            return None
+        now = int(time.time() * 1000)
+        played_at = int(reaction.get("played_at_ms") or 0)
+        if not played_at or now - played_at > TRIGGER_FRESH_MS:
+            return None
+
+        direction = str(reaction.get("direction") or "").upper()
+        if direction not in {"LONG", "SHORT"}:
+            return None
+        level = float(reaction.get("price") or 0.0)
+        entry = float(state.last_price)
+        if level <= 0 or entry <= 0:
+            return None
+
+        live = None
+        if state.candles_5:
+            live = state.candles_5[-1]
+        if live is None:
+            confirmed = [c for c in state.candles_15 if c.confirmed]
+            live = confirmed[-1] if confirmed else None
+        if live is None:
+            return None
+
+        atr = max(float(f.atr_15 or 0.0), entry * 0.0005)
+        buffer = max(atr * 0.16, entry * 0.00022)
+        if direction == "LONG":
+            raw_stop = min(float(live.low), level - buffer)
+            above = sorted(
+                float(row.get("price"))
+                for row in (self.level_reaction_state.get("levels") or [])
+                if float(row.get("price") or 0) > entry + atr * 0.5
+            )
+            raw_target = above[0] if above else entry + max(entry - raw_stop, atr) * 3.0
+        else:
+            raw_stop = max(float(live.high), level + buffer)
+            below = sorted(
+                (
+                    float(row.get("price"))
+                    for row in (self.level_reaction_state.get("levels") or [])
+                    if 0 < float(row.get("price") or 0) < entry - atr * 0.5
+                ),
+                reverse=True,
+            )
+            raw_target = below[0] if below else entry - max(raw_stop - entry, atr) * 3.0
+
+        label = str(reaction.get("label") or reaction.get("kind") or "LEVEL")
+        signal = _signal(
+            id=f"level-reaction-{reaction.get('id','level')}-{reaction.get('reaction_candle_start',played_at)}-{direction.lower()}",
+            direction=direction,
+            setup=f"{label} Level Reaction • SFP",
+            entry=entry,
+            stop=raw_stop,
+            target=raw_target,
+            timeframe="5m",
+            invalidation=f"5m acceptance back through {label} at {level:.2f}",
+            f=f,
+            thesis=[
+                f"{label} at {level:.2f} was already mapped before the reaction.",
+                f"Price interacted with the level and confirmed a {reaction.get('reaction','reaction').lower().replace('_',' ')}.",
+                "Proximity alone never creates this candidate; reaction confirmation is mandatory.",
+            ],
+        )
+        if signal:
+            signal.evidence["level_reaction"] = dict(reaction)
+            signal.evidence["level_reaction_policy"] = "REACTION_REQUIRED_NO_BLIND_LEVEL_ENTRY"
+        return signal
+
     def diagnostics(self, state: MarketState) -> dict:
         cs = [c for c in state.candles_15 if c.confirmed]
         highs, lows = pivots(cs[:-1], 2) if len(cs) >= 5 else ([], [])
@@ -2355,6 +2448,7 @@ class StrategyEngine:
         radar_top = radar[0] if radar else None
         sfp_hunter = self._build_sfp_hunter(state, f0)
         breakout_watch = self._build_breakout_watch(state, f0)
+        self.level_reaction_state = self.level_reaction_tracker.update(state, f0, sfp_hunter)
         evidence_matrix = self._build_evidence_matrix(f0, state)
         result = {
             "status": "SCANNING" if state.data_health == "HEALTHY" else ("DEGRADED_SCANNING" if state.data_health == "DEGRADED" else "CONNECTING"),
@@ -2379,6 +2473,7 @@ class StrategyEngine:
             "evidence_matrix": evidence_matrix,
             "sfp_hunter": sfp_hunter,
             "breakout_watch": breakout_watch,
+            "level_reactions": self.level_reaction_state,
             "fast_move": self._build_fast_move_context(state, f0),
             "evidence_matrix": evidence_matrix,
             "data_quality": state.data_health,
@@ -2399,6 +2494,7 @@ class StrategyEngine:
                 "spread_bps": round(f0.spread_bps, 4),
                 "fvg_direction": f0.fvg_direction,
                 "order_block_direction": f0.order_block_direction,
+                "order_blocks": f0.order_blocks,
                 "golden_pocket": f0.golden_pocket,
                 "elliott_phase": f0.elliott_phase,
                 "elliott_direction": f0.elliott_direction,
@@ -2978,6 +3074,7 @@ class StrategyEngine:
             return None
         candidates = [
             detect_sfp(state),
+            self._level_reaction_signal(state, f),
             detect_dline(state),
             detect_mss(state),
             detect_breakout_retest(state),

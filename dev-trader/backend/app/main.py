@@ -126,23 +126,23 @@ class RiskPayload(BaseModel):
 
 
 def chart_overlay_payload(f, diag):
-    """Small, auditable chart-level map for the mobile renderer.
+    """Compact auditable chart map aligned with the reaction engine.
 
-    Only price levels with explicit engine provenance are emitted. Candle-only
-    estimates are never mislabeled as exact NPOC.
+    Recent 15m high/low display noise is intentionally excluded. Daily levels,
+    weekly open, exact NPOC, SFP and multi-timeframe OB midpoints are emitted
+    with stable semantic kinds so Android can render the requested colors.
     """
     rows = []
     seen = []
 
-    def add(kind, label, price, status="", direction=""):
+    def add(kind, label, price, status="", direction="", source="", hide_after_ms=None):
         try:
             value = float(price)
         except (TypeError, ValueError):
             return
         if not math.isfinite(value) or value <= 0:
             return
-        # Avoid near-duplicate visual lines while preserving the higher-priority row.
-        if any(abs(value - prior) / max(value, 1.0) < 0.00015 for prior in seen):
+        if any(abs(value - prior) / max(value, 1.0) < 0.00010 for prior in seen):
             return
         seen.append(value)
         item = {"kind": kind, "label": label, "price": round(value, 2)}
@@ -150,38 +150,52 @@ def chart_overlay_payload(f, diag):
             item["status"] = str(status)
         if direction:
             item["direction"] = str(direction)
+        if source:
+            item["source"] = str(source)
+        if hide_after_ms:
+            item["hide_after_ms"] = int(hide_after_ms)
         rows.append(item)
 
-    sfp = (diag or {}).get("sfp_hunter") or {}
-    add("SFP", "SFP", sfp.get("target_level"), sfp.get("status", ""), sfp.get("direction", ""))
+    reaction_map = (diag or {}).get("level_reactions") or {}
+    reaction_levels = reaction_map.get("levels") or []
+    if reaction_levels:
+        order = {"SFP": 0, "NPOC": 1, "DAILY": 2, "WEEKLY_OPEN": 3, "OB": 4}
+        for row in sorted(reaction_levels, key=lambda x: order.get(str(x.get("kind") or "").upper(), 9)):
+            add(
+                str(row.get("kind") or "LEVEL").upper(),
+                str(row.get("label") or row.get("kind") or "LEVEL"),
+                row.get("price"),
+                row.get("state", row.get("status", "")),
+                row.get("direction", ""),
+                row.get("source", ""),
+                row.get("hide_after_ms"),
+            )
+    else:
+        # Fallback while the reaction tracker warms.
+        add("DAILY", "D HIGH", getattr(f, "previous_day_high", None), source="PREVIOUS_DAY_HIGH")
+        add("DAILY", "D LOW", getattr(f, "previous_day_low", None), source="PREVIOUS_DAY_LOW")
+        add("WEEKLY_OPEN", "W OPEN", getattr(f, "weekly_open", None), source="WEEKLY_OPEN")
 
+        volume = getattr(f, "volume_context", {}) or {}
+        if bool(volume.get("exact_npoc")) and volume.get("untouched_poc") is not None:
+            add("NPOC", "NPOC", volume.get("untouched_poc"), "UNTOUCHED", source="EXECUTED_TRADE_PROFILE")
+
+        labels = {"15m": "15M OB", "1h": "1H OB", "4h": "4H OB", "1D": "1D OB", "2D": "2D OB"}
+        blocks = getattr(f, "order_blocks", {}) or {}
+        for timeframe in ("15m", "1h", "4h", "1D", "2D"):
+            detail = blocks.get(timeframe) or {}
+            direction = str(detail.get("direction") or "NONE").upper()
+            if direction != "NONE":
+                add("OB", labels[timeframe], detail.get("mid"), direction=direction, source=f"{timeframe}_ORDER_BLOCK")
+
+        sfp = (diag or {}).get("sfp_hunter") or {}
+        add("SFP", "SFP", sfp.get("target_level"), sfp.get("status", ""), sfp.get("direction", ""), "SFP_HUNTER")
+
+    # D-Line remains a distinct strategy reference; it is not a liquidity level.
     dline = ((diag or {}).get("setups") or {}).get("D-Line") or {}
-    add("DLINE", "D-LINE", dline.get("projected_line"), dline.get("status", ""), dline.get("direction", ""))
+    add("DLINE", "D-LINE", dline.get("projected_line"), dline.get("status", ""), dline.get("direction", ""), "DLINE")
 
-    ob_mid = getattr(f, "order_block_mid", None)
-    ob_direction = str(getattr(f, "order_block_direction", "NONE") or "NONE")
-    if ob_mid is not None and ob_direction != "NONE":
-        add("OB", ("BULL OB" if ob_direction == "BULLISH" else "BEAR OB"), ob_mid, direction=ob_direction)
-
-    volume = getattr(f, "volume_context", {}) or {}
-    if bool(volume.get("exact_npoc")) and volume.get("untouched_poc") is not None:
-        add("NPOC", "NPOC", volume.get("untouched_poc"), "UNTOUCHED")
-
-    # Fill any remaining room with the closest audited liquidity references.
-    liquidity = (diag or {}).get("liquidity_map") or {}
-    short_names = {
-        "recent 15m high": "15M H", "recent 15m low": "15M L",
-        "previous day high": "PDH", "previous day low": "PDL",
-        "previous week high": "PWH", "previous week low": "PWL",
-        "weekly open": "W OPEN",
-    }
-    for side in ("above", "below"):
-        for row in (liquidity.get(side) or [])[:2]:
-            if len(rows) >= 6:
-                break
-            title = str(row.get("title") or "LIQ")
-            add("LIQUIDITY", short_names.get(title.lower(), title[:10].upper()), row.get("price"))
-    return rows[:6]
+    return rows[:14]
 
 
 def mobile_payload(include_research=True):

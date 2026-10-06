@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 import time
 
-from .models import Candle, MarketState
+from .models import Candle, MarketState, aggregate_candles
 from .elliott_wave import analyze_elliott
 from .volume_context import volume_context
 from .structure import structure_map
@@ -39,6 +39,7 @@ class MarketFeatures:
     fvg_mid: float | None = None
     order_block_direction: str = "NONE"
     order_block_mid: float | None = None
+    order_blocks: dict = field(default_factory=dict)
     golden_pocket: str = "NONE"
     elliott_phase: str = "UNKNOWN"
     elliott_direction: str = "NEUTRAL"
@@ -136,18 +137,60 @@ def _fvg(candles: list[Candle]) -> tuple[str, float | None]:
     return "NONE", None
 
 
-def _order_block(candles: list[Candle]) -> tuple[str, float | None]:
+def _order_block_detail(candles: list[Candle]) -> dict:
+    """Return the latest confirmed displacement-backed order block.
+
+    The midpoint is the chart/reaction level while the candle body/wick range is
+    retained for auditability. This intentionally requires a following candle
+    to close beyond the base candle before an OB exists.
+    """
     cs = [c for c in candles if c.confirmed]
     if len(cs) < 5:
-        return "NONE", None
-    for i in range(len(cs) - 2, max(-1, len(cs) - 8), -1):
+        return {"direction": "NONE", "mid": None, "zone_low": None, "zone_high": None, "source_start": None}
+    for i in range(len(cs) - 2, max(-1, len(cs) - 10), -1):
         base = cs[i]
         nxt = cs[i + 1]
+        direction = "NONE"
         if nxt.close > base.high and nxt.close > nxt.open:
-            return "BULLISH", (base.open + base.close) / 2.0
-        if nxt.close < base.low and nxt.close < nxt.open:
-            return "BEARISH", (base.open + base.close) / 2.0
-    return "NONE", None
+            direction = "BULLISH"
+        elif nxt.close < base.low and nxt.close < nxt.open:
+            direction = "BEARISH"
+        if direction != "NONE":
+            body_low = min(float(base.open), float(base.close))
+            body_high = max(float(base.open), float(base.close))
+            return {
+                "direction": direction,
+                "mid": (body_low + body_high) / 2.0,
+                "zone_low": float(base.low),
+                "zone_high": float(base.high),
+                "body_low": body_low,
+                "body_high": body_high,
+                "source_start": int(base.start),
+                "confirmed_at": int(nxt.end) + 1,
+            }
+    return {"direction": "NONE", "mid": None, "zone_low": None, "zone_high": None, "source_start": None}
+
+
+def _order_block(candles: list[Candle]) -> tuple[str, float | None]:
+    detail = _order_block_detail(candles)
+    return str(detail.get("direction") or "NONE"), detail.get("mid")
+
+
+def _multi_timeframe_order_blocks(state: MarketState) -> dict:
+    hourly = [c for c in state.candles_60 if c.confirmed]
+    pools = {
+        "15m": [c for c in state.candles_15 if c.confirmed],
+        "1h": hourly,
+        "4h": aggregate_candles(hourly, 4),
+        "1D": aggregate_candles(hourly, 24),
+        "2D": aggregate_candles(hourly, 48),
+    }
+    out = {}
+    for label, candles in pools.items():
+        detail = _order_block_detail(candles)
+        if detail.get("direction") != "NONE" and detail.get("mid") is not None:
+            out[label] = detail
+    return out
 
 
 def _harmonic_context(candles: list[Candle]) -> tuple[str, str, float, str]:
@@ -290,7 +333,10 @@ def _compute_features(state: MarketState) -> MarketFeatures:
     f.liquidity_high = max((c.high for c in recent), default=None)
     f.liquidity_low = min((c.low for c in recent), default=None)
     f.fvg_direction, f.fvg_mid = _fvg(state.candles_15)
-    f.order_block_direction, f.order_block_mid = _order_block(state.candles_15)
+    f.order_blocks = _multi_timeframe_order_blocks(state)
+    ob15 = f.order_blocks.get("15m") or _order_block_detail(state.candles_15)
+    f.order_block_direction = str(ob15.get("direction") or "NONE")
+    f.order_block_mid = ob15.get("mid")
 
     # Compare price and CVD over the same observed five-minute tape. Comparing
     # ninety minutes of candles to six recent ticks manufactured divergence.
