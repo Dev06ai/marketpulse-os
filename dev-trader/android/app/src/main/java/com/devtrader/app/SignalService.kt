@@ -450,12 +450,6 @@ class SignalService : Service() {
 
     private fun buildServiceNotification(state: ServiceUiState): Notification {
         val model = serviceNotificationModel(state)
-        val confidence = signal.optDouble("confidence", 0.0)
-        val tier = when {
-            hasManagement -> "PRIORITY"
-            confidence >= 0.85 -> "PRIORITY"
-            else -> "INFO"
-        }
         val launchIntent = Intent(this, SafeActivity::class.java)
         val pending = PendingIntent.getActivity(
             this, 3100, launchIntent,
@@ -555,6 +549,12 @@ class SignalService : Service() {
             body = "$tradeStyle · Entry " + format(entry) + " · SL " + format(stop) + " · R:R " + format(rr)
         }
 
+        val confidence = signal.optDouble("confidence", 0.0)
+        val tier = when {
+            hasManagement -> "PRIORITY"
+            confidence >= 0.85 -> "PRIORITY"
+            else -> "INFO"
+        }
         val launchIntent = Intent(this, SafeActivity::class.java)
         val pending = PendingIntent.getActivity(
             this, SIGNAL_NOTIFICATION_ID, launchIntent,
