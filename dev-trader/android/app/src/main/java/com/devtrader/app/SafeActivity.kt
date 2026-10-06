@@ -1,5 +1,6 @@
 // Build 101: KYVORIQ visual identity — gold/charcoal system, branded navigation and mark.
 // Build 99: free-host migration with compact mobile delivery.
+// Build 113: reaction-aware chart level map + multi-timeframe OB presentation.
 // Build 112: high-refresh VSYNC price motion for the in-app BTC hero.
 // Price animation follows Android VSYNC; the display-mode request is capped at 120 Hz.
  // Build 110: KYVORIQ Premium Experience Pack — motion, ambience, risk/alert intelligence, privacy and widget.
@@ -1938,19 +1939,24 @@ class SafeActivity : FragmentActivity() {
         val out = JSONArray()
         val prices = mutableListOf<Double>()
 
-        fun add(kind: String, label: String, price: Double, status: String = "") {
+        fun add(kind: String, label: String, price: Double, status: String = "", direction: String = "") {
             if (!price.isFinite() || price <= 0.0) return
-            if (prices.any { kotlin.math.abs(it - price) / kotlin.math.max(price, 1.0) < 0.00015 }) return
-            if (out.length() >= 6) return
+            if (prices.any { kotlin.math.abs(it - price) / kotlin.math.max(price, 1.0) < 0.00010 }) return
+            if (out.length() >= 14) return
             prices.add(price)
-            out.put(JSONObject()
-                .put("kind", kind)
-                .put("label", label)
-                .put("price", price)
-                .put("status", status))
+            out.put(
+                JSONObject()
+                    .put("kind", kind)
+                    .put("label", label)
+                    .put("price", price)
+                    .put("status", status)
+                    .put("direction", direction)
+            )
         }
 
-        // Newer hosts can provide the compact map directly.
+        // Preferred source: the backend's reaction-aware chart map. It carries
+        // the same levels the trading engine is watching, so visual context and
+        // engine readiness cannot silently drift apart.
         root?.optJSONArray("chart_overlays")?.let { arr ->
             for (i in 0 until arr.length()) {
                 val row = arr.optJSONObject(i) ?: continue
@@ -1958,60 +1964,77 @@ class SafeActivity : FragmentActivity() {
                     row.optString("kind", "LEVEL"),
                     row.optString("label", row.optString("kind", "LEVEL")),
                     row.optDouble("price", Double.NaN),
-                    row.optString("status", "")
+                    row.optString("status", ""),
+                    row.optString("direction", "")
                 )
             }
         }
 
-        // Existing dashboard frames already contain SFP + liquidity references.
         val engine = root?.optJSONObject("engine")
+
+        // Fallbacks keep Build 113 useful before a backend restart/redeploy.
         val sfp = overlayStrategy?.optJSONObject("sfp_hunter") ?: engine?.optJSONObject("sfp_hunter")
         add(
             "SFP",
             "SFP",
             sfp?.optDouble("target_level", Double.NaN) ?: Double.NaN,
-            sfp?.optString("status", "WATCH") ?: "WATCH"
+            sfp?.optString("status", "WATCH") ?: "WATCH",
+            sfp?.optString("direction", "") ?: ""
         )
 
-        // The currently deployed host exposes full diagnostics at /strategy.
         val dline = overlayStrategy?.optJSONObject("setups")?.optJSONObject("D-Line")
         add(
             "DLINE",
             "D-LINE",
             dline?.optDouble("projected_line", Double.NaN) ?: Double.NaN,
-            dline?.optString("status", "") ?: ""
+            dline?.optString("status", "") ?: "",
+            dline?.optString("direction", "") ?: ""
         )
 
-        // /features exposes the exact order-block midpoint calculated by the engine.
-        val obMid = overlayFeatures?.optDouble("order_block_mid", Double.NaN) ?: Double.NaN
-        val obDirection = overlayFeatures?.optString("order_block_direction", "NONE") ?: "NONE"
-        if (obDirection != "NONE") {
-            add("OB", if (obDirection == "BULLISH") "BULL OB" else "BEAR OB", obMid)
+        val blocks = overlayFeatures?.optJSONObject("order_blocks")
+        val obLabels = linkedMapOf(
+            "15m" to "15M OB",
+            "1h" to "1H OB",
+            "4h" to "4H OB",
+            "1D" to "1D OB",
+            "2D" to "2D OB"
+        )
+        if (blocks != null) {
+            obLabels.forEach { (tf, label) ->
+                val detail = blocks.optJSONObject(tf) ?: return@forEach
+                val rawDirection = detail.optString("direction", "NONE")
+                add("OB", label, detail.optDouble("mid", Double.NaN), "", rawDirection)
+            }
+        } else {
+            // Legacy host compatibility: the old single OB was calculated from 15m.
+            val obMid = overlayFeatures?.optDouble("order_block_mid", Double.NaN) ?: Double.NaN
+            val obDirection = overlayFeatures?.optString("order_block_direction", "NONE") ?: "NONE"
+            if (obDirection != "NONE") add("OB", "15M OB", obMid, "", obDirection)
         }
 
-        // Never display an estimated candle POC as NPOC. Only the engine's
-        // executed-trade profile may set exact_npoc=true.
         val volume = overlayFeatures?.optJSONObject("volume_context")
         if (volume?.optBoolean("exact_npoc", false) == true) {
             add("NPOC", "NPOC", volume.optDouble("untouched_poc", Double.NaN), "UNTOUCHED")
         }
 
+        // Daily levels replace the old recent 15m H/L clutter. Prefer features,
+        // then fall back to the audited liquidity map if necessary.
+        add("DAILY", "D HIGH", overlayFeatures?.optDouble("previous_day_high", Double.NaN) ?: Double.NaN)
+        add("DAILY", "D LOW", overlayFeatures?.optDouble("previous_day_low", Double.NaN) ?: Double.NaN)
+        add("WEEKLY_OPEN", "W OPEN", overlayFeatures?.optDouble("weekly_open", Double.NaN) ?: Double.NaN)
+
         val liquidity = overlayStrategy?.optJSONObject("liquidity_map") ?: engine?.optJSONObject("liquidity_map")
-        val names = mapOf(
-            "recent 15m high" to "15M H",
-            "recent 15m low" to "15M L",
-            "previous day high" to "PDH",
-            "previous day low" to "PDL",
-            "previous week high" to "PWH",
-            "previous week low" to "PWL",
-            "weekly open" to "W OPEN"
+        val allowed = mapOf(
+            "previous day high" to Pair("DAILY", "D HIGH"),
+            "previous day low" to Pair("DAILY", "D LOW"),
+            "weekly open" to Pair("WEEKLY_OPEN", "W OPEN")
         )
         listOf("above", "below").forEach { side ->
             val rows = liquidity?.optJSONArray(side)
-            for (i in 0 until minOf(2, rows?.length() ?: 0)) {
+            for (i in 0 until (rows?.length() ?: 0)) {
                 val row = rows?.optJSONObject(i) ?: continue
-                val raw = row.optString("title", "LIQ")
-                add("LIQUIDITY", names[raw.lowercase(Locale.US)] ?: raw.take(10).uppercase(Locale.US), row.optDouble("price", Double.NaN))
+                val mapped = allowed[row.optString("title", "").lowercase(Locale.US)] ?: continue
+                add(mapped.first, mapped.second, row.optDouble("price", Double.NaN))
             }
         }
         return out
@@ -2019,15 +2042,15 @@ class SafeActivity : FragmentActivity() {
 
     private fun requestChartOverlays(force: Boolean = false) {
         val now = System.currentTimeMillis()
-        if (!force && now - lastOverlayRequestMs < 60_000L) return
+        if (!force && now - lastOverlayRequestMs < 15_000L) return
         lastOverlayRequestMs = now
 
         fun apply() {
             if (::chart.isInitialized) chart.setOverlays(chartOverlays(latestRoot))
         }
 
-        // These endpoints already exist on the deployed free host, so D-Line,
-        // OB and exact NPOC overlays work without waiting for a backend redeploy.
+        // Refresh structural context frequently enough for played levels to
+        // disappear within their 15m/30m lifecycle without disturbing price ticks.
         getJson(backendBase + "/features") { ok, body ->
             handler.post {
                 if (ok) safe {

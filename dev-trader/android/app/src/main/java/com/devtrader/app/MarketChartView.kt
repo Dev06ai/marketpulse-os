@@ -154,7 +154,7 @@ class MarketChartView @JvmOverloads constructor(
     private val structureLinePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
         strokeWidth = dp(.8f)
-        pathEffect = DashPathEffect(floatArrayOf(dp(3f), dp(4f)), 0f)
+        pathEffect = DashPathEffect(floatArrayOf(dp(2f), dp(4f)), 0f)
         alpha = 150
     }
     private val structureLabelBgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -795,23 +795,24 @@ class MarketChartView @JvmOverloads constructor(
                 if (!value.isFinite() || value !in low..high) null else Triple(row, value, mapY(value, low, high, top, bottom))
             }
             .sortedBy { it.third }
-            .take(6)
+            .take(14)
 
         var lastLabelBottom = top - dp(20f)
         rows.forEach { (row, value, lineY) ->
             val kind = row.optString("kind", "LEVEL").uppercase(Locale.US)
             val color = when (kind) {
-                "SFP" -> Color.rgb(224, 167, 46)
-                "DLINE" -> Color.rgb(247, 201, 72)
-                "OB" -> Color.rgb(156, 163, 175)
-                "NPOC" -> Color.rgb(219, 188, 103)
+                "SFP", "WEEKLY_OPEN" -> Color.rgb(247, 201, 72)
+                "DLINE" -> Color.rgb(224, 167, 46)
+                "OB" -> Color.rgb(245, 247, 250)
+                "NPOC" -> Color.rgb(255, 82, 105)
+                "DAILY" -> Color.rgb(54, 211, 153)
                 else -> Color.rgb(126, 135, 148)
             }
             structureLinePaint.color = color
             canvas.drawLine(left, lineY, right, lineY, structureLinePaint)
 
             val rawLabel = row.optString("label", kind).uppercase(Locale.US)
-            val text = rawLabel.take(12)
+            val text = rawLabel.take(14)
             structureLabelTextPaint.color = color
             val pad = dp(4f)
             val w = structureLabelTextPaint.measureText(text) + pad * 2f

@@ -1,4 +1,4 @@
-# Build 112: high-refresh in-app BTC price motion release pipeline.
+# Build 113: reaction-aware chart levels + level-following readiness UI.
 name: KYVORIQ CI
 
 on:
@@ -121,7 +121,7 @@ jobs:
           gradle-version: '9.6.0'
       - name: Build Android debug APK
         working-directory: dev-trader/android
-        run: gradle assembleDebug --stacktrace -PdevTraderVersionCode=112 -PdevTraderVersionName=0.16.2
+        run: gradle assembleDebug --stacktrace -PdevTraderVersionCode=113 -PdevTraderVersionName=0.17.0
       - name: Build signed Android release APK
         if: steps.changed.outputs.android_changed == 'true'
         working-directory: dev-trader/android
@@ -132,7 +132,7 @@ jobs:
           DEV_TRADER_KEY_PASSWORD: ${{ secrets.DEV_TRADER_KEY_PASSWORD }}
         run: |
           echo "${{ secrets.DEV_TRADER_KEYSTORE_BASE64 }}" | base64 --decode > "$DEV_TRADER_KEYSTORE_PATH"
-          gradle assembleRelease --stacktrace -PdevTraderVersionCode=112 -PdevTraderVersionName=0.16.2
+          gradle assembleRelease --stacktrace -PdevTraderVersionCode=113 -PdevTraderVersionName=0.17.0
           if unzip -l app/build/outputs/apk/release/app-release.apk | grep -q ui_preview.json; then
             echo 'Debug preview data must never be included in release APKs.'
             exit 1
@@ -203,7 +203,7 @@ jobs:
           mkdir -p release
           cp dist/app-release.apk release/app-release.apk
           sha256sum release/app-release.apk | awk '{print $1}' > release/app-release.sha256
-          echo "tag=dev-trader-v0.16.2-112" >> "$GITHUB_OUTPUT"
+          echo "tag=dev-trader-v0.17.0-113" >> "$GITHUB_OUTPUT"
           echo "sha256=$(cat release/app-release.sha256)" >> "$GITHUB_OUTPUT"
       - name: Create GitHub release
         env:
@@ -213,7 +213,7 @@ jobs:
             echo "This release already exists; refusing to replace a published APK."
             exit 1
           fi
-          gh release create "${{ steps.release.outputs.tag }}" release/app-release.apk --target "$GITHUB_SHA" --title "KYVORIQ 0.16.2 (112)" --notes "Premium Price Motion: VSYNC-native BTC price transitions in the main app, directional up/down motion, green/red tick flash that settles back to KYVORIQ gold, hardware-layer animation, and high-refresh display preference up to 120Hz where supported. Trading logic is unchanged."
+          gh release create "${{ steps.release.outputs.tag }}" release/app-release.apk --target "$GITHUB_SHA" --title "KYVORIQ 0.17.0 (113)" --notes "Reaction Map: daily + exact NPOC + weekly-open + multi-timeframe OB chart levels, semantic dotted-line colors, played-level retirement, and UI support for the backend reaction-aware readiness engine. Backend execution remains gated by fresh data, reaction confirmation, quality, risk and exchange checks."
       - name: Publish verified update manifest
         env:
           SHA256: "${{ steps.release.outputs.sha256 }}"
@@ -227,11 +227,11 @@ jobs:
           data = json.loads(p.read_text())
           data.update({
               "enabled": True,
-              "versionCode": 112,
-              "versionName": "0.16.2",
-              "apkUrl": "https://github.com/Dev06ai/marketpulse-os/releases/download/dev-trader-v0.16.2-112/app-release.apk",
+              "versionCode": 113,
+              "versionName": "0.17.0",
+              "apkUrl": "https://github.com/Dev06ai/marketpulse-os/releases/download/dev-trader-v0.17.0-113/app-release.apk",
               "sha256": os.environ["SHA256"],
-              "notes": "KYVORIQ 0.16.2 • Premium Price Motion • VSYNC-native BTC transitions • directional tick flash • up to 120Hz where supported"
+              "notes": "KYVORIQ 0.17.0 • Reaction Map • daily/NPOC/W-open/multi-TF OB levels • semantic dotted colors • reaction-aware readiness UI"
           })
           p.write_text(json.dumps(data, indent=2) + "\n")
           PY
