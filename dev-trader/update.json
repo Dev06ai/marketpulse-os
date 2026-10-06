@@ -1,8 +1,8 @@
 {
   "enabled": true,
-  "versionCode": 113,
-  "versionName": "0.17.0",
-  "apkUrl": "https://github.com/Dev06ai/marketpulse-os/releases/download/dev-trader-v0.17.0-113/app-release.apk",
-  "sha256": "51c39c7fa32df2f80dfd0ae97d3e25b44a46ef9f328ee4f16390507d4ffa1e30",
-  "notes": "KYVORIQ 0.17.0 \u2022 Reaction Map \u2022 daily/NPOC/W-open/multi-TF OB levels \u2022 semantic dotted colors \u2022 reaction-aware readiness UI"
+  "versionCode": 114,
+  "versionName": "0.17.1",
+  "apkUrl": "https://github.com/Dev06ai/marketpulse-os/releases/download/dev-trader-v0.17.1-114/app-release.apk",
+  "sha256": "a86fcedcd7d19410f4e29eceb078e9ebaa8f2a67629bb83cceec27c9afed5db8",
+  "notes": "KYVORIQ 0.17.1 \u2022 Privacy Shield Studio \u2022 premium dark/gold privacy sheet \u2022 biometric lock + sensitive-value controls \u2022 polished motion/haptics"
 }
