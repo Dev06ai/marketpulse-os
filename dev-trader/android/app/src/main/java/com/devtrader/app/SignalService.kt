@@ -24,7 +24,7 @@ import java.util.Locale
 import java.util.concurrent.TimeUnit
 import kotlin.math.min
 
-// Build 106: KYVORIQ branded notification system + static status-bar glyph.
+// Build 107: compact notification layout fix for OEM collapsed-height clipping.
 class SignalService : Service() {
     companion object {
         private const val SERVICE_CHANNEL = "dev_trader_background"
@@ -397,9 +397,9 @@ class SignalService : Service() {
         views.setTextViewText(R.id.notif_chip, model.chip)
         views.setInt(R.id.notif_chip, "setBackgroundResource", model.chipBackground)
         views.setTextColor(R.id.notif_chip, model.chipTextColor)
-        views.setViewVisibility(R.id.notif_pulse, if (model.animate) View.VISIBLE else View.INVISIBLE)
         if (expanded) {
             views.setTextViewText(R.id.notif_body, model.body)
+            views.setViewVisibility(R.id.notif_pulse, if (model.animate) View.VISIBLE else View.INVISIBLE)
         }
     }
 
