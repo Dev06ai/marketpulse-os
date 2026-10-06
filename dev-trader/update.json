@@ -1,8 +1,8 @@
 {
   "enabled": true,
-  "versionCode": 110,
-  "versionName": "0.16.0",
-  "apkUrl": "https://github.com/Dev06ai/marketpulse-os/releases/download/dev-trader-v0.16.0-110/app-release.apk",
-  "sha256": "a1df1616d2594918a9b69d7ac9b659d84711bb42f178b000122f6c5ed2db7c79",
-  "notes": "KYVORIQ 0.16.0 \u2022 Premium Experience Pack \u2022 smart alerts + risk heat in Insights \u2022 biometric Privacy Shield \u2022 adaptive widget \u2022 motion/ambience"
+  "versionCode": 111,
+  "versionName": "0.16.1",
+  "apkUrl": "https://github.com/Dev06ai/marketpulse-os/releases/download/dev-trader-v0.16.1-111/app-release.apk",
+  "sha256": "4417f4a82900aaf80ba7cf8956b58490f21df34e5d59c05c8e337b27eba927ad",
+  "notes": "KYVORIQ 0.16.1 \u2022 Live Widget Motion \u2022 up-to-1Hz BTC updates \u2022 animated price transitions \u2022 live bias/health/P&L"
 }
