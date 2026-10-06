@@ -1937,7 +1937,7 @@ class SafeActivity : Activity() {
                         val tp = t.optDouble("take_profit", Double.NaN)
                         val qty = t.optDouble("filled_qty", t.optDouble("requested_qty", Double.NaN))
                         val plannedMargin = t.optDouble("planned_margin_usdt", Double.NaN)
-                        val tradeLeverage = t.optInt("leverage", leverage)
+                        val tradeLeverage = t.optInt("leverage", 20)
                         val confidenceBand = t.optString("confidence_band", "")
                         val pnl = t.optDouble("net_profit_usdt", 0.0)
                         val resultR = t.optDouble("result_r", Double.NaN)
