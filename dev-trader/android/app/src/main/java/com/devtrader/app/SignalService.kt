@@ -24,11 +24,16 @@ import java.util.Locale
 import java.util.concurrent.TimeUnit
 import kotlin.math.min
 
-// Build 108: confidence-sized 20x demo execution notifications.
+// Build 110: premium alert hierarchy + widget sync.
+ // Build 108: confidence-sized 20x demo execution notifications.
 class SignalService : Service() {
     companion object {
         private const val SERVICE_CHANNEL = "dev_trader_background"
-        private const val SIGNAL_CHANNEL = "dev_trader_signals"
+        private const val ALERT_INFO_CHANNEL = "kyvoriq_alert_info_v1"
+        private const val ALERT_PRIORITY_CHANNEL = "kyvoriq_alert_priority_v1"
+        private const val ALERT_EXECUTION_CHANNEL = "kyvoriq_alert_execution_v1"
+        private const val ALERT_CRITICAL_CHANNEL = "kyvoriq_alert_critical_v1"
+        private const val ALERT_PREFS = "kyvoriq_alert_intelligence"
         private const val SERVICE_NOTIFICATION_ID = 3100
         private const val SIGNAL_NOTIFICATION_ID = 3101
         private const val PREFS = "dev_trader_signal_state"
@@ -130,12 +135,51 @@ class SignalService : Service() {
         )
         manager.createNotificationChannel(
             NotificationChannel(
-                SIGNAL_CHANNEL,
-                "KYVORIQ Signal Alerts",
+                ALERT_INFO_CHANNEL,
+                "KYVORIQ • Signals",
+                NotificationManager.IMPORTANCE_DEFAULT
+            ).apply {
+                description = "Routine setup and opportunity intelligence."
+                enableVibration(false)
+                setShowBadge(true)
+                lockscreenVisibility = Notification.VISIBILITY_PRIVATE
+            }
+        )
+        manager.createNotificationChannel(
+            NotificationChannel(
+                ALERT_PRIORITY_CHANNEL,
+                "KYVORIQ • Priority",
                 NotificationManager.IMPORTANCE_HIGH
             ).apply {
-                description = "KYVORIQ trade, setup and execution alerts."
+                description = "High-confidence setups and important position-management alerts."
                 enableVibration(true)
+                vibrationPattern = longArrayOf(0, 45)
+                setShowBadge(true)
+                lockscreenVisibility = Notification.VISIBILITY_PRIVATE
+            }
+        )
+        manager.createNotificationChannel(
+            NotificationChannel(
+                ALERT_EXECUTION_CHANNEL,
+                "KYVORIQ • Execution",
+                NotificationManager.IMPORTANCE_HIGH
+            ).apply {
+                description = "Order, fill, take-profit and position lifecycle alerts."
+                enableVibration(true)
+                vibrationPattern = longArrayOf(0, 35, 55, 70)
+                setShowBadge(true)
+                lockscreenVisibility = Notification.VISIBILITY_PRIVATE
+            }
+        )
+        manager.createNotificationChannel(
+            NotificationChannel(
+                ALERT_CRITICAL_CHANNEL,
+                "KYVORIQ • Critical",
+                NotificationManager.IMPORTANCE_HIGH
+            ).apply {
+                description = "Stop, execution failure and safety-critical alerts."
+                enableVibration(true)
+                vibrationPattern = longArrayOf(0, 85, 55, 120)
                 setShowBadge(true)
                 lockscreenVisibility = Notification.VISIBILITY_PRIVATE
             }
@@ -195,6 +239,7 @@ class SignalService : Service() {
                     runCatching {
                         val root = JSONObject(text)
                         if (root.optString("type") != "state") return
+                        KyvoriqWidgetProvider.updateFromState(this@SignalService, root)
                         val prefs = getSharedPreferences(PREFS, MODE_PRIVATE)
 
                         val alert = root.optJSONObject("opportunity_alert")
@@ -405,6 +450,12 @@ class SignalService : Service() {
 
     private fun buildServiceNotification(state: ServiceUiState): Notification {
         val model = serviceNotificationModel(state)
+        val confidence = signal.optDouble("confidence", 0.0)
+        val tier = when {
+            hasManagement -> "PRIORITY"
+            confidence >= 0.85 -> "PRIORITY"
+            else -> "INFO"
+        }
         val launchIntent = Intent(this, SafeActivity::class.java)
         val pending = PendingIntent.getActivity(
             this, 3100, launchIntent,
@@ -442,6 +493,26 @@ class SignalService : Service() {
         lastServiceUiState = state
         getSystemService(NotificationManager::class.java)
             .notify(SERVICE_NOTIFICATION_ID, buildServiceNotification(state))
+    }
+
+    private fun recordAlertTier(tier: String, title: String) {
+        getSharedPreferences(ALERT_PREFS, MODE_PRIVATE).edit()
+            .putString("last_tier", tier)
+            .putString("last_title", title)
+            .putLong("last_ts", System.currentTimeMillis())
+            .apply()
+    }
+
+    private fun alertChannelForTier(tier: String): String = when (tier) {
+        "CRITICAL" -> ALERT_CRITICAL_CHANNEL
+        "EXECUTION" -> ALERT_EXECUTION_CHANNEL
+        "PRIORITY" -> ALERT_PRIORITY_CHANNEL
+        else -> ALERT_INFO_CHANNEL
+    }
+
+    private fun alertPriorityForTier(tier: String): Int = when (tier) {
+        "CRITICAL", "EXECUTION", "PRIORITY" -> NotificationCompat.PRIORITY_HIGH
+        else -> NotificationCompat.PRIORITY_DEFAULT
     }
 
     private fun notifySignal(signal: JSONObject) {
@@ -490,7 +561,7 @@ class SignalService : Service() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        val notification = NotificationCompat.Builder(this, SIGNAL_CHANNEL)
+        val notification = NotificationCompat.Builder(this, alertChannelForTier(tier))
             .setSmallIcon(R.drawable.ic_stat_kyvoriq)
             .setColor(getColor(R.color.kyvoriq_gold))
             .setColorized(false)
@@ -499,10 +570,11 @@ class SignalService : Service() {
             .setStyle(NotificationCompat.BigTextStyle().bigText(body))
             .setContentIntent(pending)
             .setAutoCancel(true)
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setPriority(alertPriorityForTier(tier))
             .setCategory(Notification.CATEGORY_MESSAGE)
             .build()
 
+        recordAlertTier(tier, title)
         getSystemService(NotificationManager::class.java)
             .notify(SIGNAL_NOTIFICATION_ID, notification)
     }
@@ -578,13 +650,18 @@ class SignalService : Service() {
             if (avoid != null && avoid.length() > 0) body += "\nAvoid: " + avoid.optString(0)
         }
 
+        val tier = when (type) {
+            "SL_HIT", "EXECUTION_FAILED" -> "CRITICAL"
+            "TP1_HIT", "TP2_HIT", "EXECUTION_PENDING", "EXECUTION_OPEN", "EXECUTION_CLOSED" -> "EXECUTION"
+            else -> "PRIORITY"
+        }
         val launchIntent = Intent(this, SafeActivity::class.java)
         val pending = PendingIntent.getActivity(
             this, 3200, launchIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
         val notificationId = 3200 + (event.optString("key").hashCode() and 0x7fffffff) % 50000
-        val notification = NotificationCompat.Builder(this, SIGNAL_CHANNEL)
+        val notification = NotificationCompat.Builder(this, alertChannelForTier(tier))
             .setSmallIcon(R.drawable.ic_stat_kyvoriq)
             .setColor(getColor(R.color.kyvoriq_gold))
             .setColorized(false)
@@ -593,10 +670,11 @@ class SignalService : Service() {
             .setStyle(NotificationCompat.BigTextStyle().bigText(body))
             .setContentIntent(pending)
             .setAutoCancel(true)
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setPriority(alertPriorityForTier(tier))
             .setCategory(Notification.CATEGORY_MESSAGE)
             .build()
 
+        recordAlertTier(tier, title)
         getSystemService(NotificationManager::class.java).notify(notificationId, notification)
     }
 
@@ -606,12 +684,13 @@ class SignalService : Service() {
             android.content.pm.PackageManager.PERMISSION_GRANTED
         ) return
 
+        val tier = "PRIORITY"
         val launchIntent = Intent(this, SafeActivity::class.java)
         val pending = PendingIntent.getActivity(
             this, SIGNAL_NOTIFICATION_ID + 1, launchIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
-        val notification = NotificationCompat.Builder(this, SIGNAL_CHANNEL)
+        val notification = NotificationCompat.Builder(this, alertChannelForTier(tier))
             .setSmallIcon(R.drawable.ic_stat_kyvoriq)
             .setColor(getColor(R.color.kyvoriq_gold))
             .setColorized(false)
@@ -620,9 +699,10 @@ class SignalService : Service() {
             .setStyle(NotificationCompat.BigTextStyle().bigText(body))
             .setContentIntent(pending)
             .setAutoCancel(true)
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setPriority(alertPriorityForTier(tier))
             .setCategory(Notification.CATEGORY_MESSAGE)
             .build()
+        recordAlertTier(tier, title.ifBlank { "KYVORIQ Opportunity" })
         getSystemService(NotificationManager::class.java)
             .notify(SIGNAL_NOTIFICATION_ID + 1, notification)
     }

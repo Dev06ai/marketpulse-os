@@ -1,1 +1,2 @@
-<resources><string name="app_name">KYVORIQ</string></resources>
+<resources><string name="app_name">KYVORIQ</string>    <string name="widget_description">KYVORIQ market status and demo position widget</string>
+</resources>

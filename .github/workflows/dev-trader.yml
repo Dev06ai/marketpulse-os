@@ -120,7 +120,7 @@ jobs:
           gradle-version: '9.6.0'
       - name: Build Android debug APK
         working-directory: dev-trader/android
-        run: gradle assembleDebug --stacktrace -PdevTraderVersionCode=109 -PdevTraderVersionName=0.15.8
+        run: gradle assembleDebug --stacktrace -PdevTraderVersionCode=110 -PdevTraderVersionName=0.16.0
       - name: Build signed Android release APK
         if: steps.changed.outputs.android_changed == 'true'
         working-directory: dev-trader/android
@@ -131,7 +131,7 @@ jobs:
           DEV_TRADER_KEY_PASSWORD: ${{ secrets.DEV_TRADER_KEY_PASSWORD }}
         run: |
           echo "${{ secrets.DEV_TRADER_KEYSTORE_BASE64 }}" | base64 --decode > "$DEV_TRADER_KEYSTORE_PATH"
-          gradle assembleRelease --stacktrace -PdevTraderVersionCode=109 -PdevTraderVersionName=0.15.8
+          gradle assembleRelease --stacktrace -PdevTraderVersionCode=110 -PdevTraderVersionName=0.16.0
           if unzip -l app/build/outputs/apk/release/app-release.apk | grep -q ui_preview.json; then
             echo 'Debug preview data must never be included in release APKs.'
             exit 1
@@ -202,7 +202,7 @@ jobs:
           mkdir -p release
           cp dist/app-release.apk release/app-release.apk
           sha256sum release/app-release.apk | awk '{print $1}' > release/app-release.sha256
-          echo "tag=dev-trader-v0.15.8-109" >> "$GITHUB_OUTPUT"
+          echo "tag=dev-trader-v0.16.0-110" >> "$GITHUB_OUTPUT"
           echo "sha256=$(cat release/app-release.sha256)" >> "$GITHUB_OUTPUT"
       - name: Create GitHub release
         env:
@@ -212,7 +212,7 @@ jobs:
             echo "This release already exists; refusing to replace a published APK."
             exit 1
           fi
-          gh release create "${{ steps.release.outputs.tag }}" release/app-release.apk --target "$GITHUB_SHA" --title "KYVORIQ 0.15.8 (109)" --notes "Haptic Studio: premium semantic haptics across workspace navigation, timeframe selection, chart gestures and controls, P&L actions and leverage detents. Uses device-native haptic primitives and respects Android system haptic settings."
+          gh release create "${{ steps.release.outputs.tag }}" release/app-release.apk --target "$GITHUB_SHA" --title "KYVORIQ 0.16.0 (110)" --notes "Premium Experience Pack: animated decision-state transitions, adaptive market ambience, four-tier smart alert routing, Insights risk heat meter, biometric Privacy Shield with sensitive-value masking, and responsive Android home-screen widgets. Trading logic is unchanged."
       - name: Publish verified update manifest
         env:
           SHA256: "${{ steps.release.outputs.sha256 }}"
@@ -226,11 +226,11 @@ jobs:
           data = json.loads(p.read_text())
           data.update({
               "enabled": True,
-              "versionCode": 109,
-              "versionName": "0.15.8",
-              "apkUrl": "https://github.com/Dev06ai/marketpulse-os/releases/download/dev-trader-v0.15.8-109/app-release.apk",
+              "versionCode": 110,
+              "versionName": "0.16.0",
+              "apkUrl": "https://github.com/Dev06ai/marketpulse-os/releases/download/dev-trader-v0.16.0-110/app-release.apk",
               "sha256": os.environ["SHA256"],
-              "notes": "KYVORIQ 0.15.8 • Haptic Studio • premium semantic tactile feedback • chart gesture cues • leverage detents"
+              "notes": "KYVORIQ 0.16.0 • Premium Experience Pack • smart alerts + risk heat in Insights • biometric Privacy Shield • adaptive widget • motion/ambience"
           })
           p.write_text(json.dumps(data, indent=2) + "\n")
           PY

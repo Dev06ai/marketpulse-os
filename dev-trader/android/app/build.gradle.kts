@@ -9,8 +9,8 @@ android {
         applicationId = "com.devtrader.app"
         minSdk = 26
         targetSdk = 37
-        versionCode = (providers.gradleProperty("devTraderVersionCode").orNull ?: "109").toInt()
-        versionName = providers.gradleProperty("devTraderVersionName").orNull ?: "0.15.8"
+        versionCode = (providers.gradleProperty("devTraderVersionCode").orNull ?: "110").toInt()
+        versionName = providers.gradleProperty("devTraderVersionName").orNull ?: "0.16.0"
         val backendUrl = providers.gradleProperty("devTraderBackendUrl").orNull
             ?: "https://dev-trader-engine.de.deplexo.com"
         require(Regex("https://[A-Za-z0-9.-]+(?::[0-9]+)?/?").matches(backendUrl)) {
@@ -41,6 +41,7 @@ android {
 }
 dependencies {
     implementation("androidx.core:core-ktx:1.17.0")
+    implementation("androidx.biometric:biometric:1.1.0")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("androidx.compose.runtime:runtime:1.12.1")
 }

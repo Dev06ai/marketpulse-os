@@ -1,14 +1,18 @@
 // Build 101: KYVORIQ visual identity — gold/charcoal system, branded navigation and mark.
 // Build 99: free-host migration with compact mobile delivery.
+// Build 110: KYVORIQ Premium Experience Pack — motion, ambience, risk/alert intelligence, privacy and widget.
 // Build 109: KYVORIQ premium semantic haptics across navigation, chart tools and calculator.
 // Build 108: confidence-sized demo execution UI with live-backend capability detection.
 // Build 83: show Bitget Demo funding readiness and demo execution state.
 package com.devtrader.app
 
 import android.Manifest
-import android.app.Activity
+import android.animation.ArgbEvaluator
+import android.animation.ValueAnimator
 import android.app.NotificationChannel
+import android.appwidget.AppWidgetManager
 import android.app.NotificationManager
+import android.content.ComponentName
 import android.content.Context
 import android.net.ConnectivityManager
 import android.net.Network
@@ -35,12 +39,16 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.SeekBar
 import android.widget.TextView
+import android.widget.Toast
+import androidx.biometric.BiometricManager
+import androidx.biometric.BiometricPrompt
 import androidx.core.app.NotificationCompat
 import androidx.core.content.FileProvider
 import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.fragment.app.FragmentActivity
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
@@ -56,7 +64,7 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 
 // Build 87: backend executes every emitted trade call; Android client remains signal/event driven.
-class SafeActivity : Activity() {
+class SafeActivity : FragmentActivity() {
     private val kyGold = Color.rgb(247, 201, 72)
     private val kyAmber = Color.rgb(224, 167, 46)
     private val kyDeepGold = Color.rgb(184, 134, 11)
@@ -116,13 +124,20 @@ class SafeActivity : Activity() {
     private lateinit var ledgerView: TextView
     private lateinit var decisionView: TextView
     private lateinit var insightContext: TextView
+    private lateinit var alertIntelligenceView: TextView
+    private lateinit var riskHeatText: TextView
+    private lateinit var riskHeatMeter: RiskHeatMeterView
     private lateinit var curve: PerformanceCurveView
+    private lateinit var rootSurface: LinearLayout
+    private lateinit var decisionContainer: LinearLayout
     private var selectedWorkspace = 0
     private var fullTradeHistoryText = "No executed demo trades yet."
     private lateinit var chart: MarketChartView
     private lateinit var updateButton: Button
     private lateinit var checkButton: Button
     private lateinit var alertsButton: Button
+    private lateinit var privacyButton: Button
+    private lateinit var widgetButton: Button
     private var selectedTf = "15m"
     private var lastStateReceivedMs = 0L
     private var latestRoot: JSONObject? = null
@@ -156,6 +171,14 @@ class SafeActivity : Activity() {
     private var lastRetryRequestMs = 0L
     private var lastSocketRebuildMs = 0L
     private var reconnectRunnable: Runnable? = null
+    private var lastDecisionVisualKey = ""
+    private var lastStatusVisualKey = ""
+    private var lastAmbientKey = ""
+    private var ambientColor = kyCharcoal
+    private var ambientAnimator: ValueAnimator? = null
+    private var privacyAuthenticated = true
+    private var biometricPromptActive = false
+    private var backgroundedAtMs = 0L
 
     private val keepaliveRunnable = object : Runnable {
         override fun run() {
@@ -218,10 +241,10 @@ class SafeActivity : Activity() {
             window.isNavigationBarContrastEnforced = false
         }
         installCrashReporter()
-        buildUi()
-        // The fixture exists only in src/debug/assets. Release builds cannot
-        // enter this path or package synthetic account/market data.
+        // Resolve preview mode before building the UI so automated visual checks
+        // never inherit a device's privacy-lock preference.
         debugPreview = BuildConfig.DEBUG && intent.getBooleanExtra("visual_preview", false)
+        buildUi()
         if (debugPreview) {
             val preview = JSONObject(assets.open("ui_preview.json").bufferedReader().use { it.readText() })
             val now = System.currentTimeMillis()
@@ -234,6 +257,7 @@ class SafeActivity : Activity() {
             selectWorkspace(intent.getIntExtra("visual_workspace", 0).coerceIn(0, 2))
             return
         }
+        enforceInitialPrivacyGate()
         registerNetworkCallback()
         ensureChannel()
         startBackgroundAlerts()
@@ -293,6 +317,7 @@ class SafeActivity : Activity() {
             setBackgroundColor(kyCharcoal)
             setPadding(dp(14), dp(8), dp(14), dp(8))
         }
+        rootSurface = root
         ViewCompat.setOnApplyWindowInsetsListener(root) { view, insets ->
             val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
             view.setPadding(dp(14), bars.top + dp(8), dp(14), bars.bottom + dp(8))
@@ -355,6 +380,7 @@ class SafeActivity : Activity() {
         chart = MarketChartView(this).apply { minimumHeight = 0; contentDescription = "Interactive price chart" }
         tradePage.addView(chart, LinearLayout.LayoutParams(-1, 0, 1f).apply { bottomMargin = dp(8) })
         val setup = premiumCard("DECISION CENTER", "NO TRADE  •  SCANNING\nWaiting for verified market data.", if (compactViewport) 11.5f else 13f)
+        decisionContainer = setup.first
         signal = setup.second
         signal.maxLines = if (compactViewport) 4 else 5
         signal.ellipsize = android.text.TextUtils.TruncateAt.END
@@ -400,22 +426,53 @@ class SafeActivity : Activity() {
         positionsPage.addView(historyButton, LinearLayout.LayoutParams(-1, dp(44)))
 
         val insightsPage = page()
+        val insightsScroll = ScrollView(this).apply {
+            isFillViewport = true
+            overScrollMode = View.OVER_SCROLL_IF_CONTENT_SCROLLS
+        }
+        val insightsContent = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(0, 0, 0, dp(4))
+        }
+        insightsScroll.addView(insightsContent, ScrollView.LayoutParams(-1, -2))
+        insightsPage.addView(insightsScroll, LinearLayout.LayoutParams(-1, 0, 1f))
+
         val story = premiumCard("MARKET CONTEXT", "Building the market picture…", 13f)
         features = story.second
         features.maxLines = 5
-        insightsPage.addView(story.first, margins(bottom = 10))
-        val decisions = scrollableCard("ENTRY CHECKS", "Waiting for a qualified setup…", 12f, dp(150))
+        insightsContent.addView(story.first, margins(bottom = 10))
+
+        val decisions = scrollableCard("ENTRY CHECKS", "Waiting for a qualified setup…", 12f, dp(if (compactViewport) 138 else 165))
         decisionView = decisions.value
-        insightsPage.addView(decisions.container, LinearLayout.LayoutParams(-1, 0, 1f).apply { bottomMargin = dp(10) })
+        insightsContent.addView(decisions.container, margins(bottom = 10))
+
+        val alertCard = compactCard("ALERT INTELLIGENCE", "INFO  •  Routine monitoring\nSmart routing is active.", 11f)
+        alertIntelligenceView = alertCard.value
+        insightsContent.addView(alertCard.container, margins(bottom = 10))
+
+        val riskCard = compactCard("POSITION RISK HEAT", "IDLE  •  No open demo position.", 11f)
+        riskHeatText = riskCard.value
+        riskHeatMeter = RiskHeatMeterView(this).apply {
+            contentDescription = "Position risk heat meter"
+            setRisk(0f, "IDLE", animate = false)
+        }
+        riskCard.container.addView(
+            riskHeatMeter,
+            1,
+            LinearLayout.LayoutParams(-1, dp(42)).apply { topMargin = dp(4); bottomMargin = dp(2) }
+        )
+        insightsContent.addView(riskCard.container, margins(bottom = 10))
+
         val levels = compactCard("LEVELS & FLOW", "Loading confirmed context…", 12f)
         insightContext = levels.value
-        insightsPage.addView(levels.container, margins(bottom = 10))
+        insightsContent.addView(levels.container, margins(bottom = 10))
         val feed = compactCard("CONNECTION", "BITGET  •  CONNECTING", 11.5f)
         integrity = feed.value
-        insightsPage.addView(feed.container, margins(bottom = 10))
+        insightsContent.addView(feed.container, margins(bottom = 10))
         val sys = compactCard("SYSTEM", "Build ${BuildConfig.VERSION_CODE}  •  Checking…", 11.5f)
         check = sys.value
-        insightsPage.addView(sys.container, margins(bottom = 10))
+        insightsContent.addView(sys.container, margins(bottom = 10))
+
         val tools = LinearLayout(this)
         checkButton = compactPillButton("SYSTEM CHECK")
         checkButton.setOnClickListener {
@@ -429,7 +486,23 @@ class SafeActivity : Activity() {
             safe { checkUpdate() }
         }
         tools.addView(updateButton, LinearLayout.LayoutParams(0, dp(44), 1f))
-        insightsPage.addView(tools)
+        insightsContent.addView(tools, margins(bottom = 8))
+
+        val deviceTools = LinearLayout(this)
+        privacyButton = compactPillButton("PRIVACY")
+        privacyButton.setOnClickListener {
+            haptic(it, KyvoriqHaptics.Cue.ACTION)
+            showPrivacyControls()
+        }
+        deviceTools.addView(privacyButton, LinearLayout.LayoutParams(0, dp(44), 1f).apply { rightMargin = dp(6) })
+        widgetButton = compactPillButton("ADD WIDGET")
+        widgetButton.setOnClickListener {
+            haptic(it, KyvoriqHaptics.Cue.ACTION)
+            requestHomeWidgetPin()
+        }
+        deviceTools.addView(widgetButton, LinearLayout.LayoutParams(0, dp(44), 1f))
+        insightsContent.addView(deviceTools)
+        refreshPrivacyButton()
 
         val navigation = LinearLayout(this).apply { setPadding(0, dp(10), 0, 0) }
         listOf("TRADE", "POSITIONS", "INSIGHTS").forEachIndexed { index, title ->
@@ -1082,7 +1155,7 @@ class SafeActivity : Activity() {
         val source = upstream?.optString("source", "").orEmpty()
         val authoritativeFeedHealthy = health == "HEALTHY" && ws && source == "BITGET_WS" && freshMarket
         chart.setFeedHealthy(authoritativeFeedHealthy)
-        status.text = when {
+        val statusLabel = when {
             authoritativeFeedHealthy -> "LIVE"
             health == "DEGRADED" -> "DATA DEGRADED"
             health == "CONNECTING" -> "CONNECTING…"
@@ -1091,6 +1164,7 @@ class SafeActivity : Activity() {
             !freshMarket -> "DATA STALE"
             else -> health
         }
+        setStatusAnimated(statusLabel)
         price.text = priceBtcAccent(
             "BTC  " + if (priceValue.isNaN()) "—"
             else String.format(Locale.US, "%,.2f", priceValue)
@@ -1331,6 +1405,11 @@ class SafeActivity : Activity() {
         chart.setLivePrice(priceValue)
         if (requestChart) requestChartIfNeeded()
         renderWorkspace(root)
+        renderAlertIntelligence(root)
+        renderRiskHeat(root)
+        animateDecisionState(root)
+        applyAdaptiveAmbience(root)
+        KyvoriqWidgetProvider.updateFromState(this, root)
     }
 
     private fun formatClock(timestamp: Long): String = if (timestamp <= 0) "—" else
@@ -1339,6 +1418,10 @@ class SafeActivity : Activity() {
     private fun renderWorkspace(root: JSONObject) {
         fun money(value: Double, signed: Boolean = false): String =
             if (!value.isFinite()) "—" else String.format(Locale.US, if (signed) "%+.2f" else "%,.2f", value)
+        val hideAmounts = getSharedPreferences("kyvoriq_privacy", Context.MODE_PRIVATE)
+            .getBoolean("hide_amounts", false)
+        fun sensitiveMoney(value: Double, signed: Boolean = false): String =
+            if (hideAmounts) "••••" else money(value, signed)
         val execution = root.optJSONObject("execution") ?: JSONObject()
         val summary = execution.optJSONObject("summary") ?: JSONObject()
         val performance = execution.optJSONObject("performance") ?: JSONObject()
@@ -1364,7 +1447,7 @@ class SafeActivity : Activity() {
         val mediumMax = marginSizing?.optDouble("medium_max_usdt", Double.NaN) ?: Double.NaN
         val highMin = marginSizing?.optDouble("high_min_usdt", Double.NaN) ?: Double.NaN
         val highMax = marginSizing?.optDouble("high_max_usdt", Double.NaN) ?: Double.NaN
-        positionSummary.text = "EQUITY  ${money(equity)} USDT\nAvailable  ${money(available)}  •  Unrealized  ${money(unrealized, true)}"
+        positionSummary.text = "EQUITY  ${sensitiveMoney(equity)} USDT\nAvailable  ${sensitiveMoney(available)}  •  Unrealized  ${sensitiveMoney(unrealized, true)}"
         positionSummary.textSize = 15f
         curve.setPoints(ledger.optJSONArray("curve") ?: JSONArray())
         val sizingLine = if (confidenceSized) {
@@ -1373,7 +1456,7 @@ class SafeActivity : Activity() {
         } else {
             "Legacy backend sizing  •  Risk ≤ ${summary.optDouble("risk_pct", 0.25)}%  •  Entries ${summary.optInt("daily_executions")}/${summary.optInt("daily_cap", 3)} today\n"
         }
-        ledgerView.text = "FILLS  ${ledger.optInt("fill_count")}  •  Net ${money(fillNet, true)} USDT\n" +
+        ledgerView.text = "FILLS  ${ledger.optInt("fill_count")}  •  Net ${sensitiveMoney(fillNet, true)} USDT\n" +
             "Fees ${money(ledger.optDouble("fees_usdt", Double.NaN))}  •  Excludes funding / transfers\n" +
             sizingLine +
             (if (ledger.optString("error").isNotBlank() && !ledger.isNull("error")) "Accounting refresh failed; showing last snapshot"
@@ -1387,9 +1470,9 @@ class SafeActivity : Activity() {
             val p = positions.optJSONObject(i) ?: continue
             if (positionText.isNotEmpty()) positionText.append("\n\n")
             positionText.append(p.optString("holdSide", "—").uppercase(Locale.US))
-                .append("  •  ").append(p.optString("total", "—")).append(" BTC")
+                .append("  •  ").append(if (hideAmounts) "••••" else p.optString("total", "—")).append(" BTC")
                 .append("\nAverage entry  ").append(money(p.optDouble("openPriceAvg", Double.NaN)))
-                .append("\nUnrealized  ").append(money(p.optDouble("unrealizedPL", Double.NaN), true)).append(" USDT")
+                .append("\nUnrealized  ").append(sensitiveMoney(p.optDouble("unrealizedPL", Double.NaN), true)).append(" USDT")
         }
         tradeHistory.text = if (positionText.isEmpty()) "No exchange position confirmed.\nEntry checks remain active." else positionText.toString()
 
@@ -1448,6 +1531,389 @@ class SafeActivity : Activity() {
                  else "Evidence ${money(s.optDouble("confidence", 0.0) * 100)} / 100  •  Heuristic score"))
         } else {
             setTradeSetupText("NO TRADE  •  ${if (openCount > 0) "EXPOSURE OPEN" else "SCANNING"}\n$reason\nTap details for entry checks.")
+        }
+    }
+
+    private fun setStatusAnimated(value: String) {
+        if (!::status.isInitialized) return
+        if (value == lastStatusVisualKey) {
+            status.text = value
+            return
+        }
+        lastStatusVisualKey = value
+        status.animate().cancel()
+        status.alpha = 0.45f
+        status.translationY = dp(2).toFloat()
+        status.text = value
+        status.animate()
+            .alpha(1f)
+            .translationY(0f)
+            .setDuration(220L)
+            .start()
+    }
+
+    private fun decisionVisualKey(root: JSONObject): String {
+        val signalObj = root.optJSONObject("signal")
+        val execution = root.optJSONObject("execution") ?: JSONObject()
+        val recent = execution.optJSONArray("recent_trades") ?: JSONArray()
+        if (signalObj == null) return if (execution.optJSONObject("summary")?.optInt("open_trades", 0) ?: 0 > 0) "OPEN" else "WAIT"
+        val id = signalObj.optString("id")
+        for (i in 0 until recent.length()) {
+            val trade = recent.optJSONObject(i) ?: continue
+            if (trade.optString("signal_id") != id) continue
+            return when (trade.optString("status").uppercase(Locale.US)) {
+                "OPEN" -> "OPEN_" + signalObj.optString("direction")
+                "ORDER_PENDING" -> "EXECUTING_" + signalObj.optString("direction")
+                "CLOSED" -> "CLOSED"
+                "FAILED" -> "FAILED"
+                else -> "SIGNAL_" + signalObj.optString("direction")
+            }
+        }
+        val lifecycle = signalObj.optString("lifecycle", signalObj.optString("lifecycle_stage", "ACTIVE")).uppercase(Locale.US)
+        return when (lifecycle) {
+            "TP1_HIT" -> "TP1"
+            "TP2_HIT", "TARGET_REACHED" -> "TP2"
+            "SL_HIT", "INVALIDATED" -> "SL"
+            else -> "SIGNAL_" + signalObj.optString("direction", "WAIT").uppercase(Locale.US)
+        }
+    }
+
+    private fun animateDecisionState(root: JSONObject) {
+        if (!::signal.isInitialized) return
+        val key = decisionVisualKey(root)
+        if (key == lastDecisionVisualKey) return
+        lastDecisionVisualKey = key
+        signal.animate().cancel()
+        signal.alpha = 0.38f
+        signal.translationY = dp(7).toFloat()
+        signal.scaleX = 0.985f
+        signal.scaleY = 0.985f
+        signal.animate()
+            .alpha(1f)
+            .translationY(0f)
+            .scaleX(1f)
+            .scaleY(1f)
+            .setDuration(320L)
+            .start()
+    }
+
+    private fun renderAlertIntelligence(root: JSONObject) {
+        if (!::alertIntelligenceView.isInitialized) return
+        val event = root.optJSONObject("trade_event")
+        val eventType = event?.optString("type", "").orEmpty()
+        val signalObj = root.optJSONObject("signal")
+        val confidence = signalObj?.optDouble("confidence", 0.0) ?: 0.0
+        val health = root.optString("data_health", "UNKNOWN")
+        val tier = when {
+            eventType in setOf("SL_HIT", "EXECUTION_FAILED") -> "CRITICAL"
+            health == "DEGRADED" || health == "STALE" -> "CRITICAL"
+            eventType in setOf("TP1_HIT", "TP2_HIT", "EXECUTION_PENDING", "EXECUTION_OPEN", "EXECUTION_CLOSED") -> "EXECUTION"
+            confidence >= 0.85 -> "PRIORITY"
+            signalObj != null -> "INFO"
+            else -> "INFO"
+        }
+        val explanation = when (tier) {
+            "CRITICAL" -> "Safety / stop / degraded-feed events use the strongest alert route."
+            "EXECUTION" -> "Orders, fills and TP lifecycle use execution-priority feedback."
+            "PRIORITY" -> "High-confidence setups use priority notification + haptic routing."
+            else -> "Routine monitoring stays quiet until something deserves attention."
+        }
+        val prefs = getSharedPreferences("kyvoriq_alert_intelligence", Context.MODE_PRIVATE)
+        val lastTier = prefs.getString("last_tier", "—") ?: "—"
+        val lastTitle = prefs.getString("last_title", "").orEmpty()
+        alertIntelligenceView.text =
+            "LIVE TIER  •  $tier\n$explanation" +
+                if (lastTitle.isBlank()) "" else "\nLast delivered  •  $lastTier  •  " + lastTitle.take(42)
+        alertIntelligenceView.setTextColor(
+            when (tier) {
+                "CRITICAL" -> Color.rgb(255, 82, 105)
+                "EXECUTION" -> Color.rgb(54, 211, 153)
+                "PRIORITY" -> kyGold
+                else -> kyGray
+            }
+        )
+    }
+
+    private fun renderRiskHeat(root: JSONObject) {
+        if (!::riskHeatMeter.isInitialized || !::riskHeatText.isInitialized) return
+        val execution = root.optJSONObject("execution") ?: JSONObject()
+        val recent = execution.optJSONArray("recent_trades") ?: JSONArray()
+        var openTrade: JSONObject? = null
+        for (i in 0 until recent.length()) {
+            val row = recent.optJSONObject(i) ?: continue
+            if (row.optString("status").uppercase(Locale.US) == "OPEN") {
+                openTrade = row
+                break
+            }
+        }
+        if (openTrade == null) {
+            riskHeatMeter.setRisk(0f, "IDLE", animate = lastDecisionVisualKey.isNotBlank())
+            riskHeatText.text = "No open demo position  •  monitoring stays armed."
+            riskHeatText.setTextColor(kyGray)
+            return
+        }
+
+        val trade = openTrade
+        val direction = trade!!.optString("direction", "LONG").uppercase(Locale.US)
+        val entry = trade.optDouble("entry_price", Double.NaN)
+        val stop = trade.optDouble("stop_loss", Double.NaN)
+        val current = root.optDouble("last_price", Double.NaN)
+        val featuresNow = overlayFeatures ?: root.optJSONObject("features") ?: JSONObject()
+        val reasons = mutableListOf<String>()
+        var score = 0.0
+
+        val initialRisk = kotlin.math.abs(entry - stop)
+        if (entry.isFinite() && stop.isFinite() && current.isFinite() && initialRisk > 0.0) {
+            val remaining = if (direction == "SHORT") (stop - current) / initialRisk else (current - stop) / initialRisk
+            val stopPressure = (1.0 - remaining).coerceIn(0.0, 1.25)
+            score += (stopPressure * 55.0).coerceAtMost(65.0)
+            when {
+                remaining <= 0.20 -> reasons += "Near stop zone"
+                remaining <= 0.55 -> reasons += "Stop distance compressed"
+            }
+        }
+
+        val volatility = featuresNow.optDouble("volatility_pct", Double.NaN)
+        if (volatility.isFinite()) {
+            if (volatility >= 1.5) { score += 14.0; reasons += "Volatility expanded" }
+            else if (volatility >= 1.0) { score += 7.0; reasons += "Volatility elevated" }
+        }
+        val spread = featuresNow.optDouble("spread_bps", Double.NaN)
+        if (spread.isFinite()) {
+            if (spread >= 5.0) { score += 10.0; reasons += "Spread widened" }
+            else if (spread >= 2.5) { score += 5.0; reasons += "Spread elevated" }
+        }
+        val cvd = featuresNow.optString("cvd_price_divergence", "NONE").uppercase(Locale.US)
+        if ((direction == "LONG" && cvd == "BEARISH") || (direction == "SHORT" && cvd == "BULLISH")) {
+            score += 10.0
+            reasons += "CVD diverging"
+        }
+        val structure = featuresNow.optString("market_structure", "").uppercase(Locale.US)
+        if ((direction == "LONG" && structure.contains("BEAR")) || (direction == "SHORT" && structure.contains("BULL"))) {
+            score += 12.0
+            reasons += "Structure against position"
+        }
+        if (root.optString("data_health") != "HEALTHY") {
+            score += 20.0
+            reasons += "Feed degraded"
+        }
+
+        val finalScore = score.coerceIn(0.0, 100.0)
+        val state = when {
+            finalScore >= 76 -> "CRITICAL"
+            finalScore >= 51 -> "HIGH"
+            finalScore >= 26 -> "ELEVATED"
+            else -> "SAFE"
+        }
+        riskHeatMeter.setRisk(finalScore.toFloat(), state)
+        riskHeatText.text = if (reasons.isEmpty()) {
+            "$direction position  •  conditions remain orderly."
+        } else {
+            "$direction  •  " + reasons.distinct().take(3).joinToString("  •  ")
+        }
+        riskHeatText.setTextColor(
+            when (state) {
+                "CRITICAL" -> Color.rgb(255, 82, 105)
+                "HIGH" -> kyAmber
+                "ELEVATED" -> kyGold
+                else -> Color.rgb(54, 211, 153)
+            }
+        )
+    }
+
+    private fun applyAdaptiveAmbience(root: JSONObject) {
+        if (!::rootSurface.isInitialized) return
+        val health = root.optString("data_health", "UNKNOWN")
+        val direction = root.optJSONObject("signal")?.optString("direction", "").orEmpty().uppercase(Locale.US)
+        val openTrades = root.optJSONObject("execution")?.optJSONObject("summary")?.optInt("open_trades", 0) ?: 0
+        val key = when {
+            health != "HEALTHY" -> "CAUTION"
+            openTrades > 0 && direction == "LONG" -> "LONG"
+            openTrades > 0 && direction == "SHORT" -> "SHORT"
+            direction == "LONG" -> "BULLISH"
+            direction == "SHORT" -> "BEARISH"
+            else -> "NEUTRAL"
+        }
+        if (key == lastAmbientKey) return
+        lastAmbientKey = key
+        val target = when (key) {
+            "LONG", "BULLISH" -> Color.rgb(10, 31, 27)
+            "SHORT", "BEARISH" -> Color.rgb(34, 14, 22)
+            "CAUTION" -> Color.rgb(34, 27, 12)
+            else -> Color.rgb(20, 18, 11)
+        }
+        val accent = when (key) {
+            "LONG", "BULLISH" -> Color.rgb(54, 211, 153)
+            "SHORT", "BEARISH" -> Color.rgb(255, 82, 105)
+            "CAUTION" -> kyAmber
+            else -> kyGold
+        }
+        ambientAnimator?.cancel()
+        val start = ambientColor
+        ambientAnimator = ValueAnimator.ofObject(ArgbEvaluator(), start, target).apply {
+            duration = 420L
+            addUpdateListener {
+                ambientColor = it.animatedValue as Int
+                rootSurface.background = gradient(
+                    intArrayOf(kyCharcoal, ambientColor),
+                    GradientDrawable.Orientation.TOP_BOTTOM
+                )
+            }
+            start()
+        }
+        if (::decisionContainer.isInitialized) {
+            decisionContainer.background = gradient(
+                intArrayOf(kySlate, kyCharcoal),
+                GradientDrawable.Orientation.TL_BR
+            ).apply {
+                cornerRadius = dp(17).toFloat()
+                setStroke(dp(1), accent)
+            }
+        }
+    }
+
+    private fun privacyPrefs() = getSharedPreferences("kyvoriq_privacy", Context.MODE_PRIVATE)
+
+    private fun privacyAuthenticators(): Int =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            BiometricManager.Authenticators.BIOMETRIC_STRONG or BiometricManager.Authenticators.DEVICE_CREDENTIAL
+        } else {
+            BiometricManager.Authenticators.BIOMETRIC_WEAK
+        }
+
+    private fun canUsePrivacyAuth(): Boolean =
+        BiometricManager.from(this).canAuthenticate(privacyAuthenticators()) == BiometricManager.BIOMETRIC_SUCCESS
+
+    private fun enforceInitialPrivacyGate() {
+        val enabled = privacyPrefs().getBoolean("biometric_enabled", false)
+        privacyAuthenticated = !enabled
+        refreshPrivacyButton()
+        if (!enabled) return
+        rootSurface.visibility = View.INVISIBLE
+        requestPrivacyAuthentication(
+            title = "Unlock KYVORIQ",
+            subtitle = "Authenticate to open your trading workspace.",
+            onSuccess = {
+                privacyAuthenticated = true
+                rootSurface.visibility = View.VISIBLE
+                rootSurface.alpha = 0f
+                rootSurface.animate().alpha(1f).setDuration(220L).start()
+            },
+            onFailure = { finishAndRemoveTask() }
+        )
+    }
+
+    private fun requestPrivacyAuthentication(
+        title: String,
+        subtitle: String,
+        onSuccess: () -> Unit,
+        onFailure: () -> Unit = {}
+    ) {
+        if (!canUsePrivacyAuth()) {
+            onFailure()
+            showInfoDialog("Privacy Shield", "Biometric or device authentication is not available on this device.")
+            return
+        }
+        if (biometricPromptActive) return
+        biometricPromptActive = true
+        val prompt = BiometricPrompt(
+            this,
+            ContextCompat.getMainExecutor(this),
+            object : BiometricPrompt.AuthenticationCallback() {
+                override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
+                    super.onAuthenticationSucceeded(result)
+                    biometricPromptActive = false
+                    haptic(rootSurface, KyvoriqHaptics.Cue.CONFIRM)
+                    onSuccess()
+                }
+
+                override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
+                    super.onAuthenticationError(errorCode, errString)
+                    biometricPromptActive = false
+                    if (errorCode != BiometricPrompt.ERROR_NEGATIVE_BUTTON &&
+                        errorCode != BiometricPrompt.ERROR_USER_CANCELED &&
+                        errorCode != BiometricPrompt.ERROR_CANCELED
+                    ) {
+                        haptic(rootSurface, KyvoriqHaptics.Cue.REJECT)
+                    }
+                    onFailure()
+                }
+            }
+        )
+        val builder = BiometricPrompt.PromptInfo.Builder()
+            .setTitle(title)
+            .setSubtitle(subtitle)
+            .setAllowedAuthenticators(privacyAuthenticators())
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) builder.setNegativeButtonText("Cancel")
+        prompt.authenticate(builder.build())
+    }
+
+    private fun showPrivacyControls() {
+        val prefs = privacyPrefs()
+        val enabled = prefs.getBoolean("biometric_enabled", false)
+        val hidden = prefs.getBoolean("hide_amounts", false)
+        val options = arrayOf(
+            if (enabled) "Disable biometric app lock" else "Enable biometric app lock",
+            if (hidden) "Show balances & P&L" else "Hide balances & P&L"
+        )
+        android.app.AlertDialog.Builder(this)
+            .setTitle("KYVORIQ Privacy Shield")
+            .setItems(options) { _, which ->
+                when (which) {
+                    0 -> {
+                        requestPrivacyAuthentication(
+                            title = if (enabled) "Disable Privacy Lock" else "Enable Privacy Lock",
+                            subtitle = "Confirm this security change.",
+                            onSuccess = {
+                                prefs.edit().putBoolean("biometric_enabled", !enabled).apply()
+                                privacyAuthenticated = true
+                                refreshPrivacyButton()
+                                Toast.makeText(this, if (enabled) "Biometric lock disabled" else "Biometric lock enabled", Toast.LENGTH_SHORT).show()
+                            }
+                        )
+                    }
+                    1 -> {
+                        prefs.edit().putBoolean("hide_amounts", !hidden).apply()
+                        refreshPrivacyButton()
+                        latestRoot?.let {
+                            renderWorkspace(it)
+                            KyvoriqWidgetProvider.updateFromState(this, it)
+                        }
+                    }
+                }
+            }
+            .setNegativeButton("CLOSE", null)
+            .show()
+    }
+
+    private fun refreshPrivacyButton() {
+        if (!::privacyButton.isInitialized) return
+        val prefs = privacyPrefs()
+        val enabled = prefs.getBoolean("biometric_enabled", false)
+        val hidden = prefs.getBoolean("hide_amounts", false)
+        privacyButton.text = when {
+            enabled && hidden -> "PRIVACY • LOCKED"
+            enabled -> "PRIVACY • ON"
+            hidden -> "PRIVACY • HIDDEN"
+            else -> "PRIVACY"
+        }
+    }
+
+    private fun requestHomeWidgetPin() {
+        val manager = AppWidgetManager.getInstance(this)
+        val provider = ComponentName(this, KyvoriqWidgetProvider::class.java)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && manager.isRequestPinAppWidgetSupported) {
+            val requested = manager.requestPinAppWidget(provider, null, null)
+            if (requested) {
+                haptic(widgetButton, KyvoriqHaptics.Cue.CONFIRM)
+                widgetButton.text = "WIDGET REQUESTED"
+                handler.postDelayed({ if (::widgetButton.isInitialized) widgetButton.text = "ADD WIDGET" }, 2200L)
+            } else {
+                haptic(widgetButton, KyvoriqHaptics.Cue.REJECT)
+                showInfoDialog("KYVORIQ Widget", "Your launcher did not accept the pin request. Add KYVORIQ from the Android widget picker.")
+            }
+        } else {
+            showInfoDialog("KYVORIQ Widget", "Add KYVORIQ from your launcher’s widget picker.")
         }
     }
 
@@ -2418,6 +2884,28 @@ class SafeActivity : Activity() {
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        if (debugPreview || biometricPromptActive) return
+        if (privacyPrefs().getBoolean("biometric_enabled", false)) {
+            val elapsed = if (backgroundedAtMs > 0L) System.currentTimeMillis() - backgroundedAtMs else 0L
+            if (!privacyAuthenticated || elapsed >= 60_000L) {
+                privacyAuthenticated = false
+                rootSurface.visibility = View.INVISIBLE
+                requestPrivacyAuthentication(
+                    title = "Unlock KYVORIQ",
+                    subtitle = "Privacy Shield locked this session.",
+                    onSuccess = {
+                        privacyAuthenticated = true
+                        backgroundedAtMs = 0L
+                        rootSurface.visibility = View.VISIBLE
+                    },
+                    onFailure = { finishAndRemoveTask() }
+                )
+            }
+        }
+    }
+
     override fun onStart() {
         super.onStart()
         if (debugPreview) return
@@ -2441,6 +2929,9 @@ class SafeActivity : Activity() {
     }
 
     override fun onStop() {
+        if (!debugPreview && !biometricPromptActive && privacyPrefs().getBoolean("biometric_enabled", false)) {
+            backgroundedAtMs = System.currentTimeMillis()
+        }
         stopped = true
         handler.removeCallbacks(snapshotPollRunnable)
         handler.removeCallbacks(keepaliveRunnable)
@@ -2455,6 +2946,8 @@ class SafeActivity : Activity() {
     }
 
     override fun onDestroy() {
+        ambientAnimator?.cancel()
+        ambientAnimator = null
         stopped = true
         lastSocketRebuildMs = System.currentTimeMillis()
         runCatching {
