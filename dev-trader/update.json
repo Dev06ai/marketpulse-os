@@ -1,8 +1,8 @@
 {
   "enabled": true,
-  "versionCode": 106,
-  "versionName": "0.15.5",
-  "apkUrl": "https://github.com/Dev06ai/marketpulse-os/releases/download/dev-trader-v0.15.5-106/app-release.apk",
-  "sha256": "4007f6cdb91f1d6485d6fe8c30fa1277d1e5faa636e3e51e51398a75e678b097",
-  "notes": "KYVORIQ 0.15.5 \u2022 premium branded notification card \u2022 KYVORIQ status icon \u2022 animated activity rail \u2022 live health states"
+  "versionCode": 107,
+  "versionName": "0.15.6",
+  "apkUrl": "https://github.com/Dev06ai/marketpulse-os/releases/download/dev-trader-v0.15.6-107/app-release.apk",
+  "sha256": "00ee3f2a5f8d11dafef1181662dd4536b3a6f0a0e1dfbac6e413c0688407e62d",
+  "notes": "KYVORIQ 0.15.6 \u2022 compact notification clipping fix \u2022 cleaner collapsed card \u2022 refined expanded spacing"
 }
