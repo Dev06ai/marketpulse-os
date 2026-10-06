@@ -1,8 +1,8 @@
 {
   "enabled": true,
-  "versionCode": 105,
-  "versionName": "0.15.4",
-  "apkUrl": "https://github.com/Dev06ai/marketpulse-os/releases/download/dev-trader-v0.15.4-105/app-release.apk",
-  "sha256": "019eca19dfe3359a2b90c63dbda4c5518f0e92091becb4d18f39fab7d995cebe",
-  "notes": "KYVORIQ 0.15.4 \u2022 live D-Line/OB/exact-NPOC overlays \u2022 indicator toggles \u2022 rich crosshair \u2022 semantic trade levels"
+  "versionCode": 106,
+  "versionName": "0.15.5",
+  "apkUrl": "https://github.com/Dev06ai/marketpulse-os/releases/download/dev-trader-v0.15.5-106/app-release.apk",
+  "sha256": "4007f6cdb91f1d6485d6fe8c30fa1277d1e5faa636e3e51e51398a75e678b097",
+  "notes": "KYVORIQ 0.15.5 \u2022 premium branded notification card \u2022 KYVORIQ status icon \u2022 animated activity rail \u2022 live health states"
 }
