@@ -34,6 +34,31 @@ public final class HostProbe {
         }
     }
 
+    private JSONObject waitForConfidenceSizing() throws Exception {
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(180);
+        String lastPolicy = "";
+        while (System.nanoTime() < deadline) {
+            JSONObject bootstrap = get("/bootstrap?profile=dashboard");
+            JSONObject execution = bootstrap.optJSONObject("execution");
+            JSONObject summary = execution != null ? execution.optJSONObject("summary") : null;
+            if (summary != null) {
+                lastPolicy = summary.optString("execution_policy", "");
+                JSONObject sizing = summary.optJSONObject("margin_sizing");
+                if ("CONFIDENCE_MARGIN_20X_FEE_ADJUSTED".equals(lastPolicy)
+                    && summary.optInt("leverage", 0) == 20
+                    && sizing != null
+                    && sizing.optDouble("medium_min_usdt", -1) == 50.0
+                    && sizing.optDouble("medium_max_usdt", -1) == 75.0
+                    && sizing.optDouble("high_min_usdt", -1) == 76.0
+                    && sizing.optDouble("high_max_usdt", -1) == 100.0) {
+                    return summary;
+                }
+            }
+            Thread.sleep(5000);
+        }
+        throw new IllegalStateException("Live host did not converge to confidence-sized 20x execution; last policy=" + lastPolicy);
+    }
+
     private void socket(String profile) throws Exception {
         LinkedBlockingQueue<JSONObject> packets = new LinkedBlockingQueue<>();
         WebSocket ws = client.newWebSocket(new Request.Builder()
@@ -76,6 +101,7 @@ public final class HostProbe {
         JSONObject bootstrap = get("/bootstrap?profile=dashboard");
         require(bootstrap.getJSONObject("chart").getJSONArray("candles").length() > 0, "Missing chart history");
         require("BITGET_WS".equals(bootstrap.getJSONObject("upstream").getString("source")), "Exchange source is not WebSocket");
+        JSONObject executionSummary = waitForConfidenceSizing();
         // Demo depth updates can pause while ticker packets keep arriving.
         // Observe a full minute, report those intervals, and retain the engine's
         // unchanged entry gate. Socket liveness alone is never entry readiness.
@@ -98,6 +124,9 @@ public final class HostProbe {
             .put("chart_history", "PASS").put("journal", "PASS").put("live_bitget_feed", "PASS")
             .put("feed_age_ms", age).put("healthy_samples", healthy).put("degraded_samples", degraded)
             .put("max_book_age_ms", maxBookAge).put("entry_freshness_gate", "UNCHANGED")
+            .put("execution_policy", executionSummary.getString("execution_policy"))
+            .put("execution_leverage", executionSummary.getInt("leverage"))
+            .put("medium_margin_usdt", "50-75").put("high_margin_usdt", "76-100")
             .put("engine_revision", health.getString("engine_revision")));
     }
 
