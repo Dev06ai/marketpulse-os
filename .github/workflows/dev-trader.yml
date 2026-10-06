@@ -27,8 +27,7 @@ jobs:
       - name: Detect confidence-sizing execution changes
         id: backend_changed
         run: |
-          CHANGED="$(git diff --name-only HEAD^ HEAD)"
-          if echo "$CHANGED" | grep -Fxq 'dev-trader/backend/app/execution.py'; then
+          if git diff --name-only HEAD^ HEAD | grep -Fxq dev-trader/backend/app/execution.py; then
             echo "backend_changed=true" >> "$GITHUB_OUTPUT"
           else
             echo "backend_changed=false" >> "$GITHUB_OUTPUT"
