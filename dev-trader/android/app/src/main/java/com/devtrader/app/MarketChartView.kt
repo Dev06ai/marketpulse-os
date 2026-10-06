@@ -212,6 +212,7 @@ class MarketChartView @JvmOverloads constructor(
     private var touchDownX = 0f
     private var touchDownY = 0f
     private var pinchActive = false
+    private var dragHapticActive = false
     private var pinchStartDistance = 0f
     private var pinchStartZoomX = 1f
     private var pinchStartZoomY = 1f
@@ -877,6 +878,7 @@ class MarketChartView @JvmOverloads constructor(
                 touchDownY = event.y
                 dragging = false
                 pinchActive = false
+                dragHapticActive = false
                 return true
             }
 
@@ -884,6 +886,10 @@ class MarketChartView @JvmOverloads constructor(
                 if (event.pointerCount >= 2) {
                     pinchActive = true
                     dragging = true
+                    if (!dragHapticActive) {
+                        KyvoriqHaptics.fire(this, KyvoriqHaptics.Cue.DRAG_START)
+                        dragHapticActive = true
+                    }
                     pinchStartDistance = distance(event)
                     pinchStartZoomX = zoomX
                     pinchStartZoomY = zoomY
@@ -908,6 +914,10 @@ class MarketChartView @JvmOverloads constructor(
                 val dx = event.x - lastTouchX
                 val dy = event.y - lastTouchY
                 if (abs(event.x - touchDownX) > dp(6f) || abs(event.y - touchDownY) > dp(6f)) {
+                    if (!dragging && !dragHapticActive) {
+                        KyvoriqHaptics.fire(this, KyvoriqHaptics.Cue.DRAG_START)
+                        dragHapticActive = true
+                    }
                     dragging = true
                     followLive = false
                     crosshairVisible = false
@@ -926,7 +936,13 @@ class MarketChartView @JvmOverloads constructor(
             }
 
             MotionEvent.ACTION_POINTER_UP -> {
-                if (event.pointerCount - 1 < 2) pinchActive = false
+                if (event.pointerCount - 1 < 2) {
+                    pinchActive = false
+                    if (dragHapticActive) {
+                        KyvoriqHaptics.fire(this, KyvoriqHaptics.Cue.DRAG_END)
+                        dragHapticActive = false
+                    }
+                }
                 return true
             }
 
@@ -938,12 +954,14 @@ class MarketChartView @JvmOverloads constructor(
 
                 if (!dragging && !pinchActive) {
                     if (toggleIndicatorAt(event.x, event.y)) {
+                        KyvoriqHaptics.fire(this, KyvoriqHaptics.Cue.SELECT)
                         performClick()
                         invalidate()
                         return true
                     }
                     val now = SystemClock.uptimeMillis()
                     if (liveChipHit || now - lastTapMs < 280L) {
+                        KyvoriqHaptics.fire(this, KyvoriqHaptics.Cue.CONFIRM)
                         followLive = true
                         candleShift = 0f
                         verticalOffset = 0.0
@@ -951,12 +969,16 @@ class MarketChartView @JvmOverloads constructor(
                         zoomY = 1.0f
                         crosshairVisible = false
                     } else {
+                        KyvoriqHaptics.fire(this, KyvoriqHaptics.Cue.TAP)
                         crosshairVisible = true
                         crosshairX = event.x
                         crosshairY = event.y
                     }
                     lastTapMs = now
                     invalidate()
+                } else if (dragHapticActive) {
+                    KyvoriqHaptics.fire(this, KyvoriqHaptics.Cue.DRAG_END)
+                    dragHapticActive = false
                 }
                 return true
             }
@@ -965,6 +987,7 @@ class MarketChartView @JvmOverloads constructor(
                 parent?.requestDisallowInterceptTouchEvent(false)
                 pinchActive = false
                 dragging = false
+                dragHapticActive = false
                 return true
             }
         }

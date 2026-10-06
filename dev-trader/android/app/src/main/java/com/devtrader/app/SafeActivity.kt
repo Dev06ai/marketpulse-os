@@ -1,6 +1,8 @@
 // Build 101: KYVORIQ visual identity — gold/charcoal system, branded navigation and mark.
 // Build 99: free-host migration with compact mobile delivery.
-// Build 108: confidence-sized demo execution UI with live-backend capability detection.\n// Build 83: show Bitget Demo funding readiness and demo execution state.
+// Build 109: KYVORIQ premium semantic haptics across navigation, chart tools and calculator.
+// Build 108: confidence-sized demo execution UI with live-backend capability detection.
+// Build 83: show Bitget Demo funding readiness and demo execution state.
 package com.devtrader.app
 
 import android.Manifest
@@ -69,6 +71,10 @@ class SafeActivity : Activity() {
     // KYVORIQ uses its gold accent for the instrument emphasis while ordinary
     // asset labels stay neutral so trading semantics remain easy to scan.
     private fun marketAssetAccent(value: CharSequence): CharSequence = value
+
+    private fun haptic(view: View?, cue: KyvoriqHaptics.Cue = KyvoriqHaptics.Cue.TAP) {
+        KyvoriqHaptics.fire(view, cue)
+    }
 
     private fun priceBtcAccent(value: CharSequence): CharSequence {
         val text = value.toString()
@@ -308,10 +314,16 @@ class SafeActivity : Activity() {
         brand.addView(label("AI POWERED TRADING ASSISTANT", 7.8f, kyGray, 0.11f), margins(top = 3))
         header.addView(brand, LinearLayout.LayoutParams(0, dp(48), 1f))
         alertsButton = compactPillButton("ALERTS").apply { contentDescription = "Enable trade alerts" }
-        alertsButton.setOnClickListener { safe { requestAlertPermission() } }
+        alertsButton.setOnClickListener {
+            haptic(it, KyvoriqHaptics.Cue.ACTION)
+            safe { requestAlertPermission() }
+        }
         header.addView(alertsButton, LinearLayout.LayoutParams(dp(66), dp(44)).apply { rightMargin = dp(6) })
         retryButton = compactPillButton("RETRY").apply { contentDescription = "Reconnect market data" }
-        retryButton?.setOnClickListener { safe { forceReconnectFromUser() } }
+        retryButton?.setOnClickListener {
+            haptic(it, KyvoriqHaptics.Cue.ACTION)
+            safe { forceReconnectFromUser() }
+        }
         header.addView(retryButton, LinearLayout.LayoutParams(dp(56), dp(44)))
         root.addView(header, margins(bottom = 8))
 
@@ -330,6 +342,7 @@ class SafeActivity : Activity() {
         listOf("5m", "15m", "1h", "4h").forEach { tf ->
             val button = compactPillButton(tf).apply { contentDescription = "Chart $tf" }
             button.setOnClickListener {
+                if (selectedTf != tf) haptic(it, KyvoriqHaptics.Cue.SELECT)
                 selectedTf = tf
                 chart.setTimeframe(tf)
                 refreshTimeframeButtons(tfRow)
@@ -345,15 +358,24 @@ class SafeActivity : Activity() {
         signal = setup.second
         signal.maxLines = if (compactViewport) 4 else 5
         signal.ellipsize = android.text.TextUtils.TruncateAt.END
-        setup.first.setOnClickListener { showTradeDetails() }
+        setup.first.setOnClickListener {
+            haptic(it, KyvoriqHaptics.Cue.TAP)
+            showTradeDetails()
+        }
         setup.first.contentDescription = "Open complete trade setup"
         tradePage.addView(setup.first, LinearLayout.LayoutParams(-1, dp(if (compactViewport) 110 else 132)).apply { bottomMargin = dp(8) })
         val tradeTools = LinearLayout(this)
         val details = compactPillButton("SETUP DETAILS")
-        details.setOnClickListener { showTradeDetails() }
+        details.setOnClickListener {
+            haptic(it, KyvoriqHaptics.Cue.TAP)
+            showTradeDetails()
+        }
         tradeTools.addView(details, LinearLayout.LayoutParams(0, dp(44), 1f).apply { rightMargin = dp(6) })
         val pnl = compactPillButton("P&L CALCULATOR")
-        pnl.setOnClickListener { safe { showPnlCalculator() } }
+        pnl.setOnClickListener {
+            haptic(it, KyvoriqHaptics.Cue.ACTION)
+            safe { showPnlCalculator() }
+        }
         tradeTools.addView(pnl, LinearLayout.LayoutParams(0, dp(44), 1f))
         tradePage.addView(tradeTools)
         refreshTimeframeButtons(tfRow)
@@ -371,7 +393,10 @@ class SafeActivity : Activity() {
         tradeHistory = exposureCard.value
         positionsPage.addView(exposureCard.container, LinearLayout.LayoutParams(-1, 0, 1f).apply { bottomMargin = dp(10) })
         val historyButton = compactPillButton("OPEN EXECUTION HISTORY")
-        historyButton.setOnClickListener { safe { loadTradeHistory(); showInfoDialog("Execution history", fullTradeHistoryText) } }
+        historyButton.setOnClickListener {
+            haptic(it, KyvoriqHaptics.Cue.ACTION)
+            safe { loadTradeHistory(); showInfoDialog("Execution history", fullTradeHistoryText) }
+        }
         positionsPage.addView(historyButton, LinearLayout.LayoutParams(-1, dp(44)))
 
         val insightsPage = page()
@@ -393,17 +418,28 @@ class SafeActivity : Activity() {
         insightsPage.addView(sys.container, margins(bottom = 10))
         val tools = LinearLayout(this)
         checkButton = compactPillButton("SYSTEM CHECK")
-        checkButton.setOnClickListener { safe { systemCheck() } }
+        checkButton.setOnClickListener {
+            haptic(it, KyvoriqHaptics.Cue.ACTION)
+            safe { systemCheck() }
+        }
         tools.addView(checkButton, LinearLayout.LayoutParams(0, dp(44), 1f).apply { rightMargin = dp(6) })
         updateButton = compactPillButton("UPDATE")
-        updateButton.setOnClickListener { safe { checkUpdate() } }
+        updateButton.setOnClickListener {
+            haptic(it, KyvoriqHaptics.Cue.ACTION)
+            safe { checkUpdate() }
+        }
         tools.addView(updateButton, LinearLayout.LayoutParams(0, dp(44), 1f))
         insightsPage.addView(tools)
 
         val navigation = LinearLayout(this).apply { setPadding(0, dp(10), 0, 0) }
         listOf("TRADE", "POSITIONS", "INSIGHTS").forEachIndexed { index, title ->
             val button = compactPillButton(title).apply { contentDescription = "Workspace $title"; textSize = 11.5f }
-            button.setOnClickListener { selectWorkspace(index) }
+            button.setOnClickListener {
+                if (workspacePages.getOrNull(index)?.visibility != View.VISIBLE) {
+                    haptic(it, KyvoriqHaptics.Cue.SELECT)
+                }
+                selectWorkspace(index)
+            }
             navigationButtons.add(button)
             navigation.addView(button, LinearLayout.LayoutParams(0, dp(48), 1f).apply { leftMargin = dp(3); rightMargin = dp(3) })
         }
@@ -765,10 +801,7 @@ class SafeActivity : Activity() {
             setOnTouchListener { v, event ->
                 when (event.actionMasked) {
                     android.view.MotionEvent.ACTION_DOWN -> alpha = 0.72f
-                    android.view.MotionEvent.ACTION_UP -> {
-                        alpha = 1f
-                        v.performClick()
-                    }
+                    android.view.MotionEvent.ACTION_UP -> alpha = 1f
                     android.view.MotionEvent.ACTION_CANCEL -> alpha = 1f
                 }
                 false
@@ -1749,7 +1782,10 @@ class SafeActivity : Activity() {
             minWidth = dp(48)
             minHeight = dp(44)
             textSize = 24f
-            setOnClickListener { buildUi() }
+            setOnClickListener {
+                haptic(it, KyvoriqHaptics.Cue.TAP)
+                buildUi()
+            }
         }
         header.addView(back, LinearLayout.LayoutParams(dp(52), dp(46)))
         header.addView(
@@ -1772,8 +1808,16 @@ class SafeActivity : Activity() {
             longButton.alpha = if (direction == "LONG") 1f else 0.45f
             shortButton.alpha = if (direction == "SHORT") 1f else 0.45f
         }
-        longButton.setOnClickListener { direction = "LONG"; refreshSides() }
-        shortButton.setOnClickListener { direction = "SHORT"; refreshSides() }
+        longButton.setOnClickListener {
+            if (direction != "LONG") haptic(it, KyvoriqHaptics.Cue.SELECT)
+            direction = "LONG"
+            refreshSides()
+        }
+        shortButton.setOnClickListener {
+            if (direction != "SHORT") haptic(it, KyvoriqHaptics.Cue.SELECT)
+            direction = "SHORT"
+            refreshSides()
+        }
         sideRow.addView(longButton, LinearLayout.LayoutParams(0, dp(52), 1f).apply { rightMargin = dp(4) })
         sideRow.addView(shortButton, LinearLayout.LayoutParams(0, dp(52), 1f).apply { leftMargin = dp(4) })
         root.addView(sideRow, margins(bottom = 14))
@@ -1793,12 +1837,14 @@ class SafeActivity : Activity() {
             costButton.alpha = if (unitMode == "COST") 1f else 0.45f
         }
         quantityButton.setOnClickListener {
+            if (unitMode != "QUANTITY") haptic(it, KyvoriqHaptics.Cue.SELECT)
             unitMode = "QUANTITY"
             refreshUnits()
             amountLabel.text = "Quantity (BTC)"
             amountEdit.hint = "e.g. 0.01"
         }
         costButton.setOnClickListener {
+            if (unitMode != "COST") haptic(it, KyvoriqHaptics.Cue.SELECT)
             unitMode = "COST"
             refreshUnits()
             amountLabel.text = "Position Cost (USDT)"
@@ -1821,13 +1867,22 @@ class SafeActivity : Activity() {
         val leverageLabel = label("Leverage  •  20x", 12f, kyGray, 0f)
         root.addView(leverageLabel, margins(bottom = 4))
         val leverageBar = SeekBar(this).apply { max = 149; progress = 19; splitTrack = false }
+        var lastLeverageHaptic = leverage
         leverageBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
                 leverage = progress + 1
                 leverageLabel.text = "Leverage  •  " + leverage + "x"
+                if (fromUser && (leverage == 20 || leverage == 50 || leverage == 100 || kotlin.math.abs(leverage - lastLeverageHaptic) >= 5)) {
+                    KyvoriqHaptics.frequentTick(seekBar)
+                    lastLeverageHaptic = leverage
+                }
             }
-            override fun onStartTrackingTouch(seekBar: SeekBar?) {}
-            override fun onStopTrackingTouch(seekBar: SeekBar?) {}
+            override fun onStartTrackingTouch(seekBar: SeekBar?) {
+                haptic(seekBar, KyvoriqHaptics.Cue.DRAG_START)
+            }
+            override fun onStopTrackingTouch(seekBar: SeekBar?) {
+                haptic(seekBar, KyvoriqHaptics.Cue.DRAG_END)
+            }
         })
         root.addView(leverageBar, margins(bottom = 16))
 
@@ -1842,6 +1897,7 @@ class SafeActivity : Activity() {
                 val entry = openEdit.text.toString().toDoubleOrNull()
                 val exit = closeEdit.text.toString().toDoubleOrNull()
                 if (amount == null || amount <= 0 || entry == null || entry <= 0 || exit == null || exit <= 0 || leverage <= 0) {
+                    haptic(calcButton, KyvoriqHaptics.Cue.REJECT)
                     results.text = "Enter a valid position size/cost and both prices."
                     return@safe
                 }
@@ -1860,6 +1916,7 @@ class SafeActivity : Activity() {
                     "\nPrice Move  " + pnlSign + String.format(Locale.US, "%.2f%%", movePct) +
                     "\nQuantity  " + String.format(Locale.US, "%.6f BTC", qty) +
                     "\nNotional  " + String.format(Locale.US, "%.2f USDT", notional)
+                haptic(calcButton, KyvoriqHaptics.Cue.CONFIRM)
             }
         }
         root.addView(calcButton, margins(bottom = 14))

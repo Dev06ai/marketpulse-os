@@ -90,7 +90,7 @@ public final class HostProbe {
         } finally { ws.close(1000, "Probe complete"); ws.cancel(); }
     }
 
-    private void run() throws Exception {
+    private void run(boolean requireConfidenceSizing) throws Exception {
         JSONObject health = get("/health");
         require(health.getBoolean("ok"), "Backend health failed");
         JSONObject checks = get("/system-check");
@@ -101,7 +101,9 @@ public final class HostProbe {
         JSONObject bootstrap = get("/bootstrap?profile=dashboard");
         require(bootstrap.getJSONObject("chart").getJSONArray("candles").length() > 0, "Missing chart history");
         require("BITGET_WS".equals(bootstrap.getJSONObject("upstream").getString("source")), "Exchange source is not WebSocket");
-        JSONObject executionSummary = waitForConfidenceSizing();
+        JSONObject executionSummary = requireConfidenceSizing
+            ? waitForConfidenceSizing()
+            : bootstrap.optJSONObject("execution").optJSONObject("summary");
         // Demo depth updates can pause while ticker packets keep arriving.
         // Observe a full minute, report those intervals, and retain the engine's
         // unchanged entry gate. Socket liveness alone is never entry readiness.
@@ -124,16 +126,22 @@ public final class HostProbe {
             .put("chart_history", "PASS").put("journal", "PASS").put("live_bitget_feed", "PASS")
             .put("feed_age_ms", age).put("healthy_samples", healthy).put("degraded_samples", degraded)
             .put("max_book_age_ms", maxBookAge).put("entry_freshness_gate", "UNCHANGED")
-            .put("execution_policy", executionSummary.getString("execution_policy"))
-            .put("execution_leverage", executionSummary.getInt("leverage"))
-            .put("medium_margin_usdt", "50-75").put("high_margin_usdt", "76-100")
+            .put("execution_policy", executionSummary != null ? executionSummary.optString("execution_policy", "UNKNOWN") : "UNKNOWN")
+            .put("execution_leverage", executionSummary != null ? executionSummary.optInt("leverage", 0) : 0)
+            .put("confidence_sizing_required", requireConfidenceSizing)
+            .put("medium_margin_usdt", requireConfidenceSizing ? "50-75" : "NOT_REQUIRED")
+            .put("high_margin_usdt", requireConfidenceSizing ? "76-100" : "NOT_REQUIRED")
             .put("engine_revision", health.getString("engine_revision")));
     }
 
     public static void main(String[] args) throws Exception {
-        require(args.length == 1, "Supply one HTTPS origin");
+        require(args.length == 1 || args.length == 2, "Supply one HTTPS origin and optional --require-confidence-sizing");
+        boolean requireConfidenceSizing = args.length == 2;
+        if (requireConfidenceSizing) {
+            require("--require-confidence-sizing".equals(args[1]), "Unknown host-probe option");
+        }
         HostProbe probe = new HostProbe(args[0]);
-        try { probe.run(); }
+        try { probe.run(requireConfidenceSizing); }
         finally {
             probe.client.dispatcher().executorService().shutdownNow();
             probe.client.connectionPool().evictAll();

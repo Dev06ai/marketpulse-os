@@ -21,6 +21,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - name: Detect backend execution changes
+        id: backend_changed
+        run: |
+          if git diff --name-only HEAD^ HEAD | grep -q '^dev-trader/backend/'; then
+            echo "backend_changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "backend_changed=false" >> "$GITHUB_OUTPUT"
+          fi
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -29,7 +39,12 @@ jobs:
         with:
           gradle-version: '9.6.0'
       - name: Verify the live host with Android's HTTP and socket library
-        run: gradle -p dev-trader/tools/host-probe run --args='https://dev-trader-engine.de.deplexo.com' --stacktrace
+        run: |
+          EXTRA=""
+          if [ "${{ steps.backend_changed.outputs.backend_changed }}" = "true" ]; then
+            EXTRA=" --require-confidence-sizing"
+          fi
+          gradle -p dev-trader/tools/host-probe run --args="https://dev-trader-engine.de.deplexo.com${EXTRA}" --stacktrace
   free-container:
     runs-on: ubuntu-latest
     steps:
@@ -105,7 +120,7 @@ jobs:
           gradle-version: '9.6.0'
       - name: Build Android debug APK
         working-directory: dev-trader/android
-        run: gradle assembleDebug --stacktrace -PdevTraderVersionCode=108 -PdevTraderVersionName=0.15.7
+        run: gradle assembleDebug --stacktrace -PdevTraderVersionCode=109 -PdevTraderVersionName=0.15.8
       - name: Build signed Android release APK
         if: steps.changed.outputs.android_changed == 'true'
         working-directory: dev-trader/android
@@ -116,7 +131,7 @@ jobs:
           DEV_TRADER_KEY_PASSWORD: ${{ secrets.DEV_TRADER_KEY_PASSWORD }}
         run: |
           echo "${{ secrets.DEV_TRADER_KEYSTORE_BASE64 }}" | base64 --decode > "$DEV_TRADER_KEYSTORE_PATH"
-          gradle assembleRelease --stacktrace -PdevTraderVersionCode=108 -PdevTraderVersionName=0.15.7
+          gradle assembleRelease --stacktrace -PdevTraderVersionCode=109 -PdevTraderVersionName=0.15.8
           if unzip -l app/build/outputs/apk/release/app-release.apk | grep -q ui_preview.json; then
             echo 'Debug preview data must never be included in release APKs.'
             exit 1
@@ -187,7 +202,7 @@ jobs:
           mkdir -p release
           cp dist/app-release.apk release/app-release.apk
           sha256sum release/app-release.apk | awk '{print $1}' > release/app-release.sha256
-          echo "tag=dev-trader-v0.15.7-108" >> "$GITHUB_OUTPUT"
+          echo "tag=dev-trader-v0.15.8-109" >> "$GITHUB_OUTPUT"
           echo "sha256=$(cat release/app-release.sha256)" >> "$GITHUB_OUTPUT"
       - name: Create GitHub release
         env:
@@ -197,7 +212,7 @@ jobs:
             echo "This release already exists; refusing to replace a published APK."
             exit 1
           fi
-          gh release create "${{ steps.release.outputs.tag }}" release/app-release.apk --target "$GITHUB_SHA" --title "KYVORIQ 0.15.7 (108)" --notes "Confidence-sized demo execution: 20x leverage, medium-confidence 50-75 USDT margin, high-confidence 76-100 USDT margin, exchange leverage enforcement, stop/fee loss guard, and margin/leverage visibility in KYVORIQ."
+          gh release create "${{ steps.release.outputs.tag }}" release/app-release.apk --target "$GITHUB_SHA" --title "KYVORIQ 0.15.8 (109)" --notes "Haptic Studio: premium semantic haptics across workspace navigation, timeframe selection, chart gestures and controls, P&L actions and leverage detents. Uses device-native haptic primitives and respects Android system haptic settings."
       - name: Publish verified update manifest
         env:
           SHA256: "${{ steps.release.outputs.sha256 }}"
@@ -211,11 +226,11 @@ jobs:
           data = json.loads(p.read_text())
           data.update({
               "enabled": True,
-              "versionCode": 108,
-              "versionName": "0.15.7",
-              "apkUrl": "https://github.com/Dev06ai/marketpulse-os/releases/download/dev-trader-v0.15.7-108/app-release.apk",
+              "versionCode": 109,
+              "versionName": "0.15.8",
+              "apkUrl": "https://github.com/Dev06ai/marketpulse-os/releases/download/dev-trader-v0.15.8-109/app-release.apk",
               "sha256": os.environ["SHA256"],
-              "notes": "KYVORIQ 0.15.7 • 20x confidence-sized demo execution • 50-75 medium margin • 76-100 high margin • leverage/margin visibility"
+              "notes": "KYVORIQ 0.15.8 • Haptic Studio • premium semantic tactile feedback • chart gesture cues • leverage detents"
           })
           p.write_text(json.dumps(data, indent=2) + "\n")
           PY
