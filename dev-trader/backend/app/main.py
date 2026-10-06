@@ -1,5 +1,6 @@
 import asyncio
 import json
+import math
 import os
 import time
 from contextlib import asynccontextmanager
@@ -124,6 +125,65 @@ class RiskPayload(BaseModel):
     target: float | None = None
 
 
+def chart_overlay_payload(f, diag):
+    """Small, auditable chart-level map for the mobile renderer.
+
+    Only price levels with explicit engine provenance are emitted. Candle-only
+    estimates are never mislabeled as exact NPOC.
+    """
+    rows = []
+    seen = []
+
+    def add(kind, label, price, status="", direction=""):
+        try:
+            value = float(price)
+        except (TypeError, ValueError):
+            return
+        if not math.isfinite(value) or value <= 0:
+            return
+        # Avoid near-duplicate visual lines while preserving the higher-priority row.
+        if any(abs(value - prior) / max(value, 1.0) < 0.00015 for prior in seen):
+            return
+        seen.append(value)
+        item = {"kind": kind, "label": label, "price": round(value, 2)}
+        if status:
+            item["status"] = str(status)
+        if direction:
+            item["direction"] = str(direction)
+        rows.append(item)
+
+    sfp = (diag or {}).get("sfp_hunter") or {}
+    add("SFP", "SFP", sfp.get("target_level"), sfp.get("status", ""), sfp.get("direction", ""))
+
+    dline = ((diag or {}).get("setups") or {}).get("D-Line") or {}
+    add("DLINE", "D-LINE", dline.get("projected_line"), dline.get("status", ""), dline.get("direction", ""))
+
+    ob_mid = getattr(f, "order_block_mid", None)
+    ob_direction = str(getattr(f, "order_block_direction", "NONE") or "NONE")
+    if ob_mid is not None and ob_direction != "NONE":
+        add("OB", ("BULL OB" if ob_direction == "BULLISH" else "BEAR OB"), ob_mid, direction=ob_direction)
+
+    volume = getattr(f, "volume_context", {}) or {}
+    if bool(volume.get("exact_npoc")) and volume.get("untouched_poc") is not None:
+        add("NPOC", "NPOC", volume.get("untouched_poc"), "UNTOUCHED")
+
+    # Fill any remaining room with the closest audited liquidity references.
+    liquidity = (diag or {}).get("liquidity_map") or {}
+    short_names = {
+        "recent 15m high": "15M H", "recent 15m low": "15M L",
+        "previous day high": "PDH", "previous day low": "PDL",
+        "previous week high": "PWH", "previous week low": "PWL",
+        "weekly open": "W OPEN",
+    }
+    for side in ("above", "below"):
+        for row in (liquidity.get(side) or [])[:2]:
+            if len(rows) >= 6:
+                break
+            title = str(row.get("title") or "LIQ")
+            add("LIQUIDITY", short_names.get(title.lower(), title[:10].upper()), row.get("price"))
+    return rows[:6]
+
+
 def mobile_payload(include_research=True):
     now = int(time.time() * 1000)
     # Reconcile any exchange-side close before broadcasting cached signal state.
@@ -148,6 +208,7 @@ def mobile_payload(include_research=True):
         "last_market_update_ts": state.last_market_update_ts,
         "server_ts": now,
         "signal": engine.active_signal,
+        "chart_overlays": chart_overlay_payload(f, diag),
         "engine": {
             "status": diag.get("status", "UNKNOWN"),
             "wait_reason": diag.get("wait_reason", ""),

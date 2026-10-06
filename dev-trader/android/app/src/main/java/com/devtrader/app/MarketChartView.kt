@@ -141,13 +141,53 @@ class MarketChartView @JvmOverloads constructor(
     private val volumeDownPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(167, 70, 86); alpha = 170 }
     private val liveChipPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(18, 24, 33) }
     private val liveDotPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(71, 191, 149) }
+    private val controlActivePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(49, 39, 14) }
+    private val controlInactivePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(20, 27, 36) }
+    private val controlBorderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeWidth = dp(.7f)
+    }
+    private val controlTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        textSize = dp(8.2f)
+        typeface = android.graphics.Typeface.create(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD)
+    }
+    private val structureLinePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeWidth = dp(.8f)
+        pathEffect = DashPathEffect(floatArrayOf(dp(3f), dp(4f)), 0f)
+        alpha = 150
+    }
+    private val structureLabelBgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.rgb(16, 22, 30)
+        alpha = 235
+    }
+    private val structureLabelTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        textSize = dp(8.1f)
+        typeface = android.graphics.Typeface.create(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD)
+    }
+    private val tradeLevelBgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { alpha = 238 }
+    private val tradeLevelLinePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeWidth = dp(.9f)
+        pathEffect = DashPathEffect(floatArrayOf(dp(6f), dp(4f)), 0f)
+        alpha = 200
+    }
+    private val tradeLevelTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        textSize = dp(8.2f)
+        typeface = android.graphics.Typeface.create(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD)
+    }
 
     private var candles = JSONArray()
     private var signal: JSONObject? = null
     private var ema50: Double? = null
+    private var overlays = JSONArray()
     private var timeframe = "15m"
     private var livePrice = Double.NaN
     private var feedHealthy = false
+    private var showBollinger = true
+    private var showEma = true
+    private var showLevels = true
+    private var showVolume = true
 
     fun setFeedHealthy(value: Boolean) { feedHealthy = value; invalidate() }
 
@@ -177,11 +217,13 @@ class MarketChartView @JvmOverloads constructor(
         candles: JSONArray,
         signal: JSONObject?,
         ema50: Double?,
-        price: Double
+        price: Double,
+        overlays: JSONArray? = null
     ) {
         this.candles = candles
         this.signal = signal
         this.ema50 = ema50
+        this.overlays = overlays ?: JSONArray()
         if (price.isFinite()) this.livePrice = price
 
         val newCount = candles.length()
@@ -238,8 +280,8 @@ class MarketChartView @JvmOverloads constructor(
         val right = width - dp(60f)
         val top = dp(if (height < dp(190f)) 32f else 44f)
         val bottom = height - dp(24f)
-        val priceBottom = top + (bottom - top) * .76f
-        val volumeTop = priceBottom + dp(4f)
+        val priceBottom = if (showVolume) top + (bottom - top) * .76f else bottom
+        val volumeTop = if (showVolume) priceBottom + dp(4f) else bottom
 
         drawHeader(canvas, left, top)
 
@@ -302,7 +344,7 @@ class MarketChartView @JvmOverloads constructor(
 
         drawGrid(canvas, left, top, right, priceBottom)
         canvas.drawRoundRect(RectF(left, top, right, bottom), dp(3f), dp(3f), plotBorderPaint)
-        canvas.drawLine(left, volumeTop, right, volumeTop, volumeDividerPaint)
+        if (showVolume) canvas.drawLine(left, volumeTop, right, volumeTop, volumeDividerPaint)
         drawAxes(canvas, right, priceBottom, top, bottom, low, high)
 
         val step = (right - left) / actualVisible
@@ -333,7 +375,7 @@ class MarketChartView @JvmOverloads constructor(
                 bodyPaint
             )
 
-            if (maxVolume > 0.0) {
+            if (showVolume && maxVolume > 0.0) {
                 val vh = ((c.optDouble("volume") / maxVolume) * (bottom - volumeTop)).toFloat()
                 val vp = if (up) volumeUpPaint else volumeDownPaint
                 canvas.drawRect(
@@ -346,15 +388,21 @@ class MarketChartView @JvmOverloads constructor(
             }
         }
 
-        drawBollinger(canvas, start, actualVisible, left, top, priceBottom, low, high, step)
-        drawEma50(canvas, start, actualVisible, left, top, priceBottom, low, high, step)
-
-        signal?.let { s ->
-            listOf("entry" to "ENTRY", "stop" to "SL", "target2" to "TP").forEach { (key, label) ->
-                val value = s.optDouble(key, Double.NaN)
-                if (value.isFinite() && value in low..high) {
-                    val text = if (key == "entry" && priceBottom - top < dp(120f)) "" else label
-                    drawLevel(canvas, left, right, mapY(value, low, high, top, priceBottom), text)
+        if (showBollinger) drawBollinger(canvas, start, actualVisible, left, top, priceBottom, low, high, step)
+        if (showEma) drawEma50(canvas, start, actualVisible, left, top, priceBottom, low, high, step)
+        if (showLevels) {
+            drawStructureOverlays(canvas, left, right, top, priceBottom, low, high)
+            signal?.let { s ->
+                listOf(
+                    Triple("entry", "ENTRY", Color.rgb(247, 201, 72)),
+                    Triple("stop", "SL", Color.rgb(242, 91, 111)),
+                    Triple("target1", "TP1", Color.rgb(76, 211, 166)),
+                    Triple("target2", "TP2", Color.rgb(76, 211, 166))
+                ).forEach { (key, label, color) ->
+                    val value = s.optDouble(key, Double.NaN)
+                    if (value.isFinite() && value in low..high) {
+                        drawTradeLevel(canvas, left, right, mapY(value, low, high, top, priceBottom), label, value, color)
+                    }
                 }
             }
         }
@@ -371,16 +419,64 @@ class MarketChartView @JvmOverloads constructor(
 
     private fun drawHeader(canvas: Canvas, left: Float, top: Float) {
         canvas.drawText("PRICE  •  $timeframe", left, dp(17f), strongLabelPaint)
-        if (top > dp(40f)) canvas.drawText("BB(20,2)  •  EMA 50  •  VOL", left, dp(32f), axisLabelPaint)
+        if (top > dp(40f)) {
+            indicatorChipRects(left).forEach { (key, rect) ->
+                val active = when (key) {
+                    "BB" -> showBollinger
+                    "EMA" -> showEma
+                    "LVL" -> showLevels
+                    else -> showVolume
+                }
+                canvas.drawRoundRect(rect, dp(5f), dp(5f), if (active) controlActivePaint else controlInactivePaint)
+                controlBorderPaint.color = if (active) Color.rgb(184, 134, 11) else Color.rgb(55, 64, 76)
+                canvas.drawRoundRect(rect, dp(5f), dp(5f), controlBorderPaint)
+                controlTextPaint.color = if (active) Color.rgb(247, 201, 72) else Color.rgb(126, 135, 148)
+                val tw = controlTextPaint.measureText(key)
+                canvas.drawText(key, rect.centerX() - tw / 2f, rect.centerY() + dp(3f), controlTextPaint)
+            }
+        }
 
-        val chipWidth = dp(54f)
+        val chipWidth = dp(58f)
         val chipLeft = width - chipWidth - dp(10f)
         val chipTop = dp(8f)
-        val rect = android.graphics.RectF(chipLeft, chipTop, width - dp(10f), chipTop + dp(24f))
+        val rect = RectF(chipLeft, chipTop, width - dp(10f), chipTop + dp(24f))
         canvas.drawRoundRect(rect, dp(12f), dp(12f), liveChipPaint)
-        liveDotPaint.color = if (feedHealthy) Color.rgb(71, 191, 149) else Color.rgb(156, 163, 175)
-        canvas.drawCircle(chipLeft + dp(11f), chipTop + dp(12f), dp(3.5f), liveDotPaint)
-        canvas.drawText(if (feedHealthy) "LIVE" else "WAIT", chipLeft + dp(19f), chipTop + dp(16f), strongLabelPaint)
+        val resetting = !followLive
+        liveDotPaint.color = when {
+            resetting -> Color.rgb(247, 201, 72)
+            feedHealthy -> Color.rgb(71, 191, 149)
+            else -> Color.rgb(156, 163, 175)
+        }
+        canvas.drawCircle(chipLeft + dp(10f), chipTop + dp(12f), dp(3.2f), liveDotPaint)
+        val stateText = if (resetting) "RESET" else if (feedHealthy) "LIVE" else "WAIT"
+        canvas.drawText(stateText, chipLeft + dp(17f), chipTop + dp(16f), strongLabelPaint)
+    }
+
+    private fun indicatorChipRects(left: Float): List<Pair<String, RectF>> {
+        val top = dp(23f)
+        val height = dp(16f)
+        val gap = dp(4f)
+        val specs = listOf("BB" to 26f, "EMA" to 34f, "LVL" to 32f, "VOL" to 32f)
+        var x = left
+        return specs.map { (key, widthDp) ->
+            val rect = RectF(x, top, x + dp(widthDp), top + height)
+            x = rect.right + gap
+            key to rect
+        }
+    }
+
+    private fun toggleIndicatorAt(x: Float, y: Float): Boolean {
+        if (height < dp(190f)) return false
+        val left = dp(10f)
+        val hit = indicatorChipRects(left).firstOrNull { it.second.contains(x, y) }?.first ?: return false
+        when (hit) {
+            "BB" -> showBollinger = !showBollinger
+            "EMA" -> showEma = !showEma
+            "LVL" -> showLevels = !showLevels
+            "VOL" -> showVolume = !showVolume
+        }
+        crosshairVisible = false
+        return true
     }
 
     private fun drawGrid(canvas: Canvas, left: Float, top: Float, right: Float, bottom: Float) {
@@ -456,22 +552,23 @@ class MarketChartView @JvmOverloads constructor(
 
         val clampedX = crosshairX.coerceIn(left, right)
         val clampedY = crosshairY.coerceIn(top, priceBottom)
+        val candleIndex = (start + ((clampedX - left) / step)).roundToInt().coerceIn(start, min(candles.length() - 1, start + visible - 1))
+        val candle = candles.optJSONObject(candleIndex) ?: return
+        val snappedX = left + ((candleIndex - start) + 0.5f) * step
 
         val previousEffect = crosshairPaint.pathEffect
         crosshairPaint.pathEffect = DashPathEffect(floatArrayOf(dp(3f), dp(4f)), 0f)
-        canvas.drawLine(clampedX, top, clampedX, bottom, crosshairPaint)
+        canvas.drawLine(snappedX, top, snappedX, bottom, crosshairPaint)
         canvas.drawLine(left, clampedY, right, clampedY, crosshairPaint)
         crosshairPaint.pathEffect = previousEffect
 
-        val candleIndex = (start + ((clampedX - left) / step)).roundToInt().coerceIn(0, candles.length() - 1)
-        val candle = candles.optJSONObject(candleIndex) ?: return
         val price = high - ((clampedY - top) / (priceBottom - top)) * (high - low)
 
         val dateLabel = formatCrosshairTime(candle.optLong("start", 0L))
         val priceLabel = String.format(Locale.US, "%.2f", price)
 
-        val dateWidth = dp(86f)
-        val dateLeft = (clampedX - dateWidth / 2f).coerceIn(left, right - dateWidth)
+        val dateWidth = dp(94f)
+        val dateLeft = (snappedX - dateWidth / 2f).coerceIn(left, right - dateWidth)
         val dateTop = bottom + dp(2f)
         canvas.drawRoundRect(
             android.graphics.RectF(dateLeft, dateTop, dateLeft + dateWidth, dateTop + dp(20f)),
@@ -481,18 +578,32 @@ class MarketChartView @JvmOverloads constructor(
 
         drawPriceTag(canvas, right + dp(4f), clampedY, priceLabel, false)
 
-        val info = "O " + compactPrice(candle.optDouble("open")) +
+        val open = candle.optDouble("open", Double.NaN)
+        val close = candle.optDouble("close", Double.NaN)
+        val volume = candle.optDouble("volume", Double.NaN)
+        val changePct = if (open.isFinite() && open != 0.0 && close.isFinite()) (close - open) / open * 100.0 else Double.NaN
+        val line1 = "O " + compactPrice(open) +
             "   H " + compactPrice(candle.optDouble("high")) +
             "   L " + compactPrice(candle.optDouble("low")) +
-            "   C " + compactPrice(candle.optDouble("close"))
-        val infoWidth = min(width - dp(28f), dp(250f))
-        val infoLeft = (clampedX - infoWidth / 2f).coerceIn(left, right - infoWidth)
-        val infoTop = max(dp(48f), clampedY - dp(42f))
+            "   C " + compactPrice(close)
+        val line2 = "VOL " + compactVolume(volume) +
+            if (changePct.isFinite()) "   Δ " + String.format(Locale.US, "%+.2f%%", changePct) else ""
+        val infoWidth = min(width - dp(28f), dp(278f))
+        val infoLeft = (snappedX - infoWidth / 2f).coerceIn(left, right - infoWidth)
+        val infoTop = max(dp(47f), clampedY - dp(52f))
         canvas.drawRoundRect(
-            android.graphics.RectF(infoLeft, infoTop, infoLeft + infoWidth, infoTop + dp(22f)),
-            dp(6f), dp(6f), liveChipPaint
+            RectF(infoLeft, infoTop, infoLeft + infoWidth, infoTop + dp(36f)),
+            dp(7f), dp(7f), liveChipPaint
         )
-        canvas.drawText(info, infoLeft + dp(7f), infoTop + dp(15f), axisLabelPaint)
+        canvas.drawText(line1, infoLeft + dp(7f), infoTop + dp(14f), axisLabelPaint)
+        val oldColor = axisLabelPaint.color
+        axisLabelPaint.color = when {
+            !changePct.isFinite() -> Color.rgb(156, 163, 175)
+            changePct >= 0.0 -> Color.rgb(76, 211, 166)
+            else -> Color.rgb(242, 91, 111)
+        }
+        canvas.drawText(line2, infoLeft + dp(7f), infoTop + dp(29f), axisLabelPaint)
+        axisLabelPaint.color = oldColor
     }
 
     private fun drawPriceTag(canvas: Canvas, x: Float, y: Float, text: String, live: Boolean) {
@@ -640,12 +751,74 @@ class MarketChartView @JvmOverloads constructor(
         }
     }
 
-    private fun drawLevel(canvas: Canvas, left: Float, right: Float, y: Float, text: String) {
-        val old: PathEffect? = axisPaint.pathEffect
-        axisPaint.pathEffect = DashPathEffect(floatArrayOf(dp(5f), dp(5f)), 0f)
-        canvas.drawLine(left, y, right, y, axisPaint)
-        axisPaint.pathEffect = old
-        canvas.drawText(text, right - dp(27f), y - dp(4f), axisLabelPaint)
+    private fun drawTradeLevel(
+        canvas: Canvas,
+        left: Float,
+        right: Float,
+        y: Float,
+        label: String,
+        value: Double,
+        color: Int
+    ) {
+        tradeLevelLinePaint.color = color
+        canvas.drawLine(left, y, right, y, tradeLevelLinePaint)
+        val text = "$label  " + String.format(Locale.US, "%.2f", value)
+        val pad = dp(5f)
+        val w = tradeLevelTextPaint.measureText(text) + pad * 2f
+        val h = dp(17f)
+        val rect = RectF((right - w - dp(4f)).coerceAtLeast(left + dp(4f)), y - h / 2f, right - dp(4f), y + h / 2f)
+        tradeLevelBgPaint.color = Color.rgb(13, 18, 24)
+        tradeLevelTextPaint.color = color
+        canvas.drawRoundRect(rect, dp(5f), dp(5f), tradeLevelBgPaint)
+        canvas.drawText(text, rect.left + pad, rect.centerY() + dp(3f), tradeLevelTextPaint)
+    }
+
+    private fun drawStructureOverlays(
+        canvas: Canvas,
+        left: Float,
+        right: Float,
+        top: Float,
+        bottom: Float,
+        low: Double,
+        high: Double
+    ) {
+        if (overlays.length() == 0) return
+        val rows = (0 until overlays.length()).mapNotNull { overlays.optJSONObject(it) }
+            .mapNotNull { row ->
+                val value = row.optDouble("price", Double.NaN)
+                if (!value.isFinite() || value !in low..high) null else Triple(row, value, mapY(value, low, high, top, bottom))
+            }
+            .sortedBy { it.third }
+            .take(6)
+
+        var lastLabelBottom = top - dp(20f)
+        rows.forEach { (row, value, lineY) ->
+            val kind = row.optString("kind", "LEVEL").uppercase(Locale.US)
+            val color = when (kind) {
+                "SFP" -> Color.rgb(224, 167, 46)
+                "DLINE" -> Color.rgb(247, 201, 72)
+                "OB" -> Color.rgb(156, 163, 175)
+                "NPOC" -> Color.rgb(219, 188, 103)
+                else -> Color.rgb(126, 135, 148)
+            }
+            structureLinePaint.color = color
+            canvas.drawLine(left, lineY, right, lineY, structureLinePaint)
+
+            val rawLabel = row.optString("label", kind).uppercase(Locale.US)
+            val text = rawLabel.take(12)
+            structureLabelTextPaint.color = color
+            val pad = dp(4f)
+            val w = structureLabelTextPaint.measureText(text) + pad * 2f
+            val h = dp(15f)
+            var labelTop = (lineY - h / 2f).coerceIn(top + dp(2f), bottom - h - dp(2f))
+            if (labelTop < lastLabelBottom + dp(2f)) {
+                labelTop = (lastLabelBottom + dp(2f)).coerceAtMost(bottom - h - dp(2f))
+            }
+            val rect = RectF(left + dp(3f), labelTop, left + dp(3f) + w, labelTop + h)
+            canvas.drawRoundRect(rect, dp(4f), dp(4f), structureLabelBgPaint)
+            canvas.drawText(text, rect.left + pad, rect.centerY() + dp(2.8f), structureLabelTextPaint)
+            lastLabelBottom = rect.bottom
+        }
     }
 
     private fun mapY(value: Double, low: Double, high: Double, top: Float, bottom: Float): Float {
@@ -653,6 +826,16 @@ class MarketChartView @JvmOverloads constructor(
     }
 
     private fun compactPrice(value: Double): String {
+        if (!value.isFinite()) return "—"
+        return when {
+            abs(value) >= 1000000 -> String.format(Locale.US, "%.2fM", value / 1000000.0)
+            abs(value) >= 1000 -> String.format(Locale.US, "%.1fk", value / 1000.0)
+            else -> String.format(Locale.US, "%.2f", value)
+        }
+    }
+
+    private fun compactVolume(value: Double): String {
+        if (!value.isFinite()) return "—"
         return when {
             abs(value) >= 1000000 -> String.format(Locale.US, "%.2fM", value / 1000000.0)
             abs(value) >= 1000 -> String.format(Locale.US, "%.1fk", value / 1000.0)
@@ -749,6 +932,11 @@ class MarketChartView @JvmOverloads constructor(
                     event.y < dp(42f)
 
                 if (!dragging && !pinchActive) {
+                    if (toggleIndicatorAt(event.x, event.y)) {
+                        performClick()
+                        invalidate()
+                        return true
+                    }
                     val now = SystemClock.uptimeMillis()
                     if (liveChipHit || now - lastTapMs < 280L) {
                         followLive = true
@@ -775,6 +963,11 @@ class MarketChartView @JvmOverloads constructor(
                 return true
             }
         }
+        return true
+    }
+
+    override fun performClick(): Boolean {
+        super.performClick()
         return true
     }
 

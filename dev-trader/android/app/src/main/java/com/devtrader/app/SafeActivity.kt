@@ -220,7 +220,7 @@ class SafeActivity : Activity() {
             latestRoot = preview
             renderState(preview, requestChart = false)
             val candles = preview.getJSONObject("chart").getJSONArray("candles")
-            chart.setData(candles, preview.optJSONObject("signal"), calculateEma(candles, 50), preview.getDouble("last_price"))
+            chart.setData(candles, preview.optJSONObject("signal"), calculateEma(candles, 50), preview.getDouble("last_price"), chartOverlays(preview))
             check.text = "Build ${BuildConfig.VERSION_CODE}  •  Visual verification"
             selectWorkspace(intent.getIntExtra("visual_workspace", 0).coerceIn(0, 2))
             return
@@ -1018,7 +1018,8 @@ class SafeActivity : Activity() {
                             candles,
                             latestRoot?.optJSONObject("signal"),
                             calculateEma(candles, 50),
-                            lastPrice
+                            lastPrice,
+                            chartOverlays(latestRoot)
                         )
                     }
                 }
@@ -1394,6 +1395,37 @@ class SafeActivity : Activity() {
         }
     }
 
+    private fun chartOverlays(root: JSONObject?): JSONArray {
+        if (root == null) return JSONArray()
+        root.optJSONArray("chart_overlays")?.let { return it }
+
+        // Backward-compatible fallback while a backend rollout is converging:
+        // SFP and the nearest liquidity references already exist in dashboard frames.
+        val out = JSONArray()
+        val engine = root.optJSONObject("engine")
+        val sfp = engine?.optJSONObject("sfp_hunter")
+        val sfpLevel = sfp?.optDouble("target_level", Double.NaN) ?: Double.NaN
+        if (sfpLevel.isFinite() && sfpLevel > 0) {
+            out.put(JSONObject()
+                .put("kind", "SFP")
+                .put("label", "SFP")
+                .put("price", sfpLevel)
+                .put("status", sfp?.optString("status", "WATCH")))
+        }
+        val liquidity = engine?.optJSONObject("liquidity_map")
+        listOf("above", "below").forEach { side ->
+            val row = liquidity?.optJSONArray(side)?.optJSONObject(0)
+            val price = row?.optDouble("price", Double.NaN) ?: Double.NaN
+            if (price.isFinite() && price > 0) {
+                out.put(JSONObject()
+                    .put("kind", "LIQUIDITY")
+                    .put("label", row?.optString("title", "LIQ") ?: "LIQ")
+                    .put("price", price))
+            }
+        }
+        return out
+    }
+
     private fun requestChartIfNeeded(force: Boolean = false) {
         val now = System.currentTimeMillis()
         if (!force && chartRequestInFlight) return
@@ -1426,7 +1458,8 @@ class SafeActivity : Activity() {
                         candles,
                         latestRoot?.optJSONObject("signal"),
                         calculateEma(candles, 50),
-                        lastPrice
+                        lastPrice,
+                        chartOverlays(latestRoot)
                     )
                     refreshTimeframeButtonsForCurrentSelection()
                 }
