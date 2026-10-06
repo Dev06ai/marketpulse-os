@@ -1,6 +1,7 @@
 // Build 101: KYVORIQ visual identity — gold/charcoal system, branded navigation and mark.
 // Build 99: free-host migration with compact mobile delivery.
 // Build 112: high-refresh VSYNC price motion for the in-app BTC hero.
+// Price animation follows Android VSYNC; the display-mode request is capped at 120 Hz.
  // Build 110: KYVORIQ Premium Experience Pack — motion, ambience, risk/alert intelligence, privacy and widget.
 // Build 109: KYVORIQ premium semantic haptics across navigation, chart tools and calculator.
 // Build 108: confidence-sized demo execution UI with live-backend capability detection.
