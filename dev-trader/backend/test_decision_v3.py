@@ -189,6 +189,7 @@ def test_zone_and_manual_level_reactions_use_dedicated_playbook():
     ]:
         s=setup(setup_name,"LONG" if kind != "SUPPLY_ZONE" else "SHORT")
         if s.direction == "SHORT":
+            s.stop=100500.;s.target1=99300.;s.target2=98250.
             f.trend_60="DOWN";f.trend_240="DOWN"
             f.structure_map["1h"]["bias"]="BEARISH"
         else:
