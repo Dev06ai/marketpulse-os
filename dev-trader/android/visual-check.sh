@@ -65,7 +65,11 @@ for viewport in compact tall; do
       fi
       rm -f "$candidate"
       adb shell am broadcast -a android.intent.action.CLOSE_SYSTEM_DIALOGS >/dev/null 2>&1 || true
-      adb shell input keyevent KEYCODE_BACK >/dev/null 2>&1 || true
+      # A transient null/foreign accessibility root must not press Back: that
+      # closes KYVORIQ and turns a retry into a guaranteed launcher failure.
+      # Reassert the requested preview activity instead.
+      adb shell am start -W -n "${app_package}/com.devtrader.app.SafeActivity" \
+        --ez visual_preview true --ei visual_workspace "$workspace" >/dev/null 2>&1 || true
     done
     if [[ "$captured" != true ]]; then
       echo "Unable to capture Dev Trader workspace ${workspace} at ${viewport}; top window never became the requested app workspace."
