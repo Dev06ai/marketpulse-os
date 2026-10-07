@@ -75,8 +75,6 @@ for viewport in compact tall; do
   done
 done
 
-python3 dev-trader/android/verify-interactions.py
-
 adb logcat -d > ui-check/logcat.txt
 if app_health_failed ui-check/logcat.txt; then
   grep -n -E -A 22 "FATAL EXCEPTION|ANR in ${app_package}|Application Not Responding: ${app_package}" ui-check/logcat.txt | tail -n 160 || true
@@ -108,3 +106,5 @@ for path in Path('ui-check').glob('*.xml'):
     assert any(n.get('text') == 'LIVE' for n in nodes) if workspace == 0 else True
 print('Six native workspace layouts verified; navigation stays inside both viewports.')
 PY
+
+python3 dev-trader/android/verify-interactions.py

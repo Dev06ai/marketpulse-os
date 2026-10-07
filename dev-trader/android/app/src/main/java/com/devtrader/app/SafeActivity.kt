@@ -866,7 +866,10 @@ class SafeActivity : FragmentActivity() {
             letterSpacing = 0.11f
             includeFontPadding = false
         }
-        box.addView(heading)
+        val headingRow = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
+        headingRow.addView(heading, LinearLayout.LayoutParams(0, -2, 1f))
+        if (!expandToFill) headingRow.addView(label("SCROLL ↓", 8f, kyAmber, 0.04f))
+        box.addView(headingRow)
 
         val value = TextView(this).apply {
             text = marketAssetAccent(initial)
@@ -948,7 +951,7 @@ class SafeActivity : FragmentActivity() {
             isEnabled = true
             isClickable = true
             isFocusable = true
-            isFocusableInTouchMode = true
+            isFocusableInTouchMode = false
             minHeight = dp(52)
             minWidth = 0
             stateListAnimator = null
@@ -1943,7 +1946,7 @@ class SafeActivity : FragmentActivity() {
         val handle = View(this).apply {
             background = GradientDrawable().apply {
                 cornerRadius = dp(3).toFloat()
-                setColor(Color.rgb(73, 82, 94))
+                setColor(KyvoriqTheme.border)
             }
         }
         sheet.addView(
@@ -2015,7 +2018,7 @@ class SafeActivity : FragmentActivity() {
             setLineSpacing(0f, 1.08f)
             setPadding(dp(12), dp(10), dp(12), dp(10))
             background = gradient(
-                intArrayOf(Color.rgb(28, 27, 20), Color.rgb(19, 24, 31)),
+                intArrayOf(Color.rgb(28, 27, 20), KyvoriqTheme.surface),
                 GradientDrawable.Orientation.LEFT_RIGHT
             ).apply {
                 cornerRadius = dp(14).toFloat()
@@ -2064,7 +2067,7 @@ class SafeActivity : FragmentActivity() {
                 isClickable = true
                 isFocusable = true
                 background = gradient(
-                    intArrayOf(kySlate, Color.rgb(14, 19, 26)),
+                    intArrayOf(kySlate, KyvoriqTheme.charcoal),
                     GradientDrawable.Orientation.TL_BR
                 ).apply {
                     cornerRadius = dp(18).toFloat()
@@ -2143,7 +2146,7 @@ class SafeActivity : FragmentActivity() {
         val note = TextView(this).apply {
             text = "Settings save instantly. KYVORIQ never receives or stores your biometric template."
             textSize = 8.8f
-            setTextColor(Color.rgb(118, 128, 142))
+            setTextColor(KyvoriqTheme.muted)
             includeFontPadding = false
             gravity = Gravity.CENTER_HORIZONTAL
         }
@@ -2504,6 +2507,8 @@ class SafeActivity : FragmentActivity() {
             textSize = 15f
             setTextColor(kyWhite)
             setHintTextColor(kyGray)
+            minHeight = dp(48)
+            setSingleLine(true)
             inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL
             setPadding(dp(12), 0, dp(12), 0)
             background = gradient(
