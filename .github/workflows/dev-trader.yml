@@ -1,4 +1,4 @@
-# Build 116: KYVORIQ decision-engine reliability audit release pipeline.
+# Build 125: KYVORIQ Palette + Expanded Chart + Level Lifecycle release pipeline.
 name: KYVORIQ CI
 
 on:
@@ -193,7 +193,7 @@ jobs:
           gradle-version: '9.6.0'
       - name: Build Android debug APK
         working-directory: dev-trader/android
-        run: gradle assembleDebug --stacktrace -PdevTraderVersionCode=124 -PdevTraderVersionName=0.20.4
+        run: gradle assembleDebug --stacktrace -PdevTraderVersionCode=125 -PdevTraderVersionName=0.21.0
       - name: Build signed Android release APK
         if: steps.changed.outputs.android_changed == 'true'
         working-directory: dev-trader/android
@@ -204,7 +204,7 @@ jobs:
           DEV_TRADER_KEY_PASSWORD: ${{ secrets.DEV_TRADER_KEY_PASSWORD }}
         run: |
           echo "${{ secrets.DEV_TRADER_KEYSTORE_BASE64 }}" | base64 --decode > "$DEV_TRADER_KEYSTORE_PATH"
-          gradle assembleRelease --stacktrace -PdevTraderVersionCode=124 -PdevTraderVersionName=0.20.4
+          gradle assembleRelease --stacktrace -PdevTraderVersionCode=125 -PdevTraderVersionName=0.21.0
           if unzip -l app/build/outputs/apk/release/app-release.apk | grep -q ui_preview.json; then
             echo 'Debug preview data must never be included in release APKs.'
             exit 1
@@ -277,7 +277,7 @@ jobs:
           mkdir -p release
           cp dist/app-release.apk release/app-release.apk
           sha256sum release/app-release.apk | awk '{print $1}' > release/app-release.sha256
-          echo "tag=dev-trader-v0.20.4-124" >> "$GITHUB_OUTPUT"
+          echo "tag=dev-trader-v0.21.0-125" >> "$GITHUB_OUTPUT"
           echo "sha256=$(cat release/app-release.sha256)" >> "$GITHUB_OUTPUT"
       - name: Create GitHub release
         env:
@@ -287,7 +287,7 @@ jobs:
             echo "This release already exists; refusing to replace a published APK."
             exit 1
           fi
-          gh release create "${{ steps.release.outputs.tag }}" release/app-release.apk --target "$GITHUB_SHA" --title "KYVORIQ 0.20.4 (124)" --notes "Chart Control Edition: developing opportunity pushes stay quiet until confirmed; LVL opens persistent SFP/nPOC/OB/Daily/Weekly/Other filters; FULL opens the same live chart in immersive fullscreen."
+          gh release create "${{ steps.release.outputs.tag }}" release/app-release.apk --target "$GITHUB_SHA" --title "KYVORIQ 0.21.0 (125)" --notes "Palette & Chart Edition: exact KYVORIQ Gold/Amber/Deep Gold/Charcoal/Slate/Graphite/Gray design system, dark branded system bars, wider/taller main chart, tighter terminal layout, and five-minute retirement for fully tapped structural levels while reaction and risk gates remain intact."
       - name: Publish verified update manifest
         env:
           SHA256: "${{ steps.release.outputs.sha256 }}"
@@ -301,11 +301,11 @@ jobs:
           data = json.loads(p.read_text())
           data.update({
               "enabled": True,
-              "versionCode": 124,
-              "versionName": "0.20.4",
-              "apkUrl": "https://github.com/Dev06ai/marketpulse-os/releases/download/dev-trader-v0.20.4-124/app-release.apk",
+              "versionCode": 125,
+              "versionName": "0.21.0",
+              "apkUrl": "https://github.com/Dev06ai/marketpulse-os/releases/download/dev-trader-v0.21.0-125/app-release.apk",
               "sha256": os.environ["SHA256"],
-              "notes": "KYVORIQ 0.20.4 • Chart Control Edition • quiet developing alerts • persistent SFP/nPOC/OB/Daily/Weekly filters • immersive live fullscreen chart"
+              "notes": "KYVORIQ 0.21.0 • exact brand palette • wider/taller main chart • premium system UI • fully tapped levels retire after 5 minutes"
           })
           p.write_text(json.dumps(data, indent=2) + "\n")
           PY
