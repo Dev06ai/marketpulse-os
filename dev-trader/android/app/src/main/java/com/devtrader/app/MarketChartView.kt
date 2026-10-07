@@ -165,6 +165,17 @@ class MarketChartView @JvmOverloads constructor(
         textSize = dp(8.1f)
         typeface = android.graphics.Typeface.create(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD)
     }
+    private val zoneFillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
+    private val zoneBorderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeWidth = dp(.9f)
+        pathEffect = DashPathEffect(floatArrayOf(dp(4f), dp(3f)), 0f)
+    }
+    private val zoneTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = KyvoriqTheme.white
+        textSize = dp(8.3f)
+        typeface = android.graphics.Typeface.create(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD)
+    }
     private val tradeLevelBgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { alpha = 238 }
     private val tradeLevelLinePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
@@ -443,6 +454,7 @@ class MarketChartView @JvmOverloads constructor(
         canvas.drawRoundRect(RectF(left, top, right, bottom), dp(3f), dp(3f), plotBorderPaint)
         if (showVolume) canvas.drawLine(left, volumeTop, right, volumeTop, volumeDividerPaint)
         drawAxes(canvas, right, priceBottom, top, bottom, low, high)
+        if (showLevels) drawZoneOverlays(canvas, left, right, top, priceBottom, low, high)
 
         val step = (right - left) / actualVisible
         val candleWidth = max(dp(2.4f), min(dp(9.2f), step * 0.62f))
@@ -965,6 +977,47 @@ class MarketChartView @JvmOverloads constructor(
         postInvalidateOnAnimation()
     }
 
+    private fun drawZoneOverlays(
+        canvas: Canvas,
+        left: Float,
+        right: Float,
+        top: Float,
+        bottom: Float,
+        low: Double,
+        high: Double
+    ) {
+        val wallNow = System.currentTimeMillis()
+        for (i in 0 until overlays.length()) {
+            val row = overlays.optJSONObject(i) ?: continue
+            val zl = row.optDouble("zone_low", Double.NaN)
+            val zh = row.optDouble("zone_high", Double.NaN)
+            if (!zl.isFinite() || !zh.isFinite() || zl <= 0.0 || zh <= 0.0) continue
+            val lo = min(zl, zh); val hi = max(zl, zh)
+            if (hi < low || lo > high) continue
+            val hideAfter = row.optLong("hide_after_ms", 0L)
+            if (hideAfter > 0L && wallNow >= hideAfter) continue
+            val direction = row.optString("direction","BOTH").uppercase(Locale.US)
+            val kind = row.optString("kind","OB_ZONE").uppercase(Locale.US)
+            val color = when {
+                direction == "SHORT" || kind == "SUPPLY_ZONE" -> Color.rgb(214,73,94)
+                direction == "LONG" -> Color.rgb(54,188,148)
+                else -> KyvoriqTheme.deepGold
+            }
+            val y1=mapY(min(hi,high),low,high,top,bottom)
+            val y2=mapY(max(lo,low),low,high,top,bottom)
+            val rect=RectF(left,min(y1,y2),right,max(y1,y2))
+            zoneFillPaint.color=color; zoneFillPaint.alpha=if(row.optBoolean("manual",false)) 52 else 34
+            canvas.drawRect(rect,zoneFillPaint)
+            zoneBorderPaint.color=if(kind=="OB" || kind=="OB_ZONE") KyvoriqTheme.white else color
+            zoneBorderPaint.alpha=150; canvas.drawRect(rect,zoneBorderPaint)
+            val label=row.optString("label",kind).uppercase(Locale.US)
+            val w=zoneTextPaint.measureText(label)
+            val x=(left+(right-left)*0.52f-w/2f).coerceIn(left+dp(6f),right-w-dp(6f))
+            canvas.drawText(label,x,rect.centerY()-dp(3f),zoneTextPaint)
+        }
+        zoneFillPaint.alpha=255; zoneBorderPaint.alpha=255
+    }
+
     private fun drawStructureOverlays(
         canvas: Canvas,
         left: Float,
@@ -977,11 +1030,14 @@ class MarketChartView @JvmOverloads constructor(
         if (overlays.length() == 0) return
         val rows = (0 until overlays.length()).mapNotNull { overlays.optJSONObject(it) }
             .mapNotNull { row ->
+                val zoneLow = row.optDouble("zone_low", Double.NaN)
+                val zoneHigh = row.optDouble("zone_high", Double.NaN)
+                if (zoneLow.isFinite() && zoneHigh.isFinite() && zoneLow > 0.0 && zoneHigh > 0.0) return@mapNotNull null
                 val value = row.optDouble("price", Double.NaN)
                 if (!value.isFinite() || value !in low..high) null else Triple(row, value, mapY(value, low, high, top, bottom))
             }
             .sortedBy { it.third }
-            .take(14)
+            .take(24)
 
         val elapsedNow = SystemClock.elapsedRealtime()
         val wallNow = System.currentTimeMillis()
@@ -990,10 +1046,10 @@ class MarketChartView @JvmOverloads constructor(
         rows.forEach { (row, value, lineY) ->
             val kind = row.optString("kind", "LEVEL").uppercase(Locale.US)
             val color = when (kind) {
-                "SFP", "WEEKLY_OPEN" -> KyvoriqTheme.gold
+                "SFP", "WEEKLY_OPEN", "WEEKLY_NPOC" -> KyvoriqTheme.gold
                 "DLINE" -> KyvoriqTheme.ember
-                "OB" -> KyvoriqTheme.white
-                "NPOC" -> Color.rgb(255, 82, 105)
+                "OB", "OB_ZONE" -> KyvoriqTheme.white
+                "NPOC", "RANGE_POC", "SUPPLY_ZONE" -> Color.rgb(255, 82, 105)
                 "DAILY" -> Color.rgb(54, 211, 153)
                 else -> KyvoriqTheme.muted
             }
@@ -1034,7 +1090,8 @@ class MarketChartView @JvmOverloads constructor(
             }
 
             val rawLabel = row.optString("label", kind).uppercase(Locale.US)
-            val text = rawLabel.take(14)
+            val manual = row.optBoolean("manual", false)
+            val text = if (manual) rawLabel.take(18) + "  " + String.format(Locale.US, "%,.1f", value) else rawLabel.take(14)
             structureLabelTextPaint.color = color
             structureLabelTextPaint.alpha = (255f * retirementFade).toInt().coerceIn(0, 255)
             structureLabelBgPaint.alpha = (235f * retirementFade).toInt().coerceIn(0, 235)
@@ -1045,7 +1102,8 @@ class MarketChartView @JvmOverloads constructor(
             if (labelTop < lastLabelBottom + dp(2f)) {
                 labelTop = (lastLabelBottom + dp(2f)).coerceAtMost(bottom - h - dp(2f))
             }
-            val rect = RectF(left + dp(3f), labelTop, left + dp(3f) + w, labelTop + h)
+            val labelLeft = if (manual) right - w - dp(3f) else left + dp(3f)
+            val rect = RectF(labelLeft, labelTop, labelLeft + w, labelTop + h)
             canvas.drawRoundRect(rect, dp(4f), dp(4f), structureLabelBgPaint)
             canvas.drawText(text, rect.left + pad, rect.centerY() + dp(2.8f), structureLabelTextPaint)
             lastLabelBottom = rect.bottom
