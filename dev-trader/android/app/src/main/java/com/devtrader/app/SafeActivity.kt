@@ -1,5 +1,6 @@
 // Build 101: KYVORIQ visual identity — gold/charcoal system, branded navigation and mark.
 // Build 99: free-host migration with compact mobile delivery.
+// Build 117: Decision Engine Audit v3.5 companion release.
 // Build 115: KYVORIQ Motion Studio — launch, decision, chart reaction/execution and Insights motion graphics.
 // Build 114: premium KYVORIQ Privacy Shield bottom sheet.
 // Build 113: reaction-aware chart level map + multi-timeframe OB presentation.
