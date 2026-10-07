@@ -475,12 +475,12 @@ class SafeActivity : FragmentActivity() {
                 intArrayOf(kyCharcoal, KyvoriqTheme.slate, kyCharcoal),
                 GradientDrawable.Orientation.TOP_BOTTOM
             )
-            setPadding(dp(10), dp(8), dp(10), dp(8))
+            setPadding(dp(6), dp(8), dp(6), dp(8))
         }
         rootSurface = root
         ViewCompat.setOnApplyWindowInsetsListener(root) { view, insets ->
             val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
-            view.setPadding(dp(10), bars.top + dp(8), dp(10), bars.bottom + dp(8))
+            view.setPadding(dp(6), bars.top + dp(8), dp(6), bars.bottom + dp(8))
             insets
         }
         setContentView(root)
