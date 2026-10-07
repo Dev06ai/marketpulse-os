@@ -4,7 +4,7 @@ import time
 
 import pytest
 
-from app.analytics import MarketFeatures, compute_features
+from app.analytics import MarketFeatures, compute_features, _order_block_detail
 from app.bitget import BitgetDemoClient, BitgetDemoError
 from app.learning import AdaptiveLearning
 from app.models import Candle, MarketState
@@ -286,6 +286,46 @@ def test_nearby_major_resistance_blocks_optimistic_target():
     signal = sample_signal()
     assert not entry_room(signal,MarketState(),MarketFeatures(previous_day_high=100100))["allow"]
     assert entry_room(signal,MarketState(),MarketFeatures(previous_day_high=102000))["allow"]
+
+
+def test_entry_room_includes_weekly_open_and_opposing_order_blocks():
+    signal = sample_signal()
+    weekly = MarketFeatures(weekly_open=100100)
+    blocked = entry_room(signal, MarketState(), weekly)
+    assert not blocked["allow"] and blocked["nearest_barrier"] == "weekly open"
+
+    opposing = MarketFeatures(order_blocks={
+        "1h": {"direction": "BEARISH", "mid": 100120},
+        "4h": {"direction": "BULLISH", "mid": 100080},
+    })
+    blocked = entry_room(signal, MarketState(), opposing)
+    assert not blocked["allow"] and "opposing order block" in blocked["nearest_barrier"]
+
+
+def test_invalidated_order_block_is_not_returned_as_active_level():
+    cs = [
+        Candle(0, 899999, 100, 101, 99, 100, 10, True),
+        Candle(900000, 1799999, 100, 102, 98, 99, 10, True),
+        Candle(1800000, 2699999, 100, 104, 99, 103, 20, True),
+        # Decisive close below the bullish base low invalidates that OB, but
+        # the candle is green so it does not manufacture a bearish OB.
+        Candle(2700000, 3599999, 95, 98, 94, 97, 15, True),
+        Candle(3600000, 4499999, 97, 98, 96, 97.5, 10, True),
+    ]
+    assert _order_block_detail(cs)["direction"] == "NONE"
+
+
+def test_uninvalidated_order_block_remains_available():
+    cs = [
+        Candle(0, 899999, 100, 101, 99, 100, 10, True),
+        Candle(900000, 1799999, 100, 102, 98, 99, 10, True),
+        Candle(1800000, 2699999, 100, 104, 99, 103, 20, True),
+        Candle(2700000, 3599999, 102, 104, 101, 103, 15, True),
+        Candle(3600000, 4499999, 103, 104, 102, 103.5, 10, True),
+    ]
+    detail = _order_block_detail(cs)
+    assert detail["direction"] == "BULLISH"
+    assert detail["status"] == "ACTIVE"
 
 
 def test_aligned_structure_confirms_continuation_without_wave_vote(monkeypatch,tmp_path):

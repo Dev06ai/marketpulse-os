@@ -728,6 +728,15 @@ def entry_room(signal: Signal, state: MarketState, f: MarketFeatures) -> dict:
         levels.extend((name,price) for name,price in (("previous day low",f.previous_day_low),("previous week low",f.previous_week_low)) if signal.direction=="SHORT")
     if f.volume_context.get("source")=="EXECUTED_TRADES" and f.volume_context.get("exact_npoc"):
         levels.append(("untouched executed-volume POC",f.volume_context.get("untouched_poc")))
+    if f.weekly_open is not None:
+        levels.append(("weekly open", f.weekly_open))
+    opposing_ob = "BEARISH" if signal.direction == "LONG" else "BULLISH"
+    for tf, detail in (f.order_blocks or {}).items():
+        if str((detail or {}).get("direction") or "").upper() != opposing_ob:
+            continue
+        mid = (detail or {}).get("mid")
+        if mid is not None:
+            levels.append((f"{tf} opposing order block", mid))
     sign = 1 if signal.direction == "LONG" else -1
     ahead = [(name, price) for name, price in levels if price is not None and sign*(price-signal.entry) > 0]
     if not ahead:
@@ -1002,11 +1011,12 @@ class StrategyEngine:
         """High-conviction decision layer designed to reject marginal entries."""
         f = compute_features(state)
         if signal.evidence.get("playbook"):
+            gate_now = int(getattr(state, "_as_of_ms", time.time() * 1000))
             allowed,reason=playbook_admission(
                 signal,
                 state,
                 f,
-                int(time.time()*1000),
+                gate_now,
                 min_confidence=_decision_min_confidence(),
                 min_rr=_quality_min_rr(),
             )
@@ -2387,9 +2397,10 @@ class StrategyEngine:
         reaction = (self.level_reaction_state or {}).get("trigger") or {}
         if not reaction or state.last_price is None:
             return None
-        now = int(time.time() * 1000)
+        now = int(getattr(state, "_as_of_ms", time.time() * 1000))
         played_at = int(reaction.get("played_at_ms") or 0)
-        if not played_at or now - played_at > TRIGGER_FRESH_MS:
+        reaction_age = now - played_at
+        if not played_at or reaction_age < 0 or reaction_age > TRIGGER_FRESH_MS:
             return None
 
         direction = str(reaction.get("direction") or "").upper()
@@ -2400,19 +2411,27 @@ class StrategyEngine:
         if level <= 0 or entry <= 0:
             return None
 
-        live = None
-        if state.candles_5:
-            live = state.candles_5[-1]
-        if live is None:
-            confirmed = [c for c in state.candles_15 if c.confirmed]
-            live = confirmed[-1] if confirmed else None
-        if live is None:
-            return None
+        reaction_low = reaction.get("reaction_candle_low")
+        reaction_high = reaction.get("reaction_candle_high")
+        try:
+            reaction_low = float(reaction_low)
+            reaction_high = float(reaction_high)
+        except (TypeError, ValueError):
+            reaction_low = reaction_high = float("nan")
+        if not (reaction_low > 0 and reaction_high > 0 and reaction_high >= reaction_low):
+            live = state.candles_5[-1] if state.candles_5 else None
+            if live is None:
+                confirmed = [c for c in state.candles_15 if c.confirmed]
+                live = confirmed[-1] if confirmed else None
+            if live is None:
+                return None
+            reaction_low = float(live.low)
+            reaction_high = float(live.high)
 
         atr = max(float(f.atr_15 or 0.0), entry * 0.0005)
         buffer = max(atr * 0.16, entry * 0.00022)
         if direction == "LONG":
-            raw_stop = min(float(live.low), level - buffer)
+            raw_stop = min(reaction_low, level - buffer)
             above = sorted(
                 float(row.get("price"))
                 for row in (self.level_reaction_state.get("levels") or [])
@@ -2420,7 +2439,7 @@ class StrategyEngine:
             )
             raw_target = above[0] if above else entry + max(entry - raw_stop, atr) * 3.0
         else:
-            raw_stop = max(float(live.high), level + buffer)
+            raw_stop = max(reaction_high, level + buffer)
             below = sorted(
                 (
                     float(row.get("price"))
@@ -2450,7 +2469,13 @@ class StrategyEngine:
         )
         if signal:
             signal.evidence["level_reaction"] = dict(reaction)
-            signal.evidence["level_reaction_policy"] = "REACTION_REQUIRED_NO_BLIND_LEVEL_ENTRY"
+            signal.evidence["level_reaction_age_ms"] = reaction_age
+            signal.evidence["level_reaction_stop_anchor"] = {
+                "low": reaction_low,
+                "high": reaction_high,
+                "source": "REACTION_CANDLE",
+            }
+            signal.evidence["level_reaction_policy"] = "MAPPED_BEFORE_TRIGGER_REACTION_REQUIRED_NO_BLIND_LEVEL_ENTRY"
         return signal
 
     def diagnostics(self, state: MarketState) -> dict:

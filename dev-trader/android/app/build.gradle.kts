@@ -1,3 +1,4 @@
+// Build 116: decision-engine reliability audit companion release.
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.plugin.compose")

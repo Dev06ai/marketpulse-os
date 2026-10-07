@@ -95,18 +95,33 @@ def collect_reaction_levels(features: MarketFeatures, sfp_hunter: dict | None = 
 class LevelReactionTracker:
     def __init__(self):
         self.played: dict[str, dict] = {}
+        self.seen_levels: dict[str, dict] = {}
         self.last_state: dict = {"status": "IDLE", "levels": [], "armed": [], "trigger": None}
 
     @staticmethod
-    def _live_candle(state: MarketState) -> Candle | None:
+    def _live_candle(state: MarketState, now_ms: int) -> Candle | None:
+        """Return only a candle that can legitimately describe a reaction now.
+
+        A stale closed candle plus a new live price must never be merged into a
+        synthetic sweep/reclaim. Closed bars are accepted only briefly after
+        their close; an open bar must actually contain the current as-of time.
+        """
         if state.candles_5:
             last = state.candles_5[-1]
             if not last.confirmed:
-                return last
+                if int(last.start) - 1_000 <= now_ms <= int(last.end) + 90_000:
+                    return last
+                return None
             confirmed = [c for c in state.candles_5 if c.confirmed]
-            return confirmed[-1] if confirmed else last
+            recent = confirmed[-1] if confirmed else last
+            if 0 <= now_ms - int(recent.end) <= 90_000:
+                return recent
+            return None
         confirmed15 = [c for c in state.candles_15 if c.confirmed]
-        return confirmed15[-1] if confirmed15 else None
+        if not confirmed15:
+            return None
+        recent = confirmed15[-1]
+        return recent if 0 <= now_ms - int(recent.end) <= 90_000 else None
 
     def update(
         self,
@@ -117,7 +132,7 @@ class LevelReactionTracker:
     ) -> dict:
         now = int(now_ms if now_ms is not None else getattr(state, "_as_of_ms", time.time() * 1000))
         price = _finite(state.last_price)
-        candle = self._live_candle(state)
+        candle = self._live_candle(state, now)
         raw_levels = collect_reaction_levels(features, sfp_hunter)
 
         # Retain played state for as long as the same structural level still
@@ -126,8 +141,15 @@ class LevelReactionTracker:
         # price naturally creates a new id and becomes eligible again.
         active_ids = {row["id"] for row in raw_levels}
         self.played = {key: value for key, value in self.played.items() if key in active_ids}
+        self.seen_levels = {key: value for key, value in self.seen_levels.items() if key in active_ids}
+        previously_seen = set(self.seen_levels)
+        for row in raw_levels:
+            self.seen_levels.setdefault(
+                row["id"],
+                {"first_seen_ms": now, "first_seen_candle_start": int(candle.start) if candle else None},
+            )
 
-        if price is None or candle is None:
+        if price is None:
             levels = []
             for row in raw_levels:
                 played = self.played.get(row["id"])
@@ -146,9 +168,10 @@ class LevelReactionTracker:
         reclaim = max(1.0, atr * 0.12, price * 0.00012)
         arm_distance = max(touch_tolerance * 3.0, atr * 0.35)
 
-        high = max(float(candle.high), price)
-        low = min(float(candle.low), price)
-        open_price = float(candle.open)
+        can_trigger = candle is not None
+        high = max(float(candle.high), price) if candle else price
+        low = min(float(candle.low), price) if candle else price
+        open_price = float(candle.open) if candle else price
         armed: list[dict] = []
         levels: list[dict] = []
         fresh_triggers: list[dict] = []
@@ -176,14 +199,18 @@ class LevelReactionTracker:
             # A reaction requires actual interaction plus displacement away from
             # the level. Proximity alone is only ARMED and can never create a trade.
             bullish = (
-                allow_long
+                can_trigger
+                and row["id"] in previously_seen
+                and allow_long
                 and touched
                 and price >= level + reclaim
                 and price >= open_price
                 and (low <= level or abs(low - level) <= touch_tolerance)
             )
             bearish = (
-                allow_short
+                can_trigger
+                and row["id"] in previously_seen
+                and allow_short
                 and touched
                 and price <= level - reclaim
                 and price <= open_price
@@ -207,6 +234,7 @@ class LevelReactionTracker:
                     "played_at_ms": played_at,
                     "hide_after_ms": hide_after,
                     "reaction_candle_start": int(candle.start),
+                    "reaction_candle_end": int(candle.end),
                     "reaction_candle_high": round(high, 2),
                     "reaction_candle_low": round(low, 2),
                     "distance_at_trigger": round(distance, 2),
@@ -218,6 +246,10 @@ class LevelReactionTracker:
                 row["state"] = "ARMED"
                 row["distance"] = round(distance, 2)
                 row["arm_distance"] = round(arm_distance, 2)
+                if row["id"] not in previously_seen:
+                    row["arming_reason"] = "LEVEL_FIRST_OBSERVED"
+                elif not can_trigger:
+                    row["arming_reason"] = "WAITING_FOR_FRESH_REACTION_CANDLE"
                 armed.append(row)
             else:
                 row["state"] = "WATCH"
@@ -238,6 +270,7 @@ class LevelReactionTracker:
             "trigger": trigger,
             "touch_tolerance": round(touch_tolerance, 2),
             "reclaim_distance": round(reclaim, 2),
-            "rule": "Proximity only arms a level; a sweep/reclaim or rejection with displacement is required before signal evaluation.",
+            "reaction_candle_fresh": bool(can_trigger),
+            "rule": "Proximity only arms a level; the level must already be mapped and a fresh sweep/reclaim or rejection with displacement is required before signal evaluation.",
         }
         return self.last_state

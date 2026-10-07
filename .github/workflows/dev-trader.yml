@@ -215,7 +215,7 @@ jobs:
             echo "This release already exists; refusing to replace a published APK."
             exit 1
           fi
-          gh release create "${{ steps.release.outputs.tag }}" release/app-release.apk --target "$GITHUB_SHA" --title "KYVORIQ 0.18.1 (116)" --notes "Decision Engine Reliability Audit: aligns playbook/execution R:R thresholds, adds a dedicated mapped-level reaction playbook, releases quota for conclusively skipped entries, closes durable never-executed predictions safely, caps confidence sizing by the remaining UTC daily-loss budget, and prevents pre-submission validation failures from creating phantom trades."
+          gh release create "${{ steps.release.outputs.tag }}" release/app-release.apk --target "$GITHUB_SHA" --title "KYVORIQ 0.18.1 (116)" --notes "Decision Engine Reliability Audit: threshold parity, dedicated mapped-level reaction playbook, skipped-quota recovery, durable skip cleanup, daily-risk-budget enforcement, clean pre-submission failures, stale/hindsight reaction protection, invalidated-OB retirement, reaction-candle stop anchoring, and chart-level entry-room checks."
       - name: Publish verified update manifest
         env:
           SHA256: "${{ steps.release.outputs.sha256 }}"
@@ -233,7 +233,7 @@ jobs:
               "versionName": "0.18.1",
               "apkUrl": "https://github.com/Dev06ai/marketpulse-os/releases/download/dev-trader-v0.18.1-116/app-release.apk",
               "sha256": os.environ["SHA256"],
-              "notes": "KYVORIQ 0.18.1 • Decision Engine Audit • threshold parity • dedicated level-reaction playbook • skipped-quota recovery • daily-risk-budget guard"
+              "notes": "KYVORIQ 0.18.1 • Decision Engine Audit v3.4 • reaction freshness + mapped-before-trigger • invalidated OB retirement • stop anchoring • chart-level room checks"
           })
           p.write_text(json.dumps(data, indent=2) + "\n")
           PY

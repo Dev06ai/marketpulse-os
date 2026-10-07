@@ -156,6 +156,19 @@ def _order_block_detail(candles: list[Candle]) -> dict:
         elif nxt.close < base.low and nxt.close < nxt.open:
             direction = "BEARISH"
         if direction != "NONE":
+            # A historical displacement candle is not enough: an OB that has
+            # since been decisively invalidated must not remain on the chart or
+            # arm the reaction engine. Use confirmed closes beyond the original
+            # wick boundary as the conservative invalidation rule.
+            later = cs[i + 2:]
+            invalidated = (
+                direction == "BULLISH" and any(float(c.close) < float(base.low) for c in later)
+            ) or (
+                direction == "BEARISH" and any(float(c.close) > float(base.high) for c in later)
+            )
+            if invalidated:
+                continue
+
             body_low = min(float(base.open), float(base.close))
             body_high = max(float(base.open), float(base.close))
             return {
@@ -167,6 +180,7 @@ def _order_block_detail(candles: list[Candle]) -> dict:
                 "body_high": body_high,
                 "source_start": int(base.start),
                 "confirmed_at": int(nxt.end) + 1,
+                "status": "ACTIVE",
             }
     return {"direction": "NONE", "mid": None, "zone_low": None, "zone_high": None, "source_start": None}
 

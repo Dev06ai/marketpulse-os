@@ -1,6 +1,6 @@
 # KYVORIQ Decision Engine Deep Audit — 2026-10-07
 
-Backend revision after this audit: `market-decision-v3.3`.
+Backend revision after this audit: `market-decision-v3.4`.
 
 ## Scope
 
@@ -49,6 +49,36 @@ Sizing/configuration exceptions before any Bitget order was submitted fell into 
 
 Fix: before a client order id is committed, validation/config/sizing exceptions now return a clean `skipped=true` decision with no trade record. Once an order id has been committed, failures still remain `SUBMISSION_UNKNOWN` and reconciliation stays authoritative.
 
+### 7. A stale candle could fabricate a mapped-level reaction
+
+The reaction tracker could combine the latest live price with an old closed 5m/15m candle. If that old candle had previously crossed a level, the merged geometry could resemble a fresh sweep/reclaim even though no current reaction happened.
+
+Fix: reaction confirmation now requires a fresh candle that actually covers the current market-as-of time (or a just-closed bar inside a short close grace window). A stale bar may keep a nearby level ARMED, but it cannot trigger a trade.
+
+### 8. Newly discovered levels could hindsight-trigger immediately
+
+A level that first appeared in the map could be evaluated against the entire current candle on that same update. That allowed a level discovered after an intrabar move to claim the move as a reaction.
+
+Fix: every mapped level must be observed by the tracker before it can trigger. Its first observation can only place it in WATCH/ARMED; a later update must confirm the reaction.
+
+### 9. Invalidated order blocks could remain executable chart levels
+
+The multi-timeframe OB scanner found displacement-backed blocks but did not retire blocks that were later closed through. Old invalidated OBs could therefore remain on the chart and arm the reaction engine.
+
+Fix: bullish blocks are retired after a confirmed close below their wick low; bearish blocks are retired after a confirmed close above their wick high. Only active blocks feed the chart/reaction map.
+
+### 10. Level-reaction stops could drift away from the actual reaction candle
+
+A mapped-level trigger stays fresh briefly. During that window, the candidate builder could use whatever the newest 5m candle happened to be when it evaluated, rather than the candle that actually produced the reaction. That could tighten or widen the stop inconsistently.
+
+Fix: the tracker snapshots the reaction candle high/low when the reaction occurs, and the signal builder anchors invalidation to that stored candle for the entire trigger lifetime.
+
+### 11. Entry-room checks ignored some chart levels
+
+The execution-room veto considered higher-timeframe swings, daily/weekly highs/lows and exact NPOC, but not weekly open or opposing multi-timeframe order blocks. A target could therefore be accepted through a nearby chart level the engine itself was displaying.
+
+Fix: weekly open and opposing 15m/1h/4h/1D/2D OB midpoints now participate in the same fee-adjusted room check before a candidate can pass.
+
 ## Safety invariants retained
 
 - Demo execution only.
@@ -71,5 +101,10 @@ New regression checks cover:
 - skipped-signal quota release across restart,
 - remote skipped-prediction cleanup,
 - protection against accidentally resolving ambiguous duplicate submissions, and
-- remaining daily-loss-budget enforcement during confidence sizing.
+- remaining daily-loss-budget enforcement during confidence sizing,
+- stale-candle reaction rejection,
+- mapped-before-trigger protection,
+- reaction-candle stop anchoring,
+- invalidated-OB retirement, and
+- weekly-open/opposing-OB entry-room vetoes.
 
