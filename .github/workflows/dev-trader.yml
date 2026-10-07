@@ -239,6 +239,8 @@ jobs:
           if-no-files-found: error
 
   publish-release:
+    permissions:
+      contents: write
     concurrency:
       group: dev-trader-release
       cancel-in-progress: false
