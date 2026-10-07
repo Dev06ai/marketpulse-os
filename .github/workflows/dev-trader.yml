@@ -70,7 +70,19 @@ jobs:
         with:
           gradle-version: '9.6.0'
       - name: Verify the live host with Android's HTTP and socket library
-        run: gradle -p dev-trader/tools/host-probe run --args='https://dev-trader-engine.de.deplexo.com' --stacktrace
+        run: |
+          ok=false
+          for attempt in {1..4}; do
+            echo "Host probe attempt $attempt/4"
+            if gradle -p dev-trader/tools/host-probe run --args='https://dev-trader-engine.de.deplexo.com' --stacktrace; then
+              ok=true
+              break
+            fi
+            if [ "$attempt" -lt 4 ]; then
+              sleep $((attempt * 10))
+            fi
+          done
+          test "$ok" = "true"
       - name: Wait for audited Deplexo reaction-map backend
         if: steps.backend_changed.outputs.backend_changed == 'true'
         run: |
