@@ -33,7 +33,7 @@ class MarketChartView @JvmOverloads constructor(
 
     private val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val gridPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.rgb(60, 54, 43)
+        color = KyvoriqTheme.graphite
         strokeWidth = dp(.72f)
         alpha = 96
     }
@@ -63,7 +63,7 @@ class MarketChartView @JvmOverloads constructor(
     }
     private val bodyPaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val bbPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.rgb(201, 149, 27)
+        color = KyvoriqTheme.ember
         strokeWidth = dp(.95f)
         style = Paint.Style.STROKE
         strokeCap = Paint.Cap.ROUND
@@ -139,10 +139,10 @@ class MarketChartView @JvmOverloads constructor(
     }
     private val volumeUpPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(49, 137, 115); alpha = 170 }
     private val volumeDownPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(167, 70, 86); alpha = 170 }
-    private val liveChipPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = KyvoriqTheme.surface }
+    private val liveChipPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = KyvoriqTheme.graphite }
     private val liveDotPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(71, 191, 149) }
-    private val controlActivePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(49, 39, 14) }
-    private val controlInactivePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = KyvoriqTheme.surface }
+    private val controlActivePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = KyvoriqTheme.deepGold }
+    private val controlInactivePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = KyvoriqTheme.graphite }
     private val controlBorderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
         strokeWidth = dp(.7f)
@@ -411,7 +411,7 @@ class MarketChartView @JvmOverloads constructor(
     }
 
     private fun visibleCount(): Int {
-        val widthPx = max(1f, width - dp(66f))
+        val widthPx = max(1f, width - dp(62f))
         val base = max(34f, widthPx / dp(7.4f))
         return max(24, min(140, (base / zoomX).roundToInt()))
     }
@@ -420,15 +420,15 @@ class MarketChartView @JvmOverloads constructor(
         super.onDraw(canvas)
         bgPaint.shader = LinearGradient(
             0f, 0f, 0f, height.toFloat(),
-            intArrayOf(KyvoriqTheme.surface, KyvoriqTheme.charcoal, Color.rgb(19, 18, 16)),
+            intArrayOf(KyvoriqTheme.slate, KyvoriqTheme.charcoal, KyvoriqTheme.graphite),
             null,
             Shader.TileMode.CLAMP
         )
         canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), bgPaint)
         bgPaint.shader = null
 
-        val left = dp(10f)
-        val right = width - dp(60f)
+        val left = dp(6f)
+        val right = width - dp(56f)
         val top = dp(
             if (height < dp(190f)) 32f
             else if (levelMenuOpen) 70f
@@ -623,7 +623,11 @@ class MarketChartView @JvmOverloads constructor(
                 canvas.drawRoundRect(rect, dp(5f), dp(5f), if (active) controlActivePaint else controlInactivePaint)
                 controlBorderPaint.color = if (active || (key == "LVL" && levelMenuOpen)) KyvoriqTheme.deepGold else KyvoriqTheme.border
                 canvas.drawRoundRect(rect, dp(5f), dp(5f), controlBorderPaint)
-                controlTextPaint.color = if (active || key == "FULL") KyvoriqTheme.gold else KyvoriqTheme.muted
+                controlTextPaint.color = when {
+                    active -> KyvoriqTheme.charcoal
+                    key == "FULL" -> KyvoriqTheme.gold
+                    else -> KyvoriqTheme.muted
+                }
                 val label = if (key == "FULL" && fullscreenMode) "EXIT" else key
                 val tw = controlTextPaint.measureText(label)
                 canvas.drawText(label, rect.centerX() - tw / 2f, rect.centerY() + dp(3f), controlTextPaint)
@@ -632,9 +636,9 @@ class MarketChartView @JvmOverloads constructor(
         }
 
         val chipWidth = dp(58f)
-        val chipLeft = width - chipWidth - dp(10f)
+        val chipLeft = width - chipWidth - dp(6f)
         val chipTop = dp(8f)
-        val rect = RectF(chipLeft, chipTop, width - dp(10f), chipTop + dp(24f))
+        val rect = RectF(chipLeft, chipTop, width - dp(6f), chipTop + dp(24f))
         canvas.drawRoundRect(rect, dp(12f), dp(12f), liveChipPaint)
         val resetting = !followLive
         liveDotPaint.color = when {
@@ -695,7 +699,7 @@ class MarketChartView @JvmOverloads constructor(
             canvas.drawRoundRect(rect, dp(5f), dp(5f), if (active) controlActivePaint else controlInactivePaint)
             controlBorderPaint.color = if (active) KyvoriqTheme.deepGold else KyvoriqTheme.border
             canvas.drawRoundRect(rect, dp(5f), dp(5f), controlBorderPaint)
-            controlTextPaint.color = if (active) KyvoriqTheme.gold else KyvoriqTheme.muted
+            controlTextPaint.color = if (active) KyvoriqTheme.charcoal else KyvoriqTheme.muted
             val tw = controlTextPaint.measureText(key)
             canvas.drawText(key, rect.centerX() - tw / 2f, rect.centerY() + dp(3f), controlTextPaint)
         }
@@ -703,7 +707,7 @@ class MarketChartView @JvmOverloads constructor(
 
     private fun toggleLevelFilterAt(x: Float, y: Float): Boolean {
         if (!levelMenuOpen || height < dp(190f)) return false
-        val key = levelFilterChipRects(dp(10f)).firstOrNull { it.second.contains(x, y) }?.first ?: return false
+        val key = levelFilterChipRects(dp(6f)).firstOrNull { it.second.contains(x, y) }?.first ?: return false
         when (key) {
             "SFP" -> showSfpLevels = !showSfpLevels
             "NPOC" -> showNpocLevels = !showNpocLevels
@@ -719,7 +723,7 @@ class MarketChartView @JvmOverloads constructor(
 
     private fun toggleIndicatorAt(x: Float, y: Float): Boolean {
         if (height < dp(190f)) return false
-        val left = dp(10f)
+        val left = dp(6f)
         val hit = indicatorChipRects(left).firstOrNull { it.second.contains(x, y) }?.first ?: return false
         when (hit) {
             "BB" -> showBollinger = !showBollinger
@@ -1370,7 +1374,7 @@ class MarketChartView @JvmOverloads constructor(
                     dragging = true
                     followLive = false
                     crosshairVisible = false
-                    val bar = max(1f, (width - dp(70f)) / visibleCount())
+                    val bar = max(1f, (width - dp(64f)) / visibleCount())
                     candleShift = (candleShift - dx / bar).coerceIn(
                         0f,
                         max(0f, candles.length() - visibleCount().toFloat())
