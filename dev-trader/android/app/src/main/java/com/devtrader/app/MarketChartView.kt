@@ -918,13 +918,19 @@ class MarketChartView @JvmOverloads constructor(
         val pad = dp(5f)
         val w = tradeLevelTextPaint.measureText(text) + pad * 2f
         val h = dp(17f)
-        val rect = RectF((right - w - dp(4f)).coerceAtLeast(left + dp(4f)), y - h / 2f, right - dp(4f), y + h / 2f)
+        // Keep execution chips in the left lane so the right lane remains
+        // dedicated to Daily/nPOC/Weekly nPOC map labels.
+        val tradeLeft = left + dp(4f)
+        val tradeRight = (tradeLeft + w).coerceAtMost(left + (right - left) * 0.58f)
+        val rect = RectF(tradeLeft, y - h / 2f, tradeRight, y + h / 2f)
         tradeLevelBgPaint.color = KyvoriqTheme.surface
         tradeLevelBgPaint.alpha = (238f * labelAlpha / 255f).toInt()
         tradeLevelTextPaint.color = color
         tradeLevelTextPaint.alpha = labelAlpha
         canvas.drawRoundRect(rect, dp(5f), dp(5f), tradeLevelBgPaint)
-        canvas.drawText(text, rect.left + pad, rect.centerY() + dp(3f), tradeLevelTextPaint)
+        val available = (rect.width() - pad * 2f).coerceAtLeast(dp(30f))
+        val renderedText = if (tradeLevelTextPaint.measureText(text) <= available) text else "$label  " + String.format(Locale.US, "%.0f", value)
+        canvas.drawText(renderedText, rect.left + pad, rect.centerY() + dp(3f), tradeLevelTextPaint)
         tradeLevelBgPaint.alpha = 238
         tradeLevelTextPaint.alpha = 255
     }
@@ -1110,7 +1116,13 @@ class MarketChartView @JvmOverloads constructor(
 
             val rawLabel = row.optString("label", kind).uppercase(Locale.US)
             val manual = row.optBoolean("manual", false)
-            val text = if (manual) rawLabel.take(18) + "  " + String.format(Locale.US, "%,.1f", value) else rawLabel.take(14)
+            val formattedPrice = String.format(Locale.US, "%,.1f", value)
+            val numericOnlyLabel = rawLabel.replace(",", "").toDoubleOrNull() != null
+            val text = when {
+                manual && numericOnlyLabel -> formattedPrice
+                manual -> rawLabel.take(18) + "  " + formattedPrice
+                else -> rawLabel.take(14)
+            }
             structureLabelTextPaint.color = color
             structureLabelTextPaint.alpha = (255f * retirementFade).toInt().coerceIn(0, 255)
             structureLabelBgPaint.alpha = (235f * retirementFade).toInt().coerceIn(0, 235)
