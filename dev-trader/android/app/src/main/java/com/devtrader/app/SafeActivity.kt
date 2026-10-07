@@ -72,6 +72,7 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 
 // Build 87: backend executes every emitted trade call; Android client remains signal/event driven.
+// Build 126: final Palette & Chart release trigger.
 // Build 125: final palette/chart lifecycle validation trigger.
 // Build 125: exact brand-palette UI + expanded chart canvas + consumed-level retirement.
  // Build 124: visual-accessibility compatibility fix.
