@@ -1587,8 +1587,28 @@ class SafeActivity : FragmentActivity() {
             .append("Fee-adjusted reward / risk ≥ ${summary.optDouble("min_net_rr", 1.5)}\nPause after 2 consecutive daily losses\nObserved daily equity loss limit 1%\n\n")
             .append("EVIDENCE\nScores rank setups; they are not win probabilities.\n")
         decisionView.text = details.toString()
-        insightContext.text = "CVD  ${f.optString("cvd_price_divergence", "—")}\n" +
-            "OI 5m  ${money(f.optDouble("oi_change_5m_pct", Double.NaN), true)}%\n" +
+        val reactionMap = e.optJSONObject("level_reactions")
+        val reactionTrigger = reactionMap?.optJSONObject("trigger")
+        val armedLevels = reactionMap?.optJSONArray("armed")
+        val nearestLevel = reactionTrigger ?: armedLevels?.optJSONObject(0)
+        val levelState = when {
+            reactionTrigger != null -> "READY"
+            reactionMap?.optString("status") == "CONFIRMING" -> "CONFIRMING"
+            reactionMap?.optString("status") == "ARMED" -> "ARMED"
+            else -> "WATCH"
+        }
+        val activeLevelText = if (nearestLevel != null) {
+            val score = nearestLevel.optInt("reaction_score", 0)
+            val required = nearestLevel.optInt("required_confirmation_score", reactionMap?.optInt("min_confirmation_score", 3) ?: 3)
+            nearestLevel.optString("label", "LEVEL") + "  " +
+                String.format(Locale.US, "%,.1f", nearestLevel.optDouble("price", Double.NaN)) +
+                "  •  " + nearestLevel.optString("direction", "BOTH") +
+                if (score > 0) "  •  $score/$required" else ""
+        } else "Waiting for price to approach mapped levels"
+        insightContext.text =
+            "LEVEL MAP  $levelState\n" +
+            activeLevelText +
+            "\nCVD  ${f.optString("cvd_price_divergence", "—")}  •  OI5m ${money(f.optDouble("oi_change_5m_pct", Double.NaN), true)}%\n" +
             "Structure  ${f.optString("market_structure", "—")}"
         if (s != null) {
             val direction = s.optString("direction", "WAIT")
@@ -2301,27 +2321,39 @@ class SafeActivity : FragmentActivity() {
             direction: String = "",
             playedAtMs: Long = 0L,
             hideAfterMs: Long = 0L,
-            reaction: String = ""
+            reaction: String = "",
+            zoneLow: Double = Double.NaN,
+            zoneHigh: Double = Double.NaN,
+            source: String = "",
+            manual: Boolean = false,
+            packId: String = "",
+            priority: Int = 0,
+            estimated: Boolean = false,
+            reactionScore: Int = 0
         ) {
             if (!price.isFinite() || price <= 0.0) return
             if (prices.any { kotlin.math.abs(it - price) / kotlin.math.max(price, 1.0) < 0.00010 }) return
-            if (out.length() >= 14) return
+            if (out.length() >= 24) return
             prices.add(price)
             val item = JSONObject()
-                .put("kind", kind)
-                .put("label", label)
-                .put("price", price)
-                .put("status", status)
-                .put("direction", direction)
+                .put("kind", kind).put("label", label).put("price", price)
+                .put("status", status).put("direction", direction)
             if (playedAtMs > 0L) item.put("played_at_ms", playedAtMs)
             if (hideAfterMs > 0L) item.put("hide_after_ms", hideAfterMs)
             if (reaction.isNotBlank()) item.put("reaction", reaction)
+            if (zoneLow.isFinite() && zoneHigh.isFinite() && zoneLow > 0.0 && zoneHigh > 0.0) {
+                item.put("zone_low", minOf(zoneLow, zoneHigh))
+                item.put("zone_high", maxOf(zoneLow, zoneHigh))
+            }
+            if (source.isNotBlank()) item.put("source", source)
+            if (manual) item.put("manual", true)
+            if (packId.isNotBlank()) item.put("pack_id", packId)
+            if (priority > 0) item.put("priority", priority)
+            if (estimated) item.put("estimated", true)
+            if (reactionScore > 0) item.put("reaction_score", reactionScore)
             out.put(item)
         }
 
-        // Preferred source: the backend's reaction-aware chart map. It carries
-        // the same levels the trading engine is watching, so visual context and
-        // engine readiness cannot silently drift apart.
         root?.optJSONArray("chart_overlays")?.let { arr ->
             for (i in 0 until arr.length()) {
                 val row = arr.optJSONObject(i) ?: continue
@@ -2333,78 +2365,42 @@ class SafeActivity : FragmentActivity() {
                     row.optString("direction", ""),
                     row.optLong("played_at_ms", 0L),
                     row.optLong("hide_after_ms", 0L),
-                    row.optString("reaction", "")
+                    row.optString("reaction", ""),
+                    row.optDouble("zone_low", Double.NaN),
+                    row.optDouble("zone_high", Double.NaN),
+                    row.optString("source", ""),
+                    row.optBoolean("manual", false),
+                    row.optString("pack_id", ""),
+                    row.optInt("priority", 0),
+                    row.optBoolean("estimated", false),
+                    row.optInt("reaction_score", 0)
                 )
             }
         }
 
         val engine = root?.optJSONObject("engine")
-
-        // Fallbacks keep Build 113 useful before a backend restart/redeploy.
         val sfp = overlayStrategy?.optJSONObject("sfp_hunter") ?: engine?.optJSONObject("sfp_hunter")
-        add(
-            "SFP",
-            "SFP",
-            sfp?.optDouble("target_level", Double.NaN) ?: Double.NaN,
-            sfp?.optString("status", "WATCH") ?: "WATCH",
-            sfp?.optString("direction", "") ?: ""
-        )
-
+        add("SFP","SFP",sfp?.optDouble("target_level", Double.NaN) ?: Double.NaN,
+            sfp?.optString("status","WATCH") ?: "WATCH",sfp?.optString("direction","") ?: "")
         val dline = overlayStrategy?.optJSONObject("setups")?.optJSONObject("D-Line")
-        add(
-            "DLINE",
-            "D-LINE",
-            dline?.optDouble("projected_line", Double.NaN) ?: Double.NaN,
-            dline?.optString("status", "") ?: "",
-            dline?.optString("direction", "") ?: ""
-        )
+        add("DLINE","D-LINE",dline?.optDouble("projected_line",Double.NaN) ?: Double.NaN,
+            dline?.optString("status","") ?: "",dline?.optString("direction","") ?: "")
 
         val blocks = overlayFeatures?.optJSONObject("order_blocks")
-        val obLabels = linkedMapOf(
-            "15m" to "15M OB",
-            "1h" to "1H OB",
-            "4h" to "4H OB",
-            "1D" to "1D OB",
-            "2D" to "2D OB"
-        )
+        val obLabels = linkedMapOf("15m" to "15M OB","1h" to "1H OB","4h" to "4H OB","1D" to "1D OB","2D" to "2D OB")
         if (blocks != null) {
-            obLabels.forEach { (tf, label) ->
+            obLabels.forEach { (tf,label) ->
                 val detail = blocks.optJSONObject(tf) ?: return@forEach
-                val rawDirection = detail.optString("direction", "NONE")
-                add("OB", label, detail.optDouble("mid", Double.NaN), "", rawDirection)
-            }
-        } else {
-            // Legacy host compatibility: the old single OB was calculated from 15m.
-            val obMid = overlayFeatures?.optDouble("order_block_mid", Double.NaN) ?: Double.NaN
-            val obDirection = overlayFeatures?.optString("order_block_direction", "NONE") ?: "NONE"
-            if (obDirection != "NONE") add("OB", "15M OB", obMid, "", obDirection)
-        }
-
-        val volume = overlayFeatures?.optJSONObject("volume_context")
-        if (volume?.optBoolean("exact_npoc", false) == true) {
-            add("NPOC", "NPOC", volume.optDouble("untouched_poc", Double.NaN), "UNTOUCHED")
-        }
-
-        // Daily levels replace the old recent 15m H/L clutter. Prefer features,
-        // then fall back to the audited liquidity map if necessary.
-        add("DAILY", "D HIGH", overlayFeatures?.optDouble("previous_day_high", Double.NaN) ?: Double.NaN)
-        add("DAILY", "D LOW", overlayFeatures?.optDouble("previous_day_low", Double.NaN) ?: Double.NaN)
-        add("WEEKLY_OPEN", "W OPEN", overlayFeatures?.optDouble("weekly_open", Double.NaN) ?: Double.NaN)
-
-        val liquidity = overlayStrategy?.optJSONObject("liquidity_map") ?: engine?.optJSONObject("liquidity_map")
-        val allowed = mapOf(
-            "previous day high" to Pair("DAILY", "D HIGH"),
-            "previous day low" to Pair("DAILY", "D LOW"),
-            "weekly open" to Pair("WEEKLY_OPEN", "W OPEN")
-        )
-        listOf("above", "below").forEach { side ->
-            val rows = liquidity?.optJSONArray(side)
-            for (i in 0 until (rows?.length() ?: 0)) {
-                val row = rows?.optJSONObject(i) ?: continue
-                val mapped = allowed[row.optString("title", "").lowercase(Locale.US)] ?: continue
-                add(mapped.first, mapped.second, row.optDouble("price", Double.NaN))
+                val rawDirection = detail.optString("direction","NONE")
+                add("OB",label,detail.optDouble("mid",Double.NaN),"",rawDirection,
+                    zoneLow=detail.optDouble("zone_low",Double.NaN),zoneHigh=detail.optDouble("zone_high",Double.NaN))
             }
         }
+        val volume=overlayFeatures?.optJSONObject("volume_context")
+        if (volume?.optBoolean("exact_npoc",false)==true) add("NPOC","NPOC",volume.optDouble("untouched_poc",Double.NaN),"UNTOUCHED")
+        add("DAILY","D HIGH",overlayFeatures?.optDouble("previous_day_high",Double.NaN) ?: Double.NaN)
+        add("DAILY","D LOW",overlayFeatures?.optDouble("previous_day_low",Double.NaN) ?: Double.NaN)
+        add("WEEKLY_OPEN","W OPEN",overlayFeatures?.optDouble("weekly_open",Double.NaN) ?: Double.NaN)
         return out
     }
 
