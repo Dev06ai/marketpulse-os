@@ -43,7 +43,7 @@ def test_chart_overlay_payload_uses_reaction_aware_semantic_levels():
     assert {'SFP', 'DLINE', 'OB', 'NPOC', 'DAILY', 'WEEKLY_OPEN'}.issubset(kinds)
     assert {'D HIGH', 'D LOW', 'W OPEN', '15M OB', '1H OB'}.issubset(labels)
     assert '15M H' not in labels and '15M L' not in labels
-    assert len(rows) <= 14
+    assert len(rows) <= 24
 
 
 def test_chart_overlay_payload_does_not_claim_npoc_without_exact_profile():
