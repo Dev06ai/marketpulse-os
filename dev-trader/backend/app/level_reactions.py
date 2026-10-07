@@ -1,5 +1,7 @@
 """Auditable reaction-aware chart levels shared by diagnostics and signal readiness.
 
+Build 125: five-minute consumed-level retirement.
+
 The tracker never emits a trade by itself. It only marks levels ARMED/PLAYED and
 exposes a short-lived confirmed reaction to StrategyEngine, which must still
 pass the existing quality, freshness, playbook, execution and risk gates.
