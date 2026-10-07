@@ -1,5 +1,5 @@
 from app.analytics import MarketFeatures
-from app.level_reactions import LevelReactionTracker, FIFTEEN_MIN_MS, THIRTY_MIN_MS
+from app.level_reactions import FIVE_MIN_MS, LevelReactionTracker, FIFTEEN_MIN_MS, THIRTY_MIN_MS
 from app.models import Candle, MarketState
 from app.strategy import StrategyEngine
 
@@ -40,7 +40,8 @@ def test_daily_reaction_triggers_then_hides_after_30_minutes():
     assert triggered["status"] == "TRIGGERED"
     assert triggered["trigger"]["label"] == "D LOW"
     assert triggered["trigger"]["direction"] == "LONG"
-    assert triggered["trigger"]["hide_after_ms"] - triggered["trigger"]["played_at_ms"] == THIRTY_MIN_MS
+    assert triggered["trigger"]["hide_after_ms"] - triggered["trigger"]["tapped_at_ms"] == FIVE_MIN_MS
+    assert triggered["trigger"]["hide_after_ms"] - triggered["trigger"]["played_at_ms"] <= FIVE_MIN_MS
 
     later = tracker.update(state, f, now_ms=1_101_000 + THIRTY_MIN_MS + 1)
     assert all(row["label"] != "D LOW" for row in later["levels"])
@@ -70,7 +71,8 @@ def test_sfp_reaction_uses_15_minute_chart_lifetime():
         now_ms=1_101_000,
     )
     assert result["trigger"]["kind"] == "SFP"
-    assert result["trigger"]["hide_after_ms"] - result["trigger"]["played_at_ms"] == FIFTEEN_MIN_MS
+    assert result["trigger"]["hide_after_ms"] - result["trigger"]["tapped_at_ms"] == FIVE_MIN_MS
+    assert result["trigger"]["hide_after_ms"] - result["trigger"]["played_at_ms"] <= FIVE_MIN_MS
 
 
 def test_engine_can_build_candidate_only_after_confirmed_level_reaction():
@@ -193,3 +195,35 @@ def test_level_reaction_stop_stays_anchored_to_original_reaction_candle():
     assert sig is not None
     assert sig.evidence["level_reaction_stop_anchor"]["low"] == 98.0
     assert sig.stop <= 98.0
+
+
+def test_fully_tapped_level_retires_after_five_minutes_without_blind_trade():
+    tracker = LevelReactionTracker()
+    state = MarketState(
+        last_price=103.0,
+        candles_5=[candle(1_000_000, 103.0, 103.5, 102.5, 103.0, False)],
+    )
+    f = MarketFeatures(atr_15=4.0, previous_day_low=100.0)
+
+    # First observation only maps the level; hindsight cannot consume it.
+    first = tracker.update(state, f, now_ms=1_100_000)
+    assert any(row["label"] == "D LOW" for row in first["levels"])
+
+    # A later live bar fully trades through the exact level but does not reclaim
+    # far enough to qualify a trade. It becomes TAPPED, not a signal.
+    state.candles_5=[candle(1_200_000, 100.4, 100.7, 99.7, 100.1, False)]
+    state.last_price=100.1
+    tapped = tracker.update(state, f, now_ms=1_250_000)
+    row = next(row for row in tapped["levels"] if row["label"] == "D LOW")
+    assert row["state"] == "TAPPED"
+    assert tapped["trigger"] is None
+    assert row["hide_after_ms"] - row["tapped_at_ms"] == FIVE_MIN_MS
+
+    # It remains visible briefly, then retires and cannot immediately re-arm
+    # while the structural level id is unchanged.
+    state.last_price=101.0
+    before = tracker.update(state, f, now_ms=1_250_000 + FIVE_MIN_MS - 1)
+    assert any(row["label"] == "D LOW" for row in before["levels"])
+    after = tracker.update(state, f, now_ms=1_250_000 + FIVE_MIN_MS + 1)
+    assert all(row["label"] != "D LOW" for row in after["levels"])
+    assert after["trigger"] is None
