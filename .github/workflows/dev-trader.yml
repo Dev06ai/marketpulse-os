@@ -40,12 +40,14 @@ jobs:
         with:
           gradle-version: '9.6.0'
       - name: Verify the live host with Android's HTTP and socket library
+        run: gradle -p dev-trader/tools/host-probe run --args='https://dev-trader-engine.de.deplexo.com' --stacktrace
+      - name: Report manual Deplexo deployment drift
+        if: steps.backend_changed.outputs.backend_changed == 'true'
+        continue-on-error: true
         run: |
-          EXTRA=""
-          if [ "${{ steps.backend_changed.outputs.backend_changed }}" = "true" ]; then
-            EXTRA=" --require-confidence-sizing"
-          fi
-          gradle -p dev-trader/tools/host-probe run --args="https://dev-trader-engine.de.deplexo.com${EXTRA}" --stacktrace
+          POLICY="$(curl -fsS --max-time 12 'https://dev-trader-engine.de.deplexo.com/bootstrap?profile=dashboard' | jq -r '.execution.summary.execution_policy // "UNKNOWN"')"
+          echo "Live Deplexo execution policy: $POLICY"
+          test "$POLICY" = "CONFIDENCE_MARGIN_20X_FEE_ADJUSTED"
   free-container:
     runs-on: ubuntu-latest
     steps:
@@ -213,7 +215,7 @@ jobs:
             echo "This release already exists; refusing to replace a published APK."
             exit 1
           fi
-          gh release create "${{ steps.release.outputs.tag }}" release/app-release.apk --target "$GITHUB_SHA" --title "KYVORIQ 0.18.1 (116)" --notes "Decision Engine Reliability Audit: aligns playbook and execution R:R thresholds, adds a dedicated mapped-level reaction playbook, releases quota for conclusively skipped entries, closes durable never-executed predictions safely, and caps confidence sizing by the remaining UTC daily-loss budget."
+          gh release create "${{ steps.release.outputs.tag }}" release/app-release.apk --target "$GITHUB_SHA" --title "KYVORIQ 0.18.1 (116)" --notes "Decision Engine Reliability Audit: aligns playbook/execution R:R thresholds, adds a dedicated mapped-level reaction playbook, releases quota for conclusively skipped entries, closes durable never-executed predictions safely, caps confidence sizing by the remaining UTC daily-loss budget, and prevents pre-submission validation failures from creating phantom trades."
       - name: Publish verified update manifest
         env:
           SHA256: "${{ steps.release.outputs.sha256 }}"

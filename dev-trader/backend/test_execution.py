@@ -447,6 +447,20 @@ def test_utc_trade_count_is_independent_of_local_timezone(monkeypatch, tmp_path)
     assert executor._count_today() == 1
 
 
+def test_pre_submission_validation_exception_is_clean_skip(monkeypatch, tmp_path):
+    executor = audit_executor(monkeypatch, tmp_path)
+
+    async def reject_before_submission(_signal):
+        raise RuntimeError("risk/config validation unavailable")
+
+    monkeypatch.setattr(executor, "_risk_size", reject_before_submission)
+    result = asyncio.run(executor.handle_signal(audit_signal()))
+    assert not result["ok"] and result["skipped"]
+    assert "validation unavailable" in result["reason"]
+    assert executor.data["trades"] == []
+    assert executor.data.get("pending_submission") is None
+
+
 def test_concurrent_signal_submissions_only_open_once(monkeypatch, tmp_path):
     executor = audit_executor(monkeypatch, tmp_path)
     async def run():

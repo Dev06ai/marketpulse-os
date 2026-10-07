@@ -43,6 +43,12 @@ Fix: planned stop/fee risk is now capped by the minimum of:
 
 If the required confidence margin cannot fit inside that risk budget, the trade is skipped rather than silently weakening the safety rules.
 
+### 6. Pre-submission validation failures could create phantom FAILED trades
+
+Sizing/configuration exceptions before any Bitget order was submitted fell into the same exception path used for uncertain post-submission failures. That could persist a FAILED trade record, leave the strategy signal active, and consume quota even though no exchange exposure existed.
+
+Fix: before a client order id is committed, validation/config/sizing exceptions now return a clean `skipped=true` decision with no trade record. Once an order id has been committed, failures still remain `SUBMISSION_UNKNOWN` and reconciliation stays authoritative.
+
 ## Safety invariants retained
 
 - Demo execution only.

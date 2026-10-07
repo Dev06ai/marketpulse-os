@@ -674,6 +674,14 @@ class DemoExecutionEngine:
             await self._poll_fill(trade["execution_id"])
             return {"ok": True, "trade": dict(trade)}
         except Exception as exc:
+            # Before a client order id is committed there is no ambiguous
+            # exchange exposure. Treat validation/sizing/config failures as a
+            # clean skip rather than persisting a phantom FAILED trade.
+            if not submission_oid:
+                with self.lock:
+                    self.data.pop("pending_submission", None)
+                    self._save()
+                return {"ok": False, "skipped": True, "reason": str(exc)}
             now = int(time.time() * 1000)
             failed = {
                 **submission_context,
