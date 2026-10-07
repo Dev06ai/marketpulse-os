@@ -2484,7 +2484,7 @@ class StrategyEngine:
             }
             signal.evidence["level_reaction_score"] = int(reaction.get("reaction_score") or 0)
             signal.evidence["level_reaction_confirmations"] = list(reaction.get("reaction_confirmations") or [])
-            signal.evidence["level_reaction_policy"] = "MAPPED_BEFORE_TRIGGER_REACTION_SCORE_REQUIRED_NO_BLIND_LEVEL_ENTRY"
+            signal.evidence["level_reaction_policy"] = "MAPPED_BEFORE_TRIGGER_REACTION_REQUIRED_NO_BLIND_LEVEL_ENTRY"
             if reaction.get("pack_id"):
                 signal.evidence["manual_level_pack"] = reaction.get("pack_id")
         return signal
