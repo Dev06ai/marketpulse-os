@@ -22,6 +22,7 @@ from .execution import DemoExecutionEngine
 from .journal import ENGINE_REVISION, performance_scorecard
 from .evaluation import ShadowEvaluator, chronological_split, replay_decisions
 from .transport import Subscription, alert_payload, dashboard_payload, event_key
+from .manual_levels import load_manual_level_pack
 
 load_dotenv()
 
@@ -135,7 +136,9 @@ def chart_overlay_payload(f, diag):
     rows = []
     seen = []
 
-    def add(kind, label, price, status="", direction="", source="", hide_after_ms=None):
+    def add(kind, label, price, status="", direction="", source="", hide_after_ms=None,
+            zone_low=None, zone_high=None, manual=False, pack_id="", priority=0, estimated=False,
+            reaction_score=None, reaction_confirmations=None):
         try:
             value = float(price)
         except (TypeError, ValueError):
@@ -154,6 +157,20 @@ def chart_overlay_payload(f, diag):
             item["source"] = str(source)
         if hide_after_ms:
             item["hide_after_ms"] = int(hide_after_ms)
+        try:
+            zl, zh = sorted((float(zone_low), float(zone_high)))
+            if math.isfinite(zl) and math.isfinite(zh) and zl > 0 and zh > 0:
+                item["zone_low"], item["zone_high"] = round(zl, 2), round(zh, 2)
+        except (TypeError, ValueError):
+            pass
+        if manual: item["manual"] = True
+        if pack_id: item["pack_id"] = str(pack_id)
+        if priority: item["priority"] = int(priority)
+        if estimated: item["estimated"] = True
+        if reaction_score is not None:
+            try: item["reaction_score"] = int(reaction_score)
+            except (TypeError, ValueError): pass
+        if reaction_confirmations: item["reaction_confirmations"] = list(reaction_confirmations)[:8]
         rows.append(item)
 
     reaction_map = (diag or {}).get("level_reactions") or {}
@@ -169,6 +186,9 @@ def chart_overlay_payload(f, diag):
                 row.get("direction", ""),
                 row.get("source", ""),
                 row.get("hide_after_ms"),
+                row.get("zone_low"), row.get("zone_high"), bool(row.get("manual")),
+                row.get("pack_id", ""), row.get("priority", 0), bool(row.get("estimated")),
+                row.get("reaction_score"), row.get("reaction_confirmations"),
             )
     else:
         # Fallback while the reaction tracker warms.
@@ -195,7 +215,7 @@ def chart_overlay_payload(f, diag):
     dline = ((diag or {}).get("setups") or {}).get("D-Line") or {}
     add("DLINE", "D-LINE", dline.get("projected_line"), dline.get("status", ""), dline.get("direction", ""), "DLINE")
 
-    return rows[:14]
+    return rows[:24]
 
 
 def mobile_payload(include_research=True):
@@ -240,6 +260,7 @@ def mobile_payload(include_research=True):
             "evidence_matrix": diag.get("evidence_matrix", {}),
             "sfp_hunter": diag.get("sfp_hunter", {}),
             "breakout_watch": diag.get("breakout_watch", {}),
+            "level_reactions": diag.get("level_reactions", {}),
             "data_quality": diag.get("data_quality", state.data_health),
             "engine_revision": ENGINE_REVISION,
             "regime_selector": engine.regime_state,
@@ -987,6 +1008,11 @@ async def app_config():
             "journal": True,
         },
     }
+
+
+@app.get("/level-pack")
+async def level_pack():
+    return load_manual_level_pack()
 
 
 @app.get("/config")
