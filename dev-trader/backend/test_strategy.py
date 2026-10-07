@@ -180,6 +180,7 @@ def test_remote_not_executed_prediction_does_not_consume_daily_quota(monkeypatch
     now = int(time.time() * 1000)
     engine.rehydrate_remote_history([
         {"id": "remote-skip", "opened_ts": now, "status": "NOT_EXECUTED"},
+        {"id": "remote-timeout", "opened_ts": now, "outcome": "TIMEOUT"},
     ])
     assert engine.daily_signal_count == 0
 

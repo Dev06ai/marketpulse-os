@@ -727,6 +727,26 @@ def test_filled_status_without_actual_values_stays_unconfirmed(monkeypatch, tmp_
     assert 'missing exchange' in trade['error']
 
 
+def test_confidence_sizing_respects_authoritative_remaining_daily_budget(monkeypatch, tmp_path):
+    import time
+    import pytest
+    executor = audit_executor(monkeypatch, tmp_path)
+    day_start = int(time.time()) // 86400 * 86400000
+    executor.data['account_metrics'] = dict(
+        equity_usdt=1000,
+        observed_peak_usdt=1000,
+        utc_day=executor._utc_day(),
+        utc_day_open_equity_usdt=1000,
+    )
+    executor.data['fill_ledger'] = dict(
+        complete_window=True,
+        fee_accounting_complete=True,
+        daily_net_usdt={str(day_start): -8.0},
+    )
+    with pytest.raises(Exception, match='risk guard'):
+        asyncio.run(executor._risk_size(audit_signal()))
+
+
 def test_exchange_fill_losses_cannot_bypass_daily_limit(monkeypatch, tmp_path):
     import time
     executor = audit_executor(monkeypatch, tmp_path)

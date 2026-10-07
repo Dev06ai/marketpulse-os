@@ -43,7 +43,7 @@ class DemoExecutionEngine:
             raise ValueError("Demo confidence-margin bands are invalid.")
         if not 0.70 <= self.high_confidence_threshold < 1.0:
             raise ValueError("BITGET_DEMO_HIGH_CONFIDENCE must be between 0.70 and 1.0.")
-        self.max_planned_loss_pct = float(os.getenv("BITGET_DEMO_MAX_PLANNED_LOSS_PCT", "1.0"))
+        self.max_planned_loss_pct = float(os.getenv("BITGET_DEMO_MAX_PLANNED_LOSS_PCT", "2.0"))
         if not math.isfinite(self.max_planned_loss_pct) or not 0 < self.max_planned_loss_pct <= 5:
             raise ValueError("BITGET_DEMO_MAX_PLANNED_LOSS_PCT must be finite and between 0 and 5 percent.")
         self.risk_pct = self.max_planned_loss_pct
@@ -235,17 +235,23 @@ class DemoExecutionEngine:
         risk_factor = 0.5 if peak > 0 and equity > 0 and equity < peak * 0.98 else 1.0
         per_trade_cap = balance * self.max_planned_loss_pct * risk_factor / 100.0
 
-        # The confidence-margin refactor must never allow one planned stop to
-        # exceed the remaining daily loss budget. Use the UTC day-open equity
-        # when available and never let today's profits increase that budget.
+        # Only apply a prospective UTC daily-loss budget when the private
+        # account refresh has established an authoritative current-day equity
+        # anchor. Inventing a day-open value from available balance can turn
+        # incomplete startup/test data into a false zero-risk lock.
         loss_limit_pct = max(0.0, float(os.getenv("BITGET_DEMO_MAX_DAILY_LOSS_PCT", "1.0")))
         day_equity = self._num(account.get("utc_day_open_equity_usdt"))
-        daily_base = day_equity if day_equity > 0 else (equity if equity > 0 else balance)
-        daily_cap = daily_base * loss_limit_pct / 100.0
+        authoritative_day = (
+            account.get("utc_day") == self._utc_day()
+            and day_equity > 0
+            and equity > 0
+        )
+        if not authoritative_day or loss_limit_pct <= 0:
+            return balance, per_trade_cap
 
+        daily_cap = day_equity * loss_limit_pct / 100.0
         day_start = int(time.time()) // 86400 * 86400000
         ledger = self.data.get("fill_ledger") or {}
-        daily_net = 0.0
         if ledger.get("complete_window") and ledger.get("fee_accounting_complete"):
             daily_net = self._num((ledger.get("daily_net_usdt") or {}).get(str(day_start)))
         else:
@@ -254,13 +260,13 @@ class DemoExecutionEngine:
                 for row in self.data.get("trades", [])
                 if row.get("status") == "CLOSED" and self._num(row.get("closed_ts")) >= day_start
             )
+
+        # Today's profits never expand the allowed loss budget. Both realized
+        # losses and live equity drawdown constrain the next planned stop.
         realized_remaining = max(0.0, daily_cap - max(0.0, -daily_net))
-        equity_drawdown = max(0.0, daily_base - equity) if equity > 0 and daily_base > 0 else 0.0
+        equity_drawdown = max(0.0, day_equity - equity)
         equity_remaining = max(0.0, daily_cap - equity_drawdown)
-        risk_cap = min(per_trade_cap, realized_remaining, equity_remaining)
-        if risk_cap <= 0:
-            raise BitgetDemoError("Daily demo loss budget is exhausted; no new planned stop risk is allowed.")
-        return balance, risk_cap
+        return balance, min(per_trade_cap, realized_remaining, equity_remaining)
 
     async def _risk_size(self, signal: dict[str, Any]) -> tuple[float, float, dict[str, Any]]:
         entry = self._num(signal.get("entry"))

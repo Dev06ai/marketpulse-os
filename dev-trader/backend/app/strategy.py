@@ -787,7 +787,7 @@ class StrategyEngine:
         outcome = str(row.get("outcome") or "").upper()
         if status in {"NOT_EXECUTED","SKIPPED","REJECTED","CANCELLED","FAILED"}:
             return False
-        if outcome in {"NOT_EXECUTED","SKIPPED","REJECTED","CANCELLED","FAILED"}:
+        if outcome in {"NOT_EXECUTED","SKIPPED","REJECTED","CANCELLED","FAILED","TIMEOUT"}:
             return False
         if row.get("actual_fill_confirmed") is False and status in {"ERROR","RECONCILIATION_FAILED"}:
             return False
