@@ -14,6 +14,7 @@ from .analytics import MarketFeatures
 from .models import Candle, MarketState
 from .manual_levels import manual_engine_rules, manual_level_pack_summary, manual_reaction_levels
 
+FIVE_MIN_MS = 5 * 60_000
 FIFTEEN_MIN_MS = 15 * 60_000
 THIRTY_MIN_MS = 30 * 60_000
 TRIGGER_FRESH_MS = 3 * 60_000
@@ -101,6 +102,7 @@ def collect_reaction_levels(features: MarketFeatures, sfp_hunter: dict | None = 
 class LevelReactionTracker:
     def __init__(self):
         self.played: dict[str, dict] = {}
+        self.tapped: dict[str, dict] = {}
         self.seen_levels: dict[str, dict] = {}
         self.last_state: dict = {"status": "IDLE", "levels": [], "armed": [], "trigger": None}
 
@@ -146,6 +148,7 @@ class LevelReactionTracker:
 
         active_ids = {row["id"] for row in raw_levels}
         self.played = {k: v for k, v in self.played.items() if k in active_ids}
+        self.tapped = {k: v for k, v in self.tapped.items() if k in active_ids}
         self.seen_levels = {k: v for k, v in self.seen_levels.items() if k in active_ids}
         previously_seen = set(self.seen_levels)
         for row in raw_levels:
@@ -157,9 +160,20 @@ class LevelReactionTracker:
         if price is None:
             levels=[]
             for base in raw_levels:
-                row=dict(base); played=self.played.get(row["id"])
-                if played and now >= int(played.get("hide_after_ms") or 0): continue
-                row.update(played or {}); row["state"]="PLAYED" if played else "WATCH"; levels.append(row)
+                row=dict(base)
+                tap=self.tapped.get(row["id"])
+                if tap and now >= int(tap.get("hide_after_ms") or 0):
+                    continue
+                played=self.played.get(row["id"])
+                if played and now >= int(played.get("hide_after_ms") or 0):
+                    continue
+                if played:
+                    row.update(played); row["state"]="PLAYED"
+                elif tap:
+                    row.update(tap); row["state"]="TAPPED"
+                else:
+                    row["state"]="WATCH"
+                levels.append(row)
             self.last_state={"status":"WATCH","levels":levels,"armed":[],"trigger":None,
                              "manual_pack":manual_level_pack_summary(),"min_confirmation_score":min_score}
             return self.last_state
@@ -191,6 +205,13 @@ class LevelReactionTracker:
             long_interaction=bool(newer or seen["observed_long_touch"] or (low < float(seen["initial_low"]) and low <= long_anchor+touch_tolerance))
             short_interaction=bool(newer or seen["observed_short_touch"] or (high > float(seen["initial_high"]) and high >= short_anchor-touch_tolerance))
 
+            tap=self.tapped.get(row["id"])
+            if tap and now >= int(tap.get("hide_after_ms") or 0):
+                # A fully consumed structural level remains retired until its
+                # upstream price/id changes. This keeps stale levels from
+                # immediately reappearing after the requested grace period.
+                continue
+
             played=self.played.get(row["id"])
             if played:
                 if now >= int(played.get("hide_after_ms") or 0): continue
@@ -199,6 +220,19 @@ class LevelReactionTracker:
                 continue
 
             distance=0.0 if lower <= price <= upper else min(abs(price-lower),abs(price-upper))
+            fully_tapped=bool(
+                can_trigger
+                and row["id"] in previously_seen
+                and low <= level <= high
+            )
+            if fully_tapped and tap is None:
+                tap={
+                    "state":"TAPPED",
+                    "tapped_at_ms":now,
+                    "hide_after_ms":now+FIVE_MIN_MS,
+                    "tap_reason":"PRICE_FULLY_TOUCHED_LEVEL",
+                }
+                self.tapped[row["id"]]=tap
             native=str(row.get("direction","BOTH")).upper()
             allow_long=native in {"BOTH","LONG","BULLISH"}
             allow_short=native in {"BOTH","SHORT","BEARISH"}
@@ -225,25 +259,36 @@ class LevelReactionTracker:
                     score+=2; confirms.append("SFP")
 
                 if score < min_score:
+                    if tap:
+                        row.update(tap)
                     row.update({"state":"CONFIRMING","direction":direction,"reaction":reaction,"reaction_score":score,
                                 "reaction_confirmations":confirms,"required_confirmation_score":min_score,
                                 "distance":round(distance,2),"arm_distance":round(arm_distance,2)})
                     armed.append(row); levels.append(row); continue
 
-                played_at=now; hide_after=played_at+(FIFTEEN_MIN_MS if row["kind"]=="SFP" else THIRTY_MIN_MS)
+                played_at=now
+                default_hide=played_at+(FIFTEEN_MIN_MS if row["kind"]=="SFP" else THIRTY_MIN_MS)
+                hide_after=min(default_hide,int(tap.get("hide_after_ms"))) if tap else default_hide
                 meta={"state":"PLAYED","reaction_status":"READY","direction":direction,"reaction":reaction,
                       "reaction_score":score,"reaction_confirmations":confirms,"required_confirmation_score":min_score,
                       "played_at_ms":played_at,"hide_after_ms":hide_after,"reaction_candle_start":int(candle.start),
                       "reaction_candle_end":int(candle.end),"reaction_candle_high":round(high,2),
                       "reaction_candle_low":round(low,2),"distance_at_trigger":round(distance,2)}
+                if tap:
+                    meta["tapped_at_ms"]=int(tap.get("tapped_at_ms") or played_at)
+                    meta["tap_reason"]=str(tap.get("tap_reason") or "PRICE_FULLY_TOUCHED_LEVEL")
                 if is_zone: meta.update(zone_low=round(lower,2),zone_high=round(upper,2))
                 self.played[row["id"]]=meta; row.update(meta); fresh.append(row)
             elif distance <= arm_distance or touched:
                 was_seen = row["id"] in previously_seen
-                row["state"] = "CONFIRMING" if (touched and was_seen and can_trigger) else "ARMED"
+                if tap:
+                    row.update(tap)
+                    row["state"]="TAPPED"
+                else:
+                    row["state"] = "CONFIRMING" if (touched and was_seen and can_trigger) else "ARMED"
                 row["distance"]=round(distance,2)
                 row["arm_distance"]=round(arm_distance,2); row["required_confirmation_score"]=min_score
-                row["arming_reason"]="LEVEL_FIRST_OBSERVED" if not was_seen else                     "WAITING_FOR_FRESH_REACTION_CANDLE" if not can_trigger else                     "TOUCHED_WAITING_FOR_RECLAIM" if touched else "PRICE_APPROACHING_LEVEL"
+                row["arming_reason"]="LEVEL_FULLY_TAPPED_RETIRING_SOON" if tap else                     "LEVEL_FIRST_OBSERVED" if not was_seen else                     "WAITING_FOR_FRESH_REACTION_CANDLE" if not can_trigger else                     "TOUCHED_WAITING_FOR_RECLAIM" if touched else "PRICE_APPROACHING_LEVEL"
                 armed.append(row)
             else:
                 row["state"]="WATCH"
