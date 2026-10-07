@@ -72,7 +72,8 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 
 // Build 87: backend executes every emitted trade call; Android client remains signal/event driven.
-// Build 124: visual-accessibility compatibility fix.
+// Build 125: exact brand-palette UI + expanded chart canvas + consumed-level retirement.
+ // Build 124: visual-accessibility compatibility fix.
 // Build 124: final chart-control release trigger after versioned workflow.
 // Build 124: quiet developing alerts + chart level filters + immersive fullscreen.
 // Build 123: client-release health gate separation trigger.
@@ -272,8 +273,15 @@ class SafeActivity : FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         WindowCompat.setDecorFitsSystemWindows(window, false)
-        window.statusBarColor = Color.TRANSPARENT
-        window.navigationBarColor = Color.TRANSPARENT
+        window.statusBarColor = kyCharcoal
+        window.navigationBarColor = kyCharcoal
+        WindowCompat.getInsetsController(window, window.decorView).apply {
+            isAppearanceLightStatusBars = false
+            isAppearanceLightNavigationBars = false
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            window.navigationBarDividerColor = kyDeepGold
+        }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             window.isStatusBarContrastEnforced = false
             window.isNavigationBarContrastEnforced = false
@@ -463,13 +471,16 @@ class SafeActivity : FragmentActivity() {
         val compactViewport = resources.configuration.screenHeightDp < 760
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(kyCharcoal)
-            setPadding(dp(14), dp(8), dp(14), dp(8))
+            background = gradient(
+                intArrayOf(kyCharcoal, KyvoriqTheme.slate, kyCharcoal),
+                GradientDrawable.Orientation.TOP_BOTTOM
+            )
+            setPadding(dp(10), dp(8), dp(10), dp(8))
         }
         rootSurface = root
         ViewCompat.setOnApplyWindowInsetsListener(root) { view, insets ->
             val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
-            view.setPadding(dp(14), bars.top + dp(8), dp(14), bars.bottom + dp(8))
+            view.setPadding(dp(10), bars.top + dp(8), dp(10), bars.bottom + dp(8))
             insets
         }
         setContentView(root)
@@ -511,7 +522,7 @@ class SafeActivity : FragmentActivity() {
         val tradePage = page()
         val hero = heroCard()
         price = hero.price; oiView = hero.oi; status = hero.status
-        tradePage.addView(hero.container, margins(bottom = 8))
+        tradePage.addView(hero.container, margins(bottom = 6))
         val tfRow = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
         listOf("5m", "15m", "1h", "4h").forEach { tf ->
             val button = compactPillButton(tf).apply { contentDescription = "Chart $tf" }
@@ -522,16 +533,23 @@ class SafeActivity : FragmentActivity() {
                 refreshTimeframeButtons(tfRow)
                 requestChartIfNeeded(force = true)
             }
-            tfRow.addView(button, LinearLayout.LayoutParams(0, dp(40), 1f).apply { leftMargin = dp(2); rightMargin = dp(2) })
+            tfRow.addView(button, LinearLayout.LayoutParams(0, dp(38), 1f).apply { leftMargin = dp(2); rightMargin = dp(2) })
         }
         timeframeButtonRow = tfRow
-        tradePage.addView(tfRow, margins(bottom = 6))
+        tradePage.addView(tfRow, margins(bottom = 4))
         chart = MarketChartView(this).apply {
-            minimumHeight = dp(if (compactViewport) 140 else 0)
+            minimumHeight = dp(if (compactViewport) 176 else 248)
             contentDescription = "Interactive price chart"
             onFullscreenRequested = { toggleChartFullscreen() }
         }
-        tradePage.addView(chart, LinearLayout.LayoutParams(-1, 0, 1f).apply { bottomMargin = dp(8) })
+        tradePage.addView(
+            chart,
+            LinearLayout.LayoutParams(-1, 0, 1f).apply {
+                leftMargin = -dp(6)
+                rightMargin = -dp(6)
+                bottomMargin = dp(6)
+            }
+        )
         val setup = premiumCard("DECISION CENTER", "NO TRADE  •  SCANNING\nWaiting for verified market data.", if (compactViewport) 11.5f else 13f)
         decisionContainer = setup.first
         signal = setup.second
@@ -550,20 +568,20 @@ class SafeActivity : FragmentActivity() {
         decisionHost.addView(setup.first, FrameLayout.LayoutParams(-1, -1))
         decisionMotionView = DecisionMotionView(this)
         decisionHost.addView(decisionMotionView, FrameLayout.LayoutParams(-1, -1))
-        tradePage.addView(decisionHost, LinearLayout.LayoutParams(-1, dp(if (compactViewport) 108 else 138)).apply { bottomMargin = dp(8) })
+        tradePage.addView(decisionHost, LinearLayout.LayoutParams(-1, dp(if (compactViewport) 96 else 118)).apply { bottomMargin = dp(6) })
         val tradeTools = LinearLayout(this)
         val details = compactPillButton("SETUP DETAILS")
         details.setOnClickListener {
             haptic(it, KyvoriqHaptics.Cue.TAP)
             showTradeDetails()
         }
-        tradeTools.addView(details, LinearLayout.LayoutParams(0, dp(44), 1f).apply { rightMargin = dp(6) })
+        tradeTools.addView(details, LinearLayout.LayoutParams(0, dp(42), 1f).apply { rightMargin = dp(6) })
         val pnl = compactPillButton("P&L CALCULATOR")
         pnl.setOnClickListener {
             haptic(it, KyvoriqHaptics.Cue.ACTION)
             safe { showPnlCalculator() }
         }
-        tradeTools.addView(pnl, LinearLayout.LayoutParams(0, dp(44), 1f))
+        tradeTools.addView(pnl, LinearLayout.LayoutParams(0, dp(42), 1f))
         tradePage.addView(tradeTools)
         refreshTimeframeButtons(tfRow)
 
@@ -1933,10 +1951,10 @@ class SafeActivity : FragmentActivity() {
         if (key == lastAmbientKey) return
         lastAmbientKey = key
         val target = when (key) {
-            "LONG", "BULLISH" -> Color.rgb(30, 26, 18)
-            "SHORT", "BEARISH" -> Color.rgb(31, 24, 18)
-            "CAUTION" -> Color.rgb(34, 27, 12)
-            else -> Color.rgb(20, 18, 11)
+            "LONG", "BULLISH" -> Color.rgb(11, 29, 27)
+            "SHORT", "BEARISH" -> Color.rgb(31, 18, 25)
+            "CAUTION" -> KyvoriqTheme.graphite
+            else -> KyvoriqTheme.slate
         }
         ambientAnimator?.cancel()
         val start = ambientColor
