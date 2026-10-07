@@ -109,6 +109,17 @@ jobs:
       - run: pip install -r requirements.txt pytest
       - run: python -m py_compile app/*.py
       - run: pytest -q
+      - name: Package verified Deplexo backend
+        run: |
+          rm -rf deplexo-package KYVORIQ-deplexo-backend.zip
+          mkdir -p deplexo-package
+          cp -R app knowledge Dockerfile deplexo.yaml requirements-core.txt requirements.txt .dockerignore .env.example deplexo-package/
+          (cd deplexo-package && zip -qr ../KYVORIQ-deplexo-backend.zip .)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: kyvoriq-deplexo-backend
+          path: dev-trader/backend/KYVORIQ-deplexo-backend.zip
+          if-no-files-found: error
 
   android:
     runs-on: ubuntu-latest
