@@ -1,8 +1,8 @@
 {
   "enabled": true,
-  "versionCode": 124,
-  "versionName": "0.20.4",
-  "apkUrl": "https://github.com/Dev06ai/marketpulse-os/releases/download/dev-trader-v0.20.4-124/app-release.apk",
-  "sha256": "64d710926d648940f7142f91fb0b20b30cc54528ac52c03b14a7e496e46b6e4e",
-  "notes": "KYVORIQ 0.20.4 \u2022 Chart Control Edition \u2022 quiet developing alerts \u2022 persistent SFP/nPOC/OB/Daily/Weekly filters \u2022 immersive live fullscreen chart"
+  "versionCode": 125,
+  "versionName": "0.21.0",
+  "apkUrl": "https://github.com/Dev06ai/marketpulse-os/releases/download/dev-trader-v0.21.0-125/app-release.apk",
+  "sha256": "12e292bd43e5f1629b933f7911a28a978938faa2279abc7095bec94043f18d5b",
+  "notes": "KYVORIQ 0.21.0 \u2022 exact brand palette \u2022 wider/taller main chart \u2022 premium system UI \u2022 fully tapped levels retire after 5 minutes"
 }
