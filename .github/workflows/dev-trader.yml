@@ -135,7 +135,7 @@ jobs:
           gradle-version: '9.6.0'
       - name: Build Android debug APK
         working-directory: dev-trader/android
-        run: gradle assembleDebug --stacktrace -PdevTraderVersionCode=121 -PdevTraderVersionName=0.20.1
+        run: gradle assembleDebug --stacktrace -PdevTraderVersionCode=122 -PdevTraderVersionName=0.20.2
       - name: Build signed Android release APK
         if: steps.changed.outputs.android_changed == 'true'
         working-directory: dev-trader/android
@@ -146,7 +146,7 @@ jobs:
           DEV_TRADER_KEY_PASSWORD: ${{ secrets.DEV_TRADER_KEY_PASSWORD }}
         run: |
           echo "${{ secrets.DEV_TRADER_KEYSTORE_BASE64 }}" | base64 --decode > "$DEV_TRADER_KEYSTORE_PATH"
-          gradle assembleRelease --stacktrace -PdevTraderVersionCode=121 -PdevTraderVersionName=0.20.1
+          gradle assembleRelease --stacktrace -PdevTraderVersionCode=122 -PdevTraderVersionName=0.20.2
           if unzip -l app/build/outputs/apk/release/app-release.apk | grep -q ui_preview.json; then
             echo 'Debug preview data must never be included in release APKs.'
             exit 1
@@ -217,7 +217,7 @@ jobs:
           mkdir -p release
           cp dist/app-release.apk release/app-release.apk
           sha256sum release/app-release.apk | awk '{print $1}' > release/app-release.sha256
-          echo "tag=dev-trader-v0.20.1-121" >> "$GITHUB_OUTPUT"
+          echo "tag=dev-trader-v0.20.2-122" >> "$GITHUB_OUTPUT"
           echo "sha256=$(cat release/app-release.sha256)" >> "$GITHUB_OUTPUT"
       - name: Create GitHub release
         env:
@@ -227,7 +227,7 @@ jobs:
             echo "This release already exists; refusing to replace a published APK."
             exit 1
           fi
-          gh release create "${{ steps.release.outputs.tag }}" release/app-release.apk --target "$GITHUB_SHA" --title "KYVORIQ 0.20.1 (121)" --notes "Reaction Map Edition: Dewald BTC levels and OB zones rendered on-chart, reaction-only arming, confirmation scoring, zone-aware invalidation, and no blind touch entries."
+          gh release create "${{ steps.release.outputs.tag }}" release/app-release.apk --target "$GITHUB_SHA" --title "KYVORIQ 0.20.2 (122)" --notes "Reaction Map Edition: Dewald BTC levels and OB zones rendered on-chart with an embedded fallback for stale backend hosts; backend reaction logic remains confirmation-only with no blind touch entries."
       - name: Publish verified update manifest
         env:
           SHA256: "${{ steps.release.outputs.sha256 }}"
@@ -241,11 +241,11 @@ jobs:
           data = json.loads(p.read_text())
           data.update({
               "enabled": True,
-              "versionCode": 121,
-              "versionName": "0.20.1",
-              "apkUrl": "https://github.com/Dev06ai/marketpulse-os/releases/download/dev-trader-v0.20.1-121/app-release.apk",
+              "versionCode": 122,
+              "versionName": "0.20.2",
+              "apkUrl": "https://github.com/Dev06ai/marketpulse-os/releases/download/dev-trader-v0.20.2-122/app-release.apk",
               "sha256": os.environ["SHA256"],
-              "notes": "KYVORIQ 0.20.1 • Reaction Map Edition • Dewald BTC level pack • Daily/nPOC/Weekly nPOC • OB zones • reaction-only arming • confirmation scoring"
+              "notes": "KYVORIQ 0.20.2 • Reaction Map Edition • embedded Dewald chart fallback • Daily/nPOC/Weekly nPOC • OB zones • reaction-only backend arming"
           })
           p.write_text(json.dumps(data, indent=2) + "\n")
           PY
