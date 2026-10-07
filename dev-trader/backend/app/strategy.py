@@ -2460,7 +2460,10 @@ class StrategyEngine:
         signal = _signal(
             id=f"level-reaction-{reaction.get('id','level')}-{reaction.get('reaction_candle_start',played_at)}-{direction.lower()}",
             direction=direction,
-            setup=f"{label} {'Zone' if is_zone else 'Level'} Reaction",
+            # Keep the canonical family phrase in every mapped reaction setup.
+            # Zone reactions previously became "<label> Zone Reaction", which
+            # bypassed the dedicated LEVEL_REACTION playbook classification.
+            setup=f"{label} Level Reaction" + (" • ZONE" if is_zone else ""),
             entry=entry,
             stop=raw_stop,
             target=raw_target,

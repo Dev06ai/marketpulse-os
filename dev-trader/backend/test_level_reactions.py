@@ -227,3 +227,29 @@ def test_fully_tapped_level_retires_after_five_minutes_without_blind_trade():
     after = tracker.update(state, f, now_ms=1_250_000 + FIVE_MIN_MS + 1)
     assert all(row["label"] != "D LOW" for row in after["levels"])
     assert after["trigger"] is None
+
+
+
+def test_zone_midpoint_touch_does_not_retire_whole_zone():
+    tracker = LevelReactionTracker()
+    now = 2_000_000
+    state = MarketState(
+        last_price=100.5,
+        candles_5=[candle(now - 60_000, 100.4, 100.8, 100.2, 100.5, False)],
+    )
+    f = MarketFeatures(atr_15=5.0)
+    # Inject one already-seen manual-style zone directly through the tracker by
+    # patching collect_reaction_levels in this module.
+    import app.level_reactions as lr
+    original = lr.collect_reaction_levels
+    lr.collect_reaction_levels = lambda *_: [{
+        "id":"zone","kind":"OB_ZONE","label":"1H OB","price":100.5,
+        "direction":"BOTH","zone_low":100.0,"zone_high":101.0,
+    }]
+    try:
+        tracker.update(state, f, now_ms=now-1_000)
+        result = tracker.update(state, f, now_ms=now)
+    finally:
+        lr.collect_reaction_levels = original
+    assert "zone" not in tracker.tapped
+    assert any(row["id"]=="zone" for row in result["levels"])

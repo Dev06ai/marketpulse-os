@@ -4,7 +4,10 @@ import math
 
 def family(setup):
     name=setup.upper()
-    if "LEVEL REACTION" in name: return "LEVEL_REACTION"
+    # All mapped-level reaction candidates, including zone reactions, belong to
+    # one admission family. Older zone candidates used "Zone Reaction" and were
+    # accidentally treated as generic continuations.
+    if "LEVEL REACTION" in name or "ZONE REACTION" in name: return "LEVEL_REACTION"
     if "SFP" in name: return "SFP_REVERSAL"
     if "RETEST" in name: return "BREAKOUT_RETEST"
     if "PULLBACK" in name: return "TREND_PULLBACK"
@@ -36,7 +39,10 @@ def policy(signal, state, features, regime):
     reaction_state = str(reaction.get("state") or "").upper()
     valid_level_reaction = (
         name == "LEVEL_REACTION"
-        and reaction_kind in {"DAILY","WEEKLY_OPEN","NPOC","OB","SFP"}
+        and reaction_kind in {
+            "DAILY","WEEKLY_OPEN","NPOC","WEEKLY_NPOC","RANGE_POC",
+            "OB","OB_ZONE","SUPPLY_ZONE","SFP"
+        }
         and reaction_direction == direction
         and reaction_state in {"PLAYED","TRIGGERED","REACTION_CONFIRMED"}
     )
@@ -54,11 +60,12 @@ def policy(signal, state, features, regime):
     elif name == "LEVEL_REACTION":
         if not valid_level_reaction:
             reasons.append("Level-reaction candidate is missing a fresh confirmed mapped-level reaction")
-        if reaction_kind == "OB" and not trend_aligned:
+        is_order_block_reaction = reaction_kind in {"OB","OB_ZONE"}
+        if is_order_block_reaction and not trend_aligned:
             reasons.append("Order-block reaction is counter to the confirmed 1h trend")
-        if structure_opposed and reaction_kind == "OB":
+        if structure_opposed and is_order_block_reaction:
             reasons.append("Order-block reaction conflicts with confirmed 1h structure")
-        if features.trend_240 in {"UP","DOWN"} and features.trend_240 != expected and reaction_kind == "OB":
+        if features.trend_240 in {"UP","DOWN"} and features.trend_240 != expected and is_order_block_reaction:
             reasons.append("Order-block reaction conflicts with 4h context")
     elif name == "EARLY_MOMENTUM":
         if structure_opposed or features.trend_15 == ("DOWN" if direction == "LONG" else "UP"):

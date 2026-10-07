@@ -175,6 +175,34 @@ def test_playbook_admission_uses_quality_governor_rr_threshold():
     assert admission(s,state,f,1100,min_confidence=.78,min_rr=3.0)[0]
 
 
+def test_zone_and_manual_level_reactions_use_dedicated_playbook():
+    now=100_000
+    f=features();f.book_imbalance=.2
+    state=MarketState(last_price=100000,data_health="HEALTHY",
+        last_market_update_ts=now,last_trade_ts=now,last_book_ts=now)
+
+    for setup_name,kind in [
+        ("1H OB Zone Reaction","OB_ZONE"),
+        ("Weekly nPOC Level Reaction","WEEKLY_NPOC"),
+        ("Range POC Level Reaction","RANGE_POC"),
+        ("Supply Zone Reaction","SUPPLY_ZONE"),
+    ]:
+        s=setup(setup_name,"LONG" if kind != "SUPPLY_ZONE" else "SHORT")
+        if s.direction == "SHORT":
+            f.trend_60="DOWN";f.trend_240="DOWN"
+            f.structure_map["1h"]["bias"]="BEARISH"
+        else:
+            f.trend_60="UP";f.trend_240="UP"
+            f.structure_map["1h"]["bias"]="BULLISH"
+        s.evidence["level_reaction"]={
+            "kind":kind,"label":setup_name,"direction":s.direction,"state":"PLAYED",
+            "played_at_ms":now-10_000,"price":99950,
+        }
+        assert family(s.setup)=="LEVEL_REACTION"
+        s.evidence["playbook"]=policy(s,state,f,dict(regime="TREND_DOWN" if s.direction=="SHORT" else "TREND_UP"))
+        assert s.evidence["playbook"]["allow"], (setup_name,s.evidence["playbook"]["reason"])
+
+
 def test_mapped_level_reaction_has_dedicated_playbook_and_freshness_guard():
     now=100_000
     f=features();f.book_imbalance=.2

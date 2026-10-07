@@ -222,10 +222,16 @@ class LevelReactionTracker:
                 continue
 
             distance=0.0 if lower <= price <= upper else min(abs(price-lower),abs(price-upper))
+            # A line is consumed once price trades through the line. A zone is
+            # only "fully tapped" after the candle spans the entire zone; using
+            # the midpoint for zones retired valid OB/supply reactions too early.
             fully_tapped=bool(
                 can_trigger
                 and row["id"] in previously_seen
-                and low <= level <= high
+                and (
+                    (not is_zone and low <= level <= high)
+                    or (is_zone and low <= lower and high >= upper)
+                )
             )
             if fully_tapped and tap is None:
                 tap={
