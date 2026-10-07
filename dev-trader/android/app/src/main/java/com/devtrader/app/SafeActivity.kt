@@ -72,7 +72,7 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 
 // Build 87: backend executes every emitted trade call; Android client remains signal/event driven.
-// Build 122: embed Dewald reaction-map fallback until backend redeploy; release verification trigger.
+// Build 122: Dewald reaction-map fallback verified; publish-permission release trigger.
 // Build 121: final reaction-map verification trigger.
 class SafeActivity : FragmentActivity() {
     private val kyGold = KyvoriqTheme.gold
