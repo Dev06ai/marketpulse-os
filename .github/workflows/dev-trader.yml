@@ -49,13 +49,17 @@ jobs:
           gradle-version: '9.6.0'
       - name: Verify the live host with Android's HTTP and socket library
         run: gradle -p dev-trader/tools/host-probe run --args='https://dev-trader-engine.de.deplexo.com' --stacktrace
-      - name: Report manual Deplexo deployment drift
+      - name: Block backend drift until Deplexo runs audited source
         if: steps.backend_changed.outputs.backend_changed == 'true'
-        continue-on-error: true
         run: |
-          POLICY="$(curl -fsS --max-time 12 'https://dev-trader-engine.de.deplexo.com/bootstrap?profile=dashboard' | jq -r '.execution.summary.execution_policy // "UNKNOWN"')"
+          BOOTSTRAP="$(curl -fsS --max-time 12 'https://dev-trader-engine.de.deplexo.com/bootstrap?profile=dashboard')"
+          POLICY="$(printf '%s' "$BOOTSTRAP" | jq -r '.execution.summary.execution_policy // "UNKNOWN"')"
+          REVISION="$(printf '%s' "$BOOTSTRAP" | jq -r '.engine.engine_revision // .engine_revision // "UNKNOWN"')"
           echo "Live Deplexo execution policy: $POLICY"
+          echo "Live Deplexo engine revision: $REVISION"
           test "$POLICY" = "CONFIDENCE_MARGIN_20X_FEE_ADJUSTED"
+          test "$REVISION" = "market-decision-v3.6"
+          curl -fsS --max-time 12 'https://dev-trader-engine.de.deplexo.com/level-pack' | jq -e '.pack_id == "dewald_levels_2026_10_07" and .enabled == true' >/dev/null
   free-container:
     runs-on: ubuntu-latest
     steps:
