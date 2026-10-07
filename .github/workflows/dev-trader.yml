@@ -44,22 +44,51 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
+      - name: Request Deplexo backend redeploy
+        if: steps.backend_changed.outputs.backend_changed == 'true'
+        env:
+          DEPLEXO_TOKEN: ${{ secrets.DEPLEXO_TOKEN }}
+          DEPLEXO_APP_ID: ${{ secrets.DEPLEXO_APP_ID }}
+        run: |
+          if [ -z "${DEPLEXO_TOKEN:-}" ]; then
+            echo "DEPLEXO_TOKEN is not configured in repository secrets; relying on Deplexo git auto-deploy."
+            exit 0
+          fi
+          APP_ID="${DEPLEXO_APP_ID:-}"
+          if [ -z "$APP_ID" ]; then
+            ME="$(curl -fsS --max-time 20 -H "Authorization: Bearer $DEPLEXO_TOKEN" https://deplexo.com/user/api/v1/me)"
+            APP_ID="$(printf '%s' "$ME" | jq -r '.apps[]? | select(((.name // "") | ascii_downcase | contains("dev-trader"))) | .id' | head -n 1)"
+          fi
+          if [ -z "$APP_ID" ] || [ "$APP_ID" = "null" ]; then
+            echo "Could not resolve the Deplexo app id. Set DEPLEXO_APP_ID in repository secrets."
+            exit 1
+          fi
+          curl -fsS --max-time 30             -H "Authorization: Bearer $DEPLEXO_TOKEN"             -H 'Content-Type: application/json'             --data "{\"commitSha\":\"$GITHUB_SHA\"}"             "https://deplexo.com/user/api/v1/apps/$APP_ID/restart"
+          echo
+          echo "Deplexo rebuild requested for $GITHUB_SHA"
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '9.6.0'
       - name: Verify the live host with Android's HTTP and socket library
         run: gradle -p dev-trader/tools/host-probe run --args='https://dev-trader-engine.de.deplexo.com' --stacktrace
-      - name: Block backend drift until Deplexo runs audited source
+      - name: Wait for audited Deplexo reaction-map backend
         if: steps.backend_changed.outputs.backend_changed == 'true'
         run: |
-          BOOTSTRAP="$(curl -fsS --max-time 12 'https://dev-trader-engine.de.deplexo.com/bootstrap?profile=dashboard')"
-          POLICY="$(printf '%s' "$BOOTSTRAP" | jq -r '.execution.summary.execution_policy // "UNKNOWN"')"
-          REVISION="$(printf '%s' "$BOOTSTRAP" | jq -r '.engine.engine_revision // .engine_revision // "UNKNOWN"')"
-          echo "Live Deplexo execution policy: $POLICY"
-          echo "Live Deplexo engine revision: $REVISION"
-          test "$POLICY" = "CONFIDENCE_MARGIN_20X_FEE_ADJUSTED"
-          test "$REVISION" = "market-decision-v3.6"
-          curl -fsS --max-time 12 'https://dev-trader-engine.de.deplexo.com/level-pack' | jq -e '.pack_id == "dewald_levels_2026_10_07" and .enabled == true' >/dev/null
+          ok=false
+          for attempt in {1..42}; do
+            BOOTSTRAP="$(curl -fsS --max-time 12 'https://dev-trader-engine.de.deplexo.com/bootstrap?profile=dashboard' 2>/dev/null || true)"
+            POLICY="$(printf '%s' "$BOOTSTRAP" | jq -r '.execution.summary.execution_policy // "UNKNOWN"' 2>/dev/null || echo UNKNOWN)"
+            REVISION="$(printf '%s' "$BOOTSTRAP" | jq -r '.engine.engine_revision // .engine_revision // "UNKNOWN"' 2>/dev/null || echo UNKNOWN)"
+            PACK="$(curl -fsS --max-time 12 'https://dev-trader-engine.de.deplexo.com/level-pack' 2>/dev/null || true)"
+            PACK_OK="$(printf '%s' "$PACK" | jq -r '(.pack_id == "dewald_levels_2026_10_07") and (.enabled == true)' 2>/dev/null || echo false)"
+            echo "Deplexo check $attempt/42 • revision=$REVISION • policy=$POLICY • reaction_pack=$PACK_OK"
+            if [ "$REVISION" = "market-decision-v3.6" ] &&                [ "$POLICY" = "CONFIDENCE_MARGIN_20X_FEE_ADJUSTED" ] &&                [ "$PACK_OK" = "true" ]; then
+              ok=true
+              break
+            fi
+            sleep 10
+          done
+          test "$ok" = "true"
   free-container:
     runs-on: ubuntu-latest
     steps:
