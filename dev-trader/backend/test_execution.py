@@ -555,6 +555,34 @@ def test_closed_lifecycle_reconciles_while_new_same_side_position_exists(monkeyp
     assert executor.data['trades'][0]['result_r'] == -1
 
 
+def test_terminal_partial_fill_scales_realized_risk_for_learning(monkeypatch, tmp_path):
+    executor = audit_executor(monkeypatch, tmp_path)
+    trade = dict(
+        execution_id="partial-risk",
+        signal_id="partial-risk",
+        status="OPEN",
+        direction="LONG",
+        opened_ts=1000,
+        requested_qty=.01,
+        filled_qty=.005,
+        entry_price=100000,
+        stop_loss=99500,
+        take_profit=102000,
+        planned_risk_usdt=10.0,
+        signal_snapshot=audit_signal(),
+    )
+    closed = dict(
+        symbol="BTCUSDT", holdSide="long", ctime=1000, utime=2000,
+        closeTotalPos=".005", openAvgPrice="100000", closeAvgPrice="101000",
+        pnl="5", netProfit="5", positionId="partial",
+    )
+    event = executor._finalize_trade(trade, closed, [])
+    assert event is not None
+    assert trade["actual_risk_usdt"] == 5.0
+    assert trade["result_r"] == 1.0
+    assert executor.learning.resolved[-1][2] == 1.0
+
+
 def test_recovered_exchange_entries_restore_daily_cap(monkeypatch, tmp_path):
     import time
     executor = audit_executor(monkeypatch, tmp_path)

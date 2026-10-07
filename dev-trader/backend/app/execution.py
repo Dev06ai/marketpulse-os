@@ -1539,7 +1539,16 @@ class DemoExecutionEngine:
         trade["close_reason"] = self._infer_close_reason(trade, closed, orders)
 
         planned_risk = self._num(trade.get("planned_risk_usdt"))
-        result_r = net / planned_risk if planned_risk > 0 else 0.0
+        requested_qty = self._num(trade.get("requested_qty"))
+        actual_qty = self._num(trade.get("filled_qty"))
+        # A terminal partial fill carries only a proportional share of the
+        # originally planned stop risk. Dividing its PnL by the full requested
+        # risk understated both wins and losses and polluted setup learning.
+        actual_risk = planned_risk
+        if planned_risk > 0 and requested_qty > 0 and 0 < actual_qty < requested_qty:
+            actual_risk = planned_risk * min(1.0, actual_qty / requested_qty)
+        trade["actual_risk_usdt"] = round(actual_risk, 6)
+        result_r = net / actual_risk if actual_risk > 0 else 0.0
         trade["result_r"] = round(result_r, 4)
 
         snapshot = dict(trade.get("signal_snapshot") or {})
