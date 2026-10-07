@@ -72,6 +72,7 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 
 // Build 87: backend executes every emitted trade call; Android client remains signal/event driven.
+// Build 124: visual-accessibility compatibility fix.
 // Build 124: final chart-control release trigger after versioned workflow.
 // Build 124: quiet developing alerts + chart level filters + immersive fullscreen.
 // Build 123: client-release health gate separation trigger.
@@ -527,7 +528,7 @@ class SafeActivity : FragmentActivity() {
         tradePage.addView(tfRow, margins(bottom = 6))
         chart = MarketChartView(this).apply {
             minimumHeight = dp(if (compactViewport) 140 else 0)
-            contentDescription = "Interactive price chart with layer controls and fullscreen mode"
+            contentDescription = "Interactive price chart"
             onFullscreenRequested = { toggleChartFullscreen() }
         }
         tradePage.addView(chart, LinearLayout.LayoutParams(-1, 0, 1f).apply { bottomMargin = dp(8) })
