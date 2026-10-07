@@ -1,8 +1,8 @@
 {
   "enabled": true,
-  "versionCode": 123,
-  "versionName": "0.20.3",
-  "apkUrl": "https://github.com/Dev06ai/marketpulse-os/releases/download/dev-trader-v0.20.3-123/app-release.apk",
-  "sha256": "020645f59f1bf9271b9c23c6257b5e6f5708a5eb0eaf1fa689a46620340fda03",
-  "notes": "KYVORIQ 0.20.3 \u2022 Reaction Map Edition \u2022 clean chart label lanes \u2022 Dewald Daily/nPOC/Weekly nPOC \u2022 OB zones \u2022 reaction-only backend arming"
+  "versionCode": 124,
+  "versionName": "0.20.4",
+  "apkUrl": "https://github.com/Dev06ai/marketpulse-os/releases/download/dev-trader-v0.20.4-124/app-release.apk",
+  "sha256": "64d710926d648940f7142f91fb0b20b30cc54528ac52c03b14a7e496e46b6e4e",
+  "notes": "KYVORIQ 0.20.4 \u2022 Chart Control Edition \u2022 quiet developing alerts \u2022 persistent SFP/nPOC/OB/Daily/Weekly filters \u2022 immersive live fullscreen chart"
 }
