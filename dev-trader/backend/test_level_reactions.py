@@ -33,6 +33,9 @@ def test_daily_reaction_triggers_then_hides_after_30_minutes():
     assert first["trigger"] is None
     assert first["armed"][0]["arming_reason"] == "LEVEL_FIRST_OBSERVED"
 
+    state.last_price = 100.0
+    assert tracker.update(state, f, now_ms=1_100_500)["trigger"] is None
+    state.last_price = 102.0
     triggered = tracker.update(state, f, now_ms=1_101_000)
     assert triggered["status"] == "TRIGGERED"
     assert triggered["trigger"]["label"] == "D LOW"
@@ -57,6 +60,9 @@ def test_sfp_reaction_uses_15_minute_chart_lifetime():
         now_ms=1_100_000,
     )
     assert first["trigger"] is None
+    state.last_price = 100.0
+    tracker.update(state, f, sfp_hunter={"target_level": 100.0, "direction": "LONG", "status": "NEAR_TRIGGER"}, now_ms=1_100_500)
+    state.last_price = 102.0
     result = tracker.update(
         state,
         f,
@@ -145,7 +151,12 @@ def test_newly_discovered_level_cannot_hindsight_trigger_on_same_update():
     assert first["status"] == "ARMED"
 
     second = tracker.update(state, f, now_ms=1_101_000)
-    assert second["trigger"]["label"] == "D LOW"
+    assert second["trigger"] is None
+    # Only a newly observed touch/reclaim can qualify this old wick.
+    state.last_price = 100.0
+    assert tracker.update(state, f, now_ms=1_102_000)["trigger"] is None
+    state.last_price = 102.0
+    assert tracker.update(state, f, now_ms=1_103_000)["trigger"]["label"] == "D LOW"
 
 
 def test_level_reaction_stop_stays_anchored_to_original_reaction_candle():

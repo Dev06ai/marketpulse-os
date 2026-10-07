@@ -45,7 +45,10 @@ def build_fill_ledger(fills: list[dict], orders: list[dict], symbol: str, start_
         if not start_ts <= ts <= end_ts:
             continue
         valid_count += 1
-        pnl = number(row.get('execPnl'))
+        pnl = number(row.get('execPnl'), None)
+        if pnl is None:
+            complete = False
+            pnl = 0.0
         details = row.get('feeDetail')
         if not isinstance(details, list):
             details = []
@@ -59,7 +62,7 @@ def build_fill_ledger(fills: list[dict], orders: list[dict], symbol: str, start_
             if str(detail.get('feeCoin') or '').upper() == 'USDT' and amount is not None:
                 # A negative fee is a rebate and must improve net P&L.
                 fee += amount
-            elif amount not in (None, 0.0):
+            elif amount is None or amount != 0.0:
                 fee_accounting_complete = False
         realized += pnl
         fees += fee

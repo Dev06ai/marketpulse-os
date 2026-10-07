@@ -179,6 +179,19 @@ class LevelReactionTracker:
         for base in raw_levels:
             row = dict(base)
             level = float(row["price"])
+            seen = self.seen_levels[row["id"]]
+            # Mapping a level after a completed intrabar reaction must not
+            # claim that same historic wick on the next evaluation. Record
+            # interaction observed while mapped, or require a newer candle.
+            seen.setdefault("initial_low", low)
+            seen.setdefault("initial_high", high)
+            seen["observed_long_touch"] = bool(seen.get("observed_long_touch") or price <= level + touch_tolerance)
+            seen["observed_short_touch"] = bool(seen.get("observed_short_touch") or price >= level - touch_tolerance)
+            newer_candle = candle is not None and candle.start > seen["first_seen_ms"]
+            long_interaction = (newer_candle or seen["observed_long_touch"]
+                                or low < seen["initial_low"] and low <= level + touch_tolerance)
+            short_interaction = (newer_candle or seen["observed_short_touch"]
+                                 or high > seen["initial_high"] and high >= level - touch_tolerance)
             played = self.played.get(row["id"])
             if played:
                 if now >= int(played.get("hide_after_ms") or 0):
@@ -201,6 +214,7 @@ class LevelReactionTracker:
             bullish = (
                 can_trigger
                 and row["id"] in previously_seen
+                and long_interaction
                 and allow_long
                 and touched
                 and price >= level + reclaim
@@ -210,6 +224,7 @@ class LevelReactionTracker:
             bearish = (
                 can_trigger
                 and row["id"] in previously_seen
+                and short_interaction
                 and allow_short
                 and touched
                 and price <= level - reclaim

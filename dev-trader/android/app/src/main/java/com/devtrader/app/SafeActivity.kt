@@ -3157,6 +3157,7 @@ class SafeActivity : FragmentActivity() {
         val manifestUrl = "https://raw.githubusercontent.com/Dev06ai/marketpulse-os/dev-trader-v1/dev-trader/update.json?ts=" + System.currentTimeMillis()
         getJson(manifestUrl) { ok, body ->
             handler.post {
+                if (isFinishing || isDestroyed) return@post
                 if (!ok) {
                     updateButton.isEnabled = true
                     setUpdateStatus("UPDATE CHECK FAILED • TAP RETRY")
@@ -3175,12 +3176,14 @@ class SafeActivity : FragmentActivity() {
                     } else {
                         val apkUrl = j.optString("apkUrl", "")
                         val expectedSha = j.optString("sha256", "")
-                        if (apkUrl.isBlank() || expectedSha.length < 32) {
+                        if (!Regex("[0-9a-fA-F]{64}").matches(expectedSha) ||
+                            !Regex("[0-9]+\\.[0-9]+\\.[0-9]+").matches(remoteName) ||
+                            !Regex("https://github\\.com/Dev06ai/marketpulse-os/releases/download/dev-trader-v[0-9]+\\.[0-9]+\\.[0-9]+-[0-9]+/app-release\\.apk").matches(apkUrl)) {
                             updateButton.isEnabled = true
                             setUpdateStatus("UPDATE METADATA INVALID")
                         } else {
                             setUpdateStatus("DOWNLOADING • v" + remoteName)
-                            val freshApkUrl = apkUrl + if (apkUrl.contains("?")) "&" else "?" + "ts=" + System.currentTimeMillis()
+                            val freshApkUrl = apkUrl + (if (apkUrl.contains("?")) "&" else "?") + "ts=" + System.currentTimeMillis()
                             downloadAndInstallUpdate(freshApkUrl, expectedSha, remoteName)
                         }
                     }
@@ -3192,62 +3195,84 @@ class SafeActivity : FragmentActivity() {
     private fun downloadAndInstallUpdate(apkUrl: String, expectedSha: String, versionName: String) {
         runCatching {
             val request = Request.Builder().url(apkUrl).get().build()
-            client.newCall(request).enqueue(object : okhttp3.Callback {
+            restClient.newBuilder().readTimeout(30, TimeUnit.SECONDS)
+                .callTimeout(180, TimeUnit.SECONDS).build().newCall(request).enqueue(object : okhttp3.Callback {
                 override fun onFailure(call: okhttp3.Call, e: java.io.IOException) {
                     handler.post {
+                        if (isFinishing || isDestroyed) return@post
                         updateButton.isEnabled = true
                         setUpdateStatus("UPDATE DOWNLOAD FAILED • RETRY")
                     }
                 }
 
                 override fun onResponse(call: okhttp3.Call, response: Response) {
-                    response.use {
-                        if (!it.isSuccessful || it.body == null) {
-                            handler.post {
-                                updateButton.isEnabled = true
-                                setUpdateStatus("UPDATE DOWNLOAD FAILED • HTTP " + it.code)
+                    val apk = File(File(cacheDir, "updates"), "dev-trader-" + versionName + ".apk")
+                    try {
+                        response.use {
+                            if (!it.isSuccessful || it.body == null) {
+                                handler.post {
+                                    if (isFinishing || isDestroyed) return@post
+                                    updateButton.isEnabled = true
+                                    setUpdateStatus("UPDATE DOWNLOAD FAILED • HTTP " + it.code)
+                                }
+                                return
                             }
-                            return
-                        }
-                        val dir = File(cacheDir, "updates")
-                        dir.mkdirs()
-                        val apk = File(dir, "dev-trader-" + versionName + ".apk")
-                        val digest = MessageDigest.getInstance("SHA-256")
-                        FileOutputStream(apk).use { out ->
-                            it.body!!.byteStream().use { input ->
-                                val buffer = ByteArray(32 * 1024)
-                                while (true) {
-                                    val count = input.read(buffer)
-                                    if (count <= 0) break
-                                    digest.update(buffer, 0, count)
-                                    out.write(buffer, 0, count)
+                            val maxBytes = 64L * 1024 * 1024
+                            if (it.body!!.contentLength() > maxBytes) throw java.io.IOException("Update is too large")
+                            if (apk.parentFile?.mkdirs() != true && apk.parentFile?.isDirectory != true) {
+                                throw java.io.IOException("Update directory is unavailable")
+                            }
+                            val digest = MessageDigest.getInstance("SHA-256")
+                            FileOutputStream(apk).use { out ->
+                                it.body!!.byteStream().use { input ->
+                                    var bytes = 0L
+                                    val buffer = ByteArray(32 * 1024)
+                                    while (true) {
+                                        val count = input.read(buffer)
+                                        if (count <= 0) break
+                                        bytes += count
+                                        if (bytes > maxBytes) throw java.io.IOException("Update is too large")
+                                        digest.update(buffer, 0, count)
+                                        out.write(buffer, 0, count)
+                                    }
                                 }
                             }
-                        }
-                        val actualSha = digest.digest().joinToString("") { b -> "%02x".format(b) }
-                        if (!actualSha.equals(expectedSha, ignoreCase = true)) {
-                            apk.delete()
-                            handler.post {
-                                updateButton.isEnabled = true
-                                setUpdateStatus("UPDATE BLOCKED • CHECKSUM FAILED")
+                            val actualSha = digest.digest().joinToString("") { b -> "%02x".format(b) }
+                            if (!actualSha.equals(expectedSha, ignoreCase = true)) {
+                                apk.delete()
+                                handler.post {
+                                    if (isFinishing || isDestroyed) return@post
+                                    updateButton.isEnabled = true
+                                    setUpdateStatus("UPDATE BLOCKED • CHECKSUM FAILED")
+                                }
+                                return
                             }
-                            return
+                            handler.post {
+                                if (isFinishing || isDestroyed) return@post
+                                updateButton.isEnabled = true
+                                setUpdateStatus("UPDATE VERIFIED • INSTALLING v" + versionName)
+                                installApk(apk)
+                            }
                         }
+                    } catch (_: Exception) {
+                        apk.delete()
                         handler.post {
+                            if (isFinishing || isDestroyed) return@post
                             updateButton.isEnabled = true
-                            setUpdateStatus("UPDATE VERIFIED • INSTALLING v" + versionName)
-                            installApk(apk)
+                            setUpdateStatus("UPDATE DOWNLOAD FAILED • RETRY")
                         }
                     }
                 }
             })
         }.onFailure {
             handler.post {
+                if (isFinishing || isDestroyed) return@post
                 updateButton.isEnabled = true
                 setUpdateStatus("UPDATE FAILED • RETRY")
             }
         }
     }
+
 
     private fun installApk(apk: File) {
         runCatching {
@@ -3293,10 +3318,11 @@ class SafeActivity : FragmentActivity() {
                 }
 
                 override fun onResponse(call: okhttp3.Call, response: Response) {
-                    response.use {
-                        val success = it.isSuccessful
-                        val body = it.body?.string().orEmpty()
-                        handler.post { callback(success, body) }
+                    val result = runCatching {
+                        response.use { Pair(it.isSuccessful, it.body?.string().orEmpty()) }
+                    }.getOrElse { Pair(false, "") }
+                    handler.post {
+                        if (!isFinishing && !isDestroyed) callback(result.first, result.second)
                     }
                 }
             })

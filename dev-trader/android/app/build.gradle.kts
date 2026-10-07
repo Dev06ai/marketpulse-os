@@ -10,8 +10,8 @@ android {
         applicationId = "com.devtrader.app"
         minSdk = 26
         targetSdk = 37
-        versionCode = (providers.gradleProperty("devTraderVersionCode").orNull ?: "117").toInt()
-        versionName = providers.gradleProperty("devTraderVersionName").orNull ?: "0.18.2"
+        versionCode = (providers.gradleProperty("devTraderVersionCode").orNull ?: "118").toInt()
+        versionName = providers.gradleProperty("devTraderVersionName").orNull ?: "0.18.3"
         val backendUrl = providers.gradleProperty("devTraderBackendUrl").orNull
             ?: "https://dev-trader-engine.de.deplexo.com"
         require(Regex("https://[A-Za-z0-9.-]+(?::[0-9]+)?/?").matches(backendUrl)) {

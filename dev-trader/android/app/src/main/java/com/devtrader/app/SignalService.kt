@@ -191,7 +191,7 @@ class SignalService : Service() {
         val notification = buildServiceNotification(ServiceUiState.CONNECTING)
         lastServiceUiState = ServiceUiState.CONNECTING
 
-        if (Build.VERSION.SDK_INT >= 29) {
+        if (Build.VERSION.SDK_INT >= 34) {
             startForeground(
                 SERVICE_NOTIFICATION_ID,
                 notification,

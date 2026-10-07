@@ -1,4 +1,5 @@
 from __future__ import annotations
+import math
 
 def calculate_risk(
     account_balance: float,
@@ -8,6 +9,16 @@ def calculate_risk(
     target: float | None = None,
     hard_cap_pct: float = 1.0,
 ) -> dict:
+    values = (account_balance, risk_pct, entry, stop, hard_cap_pct)
+    if not all(math.isfinite(float(value)) for value in values):
+        raise ValueError("Risk inputs must be finite numbers.")
+    if account_balance < 0 or risk_pct < 0 or hard_cap_pct < 0:
+        raise ValueError("Balance and risk percentages cannot be negative.")
+    if entry <= 0 or stop <= 0 or entry == stop:
+        raise ValueError("Entry and stop must be positive and different.")
+    if target is not None and (not math.isfinite(float(target)) or target <= 0
+                               or (target-entry)*(entry-stop) <= 0):
+        raise ValueError("Target must be positive and on the profit side of entry.")
     account_balance = max(float(account_balance), 0.0)
     requested_pct = max(float(risk_pct), 0.0)
     applied_pct = min(requested_pct, float(hard_cap_pct))

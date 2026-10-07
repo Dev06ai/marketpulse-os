@@ -5,7 +5,7 @@ import os
 import time
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from starlette.middleware.gzip import GZipMiddleware
 from pydantic import BaseModel
 from dotenv import load_dotenv
@@ -526,9 +526,10 @@ async def on_state(s: MarketState):
                     "title": f"BTC {breakout.get('event','BREAKOUT')}",
                     "body": breakout.get('message', 'Breakout/reclaim detected.'),
                 }
-        if alert and push.ready and not clients:
+        if alert:
             last_opportunity_alert = {"key": alert["key"], "ts": now_alert, "title": alert["title"], "body": alert["body"]}
-            push.send_opportunity(alert)
+            if push.ready and not clients:
+                push.send_opportunity(alert)
 
         lifecycle_events = list(getattr(engine, "last_lifecycle_events", []) or [])
         if lifecycle_events:
@@ -927,14 +928,14 @@ async def risk(
         entry = float(engine.active_signal["entry"])
         stop = float(engine.active_signal["stop"])
         target = float(engine.active_signal["target2"])
-    return {"ready": True, **calculate_risk(
-        account_balance=account_balance,
-        risk_pct=risk_pct,
-        entry=entry,
-        stop=stop,
-        target=target,
-        hard_cap_pct=float(os.getenv("MAX_RISK_PCT", "1")),
-    )}
+    try:
+        return {"ready": True, **calculate_risk(
+            account_balance=account_balance, risk_pct=risk_pct,
+            entry=entry, stop=stop, target=target,
+            hard_cap_pct=float(os.getenv("MAX_RISK_PCT", "1")),
+        )}
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @app.get("/backtest/recent")

@@ -623,17 +623,20 @@ class BitgetMarketStream:
         now = int(time.time() * 1000)
         merged = {c.start: c for c in dest}
         for row in rows:
-            start = int(row[0])
-            candle = Candle(
-                start=start,
-                end=start + interval_ms - 1,
-                open=float(row[1]),
-                high=float(row[2]),
-                low=float(row[3]),
-                close=float(row[4]),
-                volume=float(row[5]) if len(row) > 5 else 0.0,
-                confirmed=start < (now // interval_ms) * interval_ms,
-            )
+            try:
+                start = int(row[0])
+                candle = Candle(
+                    start=start, end=start + interval_ms - 1,
+                    open=float(row[1]), high=float(row[2]), low=float(row[3]), close=float(row[4]),
+                    volume=float(row[5]) if len(row) > 5 else 0.0,
+                    confirmed=start < (now // interval_ms) * interval_ms,
+                )
+            except (TypeError, ValueError, IndexError, KeyError, OverflowError):
+                continue
+            if (not all(math.isfinite(v) for v in (candle.open,candle.high,candle.low,candle.close,candle.volume))
+                    or not 0 < candle.low <= min(candle.open,candle.close) <= max(candle.open,candle.close) <= candle.high
+                    or candle.volume < 0 or start % interval_ms != 0 or start > now):
+                continue
             # Do not overwrite a concurrently received live forming candle
             # with the older REST snapshot. Past unconfirmed bars can mature.
             if start not in merged or (not merged[start].confirmed and start < (now // interval_ms) * interval_ms):
@@ -724,21 +727,22 @@ class BitgetMarketStream:
                     try:
                         value = float(d[key])
                         if not math.isfinite(value) or (attr == "open_interest" and value < 0) or (attr not in {"funding_rate", "open_interest"} and value <= 0):
-                            return
+                            return False
                     except (TypeError, ValueError):
-                        return
+                        return False
                     parsed[attr] = value
                     break
         if not any(key in parsed for key in ("last_price", "bid", "ask")):
-            return
+            return False
         for attr, value in parsed.items():
             setattr(self.state, attr, value)
         now = int(time.time() * 1000)
         self.state.received_ts = now
         self.state.exchange_ts = exchange_ts
-        self.state.last_market_update_ts = now
+        self.state.last_market_update_ts = exchange_ts
         if self.state.open_interest is not None:
             self.state.oi_window.append((now, self.state.open_interest))
+        return True
 
     def _apply_book(self, data: dict, action: str):
         try:
@@ -806,6 +810,8 @@ class BitgetMarketStream:
             msg = json.loads(raw)
         except (TypeError, ValueError):
             return
+        if not isinstance(msg, dict) or not isinstance(msg.get("arg") or {}, dict):
+            return
         if msg.get("event") in {"subscribe", "error"}:
             arg = msg.get("arg") or {}
             topic = str(arg.get("topic") or arg.get("channel") or "unknown")
@@ -821,7 +827,11 @@ class BitgetMarketStream:
 
         now = int(time.time() * 1000)
         self.state.received_ts = now
-        self.state.exchange_ts = int(msg.get("ts", now) or now)
+        try:
+            exchange_ts = int(msg.get("ts", now) or now)
+        except (TypeError, ValueError, OverflowError):
+            return
+        self.state.exchange_ts = exchange_ts
         topic = str((msg.get("arg") or {}).get("topic") or "")
         if not topic:
             return
@@ -831,13 +841,13 @@ class BitgetMarketStream:
         # Only ticker/public-trade traffic proves the live price/trade path
         # is flowing again. A liquidation-only or acknowledgement message must
         # not let REST-refreshed state appear HEALTHY.
-        if topic in {"ticker", "publicTrade"}:
-            self.last_data_source = "BITGET_WS"
-
         rows = msg.get("data") or []
+        if not isinstance(rows, list):
+            return
         if topic == "ticker":
             if rows and isinstance(rows[0], dict):
-                self._apply_ticker(rows[0], self.state.exchange_ts)
+                if self._apply_ticker(rows[0], self.state.exchange_ts):
+                    self.last_data_source = "BITGET_WS"
         elif topic == "publicTrade":
             for trade in rows:
                 try:
@@ -854,6 +864,7 @@ class BitgetMarketStream:
                     continue
                 if exec_id:
                     self.recent_exec_ids.add(exec_id)
+                self.last_data_source = "BITGET_WS"
                 if side == "buy":
                     self.state.cvd += size
                 elif side == "sell":
@@ -863,7 +874,7 @@ class BitgetMarketStream:
                     self.volume_profile.ingest(exec_id,ts,price,size,now)
                     self.state.last_price = price
                     self.state.flow_history.append((ts, price, self.state.cvd, size))
-                self.state.last_market_update_ts = now
+                self.state.last_market_update_ts = ts
                 minute = ts // 60_000
                 if self.last_trade_minute != minute:
                     self.last_trade_minute = minute
@@ -873,14 +884,30 @@ class BitgetMarketStream:
         elif topic == "books5":
             if rows and isinstance(rows[0], dict):
                 data = rows[0]
-                self.state.orderbook_seq = int(data.get("seq", self.state.orderbook_seq or 0))
+                try:
+                    sequence = int(data.get("seq", self.state.orderbook_seq or 0))
+                except (TypeError, ValueError, OverflowError):
+                    self._invalidate_book()
+                    return
+                if self.state.orderbook_seq and sequence and sequence <= self.state.orderbook_seq:
+                    return  # A duplicate/replayed book cannot refresh depth.
                 if self._apply_book(data, str(msg.get("action") or "snapshot")):
-                    self.state.last_book_ts = now
+                    self.state.orderbook_seq = sequence
+                    # A replayed packet is not fresh depth just because it was
+                    # received now. Admission uses this exchange timestamp.
+                    self.state.last_book_ts = exchange_ts
         elif topic == "liquidation":
             for liq in rows:
+                if not isinstance(liq, dict):
+                    continue
                 side = str(liq.get("side") or "").lower()
-                amount = float(liq.get("amount", 0.0))
-                ts = int(liq.get("ts", self.state.exchange_ts) or self.state.exchange_ts)
+                try:
+                    amount = float(liq.get("amount", 0.0))
+                    ts = int(liq.get("ts", self.state.exchange_ts) or self.state.exchange_ts)
+                except (TypeError, ValueError, OverflowError):
+                    continue
+                if not math.isfinite(amount) or amount <= 0 or not 0 <= now-ts <= 5*60_000:
+                    continue
                 if side == "buy":
                     liquidation_side = "LONG"
                 elif side == "sell":
@@ -953,10 +980,10 @@ class BitgetMarketStream:
         if (
             self.state.ws_connected
             and self.last_data_source == "BITGET_WS"
-            and market_age < 3000
-            and trade_age < 15000
-            and book_age < 5000
-            and kline_age < 120_000
+            and -1000 <= market_age < 3000
+            and -1000 <= trade_age < 15000
+            and -1000 <= book_age < 5000
+            and -1000 <= kline_age < 120_000
         ):
             self.state.data_health = "HEALTHY"
         elif self.state.ws_connected and market_age < 5000:

@@ -565,6 +565,12 @@ class DemoExecutionEngine:
                 )
             except Exception as exc:
                 return {"ok": False, "skipped": True, "reason": f"Cannot verify {self.leverage}x Bitget Demo leverage: {exc}"}
+            # Leverage verification is another private request and can outlive
+            # the decision or the public feed. Check again before saving intent
+            # and sending an order, not only before that request.
+            allowed, reason = self._signal_allowed(signal, reconciliation_locked=True)
+            if not allowed:
+                return {"ok": False, "skipped": True, "reason": reason}
             # Bitget UTA permits at most 32 characters; use a deterministic ID
             # for retry/recovery rather than truncating the setup unpredictably.
             client_oid = client_identity(signal, risk_usdt)

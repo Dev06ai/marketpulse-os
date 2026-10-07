@@ -168,7 +168,7 @@ def test_bitget_rest_candle_backfill_does_not_mark_live_kline_fresh(monkeypatch)
     stream = BitgetMarketStream("BTCUSDT", on_state)
 
     async def fake_to_thread(fn, *args, **kwargs):
-        return [["1770000000000", "100000", "100100", "99900", "100050", "12.5"]]
+        return [["1769999400000", "100000", "100100", "99900", "100050", "12.5"]]
 
     import app.stream as stream_module
     monkeypatch.setattr(stream_module.asyncio, "to_thread", fake_to_thread)
