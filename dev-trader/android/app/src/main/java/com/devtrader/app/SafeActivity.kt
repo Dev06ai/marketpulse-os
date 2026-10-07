@@ -2089,7 +2089,7 @@ class SafeActivity : FragmentActivity() {
         }
         val logoFrame = FrameLayout(this).apply {
             background = gradient(
-                intArrayOf(Color.rgb(39, 34, 19), kySlate),
+                intArrayOf(KyvoriqTheme.graphite, KyvoriqTheme.slate),
                 GradientDrawable.Orientation.TL_BR
             ).apply {
                 cornerRadius = dp(14).toFloat()
@@ -2144,7 +2144,7 @@ class SafeActivity : FragmentActivity() {
             setLineSpacing(0f, 1.08f)
             setPadding(dp(12), dp(10), dp(12), dp(10))
             background = gradient(
-                intArrayOf(Color.rgb(28, 27, 20), KyvoriqTheme.surface),
+                intArrayOf(KyvoriqTheme.graphite, KyvoriqTheme.slate),
                 GradientDrawable.Orientation.LEFT_RIGHT
             ).apply {
                 cornerRadius = dp(14).toFloat()
@@ -2209,7 +2209,7 @@ class SafeActivity : FragmentActivity() {
                 includeFontPadding = false
                 background = GradientDrawable().apply {
                     cornerRadius = dp(13).toFloat()
-                    setColor(Color.rgb(35, 31, 18))
+                    setColor(KyvoriqTheme.graphite)
                     setStroke(dp(1), kyDeepGold)
                 }
             }
@@ -2790,7 +2790,7 @@ class SafeActivity : FragmentActivity() {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(16), dp(18), dp(16), dp(30))
             background = gradient(
-                intArrayOf(kyCharcoal, kyCharcoal, kyCharcoal),
+                intArrayOf(kyCharcoal, KyvoriqTheme.slate, KyvoriqTheme.graphite, kyCharcoal),
                 GradientDrawable.Orientation.TL_BR
             )
         }
