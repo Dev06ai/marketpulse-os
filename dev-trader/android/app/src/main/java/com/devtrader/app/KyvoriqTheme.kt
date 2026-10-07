@@ -14,15 +14,19 @@ import android.widget.Button
 
 /** Shared visual tokens: gold is identity; green/red remain trading information. */
 object KyvoriqTheme {
-    val gold = Color.rgb(231, 196, 106)
-    val deepGold = Color.rgb(184, 134, 11)
-    val ember = Color.rgb(221, 151, 65)
-    val charcoal = Color.rgb(13, 14, 16)
-    val surface = Color.rgb(26, 25, 23)
-    val raised = Color.rgb(39, 35, 28)
-    val border = Color.rgb(80, 65, 38)
-    val muted = Color.rgb(177, 171, 159)
-    val white = Color.rgb(245, 240, 228)
+    // KYVORIQ brand board — exact palette values.
+    val gold = Color.rgb(247, 201, 72)       // #F7C948
+    val ember = Color.rgb(224, 167, 46)      // #E0A72E
+    val deepGold = Color.rgb(184, 134, 11)   // #B8860B
+    val charcoal = Color.rgb(11, 15, 20)     // #0B0F14
+    val slate = Color.rgb(18, 24, 33)        // #121821
+    val graphite = Color.rgb(31, 41, 54)     // #1F2936
+    val gray = Color.rgb(156, 163, 175)      // #9CA3AF
+    val surface = slate
+    val raised = graphite
+    val border = Color.argb(170, 184, 134, 11)
+    val muted = gray
+    val white = Color.rgb(245, 247, 250)
     val motion = PathInterpolator(0.20f, 0.80f, 0.20f, 1f)
 
     fun motionEnabled(context: Context): Boolean = ValueAnimator.areAnimatorsEnabled() &&
@@ -30,12 +34,15 @@ object KyvoriqTheme {
 
     fun button(context: Context, selected: Boolean = false, radius: Float = 12f): Drawable {
         val density = context.resources.displayMetrics.density
-        val shape = GradientDrawable(GradientDrawable.Orientation.TL_BR,
-            if (selected) intArrayOf(gold, deepGold) else intArrayOf(raised, surface)).apply {
+        val shape = GradientDrawable(
+            GradientDrawable.Orientation.TL_BR,
+            if (selected) intArrayOf(gold, ember, deepGold)
+            else intArrayOf(graphite, slate, charcoal)
+        ).apply {
             cornerRadius = radius * density
             setStroke(density.toInt().coerceAtLeast(1), ColorStateList(
                 arrayOf(intArrayOf(android.R.attr.state_focused), intArrayOf()),
-                intArrayOf(gold, if (selected) gold else border)))
+                intArrayOf(gold, if (selected) deepGold else Color.argb(150, 184, 134, 11))))
         }
         return RippleDrawable(ColorStateList.valueOf(Color.argb(46, 247, 201, 72)), shape, null)
     }
@@ -81,16 +88,21 @@ private class GoldSurfaceDrawable(
     override fun onBoundsChange(bounds: Rect) {
         rect.set(bounds); rect.inset(density * 0.5f, density * 0.5f)
         clip.reset(); clip.addRoundRect(rect, radiusPx, radiusPx, Path.Direction.CW)
-        fill = LinearGradient(rect.left, rect.top, rect.right, rect.bottom,
-            if (prominent) intArrayOf(Color.rgb(53, 42, 23), Color.rgb(28, 25, 20), KyvoriqTheme.surface)
-            else intArrayOf(Color.rgb(33, 30, 25), KyvoriqTheme.surface, Color.rgb(20, 20, 19)),
-            null, Shader.TileMode.CLAMP)
+        fill = LinearGradient(
+            rect.left, rect.top, rect.right, rect.bottom,
+            if (prominent) intArrayOf(KyvoriqTheme.graphite, KyvoriqTheme.slate, KyvoriqTheme.charcoal)
+            else intArrayOf(KyvoriqTheme.slate, KyvoriqTheme.charcoal, KyvoriqTheme.graphite),
+            null, Shader.TileMode.CLAMP
+        )
         glow = RadialGradient(rect.left + rect.width() * .12f, rect.top,
             rect.width().coerceAtLeast(1f) * .85f,
-            Color.argb(if (prominent) 30 else 10, 221, 151, 65), Color.TRANSPARENT, Shader.TileMode.CLAMP)
+            Color.argb(if (prominent) 34 else 12, 224, 167, 46), Color.TRANSPARENT, Shader.TileMode.CLAMP)
         rim = LinearGradient(rect.left, rect.top, rect.right, rect.bottom,
-            intArrayOf(if (prominent) KyvoriqTheme.deepGold else KyvoriqTheme.border,
-                KyvoriqTheme.border, Color.rgb(48, 43, 33)), null, Shader.TileMode.CLAMP)
+            intArrayOf(
+                if (prominent) KyvoriqTheme.deepGold else Color.argb(120, 184, 134, 11),
+                Color.argb(120, 184, 134, 11),
+                KyvoriqTheme.graphite
+            ), null, Shader.TileMode.CLAMP)
     }
     override fun draw(canvas: Canvas) {
         paint.alpha = drawableAlpha
@@ -102,7 +114,7 @@ private class GoldSurfaceDrawable(
         canvas.drawRoundRect(rect, radiusPx, radiusPx, edge)
         if (prominent) {
             val save = canvas.save(); canvas.clipPath(clip)
-            paint.shader = null; paint.color = Color.argb(13 * drawableAlpha / 255, 231, 196, 106)
+            paint.shader = null; paint.color = Color.argb(16 * drawableAlpha / 255, 247, 201, 72)
             val x = rect.right - rect.width() * .22f
             val facet = Path().apply {
                 moveTo(x, rect.top); lineTo(rect.right, rect.top)
