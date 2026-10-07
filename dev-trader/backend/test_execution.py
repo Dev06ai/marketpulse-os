@@ -653,6 +653,65 @@ def test_feed_execution_is_scheduled_without_waiting_for_exchange(monkeypatch):
     assert not main.execution_tasks
 
 
+def test_conclusively_skipped_execution_closes_remote_open_prediction(monkeypatch):
+    from app import main
+
+    class FakeBridge:
+        enabled = True
+        def __init__(self):
+            self.outcomes = []
+        async def post_outcome(self, signal, outcome, result_r):
+            self.outcomes.append((signal.get("id"), outcome, result_r))
+            return {"ok": True}
+
+    sid = "REMOTE-SKIP"
+    fake_bridge = FakeBridge()
+    main.engine.active_signals[sid] = {"id": sid}
+    main.engine.active_signal = main.engine.active_signals[sid]
+
+    async def skip(_payload):
+        return {"ok": False, "skipped": True, "reason": "verified no entry"}
+
+    def reconcile():
+        main.engine.active_signals.pop(sid, None)
+        main.engine.active_signal = None
+
+    monkeypatch.setattr(main, "bridge", fake_bridge)
+    monkeypatch.setattr(main.execution, "handle_signal", skip)
+    monkeypatch.setattr(main, "reconcile_execution_truth", reconcile)
+
+    asyncio.run(main.execute_signal({"id": sid, "direction": "LONG"}))
+    assert fake_bridge.outcomes == [(sid, "NOT_EXECUTED", 0.0)]
+
+
+def test_duplicate_or_uncertain_skip_does_not_close_remote_prediction(monkeypatch):
+    from app import main
+
+    class FakeBridge:
+        enabled = True
+        def __init__(self):
+            self.outcomes = []
+        async def post_outcome(self, signal, outcome, result_r):
+            self.outcomes.append((signal.get("id"), outcome, result_r))
+
+    sid = "REMOTE-STILL-ACTIVE"
+    fake_bridge = FakeBridge()
+    main.engine.active_signals[sid] = {"id": sid}
+    main.engine.active_signal = main.engine.active_signals[sid]
+
+    async def skip(_payload):
+        return {"ok": False, "skipped": True, "reason": "already submitted"}
+
+    monkeypatch.setattr(main, "bridge", fake_bridge)
+    monkeypatch.setattr(main.execution, "handle_signal", skip)
+    monkeypatch.setattr(main, "reconcile_execution_truth", lambda: None)
+
+    asyncio.run(main.execute_signal({"id": sid, "direction": "LONG"}))
+    assert fake_bridge.outcomes == []
+    main.engine.active_signals.pop(sid, None)
+    main.engine.active_signal = None
+
+
 def test_filled_status_without_actual_values_stays_unconfirmed(monkeypatch, tmp_path):
     executor = audit_executor(monkeypatch, tmp_path)
     executor.client.order_detail = lambda *args: dict(orderStatus='filled', cumExecQty='0', avgPrice='0')

@@ -387,6 +387,14 @@ async def execute_signal(payload: dict):
             active["execution_status"] = result.get("trade", {}).get("status") if result.get("ok") else "SKIPPED" if result.get("skipped") else "FAILED"
             active["execution_reason"] = result.get("reason", "Exchange submission accepted")
         reconcile_execution_truth()
+        # The strategy prediction is persisted before the private exchange
+        # checks run. If Bitget conclusively skips the entry and reconciliation
+        # retires the local signal, close the durable prediction too so a restart
+        # cannot resurrect a trade that never existed. Do not do this when the
+        # signal remains active: duplicate/uncertain submissions may already
+        # correspond to real exchange exposure.
+        if result.get("skipped") and sid and sid not in engine.active_signals and bridge.enabled:
+            await bridge.post_outcome(payload, "NOT_EXECUTED", 0.0)
         engine.journal.record("EXECUTION",dict(signal_id=sid,ok=result.get("ok"),
             skipped=result.get("skipped"),reason=result.get("reason"),trade=result.get("trade")),
             identity="execution:"+sid)

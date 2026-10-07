@@ -43,7 +43,7 @@ class DemoExecutionEngine:
             raise ValueError("Demo confidence-margin bands are invalid.")
         if not 0.70 <= self.high_confidence_threshold < 1.0:
             raise ValueError("BITGET_DEMO_HIGH_CONFIDENCE must be between 0.70 and 1.0.")
-        self.max_planned_loss_pct = float(os.getenv("BITGET_DEMO_MAX_PLANNED_LOSS_PCT", "2.0"))
+        self.max_planned_loss_pct = float(os.getenv("BITGET_DEMO_MAX_PLANNED_LOSS_PCT", "1.0"))
         if not math.isfinite(self.max_planned_loss_pct) or not 0 < self.max_planned_loss_pct <= 5:
             raise ValueError("BITGET_DEMO_MAX_PLANNED_LOSS_PCT must be finite and between 0 and 5 percent.")
         self.risk_pct = self.max_planned_loss_pct
@@ -233,7 +233,33 @@ class DemoExecutionEngine:
         balance = min(balance, equity) if equity > 0 else balance
         peak = self._num(account.get("observed_peak_usdt"), equity)
         risk_factor = 0.5 if peak > 0 and equity > 0 and equity < peak * 0.98 else 1.0
-        risk_cap = balance * self.max_planned_loss_pct * risk_factor / 100.0
+        per_trade_cap = balance * self.max_planned_loss_pct * risk_factor / 100.0
+
+        # The confidence-margin refactor must never allow one planned stop to
+        # exceed the remaining daily loss budget. Use the UTC day-open equity
+        # when available and never let today's profits increase that budget.
+        loss_limit_pct = max(0.0, float(os.getenv("BITGET_DEMO_MAX_DAILY_LOSS_PCT", "1.0")))
+        day_equity = self._num(account.get("utc_day_open_equity_usdt"))
+        daily_base = day_equity if day_equity > 0 else (equity if equity > 0 else balance)
+        daily_cap = daily_base * loss_limit_pct / 100.0
+
+        day_start = int(time.time()) // 86400 * 86400000
+        ledger = self.data.get("fill_ledger") or {}
+        daily_net = 0.0
+        if ledger.get("complete_window") and ledger.get("fee_accounting_complete"):
+            daily_net = self._num((ledger.get("daily_net_usdt") or {}).get(str(day_start)))
+        else:
+            daily_net = sum(
+                self._num(row.get("net_profit_usdt"))
+                for row in self.data.get("trades", [])
+                if row.get("status") == "CLOSED" and self._num(row.get("closed_ts")) >= day_start
+            )
+        realized_remaining = max(0.0, daily_cap - max(0.0, -daily_net))
+        equity_drawdown = max(0.0, daily_base - equity) if equity > 0 and daily_base > 0 else 0.0
+        equity_remaining = max(0.0, daily_cap - equity_drawdown)
+        risk_cap = min(per_trade_cap, realized_remaining, equity_remaining)
+        if risk_cap <= 0:
+            raise BitgetDemoError("Daily demo loss budget is exhausted; no new planned stop risk is allowed.")
         return balance, risk_cap
 
     async def _risk_size(self, signal: dict[str, Any]) -> tuple[float, float, dict[str, Any]]:
@@ -344,7 +370,8 @@ class DemoExecutionEngine:
             daily_net = min(daily_net, fill_net)
         balance = self._num((self.data.get("client_status") or {}).get("available_balance_usdt"))
         loss_limit = max(0.0, float(os.getenv("BITGET_DEMO_MAX_DAILY_LOSS_PCT", "1.0")))
-        if balance > 0 and daily_net < 0 and abs(daily_net) >= balance * loss_limit / 100:
+        daily_base = day_equity if day_equity > 0 else (equity if equity > 0 else balance)
+        if daily_base > 0 and daily_net < 0 and abs(daily_net) >= daily_base * loss_limit / 100:
             return False, "Demo daily loss limit reached; entries paused until the next UTC day."
         direction = str(signal.get("direction", "")).upper()
         grade = str(signal.get("grade", "")).upper()
@@ -1627,6 +1654,10 @@ class DemoExecutionEngine:
             "daily_cap": self.max_daily,
             "risk_pct": self.risk_pct,
             "max_planned_loss_pct": self.max_planned_loss_pct,
+            "effective_max_planned_loss_pct": min(
+                self.max_planned_loss_pct,
+                float(os.getenv("BITGET_DEMO_MAX_DAILY_LOSS_PCT", "1.0")),
+            ),
             "leverage": self.leverage,
             "max_notional_usdt": self.max_notional,
             "margin_sizing": {

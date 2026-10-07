@@ -781,6 +781,18 @@ class StrategyEngine:
             self.daily_signal_count = 0
             self.governor_lock_reason = ""
 
+    @staticmethod
+    def _counts_toward_daily_quota(row: dict) -> bool:
+        status = str(row.get("status") or row.get("execution_status") or "").upper()
+        outcome = str(row.get("outcome") or "").upper()
+        if status in {"NOT_EXECUTED","SKIPPED","REJECTED","CANCELLED","FAILED"}:
+            return False
+        if outcome in {"NOT_EXECUTED","SKIPPED","REJECTED","CANCELLED","FAILED"}:
+            return False
+        if row.get("actual_fill_confirmed") is False and status in {"ERROR","RECONCILIATION_FAILED"}:
+            return False
+        return True
+
     def _rehydrate_signal_governor(self):
         """Restore daily quota and all unresolved active signals after restart."""
         self._rotate_governor_day()
@@ -802,7 +814,7 @@ class StrategyEngine:
             resolved = int(row.get("resolved_ts") or 0)
             if opened:
                 opened_day = datetime.fromtimestamp(opened / 1000, tz=timezone.utc).date().isoformat()
-                if opened_day == day:
+                if opened_day == day and self._counts_toward_daily_quota(row):
                     daily += 1
             if resolved:
                 last_resolved = max(last_resolved, resolved)
@@ -863,7 +875,7 @@ class StrategyEngine:
                     opened_day = datetime.fromtimestamp(opened / 1000, tz=timezone.utc).date().isoformat()
                 except (ValueError, OSError, OverflowError):
                     opened_day = ""
-                if opened_day == today:
+                if opened_day == today and self._counts_toward_daily_quota(row):
                     daily += 1
             try:
                 resolved = int(row.get("resolved_ts") or 0)
@@ -990,13 +1002,21 @@ class StrategyEngine:
         """High-conviction decision layer designed to reject marginal entries."""
         f = compute_features(state)
         if signal.evidence.get("playbook"):
-            allowed,reason=playbook_admission(signal,state,f,int(time.time()*1000))
+            allowed,reason=playbook_admission(
+                signal,
+                state,
+                f,
+                int(time.time()*1000),
+                min_confidence=_decision_min_confidence(),
+                min_rr=_quality_min_rr(),
+            )
             room=entry_room(signal,state,f)
             signal.evidence["entry_room"]=room
             learned=self.learning.decision_filter(signal.to_dict())
             signal.evidence["decision_engine"]={"historical_filter":learned,"policy":"PLAYBOOK_V3",
                 "confirmations":int(signal.evidence["playbook"]["trend_aligned"])+int(signal.evidence["playbook"]["at_htf_level"]),
-                "decision_min_confidence":.78}
+                "decision_min_confidence":_decision_min_confidence(),
+                "quality_min_rr":_quality_min_rr()}
             failures=[reason] if not allowed else []
             if not room["allow"]: failures.append(room["reason"])
             if not learned["allow"]: failures.append(learned["reason"])
@@ -2415,7 +2435,7 @@ class StrategyEngine:
         signal = _signal(
             id=f"level-reaction-{reaction.get('id','level')}-{reaction.get('reaction_candle_start',played_at)}-{direction.lower()}",
             direction=direction,
-            setup=f"{label} Level Reaction • SFP",
+            setup=f"{label} Level Reaction",
             entry=entry,
             stop=raw_stop,
             target=raw_target,
@@ -2968,6 +2988,9 @@ class StrategyEngine:
         signal.update(lifecycle="NOT_EXECUTED", lifecycle_stage="NOT_EXECUTED",
             execution_status=status, execution_reason=reason, retired_ts=ts)
         self.learning.retire_unexecuted(signal_id, reason, ts)
+        # A plan that never reached exchange exposure must not consume one of
+        # the day's scarce executable-signal slots.
+        self.daily_signal_count = max(0, self.daily_signal_count - 1)
         for row in self.signal_history:
             if row.get("id") == signal_id:
                 row.update(status="NOT_EXECUTED", execution_status=status,

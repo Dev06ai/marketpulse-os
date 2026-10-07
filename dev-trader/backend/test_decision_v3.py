@@ -9,7 +9,7 @@ from app.evaluation import (exit_observation, advance_exit, ShadowEvaluator,
                             chronological_split, replay_decisions)
 from app.journal import DecisionJournal, performance_scorecard
 from app.models import Candle, MarketState, aggregate_candles
-from app.playbooks import policy, admission
+from app.playbooks import policy, admission, family
 from app.structure import confirmed_swings, timeframe_structure, RegimeSelector
 from app.trade_profile import TradeVolumeProfile, DAY_MS
 from test_execution import audit_executor, audit_signal
@@ -164,6 +164,38 @@ def test_sfp_must_be_at_major_level_and_have_independent_flow():
     assert admission(s,state,f,1100)[0]
 
 
+def test_playbook_admission_uses_quality_governor_rr_threshold():
+    f=features();s=setup();state=MarketState(last_price=100000,data_health="HEALTHY",
+        last_market_update_ts=1000,last_trade_ts=1000,last_book_ts=1000)
+    s.rr=2.5
+    s.evidence["playbook"]=policy(s,state,f,dict(regime="TREND_UP"))
+    allowed,reason=admission(s,state,f,1100,min_confidence=.78,min_rr=3.0)
+    assert not allowed and "R:R >= 3.00" in reason
+    s.rr=3.1
+    assert admission(s,state,f,1100,min_confidence=.78,min_rr=3.0)[0]
+
+
+def test_mapped_level_reaction_has_dedicated_playbook_and_freshness_guard():
+    now=100_000
+    f=features();f.book_imbalance=.2
+    s=setup("15M OB Level Reaction","LONG")
+    s.evidence["level_reaction"]={
+        "kind":"OB","label":"15M OB","direction":"LONG","state":"PLAYED",
+        "played_at_ms":now-10_000,"price":99950,
+    }
+    state=MarketState(last_price=100000,data_health="HEALTHY",
+        last_market_update_ts=now,last_trade_ts=now,last_book_ts=now)
+    assert family(s.setup)=="LEVEL_REACTION"
+    s.evidence["playbook"]=policy(s,state,f,dict(regime="TREND_UP"))
+    assert s.evidence["playbook"]["allow"]
+    assert s.evidence["playbook"]["at_htf_level"]
+    assert admission(s,state,f,now,min_confidence=.78,min_rr=3.0)[0]
+    s.evidence["level_reaction"]["played_at_ms"]=now-181_000
+    allowed,reason=admission(s,state,f,now,min_confidence=.78,min_rr=3.0)
+    assert not allowed and "stale" in reason
+
+
+
 @pytest.mark.parametrize("field",["last_market_update_ts","last_trade_ts","last_book_ts"])
 def test_v3_never_approves_stale_or_future_feeds(field):
     f=features();s=setup();state=MarketState(last_price=100000,data_health="HEALTHY",
@@ -314,7 +346,7 @@ def test_engine_selects_a_v3_playbook_and_journals_the_decision(monkeypatch,tmp_
     monkeypatch.setattr(engine,"_momentum_signal",lambda state,f:None)
     state=MarketState(last_price=100000,data_health="HEALTHY",last_market_update_ts=now,last_trade_ts=now,last_book_ts=now)
     assert engine.evaluate(state).id==signal.id
-    assert engine.active_signal["engine_revision"]=="market-decision-v3.2"
+    assert engine.active_signal["engine_revision"]=="market-decision-v3.3"
     record=engine.journal.records(1,"DECISION")[0]
     assert record["report"]["selected"]==signal.id
     assert record["candidates"][0]["family"]=="TREND_PULLBACK"
@@ -324,7 +356,7 @@ def test_engine_selects_a_v3_playbook_and_journals_the_decision(monkeypatch,tmp_
 def test_evaluation_endpoints_keep_shadow_and_real_results_distinct():
     from app import main
     report=asyncio.run(main.evaluation())
-    assert report["engine_revision"]=="market-decision-v3.2"
+    assert report["engine_revision"]=="market-decision-v3.3"
     assert report["shadow"]["mode"]=="SHADOW_ONLY"
     assert not report["scorecard"]["profitability_proven"]
     replay=asyncio.run(main.decision_replay(1))

@@ -4,6 +4,7 @@ import math
 
 def family(setup):
     name=setup.upper()
+    if "LEVEL REACTION" in name: return "LEVEL_REACTION"
     if "SFP" in name: return "SFP_REVERSAL"
     if "RETEST" in name: return "BREAKOUT_RETEST"
     if "PULLBACK" in name: return "TREND_PULLBACK"
@@ -29,6 +30,18 @@ def policy(signal, state, features, regime):
     kind="LOW" if direction == "LONG" else "HIGH"
     levels += [l["price"] for tf in (h,f4) for l in tf.get("levels",[]) if l["kind"] == kind and l["status"] in {"ACTIVE","TOUCHED"}]
     at_level=any(level and abs(price-level) <= 1.5*atr for level in levels)
+    reaction = signal.evidence.get("level_reaction") or {}
+    reaction_kind = str(reaction.get("kind") or "").upper()
+    reaction_direction = str(reaction.get("direction") or "").upper()
+    reaction_state = str(reaction.get("state") or "").upper()
+    valid_level_reaction = (
+        name == "LEVEL_REACTION"
+        and reaction_kind in {"DAILY","WEEKLY_OPEN","NPOC","OB","SFP"}
+        and reaction_direction == direction
+        and reaction_state in {"PLAYED","TRIGGERED","REACTION_CONFIRMED"}
+    )
+    if valid_level_reaction:
+        at_level = True
     if regime_name in {"UNKNOWN","HIGH_VOL"}:
         reasons.append("Market condition is warming or unstable")
     if h.get("status") != "READY" or not h.get("contiguous_recent",False):
@@ -38,6 +51,15 @@ def policy(signal, state, features, regime):
             reasons.append("SFP lacks a nearby daily/weekly/confirmed higher-timeframe swing level")
         if not trend_aligned and regime_name != "RANGE":
             reasons.append("Counter-trend SFP requires a stable range condition")
+    elif name == "LEVEL_REACTION":
+        if not valid_level_reaction:
+            reasons.append("Level-reaction candidate is missing a fresh confirmed mapped-level reaction")
+        if reaction_kind == "OB" and not trend_aligned:
+            reasons.append("Order-block reaction is counter to the confirmed 1h trend")
+        if structure_opposed and reaction_kind == "OB":
+            reasons.append("Order-block reaction conflicts with confirmed 1h structure")
+        if features.trend_240 in {"UP","DOWN"} and features.trend_240 != expected and reaction_kind == "OB":
+            reasons.append("Order-block reaction conflicts with 4h context")
     elif name == "EARLY_MOMENTUM":
         if structure_opposed or features.trend_15 == ("DOWN" if direction == "LONG" else "UP"):
             reasons.append("Early momentum conflicts with confirmed structure")
@@ -69,7 +91,7 @@ def policy(signal, state, features, regime):
                 pattern_context="ELLIOTT_AND_HARMONIC_OBSERVATION_ONLY")
 
 
-def admission(signal,state,features,now):
+def admission(signal,state,features,now, min_confidence=.78, min_rr=3.0):
     reasons=[]
     direction=signal.direction
     playbook=signal.evidence["playbook"]
@@ -89,12 +111,20 @@ def admission(signal,state,features,now):
         reasons.append("Order book materially opposes the trade")
     flow=((direction == "LONG" and (features.book_imbalance > .1 or features.cvd_price_divergence == "BULLISH"))
           or (direction == "SHORT" and (features.book_imbalance < -.1 or features.cvd_price_divergence == "BEARISH")))
-    if playbook["family"] in {"SFP_REVERSAL","EARLY_MOMENTUM"} and not flow:
+    if playbook["family"] in {"SFP_REVERSAL","EARLY_MOMENTUM","LEVEL_REACTION"} and not flow:
         reasons.append("Early trigger needs independent directional order-flow confirmation")
+    if playbook["family"] == "LEVEL_REACTION":
+        reaction = signal.evidence.get("level_reaction") or {}
+        played_at = int(reaction.get("played_at_ms") or 0)
+        if not played_at or now - played_at < 0 or now - played_at > 180_000:
+            reasons.append("Mapped-level reaction is stale or has an invalid timestamp")
     # An evidence score is not a win probability. Trigger, location and flow
     # do not multiply into a fictitious probability of success.
-    if signal.confidence < .78 or signal.grade != "A" or signal.rr < 2.2:
-        reasons.append("Setup does not meet the retained evidence/grade/reward thresholds")
+    if signal.confidence < float(min_confidence) or signal.grade != "A" or signal.rr < float(min_rr):
+        reasons.append(
+            f"Setup does not meet retained evidence/grade/reward thresholds "
+            f"(confidence >= {float(min_confidence):.0%}, Grade A, R:R >= {float(min_rr):.2f})"
+        )
     return not reasons,"; ".join(reasons)
 
 

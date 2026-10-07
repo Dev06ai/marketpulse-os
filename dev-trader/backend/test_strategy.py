@@ -139,6 +139,51 @@ def test_quality_governor_enforces_daily_cap():
     assert "DAILY CAP" in engine.governor_status()["lock_reason"]
 
 
+def test_unexecuted_signal_releases_daily_quota_and_stays_released_after_restart(monkeypatch, tmp_path):
+    from app.strategy import StrategyEngine
+    state_file = str(tmp_path / "learning.json")
+    monkeypatch.setenv("LEARNING_STATE_FILE", state_file)
+
+    engine = StrategyEngine()
+    signal = {
+        "id": "SKIP-1",
+        "direction": "LONG",
+        "setup": "15M OB Level Reaction",
+        "entry": 100000.0,
+        "stop": 99500.0,
+        "target1": 101500.0,
+        "target2": 103000.0,
+        "rr": 6.0,
+        "confidence": 0.85,
+        "grade": "A",
+        "timeframe": "5m",
+        "created_ts": int(time.time() * 1000),
+    }
+    engine.active_signals[signal["id"]] = dict(signal)
+    engine.active_signal = engine.active_signals[signal["id"]]
+    engine.daily_signal_count = 1
+    engine.learning.record_open(signal)
+
+    engine.retire_unexecuted_signal(signal["id"], "exchange admission skipped")
+    assert engine.daily_signal_count == 0
+    assert engine.learning.recent_trades()[0]["status"] == "NOT_EXECUTED"
+
+    restarted = StrategyEngine()
+    assert restarted.daily_signal_count == 0
+    assert signal["id"] not in restarted.active_signals
+
+
+def test_remote_not_executed_prediction_does_not_consume_daily_quota(monkeypatch, tmp_path):
+    from app.strategy import StrategyEngine
+    monkeypatch.setenv("LEARNING_STATE_FILE", str(tmp_path / "learning.json"))
+    engine = StrategyEngine()
+    now = int(time.time() * 1000)
+    engine.rehydrate_remote_history([
+        {"id": "remote-skip", "opened_ts": now, "status": "NOT_EXECUTED"},
+    ])
+    assert engine.daily_signal_count == 0
+
+
 def test_quality_governor_enforces_post_resolution_cooldown():
     from app.strategy import StrategyEngine
     import time as _time
