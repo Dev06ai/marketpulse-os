@@ -72,6 +72,7 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 
 // Build 87: backend executes every emitted trade call; Android client remains signal/event driven.
+// Build 123: final retry-hardened reaction-map release trigger.
 // Build 123: final verified reaction-map label-lane release trigger.
 // Build 123: separate execution chips from reaction-map label lane for clean chart readability.
 // Build 122: Dewald reaction-map fallback verified; publish-permission release trigger.
