@@ -2410,6 +2410,12 @@ class StrategyEngine:
         entry = float(state.last_price)
         if level <= 0 or entry <= 0:
             return None
+        try:
+            zone_low, zone_high = sorted((float(reaction.get("zone_low")), float(reaction.get("zone_high"))))
+            is_zone = zone_low > 0 and zone_high > 0
+        except (TypeError, ValueError):
+            zone_low = zone_high = level
+            is_zone = False
 
         reaction_low = reaction.get("reaction_candle_low")
         reaction_high = reaction.get("reaction_candle_high")
@@ -2431,7 +2437,7 @@ class StrategyEngine:
         atr = max(float(f.atr_15 or 0.0), entry * 0.0005)
         buffer = max(atr * 0.16, entry * 0.00022)
         if direction == "LONG":
-            raw_stop = min(reaction_low, level - buffer)
+            raw_stop = min(reaction_low, (zone_low if is_zone else level) - buffer)
             above = sorted(
                 float(row.get("price"))
                 for row in (self.level_reaction_state.get("levels") or [])
@@ -2439,7 +2445,7 @@ class StrategyEngine:
             )
             raw_target = above[0] if above else entry + max(entry - raw_stop, atr) * 3.0
         else:
-            raw_stop = max(reaction_high, level + buffer)
+            raw_stop = max(reaction_high, (zone_high if is_zone else level) + buffer)
             below = sorted(
                 (
                     float(row.get("price"))
@@ -2454,12 +2460,13 @@ class StrategyEngine:
         signal = _signal(
             id=f"level-reaction-{reaction.get('id','level')}-{reaction.get('reaction_candle_start',played_at)}-{direction.lower()}",
             direction=direction,
-            setup=f"{label} Level Reaction",
+            setup=f"{label} {'Zone' if is_zone else 'Level'} Reaction",
             entry=entry,
             stop=raw_stop,
             target=raw_target,
             timeframe="5m",
-            invalidation=f"5m acceptance back through {label} at {level:.2f}",
+            invalidation=(f"5m acceptance back through {label} zone {zone_low:.2f}-{zone_high:.2f}" if is_zone
+                          else f"5m acceptance back through {label} at {level:.2f}"),
             f=f,
             thesis=[
                 f"{label} at {level:.2f} was already mapped before the reaction.",
@@ -2475,7 +2482,11 @@ class StrategyEngine:
                 "high": reaction_high,
                 "source": "REACTION_CANDLE",
             }
-            signal.evidence["level_reaction_policy"] = "MAPPED_BEFORE_TRIGGER_REACTION_REQUIRED_NO_BLIND_LEVEL_ENTRY"
+            signal.evidence["level_reaction_score"] = int(reaction.get("reaction_score") or 0)
+            signal.evidence["level_reaction_confirmations"] = list(reaction.get("reaction_confirmations") or [])
+            signal.evidence["level_reaction_policy"] = "MAPPED_BEFORE_TRIGGER_REACTION_SCORE_REQUIRED_NO_BLIND_LEVEL_ENTRY"
+            if reaction.get("pack_id"):
+                signal.evidence["manual_level_pack"] = reaction.get("pack_id")
         return signal
 
     def diagnostics(self, state: MarketState) -> dict:
