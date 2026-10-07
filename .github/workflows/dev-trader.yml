@@ -69,11 +69,12 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '9.6.0'
-      - name: Verify the live host with Android's HTTP and socket library
+      - name: Verify live host after backend changes
+        if: steps.backend_changed.outputs.backend_changed == 'true'
         run: |
           ok=false
           for attempt in {1..4}; do
-            echo "Host probe attempt $attempt/4"
+            echo "Strict host probe attempt $attempt/4"
             if gradle -p dev-trader/tools/host-probe run --args='https://dev-trader-engine.de.deplexo.com' --stacktrace; then
               ok=true
               break
@@ -83,6 +84,11 @@ jobs:
             fi
           done
           test "$ok" = "true"
+      - name: Report live host health for client-only changes
+        if: steps.backend_changed.outputs.backend_changed != 'true'
+        continue-on-error: true
+        run: |
+          gradle -p dev-trader/tools/host-probe run --args='https://dev-trader-engine.de.deplexo.com' --stacktrace
       - name: Wait for audited Deplexo reaction-map backend
         if: steps.backend_changed.outputs.backend_changed == 'true'
         run: |
