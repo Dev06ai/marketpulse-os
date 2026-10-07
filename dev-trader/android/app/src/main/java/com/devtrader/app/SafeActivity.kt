@@ -72,6 +72,7 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 
 // Build 87: backend executes every emitted trade call; Android client remains signal/event driven.
+// Build 122: embed Dewald reaction-map fallback until backend redeploy.
 // Build 121: final reaction-map verification trigger.
 class SafeActivity : FragmentActivity() {
     private val kyGold = KyvoriqTheme.gold
@@ -2313,6 +2314,7 @@ class SafeActivity : FragmentActivity() {
     private fun chartOverlays(root: JSONObject?): JSONArray {
         val out = JSONArray()
         val prices = mutableListOf<Double>()
+        var manualPackPresent = false
 
         fun add(
             kind: String,
@@ -2358,6 +2360,9 @@ class SafeActivity : FragmentActivity() {
         root?.optJSONArray("chart_overlays")?.let { arr ->
             for (i in 0 until arr.length()) {
                 val row = arr.optJSONObject(i) ?: continue
+                if (row.optBoolean("manual", false) || row.optString("pack_id", "").isNotBlank()) {
+                    manualPackPresent = true
+                }
                 add(
                     row.optString("kind", "LEVEL"),
                     row.optString("label", row.optString("kind", "LEVEL")),
@@ -2377,6 +2382,52 @@ class SafeActivity : FragmentActivity() {
                     row.optInt("reaction_score", 0)
                 )
             }
+        }
+
+        // Compatibility fallback while the live backend is still on an older
+        // revision. Once the backend emits the same pack, these rows are not
+        // added and backend state/status remains authoritative.
+        if (!manualPackPresent) {
+            val packId = "dewald_levels_2026_10_07"
+            listOf(
+                arrayOf("NPOC", "nPOC", 89409.5, "SHORT"),
+                arrayOf("DAILY", "Daily", 89261.7, "SHORT"),
+                arrayOf("NPOC", "nPOC", 87996.6, "SHORT"),
+                arrayOf("WEEKLY_NPOC", "Weekly nPOC", 87783.9, "SHORT"),
+                arrayOf("DAILY", "Daily", 86482.8, "SHORT"),
+                arrayOf("NPOC", "nPOC", 85563.9, "SHORT"),
+                arrayOf("DAILY", "Daily - Tapped", 84482.8, "LONG"),
+                arrayOf("DAILY", "84,193.3", 84193.3, "LONG"),
+                arrayOf("DAILY", "Daily", 83576.9, "LONG"),
+                arrayOf("WEEKLY_NPOC", "Weekly nPOC", 83389.9, "LONG"),
+                arrayOf("RANGE_POC", "Range POC", 81242.8, "LONG"),
+                arrayOf("DAILY", "Daily", 81143.9, "LONG"),
+                arrayOf("NPOC", "nPOC", 80463.9, "LONG")
+            ).forEach { row ->
+                add(
+                    kind = row[0] as String,
+                    label = row[1] as String,
+                    price = row[2] as Double,
+                    status = "WATCH",
+                    direction = row[3] as String,
+                    source = "MANUAL_LEVEL_PACK_FALLBACK",
+                    manual = true,
+                    packId = packId,
+                    priority = 10
+                )
+            }
+            add("SUPPLY_ZONE", "Supply Zone", 88450.0, "WATCH", "SHORT",
+                zoneLow = 88020.0, zoneHigh = 88880.0, source = "MANUAL_LEVEL_PACK_FALLBACK",
+                manual = true, packId = packId, priority = 10, estimated = true)
+            add("OB_ZONE", "12H OB", 85900.0, "WATCH", "SHORT",
+                zoneLow = 85620.0, zoneHigh = 86180.0, source = "MANUAL_LEVEL_PACK_FALLBACK",
+                manual = true, packId = packId, priority = 9, estimated = true)
+            add("OB_ZONE", "1H OB", 83205.0, "WATCH", "LONG",
+                zoneLow = 83020.0, zoneHigh = 83390.0, source = "MANUAL_LEVEL_PACK_FALLBACK",
+                manual = true, packId = packId, priority = 9, estimated = true)
+            add("OB_ZONE", "Daily OB", 80860.0, "WATCH", "LONG",
+                zoneLow = 80460.0, zoneHigh = 81260.0, source = "MANUAL_LEVEL_PACK_FALLBACK",
+                manual = true, packId = packId, priority = 10, estimated = true)
         }
 
         val engine = root?.optJSONObject("engine")
