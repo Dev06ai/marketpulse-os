@@ -18,11 +18,11 @@ class RiskHeatMeterView @JvmOverloads constructor(
     context: Context,
     attrs: AttributeSet? = null
 ) : View(context, attrs) {
-    private val track = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(25, 33, 43) }
+    private val track = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = KyvoriqTheme.raised }
     private val segment = Paint(Paint.ANTI_ALIAS_FLAG)
     private val marker = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.WHITE }
     private val label = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.rgb(247, 201, 72)
+        color = KyvoriqTheme.gold
         textSize = sp(10f)
         isFakeBoldText = true
     }
@@ -35,12 +35,15 @@ class RiskHeatMeterView @JvmOverloads constructor(
     private var pulseProgress = 1f
 
     fun setRisk(score: Float, state: String, animate: Boolean = true) {
-        targetScore = score.coerceIn(0f, 100f)
+        val nextScore = if (score.isFinite()) score.coerceIn(0f, 100f) else 0f
+        if (targetScore == nextScore && stateLabel == state.uppercase()) return
+        val shouldAnimate = animate && isShown && KyvoriqTheme.motionEnabled(context)
+        targetScore = nextScore
         val normalizedState = state.uppercase()
         val stateChanged = normalizedState != stateLabel
         previousState = stateLabel
         stateLabel = normalizedState
-        if (stateChanged && normalizedState != "IDLE" && animate) {
+        if (stateChanged && normalizedState != "IDLE" && shouldAnimate) {
             pulseAnimator?.cancel()
             pulseProgress = 0f
             pulseAnimator = ValueAnimator.ofFloat(0f, 1f).apply {
@@ -54,7 +57,7 @@ class RiskHeatMeterView @JvmOverloads constructor(
             }
         }
         animator?.cancel()
-        if (!animate) {
+        if (!shouldAnimate) {
             renderedScore = targetScore
             invalidate()
             return
@@ -83,8 +86,8 @@ class RiskHeatMeterView @JvmOverloads constructor(
         val radius = dp(5f)
         val colors = intArrayOf(
             Color.rgb(54, 211, 153),
-            Color.rgb(247, 201, 72),
-            Color.rgb(224, 167, 46),
+            KyvoriqTheme.gold,
+            KyvoriqTheme.ember,
             Color.rgb(255, 82, 105)
         )
 
@@ -104,8 +107,8 @@ class RiskHeatMeterView @JvmOverloads constructor(
             val sweepWidth = dp(22f)
             val pulseColor = when (stateLabel) {
                 "CRITICAL" -> Color.rgb(255, 82, 105)
-                "HIGH" -> Color.rgb(224, 167, 46)
-                "ELEVATED" -> Color.rgb(247, 201, 72)
+                "HIGH" -> KyvoriqTheme.ember
+                "ELEVATED" -> KyvoriqTheme.gold
                 else -> Color.rgb(54, 211, 153)
             }
             val sweepPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -135,10 +138,10 @@ class RiskHeatMeterView @JvmOverloads constructor(
 
         label.color = when {
             stateLabel == "CRITICAL" -> Color.rgb(255, 82, 105)
-            stateLabel == "HIGH" -> Color.rgb(224, 167, 46)
-            stateLabel == "ELEVATED" -> Color.rgb(247, 201, 72)
+            stateLabel == "HIGH" -> KyvoriqTheme.ember
+            stateLabel == "ELEVATED" -> KyvoriqTheme.gold
             stateLabel == "SAFE" -> Color.rgb(54, 211, 153)
-            else -> Color.rgb(156, 163, 175)
+            else -> KyvoriqTheme.muted
         }
         canvas.drawText("${stateLabel}  •  ${renderedScore.toInt()}/100", left, dp(13f), label)
     }

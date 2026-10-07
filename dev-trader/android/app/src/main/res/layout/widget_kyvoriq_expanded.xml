@@ -30,7 +30,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="KYVORIQ"
-                android:textColor="#F7C948"
+                android:textColor="#E7C46A"
                 android:textStyle="bold"
                 android:textSize="13sp"/>
 
@@ -39,7 +39,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="SCANNING"
-                android:textColor="#9CA3AF"
+                android:textColor="#B1AB9F"
                 android:textSize="9sp"/>
         </LinearLayout>
 
@@ -105,7 +105,7 @@
             android:layout_height="match_parent"
             android:gravity="center"
             android:text="•"
-            android:textColor="#9CA3AF"
+            android:textColor="#B1AB9F"
             android:textStyle="bold"
             android:textSize="13sp"/>
     </LinearLayout>
@@ -122,7 +122,7 @@
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:text="WAIT"
-            android:textColor="#F7C948"
+            android:textColor="#E7C46A"
             android:textStyle="bold"
             android:textSize="12sp"/>
 

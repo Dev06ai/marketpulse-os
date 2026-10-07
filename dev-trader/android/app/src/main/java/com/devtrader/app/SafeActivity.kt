@@ -1,3 +1,4 @@
+// Build 119: deep gold / ember / charcoal design system and lifecycle-aware motion.
 // Build 101: KYVORIQ visual identity — gold/charcoal system, branded navigation and mark.
 // Build 99: free-host migration with compact mobile delivery.
 // Build 117: Decision Engine Audit v3.5 companion release.
@@ -46,6 +47,7 @@ import android.widget.ScrollView
 import android.widget.SeekBar
 import android.widget.TextView
 import android.widget.Toast
+import androidx.activity.OnBackPressedCallback
 import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricPrompt
 import androidx.core.app.NotificationCompat
@@ -71,15 +73,15 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 // Build 87: backend executes every emitted trade call; Android client remains signal/event driven.
 class SafeActivity : FragmentActivity() {
-    private val kyGold = Color.rgb(247, 201, 72)
-    private val kyAmber = Color.rgb(224, 167, 46)
-    private val kyDeepGold = Color.rgb(184, 134, 11)
-    private val kyCharcoal = Color.rgb(11, 15, 20)
-    private val kySlate = Color.rgb(18, 24, 33)
-    private val kyGraphite = Color.rgb(31, 41, 54)
-    private val kyGray = Color.rgb(156, 163, 175)
-    private val kyWhite = Color.rgb(245, 247, 250)
-    private val kyLine = Color.rgb(76, 62, 28)
+    private val kyGold = KyvoriqTheme.gold
+    private val kyAmber = KyvoriqTheme.ember
+    private val kyDeepGold = KyvoriqTheme.deepGold
+    private val kyCharcoal = KyvoriqTheme.charcoal
+    private val kySlate = KyvoriqTheme.surface
+    private val kyGraphite = KyvoriqTheme.raised
+    private val kyGray = KyvoriqTheme.muted
+    private val kyWhite = KyvoriqTheme.white
+    private val kyLine = KyvoriqTheme.border
     private val btcOrange = kyGold
 
     // KYVORIQ uses its gold accent for the instrument emphasis while ordinary
@@ -239,6 +241,16 @@ class SafeActivity : FragmentActivity() {
     }
 
     private var debugPreview = false
+    private val calculatorBack = object : OnBackPressedCallback(false) {
+        override fun handleOnBackPressed() { returnToDashboard() }
+    }
+
+    private fun returnToDashboard() {
+        calculatorBack.isEnabled = false
+        setContentView(rootSurface)
+        latestRoot?.let { renderState(it, requestChart = false) }
+        ViewCompat.requestApplyInsets(rootSurface)
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -249,6 +261,7 @@ class SafeActivity : FragmentActivity() {
             window.isStatusBarContrastEnforced = false
             window.isNavigationBarContrastEnforced = false
         }
+        onBackPressedDispatcher.addCallback(this, calculatorBack)
         installCrashReporter()
         requestPremiumRefreshRate()
         // Resolve preview mode before building the UI so automated visual checks
@@ -292,7 +305,7 @@ class SafeActivity : FragmentActivity() {
     }
 
     private fun showLaunchSequence() {
-        if (debugPreview || launchSequenceShown || isFinishing || isDestroyed) return
+        if (!KyvoriqTheme.motionEnabled(this) || debugPreview || launchSequenceShown || isFinishing || isDestroyed) return
         launchSequenceShown = true
         val host = findViewById<ViewGroup>(android.R.id.content) ?: return
         val overlay = KyvoriqLaunchOverlay(this)
@@ -358,6 +371,8 @@ class SafeActivity : FragmentActivity() {
     }
 
     private fun buildUi() {
+        workspacePages.clear()
+        navigationButtons.clear()
         val compactViewport = resources.configuration.screenHeightDp < 760
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -382,8 +397,8 @@ class SafeActivity : FragmentActivity() {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_VERTICAL
         }
-        brand.addView(label("KYVORIQ", 19f, kyGold, 0.10f))
-        brand.addView(label("AI POWERED TRADING ASSISTANT", 7.8f, kyGray, 0.11f), margins(top = 3))
+        brand.addView(label("KYVORIQ", 19f, kyGold, 0.12f))
+        brand.addView(label("DISCIPLINE MEETS INTELLIGENCE", 7.5f, kyGray, 0.08f), margins(top = 3))
         header.addView(brand, LinearLayout.LayoutParams(0, dp(48), 1f))
         alertsButton = compactPillButton("ALERTS").apply { contentDescription = "Enable trade alerts" }
         alertsButton.setOnClickListener {
@@ -420,7 +435,7 @@ class SafeActivity : FragmentActivity() {
                 refreshTimeframeButtons(tfRow)
                 requestChartIfNeeded(force = true)
             }
-            tfRow.addView(button, LinearLayout.LayoutParams(0, dp(if (compactViewport) 36 else 40), 1f).apply { leftMargin = dp(2); rightMargin = dp(2) })
+            tfRow.addView(button, LinearLayout.LayoutParams(0, dp(40), 1f).apply { leftMargin = dp(2); rightMargin = dp(2) })
         }
         timeframeButtonRow = tfRow
         tradePage.addView(tfRow, margins(bottom = 6))
@@ -433,6 +448,7 @@ class SafeActivity : FragmentActivity() {
         decisionContainer = setup.first
         signal = setup.second
         signal.maxLines = if (compactViewport) 4 else 5
+        signal.setLineSpacing(0f, 1.12f)
         signal.ellipsize = android.text.TextUtils.TruncateAt.END
         setup.first.setOnClickListener {
             haptic(it, KyvoriqHaptics.Cue.TAP)
@@ -446,7 +462,7 @@ class SafeActivity : FragmentActivity() {
         decisionHost.addView(setup.first, FrameLayout.LayoutParams(-1, -1))
         decisionMotionView = DecisionMotionView(this)
         decisionHost.addView(decisionMotionView, FrameLayout.LayoutParams(-1, -1))
-        tradePage.addView(decisionHost, LinearLayout.LayoutParams(-1, dp(if (compactViewport) 92 else 132)).apply { bottomMargin = dp(8) })
+        tradePage.addView(decisionHost, LinearLayout.LayoutParams(-1, dp(if (compactViewport) 108 else 138)).apply { bottomMargin = dp(8) })
         val tradeTools = LinearLayout(this)
         val details = compactPillButton("SETUP DETAILS")
         details.setOnClickListener {
@@ -472,7 +488,7 @@ class SafeActivity : FragmentActivity() {
         val ledgerCard = compactCard("ACCOUNTING & RISK", "Checking fills and exposure…", 12f)
         ledgerView = ledgerCard.value
         positionsPage.addView(ledgerCard.container, margins(bottom = 10))
-        val exposureCard = scrollableCard("EXCHANGE POSITIONS", "No verified position data yet.", 13f, dp(120))
+        val exposureCard = scrollableCard("EXCHANGE POSITIONS", "No verified position data yet.", 13f, dp(120), expandToFill = true)
         tradeHistory = exposureCard.value
         positionsPage.addView(exposureCard.container, LinearLayout.LayoutParams(-1, 0, 1f).apply { bottomMargin = dp(10) })
         val historyButton = compactPillButton("OPEN EXECUTION HISTORY")
@@ -575,9 +591,17 @@ class SafeActivity : FragmentActivity() {
         )
         refreshPrivacyButton()
 
-        val navigation = LinearLayout(this).apply { setPadding(0, dp(10), 0, 0) }
+        val navigation = LinearLayout(this).apply {
+            setPadding(dp(3), dp(4), dp(3), dp(4))
+            background = KyvoriqTheme.surface(this@SafeActivity, radius = 18f)
+        }
         listOf("TRADE", "POSITIONS", "INSIGHTS").forEachIndexed { index, title ->
-            val button = compactPillButton(title).apply { contentDescription = "Workspace $title"; textSize = 11.5f }
+            val button = compactPillButton(title).apply { contentDescription = "Workspace $title"; textSize = 10f
+                compoundDrawablePadding = dp(5)
+                val icon = getDrawable(listOf(R.drawable.ic_nav_trade, R.drawable.ic_nav_positions, R.drawable.ic_nav_insights)[index])!!.mutate()
+                icon.setBounds(0, 0, dp(16), dp(16))
+                setCompoundDrawablesRelative(icon, null, null, null)
+                setPadding(dp(10), 0, dp(6), 0) }
             button.setOnClickListener {
                 if (workspacePages.getOrNull(index)?.visibility != View.VISIBLE) {
                     haptic(it, KyvoriqHaptics.Cue.SELECT)
@@ -587,7 +611,7 @@ class SafeActivity : FragmentActivity() {
             navigationButtons.add(button)
             navigation.addView(button, LinearLayout.LayoutParams(0, dp(48), 1f).apply { leftMargin = dp(3); rightMargin = dp(3) })
         }
-        root.addView(navigation)
+        root.addView(navigation, margins(top = 10))
         update = TextView(this); risk = TextView(this); journal = TextView(this); replay = TextView(this)
         selectWorkspace(0)
     }
@@ -595,18 +619,28 @@ class SafeActivity : FragmentActivity() {
     private fun selectWorkspace(index: Int) {
         val previous = selectedWorkspace
         selectedWorkspace = index
-        workspacePages.forEachIndexed { i, page -> page.visibility = if (i == index) View.VISIBLE else View.GONE }
+        workspacePages.forEachIndexed { i, page ->
+            page.animate().cancel(); page.alpha = 1f; page.translationX = 0f
+            page.visibility = if (i == index) View.VISIBLE else View.GONE
+        }
         navigationButtons.forEachIndexed { i, button ->
-            button.setTextColor(if (i == index) kyCharcoal else kyGray)
-            button.background = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,
-                if (i == index) intArrayOf(kyGold, kyAmber)
-                else intArrayOf(kySlate, kyCharcoal)).apply {
-                cornerRadius = dp(14).toFloat()
-                setStroke(dp(1), if (i == index) kyDeepGold else kyGraphite)
+            val active = i == index
+            button.isSelected = active
+            button.setTextColor(if (active) kyCharcoal else kyGold)
+            button.compoundDrawablesRelative.filterNotNull().forEach { it.setTint(if (active) kyCharcoal else kyGold) }
+            button.background = KyvoriqTheme.button(this, active, 13f)
+        }
+        if (previous != index && !debugPreview && KyvoriqTheme.motionEnabled(this)) {
+            workspacePages[index].apply {
+                animate().cancel()
+                alpha = 0f
+                translationX = dp(if (index > previous) 12 else -12).toFloat()
+                animate().alpha(1f).translationX(0f).setStartDelay(0).setDuration(260L)
+                    .setInterpolator(KyvoriqTheme.motion).start()
             }
         }
         latestRoot?.let { renderWorkspace(it) }
-        if (index == 2 && previous != 2 && !debugPreview) animateInsightsEntrance()
+        if (index == 2 && previous != 2 && !debugPreview && KyvoriqTheme.motionEnabled(this)) animateInsightsEntrance()
     }
 
     private fun animateInsightsEntrance() {
@@ -668,22 +702,20 @@ class SafeActivity : FragmentActivity() {
             val child = row.getChildAt(i) as? Button ?: continue
             val tf = child.text.toString()
             val selected = tf == selectedTf
-            child.setTextColor(if (selected) kyCharcoal else kyGray)
-            child.background = gradient(
-                if (selected) intArrayOf(kyGold, kyAmber) else intArrayOf(kyGraphite, kySlate),
-                GradientDrawable.Orientation.LEFT_RIGHT
-            ).apply {
-                cornerRadius = dp(11).toFloat()
-                setStroke(dp(1), if (selected) kyDeepGold else kyGraphite)
-            }
+            child.isSelected = selected
+            child.setTextColor(if (selected) kyCharcoal else kyGold)
+            child.background = KyvoriqTheme.button(this, selected, 11f)
         }
     }
 
     private fun compactPillButton(text: String): Button =
-        Button(this).apply {
+        KyvoriqButton(this).apply {
             this.text = text
             textSize = 10.5f
-            setTextColor(kyWhite)
+            setTextColor(android.content.res.ColorStateList(
+                arrayOf(intArrayOf(-android.R.attr.state_enabled), intArrayOf()),
+                intArrayOf(kyGray, kyGold)))
+            backgroundTintList = null
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
             isAllCaps = false
             isEnabled = true
@@ -694,13 +726,7 @@ class SafeActivity : FragmentActivity() {
             stateListAnimator = null
             elevation = 0f
             setPadding(dp(5), 0, dp(5), 0)
-            background = gradient(
-                intArrayOf(kyGraphite, kySlate),
-                GradientDrawable.Orientation.LEFT_RIGHT
-            ).apply {
-                cornerRadius = dp(12).toFloat()
-                setStroke(dp(1), kyLine)
-            }
+            background = KyvoriqTheme.button(this@SafeActivity)
         }
 
     private data class HeroRefs(
@@ -715,22 +741,16 @@ class SafeActivity : FragmentActivity() {
         val box = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(14), dp(if (compactViewport) 8 else 10), dp(14), dp(if (compactViewport) 8 else 10))
-            background = gradient(
-                intArrayOf(kySlate, kyCharcoal),
-                GradientDrawable.Orientation.TL_BR
-            ).apply {
-                cornerRadius = dp(18).toFloat()
-                setStroke(dp(1), kyLine)
-            }
+            background = KyvoriqTheme.surface(this@SafeActivity, prominent = true)
         }
 
         val top = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
         }
-        top.addView(label("BTCUSDT", 10f, kyGray, 0.08f),
+        top.addView(label("BITCOIN / USDT", 9f, kyGold, 0.10f),
             LinearLayout.LayoutParams(0, dp(if (compactViewport) 18 else 22), 1f))
-        val livePill = label("USDT", 10f, Color.rgb(54, 211, 153), 0.08f)
+        val livePill = label("PERPETUAL", 8f, kyAmber, 0.10f)
         top.addView(livePill, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(if (compactViewport) 18 else 22)))
         box.addView(top)
 
@@ -756,7 +776,7 @@ class SafeActivity : FragmentActivity() {
                 setStroke(dp(1), kyLine)
             }
         }
-        row.addView(statusView, LinearLayout.LayoutParams(dp(112), dp(30)))
+        row.addView(statusView, LinearLayout.LayoutParams(dp(94), dp(28)))
         box.addView(row)
 
         val oi = label("OI  —", 9f, kyGray, 0.02f)
@@ -768,20 +788,14 @@ class SafeActivity : FragmentActivity() {
         val box = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(12), dp(9), dp(12), dp(8))
-            background = gradient(
-                intArrayOf(kySlate, kyCharcoal),
-                GradientDrawable.Orientation.TL_BR
-            ).apply {
-                cornerRadius = dp(15).toFloat()
-                setStroke(dp(1), kyGraphite)
-            }
+            background = KyvoriqTheme.surface(this@SafeActivity, prominent = false)
         }
-        val heading = label(title, 8.5f, kyGray, 0.11f)
+        val heading = label(title, 9f, kyGold, 0.11f)
         val value = TextView(this).apply {
             text = initial
             textSize = valueSize
-            setTextColor(Color.WHITE)
-            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            setTextColor(kyWhite)
+            typeface = Typeface.create("sans-serif", Typeface.NORMAL)
             includeFontPadding = false
             setLineSpacing(0f, 1.02f)
             setHorizontallyScrolling(false)
@@ -795,28 +809,22 @@ class SafeActivity : FragmentActivity() {
         val box = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(14), dp(11), dp(14), dp(10))
-            background = gradient(
-                intArrayOf(kySlate, kyCharcoal),
-                GradientDrawable.Orientation.TL_BR
-            ).apply {
-                cornerRadius = dp(17).toFloat()
-                setStroke(dp(1), kyLine)
-            }
+            background = KyvoriqTheme.surface(this@SafeActivity, prominent = true)
         }
         val header = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
         }
-        header.addView(label(title, 9f, kyGray, 0.12f),
+        header.addView(label(title, 9f, kyGold, 0.12f),
             LinearLayout.LayoutParams(0, dp(18), 1f))
-        header.addView(label(if (title == "DECISION CENTER") "DETAILS  ›" else "DEMO", 8.5f, kyGold, 0.08f))
+        header.addView(label(if (title == "DECISION CENTER") "DETAILS  ›" else if (title == "DEMO PERFORMANCE") "DEMO" else "MARKET", 8.5f, kyAmber, 0.08f))
         box.addView(header)
 
         val value = TextView(this).apply {
             text = initial
             textSize = valueSize
-            setTextColor(Color.WHITE)
-            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            setTextColor(kyWhite)
+            typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
             includeFontPadding = false
             setLineSpacing(0f, 1.10f)
         }
@@ -841,24 +849,19 @@ class SafeActivity : FragmentActivity() {
         title: String,
         initial: String,
         valueSize: Float,
-        scrollHeightPx: Int
+        scrollHeightPx: Int,
+        expandToFill: Boolean = false
     ): CardRefs {
         val box = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(17), dp(15), dp(17), dp(16))
-            background = gradient(
-                intArrayOf(kySlate, kyCharcoal),
-                GradientDrawable.Orientation.TL_BR
-            ).apply {
-                cornerRadius = dp(18).toFloat()
-                setStroke(dp(1), kyGraphite)
-            }
+            background = KyvoriqTheme.surface(this@SafeActivity, prominent = false)
         }
 
         val heading = TextView(this).apply {
             text = marketAssetAccent(title)
             textSize = 11f
-            setTextColor(kyGray)
+            setTextColor(kyGold)
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
             letterSpacing = 0.11f
             includeFontPadding = false
@@ -868,8 +871,8 @@ class SafeActivity : FragmentActivity() {
         val value = TextView(this).apply {
             text = marketAssetAccent(initial)
             textSize = valueSize
-            setTextColor(Color.WHITE)
-            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            setTextColor(kyWhite)
+            typeface = Typeface.create("sans-serif", Typeface.NORMAL)
             includeFontPadding = false
             setLineSpacing(0f, 1.24f)
         }
@@ -895,7 +898,7 @@ class SafeActivity : FragmentActivity() {
             historyScroll,
             LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
-                0, 1f
+                if (expandToFill) 0 else scrollHeightPx, if (expandToFill) 1f else 0f
             ).apply {
                 topMargin = dp(8)
             }
@@ -908,19 +911,13 @@ class SafeActivity : FragmentActivity() {
         val box = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(17), dp(15), dp(17), dp(16))
-            background = gradient(
-                intArrayOf(kySlate, kyCharcoal),
-                GradientDrawable.Orientation.TL_BR
-            ).apply {
-                cornerRadius = dp(18).toFloat()
-                setStroke(dp(1), kyGraphite)
-            }
+            background = KyvoriqTheme.surface(this@SafeActivity, prominent = false)
         }
 
         val heading = TextView(this).apply {
             text = marketAssetAccent(title)
             textSize = 11f
-            setTextColor(kyGray)
+            setTextColor(kyGold)
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
             letterSpacing = 0.11f
         }
@@ -929,8 +926,8 @@ class SafeActivity : FragmentActivity() {
         val value = TextView(this).apply {
             text = marketAssetAccent(initial)
             textSize = valueSize
-            setTextColor(Color.WHITE)
-            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            setTextColor(kyWhite)
+            typeface = Typeface.create("sans-serif", Typeface.NORMAL)
             includeFontPadding = false
             setLineSpacing(0f, 1.24f)
         }
@@ -939,10 +936,13 @@ class SafeActivity : FragmentActivity() {
     }
 
     private fun actionButton(label: String): Button {
-        return Button(this).apply {
+        return KyvoriqButton(this).apply {
             text = marketAssetAccent(label)
             textSize = 13f
-            setTextColor(Color.WHITE)
+            setTextColor(android.content.res.ColorStateList(
+                arrayOf(intArrayOf(-android.R.attr.state_enabled), intArrayOf()),
+                intArrayOf(kyGray, kyGold)))
+            backgroundTintList = null
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
             isAllCaps = false
             isEnabled = true
@@ -953,22 +953,9 @@ class SafeActivity : FragmentActivity() {
             minWidth = 0
             stateListAnimator = null
             elevation = 0f
-            background = gradient(
-                intArrayOf(kyGraphite, kySlate),
-                GradientDrawable.Orientation.LEFT_RIGHT
-            ).apply {
-                cornerRadius = dp(16).toFloat()
-                setStroke(dp(1), kyLine)
-            }
+            background = KyvoriqTheme.button(this@SafeActivity)
             setPadding(dp(8), 0, dp(8), 0)
-            setOnTouchListener { v, event ->
-                when (event.actionMasked) {
-                    android.view.MotionEvent.ACTION_DOWN -> alpha = 0.72f
-                    android.view.MotionEvent.ACTION_UP -> alpha = 1f
-                    android.view.MotionEvent.ACTION_CANCEL -> alpha = 1f
-                }
-                false
-            }
+
         }
     }
 
@@ -1631,6 +1618,10 @@ class SafeActivity : FragmentActivity() {
         }
         lastStatusVisualKey = value
         status.animate().cancel()
+        if (!KyvoriqTheme.motionEnabled(this) || debugPreview || !status.isShown) {
+            status.alpha = 1f; status.translationY = 0f; status.text = value
+            return
+        }
         status.alpha = 0.45f
         status.translationY = dp(2).toFloat()
         status.text = value
@@ -1674,6 +1665,10 @@ class SafeActivity : FragmentActivity() {
         if (key == lastDecisionVisualKey) return
         lastDecisionVisualKey = key
         signal.animate().cancel()
+        if (!KyvoriqTheme.motionEnabled(this) || debugPreview || !signal.isShown) {
+            signal.alpha = 1f; signal.translationY = 0f; signal.scaleX = 1f; signal.scaleY = 1f
+            return
+        }
         signal.alpha = 0.38f
         signal.translationY = dp(7).toFloat()
         signal.scaleX = 0.985f
@@ -1827,21 +1822,15 @@ class SafeActivity : FragmentActivity() {
         if (key == lastAmbientKey) return
         lastAmbientKey = key
         val target = when (key) {
-            "LONG", "BULLISH" -> Color.rgb(10, 31, 27)
-            "SHORT", "BEARISH" -> Color.rgb(34, 14, 22)
+            "LONG", "BULLISH" -> Color.rgb(30, 26, 18)
+            "SHORT", "BEARISH" -> Color.rgb(31, 24, 18)
             "CAUTION" -> Color.rgb(34, 27, 12)
             else -> Color.rgb(20, 18, 11)
-        }
-        val accent = when (key) {
-            "LONG", "BULLISH" -> Color.rgb(54, 211, 153)
-            "SHORT", "BEARISH" -> Color.rgb(255, 82, 105)
-            "CAUTION" -> kyAmber
-            else -> kyGold
         }
         ambientAnimator?.cancel()
         val start = ambientColor
         ambientAnimator = ValueAnimator.ofObject(ArgbEvaluator(), start, target).apply {
-            duration = 420L
+            duration = if (KyvoriqTheme.motionEnabled(this@SafeActivity) && !debugPreview) 420L else 0L
             addUpdateListener {
                 ambientColor = it.animatedValue as Int
                 rootSurface.background = gradient(
@@ -1852,13 +1841,8 @@ class SafeActivity : FragmentActivity() {
             start()
         }
         if (::decisionContainer.isInitialized) {
-            decisionContainer.background = gradient(
-                intArrayOf(kySlate, kyCharcoal),
-                GradientDrawable.Orientation.TL_BR
-            ).apply {
-                cornerRadius = dp(17).toFloat()
-                setStroke(dp(1), accent)
-            }
+            decisionContainer.background = KyvoriqTheme.surface(this, prominent = true)
+
         }
     }
 
@@ -1948,7 +1932,7 @@ class SafeActivity : FragmentActivity() {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(18), dp(10), dp(18), dp(18))
             background = gradient(
-                intArrayOf(Color.rgb(16, 22, 30), kyCharcoal),
+                intArrayOf(KyvoriqTheme.surface, kyCharcoal),
                 GradientDrawable.Orientation.TL_BR
             ).apply {
                 cornerRadius = dp(28).toFloat()
@@ -2019,7 +2003,7 @@ class SafeActivity : FragmentActivity() {
             background = GradientDrawable().apply {
                 cornerRadius = dp(12).toFloat()
                 setColor(kyGraphite)
-                setStroke(dp(1), Color.rgb(55, 64, 76))
+                setStroke(dp(1), KyvoriqTheme.border)
             }
         }
         header.addView(close, LinearLayout.LayoutParams(dp(42), dp(42)))
@@ -2048,7 +2032,7 @@ class SafeActivity : FragmentActivity() {
                 GradientDrawable.Orientation.LEFT_RIGHT
             ).apply {
                 cornerRadius = dp(13).toFloat()
-                setStroke(dp(1), if (active) kyDeepGold else Color.rgb(61, 70, 82))
+                setStroke(dp(1), if (active) kyDeepGold else KyvoriqTheme.border)
             }
         }
 
@@ -2084,7 +2068,7 @@ class SafeActivity : FragmentActivity() {
                     GradientDrawable.Orientation.TL_BR
                 ).apply {
                     cornerRadius = dp(18).toFloat()
-                    setStroke(dp(1), Color.rgb(48, 56, 68))
+                    setStroke(dp(1), KyvoriqTheme.border)
                 }
             }
             val icon = TextView(this).apply {
@@ -2165,7 +2149,7 @@ class SafeActivity : FragmentActivity() {
         }
         sheet.addView(note, margins(bottom = 14))
 
-        val done = Button(this).apply {
+        val done = KyvoriqButton(this).apply {
             text = "DONE"
             textSize = 11.5f
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
@@ -2190,7 +2174,7 @@ class SafeActivity : FragmentActivity() {
             sheet.animate()
                 .alpha(0f)
                 .translationY(dp(34).toFloat())
-                .setDuration(150L)
+                .setDuration(if (KyvoriqTheme.motionEnabled(this)) 150L else 0L)
                 .withEndAction { if (dialog.isShowing) dialog.dismiss() }
                 .start()
         }
@@ -2202,7 +2186,7 @@ class SafeActivity : FragmentActivity() {
             sheet.animate()
                 .alpha(0f)
                 .translationY(dp(34).toFloat())
-                .setDuration(150L)
+                .setDuration(if (KyvoriqTheme.motionEnabled(this)) 150L else 0L)
                 .withEndAction { if (dialog.isShowing) dialog.dismiss() }
                 .start()
         }
@@ -2264,7 +2248,7 @@ class SafeActivity : FragmentActivity() {
                 .translationY(0f)
                 .scaleX(1f)
                 .scaleY(1f)
-                .setDuration(280L)
+                .setDuration(if (KyvoriqTheme.motionEnabled(this)) 280L else 0L)
                 .setInterpolator(android.view.animation.PathInterpolator(0.18f, 0.82f, 0.20f, 1f))
                 .start()
         }
@@ -2518,7 +2502,7 @@ class SafeActivity : FragmentActivity() {
             this.hint = hint
             setText(value)
             textSize = 15f
-            setTextColor(Color.WHITE)
+            setTextColor(kyWhite)
             setHintTextColor(kyGray)
             inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL
             setPadding(dp(12), 0, dp(12), 0)
@@ -2640,6 +2624,7 @@ class SafeActivity : FragmentActivity() {
     }
 
     private fun showPnlCalculator() {
+        calculatorBack.isEnabled = true
         val scroll = ScrollView(this).apply {
             setBackgroundColor(kyCharcoal)
             isFillViewport = true
@@ -2666,22 +2651,23 @@ class SafeActivity : FragmentActivity() {
             gravity = Gravity.CENTER_VERTICAL
         }
         val back = actionButton("‹").apply {
+            contentDescription = "Back to trading workspace"
             minWidth = dp(48)
             minHeight = dp(44)
             textSize = 24f
             setOnClickListener {
                 haptic(it, KyvoriqHaptics.Cue.TAP)
-                buildUi()
+                returnToDashboard()
             }
         }
         header.addView(back, LinearLayout.LayoutParams(dp(52), dp(46)))
         header.addView(
-            label("Calculator", 26f, Color.WHITE, 0f),
+            label("P&L calculator", 23f, kyGold, 0f),
             LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { leftMargin = dp(10) }
         )
         root.addView(header, margins(bottom = 16))
 
-        root.addView(label("PNL", 13f, Color.WHITE, 0f), margins(bottom = 8))
+        root.addView(label("POSITION ESTIMATE", 10f, kyAmber, 0.12f), margins(bottom = 8))
         root.addView(label("BTCUSDT Perpetual  •  USDT settlement", 14f, kyGray, 0f), margins(bottom = 14))
 
         var direction = "LONG"
@@ -2692,8 +2678,11 @@ class SafeActivity : FragmentActivity() {
         val longButton = actionButton("LONG")
         val shortButton = actionButton("SHORT")
         fun refreshSides() {
-            longButton.alpha = if (direction == "LONG") 1f else 0.45f
-            shortButton.alpha = if (direction == "SHORT") 1f else 0.45f
+            listOf(longButton to "LONG", shortButton to "SHORT").forEach { (button, side) ->
+                button.isSelected = direction == side
+                button.background = KyvoriqTheme.button(this, direction == side)
+                button.setTextColor(if (direction == side) kyCharcoal else kyGold)
+            }
         }
         longButton.setOnClickListener {
             if (direction != "LONG") haptic(it, KyvoriqHaptics.Cue.SELECT)
@@ -2720,8 +2709,11 @@ class SafeActivity : FragmentActivity() {
         val quantityButton = actionButton("QUANTITY / BTC")
         val costButton = actionButton("POSITION COST / USDT")
         fun refreshUnits() {
-            quantityButton.alpha = if (unitMode == "QUANTITY") 1f else 0.45f
-            costButton.alpha = if (unitMode == "COST") 1f else 0.45f
+            listOf(quantityButton to "QUANTITY", costButton to "COST").forEach { (button, unit) ->
+                button.isSelected = unitMode == unit
+                button.background = KyvoriqTheme.button(this, unitMode == unit)
+                button.setTextColor(if (unitMode == unit) kyCharcoal else kyGold)
+            }
         }
         quantityButton.setOnClickListener {
             if (unitMode != "QUANTITY") haptic(it, KyvoriqHaptics.Cue.SELECT)
@@ -2777,7 +2769,10 @@ class SafeActivity : FragmentActivity() {
         root.addView(resultsCard.container, margins(bottom = 10))
         val results = resultsCard.value
 
-        val calcButton = actionButton("CALCULATE P&L")
+        val calcButton = actionButton("CALCULATE P&L").apply {
+            background = KyvoriqTheme.button(this@SafeActivity, true)
+            setTextColor(kyCharcoal)
+        }
         calcButton.setOnClickListener {
             safe {
                 val amount = amountEdit.text.toString().toDoubleOrNull()
@@ -2921,7 +2916,7 @@ class SafeActivity : FragmentActivity() {
         val content = TextView(this).apply {
             text = body
             textSize = 12f
-            setTextColor(Color.WHITE)
+            setTextColor(kyWhite)
             setPadding(dp(18), dp(14), dp(18), dp(14))
             setLineSpacing(0f, 1.12f)
         }

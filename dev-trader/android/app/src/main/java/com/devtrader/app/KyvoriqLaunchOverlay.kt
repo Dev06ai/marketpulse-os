@@ -19,10 +19,10 @@ import android.widget.TextView
  * animation so it follows the display VSYNC instead of a manual frame timer.
  */
 class KyvoriqLaunchOverlay(context: Context) : FrameLayout(context) {
-    private val gold = Color.rgb(247, 201, 72)
-    private val gray = Color.rgb(156, 163, 175)
-    private val charcoal = Color.rgb(11, 15, 20)
-    private val slate = Color.rgb(18, 24, 33)
+    private val gold = KyvoriqTheme.gold
+    private val gray = KyvoriqTheme.muted
+    private val charcoal = KyvoriqTheme.charcoal
+    private val slate = KyvoriqTheme.surface
     private val motion = PathInterpolator(0.18f, 0.82f, 0.20f, 1f)
 
     private val mark = ImageView(context).apply {
@@ -65,7 +65,7 @@ class KyvoriqLaunchOverlay(context: Context) : FrameLayout(context) {
     private val sweep = View(context).apply {
         background = GradientDrawable(
             GradientDrawable.Orientation.LEFT_RIGHT,
-            intArrayOf(Color.TRANSPARENT, Color.argb(120, 247, 201, 72), Color.TRANSPARENT)
+            intArrayOf(Color.TRANSPARENT, Color.argb(64, 231, 196, 106), Color.TRANSPARENT)
         )
         alpha = 0f
         rotation = -10f
@@ -108,6 +108,7 @@ class KyvoriqLaunchOverlay(context: Context) : FrameLayout(context) {
     }
 
     fun play(onEnd: () -> Unit) {
+        if (!KyvoriqTheme.motionEnabled(context)) { onEnd(); return }
         post {
             mark.animate().alpha(1f).scaleX(1f).scaleY(1f).translationY(0f)
                 .setDuration(360L).setInterpolator(motion).withLayer().start()
@@ -120,7 +121,7 @@ class KyvoriqLaunchOverlay(context: Context) : FrameLayout(context) {
 
             sweep.translationX = -sweep.width.toFloat() * 1.5f
             sweep.animate()
-                .alpha(0.72f)
+                .alpha(0.40f)
                 .translationX(width + sweep.width.toFloat())
                 .setStartDelay(250L)
                 .setDuration(420L)
@@ -138,6 +139,12 @@ class KyvoriqLaunchOverlay(context: Context) : FrameLayout(context) {
                 .withEndAction { onEnd() }
                 .start()
         }
+    }
+
+    override fun onDetachedFromWindow() {
+        animate().cancel()
+        listOf(mark, title, subtitle, line, sweep).forEach { it.animate().cancel() }
+        super.onDetachedFromWindow()
     }
 
     private fun dp(value: Float): Float = value * resources.displayMetrics.density

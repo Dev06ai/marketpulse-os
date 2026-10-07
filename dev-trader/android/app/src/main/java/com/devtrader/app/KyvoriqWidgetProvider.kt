@@ -188,7 +188,7 @@ class KyvoriqWidgetProvider : AppWidgetProvider() {
             val currentColor = when {
                 motion > 0 -> Color.rgb(54, 211, 153)
                 motion < 0 -> Color.rgb(255, 82, 105)
-                else -> Color.rgb(245, 247, 250)
+                else -> KyvoriqTheme.white
             }
             val delta = when {
                 motion > 0 -> "▲"
@@ -198,15 +198,15 @@ class KyvoriqWidgetProvider : AppWidgetProvider() {
             val deltaColor = when {
                 motion > 0 -> Color.rgb(54, 211, 153)
                 motion < 0 -> Color.rgb(255, 82, 105)
-                else -> Color.rgb(156, 163, 175)
+                else -> KyvoriqTheme.muted
             }
             val biasColor = when (bias) {
                 "LONG", "BULLISH" -> Color.rgb(54, 211, 153)
                 "SHORT", "BEARISH" -> Color.rgb(255, 82, 105)
-                else -> Color.rgb(247, 201, 72)
+                else -> KyvoriqTheme.gold
             }
             val healthLabel = if (health == "HEALTHY") "LIVE" else health
-            val healthColor = if (health == "HEALTHY") Color.rgb(54, 211, 153) else Color.rgb(247, 201, 72)
+            val healthColor = if (health == "HEALTHY") Color.rgb(54, 211, 153) else KyvoriqTheme.gold
 
             if (slot == 0) {
                 views.setTextViewText(R.id.widget_price_0, price)
@@ -231,7 +231,7 @@ class KyvoriqWidgetProvider : AppWidgetProvider() {
                 val pnlColor = when {
                     pnl.startsWith("+") -> Color.rgb(54, 211, 153)
                     pnl.startsWith("-") -> Color.rgb(255, 82, 105)
-                    else -> Color.rgb(245, 247, 250)
+                    else -> KyvoriqTheme.white
                 }
                 views.setTextColor(R.id.widget_pnl, pnlColor)
             }

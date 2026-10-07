@@ -39,7 +39,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="KYVORIQ"
-            android:textColor="#F7C948"
+            android:textColor="#E7C46A"
             android:textSize="13sp"
             android:textStyle="bold"
             android:fontFamily="sans-serif-medium"

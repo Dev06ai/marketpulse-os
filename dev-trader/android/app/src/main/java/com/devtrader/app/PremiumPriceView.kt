@@ -20,7 +20,7 @@ import java.util.Locale
  * instead of using a hand-written timer.
  */
 class PremiumPriceView(context: Context) : LinearLayout(context) {
-    private val gold = Color.rgb(247, 201, 72)
+    private val gold = KyvoriqTheme.gold
     private val green = Color.rgb(54, 211, 153)
     private val red = Color.rgb(255, 82, 105)
     private val motionInterpolator = PathInterpolator(0.18f, 0.82f, 0.20f, 1f)
@@ -79,11 +79,12 @@ class PremiumPriceView(context: Context) : LinearLayout(context) {
     }
 
     fun setTextSizeSp(size: Float) {
-        instrument.textSize = size
+        instrument.textSize = size * .48f
         valueViews.forEach { it.textSize = size }
     }
 
     fun setPrice(price: Double, animate: Boolean = true) {
+        val shouldAnimate = animate && isShown && KyvoriqTheme.motionEnabled(context)
         if (!price.isFinite()) {
             cancelAnimations()
             valueViews[activeSlot].text = "—"
@@ -101,7 +102,7 @@ class PremiumPriceView(context: Context) : LinearLayout(context) {
             else -> 0
         }
 
-        if (!previous.isFinite() || !animate) {
+        if (!previous.isFinite() || !shouldAnimate) {
             cancelAnimations()
             val current = valueViews[activeSlot]
             current.text = formatted
@@ -124,7 +125,7 @@ class PremiumPriceView(context: Context) : LinearLayout(context) {
         val outgoing = valueViews[activeSlot]
         val incomingSlot = 1 - activeSlot
         val incoming = valueViews[incomingSlot]
-        val travel = dp(11f)
+        val travel = dp(6f)
         val incomingStart = if (direction >= 0) travel else -travel
         val outgoingEnd = -incomingStart
         val motionColor = when {
@@ -201,7 +202,11 @@ class PremiumPriceView(context: Context) : LinearLayout(context) {
         settleGeneration += 1
         colorAnimator?.cancel()
         colorAnimator = null
-        valueViews.forEach { cancelViewMotion(it) }
+        valueViews.forEachIndexed { i, view ->
+            cancelViewMotion(view)
+            view.alpha = if (i == activeSlot) 1f else 0f
+            view.translationY = 0f; view.scaleX = 1f; view.scaleY = 1f
+        }
     }
 
     private fun cancelViewMotion(view: View) {

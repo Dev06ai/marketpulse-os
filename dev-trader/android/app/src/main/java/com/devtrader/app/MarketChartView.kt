@@ -33,27 +33,27 @@ class MarketChartView @JvmOverloads constructor(
 
     private val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val gridPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.rgb(40, 49, 61)
+        color = Color.rgb(60, 54, 43)
         strokeWidth = dp(.72f)
         alpha = 96
     }
     private val axisPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.rgb(92, 101, 114)
+        color = KyvoriqTheme.muted
         strokeWidth = dp(.85f)
         alpha = 175
     }
     private val plotBorderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.rgb(76, 62, 28)
+        color = KyvoriqTheme.border
         strokeWidth = dp(.8f)
         style = Paint.Style.STROKE
         alpha = 155
     }
     private val axisPanelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.rgb(9, 13, 18)
+        color = KyvoriqTheme.charcoal
         alpha = 215
     }
     private val volumeDividerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.rgb(66, 72, 82)
+        color = KyvoriqTheme.border
         strokeWidth = dp(.7f)
         alpha = 105
     }
@@ -71,7 +71,7 @@ class MarketChartView @JvmOverloads constructor(
         alpha = 205
     }
     private val bbMiddlePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.rgb(224, 167, 46)
+        color = KyvoriqTheme.ember
         strokeWidth = dp(1.0f)
         style = Paint.Style.STROKE
         strokeCap = Paint.Cap.ROUND
@@ -79,54 +79,54 @@ class MarketChartView @JvmOverloads constructor(
         alpha = 175
     }
     private val emaPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.rgb(247, 201, 72)
+        color = KyvoriqTheme.gold
         strokeWidth = dp(1.7f)
         style = Paint.Style.STROKE
         strokeCap = Paint.Cap.ROUND
         strokeJoin = Paint.Join.ROUND
     }
     private val emaLabelBgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.rgb(18, 24, 33)
+        color = KyvoriqTheme.surface
         style = Paint.Style.FILL
         alpha = 242
     }
     private val emaLabelBorderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.rgb(184, 134, 11)
+        color = KyvoriqTheme.deepGold
         style = Paint.Style.STROKE
         strokeWidth = dp(.75f)
         alpha = 190
     }
     private val emaLabelTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.rgb(247, 201, 72)
+        color = KyvoriqTheme.gold
         textSize = dp(8.8f)
         typeface = android.graphics.Typeface.create(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD)
     }
     private val currentPricePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.rgb(247, 201, 72)
+        color = KyvoriqTheme.gold
         strokeWidth = dp(.95f)
         style = Paint.Style.STROKE
         pathEffect = DashPathEffect(floatArrayOf(dp(5f), dp(4f)), 0f)
         alpha = 225
     }
     private val livePriceTagPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.rgb(247, 201, 72)
+        color = KyvoriqTheme.gold
         style = Paint.Style.FILL
     }
     private val livePriceTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.rgb(11, 15, 20)
+        color = KyvoriqTheme.charcoal
         textSize = dp(9.6f)
         typeface = android.graphics.Typeface.create(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD)
     }
     private val labelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.rgb(156, 163, 175)
+        color = KyvoriqTheme.muted
         textSize = dp(10f)
     }
     private val axisLabelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.rgb(126, 135, 148)
+        color = KyvoriqTheme.muted
         textSize = dp(9.5f)
     }
     private val strongLabelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.rgb(245, 247, 250)
+        color = KyvoriqTheme.white
         textSize = dp(10f)
         typeface = android.graphics.Typeface.create(
             android.graphics.Typeface.DEFAULT,
@@ -134,15 +134,15 @@ class MarketChartView @JvmOverloads constructor(
         )
     }
     private val crosshairPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.rgb(224, 167, 46)
+        color = KyvoriqTheme.ember
         strokeWidth = dp(1f)
     }
     private val volumeUpPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(49, 137, 115); alpha = 170 }
     private val volumeDownPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(167, 70, 86); alpha = 170 }
-    private val liveChipPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(18, 24, 33) }
+    private val liveChipPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = KyvoriqTheme.surface }
     private val liveDotPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(71, 191, 149) }
     private val controlActivePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(49, 39, 14) }
-    private val controlInactivePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(20, 27, 36) }
+    private val controlInactivePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = KyvoriqTheme.surface }
     private val controlBorderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
         strokeWidth = dp(.7f)
@@ -158,7 +158,7 @@ class MarketChartView @JvmOverloads constructor(
         alpha = 150
     }
     private val structureLabelBgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.rgb(16, 22, 30)
+        color = KyvoriqTheme.surface
         alpha = 235
     }
     private val structureLabelTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -182,7 +182,7 @@ class MarketChartView @JvmOverloads constructor(
     }
     private val reactionChipPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.FILL
-        color = Color.rgb(16, 22, 30)
+        color = KyvoriqTheme.surface
     }
     private val reactionChipTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         textSize = dp(7.8f)
@@ -366,7 +366,7 @@ class MarketChartView @JvmOverloads constructor(
         super.onDraw(canvas)
         bgPaint.shader = LinearGradient(
             0f, 0f, 0f, height.toFloat(),
-            intArrayOf(Color.rgb(13, 18, 24), Color.rgb(8, 12, 17), Color.rgb(10, 14, 19)),
+            intArrayOf(KyvoriqTheme.surface, KyvoriqTheme.charcoal, Color.rgb(19, 18, 16)),
             null,
             Shader.TileMode.CLAMP
         )
@@ -490,12 +490,12 @@ class MarketChartView @JvmOverloads constructor(
         if (showLevels) {
             drawStructureOverlays(canvas, left, right, top, priceBottom, low, high)
             signal?.let { s ->
-                val revealBase = if (tradeRevealStartedAt > 0L) {
+                val revealBase = if (tradeRevealStartedAt > 0L && KyvoriqTheme.motionEnabled(context)) {
                     ((SystemClock.elapsedRealtime() - tradeRevealStartedAt) / 820f).coerceIn(0f, 1f)
                 } else 1f
                 if (revealBase < 1f) postInvalidateOnAnimation()
                 listOf(
-                    Triple("entry", "ENTRY", Color.rgb(247, 201, 72)),
+                    Triple("entry", "ENTRY", KyvoriqTheme.gold),
                     Triple("stop", "SL", Color.rgb(242, 91, 111)),
                     Triple("target1", "TP1", Color.rgb(76, 211, 166)),
                     Triple("target2", "TP2", Color.rgb(76, 211, 166))
@@ -541,9 +541,9 @@ class MarketChartView @JvmOverloads constructor(
                     else -> showVolume
                 }
                 canvas.drawRoundRect(rect, dp(5f), dp(5f), if (active) controlActivePaint else controlInactivePaint)
-                controlBorderPaint.color = if (active) Color.rgb(184, 134, 11) else Color.rgb(55, 64, 76)
+                controlBorderPaint.color = if (active) KyvoriqTheme.deepGold else KyvoriqTheme.border
                 canvas.drawRoundRect(rect, dp(5f), dp(5f), controlBorderPaint)
-                controlTextPaint.color = if (active) Color.rgb(247, 201, 72) else Color.rgb(126, 135, 148)
+                controlTextPaint.color = if (active) KyvoriqTheme.gold else KyvoriqTheme.muted
                 val tw = controlTextPaint.measureText(key)
                 canvas.drawText(key, rect.centerX() - tw / 2f, rect.centerY() + dp(3f), controlTextPaint)
             }
@@ -556,9 +556,9 @@ class MarketChartView @JvmOverloads constructor(
         canvas.drawRoundRect(rect, dp(12f), dp(12f), liveChipPaint)
         val resetting = !followLive
         liveDotPaint.color = when {
-            resetting -> Color.rgb(247, 201, 72)
+            resetting -> KyvoriqTheme.gold
             feedHealthy -> Color.rgb(71, 191, 149)
-            else -> Color.rgb(156, 163, 175)
+            else -> KyvoriqTheme.muted
         }
         canvas.drawCircle(chipLeft + dp(10f), chipTop + dp(12f), dp(3.2f), liveDotPaint)
         val stateText = if (resetting) "RESET" else if (feedHealthy) "LIVE" else "WAIT"
@@ -711,7 +711,7 @@ class MarketChartView @JvmOverloads constructor(
         canvas.drawText(line1, infoLeft + dp(7f), infoTop + dp(14f), axisLabelPaint)
         val oldColor = axisLabelPaint.color
         axisLabelPaint.color = when {
-            !changePct.isFinite() -> Color.rgb(156, 163, 175)
+            !changePct.isFinite() -> KyvoriqTheme.muted
             changePct >= 0.0 -> Color.rgb(76, 211, 166)
             else -> Color.rgb(242, 91, 111)
         }
@@ -734,7 +734,7 @@ class MarketChartView @JvmOverloads constructor(
             canvas.drawRoundRect(rect, dp(5.5f), dp(5.5f), livePriceTagPaint)
             canvas.drawText(text, tagLeft + dp(5f), y + dp(3.5f), livePriceTextPaint)
         } else {
-            val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(31, 41, 54) }
+            val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = KyvoriqTheme.raised }
             canvas.drawRoundRect(rect, dp(5f), dp(5f), paint)
             canvas.drawText(text, tagLeft + dp(5f), y + dp(3.5f), strongLabelPaint)
         }
@@ -888,7 +888,7 @@ class MarketChartView @JvmOverloads constructor(
         val w = tradeLevelTextPaint.measureText(text) + pad * 2f
         val h = dp(17f)
         val rect = RectF((right - w - dp(4f)).coerceAtLeast(left + dp(4f)), y - h / 2f, right - dp(4f), y + h / 2f)
-        tradeLevelBgPaint.color = Color.rgb(13, 18, 24)
+        tradeLevelBgPaint.color = KyvoriqTheme.surface
         tradeLevelBgPaint.alpha = (238f * labelAlpha / 255f).toInt()
         tradeLevelTextPaint.color = color
         tradeLevelTextPaint.alpha = labelAlpha
@@ -908,7 +908,7 @@ class MarketChartView @JvmOverloads constructor(
         low: Double,
         high: Double
     ) {
-        if (tradeHitStartedAt <= 0L) return
+        if (tradeHitStartedAt <= 0L || !KyvoriqTheme.motionEnabled(context)) return
         val elapsed = SystemClock.elapsedRealtime() - tradeHitStartedAt
         val duration = 1050f
         val progress = (elapsed / duration).coerceIn(0f, 1f)
@@ -932,7 +932,7 @@ class MarketChartView @JvmOverloads constructor(
         val color = when (type) {
             "TP1_HIT", "TP2_HIT" -> Color.rgb(54, 211, 153)
             "SL_HIT" -> Color.rgb(255, 82, 105)
-            else -> Color.rgb(247, 201, 72)
+            else -> KyvoriqTheme.gold
         }
         val y = mapY(value, low, high, top, bottom)
         val pulse = kotlin.math.sin(progress * Math.PI).toFloat().coerceAtLeast(0f)
@@ -990,22 +990,22 @@ class MarketChartView @JvmOverloads constructor(
         rows.forEach { (row, value, lineY) ->
             val kind = row.optString("kind", "LEVEL").uppercase(Locale.US)
             val color = when (kind) {
-                "SFP", "WEEKLY_OPEN" -> Color.rgb(247, 201, 72)
-                "DLINE" -> Color.rgb(224, 167, 46)
-                "OB" -> Color.rgb(245, 247, 250)
+                "SFP", "WEEKLY_OPEN" -> KyvoriqTheme.gold
+                "DLINE" -> KyvoriqTheme.ember
+                "OB" -> KyvoriqTheme.white
                 "NPOC" -> Color.rgb(255, 82, 105)
                 "DAILY" -> Color.rgb(54, 211, 153)
-                else -> Color.rgb(126, 135, 148)
+                else -> KyvoriqTheme.muted
             }
             val status = row.optString("status", "").uppercase(Locale.US)
             val motionStart = overlayMotionStartedAt[overlayKey(row)] ?: 0L
-            val motionAge = if (motionStart > 0L) elapsedNow - motionStart else Long.MAX_VALUE
+            val motionAge = if (motionStart > 0L && KyvoriqTheme.motionEnabled(context)) elapsedNow - motionStart else Long.MAX_VALUE
 
             val hideAfter = row.optLong("hide_after_ms", 0L)
             if (hideAfter > 0L && wallNow >= hideAfter) return@forEach
             val remaining = if (hideAfter > 0L) hideAfter - wallNow else Long.MAX_VALUE
-            val retirementFade = if (remaining in 0..4_000L) (remaining / 4_000f).coerceIn(0f, 1f) else 1f
-            if (remaining in 1..4_000L) postInvalidateOnAnimation()
+            val retirementFade = if (remaining in 0..4_000L && KyvoriqTheme.motionEnabled(context)) (remaining / 4_000f).coerceIn(0f, 1f) else 1f
+            if (remaining in 1..4_000L && KyvoriqTheme.motionEnabled(context)) postInvalidateOnAnimation()
 
             val armedPulse = if (status == "ARMED" && motionAge in 0..760L) {
                 kotlin.math.sin((motionAge / 760.0) * Math.PI).toFloat().coerceAtLeast(0f)

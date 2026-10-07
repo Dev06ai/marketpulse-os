@@ -17,10 +17,10 @@ import kotlin.math.sin
  * It never intercepts touches and never changes trading state.
  */
 class DecisionMotionView(context: Context) : View(context) {
-    private val gold = Color.rgb(247, 201, 72)
+    private val gold = KyvoriqTheme.gold
     private val green = Color.rgb(54, 211, 153)
     private val red = Color.rgb(255, 82, 105)
-    private val amber = Color.rgb(224, 167, 46)
+    private val amber = KyvoriqTheme.ember
     private val sweepPaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
@@ -29,6 +29,7 @@ class DecisionMotionView(context: Context) : View(context) {
     private val eventPaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val motion = PathInterpolator(0.18f, 0.82f, 0.20f, 1f)
 
+    private var motionAttached = false
     private var state = "WAIT"
     private var scanProgress = -0.25f
     private var eventProgress = 1f
@@ -69,24 +70,28 @@ class DecisionMotionView(context: Context) : View(context) {
     }
 
     private fun startScanning() {
-        if (scanAnimator?.isRunning == true || scanRunnable != null) return
+        if (!canAnimate() || scanAnimator?.isRunning == true || scanRunnable != null) return
         scheduleScan(500L)
     }
 
+    private fun canAnimate(): Boolean = motionAttached && isShown && windowVisibility == VISIBLE && KyvoriqTheme.motionEnabled(context)
+
     private fun scheduleScan(delay: Long) {
+        if (!canAnimate()) return
         scanRunnable?.let { removeCallbacks(it) }
         val runnable = Runnable {
             scanRunnable = null
+            if (!canAnimate() || !isScanning(state)) return@Runnable
             scanAnimator?.cancel()
             scanAnimator = ValueAnimator.ofFloat(-0.25f, 1.25f).apply {
-                duration = 900L
+                duration = 1400L
                 interpolator = motion
                 addUpdateListener {
                     scanProgress = it.animatedValue as Float
                     invalidate()
                 }
                 doOnEndCompat {
-                    if (isScanning(state) && isAttachedToWindow) scheduleScan(3_900L)
+                    if (isScanning(state) && canAnimate()) scheduleScan(5_600L)
                 }
                 start()
             }
@@ -98,6 +103,7 @@ class DecisionMotionView(context: Context) : View(context) {
     private fun stopScanning() {
         scanRunnable?.let { removeCallbacks(it) }
         scanRunnable = null
+        scanAnimator?.removeAllListeners()
         scanAnimator?.cancel()
         scanAnimator = null
         scanProgress = -0.25f
@@ -106,6 +112,7 @@ class DecisionMotionView(context: Context) : View(context) {
 
     private fun playEvent(color: Int) {
         eventAnimator?.cancel()
+        if (!canAnimate()) { eventProgress = 1f; invalidate(); return }
         eventPaint.color = color
         eventProgress = 0f
         eventAnimator = ValueAnimator.ofFloat(0f, 1f).apply {
@@ -131,7 +138,7 @@ class DecisionMotionView(context: Context) : View(context) {
                 0f,
                 center + band,
                 height.toFloat(),
-                intArrayOf(Color.TRANSPARENT, Color.argb(48, 247, 201, 72), Color.TRANSPARENT),
+                intArrayOf(Color.TRANSPARENT, Color.argb(22, 231, 196, 106), Color.TRANSPARENT),
                 floatArrayOf(0f, 0.5f, 1f),
                 Shader.TileMode.CLAMP
             )
@@ -154,7 +161,7 @@ class DecisionMotionView(context: Context) : View(context) {
                 dp(17f), dp(17f), borderPaint
             )
 
-            eventPaint.alpha = (42f * pulse).toInt().coerceIn(0, 255)
+            eventPaint.alpha = (18f * pulse).toInt().coerceIn(0, 255)
             val sweepX = width * eventProgress
             canvas.drawRect(
                 (sweepX - dp(46f)).coerceAtLeast(0f),
@@ -168,14 +175,28 @@ class DecisionMotionView(context: Context) : View(context) {
 
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
+        motionAttached = true
         startIfNeeded()
     }
 
     override fun onDetachedFromWindow() {
+        motionAttached = false
         stopScanning()
         eventAnimator?.cancel()
         eventAnimator = null
         super.onDetachedFromWindow()
+    }
+
+    override fun onVisibilityChanged(changedView: View, visibility: Int) {
+        super.onVisibilityChanged(changedView, visibility)
+        if (!motionAttached) return
+        if (canAnimate()) startIfNeeded() else { stopScanning(); eventAnimator?.cancel(); eventProgress = 1f }
+    }
+
+    override fun onWindowVisibilityChanged(visibility: Int) {
+        super.onWindowVisibilityChanged(visibility)
+        if (!motionAttached) return
+        if (canAnimate()) startIfNeeded() else { stopScanning(); eventAnimator?.cancel(); eventProgress = 1f }
     }
 
     private fun ValueAnimator.doOnEndCompat(block: () -> Unit) {
