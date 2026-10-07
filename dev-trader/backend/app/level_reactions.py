@@ -12,6 +12,7 @@ from typing import Any
 
 from .analytics import MarketFeatures
 from .models import Candle, MarketState
+from .manual_levels import manual_engine_rules, manual_level_pack_summary, manual_reaction_levels
 
 FIFTEEN_MIN_MS = 15 * 60_000
 THIRTY_MIN_MS = 30 * 60_000
@@ -81,15 +82,20 @@ def collect_reaction_levels(features: MarketFeatures, sfp_hunter: dict | None = 
             source="SFP_HUNTER",
         )
 
-    # Preserve higher-priority structural levels when two references nearly overlap.
-    priority = {"SFP": 0, "NPOC": 1, "DAILY": 2, "WEEKLY_OPEN": 3, "OB": 4}
-    rows.sort(key=lambda row: priority.get(row["kind"], 9))
+    # Manual rows are first-class structural references. They are the exact
+    # map rendered on Android and watched by this tracker.
+    rows.extend(manual_reaction_levels())
+
+    priority = {"SFP": 0, "NPOC": 1, "WEEKLY_NPOC": 1, "RANGE_POC": 1,
+                "DAILY": 2, "WEEKLY_OPEN": 3, "OB_ZONE": 4, "SUPPLY_ZONE": 4, "OB": 5}
+    rows.sort(key=lambda row: (0 if row.get("manual") else 1, -int(row.get("priority") or 0),
+                               priority.get(str(row.get("kind") or "").upper(), 9)))
     unique: list[dict] = []
     for row in rows:
         if any(abs(row["price"] - old["price"]) / max(row["price"], 1.0) < 0.00010 for old in unique):
             continue
         unique.append(row)
-    return unique[:14]
+    return unique[:24]
 
 
 class LevelReactionTracker:
@@ -134,158 +140,121 @@ class LevelReactionTracker:
         price = _finite(state.last_price)
         candle = self._live_candle(state, now)
         raw_levels = collect_reaction_levels(features, sfp_hunter)
+        rules = manual_engine_rules()
+        min_score = max(3, int(rules.get("min_confirmation_score", 3) or 3))
+        configured_arm_pct = max(0.0001, float(rules.get("arm_distance_pct_line", 0.0012) or 0.0012))
 
-        # Retain played state for as long as the same structural level still
-        # exists. After its grace period the level stays retired/hidden instead
-        # of immediately re-arming on the same candle. A changed daily/OB/NPOC
-        # price naturally creates a new id and becomes eligible again.
         active_ids = {row["id"] for row in raw_levels}
-        self.played = {key: value for key, value in self.played.items() if key in active_ids}
-        self.seen_levels = {key: value for key, value in self.seen_levels.items() if key in active_ids}
+        self.played = {k: v for k, v in self.played.items() if k in active_ids}
+        self.seen_levels = {k: v for k, v in self.seen_levels.items() if k in active_ids}
         previously_seen = set(self.seen_levels)
         for row in raw_levels:
-            self.seen_levels.setdefault(
-                row["id"],
-                {"first_seen_ms": now, "first_seen_candle_start": int(candle.start) if candle else None},
-            )
+            self.seen_levels.setdefault(row["id"], {
+                "first_seen_ms": now,
+                "first_seen_candle_start": int(candle.start) if candle else None,
+            })
 
         if price is None:
-            levels = []
-            for row in raw_levels:
-                played = self.played.get(row["id"])
-                if played and now >= int(played.get("hide_after_ms") or 0):
-                    continue
-                if played:
-                    row = dict(row, **played, state="PLAYED")
-                else:
-                    row = dict(row, state="WATCH")
-                levels.append(row)
-            self.last_state = {"status": "WATCH", "levels": levels, "armed": [], "trigger": None}
+            levels=[]
+            for base in raw_levels:
+                row=dict(base); played=self.played.get(row["id"])
+                if played and now >= int(played.get("hide_after_ms") or 0): continue
+                row.update(played or {}); row["state"]="PLAYED" if played else "WATCH"; levels.append(row)
+            self.last_state={"status":"WATCH","levels":levels,"armed":[],"trigger":None,
+                             "manual_pack":manual_level_pack_summary(),"min_confirmation_score":min_score}
             return self.last_state
 
-        atr = max(float(features.atr_15 or 0.0), price * 0.0005)
-        touch_tolerance = max(1.0, atr * 0.08, price * 0.00018)
-        reclaim = max(1.0, atr * 0.12, price * 0.00012)
-        arm_distance = max(touch_tolerance * 3.0, atr * 0.35)
-
-        can_trigger = candle is not None
-        high = max(float(candle.high), price) if candle else price
-        low = min(float(candle.low), price) if candle else price
-        open_price = float(candle.open) if candle else price
-        armed: list[dict] = []
-        levels: list[dict] = []
-        fresh_triggers: list[dict] = []
+        atr=max(float(features.atr_15 or 0.0), price*0.0005)
+        touch_tolerance=max(1.0,atr*0.08,price*0.00018)
+        reclaim=max(1.0,atr*0.12,price*0.00012)
+        arm_distance=max(touch_tolerance*3.0,atr*0.35,price*configured_arm_pct)
+        can_trigger=candle is not None
+        high=max(float(candle.high),price) if candle else price
+        low=min(float(candle.low),price) if candle else price
+        open_price=float(candle.open) if candle else price
+        armed=[]; levels=[]; fresh=[]
 
         for base in raw_levels:
-            row = dict(base)
-            level = float(row["price"])
-            seen = self.seen_levels[row["id"]]
-            # Mapping a level after a completed intrabar reaction must not
-            # claim that same historic wick on the next evaluation. Record
-            # interaction observed while mapped, or require a newer candle.
-            seen.setdefault("initial_low", low)
-            seen.setdefault("initial_high", high)
-            seen["observed_long_touch"] = bool(seen.get("observed_long_touch") or price <= level + touch_tolerance)
-            seen["observed_short_touch"] = bool(seen.get("observed_short_touch") or price >= level - touch_tolerance)
-            newer_candle = candle is not None and candle.start > seen["first_seen_ms"]
-            long_interaction = (newer_candle or seen["observed_long_touch"]
-                                or low < seen["initial_low"] and low <= level + touch_tolerance)
-            short_interaction = (newer_candle or seen["observed_short_touch"]
-                                 or high > seen["initial_high"] and high >= level - touch_tolerance)
-            played = self.played.get(row["id"])
+            row=dict(base); level=float(row["price"])
+            zl=_finite(row.get("zone_low")); zh=_finite(row.get("zone_high"))
+            if zl is not None and zh is not None: zl,zh=sorted((zl,zh))
+            else: zl=zh=None
+            is_zone=zl is not None and zh is not None
+            lower=float(zl if is_zone else level); upper=float(zh if is_zone else level)
+            long_anchor=upper; short_anchor=lower
+            seen=self.seen_levels[row["id"]]
+            seen.setdefault("initial_low",low); seen.setdefault("initial_high",high)
+            touched=low <= upper+touch_tolerance and high >= lower-touch_tolerance
+            seen["observed_long_touch"]=bool(seen.get("observed_long_touch") or (touched and price <= long_anchor+touch_tolerance))
+            seen["observed_short_touch"]=bool(seen.get("observed_short_touch") or (touched and price >= short_anchor-touch_tolerance))
+            newer=bool(candle is not None and int(candle.start) > int(seen.get("first_seen_candle_start") or candle.start))
+            long_interaction=bool(newer or seen["observed_long_touch"] or (low < float(seen["initial_low"]) and low <= long_anchor+touch_tolerance))
+            short_interaction=bool(newer or seen["observed_short_touch"] or (high > float(seen["initial_high"]) and high >= short_anchor-touch_tolerance))
+
+            played=self.played.get(row["id"])
             if played:
-                if now >= int(played.get("hide_after_ms") or 0):
-                    continue
-                row.update(played)
-                row["state"] = "PLAYED"
-                levels.append(row)
-                if now - int(played.get("played_at_ms") or 0) <= TRIGGER_FRESH_MS:
-                    fresh_triggers.append(row)
+                if now >= int(played.get("hide_after_ms") or 0): continue
+                row.update(played); row["state"]="PLAYED"; levels.append(row)
+                if now-int(played.get("played_at_ms") or 0) <= TRIGGER_FRESH_MS: fresh.append(row)
                 continue
 
-            distance = abs(price - level)
-            touched = low <= level + touch_tolerance and high >= level - touch_tolerance
-            native = row.get("direction", "BOTH")
-            allow_long = native in {"BOTH", "LONG", "BULLISH"}
-            allow_short = native in {"BOTH", "SHORT", "BEARISH"}
-
-            # A reaction requires actual interaction plus displacement away from
-            # the level. Proximity alone is only ARMED and can never create a trade.
-            bullish = (
-                can_trigger
-                and row["id"] in previously_seen
-                and long_interaction
-                and allow_long
-                and touched
-                and price >= level + reclaim
-                and price >= open_price
-                and (low <= level or abs(low - level) <= touch_tolerance)
-            )
-            bearish = (
-                can_trigger
-                and row["id"] in previously_seen
-                and short_interaction
-                and allow_short
-                and touched
-                and price <= level - reclaim
-                and price <= open_price
-                and (high >= level or abs(high - level) <= touch_tolerance)
-            )
-
-            direction = ""
-            reaction = ""
-            if bullish and not bearish:
-                direction, reaction = "LONG", "RECLAIM_REJECTION"
-            elif bearish and not bullish:
-                direction, reaction = "SHORT", "REJECTION_RECLAIM"
+            distance=0.0 if lower <= price <= upper else min(abs(price-lower),abs(price-upper))
+            native=str(row.get("direction","BOTH")).upper()
+            allow_long=native in {"BOTH","LONG","BULLISH"}
+            allow_short=native in {"BOTH","SHORT","BEARISH"}
+            bullish=(can_trigger and row["id"] in previously_seen and long_interaction and allow_long and touched
+                     and price >= long_anchor+reclaim and price >= open_price)
+            bearish=(can_trigger and row["id"] in previously_seen and short_interaction and allow_short and touched
+                     and price <= short_anchor-reclaim and price <= open_price)
+            direction="LONG" if bullish and not bearish else "SHORT" if bearish and not bullish else ""
+            reaction="RECLAIM_REJECTION" if direction=="LONG" else "REJECTION_RECLAIM" if direction=="SHORT" else ""
 
             if direction:
-                played_at = now
-                hide_after = played_at + (FIFTEEN_MIN_MS if row["kind"] == "SFP" else THIRTY_MIN_MS)
-                meta = {
-                    "state": "PLAYED",
-                    "direction": direction,
-                    "reaction": reaction,
-                    "played_at_ms": played_at,
-                    "hide_after_ms": hide_after,
-                    "reaction_candle_start": int(candle.start),
-                    "reaction_candle_end": int(candle.end),
-                    "reaction_candle_high": round(high, 2),
-                    "reaction_candle_low": round(low, 2),
-                    "distance_at_trigger": round(distance, 2),
-                }
-                self.played[row["id"]] = meta
-                row.update(meta)
-                fresh_triggers.append(row)
+                score=2; confirms=["LEVEL_INTERACTION","DIRECTIONAL_RECLAIM"]
+                wick_ok=(direction=="LONG" and low < min(open_price,price) and price>open_price) or                         (direction=="SHORT" and high > max(open_price,price) and price<open_price)
+                if wick_ok: score+=1; confirms.append("WICK_REJECTION")
+                expected_structure="BULLISH" if direction=="LONG" else "BEARISH"
+                if str(features.market_structure).upper()==expected_structure: score+=1; confirms.append("MARKET_STRUCTURE")
+                expected_cvd="BULLISH" if direction=="LONG" else "BEARISH"
+                if str(features.cvd_price_divergence).upper()==expected_cvd: score+=1; confirms.append("CVD")
+                if (direction=="LONG" and float(features.book_imbalance or 0)>0.10) or (direction=="SHORT" and float(features.book_imbalance or 0)<-0.10):
+                    score+=1; confirms.append("ORDER_BOOK")
+                if abs(float(features.oi_change_5m_pct or 0))>=0.15: score+=1; confirms.append("OI_EXPANSION")
+                sfp=sfp_hunter or {}; sfp_target=_finite(sfp.get("target_level")); sfp_dir=str(sfp.get("direction") or "").upper()
+                if sfp_target is not None and lower-touch_tolerance <= sfp_target <= upper+touch_tolerance and sfp_dir in {"","BOTH",direction}:
+                    score+=2; confirms.append("SFP")
+
+                if score < min_score:
+                    row.update({"state":"CONFIRMING","direction":direction,"reaction":reaction,"reaction_score":score,
+                                "reaction_confirmations":confirms,"required_confirmation_score":min_score,
+                                "distance":round(distance,2),"arm_distance":round(arm_distance,2)})
+                    armed.append(row); levels.append(row); continue
+
+                played_at=now; hide_after=played_at+(FIFTEEN_MIN_MS if row["kind"]=="SFP" else THIRTY_MIN_MS)
+                meta={"state":"PLAYED","reaction_status":"READY","direction":direction,"reaction":reaction,
+                      "reaction_score":score,"reaction_confirmations":confirms,"required_confirmation_score":min_score,
+                      "played_at_ms":played_at,"hide_after_ms":hide_after,"reaction_candle_start":int(candle.start),
+                      "reaction_candle_end":int(candle.end),"reaction_candle_high":round(high,2),
+                      "reaction_candle_low":round(low,2),"distance_at_trigger":round(distance,2)}
+                if is_zone: meta.update(zone_low=round(lower,2),zone_high=round(upper,2))
+                self.played[row["id"]]=meta; row.update(meta); fresh.append(row)
             elif distance <= arm_distance or touched:
-                row["state"] = "ARMED"
-                row["distance"] = round(distance, 2)
-                row["arm_distance"] = round(arm_distance, 2)
-                if row["id"] not in previously_seen:
-                    row["arming_reason"] = "LEVEL_FIRST_OBSERVED"
-                elif not can_trigger:
-                    row["arming_reason"] = "WAITING_FOR_FRESH_REACTION_CANDLE"
+                row["state"]="CONFIRMING" if touched else "ARMED"; row["distance"]=round(distance,2)
+                row["arm_distance"]=round(arm_distance,2); row["required_confirmation_score"]=min_score
+                row["arming_reason"]="LEVEL_FIRST_OBSERVED" if row["id"] not in previously_seen else                     "WAITING_FOR_FRESH_REACTION_CANDLE" if not can_trigger else                     "TOUCHED_WAITING_FOR_RECLAIM" if touched else "PRICE_APPROACHING_LEVEL"
                 armed.append(row)
             else:
-                row["state"] = "WATCH"
+                row["state"]="WATCH"
             levels.append(row)
 
-        trigger = None
-        if fresh_triggers:
-            # Prefer a trigger that happened on this update, otherwise keep the
-            # freshest played reaction for only three minutes.
-            fresh_triggers.sort(key=lambda row: int(row.get("played_at_ms") or 0), reverse=True)
-            trigger = fresh_triggers[0]
-
-        status = "TRIGGERED" if trigger else "ARMED" if armed else "WATCH"
-        self.last_state = {
-            "status": status,
-            "levels": levels,
-            "armed": sorted(armed, key=lambda row: float(row.get("distance") or 1e18))[:5],
-            "trigger": trigger,
-            "touch_tolerance": round(touch_tolerance, 2),
-            "reclaim_distance": round(reclaim, 2),
-            "reaction_candle_fresh": bool(can_trigger),
-            "rule": "Proximity only arms a level; the level must already be mapped and a fresh sweep/reclaim or rejection with displacement is required before signal evaluation.",
-        }
+        trigger=None
+        if fresh:
+            fresh.sort(key=lambda row:int(row.get("played_at_ms") or 0),reverse=True); trigger=fresh[0]
+        confirming=[r for r in armed if r.get("state")=="CONFIRMING"]
+        status="TRIGGERED" if trigger else "CONFIRMING" if confirming else "ARMED" if armed else "WATCH"
+        self.last_state={"status":status,"levels":levels,"armed":sorted(armed,key=lambda r:float(r.get("distance") or 1e18))[:6],
+                         "trigger":trigger,"touch_tolerance":round(touch_tolerance,2),"reclaim_distance":round(reclaim,2),
+                         "reaction_candle_fresh":bool(can_trigger),"min_confirmation_score":min_score,
+                         "manual_pack":manual_level_pack_summary(),
+                         "rule":"Proximity/touch only arms. A fresh directional reclaim/rejection plus confirmation score is required before signal evaluation."}
         return self.last_state
