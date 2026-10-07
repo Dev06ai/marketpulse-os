@@ -72,6 +72,7 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 
 // Build 87: backend executes every emitted trade call; Android client remains signal/event driven.
+// Build 124: final chart-control release trigger after versioned workflow.
 // Build 124: quiet developing alerts + chart level filters + immersive fullscreen.
 // Build 123: client-release health gate separation trigger.
 // Build 123: final retry-hardened reaction-map release trigger.
