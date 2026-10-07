@@ -1,8 +1,8 @@
 {
   "enabled": true,
-  "versionCode": 117,
-  "versionName": "0.18.2",
-  "apkUrl": "https://github.com/Dev06ai/marketpulse-os/releases/download/dev-trader-v0.18.2-117/app-release.apk",
-  "sha256": "c5dd3537740514644b6ae8c48a6769544748d6fc90526a5c10ca46d410568551",
-  "notes": "KYVORIQ 0.18.2 \u2022 Decision Engine Audit v3.5 \u2022 dispatch fail-closed \u2022 single-owner durable persistence \u2022 zero-fill cleanup \u2022 execution-failure classification"
+  "versionCode": 118,
+  "versionName": "0.18.3",
+  "apkUrl": "https://github.com/Dev06ai/marketpulse-os/releases/download/dev-trader-v0.18.3-118/app-release.apk",
+  "sha256": "bbd159ebf6790953dfe302a533bdf07d66820c7e36e1c1f3c2bb026cc6042b91",
+  "notes": "KYVORIQ 0.18.3 \u2022 System Audit v3.6 \u2022 fresh mapped reactions \u2022 reliable socket alerts \u2022 strict accounting/feed validation \u2022 safer updates"
 }
