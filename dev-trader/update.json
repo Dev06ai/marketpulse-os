@@ -1,8 +1,8 @@
 {
   "enabled": true,
-  "versionCode": 115,
-  "versionName": "0.18.0",
-  "apkUrl": "https://github.com/Dev06ai/marketpulse-os/releases/download/dev-trader-v0.18.0-115/app-release.apk",
-  "sha256": "52fd25ff3a7bf6c6bb64e072d175ec7bcdc7981a42fa4e5d9d494906f6779050",
-  "notes": "KYVORIQ 0.18.0 \u2022 Motion Studio \u2022 launch sequence \u2022 chart reaction/execution motion \u2022 risk heat animation \u2022 Insights motion"
+  "versionCode": 116,
+  "versionName": "0.18.1",
+  "apkUrl": "https://github.com/Dev06ai/marketpulse-os/releases/download/dev-trader-v0.18.1-116/app-release.apk",
+  "sha256": "22b1774a8c276a86817d922c60b11e6c47d998a436c6cac32fe6b502744f29e6",
+  "notes": "KYVORIQ 0.18.1 \u2022 Decision Engine Audit v3.4 \u2022 reaction freshness + mapped-before-trigger \u2022 invalidated OB retirement \u2022 stop anchoring \u2022 chart-level room checks"
 }
