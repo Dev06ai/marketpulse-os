@@ -2389,33 +2389,32 @@ class SafeActivity : FragmentActivity() {
         // added and backend state/status remains authoritative.
         if (!manualPackPresent) {
             val packId = "dewald_levels_2026_10_07"
-            listOf(
-                arrayOf("NPOC", "nPOC", 89409.5, "SHORT"),
-                arrayOf("DAILY", "Daily", 89261.7, "SHORT"),
-                arrayOf("NPOC", "nPOC", 87996.6, "SHORT"),
-                arrayOf("WEEKLY_NPOC", "Weekly nPOC", 87783.9, "SHORT"),
-                arrayOf("DAILY", "Daily", 86482.8, "SHORT"),
-                arrayOf("NPOC", "nPOC", 85563.9, "SHORT"),
-                arrayOf("DAILY", "Daily - Tapped", 84482.8, "LONG"),
-                arrayOf("DAILY", "84,193.3", 84193.3, "LONG"),
-                arrayOf("DAILY", "Daily", 83576.9, "LONG"),
-                arrayOf("WEEKLY_NPOC", "Weekly nPOC", 83389.9, "LONG"),
-                arrayOf("RANGE_POC", "Range POC", 81242.8, "LONG"),
-                arrayOf("DAILY", "Daily", 81143.9, "LONG"),
-                arrayOf("NPOC", "nPOC", 80463.9, "LONG")
-            ).forEach { row ->
+            fun fallbackLine(kind: String, label: String, price: Double, direction: String, priority: Int = 10) {
                 add(
-                    kind = row[0] as String,
-                    label = row[1] as String,
-                    price = row[2] as Double,
+                    kind = kind,
+                    label = label,
+                    price = price,
                     status = "WATCH",
-                    direction = row[3] as String,
+                    direction = direction,
                     source = "MANUAL_LEVEL_PACK_FALLBACK",
                     manual = true,
                     packId = packId,
-                    priority = 10
+                    priority = priority
                 )
             }
+            fallbackLine("NPOC", "nPOC", 89409.5, "SHORT")
+            fallbackLine("DAILY", "Daily", 89261.7, "SHORT", 9)
+            fallbackLine("NPOC", "nPOC", 87996.6, "SHORT")
+            fallbackLine("WEEKLY_NPOC", "Weekly nPOC", 87783.9, "SHORT")
+            fallbackLine("DAILY", "Daily", 86482.8, "SHORT", 8)
+            fallbackLine("NPOC", "nPOC", 85563.9, "SHORT", 9)
+            fallbackLine("DAILY", "Daily - Tapped", 84482.8, "LONG", 8)
+            fallbackLine("DAILY", "84,193.3", 84193.3, "LONG", 7)
+            fallbackLine("DAILY", "Daily", 83576.9, "LONG", 9)
+            fallbackLine("WEEKLY_NPOC", "Weekly nPOC", 83389.9, "LONG")
+            fallbackLine("RANGE_POC", "Range POC", 81242.8, "LONG", 8)
+            fallbackLine("DAILY", "Daily", 81143.9, "LONG", 8)
+            fallbackLine("NPOC", "nPOC", 80463.9, "LONG", 9)
             add("SUPPLY_ZONE", "Supply Zone", 88450.0, "WATCH", "SHORT",
                 zoneLow = 88020.0, zoneHigh = 88880.0, source = "MANUAL_LEVEL_PACK_FALLBACK",
                 manual = true, packId = packId, priority = 10, estimated = true)
