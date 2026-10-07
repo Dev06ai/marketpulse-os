@@ -433,6 +433,25 @@ class MarketChartView @JvmOverloads constructor(
             }
         }
 
+        // When following live BTC, include the user-supplied structural map in
+        // the vertical scale so its full Daily/nPOC/OB ladder remains visible.
+        if (showLevels && followLive) {
+            for (i in 0 until overlays.length()) {
+                val row = overlays.optJSONObject(i) ?: continue
+                if (!row.optBoolean("manual", false)) continue
+                listOf(
+                    row.optDouble("price", Double.NaN),
+                    row.optDouble("zone_low", Double.NaN),
+                    row.optDouble("zone_high", Double.NaN)
+                ).forEach { v ->
+                    if (v.isFinite() && v > 0.0) {
+                        high = max(high, v)
+                        low = min(low, v)
+                    }
+                }
+            }
+        }
+
         if (!high.isFinite() || !low.isFinite() || high <= low) {
             canvas.drawText("No chart data", left, top + dp(30f), labelPaint)
             return
