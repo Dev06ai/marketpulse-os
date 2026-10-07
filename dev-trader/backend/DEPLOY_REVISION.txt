@@ -1,0 +1,6 @@
+KYVORIQ backend deployment target
+engine_revision=market-decision-v3.6
+reaction_pack=dewald_levels_2026_10_07
+execution_policy=CONFIDENCE_MARGIN_20X_FEE_ADJUSTED
+release=0.20.3-build123
+requested_at=2026-10-07
