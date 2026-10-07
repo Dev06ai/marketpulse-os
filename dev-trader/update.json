@@ -1,8 +1,8 @@
 {
   "enabled": true,
-  "versionCode": 119,
-  "versionName": "0.19.0",
-  "apkUrl": "https://github.com/Dev06ai/marketpulse-os/releases/download/dev-trader-v0.19.0-119/app-release.apk",
-  "sha256": "2b7322aa9cd4ba77848e5eb2764174824d6c9d6eea7677855ac84dd9c952f41d",
-  "notes": "KYVORIQ 0.19.0 \u2022 Gold Edition \u2022 deep gold and charcoal \u2022 ember accents \u2022 refined native motion \u2022 accessible transitions \u2022 polished navigation"
+  "versionCode": 121,
+  "versionName": "0.20.1",
+  "apkUrl": "https://github.com/Dev06ai/marketpulse-os/releases/download/dev-trader-v0.20.1-121/app-release.apk",
+  "sha256": "d9eb83165c0ffd3765fe4bc4549dcefc8b0b31b18e041c17016c72408c582d87",
+  "notes": "KYVORIQ 0.20.1 \u2022 Reaction Map Edition \u2022 Dewald BTC level pack \u2022 Daily/nPOC/Weekly nPOC \u2022 OB zones \u2022 reaction-only arming \u2022 confirmation scoring"
 }
