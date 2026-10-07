@@ -71,17 +71,20 @@ These are offline regressions and API checks, not live trading results.
 
 ## Release and deployment limits
 
-The update manifest is deliberately left on the previously published APK until
-the signed build and required CI checks pass. Build 118 is a release candidate,
-not a locally verified APK: this environment has no Android SDK/Gradle/emulator
-or signing credentials. Android compilation, emulator layout and physical-phone
-verification remain pending. Docker/container checks are also pending here.
+Fixes are published in commit `f68510fe2cb623cd54d53222f25baac409e42ad0`.
+GitHub Actions run 37576203816 passed backend tests, full-history security scan,
+constrained Docker checks, native HTTP/WebSocket host checks, Android debug and
+signed release builds, emulator visual checks and release publication.
+Android 0.18.3/build 118 is published with its verified update manifest.
 
-The Deplexo host and GitHub Actions API could not be reached from this session.
-No live host revision, live exchange/API permissions, real fill/stop coverage or
-24/7 soak result has been verified. Backend deployment is separate from APK
-publication; these source fixes must reach Deplexo before they change its engine.
-No demo positions were opened or closed during this audit.
+The live Deplexo probe confirmed engine `market-decision-v3.2` and policy
+`ONE_POSITION_FEE_ADJUSTED`: the live backend has not received these source fixes.
+Redeploy the supplied backend ZIP on Deplexo, preserving host secrets/settings,
+and verify `/health` and `/system-check` report v3.6 before relying on the fixes.
+Updating the APK alone does not update the backend.
+
+Physical-phone testing, live exchange permissions, real fill/stop coverage and
+24/7 soak remain unverified. No demo positions were opened or closed during this audit.
 
 Demo-only execution, Grade-A/freshness gates, confidence margin bands, daily
 limits, one unresolved position, verified stop protection and historical vetoes
