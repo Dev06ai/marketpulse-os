@@ -1,4 +1,4 @@
-// Build 116: decision-engine reliability audit companion release.
+// Build 125: brand-palette + expanded chart + consumed-level lifecycle release.
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.plugin.compose")
@@ -10,8 +10,8 @@ android {
         applicationId = "com.devtrader.app"
         minSdk = 26
         targetSdk = 37
-        versionCode = (providers.gradleProperty("devTraderVersionCode").orNull ?: "124").toInt()
-        versionName = providers.gradleProperty("devTraderVersionName").orNull ?: "0.20.4"
+        versionCode = (providers.gradleProperty("devTraderVersionCode").orNull ?: "125").toInt()
+        versionName = providers.gradleProperty("devTraderVersionName").orNull ?: "0.21.0"
         val backendUrl = providers.gradleProperty("devTraderBackendUrl").orNull
             ?: "https://dev-trader-engine.de.deplexo.com"
         require(Regex("https://[A-Za-z0-9.-]+(?::[0-9]+)?/?").matches(backendUrl)) {
