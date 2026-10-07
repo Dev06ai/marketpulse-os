@@ -24,6 +24,7 @@ import java.util.Locale
 import java.util.concurrent.TimeUnit
 import kotlin.math.min
 
+// Build 124: quiet developing opportunities; push only confirmed/actionable trade events.
 // Build 111: 1 Hz live widget stream + animated widget price motion.
 // Build 110: premium alert hierarchy + widget sync.
  // Build 108: confidence-sized 20x demo execution notifications.
@@ -257,12 +258,12 @@ class SignalService : Service() {
                         val alert = root.optJSONObject("opportunity_alert")
                         if (alert != null) {
                             val alertKey = alert.optString("key")
-                            val title = alert.optString("title")
-                            val body = alert.optString("body")
                             val previousAlert = prefs.getString(PREF_LAST_ALERT_KEY, null)
                             if (alertKey.isNotBlank() && alertKey != previousAlert) {
+                                // Developing opportunities belong in the in-app radar,
+                                // not in heads-up notifications. The confirmed signal
+                                // path below remains the first actionable push.
                                 prefs.edit().putString(PREF_LAST_ALERT_KEY, alertKey).apply()
-                                notifyOpportunity(title, body)
                             }
                         }
 
