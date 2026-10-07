@@ -566,8 +566,39 @@ class DemoExecutionEngine:
             except Exception as exc:
                 return {"ok": False, "skipped": True, "reason": f"Cannot verify {self.leverage}x Bitget Demo leverage: {exc}"}
             # Leverage verification is another private request and can outlive
-            # the decision or the public feed. Check again before saving intent
-            # and sending an order, not only before that request.
+            # the decision or the public quote. Revalidate BOTH feed admission
+            # and the executable Bitget price immediately before persisting the
+            # order intent. Previously only freshness was rechecked here, so a
+            # fast move during set-leverage could bypass the drift/geometry gate.
+            allowed, reason = self._signal_allowed(signal, reconciliation_locked=True)
+            if not allowed:
+                return {"ok": False, "skipped": True, "reason": reason}
+            try:
+                final_reference_price, final_drift_pct = await self._validate_execution_price(
+                    dict(signal, stop=stop, target2=tp)
+                )
+            except BitgetDemoError as exc:
+                return {"ok": False, "skipped": True, "reason": str(exc)}
+            final_unit_risk = abs(final_reference_price - stop) + (final_reference_price + stop) * fee_rate
+            _, final_risk_cap = await self._sizing_balance_and_risk_cap()
+            final_margin = qty * final_reference_price / self.leverage if qty > 0 else 0.0
+            final_notional = qty * final_reference_price
+            final_risk = qty * final_unit_risk
+            if final_risk > final_risk_cap + 1e-9:
+                return {"ok": False, "skipped": True, "reason": "Final Bitget quote exceeds the planned-loss guard; wait for a new setup."}
+            if final_notional > self.max_notional + 1e-9:
+                return {"ok": False, "skipped": True, "reason": "Final Bitget quote exceeds the configured notional cap."}
+            if final_margin < margin_min - 1e-6 or final_margin > margin_max + 1e-6:
+                return {
+                    "ok": False,
+                    "skipped": True,
+                    "reason": f"Final Bitget quote cannot preserve the {confidence_band} margin band ({margin_min:.0f}-{margin_max:.0f} USDT).",
+                }
+            reference_price = final_reference_price
+            reference_drift_pct = final_drift_pct
+            planned_margin = final_margin
+            planned_notional = final_notional
+            risk_usdt = final_risk
             allowed, reason = self._signal_allowed(signal, reconciliation_locked=True)
             if not allowed:
                 return {"ok": False, "skipped": True, "reason": reason}

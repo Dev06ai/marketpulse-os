@@ -12,16 +12,28 @@ from test_execution import FakeLearning, audit_executor, audit_signal
 
 def test_price_moves_past_guard_during_sizing_never_submit(monkeypatch, tmp_path):
     executor = audit_executor(monkeypatch, tmp_path)
-    prices = iter([100000, 102100])
+    prices = iter([100000, 102100, 102100])
     executor.client.market_ticker = lambda _: dict(lastPrice=str(next(prices)))
     result = asyncio.run(executor.handle_signal(audit_signal()))
     assert result['skipped'] and 'drift' in result['reason']
     assert not executor.data['trades']
 
 
+def test_price_move_after_leverage_verification_never_submits(monkeypatch, tmp_path):
+    executor = audit_executor(monkeypatch, tmp_path)
+    prices = iter([100000, 100050, 102100])
+    executor.client.market_ticker = lambda _: dict(lastPrice=str(next(prices)))
+    submitted = []
+    executor.client.place_market_order = lambda *args: submitted.append(args) or {"code":"00000","data":{"orderId":"bad"}}
+    result = asyncio.run(executor.handle_signal(audit_signal()))
+    assert result["skipped"] and "drift" in result["reason"].lower()
+    assert submitted == []
+    assert executor.data["trades"] == []
+
+
 def test_updated_quote_keeps_confidence_margin_and_loss_guard_within_caps(monkeypatch, tmp_path):
     executor = audit_executor(monkeypatch, tmp_path)
-    prices = iter([100000, 100140])
+    prices = iter([100000, 100140, 100140])
     executor.client.market_ticker = lambda _: dict(lastPrice=str(next(prices)))
     result = asyncio.run(executor.handle_signal(audit_signal()))
     assert result['ok']
