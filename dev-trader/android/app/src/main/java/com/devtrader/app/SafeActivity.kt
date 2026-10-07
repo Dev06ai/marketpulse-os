@@ -72,6 +72,7 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 
 // Build 87: backend executes every emitted trade call; Android client remains signal/event driven.
+// Build 124: quiet developing alerts + chart level filters + immersive fullscreen.
 // Build 123: client-release health gate separation trigger.
 // Build 123: final retry-hardened reaction-map release trigger.
 // Build 123: final verified reaction-map label-lane release trigger.
@@ -150,6 +151,11 @@ class SafeActivity : FragmentActivity() {
     private var selectedWorkspace = 0
     private var fullTradeHistoryText = "No executed demo trades yet."
     private lateinit var chart: MarketChartView
+    private var chartFullscreenHost: FrameLayout? = null
+    private var chartHomeParent: ViewGroup? = null
+    private var chartHomeIndex: Int = -1
+    private var chartHomeLayoutParams: ViewGroup.LayoutParams? = null
+    private var chartSystemUiFlags: Int = 0
     private lateinit var updateButton: Button
     private lateinit var checkButton: Button
     private lateinit var alertsButton: Button
@@ -250,6 +256,9 @@ class SafeActivity : FragmentActivity() {
     private val calculatorBack = object : OnBackPressedCallback(false) {
         override fun handleOnBackPressed() { returnToDashboard() }
     }
+    private val chartFullscreenBack = object : OnBackPressedCallback(false) {
+        override fun handleOnBackPressed() { closeChartFullscreen() }
+    }
 
     private fun returnToDashboard() {
         calculatorBack.isEnabled = false
@@ -268,6 +277,7 @@ class SafeActivity : FragmentActivity() {
             window.isNavigationBarContrastEnforced = false
         }
         onBackPressedDispatcher.addCallback(this, calculatorBack)
+        onBackPressedDispatcher.addCallback(this, chartFullscreenBack)
         installCrashReporter()
         requestPremiumRefreshRate()
         // Resolve preview mode before building the UI so automated visual checks
@@ -323,6 +333,75 @@ class SafeActivity : FragmentActivity() {
         overlay.play {
             if (overlay.parent === host) host.removeView(overlay)
         }
+    }
+
+    private fun toggleChartFullscreen() {
+        if (chartFullscreenHost == null) showChartFullscreen() else closeChartFullscreen()
+    }
+
+    private fun showChartFullscreen() {
+        if (!::chart.isInitialized || chartFullscreenHost != null) return
+        val parent = chart.parent as? ViewGroup ?: return
+        val content = findViewById<ViewGroup>(android.R.id.content) ?: return
+
+        chartHomeParent = parent
+        chartHomeIndex = parent.indexOfChild(chart)
+        chartHomeLayoutParams = chart.layoutParams
+        parent.removeView(chart)
+
+        val host = FrameLayout(this).apply {
+            setBackgroundColor(kyCharcoal)
+            clipChildren = false
+            clipToPadding = false
+            contentDescription = "Fullscreen KYVORIQ chart"
+        }
+        chartFullscreenHost = host
+        content.addView(host, FrameLayout.LayoutParams(-1, -1))
+        host.addView(chart, FrameLayout.LayoutParams(-1, -1))
+        chart.setFullscreenMode(true)
+        chartFullscreenBack.isEnabled = true
+
+        chartSystemUiFlags = window.decorView.systemUiVisibility
+        @Suppress("DEPRECATION")
+        window.decorView.systemUiVisibility =
+            View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY or
+                View.SYSTEM_UI_FLAG_FULLSCREEN or
+                View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or
+                View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN or
+                View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION or
+                View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+        haptic(chart, KyvoriqHaptics.Cue.CONFIRM)
+        chart.requestLayout()
+        chart.invalidate()
+    }
+
+    private fun closeChartFullscreen() {
+        val host = chartFullscreenHost ?: return
+        val parent = chartHomeParent
+        val content = host.parent as? ViewGroup
+
+        host.removeView(chart)
+        content?.removeView(host)
+
+        if (parent != null) {
+            val index = chartHomeIndex.coerceIn(0, parent.childCount)
+            val lp = chartHomeLayoutParams ?: LinearLayout.LayoutParams(-1, 0, 1f)
+            parent.addView(chart, index, lp)
+        }
+
+        chart.setFullscreenMode(false)
+        chartFullscreenHost = null
+        chartHomeParent = null
+        chartHomeIndex = -1
+        chartHomeLayoutParams = null
+        chartFullscreenBack.isEnabled = false
+
+        @Suppress("DEPRECATION")
+        window.decorView.systemUiVisibility = chartSystemUiFlags
+        ViewCompat.requestApplyInsets(rootSurface)
+        chart.requestLayout()
+        chart.invalidate()
+        haptic(chart, KyvoriqHaptics.Cue.ACTION)
     }
 
     private fun requestPremiumRefreshRate() {
@@ -447,7 +526,8 @@ class SafeActivity : FragmentActivity() {
         tradePage.addView(tfRow, margins(bottom = 6))
         chart = MarketChartView(this).apply {
             minimumHeight = dp(if (compactViewport) 140 else 0)
-            contentDescription = "Interactive price chart"
+            contentDescription = "Interactive price chart with layer controls and fullscreen mode"
+            onFullscreenRequested = { toggleChartFullscreen() }
         }
         tradePage.addView(chart, LinearLayout.LayoutParams(-1, 0, 1f).apply { bottomMargin = dp(8) })
         val setup = premiumCard("DECISION CENTER", "NO TRADE  •  SCANNING\nWaiting for verified market data.", if (compactViewport) 11.5f else 13f)
