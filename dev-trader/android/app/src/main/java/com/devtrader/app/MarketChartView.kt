@@ -213,8 +213,51 @@ class MarketChartView @JvmOverloads constructor(
     private var feedHealthy = false
     private var showBollinger = true
     private var showEma = true
-    private var showLevels = true
     private var showVolume = true
+
+    private val layerPrefs = context.getSharedPreferences("kyvoriq_chart_layers", Context.MODE_PRIVATE)
+    private var showSfpLevels = layerPrefs.getBoolean("sfp", false)
+    private var showNpocLevels = layerPrefs.getBoolean("npoc", true)
+    private var showObLevels = layerPrefs.getBoolean("ob", true)
+    private var showDailyLevels = layerPrefs.getBoolean("daily", true)
+    private var showWeeklyLevels = layerPrefs.getBoolean("weekly", true)
+    private var showOtherLevels = layerPrefs.getBoolean("other", false)
+    private var levelMenuOpen = false
+    private var fullscreenMode = false
+    var onFullscreenRequested: (() -> Unit)? = null
+
+    fun setFullscreenMode(value: Boolean) {
+        fullscreenMode = value
+        levelMenuOpen = false
+        invalidate()
+    }
+
+    private fun hasVisibleLevelLayers(): Boolean =
+        showSfpLevels || showNpocLevels || showObLevels || showDailyLevels || showWeeklyLevels || showOtherLevels
+
+    private fun isOverlayVisible(row: JSONObject): Boolean {
+        val kind = row.optString("kind", "LEVEL").uppercase(Locale.US)
+        val label = row.optString("label", kind).uppercase(Locale.US)
+        return when {
+            kind == "SFP" || label.startsWith("SFP") -> showSfpLevels
+            kind in setOf("NPOC", "RANGE_POC") || label.contains("NPOC") || label.contains("POC") -> showNpocLevels
+            kind in setOf("OB", "OB_ZONE", "SUPPLY_ZONE", "DEMAND_ZONE") || label.contains(" OB") || label.endsWith("OB") -> showObLevels
+            kind == "DAILY" || label.startsWith("D HIGH") || label.startsWith("D LOW") || label.startsWith("DAILY") -> showDailyLevels
+            kind in setOf("WEEKLY_OPEN", "WEEKLY_NPOC") || label.contains("WEEK") -> showWeeklyLevels
+            else -> showOtherLevels
+        }
+    }
+
+    private fun persistLayerPrefs() {
+        layerPrefs.edit()
+            .putBoolean("sfp", showSfpLevels)
+            .putBoolean("npoc", showNpocLevels)
+            .putBoolean("ob", showObLevels)
+            .putBoolean("daily", showDailyLevels)
+            .putBoolean("weekly", showWeeklyLevels)
+            .putBoolean("other", showOtherLevels)
+            .apply()
+    }
 
     private val overlayStatusByKey = mutableMapOf<String, String>()
     private val overlayMotionStartedAt = mutableMapOf<String, Long>()
@@ -386,7 +429,11 @@ class MarketChartView @JvmOverloads constructor(
 
         val left = dp(10f)
         val right = width - dp(60f)
-        val top = dp(if (height < dp(190f)) 32f else 44f)
+        val top = dp(
+            if (height < dp(190f)) 32f
+            else if (levelMenuOpen) 70f
+            else 44f
+        )
         val bottom = height - dp(24f)
         val priceBottom = if (showVolume) top + (bottom - top) * .76f else bottom
         val volumeTop = if (showVolume) priceBottom + dp(4f) else bottom
@@ -435,10 +482,10 @@ class MarketChartView @JvmOverloads constructor(
 
         // When following live BTC, include the user-supplied structural map in
         // the vertical scale so its full Daily/nPOC/OB ladder remains visible.
-        if (showLevels && followLive) {
+        if (hasVisibleLevelLayers() && followLive) {
             for (i in 0 until overlays.length()) {
                 val row = overlays.optJSONObject(i) ?: continue
-                if (!row.optBoolean("manual", false)) continue
+                if (!row.optBoolean("manual", false) || !isOverlayVisible(row)) continue
                 listOf(
                     row.optDouble("price", Double.NaN),
                     row.optDouble("zone_low", Double.NaN),
@@ -473,7 +520,7 @@ class MarketChartView @JvmOverloads constructor(
         canvas.drawRoundRect(RectF(left, top, right, bottom), dp(3f), dp(3f), plotBorderPaint)
         if (showVolume) canvas.drawLine(left, volumeTop, right, volumeTop, volumeDividerPaint)
         drawAxes(canvas, right, priceBottom, top, bottom, low, high)
-        if (showLevels) drawZoneOverlays(canvas, left, right, top, priceBottom, low, high)
+        if (hasVisibleLevelLayers()) drawZoneOverlays(canvas, left, right, top, priceBottom, low, high)
 
         val step = (right - left) / actualVisible
         val candleWidth = max(dp(2.4f), min(dp(9.2f), step * 0.62f))
@@ -518,7 +565,7 @@ class MarketChartView @JvmOverloads constructor(
 
         if (showBollinger) drawBollinger(canvas, start, actualVisible, left, top, priceBottom, low, high, step)
         if (showEma) drawEma50(canvas, start, actualVisible, left, top, priceBottom, low, high, step)
-        if (showLevels) {
+        if (hasVisibleLevelLayers()) {
             drawStructureOverlays(canvas, left, right, top, priceBottom, low, high)
             signal?.let { s ->
                 val revealBase = if (tradeRevealStartedAt > 0L && KyvoriqTheme.motionEnabled(context)) {
@@ -568,16 +615,20 @@ class MarketChartView @JvmOverloads constructor(
                 val active = when (key) {
                     "BB" -> showBollinger
                     "EMA" -> showEma
-                    "LVL" -> showLevels
-                    else -> showVolume
+                    "LVL" -> hasVisibleLevelLayers()
+                    "VOL" -> showVolume
+                    "FULL" -> fullscreenMode
+                    else -> false
                 }
                 canvas.drawRoundRect(rect, dp(5f), dp(5f), if (active) controlActivePaint else controlInactivePaint)
-                controlBorderPaint.color = if (active) KyvoriqTheme.deepGold else KyvoriqTheme.border
+                controlBorderPaint.color = if (active || (key == "LVL" && levelMenuOpen)) KyvoriqTheme.deepGold else KyvoriqTheme.border
                 canvas.drawRoundRect(rect, dp(5f), dp(5f), controlBorderPaint)
-                controlTextPaint.color = if (active) KyvoriqTheme.gold else KyvoriqTheme.muted
-                val tw = controlTextPaint.measureText(key)
-                canvas.drawText(key, rect.centerX() - tw / 2f, rect.centerY() + dp(3f), controlTextPaint)
+                controlTextPaint.color = if (active || key == "FULL") KyvoriqTheme.gold else KyvoriqTheme.muted
+                val label = if (key == "FULL" && fullscreenMode) "EXIT" else key
+                val tw = controlTextPaint.measureText(label)
+                canvas.drawText(label, rect.centerX() - tw / 2f, rect.centerY() + dp(3f), controlTextPaint)
             }
+            if (levelMenuOpen) drawLevelMenu(canvas, left)
         }
 
         val chipWidth = dp(58f)
@@ -600,13 +651,70 @@ class MarketChartView @JvmOverloads constructor(
         val top = dp(23f)
         val height = dp(16f)
         val gap = dp(4f)
-        val specs = listOf("BB" to 26f, "EMA" to 34f, "LVL" to 32f, "VOL" to 32f)
+        val specs = listOf("BB" to 26f, "EMA" to 34f, "LVL" to 32f, "VOL" to 32f, "FULL" to 38f)
         var x = left
         return specs.map { (key, widthDp) ->
             val rect = RectF(x, top, x + dp(widthDp), top + height)
             x = rect.right + gap
             key to rect
         }
+    }
+
+    private fun levelFilterChipRects(left: Float): List<Pair<String, RectF>> {
+        val top = dp(44f)
+        val height = dp(18f)
+        val gap = dp(3f)
+        val specs = listOf(
+            "SFP" to 29f,
+            "NPOC" to 40f,
+            "OB" to 27f,
+            "DAILY" to 40f,
+            "WEEK" to 40f,
+            "OTHER" to 43f
+        )
+        var x = left
+        return specs.map { (key, widthDp) ->
+            val rect = RectF(x, top, x + dp(widthDp), top + height)
+            x = rect.right + gap
+            key to rect
+        }
+    }
+
+    private fun layerEnabled(key: String): Boolean = when (key) {
+        "SFP" -> showSfpLevels
+        "NPOC" -> showNpocLevels
+        "OB" -> showObLevels
+        "DAILY" -> showDailyLevels
+        "WEEK" -> showWeeklyLevels
+        else -> showOtherLevels
+    }
+
+    private fun drawLevelMenu(canvas: Canvas, left: Float) {
+        levelFilterChipRects(left).forEach { (key, rect) ->
+            val active = layerEnabled(key)
+            canvas.drawRoundRect(rect, dp(5f), dp(5f), if (active) controlActivePaint else controlInactivePaint)
+            controlBorderPaint.color = if (active) KyvoriqTheme.deepGold else KyvoriqTheme.border
+            canvas.drawRoundRect(rect, dp(5f), dp(5f), controlBorderPaint)
+            controlTextPaint.color = if (active) KyvoriqTheme.gold else KyvoriqTheme.muted
+            val tw = controlTextPaint.measureText(key)
+            canvas.drawText(key, rect.centerX() - tw / 2f, rect.centerY() + dp(3f), controlTextPaint)
+        }
+    }
+
+    private fun toggleLevelFilterAt(x: Float, y: Float): Boolean {
+        if (!levelMenuOpen || height < dp(190f)) return false
+        val key = levelFilterChipRects(dp(10f)).firstOrNull { it.second.contains(x, y) }?.first ?: return false
+        when (key) {
+            "SFP" -> showSfpLevels = !showSfpLevels
+            "NPOC" -> showNpocLevels = !showNpocLevels
+            "OB" -> showObLevels = !showObLevels
+            "DAILY" -> showDailyLevels = !showDailyLevels
+            "WEEK" -> showWeeklyLevels = !showWeeklyLevels
+            "OTHER" -> showOtherLevels = !showOtherLevels
+        }
+        persistLayerPrefs()
+        crosshairVisible = false
+        return true
     }
 
     private fun toggleIndicatorAt(x: Float, y: Float): Boolean {
@@ -616,8 +724,9 @@ class MarketChartView @JvmOverloads constructor(
         when (hit) {
             "BB" -> showBollinger = !showBollinger
             "EMA" -> showEma = !showEma
-            "LVL" -> showLevels = !showLevels
+            "LVL" -> levelMenuOpen = !levelMenuOpen
             "VOL" -> showVolume = !showVolume
+            "FULL" -> onFullscreenRequested?.invoke()
         }
         crosshairVisible = false
         return true
@@ -1014,6 +1123,7 @@ class MarketChartView @JvmOverloads constructor(
         val wallNow = System.currentTimeMillis()
         for (i in 0 until overlays.length()) {
             val row = overlays.optJSONObject(i) ?: continue
+            if (!isOverlayVisible(row)) continue
             val zl = row.optDouble("zone_low", Double.NaN)
             val zh = row.optDouble("zone_high", Double.NaN)
             if (!zl.isFinite() || !zh.isFinite() || zl <= 0.0 || zh <= 0.0) continue
@@ -1055,6 +1165,7 @@ class MarketChartView @JvmOverloads constructor(
         if (overlays.length() == 0) return
         val rows = (0 until overlays.length()).mapNotNull { overlays.optJSONObject(it) }
             .mapNotNull { row ->
+                if (!isOverlayVisible(row)) return@mapNotNull null
                 val zoneLow = row.optDouble("zone_low", Double.NaN)
                 val zoneHigh = row.optDouble("zone_high", Double.NaN)
                 if (zoneLow.isFinite() && zoneHigh.isFinite() && zoneLow > 0.0 && zoneHigh > 0.0) return@mapNotNull null
@@ -1291,6 +1402,12 @@ class MarketChartView @JvmOverloads constructor(
                     event.y < dp(42f)
 
                 if (!dragging && !pinchActive) {
+                    if (toggleLevelFilterAt(event.x, event.y)) {
+                        KyvoriqHaptics.fire(this, KyvoriqHaptics.Cue.SELECT)
+                        performClick()
+                        invalidate()
+                        return true
+                    }
                     if (toggleIndicatorAt(event.x, event.y)) {
                         KyvoriqHaptics.fire(this, KyvoriqHaptics.Cue.SELECT)
                         performClick()
