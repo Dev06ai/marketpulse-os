@@ -711,3 +711,39 @@ def test_position_management_uses_opposite_side_liquidations():
 
     assert management is not None
     assert any("Long-side liquidation pressure supports the short." in r for r in management["reasons"])
+
+def test_execution_failure_is_not_mislearned_as_market_invalidation(monkeypatch, tmp_path):
+    from app.strategy import StrategyEngine
+    monkeypatch.setenv("LEARNING_STATE_FILE", str(tmp_path / "learning.json"))
+    monkeypatch.setenv("DECISION_JOURNAL_FILE", str(tmp_path / "journal.db"))
+    engine = StrategyEngine()
+    signal = {
+        "id": "EXEC-FAIL-1",
+        "direction": "LONG",
+        "setup": "TEST",
+        "entry": 100000.0,
+        "stop": 99500.0,
+        "target1": 101500.0,
+        "target2": 103000.0,
+        "rr": 6.0,
+        "confidence": 0.85,
+        "grade": "A",
+        "timeframe": "5m",
+        "created_ts": int(time.time() * 1000),
+    }
+    engine.active_signals[signal["id"]] = dict(signal)
+    engine.active_signal = engine.active_signals[signal["id"]]
+    engine.signal_status = "ACTIVE"
+
+    engine.resolve_external_execution({
+        "signal_id": signal["id"],
+        "close_reason": "FAILED",
+        "result_r": 0.0,
+        "net_profit_usdt": 0.0,
+        "ts": int(time.time() * 1000),
+    })
+
+    assert engine.signal_status == "EXECUTION_FAILED"
+    assert engine.last_lifecycle_event["outcome"] == "EXECUTION_FAILED"
+    assert engine.last_lifecycle_event["signal"]["lifecycle"] == "EXECUTION_FAILED"
+

@@ -483,6 +483,7 @@ class DemoExecutionEngine:
     async def _handle_signal(self, signal: dict[str, Any]) -> dict[str, Any]:
         submission_oid = ""
         submission_context = {}
+        durable_prediction_opened = False
         allowed, reason = self._signal_allowed(signal, reconciliation_locked=True)
         if not allowed:
             return {"ok": False, "skipped": True, "reason": reason}
@@ -668,11 +669,42 @@ class DemoExecutionEngine:
                 self._save()
             if self.bridge:
                 try:
-                    await self.bridge.post_open_signal(signal, signal.get("evidence", {}).get("memory_match"))
+                    bridge_result = await self.bridge.post_open_signal(
+                        signal,
+                        signal.get("evidence", {}).get("memory_match"),
+                    )
+                    durable_prediction_opened = bridge_result is not None
                 except Exception:
-                    pass
+                    durable_prediction_opened = False
             await self._poll_fill(trade["execution_id"])
-            return {"ok": True, "trade": dict(trade)}
+
+            # An accepted order can still terminate as rejected/cancelled with
+            # zero fill. That is conclusively NOT an executed trade. Clean the
+            # durable prediction (when one was actually opened) and report a
+            # skip so strategy quota/state is retired instead of leaving a
+            # phantom ACTIVE prediction after Bitget rejected the order.
+            if trade.get("status") == "FAILED" and not trade.get("actual_fill_confirmed"):
+                reason = str(trade.get("error") or "Bitget entry order ended without a fill.")
+                cleanup_done = False
+                if durable_prediction_opened and self.bridge:
+                    try:
+                        cleanup_done = await self.bridge.post_outcome(signal, "NOT_EXECUTED", 0.0) is not None
+                    except Exception:
+                        cleanup_done = False
+                return {
+                    "ok": False,
+                    "skipped": True,
+                    "reason": reason,
+                    "trade": dict(trade),
+                    "durable_prediction_opened": durable_prediction_opened,
+                    "durable_cleanup_done": cleanup_done,
+                }
+
+            return {
+                "ok": True,
+                "trade": dict(trade),
+                "durable_prediction_opened": durable_prediction_opened,
+            }
         except Exception as exc:
             # Before a client order id is committed there is no ambiguous
             # exchange exposure. Treat validation/sizing/config failures as a

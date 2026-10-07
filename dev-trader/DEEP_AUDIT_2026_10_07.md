@@ -1,6 +1,6 @@
 # KYVORIQ Decision Engine Deep Audit — 2026-10-07
 
-Backend revision after this audit: `market-decision-v3.4`.
+Backend revision after this audit: `market-decision-v3.5`.
 
 ## Scope
 
@@ -79,6 +79,30 @@ The execution-room veto considered higher-timeframe swings, daily/weekly highs/l
 
 Fix: weekly open and opposing 15m/1h/4h/1D/2D OB midpoints now participate in the same fee-adjusted room check before a candidate can pass.
 
+### 12. Auto-execution with missing credentials could leave a phantom ACTIVE plan
+
+When Bitget Demo mode was enabled but API credentials were not configured, the strategy could still emit a qualified signal. The main loop skipped scheduling execution, but the strategy signal remained ACTIVE and consumed daily quota even though no exchange submission was possible.
+
+Fix: autonomous dispatch now fails closed. If Demo auto-execution is enabled but credentials are unavailable, the signal is retired immediately as NOT_EXECUTED/SKIPPED before durable persistence or user-facing execution signaling.
+
+### 13. Durable prediction persistence had a duplicate/race path
+
+The main loop posted the prediction to the durable bridge before private exchange admission, while the execution engine posted the same open prediction again after order acceptance. A very fast exchange skip could race the asynchronous pre-admission bridge write and its cleanup, allowing an old OPEN prediction to reappear after a NOT_EXECUTED outcome.
+
+Fix: in autonomous execution mode the execution engine is now the single owner of durable-open persistence. Manual/signal-only mode still persists immediately because no exchange executor will do it.
+
+### 14. Accepted orders that later ended rejected/cancelled with zero fill could stay remotely OPEN
+
+A market order could be accepted by the submit endpoint, persisted to the durable bridge, then return a terminal rejected/cancelled order state with zero fill during fill polling. Locally it became FAILED and was retired, but the remote prediction could remain OPEN.
+
+Fix: a terminal zero-fill rejection/cancellation is now converted to a conclusive skipped execution. If the durable prediction was successfully opened, it is explicitly closed as NOT_EXECUTED before the result returns.
+
+### 15. Exchange execution failures were mislabeled as market invalidations
+
+The external execution resolver correctly set the local lifecycle to EXECUTION_FAILED but reported the durable lifecycle outcome as INVALIDATED. That could contaminate learning/remote history by treating an infrastructure/execution failure as if the trade thesis itself failed.
+
+Fix: FAILED execution events now carry an EXECUTION_FAILED outcome end-to-end and are no longer categorized as market invalidations.
+
 ## Safety invariants retained
 
 - Demo execution only.
@@ -107,4 +131,8 @@ New regression checks cover:
 - reaction-candle stop anchoring,
 - invalidated-OB retirement, and
 - weekly-open/opposing-OB entry-room vetoes.
+- auto-execution credential-readiness retirement,
+- single-owner durable-open persistence,
+- terminal zero-fill remote cleanup, and
+- execution-failure outcome classification.
 

@@ -364,6 +364,47 @@ async def broadcast_loop():
 execution_tasks: set[asyncio.Task] = set()
 
 
+def dispatch_signal(signal_payload: dict):
+    """Route a qualified strategy signal without creating phantom durable state.
+
+    Manual mode keeps the durable prediction immediately. In autonomous Bitget
+    Demo mode the execution engine owns durable-open persistence after an order
+    has actually been accepted. If auto-execution is enabled but credentials are
+    not configured, retire the plan immediately so it cannot consume daily quota
+    or remain falsely ACTIVE.
+    """
+    sid = str(signal_payload.get("id") or "").strip()
+    if execution.enabled:
+        if not execution.ready:
+            reason = "Bitget Demo auto-execution is enabled but API credentials are not configured."
+            if sid:
+                engine.retire_unexecuted_signal(sid, reason, "SKIPPED")
+            engine.journal.record(
+                "EXECUTION",
+                dict(signal_id=sid, ok=False, skipped=True, reason=reason, trade=None),
+                identity="execution-dispatch:" + (sid or "missing-id"),
+            )
+            return {"scheduled": False, "skipped": True, "reason": reason}
+
+        if not clients:
+            push.send_signal(signal_payload)
+        schedule_execution(signal_payload)
+        return {"scheduled": True, "skipped": False, "reason": ""}
+
+    # Manual/signal-only mode still needs durable prediction persistence because
+    # no exchange executor will post it after admission.
+    if bridge.enabled:
+        asyncio.create_task(
+            bridge.post_open_signal(
+                signal_payload,
+                signal_payload.get("evidence", {}).get("memory_match"),
+            )
+        )
+    if not clients:
+        push.send_signal(signal_payload)
+    return {"scheduled": False, "skipped": False, "reason": "manual signal mode"}
+
+
 def schedule_execution(signal_payload: dict):
     # Private REST calls must not block processing the market WebSocket.
     payload = dict(signal_payload)
@@ -387,13 +428,18 @@ async def execute_signal(payload: dict):
             active["execution_status"] = result.get("trade", {}).get("status") if result.get("ok") else "SKIPPED" if result.get("skipped") else "FAILED"
             active["execution_reason"] = result.get("reason", "Exchange submission accepted")
         reconcile_execution_truth()
-        # The strategy prediction is persisted before the private exchange
-        # checks run. If Bitget conclusively skips the entry and reconciliation
-        # retires the local signal, close the durable prediction too so a restart
-        # cannot resurrect a trade that never existed. Do not do this when the
-        # signal remains active: duplicate/uncertain submissions may already
-        # correspond to real exchange exposure.
-        if result.get("skipped") and sid and sid not in engine.active_signals and bridge.enabled:
+        # The execution engine owns durable-open persistence in autonomous
+        # mode. If it opened a durable prediction and later proved there was no
+        # fill, it also performs the cleanup. Retain this fallback only for
+        # legacy/pre-fix paths that report a clean skip without a completed
+        # durable cleanup.
+        if (
+            result.get("skipped")
+            and not result.get("durable_cleanup_done")
+            and sid
+            and sid not in engine.active_signals
+            and bridge.enabled
+        ):
             await bridge.post_outcome(payload, "NOT_EXECUTED", 0.0)
         engine.journal.record("EXECUTION",dict(signal_id=sid,ok=result.get("ok"),
             skipped=result.get("skipped"),reason=result.get("reason"),trade=result.get("trade")),
@@ -527,19 +573,7 @@ async def on_state(s: MarketState):
                 push.send_trade_event(execution_event)
 
         if sig:
-            signal_payload = sig.to_dict()
-
-            if bridge.enabled:
-                asyncio.create_task(
-                    bridge.post_open_signal(
-                        signal_payload,
-                        signal_payload.get("evidence", {}).get("memory_match"),
-                    )
-                )
-            if not clients:
-                push.send_signal(signal_payload)
-            if execution.enabled and execution.ready:
-                schedule_execution(signal_payload)
+            dispatch_signal(sig.to_dict())
 
 
 async def setup_memory_refresh_loop():

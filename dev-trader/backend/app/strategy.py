@@ -3072,10 +3072,15 @@ class StrategyEngine:
 
         self.active_signals.pop(signal_id, None)
         self.last_resolved_ts = max(self.last_resolved_ts, ts)
+        lifecycle_outcome = (
+            "TARGET_REACHED" if reason == "TP" else
+            "EXECUTION_FAILED" if reason == "FAILED" else
+            "INVALIDATED"
+        )
         self.last_lifecycle_event = {
             "signal": dict(signal),
             "event": dict(event),
-            "outcome": "TARGET_REACHED" if reason == "TP" else "INVALIDATED",
+            "outcome": lifecycle_outcome,
             "result_r": result_r,
         }
 

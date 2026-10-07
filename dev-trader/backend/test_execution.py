@@ -772,3 +772,122 @@ def test_exchange_fill_losses_cannot_bypass_daily_limit(monkeypatch, tmp_path):
     assert not executor.data['trades']
     allowed, reason = executor._signal_allowed(audit_signal())
     assert not allowed and 'daily loss limit' in reason
+
+def test_terminal_unfilled_rejection_cleans_durable_prediction(monkeypatch, tmp_path):
+    class FakeBridge:
+        enabled = True
+        def __init__(self):
+            self.opens = []
+            self.outcomes = []
+
+        async def post_open_signal(self, signal, memory_match=None):
+            self.opens.append(signal.get("id"))
+            return {"ok": True}
+
+        async def post_outcome(self, signal, outcome, result_r):
+            self.outcomes.append((signal.get("id"), outcome, result_r))
+            return {"ok": True}
+
+    executor = audit_executor(monkeypatch, tmp_path)
+    bridge = FakeBridge()
+    executor.bridge = bridge
+    executor.client.order_detail = lambda *_: {
+        "orderStatus": "rejected",
+        "baseVolume": "0",
+        "priceAvg": "0",
+    }
+
+    result = asyncio.run(executor.handle_signal(audit_signal()))
+
+    assert result["ok"] is False
+    assert result["skipped"] is True
+    assert result["trade"]["status"] == "FAILED"
+    assert result["durable_prediction_opened"] is True
+    assert result["durable_cleanup_done"] is True
+    assert bridge.opens == ["AUDIT"]
+    assert bridge.outcomes == [("AUDIT", "NOT_EXECUTED", 0.0)]
+
+
+def test_auto_execution_without_credentials_retires_plan_before_remote_persistence(monkeypatch):
+    from app import main
+
+    class Journal:
+        def __init__(self):
+            self.rows = []
+
+        def record(self, event_type, payload, **kwargs):
+            self.rows.append((event_type, payload, kwargs))
+
+    class Engine:
+        def __init__(self):
+            self.retired = []
+            self.journal = Journal()
+
+        def retire_unexecuted_signal(self, sid, reason, status="SKIPPED"):
+            self.retired.append((sid, reason, status))
+
+    class Execution:
+        enabled = True
+        ready = False
+
+    class Bridge:
+        enabled = True
+        def __init__(self):
+            self.opens = []
+
+        async def post_open_signal(self, signal, memory_match=None):
+            self.opens.append(signal.get("id"))
+            return {"ok": True}
+
+    fake_engine = Engine()
+    fake_bridge = Bridge()
+    monkeypatch.setattr(main, "engine", fake_engine)
+    monkeypatch.setattr(main, "execution", Execution())
+    monkeypatch.setattr(main, "bridge", fake_bridge)
+
+    result = main.dispatch_signal({"id": "NO-CREDS", "direction": "LONG", "evidence": {}})
+
+    assert result["skipped"] is True
+    assert result["scheduled"] is False
+    assert fake_engine.retired and fake_engine.retired[0][0] == "NO-CREDS"
+    assert fake_bridge.opens == []
+
+
+def test_auto_execution_ready_does_not_double_persist_open_prediction(monkeypatch):
+    from app import main
+
+    class Execution:
+        enabled = True
+        ready = True
+
+    class Bridge:
+        enabled = True
+        def __init__(self):
+            self.opens = []
+
+        async def post_open_signal(self, signal, memory_match=None):
+            self.opens.append(signal.get("id"))
+            return {"ok": True}
+
+    class Push:
+        def __init__(self):
+            self.signals = []
+        def send_signal(self, signal):
+            self.signals.append(signal.get("id"))
+
+    scheduled = []
+    fake_bridge = Bridge()
+    fake_push = Push()
+    monkeypatch.setattr(main, "execution", Execution())
+    monkeypatch.setattr(main, "bridge", fake_bridge)
+    monkeypatch.setattr(main, "push", fake_push)
+    monkeypatch.setattr(main, "clients", set())
+    monkeypatch.setattr(main, "schedule_execution", lambda payload: scheduled.append(payload.get("id")))
+
+    result = main.dispatch_signal({"id": "AUTO-READY", "direction": "LONG", "evidence": {}})
+
+    assert result["scheduled"] is True
+    assert scheduled == ["AUTO-READY"]
+    assert fake_push.signals == ["AUTO-READY"]
+    assert fake_bridge.opens == []
+

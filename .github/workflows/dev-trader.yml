@@ -123,7 +123,7 @@ jobs:
           gradle-version: '9.6.0'
       - name: Build Android debug APK
         working-directory: dev-trader/android
-        run: gradle assembleDebug --stacktrace -PdevTraderVersionCode=116 -PdevTraderVersionName=0.18.1
+        run: gradle assembleDebug --stacktrace -PdevTraderVersionCode=117 -PdevTraderVersionName=0.18.2
       - name: Build signed Android release APK
         if: steps.changed.outputs.android_changed == 'true'
         working-directory: dev-trader/android
@@ -134,7 +134,7 @@ jobs:
           DEV_TRADER_KEY_PASSWORD: ${{ secrets.DEV_TRADER_KEY_PASSWORD }}
         run: |
           echo "${{ secrets.DEV_TRADER_KEYSTORE_BASE64 }}" | base64 --decode > "$DEV_TRADER_KEYSTORE_PATH"
-          gradle assembleRelease --stacktrace -PdevTraderVersionCode=116 -PdevTraderVersionName=0.18.1
+          gradle assembleRelease --stacktrace -PdevTraderVersionCode=117 -PdevTraderVersionName=0.18.2
           if unzip -l app/build/outputs/apk/release/app-release.apk | grep -q ui_preview.json; then
             echo 'Debug preview data must never be included in release APKs.'
             exit 1
@@ -205,7 +205,7 @@ jobs:
           mkdir -p release
           cp dist/app-release.apk release/app-release.apk
           sha256sum release/app-release.apk | awk '{print $1}' > release/app-release.sha256
-          echo "tag=dev-trader-v0.18.1-116" >> "$GITHUB_OUTPUT"
+          echo "tag=dev-trader-v0.18.2-117" >> "$GITHUB_OUTPUT"
           echo "sha256=$(cat release/app-release.sha256)" >> "$GITHUB_OUTPUT"
       - name: Create GitHub release
         env:
@@ -215,7 +215,7 @@ jobs:
             echo "This release already exists; refusing to replace a published APK."
             exit 1
           fi
-          gh release create "${{ steps.release.outputs.tag }}" release/app-release.apk --target "$GITHUB_SHA" --title "KYVORIQ 0.18.1 (116)" --notes "Decision Engine Reliability Audit: threshold parity, dedicated mapped-level reaction playbook, skipped-quota recovery, durable skip cleanup, daily-risk-budget enforcement, clean pre-submission failures, stale/hindsight reaction protection, invalidated-OB retirement, reaction-candle stop anchoring, and chart-level entry-room checks."
+          gh release create "${{ steps.release.outputs.tag }}" release/app-release.apk --target "$GITHUB_SHA" --title "KYVORIQ 0.18.2 (117)" --notes "Decision Engine Audit v3.5: retires auto-execution plans when credentials are unavailable, removes duplicate pre-admission durable persistence, cleans terminal zero-fill rejected/cancelled orders as NOT_EXECUTED, and separates execution failures from market invalidations. Existing quality/risk thresholds are unchanged."
       - name: Publish verified update manifest
         env:
           SHA256: "${{ steps.release.outputs.sha256 }}"
@@ -229,11 +229,11 @@ jobs:
           data = json.loads(p.read_text())
           data.update({
               "enabled": True,
-              "versionCode": 116,
-              "versionName": "0.18.1",
-              "apkUrl": "https://github.com/Dev06ai/marketpulse-os/releases/download/dev-trader-v0.18.1-116/app-release.apk",
+              "versionCode": 117,
+              "versionName": "0.18.2",
+              "apkUrl": "https://github.com/Dev06ai/marketpulse-os/releases/download/dev-trader-v0.18.2-117/app-release.apk",
               "sha256": os.environ["SHA256"],
-              "notes": "KYVORIQ 0.18.1 • Decision Engine Audit v3.4 • reaction freshness + mapped-before-trigger • invalidated OB retirement • stop anchoring • chart-level room checks"
+              "notes": "KYVORIQ 0.18.2 • Decision Engine Audit v3.5 • dispatch fail-closed • single-owner durable persistence • zero-fill cleanup • execution-failure classification"
           })
           p.write_text(json.dumps(data, indent=2) + "\n")
           PY
