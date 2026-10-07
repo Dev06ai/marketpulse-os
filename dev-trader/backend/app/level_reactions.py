@@ -239,9 +239,11 @@ class LevelReactionTracker:
                 if is_zone: meta.update(zone_low=round(lower,2),zone_high=round(upper,2))
                 self.played[row["id"]]=meta; row.update(meta); fresh.append(row)
             elif distance <= arm_distance or touched:
-                row["state"]="CONFIRMING" if touched else "ARMED"; row["distance"]=round(distance,2)
+                was_seen = row["id"] in previously_seen
+                row["state"] = "CONFIRMING" if (touched and was_seen and can_trigger) else "ARMED"
+                row["distance"]=round(distance,2)
                 row["arm_distance"]=round(arm_distance,2); row["required_confirmation_score"]=min_score
-                row["arming_reason"]="LEVEL_FIRST_OBSERVED" if row["id"] not in previously_seen else                     "WAITING_FOR_FRESH_REACTION_CANDLE" if not can_trigger else                     "TOUCHED_WAITING_FOR_RECLAIM" if touched else "PRICE_APPROACHING_LEVEL"
+                row["arming_reason"]="LEVEL_FIRST_OBSERVED" if not was_seen else                     "WAITING_FOR_FRESH_REACTION_CANDLE" if not can_trigger else                     "TOUCHED_WAITING_FOR_RECLAIM" if touched else "PRICE_APPROACHING_LEVEL"
                 armed.append(row)
             else:
                 row["state"]="WATCH"
