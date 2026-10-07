@@ -1,0 +1,166 @@
+{
+  "pack_id": "dewald_levels_2026_10_07",
+  "pack_name": "Dewald Levels and Order Blocks",
+  "symbol": "BTCUSDT",
+  "enabled": true,
+  "source": "user_supplied_chart_screenshot",
+  "source_note": "Horizontal prices are transcribed from the supplied chart. Zone boundaries are visually estimated and marked estimated=true until exact TradingView bounds are supplied.",
+  "engine_rules": {
+    "arm_distance_pct_line": 0.0012,
+    "entry_requires_confirmation": true,
+    "allow_blind_touch_entries": false,
+    "min_confirmation_score": 3,
+    "preferred_min_rr": 1.8
+  },
+  "levels": [
+    {
+      "id": "manual_npoc_89409_5",
+      "label": "nPOC",
+      "price": 89409.5,
+      "kind": "NPOC",
+      "priority": 10,
+      "reaction_bias": "SHORT"
+    },
+    {
+      "id": "manual_daily_89261_7",
+      "label": "Daily",
+      "price": 89261.7,
+      "kind": "DAILY",
+      "priority": 9,
+      "reaction_bias": "SHORT"
+    },
+    {
+      "id": "manual_npoc_87996_6",
+      "label": "nPOC",
+      "price": 87996.6,
+      "kind": "NPOC",
+      "priority": 10,
+      "reaction_bias": "SHORT"
+    },
+    {
+      "id": "manual_weekly_npoc_87783_9",
+      "label": "Weekly nPOC",
+      "price": 87783.9,
+      "kind": "WEEKLY_NPOC",
+      "priority": 10,
+      "reaction_bias": "SHORT"
+    },
+    {
+      "id": "manual_daily_86482_8",
+      "label": "Daily",
+      "price": 86482.8,
+      "kind": "DAILY",
+      "priority": 8,
+      "reaction_bias": "SHORT"
+    },
+    {
+      "id": "manual_npoc_85563_9",
+      "label": "nPOC",
+      "price": 85563.9,
+      "kind": "NPOC",
+      "priority": 9,
+      "reaction_bias": "SHORT"
+    },
+    {
+      "id": "manual_daily_tapped_84482_8",
+      "label": "Daily - Tapped",
+      "price": 84482.8,
+      "kind": "DAILY",
+      "priority": 8,
+      "reaction_bias": "LONG"
+    },
+    {
+      "id": "manual_support_84193_3",
+      "label": "84,193.3",
+      "price": 84193.3,
+      "kind": "DAILY",
+      "priority": 7,
+      "reaction_bias": "LONG"
+    },
+    {
+      "id": "manual_daily_83576_9",
+      "label": "Daily",
+      "price": 83576.9,
+      "kind": "DAILY",
+      "priority": 9,
+      "reaction_bias": "LONG"
+    },
+    {
+      "id": "manual_weekly_npoc_83389_9",
+      "label": "Weekly nPOC",
+      "price": 83389.9,
+      "kind": "WEEKLY_NPOC",
+      "priority": 10,
+      "reaction_bias": "LONG"
+    },
+    {
+      "id": "manual_range_poc_81242_8",
+      "label": "Range POC",
+      "price": 81242.8,
+      "kind": "RANGE_POC",
+      "priority": 8,
+      "reaction_bias": "LONG"
+    },
+    {
+      "id": "manual_daily_81143_9",
+      "label": "Daily",
+      "price": 81143.9,
+      "kind": "DAILY",
+      "priority": 8,
+      "reaction_bias": "LONG"
+    },
+    {
+      "id": "manual_npoc_80463_9",
+      "label": "nPOC",
+      "price": 80463.9,
+      "kind": "NPOC",
+      "priority": 9,
+      "reaction_bias": "LONG"
+    }
+  ],
+  "zones": [
+    {
+      "id": "manual_supply_upper",
+      "label": "Supply Zone",
+      "kind": "SUPPLY_ZONE",
+      "top": 88880,
+      "bottom": 88020,
+      "priority": 10,
+      "reaction_bias": "SHORT",
+      "estimated": true
+    },
+    {
+      "id": "manual_ob_12h",
+      "label": "12H OB",
+      "kind": "OB_ZONE",
+      "timeframe": "12H",
+      "top": 86180,
+      "bottom": 85620,
+      "priority": 9,
+      "reaction_bias": "SHORT",
+      "estimated": true
+    },
+    {
+      "id": "manual_ob_1h",
+      "label": "1H OB",
+      "kind": "OB_ZONE",
+      "timeframe": "1H",
+      "top": 83390,
+      "bottom": 83020,
+      "priority": 9,
+      "reaction_bias": "LONG",
+      "estimated": true
+    },
+    {
+      "id": "manual_ob_daily",
+      "label": "Daily OB",
+      "kind": "OB_ZONE",
+      "timeframe": "1D",
+      "top": 81260,
+      "bottom": 80460,
+      "priority": 10,
+      "reaction_bias": "LONG",
+      "estimated": true
+    }
+  ]
+}
