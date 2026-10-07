@@ -1,4 +1,4 @@
-// Build 125: brand-palette + expanded chart + consumed-level lifecycle release.
+// Build 126: final expanded chart geometry + palette lifecycle release.
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.plugin.compose")
@@ -10,8 +10,8 @@ android {
         applicationId = "com.devtrader.app"
         minSdk = 26
         targetSdk = 37
-        versionCode = (providers.gradleProperty("devTraderVersionCode").orNull ?: "125").toInt()
-        versionName = providers.gradleProperty("devTraderVersionName").orNull ?: "0.21.0"
+        versionCode = (providers.gradleProperty("devTraderVersionCode").orNull ?: "126").toInt()
+        versionName = providers.gradleProperty("devTraderVersionName").orNull ?: "0.21.1"
         val backendUrl = providers.gradleProperty("devTraderBackendUrl").orNull
             ?: "https://dev-trader-engine.de.deplexo.com"
         require(Regex("https://[A-Za-z0-9.-]+(?::[0-9]+)?/?").matches(backendUrl)) {
