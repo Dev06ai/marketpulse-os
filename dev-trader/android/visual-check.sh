@@ -100,8 +100,11 @@ for path in Path('ui-check').glob('*.xml'):
     assert len(nav) == 3, path
     if workspace == 0:
         chart = next(n for n in nodes if n.get('content-desc') == 'Interactive price chart')
-        _, chart_top, _, chart_bottom = map(int, re.findall(r'\d+', chart.get('bounds')))
-        assert chart_bottom-chart_top >= 280, (path, 'Chart is too compressed', chart.attrib)
+        chart_left, chart_top, chart_right, chart_bottom = map(int, re.findall(r'\d+', chart.get('bounds')))
+        min_chart_height = 330 if path.stem.startswith('compact') else 620
+        min_chart_width = 690 if path.stem.startswith('compact') else 1040
+        assert chart_bottom-chart_top >= min_chart_height, (path, 'Chart is too compressed', chart.attrib)
+        assert chart_right-chart_left >= min_chart_width, (path, 'Chart is not wide enough', chart.attrib)
     height = 1280 if path.stem.startswith('compact') else 2400
     width = 720 if path.stem.startswith('compact') else 1080
     for node in nav:
