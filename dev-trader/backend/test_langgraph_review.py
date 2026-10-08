@@ -199,3 +199,30 @@ def test_all_agent_reports_stay_bound_to_original_selected_signal():
     assert set(rows) == {"long-sfp-123", "short-alt"}
     assert len(rows["long-sfp-123"]["agents"]) == 4
     assert len(rows["short-alt"]["agents"]) == 4
+
+
+def test_agent_disagreement_counts_are_descriptive_not_fake_win_rates():
+    from app.agent_metrics import summarize_agent_reviews
+    matched = review(market(
+        last_price=102000,
+        features={"trend_60": "DOWN", "trend_240": "DOWN",
+                  "market_structure": "BEARISH", "atr_15": 400},
+    ))
+    summary = summarize_agent_reviews([matched, {"action": "APPROVE", "version": "legacy"}])
+    assert summary["sampled_reviews"] == 1
+    assert summary["agent_disagreements"] == 1
+    assert summary["agents"]["regime"]["CAUTION"] == 1
+    assert summary["profitability_proven"] is False
+
+
+def test_agent_status_endpoint_is_readonly_and_bounded(monkeypatch):
+    import asyncio
+    from app import main
+
+    monkeypatch.setenv("KYVORIQ_LANGGRAPH_MODE", "shadow")
+    monkeypatch.setattr(main.engine.journal, "records", lambda limit, kind: [])
+    status = asyncio.run(main.agent_status())
+    assert status["mode"] == "shadow"
+    assert status["execution_capable"] is False
+    assert status["statistics"]["sampled_reviews"] == 0
+    assert status["agent_names"] == ["regime", "liquidity", "orderflow", "entry_timing"]
