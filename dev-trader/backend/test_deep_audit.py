@@ -83,7 +83,7 @@ def test_post_has_durable_intent_before_exchange_can_accept(monkeypatch, tmp_pat
     executor._merge_exchange_open_orders([dict(clientOid=trade['client_oid'], orderId='accepted',
         avgPrice='100110', stopLoss='', takeProfit='', qty='', orderStatus='filled')])
     assert trade['entry_plan'] == 100000 and trade['stop_loss'] == 99500
-    assert trade['take_profit'] == 102000 and trade['requested_qty'] > 0
+    assert trade['take_profit'] == 103000 and trade['requested_qty'] > 0
     assert len(executor.data['trades']) == 1
 
 

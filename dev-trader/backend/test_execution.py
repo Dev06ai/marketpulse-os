@@ -259,8 +259,8 @@ def test_new_signal_is_blocked_while_existing_position_is_unresolved(monkeypatch
         "setup": "TEST",
         "entry": 100000,
         "stop": 99500,
-        "target1": 102000,
-        "target2": 102000,
+        "target1": 103000,
+        "target2": 103000,
         "rr": 3.0,
         "confidence": 0.80,
         "grade": "A",
@@ -430,7 +430,7 @@ def audit_executor(monkeypatch, tmp_path):
 
 def audit_signal():
     return dict(id='AUDIT', direction='LONG', setup='TEST', entry=100000,
-                stop=99500, target2=102000, rr=4, confidence=.85, grade='A')
+                stop=99500, target2=103000, rr=6, confidence=.85, grade='A')
 
 
 def test_integer_precision_does_not_strip_significant_zeroes():

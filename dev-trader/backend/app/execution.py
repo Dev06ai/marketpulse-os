@@ -31,9 +31,12 @@ class DemoExecutionEngine:
         self.symbol = os.getenv("SYMBOL", "BTCUSDT")
         self.session_start_ms = int(os.getenv("DEMO_SESSION_START_MS", "0") or 0)
         self.session_baseline = self._num(os.getenv("DEMO_SESSION_BASELINE_EQUITY_USDT", "0"))
-        self.leverage = int(os.getenv("BITGET_DEMO_LEVERAGE", "20"))
-        if not 1 <= self.leverage <= 125:
-            raise ValueError("BITGET_DEMO_LEVERAGE must be between 1 and 125.")
+        configured_leverage = int(os.getenv("BITGET_DEMO_LEVERAGE", "20"))
+        if configured_leverage < 1:
+            raise ValueError("BITGET_DEMO_LEVERAGE must be at least 1.")
+        # Operator permits up to 20x; lower explicitly selected leverage is
+        # respected. A stale high-leverage setting cannot exceed this ceiling.
+        self.leverage = min(configured_leverage, 20)
         self.medium_margin_min = float(os.getenv("BITGET_DEMO_MEDIUM_MARGIN_MIN_USDT", "50"))
         self.medium_margin_max = float(os.getenv("BITGET_DEMO_MEDIUM_MARGIN_MAX_USDT", "75"))
         self.high_margin_min = float(os.getenv("BITGET_DEMO_HIGH_MARGIN_MIN_USDT", "76"))
@@ -43,9 +46,10 @@ class DemoExecutionEngine:
             raise ValueError("Demo confidence-margin bands are invalid.")
         if not 0.70 <= self.high_confidence_threshold < 1.0:
             raise ValueError("BITGET_DEMO_HIGH_CONFIDENCE must be between 0.70 and 1.0.")
-        self.max_planned_loss_pct = float(os.getenv("BITGET_DEMO_MAX_PLANNED_LOSS_PCT", "2.0"))
-        if not math.isfinite(self.max_planned_loss_pct) or not 0 < self.max_planned_loss_pct <= 5:
-            raise ValueError("BITGET_DEMO_MAX_PLANNED_LOSS_PCT must be finite and between 0 and 5 percent.")
+        requested_risk_pct = float(os.getenv("BITGET_DEMO_MAX_PLANNED_LOSS_PCT", "2.0"))
+        if not math.isfinite(requested_risk_pct) or requested_risk_pct <= 0:
+            raise ValueError("BITGET_DEMO_MAX_PLANNED_LOSS_PCT must be finite and positive.")
+        self.max_planned_loss_pct = min(requested_risk_pct, 2.0)
         self.risk_pct = self.max_planned_loss_pct
         self.margin_reserve = max(0.0, float(os.getenv("BITGET_DEMO_MARGIN_RESERVE_USDT", "25")))
         # New key intentionally supersedes the old 500-USDT notional cap from the
@@ -386,7 +390,7 @@ class DemoExecutionEngine:
         if direction not in {"LONG", "SHORT"}:
             return False, "Signal direction is not executable."
         min_conf = float(os.getenv("QUALITY_MIN_CONFIDENCE", "0.70"))
-        min_rr = float(os.getenv("QUALITY_MIN_RR", "3.0"))
+        min_rr = max(2.5, float(os.getenv("QUALITY_MIN_RR", "3.0")))
         if not signal_id:
             return False, "An execution signal ID is required."
         if grade != "A":
@@ -445,7 +449,7 @@ class DemoExecutionEngine:
         loss_per_unit = abs(exchange_price - stop) + (exchange_price + stop) * fee_rate
         reward_per_unit = abs(target - exchange_price) - (exchange_price + target) * fee_rate
         net_rr = reward_per_unit / loss_per_unit
-        if net_rr < float(os.getenv("BITGET_DEMO_MIN_NET_RR", "1.5")):
+        if net_rr < max(2.5, float(os.getenv("BITGET_DEMO_MIN_NET_RR", "2.5"))):
             raise BitgetDemoError(f"Executable R:R after estimated fees is too low ({net_rr:.2f}).")
 
         return exchange_price, drift_pct
@@ -1762,7 +1766,7 @@ class DemoExecutionEngine:
             "execution_policy": "CONFIDENCE_MARGIN_20X_FEE_ADJUSTED",
             "max_daily_loss_pct": float(os.getenv("BITGET_DEMO_MAX_DAILY_LOSS_PCT", "1.0")),
             "consecutive_loss_pause": 2,
-            "min_net_rr": float(os.getenv("BITGET_DEMO_MIN_NET_RR", "1.5")),
+            "min_net_rr": max(2.5, float(os.getenv("BITGET_DEMO_MIN_NET_RR", "2.5"))),
             "last_sync_ts": self.data.get("last_sync_ts", 0),
             "client_status": self.data.get("client_status") or {},
             "operator_paused": os.getenv("DEMO_EXECUTION_PAUSED", "false").lower() == "true" or bool(os.getenv("DEMO_RESET_REQUEST_MS", "")),
