@@ -9,7 +9,7 @@ from __future__ import annotations
 import math
 from typing import Any
 
-MAX_LEVERAGE = 5
+MAX_LEVERAGE = 20
 MAX_RISK_PCT = 2.0
 MIN_GROSS_RR = 2.5
 MIN_NET_RR = 2.5
