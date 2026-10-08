@@ -694,6 +694,7 @@ function liveVisitorStats(){
 }
 
 const ADMIN_ONLY_PATHS=new Set([
+  '/api/edge',
   '/api/memory/status',
   '/api/phase7/health',
   '/api/learning/status',
@@ -2994,12 +2995,17 @@ const server=http.createServer(async(req,res)=>{
         return send(res,503,{ok:false,error:String(e.message||e)});
       }
     }if(req.method==='POST'&&u.pathname==='/api/ai'){
+       const aiUser=await auth.userFromRequest(req);
+       if(!aiUser)return send(res,401,{ok:false,error:"Authentication required"});
+       // Paid AI must remain owner-only until verified users and bounded billing exist.
+       if(OPENAI_API_KEY&&!aiUser.isAdmin)return send(res,403,{ok:false,error:"AI_OWNER_ONLY"});
       if(!aiAllowed(req)) return send(res,429,{error:"Slow down for a few seconds."});
       let raw=""; raw=await readLimitedBody(req); let body={}; try{body=JSON.parse(raw||"{}")}catch{return send(res,400,{error:"Invalid JSON"})}
       const mode=body.mode==="trade"?"trade":"market";
       const q=String(body.question||"").slice(0,1800);
       const market=body.market||{}; const trade=body.trade||{}; const traderProfile=body.traderProfile||{};
-      let edgeContext={};try{edgeContext=await phase4.snapshot(requestDevice(req),market.symbol||"BTCUSDT",market.interval||"1h",market)||{}}catch{}
+      const aiAccess=await scopedMemoryDevice(req,u);
+       let edgeContext={};if(aiAccess.device){try{edgeContext=await phase4.snapshot(aiAccess.device,market.symbol||"BTCUSDT",market.interval||"1h",market)||{}}catch{}}
       const profileText="PERSONAL TRADER PROFILE (descriptive, small-sample aware):\n"+JSON.stringify(traderProfile);
       const edgeText="PHASE 4 LIVE EDGE CONTEXT:\n"+JSON.stringify({
         signal:edgeContext.signal||null,
@@ -3391,21 +3397,26 @@ const server=http.createServer(async(req,res)=>{
 
     if(req.method==='GET'&&u.pathname==='/api/edge'){
       const symbol=(u.searchParams.get('symbol')||'BTCUSDT').toUpperCase(),interval=u.searchParams.get('interval')||'1h';
-      try{return send(res,200,await phase4.snapshot(requestDevice(req),symbol,interval,null))}catch(e){return send(res,503,{ok:false,error:e.message})}
+      const access=await scopedMemoryDevice(req,u);if(!access.device)return send(res,access.status,{ok:false,error:access.error});
+       try{return send(res,200,await phase4.snapshot(access.device,symbol,interval,null))}catch(e){return send(res,503,{ok:false,error:"Edge state unavailable"})}
     }
     if(req.method==='GET'&&u.pathname==='/api/edge/health'){
-      try{const x=await phase4.snapshot(requestDevice(req),null,null,null);return send(res,200,{ok:true,health:x.health,paper:x.paper,personalEdge:x.personalEdge,updatedAt:x.updatedAt})}catch(e){return send(res,503,{ok:false,error:e.message})}
+      const access=await scopedMemoryDevice(req,u);if(!access.device)return send(res,access.status,{ok:false,error:access.error});
+       try{const x=await phase4.snapshot(access.device,null,null,null);return send(res,200,{ok:true,health:x.health,paper:x.paper,personalEdge:x.personalEdge,updatedAt:x.updatedAt})}catch(e){return send(res,503,{ok:false,error:"Edge state unavailable"})}
     }
     if(req.method==='POST'&&u.pathname==='/api/edge/config'){
       let raw="";raw=await readLimitedBody(req);let body={};try{body=JSON.parse(raw||"{}")}catch{return send(res,400,{error:"Invalid JSON"})}
-      try{return send(res,200,await phase4.setConfig(requestDevice(req),{account:body.account,riskPct:body.riskPct,minRR:body.minRR,maxOpenRiskPct:body.maxOpenRiskPct}))}catch(e){return send(res,400,{error:e.message})}
+      const access=await scopedMemoryDevice(req,u);if(!access.device)return send(res,access.status,{ok:false,error:access.error});
+       try{return send(res,200,await phase4.setConfig(access.device,{account:body.account,riskPct:body.riskPct,minRR:body.minRR,maxOpenRiskPct:body.maxOpenRiskPct}))}catch(e){return send(res,400,{error:"Invalid edge configuration"})}
     }
     if(req.method==='POST'&&u.pathname==='/api/edge/journal'){
       let raw="";raw=await readLimitedBody(req);let body={};try{body=JSON.parse(raw||"{}")}catch{return send(res,400,{error:"Invalid JSON"})}
-      try{const row=await phase4.addJournal(requestDevice(req),body.entry||body);return send(res,200,{ok:true,row})}catch(e){return send(res,400,{error:e.message})}
+      const access=await scopedMemoryDevice(req,u);if(!access.device)return send(res,access.status,{ok:false,error:access.error});
+       try{const row=await phase4.addJournal(access.device,body.entry||body);return send(res,200,{ok:true,row})}catch(e){return send(res,400,{error:"Invalid edge journal"})}
     }
     if(req.method==='GET'&&u.pathname==='/api/edge/events'){
-      try{const x=await phase4.snapshot(requestDevice(req),null,null,null);return send(res,200,{ok:true,events:x.events||[],updatedAt:x.updatedAt})}catch(e){return send(res,503,{ok:false,error:e.message})}
+      const access=await scopedMemoryDevice(req,u);if(!access.device)return send(res,access.status,{ok:false,error:access.error});
+       try{const x=await phase4.snapshot(access.device,null,null,null);return send(res,200,{ok:true,events:x.events||[],updatedAt:x.updatedAt})}catch(e){return send(res,503,{ok:false,error:"Edge state unavailable"})}
     }
 
     if(req.method==='GET'&&u.pathname==='/api/phase401-500'){
