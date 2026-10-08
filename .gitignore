@@ -2,3 +2,22 @@ node_modules
 .env
 .DS_Store
 npm-debug.log*
+
+# Credentials, personal data, local databases and production artifacts
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.sqlite
+*.sqlite3
+*.db
+*.log
+*.bak
+*.backup
+coverage/
+.nyc_output/
+dist/
+build/
+.cache/

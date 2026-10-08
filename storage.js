@@ -91,7 +91,12 @@ async function init(){
   initPromise=(async()=>{
     if(!DB_URL||!Pool){mode="local";return}
     try{
-      pool=new Pool({connectionString:DB_URL,ssl:{rejectUnauthorized:false},max:5,idleTimeoutMillis:10000});
+      const ca=process.env.MARKETPULSE_PG_SSL_CA;
+      pool=new Pool({
+        connectionString:DB_URL,
+        ssl:ca?{rejectUnauthorized:true,ca:ca.replace(/\\n/g,"\n")}:{rejectUnauthorized:true},
+        max:5,idleTimeoutMillis:10000
+      });
       await pool.query("SELECT 1");
       await pool.query(`CREATE TABLE IF NOT EXISTS marketpulse_memory (
         device_id TEXT PRIMARY KEY,
@@ -326,7 +331,11 @@ async function init(){
       await seedSetupMemoriesFromFile();
     }catch(err){
       mode="local";try{await pool?.end()}catch{}pool=null;
-      console.error("MarketPulse memory DB unavailable; using local fallback:",err.message);
+      if(process.env.NODE_ENV==="production"){
+        console.error("MarketPulse persistent database unavailable; refusing unsafe local fallback");
+        throw new Error("Persistent database unavailable");
+      }
+      console.error("MarketPulse memory DB unavailable; using local development fallback:",err.message);
     }
   })();
   return initPromise;

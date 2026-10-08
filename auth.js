@@ -3,17 +3,21 @@ const storage=require("./storage");
 const totp=require("./totp");
 
 const SESSION_DAYS=Math.max(1,Number(process.env.MARKETPULSE_SESSION_DAYS||30));
-// Owner/admin login is intentionally persistent: once the owner completes MFA,
-// the session remains valid for years and ends only on explicit sign-out, account
-// revocation/moderation, or infrastructure-level session invalidation.
-// A shorter environment value cannot accidentally re-enable frequent owner logouts.
-const ADMIN_SESSION_HOURS=Math.max(24*365*10,Number(process.env.MARKETPULSE_ADMIN_SESSION_HOURS||24*365*10));
+// Admin sessions expire after at most 24 hours and require fresh MFA.
+// Older long-lived sessions are also subject to a one-hour inactivity limit.
+const configuredAdminHours=Number(process.env.MARKETPULSE_ADMIN_SESSION_HOURS||12);
+const ADMIN_SESSION_HOURS=Number.isFinite(configuredAdminHours)?Math.min(24,Math.max(1,configuredAdminHours)):12;
 const COOKIE="mp_session";
 const ADMIN_EMAIL=String(process.env.MARKETPULSE_ADMIN_EMAIL||"").trim().toLowerCase();
 const PASSWORD_PEPPER=String(process.env.MARKETPULSE_PASSWORD_PEPPER||"");
 const RATE_WINDOW_MS=15*60*1000;
 const RATE_LIMIT=12;
 const rate=new Map();
+function pruneRate(now){
+  if(rate.size<5000)return;
+  for(const [key,bucket] of rate)if(now-bucket.started>RATE_WINDOW_MS)rate.delete(key);
+  while(rate.size>5000)rate.delete(rate.keys().next().value);
+}
 const DUMMY_SALT=crypto.createHash("sha256").update("marketpulse-dummy-salt-v2").digest("hex");
 
 function normalizeEmail(email){return String(email||"").trim().toLowerCase()}
@@ -48,18 +52,18 @@ function newPassword(password){
 function token(){return crypto.randomBytes(32).toString("hex")}
 function hashToken(raw){return crypto.createHash("sha256").update(String(raw)).digest("hex")}
 function parseCookies(header){
-  const out={};String(header||"").split(";").forEach(part=>{const i=part.indexOf("=");if(i<0)return;const k=part.slice(0,i).trim(),v=part.slice(i+1).trim();if(k)out[k]=decodeURIComponent(v)});return out;
+  const out={};String(header||"").split(";").forEach(part=>{const i=part.indexOf("=");if(i<0)return;const k=part.slice(0,i).trim(),v=part.slice(i+1).trim();if(k){try{out[k]=decodeURIComponent(v)}catch{}}});return out;
 }
 function cookie(raw,maxAge){
   const age=Math.max(0,Math.floor(maxAge||0));
-  const insecure=String(process.env.MARKETPULSE_ALLOW_INSECURE_HTTP||"").toLowerCase()==="true";
+  const insecure=process.env.NODE_ENV!=="production"&&String(process.env.MARKETPULSE_ALLOW_INSECURE_HTTP||"").toLowerCase()==="true";
   const secure=insecure?"":" Secure;";
   const expires=new Date(Date.now()+age*1000).toUTCString();
   return COOKIE+"="+encodeURIComponent(raw)+"; Path=/; HttpOnly; SameSite=Lax; Max-Age="+age+"; Expires="+expires+"; Priority=High;"+secure;
 }
 function clearCookie(){return cookie("",0)}
 function rateCheck(key){
-  const now=Date.now(),x=rate.get(key);
+  const now=Date.now();pruneRate(now);const x=rate.get(key);
   if(!x||now-x.started>RATE_WINDOW_MS){rate.set(key,{started:now,count:1});return}
   if(x.count>=RATE_LIMIT)throw new Error("AUTH_RATE_LIMIT");
   x.count++;
@@ -72,6 +76,8 @@ function lockMessage(until){
 async function register(email,password,key="register"){
   rateCheck(key);
   const e=normalizeEmail(email),err=passwordRules(password);
+  // Never let an unauthenticated visitor reserve the configured owner identity.
+  if(isAdminEmail(e))throw new Error("ADMIN_SIGNUP_DISABLED");
   if(!validEmail(e))throw new Error("Enter a valid email address.");
   if(err)throw new Error(err);
   const existing=await storage.findUserByEmail(e);if(existing)throw new Error("EMAIL_EXISTS");
@@ -103,6 +109,8 @@ async function login(email,password,key="login",mfaCode=""){
     throw new Error("INVALID_CREDENTIALS");
   }
   const admin=isAdminEmail(user.email);
+  // A missing MFA secret must never silently downgrade owner authentication.
+  if(admin&&!totp.configured())throw new Error("ADMIN_MFA_NOT_CONFIGURED");
   const mfaEnabled=admin&&totp.configured();
   if(admin&&mfaEnabled&&!totp.verifyTotp(process.env.MARKETPULSE_ADMIN_TOTP_SECRET,mfaCode,1)){
     if(!mfaCode){storage.recordSecurityEvent("warning","admin_mfa_required",user.email).catch(()=>{});throw new Error("ADMIN_MFA_REQUIRED")}
@@ -134,6 +142,10 @@ async function userFromRequest(req){
   if(session.bannedAt||session.restrictedUntil&&new Date(session.restrictedUntil).getTime()>Date.now()){await storage.deleteSession(tokenHash);return null}
   const admin=isAdminEmail(session.email);
   const lastSeen=session.lastSeenAt?new Date(session.lastSeenAt).getTime():0;
+  // Enforce server-side idle expiry even for sessions created by older releases.
+  if(admin&&(!lastSeen||Date.now()-lastSeen>60*60*1000)){
+    await storage.deleteSession(tokenHash);return null;
+  }
   if(!lastSeen||Date.now()-lastSeen>30000)storage.touchSessionActivity(tokenHash).catch(()=>{});
 
   // Owner sessions are persistent. Refresh the server-side expiry and browser cookie
@@ -154,6 +166,7 @@ async function requireAdmin(req){
   const user=await userFromRequest(req);
   if(!user)return {ok:false,status:401,error:"Authentication required",user:null};
   if(!user.isAdmin)return {ok:false,status:403,error:"Admin access required",user};
+  if(!totp.configured())return {ok:false,status:503,error:"Admin MFA is not configured",user};
   if(totp.configured()){
     if(!user.adminMfaAt)return {ok:false,status:401,error:"Admin MFA required",user};
     const age=Date.now()-new Date(user.adminMfaAt).getTime();

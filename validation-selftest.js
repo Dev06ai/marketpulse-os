@@ -134,17 +134,22 @@ assert(tradeLevelResult.short.stop>tradeLevelResult.short.entry&&tradeLevelResul
 const serverSource=fs.readFileSync("./server.js","utf8");
 new Function(serverSource);
 const htmlSource=fs.readFileSync("./public/index.html","utf8");
-const waitVisualChecks=[
-  'var cls=side==="LONG"?"signal-long":side==="SHORT"?"signal-short":"signal-wait";',
-  'if(!executionReady)return {',
-  'reason:"FINAL_DECISION_NOT_EXECUTABLE"',
-  'No active invalidation level — final trade gate is blocked.',
-  'decisionSection.signal-wait .mpdc-execution-panel'
-];
-for(const x of waitVisualChecks)assert(htmlSource.includes(x),"WAIT/execution-map regression missing: "+x);
-const inlineScripts=[...htmlSource.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi)].map(m=>m[1]).filter(Boolean);
-for(const script of inlineScripts)new Function(script);
-assert(inlineScripts.length>0,"Dashboard inline JavaScript was not found for syntax validation.");
+// The previous inline dashboard was retired. Validate today's real decision
+// surfaces and the externally loaded first-party JS instead of obsolete strings.
+for(const id of ["decisionPanel","decision","gate","entry","stop","tp1","rr","execution","waitProb"]){
+  assert(htmlSource.includes('id="'+id+'"'),"Active dashboard missing safety surface "+id);
+}
+const srcs=[...htmlSource.matchAll(/<script\b[^>]*\bsrc=["']([^"']+)["'][^>]*><\/script>/gi)]
+  .map(m=>m[1].split("?")[0]).filter(x=>x.startsWith("/")&&!x.startsWith("//"));
+assert(srcs.length>0,"Active dashboard has no first-party scripts.");
+for(const src of srcs){
+  const relative="./public/"+src.slice(1);
+  assert(fs.existsSync(relative),"Missing dashboard script "+relative);
+  new Function(fs.readFileSync(relative,"utf8"));
+}
+const clientSource=fs.readFileSync("./public/app.js","utf8");
+assert(clientSource.includes('"GATED"'),"Client must expose blocked execution state.");
+assert(clientSource.includes('action!=="WAIT"'),"Client must not show a WAIT as manually executable.");
 
 console.log(JSON.stringify({
   ok:true,
@@ -250,5 +255,10 @@ const phase401FlowFixture={
 };
 const phase401Mismatch=phase401to500.buildState({...phase401FlowFixture,marketState:{...phase401FlowFixture.marketState,flow:{...phase401FlowFixture.marketState.flow,orderBookImbalance:.42}}});
 assert(phase401Mismatch.synchronization.badCount>0,"Phase 401–500 must block a material flow mismatch.");
-const phase401Prob=phase401to500.buildState(phase401FlowFixture).probabilities;
-assert(Math.abs(Number(phase401Prob.long)+Number(phase401Prob.short)+Number(phase401Prob.wait)-1)<1e-9,"Phase 401–500 displayed probabilities must sum to exactly 1.");
+const phase401Unavailable=phase401to500.buildState(phase401FlowFixture).probabilities;
+assert(!phase401Unavailable.available&&phase401Unavailable.long===null,"Probabilities must remain unavailable without a calibrated source.");
+const phase401Prob=phase401to500.buildState({...phase401FlowFixture,
+  decision:{...phase401FlowFixture.decision,probabilitySource:"CALIBRATED",probabilities:{long:0.6,short:0.2,wait:0.2}}
+}).probabilities;
+assert(phase401Prob.available&&Math.abs(phase401Prob.long+phase401Prob.short+phase401Prob.wait-1)<1e-9,
+  "Available calibrated probabilities must sum to exactly 1.");

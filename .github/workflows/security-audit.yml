@@ -1,0 +1,56 @@
+name: Security Hardening Gate
+
+on:
+  pull_request:
+  push:
+    branches: [main, "security/**"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  security:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install dependencies without lifecycle scripts
+        run: npm install --ignore-scripts --no-fund
+      - name: Syntax checks
+        run: |
+          node --check auth.js
+          node --check storage.js
+          node --check server.js
+          node --check tests/security-regression.js
+      - name: Existing application self-test
+        run: npm test
+      - name: Dependency security audit
+        run: npm audit --omit=dev --audit-level=high
+      - name: Security integration regressions
+        run: timeout --signal=TERM --kill-after=5s 80s node tests/security-regression.js
+
+  secret-history:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Gitleaks changed-commit scan
+        uses: gitleaks/gitleaks-action@v3
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Full repository history scan across branches
+        run: |
+          test "$(git rev-list --all --count)" -gt 0
+          docker run --rm -v "$PWD:/src:ro" -w /src \
+            -e GIT_CONFIG_COUNT=1 \
+            -e GIT_CONFIG_KEY_0=safe.directory \
+            -e GIT_CONFIG_VALUE_0=/src \
+            ghcr.io/gitleaks/gitleaks:v8.30.1 git --redact --log-opts=--all .
