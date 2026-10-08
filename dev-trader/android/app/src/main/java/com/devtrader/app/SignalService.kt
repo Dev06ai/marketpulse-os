@@ -117,7 +117,8 @@ class SignalService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         stopped = false
-        if (socket == null) connect()
+        if (intent?.action == "KYVORIQ_SECURE_SESSION_UPDATED") connect(force = true)
+        else if (socket == null) connect()
         scheduleHealthWatchdog()
         return START_STICKY
     }
@@ -213,7 +214,10 @@ class SignalService : Service() {
         if (socket != null) return
         lastMessageMs = System.currentTimeMillis()
         socket = client.newWebSocket(
-            Request.Builder().url(BackendEndpoint.socket("dashboard")).build(),
+            KyvoriqSecureSession.authenticate(
+                this, Request.Builder().url(BackendEndpoint.socket("dashboard")),
+                BackendEndpoint.socket("dashboard")
+            ).build(),
             object : WebSocketListener() {
                 override fun onOpen(ws: WebSocket, response: Response) {
                     if (stopped || socket !== ws) {
