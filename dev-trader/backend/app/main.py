@@ -884,7 +884,8 @@ async def health():
         "data_age_ms": data_age,
         "book_age_ms": now - state.last_book_ts if state.last_book_ts else None,
         "trade_age_ms": now - state.last_trade_ts if state.last_trade_ts else None,
-        "signal": engine.active_signal,
+        # Health probes must not publish private trade plans or execution evidence.
+        "signal": None,
         "signal_state": engine.signal_status,
     }
 
