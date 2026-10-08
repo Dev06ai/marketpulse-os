@@ -31,6 +31,16 @@ def tap(text=None, desc=None):
     adb('shell', 'input', 'tap', str((x1+x2)//2), str((y1+y2)//2))
     time.sleep(.4)
 
+def scroll_trade_to(text):
+    """The enlarged trade chart intentionally puts decision tools below the fold."""
+    for attempt in range(7):
+        current = nodes()
+        if any(n.get('text') == text for n in current):
+            return
+        adb('shell', 'input', 'swipe', '540', '1730', '540', '570', '290')
+        time.sleep(.35)
+    raise AssertionError(f'Trade control not reachable after scrolling: {text}')
+
 def shot(name):
     OUT.joinpath(name + '.png').write_bytes(adb('exec-out', 'screencap', '-p'))
     OUT.joinpath(name + '.xml').write_bytes(adb('shell', 'cat', '/sdcard/interaction.xml'))
@@ -44,12 +54,14 @@ tap(desc='Workspace POSITIONS')
 find(text='DEMO PERFORMANCE')
 tap(desc='Workspace TRADE')
 assert find(desc='Chart 1h').get('selected') == 'true'
+scroll_trade_to('P&L CALCULATOR')
 tap(text='P&L CALCULATOR')
 find(text='P&L calculator')
 shot('calculator')
 tap(text='SHORT')
 assert find(text='SHORT').get('selected') == 'true'
 adb('shell', 'input', 'keyevent', 'KEYCODE_BACK')
+scroll_trade_to('DECISION CENTER')
 find(text='DECISION CENTER')
 assert find(desc='Chart 1h').get('selected') == 'true'
 assert len([n for n in nodes() if n.get('content-desc', '').startswith('Workspace ')]) == 3
