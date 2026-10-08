@@ -60,6 +60,8 @@ import androidx.fragment.app.FragmentActivity
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
 import org.json.JSONArray
@@ -734,6 +736,14 @@ class SafeActivity : FragmentActivity() {
         }
         deviceTools.addView(widgetButton, LinearLayout.LayoutParams(0, dp(44), 1f))
         insightsContent.addView(deviceTools)
+        val pairButton = compactPillButton(
+            if (KyvoriqSecureSession.isPaired(this)) "DEVICE PAIRED  •  SECURE" else "PAIR DEVICE  •  PRIVATE API"
+        )
+        pairButton.setOnClickListener {
+            haptic(it, KyvoriqHaptics.Cue.ACTION)
+            showPairingDialog(pairButton)
+        }
+        insightsContent.addView(pairButton, margins(top = 7, bottom = 8))
         insightsMotionViews.clear()
         insightsMotionViews.addAll(
             listOf(
@@ -745,7 +755,8 @@ class SafeActivity : FragmentActivity() {
                 feed.container,
                 sys.container,
                 tools,
-                deviceTools
+                deviceTools,
+                pairButton
             )
         )
         refreshPrivacyButton()
@@ -1156,9 +1167,10 @@ class SafeActivity : FragmentActivity() {
         status.text = "CONNECTING…"
         integrity.text = "WebSocket  •  CONNECTING •  SECURE RETRY LOOP"
         socket = client.newWebSocket(
-            Request.Builder()
-                .url(BackendEndpoint.socket("dashboard"))
-                .build(),
+            KyvoriqSecureSession.authenticate(
+                this, Request.Builder().url(BackendEndpoint.socket("dashboard")),
+                BackendEndpoint.socket("dashboard")
+            ).build(),
             object : WebSocketListener() {
                 override fun onOpen(ws: WebSocket, response: Response) {
                     handler.post {
@@ -3515,14 +3527,81 @@ class SafeActivity : FragmentActivity() {
         }
     }
 
+    private fun showPairingDialog(button: Button) {
+        val field = EditText(this).apply {
+            hint = "Server owner pairing secret"
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
+            isSingleLine = true
+            setPadding(dp(18), dp(16), dp(18), dp(16))
+        }
+        val title = if (KyvoriqSecureSession.isPaired(this)) "Renew secure device pairing" else "Pair this device"
+        android.app.AlertDialog.Builder(this)
+            .setTitle(title)
+            .setMessage("Enter the server pairing secret from your private hosting vault. It is used once and NEVER saved on this phone. The app stores only a 7-day encrypted device token.")
+            .setView(field)
+            .setNegativeButton("CANCEL", null)
+            .setPositiveButton("PAIR") { _, _ ->
+                val entered = field.text.toString()
+                field.text.clear()
+                if (entered.length !in 32..512) {
+                    showInfoDialog("Pairing refused", "Enter the private server pairing secret. It must be at least 32 characters.")
+                    return@setPositiveButton
+                }
+                button.text = "PAIRING…"
+                button.isEnabled = false
+                val payload = JSONObject().put("pairing_secret", entered).toString()
+                val request = Request.Builder().url(backendBase + "/auth/pair")
+                    .post(payload.toRequestBody("application/json; charset=utf-8".toMediaType()))
+                    .build()
+                restClient.newCall(request).enqueue(object : okhttp3.Callback {
+                    override fun onFailure(call: okhttp3.Call, e: java.io.IOException) {
+                        handler.post {
+                            button.isEnabled = true
+                            button.text = "PAIR DEVICE  •  RETRY"
+                            if (!isFinishing && !isDestroyed) showInfoDialog("Pairing unavailable", "The server could not be reached. Check the configured private host.")
+                        }
+                    }
+                    override fun onResponse(call: okhttp3.Call, response: Response) {
+                        val received = response.use { responseBody ->
+                            if (!responseBody.isSuccessful) null else runCatching {
+                                JSONObject(responseBody.body?.string().orEmpty())
+                            }.getOrNull()
+                        }
+                        val saved = runCatching {
+                            val token = received?.getString("access_token") ?: error("Pairing denied")
+                            val expiry = received.getLong("expires_at")
+                            KyvoriqSecureSession.save(this@SafeActivity, token, expiry)
+                        }.isSuccess
+                        handler.post {
+                            if (isFinishing || isDestroyed) return@post
+                            button.isEnabled = true
+                            if (saved) {
+                                button.text = "DEVICE PAIRED  •  SECURE"
+                                showInfoDialog("Secure pairing active", "Your private trading session is encrypted on this device for up to 7 days. Renew it from this button when it expires.")
+                                connect(force = true)
+                                bootstrap(true)
+                                ContextCompat.startForegroundService(
+                                    this@SafeActivity,
+                                    Intent(this@SafeActivity, SignalService::class.java).apply {
+                                        action = "KYVORIQ_SECURE_SESSION_UPDATED"
+                                    }
+                                )
+                            } else {
+                                button.text = "PAIR DEVICE  •  RETRY"
+                                showInfoDialog("Pairing refused", "The server rejected the secret, pairing is rate-limited, or server pairing is not configured. No credential was stored.")
+                            }
+                        }
+                    }
+                })
+            }.show()
+    }
+
     private fun getJson(url: String, callback: (Boolean, String) -> Unit) {
         runCatching {
-            restClient.newCall(
-                Request.Builder()
-                    .url(url)
-                    .get()
-                    .build()
-            ).enqueue(object : okhttp3.Callback {
+            val request = KyvoriqSecureSession.authenticate(
+                this, Request.Builder().url(url).get(), url
+            ).build()
+            restClient.newCall(request).enqueue(object : okhttp3.Callback {
                 override fun onFailure(call: okhttp3.Call, e: java.io.IOException) {
                     handler.post { callback(false, "") }
                 }
