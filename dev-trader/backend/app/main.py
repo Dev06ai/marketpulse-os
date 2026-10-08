@@ -26,6 +26,7 @@ from .manual_levels import load_manual_level_pack
 from .agent_metrics import summarize_agent_reviews
 from .opportunity_scout import OpportunityScout
 from .performance_learning_agent import analyze_performance
+from .agent_orchestration import risk_guardian, graph_market, data_sentinel
 from .htf_policy import evaluate_htf_policy, MAX_LEVERAGE, MAX_RISK_PCT, MIN_NET_RR
 
 load_dotenv()
@@ -62,6 +63,20 @@ def verify_entry_feed(_signal: dict) -> tuple[bool, str]:
     report = evaluate_htf_policy(state, _signal, compute_features(state), now)
     if not report["eligible"]:
         return False, "Higher-timeframe trade policy: " + ", ".join(report["reasons"][:3])
+    # Defense in depth: independent risk review is required immediately
+    # before new Bitget Demo orders. The executor still sizes to exchange
+    # equity, fee budget, lot step, protective stop and margin limits.
+    reviewed=dict(_signal)
+    reviewed["evidence"]=dict(reviewed.get("evidence") or {})
+    reviewed["evidence"]["htf_policy"]={
+        "eligible":report["eligible"],
+        "estimated_net_rr":report["estimated_net_rr"],
+    }
+    guardian=risk_guardian(reviewed,selected=True,
+                           max_leverage=execution.leverage,
+                           max_risk_pct=execution.max_planned_loss_pct)
+    if guardian["blockers"]:
+        return False, "Independent risk guardian: " + ", ".join(guardian["blockers"][:3])
     return True, ""
 
 
@@ -289,6 +304,11 @@ def mobile_payload(include_research=True):
                 "reasons": (diag.get("htf_policy") or {}).get("reasons", []),
                 "min_net_rr": MIN_NET_RR,
                 "max_leverage": MAX_LEVERAGE,
+            },
+            "early_router": {
+                "action":(diag.get("early_router") or {}).get("action","NO_WATCH"),
+                "route":(diag.get("early_router") or {}).get("route",{}),
+                "execution_capable":False,
             },
             "langgraph": {
                 "mode": os.getenv("KYVORIQ_LANGGRAPH_MODE", "shadow").strip().lower(),
@@ -905,7 +925,24 @@ async def agent_status():
         "mode": mode if mode in {"off", "shadow", "guard"} else "off",
         "ready": mode in {"shadow", "guard"},
         "execution_capable": False,
-        "agent_names": ["regime", "liquidity", "orderflow", "entry_timing", "opportunity_scout", "performance_learning"],
+        "agent_names": ["regime", "liquidity", "orderflow", "entry_timing", "opportunity_scout", "performance_learning",
+                        "early_opportunity_router", "adaptive_supervisor", "data_quality_sentinel", "risk_guardian"],
+        "graph_workers": ["regime", "liquidity", "orderflow", "entry_timing"],
+        "early_router": {
+            "mode": os.getenv("KYVORIQ_EARLY_ROUTER_MODE","shadow"),
+            "current": (engine.last_diagnostics or {}).get("early_router", {}),
+            "persisted_samples":len(engine.journal.records(100,"AGENT_EARLY")),
+            "execution_capable":False,
+        },
+        "data_sentinel": data_sentinel(graph_market(
+            state,compute_features(state),int(time.time()*1000),
+            engine.level_reaction_state)),
+        "risk_guardian": {
+            "mode":"ENFORCED_AT_ENTRY",
+            "execution_capable":False,"max_leverage":MAX_LEVERAGE,
+            "max_planned_loss_pct":min(execution.max_planned_loss_pct, MAX_RISK_PCT),
+            "min_net_rr":MIN_NET_RR,
+        },
         "last_review": {
             "version": latest.get("version"),
             "action": latest.get("action"),
@@ -923,6 +960,24 @@ async def agent_status():
         },
         "journal": engine.journal.status(),
     }
+
+
+@app.get("/agents/router")
+async def opportunity_router_status():
+    """Read-only prequalification graph; cannot create an exchange order."""
+    return {
+        "mode":os.getenv("KYVORIQ_EARLY_ROUTER_MODE","shadow"),
+        "current":(engine.last_diagnostics or {}).get("early_router",{}),
+        "recent":engine.journal.records(6,"AGENT_EARLY"),
+        "execution_capable":False,
+        "can_override_strategy":False,
+    }
+
+
+@app.get("/agents/storage")
+async def agents_storage_status():
+    """Expose actual mounted volume evidence; do not assume restart durability."""
+    return engine.journal.status()
 
 
 @app.get("/decision/signal")
@@ -1175,7 +1230,10 @@ async def config():
         },
         "langgraph_mode": os.getenv("KYVORIQ_LANGGRAPH_MODE", "shadow").strip().lower(),
         "langgraph_agent_count": 4,
-        "additional_observer_agents": ["opportunity_scout", "performance_learning"],
+        "additional_observer_agents": ["opportunity_scout", "performance_learning", "early_opportunity_router",
+                                       "adaptive_supervisor", "data_quality_sentinel", "risk_guardian"],
+        "early_router_mode":os.getenv("KYVORIQ_EARLY_ROUTER_MODE","shadow"),
+        "entry_risk_guardian":"ENABLED",
         "exit_experiments": "SHADOW_ONLY",
         "snapshot_seconds": SNAPSHOT,
         "manual_execution_only": not execution.enabled,
