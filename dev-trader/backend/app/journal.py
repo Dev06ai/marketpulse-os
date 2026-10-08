@@ -128,6 +128,33 @@ class DecisionJournal:
         with self.lock:
             return self.db.execute("SELECT ts,price FROM ticks WHERE ts>=? AND ts<=? ORDER BY ts",(start,end)).fetchall()
 
+    def _volume_status(self):
+        """Detect explicit mount, never mistake writable container disk for durable storage."""
+        directory=self.path.parent.resolve()
+        mountpoints=set()
+        try:
+            # mountinfo field 5 contains the mount path (escaping is optional
+            # in our /data convention). Root overlayfs does not count.
+            with open("/proc/self/mountinfo",encoding="utf-8") as stream:
+                for line in stream:
+                    fields=line.split()
+                    if len(fields)>=5:
+                        mountpoints.add(fields[4].replace("\\040"," "))
+        except (OSError, ValueError):
+            pass
+        mounted=any(str(directory)==m or str(directory).startswith(m.rstrip("/")+"/")
+                    for m in mountpoints if m!="/")
+        return {
+            "path_is_on_detected_mount":mounted,
+            "mount_check":"EXPLICIT_MOUNT_SEEN" if mounted else "NO_EXPLICIT_DATA_MOUNT_SEEN",
+            "restart_durability_proven":False,
+            "deployment_action":(
+                "Validate journal survival across a real Deplexo restart"
+                if mounted else
+                "Attach a persistent writable volume at /data to retain agent evidence"
+            ),
+        }
+
     def status(self):
         counts = (0,0,None,None)
         if self.ready:
@@ -138,10 +165,12 @@ class DecisionJournal:
                     counts = n,ticks,first,last
             except Exception as exc:
                 self.error=type(exc).__name__
+        durability=self._volume_status()
         return dict(ready=self.ready,error=self.error,records=counts[0],price_samples=counts[1],
                     first_ts=counts[2],last_ts=counts[3],retention_days=self.retention_days,max_records=self.max_records,
                     max_blob_bytes=self.max_blob_bytes or None,
-                    storage="LOCAL_SQLITE",durability="EPHEMERAL_UNLESS_PERSISTENT_VOLUME_CONFIGURED",
+                    storage="LOCAL_SQLITE",durability=durability["mount_check"],
+                    volume=durability,
                     engine_revision=ENGINE_REVISION)
 
 
