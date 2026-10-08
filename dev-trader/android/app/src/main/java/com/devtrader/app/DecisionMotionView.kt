@@ -132,13 +132,13 @@ class DecisionMotionView(context: Context) : View(context) {
 
         if (isScanning(state) && scanProgress in -0.24f..1.24f) {
             val center = width * scanProgress
-            val band = dp(78f)
+            val band = dp(92f)
             sweepPaint.shader = LinearGradient(
                 center - band,
                 0f,
                 center + band,
                 height.toFloat(),
-                intArrayOf(Color.TRANSPARENT, Color.argb(22, 231, 196, 106), Color.TRANSPARENT),
+                intArrayOf(Color.TRANSPARENT, Color.argb(24, 224, 131, 45), Color.TRANSPARENT),
                 floatArrayOf(0f, 0.5f, 1f),
                 Shader.TileMode.CLAMP
             )
