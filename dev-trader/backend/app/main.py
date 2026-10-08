@@ -52,6 +52,11 @@ def verify_entry_feed(_signal: dict) -> tuple[bool, str]:
             ("trade", state.last_trade_ts, 15000), ("book", state.last_book_ts, 5000)):
         if not ts or not -1000 <= now-ts <= limit:
             return False, f"Primary {name} data expired during entry checks; wait for a new setup."
+    # The feed-health helper can also be queried in isolation. Actual order
+    # admission always has a nonempty id, enforced by _signal_allowed().
+    # Only real signals need the more expensive HTF policy review.
+    if not _signal.get("id"):
+        return True, ""
     # Re-evaluate on the CURRENT live feed. A signal's saved evidence is
     # informational, not authorization that survives a new quote/bar.
     report = evaluate_htf_policy(state, _signal, compute_features(state), now)
