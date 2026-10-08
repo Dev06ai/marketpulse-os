@@ -507,10 +507,16 @@ class MarketChartView @JvmOverloads constructor(
             low = min(low, livePrice)
         }
 
+        // Keep the default chart scaled to actual traded candles, not remote
+        // profit targets. A nearby entry/SL can expand the viewport modestly;
+        // distant targets remain available in Decision Center / trade details.
+        val candleRange = (high - low).coerceAtLeast(1.0)
+        val allowedLow = low - candleRange * 0.35
+        val allowedHigh = high + candleRange * 0.35
         signal?.let { s ->
-            for (key in listOf("entry", "stop", "target2")) {
+            for (key in listOf("entry", "stop", "target1", "target2")) {
                 val v = s.optDouble(key, Double.NaN)
-                if (!v.isNaN() && (followLive || v in low..high)) {
+                if (v.isFinite() && v in allowedLow..allowedHigh) {
                     high = max(high, v)
                     low = min(low, v)
                 }
