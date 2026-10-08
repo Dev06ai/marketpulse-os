@@ -13,6 +13,9 @@ MUTATING_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
 # the only current mutating HTTP route. Trading/execution mutations are forbidden
 # from the public API surface.
 REVIEWED_MUTATING_ROUTES = {
+    # Credential-gated pairing issues only short-lived mobile read credentials;
+    # it does not create broker orders or alter trading controls.
+    ("/auth/pair", "POST"),
     ("/system-check/push", "POST"),
 }
 
