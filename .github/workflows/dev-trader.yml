@@ -125,6 +125,8 @@ jobs:
       - name: Build and probe the constrained container
         run: |
           docker build -t dev-trader-free dev-trader/backend
+          # Cold-start and invoke the compiled multi-agent graph under the free host limit.
+          docker run --rm --memory=128m --cpus=.25 dev-trader-free python -c 'from app.decision_graph import review_decision; import time; now=int(time.time()*1000); market=dict(health="HEALTHY",connected=True,now_ms=now,market_update_ms=now,bid=99,ask=101,spread_bps=0.1); sig=dict(id="probe",direction="LONG",entry=100,stop=99,target2=103,rr=3,grade="A",evidence={}); out=review_decision(market,[sig],"probe"); assert out["action"]=="APPROVE",out; assert len(out["agents"])==4; print("LANGGRAPH_128MB_OK",out["duration_ms"])'
           docker volume create dev-trader-smoke-data
           docker run -d --name dev-trader-smoke --memory=128m --cpus=.25 \
             --read-only --tmpfs /tmp:rw,noexec,size=100m \
