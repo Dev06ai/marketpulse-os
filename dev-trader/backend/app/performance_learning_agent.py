@@ -10,6 +10,8 @@ import math
 from collections import Counter, defaultdict
 from typing import Any
 
+from .calibration_observer import summarize_forward_cohorts
+
 VERSION = "performance-learning-observer-v1"
 MIN_EVALUABLE = 30
 
@@ -66,6 +68,10 @@ def analyze_performance(trades: list[dict], graph_records: list[dict],
         ref = graph_by_id.get(str(row.get("signal_id") or ""))
         if not ref:
             continue
+        # Prevent attributing outcomes to reviews recorded after trade entry.
+        opened = _number(row.get("opened_ts"))
+        if opened and int(ref.get("ts") or 0)>opened:
+            continue
         selected = next((v for v in (ref.get("candidate_reviews") or [])
                          if v.get("id") == ref.get("engine_selected_id")), {})
         matched.append((row, selected))
@@ -112,6 +118,7 @@ def analyze_performance(trades: list[dict], graph_records: list[dict],
                              else "INSUFFICIENT_OR_INCOMPLETE_ACCOUNTING",
         },
         "agent_outcome_comparison": agent_comparisons,
+        "chronological_calibration": summarize_forward_cohorts(matched,fees_complete),
         "scout_price_observations": {
             "resolved_price_paths": len(observed),
             "unverifiable": unverifiable,
