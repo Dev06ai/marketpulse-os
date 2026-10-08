@@ -1,8 +1,10 @@
 import asyncio
+import hmac
 import json
 import math
 import os
 import time
+from collections import deque
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, Response, Request
@@ -36,6 +38,7 @@ from .htf_policy import evaluate_htf_policy, MAX_LEVERAGE, MAX_RISK_PCT, MIN_NET
 from .api_security import (
     MAX_CLIENTS, MAX_HTTP_BODY_BYTES, PUBLIC_GET_PATHS,
     private_http_error, websocket_error, security_headers,
+    owner_token, issue_device_token,
 )
 
 load_dotenv()
@@ -161,6 +164,10 @@ def reconcile_execution_truth():
 
 class PushTestPayload(BaseModel):
     token: str | None = None
+
+
+class PairDevicePayload(BaseModel):
+    pairing_secret: str
 
 
 class RiskPayload(BaseModel):
@@ -836,6 +843,29 @@ async def security_boundary(request: Request, call_next):
     for key, value in security_headers(private).items():
         response.headers[key] = value
     return response
+
+
+# Bounded global rate limit resists spoofed client IPs and credential guessing
+# in the single-worker demo-only backend. Independent ingress throttling is still advised.
+pair_attempts: deque[float] = deque(maxlen=12)
+
+
+@app.post("/auth/pair")
+async def pair_device(payload: PairDevicePayload):
+    now = time.monotonic()
+    while pair_attempts and now - pair_attempts[0] >= 60.0:
+        pair_attempts.popleft()
+    if len(pair_attempts) >= 10:
+        raise HTTPException(status_code=429, detail="Pairing temporarily unavailable")
+    pair_attempts.append(now)
+    expected = owner_token()
+    if not expected:
+        raise HTTPException(status_code=503, detail="Private API is not provisioned")
+    candidate = payload.pairing_secret
+    if not candidate or len(candidate) > 512 or not hmac.compare_digest(candidate.encode("utf-8"), expected.encode("utf-8")):
+        raise HTTPException(status_code=401, detail="Pairing refused")
+    access_token, expires = issue_device_token(expected)
+    return {"access_token": access_token, "expires_at": expires, "token_type": "Bearer"}
 
 
 @app.get("/health")
