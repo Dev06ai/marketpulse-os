@@ -138,7 +138,7 @@ class DecisionMotionView(context: Context) : View(context) {
                 0f,
                 center + band,
                 height.toFloat(),
-                intArrayOf(Color.TRANSPARENT, Color.argb(24, 224, 131, 45), Color.TRANSPARENT),
+                intArrayOf(Color.TRANSPARENT, Color.argb(22, 234, 194, 137), Color.TRANSPARENT),
                 floatArrayOf(0f, 0.5f, 1f),
                 Shader.TileMode.CLAMP
             )
