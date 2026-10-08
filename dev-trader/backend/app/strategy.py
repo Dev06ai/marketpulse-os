@@ -3280,6 +3280,18 @@ class StrategyEngine:
                         "bid": state.bid,
                         "ask": state.ask,
                         "spread_bps": f.spread_bps,
+                        "last_price": state.last_price,
+                        "book_update_ms": state.last_book_ts,
+                        "features": {
+                            "trend_60": f.trend_60,
+                            "trend_240": f.trend_240,
+                            "market_structure": f.market_structure,
+                            "atr_15": f.atr_15,
+                            "cvd_price_divergence": f.cvd_price_divergence,
+                            "book_imbalance": f.book_imbalance,
+                            "oi_change_5m_pct": f.oi_change_5m_pct,
+                            "oi_points": len(state.oi_window),
+                        },
                         "level_reactions": self.level_reaction_state,
                     },
                     candidates=[s.to_dict() for s in qualified],
@@ -3292,6 +3304,8 @@ class StrategyEngine:
                     "mode": graph_mode,
                     "action": graph_report["action"],
                     "blockers": graph_report["blockers"],
+                    "agent_disagreement": graph_report.get("agent_disagreement", False),
+                    "selected_concerns": graph_report.get("selected_concerns", [])[:4],
                 }
                 self.journal.record("LANGGRAPH", graph_report,
                                     identity="langgraph:" + signal.id)
