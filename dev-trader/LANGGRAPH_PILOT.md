@@ -6,9 +6,22 @@ The Python 3.12 FastAPI engine now calls a LangGraph StateGraph only **after**
 its normal SFP, D-Line, MSS, breakout/retest, momentum, level-reaction,
 playbook, learning and elite-admission checks have already qualified signals.
 
-Graph nodes: market health -> liquidity context -> candidate evidence review ->
-risk preflight -> supervisor. The market-health node can route directly to
-supervisor/WAIT. Nodes are deterministic and read-only: no LLM, exchange API,
+Graph nodes: market health -> parallel specialist reviewers -> candidate
+evidence review -> risk preflight -> supervisor. Four reviewers operate
+independently in parallel:
+
+- regime: 1H/4H and structure alignment; warns about counter-trend setups.
+- liquidity: checks observed direction of SFP/level reaction without inventing touches.
+- orderflow: directional CVD divergence and *fresh* order-book imbalance.
+  Open-interest expansion is context only, never a directional vote.
+- entry_timing: compares current BTC price with planned entry and 15m ATR;
+  warns about chasing, never changes a price.
+
+The market-health node can route directly to supervisor/WAIT. A specialist's
+SUPPORT/CAUTION/UNKNOWN status is an evidence annotation, **not a win
+probability**. A caution is *not* an automatic veto; many valid reversals
+run against the existing trend. Objective risk geometry and feed failures
+still block in guard mode. Nodes are deterministic and read-only: no LLM, exchange API,
 live order capability, credential access, or model-generated entry price.
 
 **The graph cannot create/override a trade, add leverage, or bypass the
@@ -43,8 +56,9 @@ save whole market snapshots or checkpoint on every tick: KYVORIQ's bounded
 DecisionJournal already holds durable decision evidence. A persistent
 LangGraph checkpoint database for 1-second candles would accumulate records,
 raise storage costs and potentially impair the 128 MB free host. The graph
-processes up to 16 qualified candidates; reviews contain short identifiers and
-bounded trace and blockers. It runs only when existing signal gates pass, not
+processes up to 16 qualified candidates; reviews contain bounded names,
+trace and blockers. A read-only /agents endpoint reports recent audit counts,
+agent disagreements and cautions without claiming any profitability. It runs only when existing signal gates pass, not
 on every WebSocket message.
 
 ## Acceptance before enabling guard
@@ -63,3 +77,12 @@ on every WebSocket message.
 Deplexo service deployed it. The deployed /bootstrap, /config, /health
 and Deplexo logs must be checked separately. PR CI is configured to avoid
 restarting Deplexo during review.
+
+## Next learning milestone
+
+- Compare specialist disagreements with actual resolved Bitget demo fills and
+  missed opportunities using chronological, fee-aware forward evidence.
+- Keep shadow logs separate from executed PnL; journal sample counts alone
+  cannot establish an edge.
+- Only after sufficient validation consider a veto policy, using explicit
+  rollout gates and no automatic live-money execution.
