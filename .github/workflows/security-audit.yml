@@ -1,0 +1,48 @@
+name: Security Hardening Gate
+
+on:
+  pull_request:
+  push:
+    branches: [main, "security/**"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  security:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install dependencies without lifecycle scripts
+        run: npm install --ignore-scripts --no-fund
+      - name: Syntax checks
+        run: |
+          node --check auth.js
+          node --check storage.js
+          node --check server.js
+          node --check tests/security-regression.js
+      - name: Existing application self-test
+        run: npm test
+      - name: Security integration regressions
+        run: node tests/security-regression.js
+      - name: Dependency security audit
+        run: npm audit --omit=dev --audit-level=high
+
+  secret-history:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Gitleaks historical secret scan
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
