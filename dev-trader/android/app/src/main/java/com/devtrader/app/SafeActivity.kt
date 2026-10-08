@@ -156,6 +156,7 @@ class SafeActivity : FragmentActivity() {
     private var selectedWorkspace = 0
     private var fullTradeHistoryText = "No executed demo trades yet."
     private lateinit var chart: MarketChartView
+    private var latestChartCandles = JSONArray()
     private var chartFullscreenHost: FrameLayout? = null
     private var chartHomeParent: ViewGroup? = null
     private var chartHomeIndex: Int = -1
@@ -303,6 +304,7 @@ class SafeActivity : FragmentActivity() {
             latestRoot = preview
             renderState(preview, requestChart = false)
             val candles = preview.getJSONObject("chart").getJSONArray("candles")
+            latestChartCandles = candles
             chart.setData(candles, preview.optJSONObject("signal"), calculateEma(candles, 50), preview.getDouble("last_price"), chartOverlays(preview))
             check.text = "Build ${BuildConfig.VERSION_CODE}  •  Visual verification"
             selectWorkspace(intent.getIntExtra("visual_workspace", 0).coerceIn(0, 2))
@@ -349,6 +351,36 @@ class SafeActivity : FragmentActivity() {
 
     private fun toggleChartFullscreen() {
         if (chartFullscreenHost == null) showChartFullscreen() else closeChartFullscreen()
+    }
+
+    private fun showTradingViewPreview() {
+        if (latestChartCandles.length() == 0) {
+            Toast.makeText(this, "Waiting for confirmed market candles. Refresh chart first.", Toast.LENGTH_SHORT).show()
+            requestChartIfNeeded(force = true)
+            return
+        }
+        // Optional, network-dependent WebView with PUBLIC candles/levels only.
+        // Never send Bitget credentials or position/account state to this view.
+        val dialog = android.app.Dialog(this)
+        val surface = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundColor(kyCharcoal)
+        }
+        val close = compactPillButton("CLOSE PREVIEW  ×").apply {
+            contentDescription = "Close optional TradingView preview and return to KYVORIQ chart"
+            setOnClickListener { dialog.dismiss() }
+        }
+        surface.addView(close, LinearLayout.LayoutParams(-1, dp(43)))
+        surface.addView(
+            TradingViewPreview(this, latestChartCandles, chartOverlays(latestRoot)),
+            LinearLayout.LayoutParams(-1, 0, 1f)
+        )
+        dialog.setContentView(surface)
+        dialog.show()
+        dialog.window?.setLayout(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.MATCH_PARENT
+        )
     }
 
     private fun showChartFullscreen() {
@@ -562,6 +594,15 @@ class SafeActivity : FragmentActivity() {
                 bottomMargin = dp(10)
             }
         )
+        // Native chart remains default; v5 lightweight renderer is a
+        // manually opened beta preview with no order-placement capability.
+        val tvPreviewButton = compactPillButton("TRADINGVIEW CHART  ↗").apply {
+            contentDescription = "Open optional TradingView Lightweight Charts preview"
+            setOnClickListener { showTradingViewPreview() }
+        }
+        tradePage.addView(tvPreviewButton, LinearLayout.LayoutParams(-1, dp(37)).apply {
+            bottomMargin = dp(8)
+        })
         val setup = premiumCard("DECISION CENTER", "NO TRADE  •  SCANNING\nWaiting for verified market data.", if (compactViewport) 11.5f else 13f)
         decisionContainer = setup.first
         signal = setup.second
@@ -1321,6 +1362,7 @@ class SafeActivity : FragmentActivity() {
                             ?: chartObj.optDouble("last_price", Double.NaN)
                         chart.setTimeframe(requestTf)
                         chart.setLivePrice(lastPrice)
+                        latestChartCandles = candles
                         chart.setData(
                             candles,
                             latestRoot?.optJSONObject("signal"),
@@ -2632,6 +2674,7 @@ class SafeActivity : FragmentActivity() {
                     if (selectedTf != requestTf) return@safe
 
                     chart.setTimeframe(requestTf)
+                    latestChartCandles = candles
                     chart.setData(
                         candles,
                         latestRoot?.optJSONObject("signal"),

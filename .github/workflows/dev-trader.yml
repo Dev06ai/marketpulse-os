@@ -1,4 +1,4 @@
-# Build 129: KYVORIQ default 1h viewport + exterior axis labels + inverse chart drag.
+# Build 130: optional TradingView chart preview; native chart remains primary.
 name: KYVORIQ CI
 
 on:
@@ -204,7 +204,7 @@ jobs:
           gradle-version: '9.6.0'
       - name: Build Android debug APK
         working-directory: dev-trader/android
-        run: gradle assembleDebug --stacktrace -PdevTraderVersionCode=129 -PdevTraderVersionName=0.21.4
+        run: gradle assembleDebug --stacktrace -PdevTraderVersionCode=130 -PdevTraderVersionName=0.21.5
       - name: Build signed Android release APK
         if: steps.changed.outputs.android_changed == 'true'
         working-directory: dev-trader/android
@@ -215,7 +215,7 @@ jobs:
           DEV_TRADER_KEY_PASSWORD: ${{ secrets.DEV_TRADER_KEY_PASSWORD }}
         run: |
           echo "${{ secrets.DEV_TRADER_KEYSTORE_BASE64 }}" | base64 --decode > "$DEV_TRADER_KEYSTORE_PATH"
-          gradle assembleRelease --stacktrace -PdevTraderVersionCode=129 -PdevTraderVersionName=0.21.4
+          gradle assembleRelease --stacktrace -PdevTraderVersionCode=130 -PdevTraderVersionName=0.21.5
           if unzip -l app/build/outputs/apk/release/app-release.apk | grep -q ui_preview.json; then
             echo 'Debug preview data must never be included in release APKs.'
             exit 1
@@ -252,6 +252,27 @@ jobs:
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
+      - name: Retry transient Android 35 emulator image download failures
+        run: |
+          # Hosted runner already has command-line tools. Avoid
+          # android-actions/setup-android, which tries to install the
+          # removed legacy `tools` package and fails before testing.
+          SDK_ROOT="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          SDKMANAGER="$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
+          if [ ! -x "$SDKMANAGER" ]; then
+            SDKMANAGER="$SDK_ROOT/cmdline-tools/16.0/bin/sdkmanager"
+          fi
+          test -x "$SDKMANAGER"
+          yes | "$SDKMANAGER" --licenses > /dev/null || true
+          for attempt in 1 2 3; do
+            echo "Emulator image preparation attempt $attempt/3"
+            if "$SDKMANAGER" --install 'system-images;android-35;google_apis;x86_64' --channel=0; then
+              exit 0
+            fi
+            rm -rf "$SDK_ROOT/system-images/android-35/google_apis/x86_64"
+            sleep $((attempt * 10))
+          done
+          exit 1
       - uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35
@@ -288,7 +309,7 @@ jobs:
           mkdir -p release
           cp dist/app-release.apk release/app-release.apk
           sha256sum release/app-release.apk | awk '{print $1}' > release/app-release.sha256
-          echo "tag=dev-trader-v0.21.4-129" >> "$GITHUB_OUTPUT"
+          echo "tag=dev-trader-v0.21.5-130" >> "$GITHUB_OUTPUT"
           echo "sha256=$(cat release/app-release.sha256)" >> "$GITHUB_OUTPUT"
       - name: Create GitHub release
         env:
@@ -298,7 +319,7 @@ jobs:
             echo "This release already exists; refusing to replace a published APK."
             exit 1
           fi
-          gh release create "${{ steps.release.outputs.tag }}" release/app-release.apk --target "$GITHUB_SHA" --title "KYVORIQ 0.21.4 (129)" --notes "KYVORIQ chart usability: open to reference-matched 1h, default reset, price-only right-axis level badges, readable price scale, inverse pan with live-edge future gutter. Demo trading logic and safety unchanged."
+          gh release create "${{ steps.release.outputs.tag }}" release/app-release.apk --target "$GITHUB_SHA" --title "KYVORIQ 0.21.5 (130)" --notes "Optional pinned TradingView Lightweight Charts v5.2.1 preview with visible attribution; existing native 1h chart, SFP/OB overlays and gestures remain default. Demo trading safety unchanged."
       - name: Publish verified update manifest
         env:
           SHA256: "${{ steps.release.outputs.sha256 }}"
@@ -312,11 +333,11 @@ jobs:
           data = json.loads(p.read_text())
           data.update({
               "enabled": True,
-              "versionCode": 129,
-              "versionName": "0.21.4",
-              "apkUrl": "https://github.com/Dev06ai/marketpulse-os/releases/download/dev-trader-v0.21.4-129/app-release.apk",
+              "versionCode": 130,
+              "versionName": "0.21.5",
+              "apkUrl": "https://github.com/Dev06ai/marketpulse-os/releases/download/dev-trader-v0.21.5-130/app-release.apk",
               "sha256": os.environ["SHA256"],
-              "notes": "KYVORIQ 0.21.4 • default 1h chart • clearer right-axis level prices • reverse drag gestures • trading safety preserved"
+              "notes": "KYVORIQ 0.21.5 • optional TradingView Lightweight Charts preview • native chart default • demo safety unchanged"
           })
           p.write_text(json.dumps(data, indent=2) + "\n")
           PY
