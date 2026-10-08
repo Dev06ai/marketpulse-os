@@ -92,7 +92,7 @@
     style();document.body.classList.add("apexV2Active");
     document.querySelectorAll(".header,.wrap,#mp401Terminal").forEach(x=>{if(x)x.style.display="none"});
     const root=document.createElement("div");root.id="apexV2Root";
-    root.innerHTML=\`
+    root.innerHTML=`
       <div class="apex-shell">
         <header class="apex-top">
           <div class="apex-brand"><div class="apex-logo">MP</div><div><b>MarketPulse NEXUS</b><small>real-time decision workspace</small></div></div>
