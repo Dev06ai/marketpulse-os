@@ -7,3 +7,6 @@ pyyaml==6.0.2
 python-dotenv==1.1.1
 # Pinned reviewed LangGraph orchestration runtime (Python 3.12)
 langgraph==1.2.12
+# Controlled GET-only retries and low-cardinality read-only metrics.
+tenacity==9.2.1
+prometheus-client==0.26.0

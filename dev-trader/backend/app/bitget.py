@@ -12,8 +12,17 @@ import urllib.parse
 import urllib.request
 from typing import Any
 
+from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
+
+from .observability import safe_get_retry_notice
+
 
 class BitgetDemoError(RuntimeError):
+    pass
+
+
+class BitgetTransientError(BitgetDemoError):
+    """Transport uncertainty; retry only idempotent read requests."""
     pass
 
 
@@ -128,9 +137,10 @@ class BitgetDemoClient:
                 raw = response.read().decode("utf-8")
         except urllib.error.HTTPError as exc:
             raw = exc.read().decode("utf-8", errors="replace")
-            raise BitgetDemoError(f"Bitget HTTP {exc.code}: {raw[:500]}") from exc
+            error = BitgetTransientError if exc.code in {408, 429, 500, 502, 503, 504} else BitgetDemoError
+            raise error(f"Bitget HTTP {exc.code}: {raw[:500]}") from exc
         except (urllib.error.URLError, TimeoutError) as exc:
-            raise BitgetDemoError(f"Bitget network error: {exc}") from exc
+            raise BitgetTransientError(f"Bitget network error: {exc}") from exc
 
         try:
             result = json.loads(raw)
@@ -143,7 +153,15 @@ class BitgetDemoClient:
             raise BitgetDemoError(f"Bitget API error {result.get('code')}: {result.get('msg')}")
         return result
 
+    @retry(
+        retry=retry_if_exception_type(BitgetTransientError),
+        wait=wait_exponential(multiplier=0.2, min=0.2, max=1.0),
+        stop=stop_after_attempt(3),
+        before_sleep=safe_get_retry_notice,
+        reraise=True,
+    )
     def _get(self, path: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        """Bounded retries for READS ONLY. Never retry market order POST."""
         return self._request("GET", path, params=params, private=True)
 
     def _post(self, path: str, payload: dict[str, Any]) -> dict[str, Any]:
