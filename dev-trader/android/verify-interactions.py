@@ -67,6 +67,13 @@ adb('shell', 'am', 'start', '-S', '-W', '-n', f'{PKG}/com.devtrader.app.SafeActi
 assert find(desc='Chart 1h').get('selected') == 'true'
 tap(desc='Chart 1h')
 assert find(desc='Chart 1h').get('selected') == 'true'
+# Isolated TradingView preview must open and close without replacing the native
+# chart, even if the optional public chart bundle cannot load in the emulator.
+scroll_trade_to('TRADINGVIEW CHART  ↗')
+tap(desc='Open optional TradingView Lightweight Charts preview')
+find(text='TRADINGVIEW LIGHTWEIGHT CHARTS · PREVIEW')
+tap(desc='Close optional TradingView preview and return to KYVORIQ chart')
+assert find(desc='Chart 1h').get('selected') == 'true'
 tap(desc='Workspace POSITIONS')
 find(text='DEMO PERFORMANCE')
 tap(desc='Workspace TRADE')
