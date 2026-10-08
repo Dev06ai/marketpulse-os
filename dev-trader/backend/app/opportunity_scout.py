@@ -79,7 +79,12 @@ class OpportunityScout:
                 uid = str(row.get("observation_id") or "")
                 key = str(row.get("dedupe_key") or "")
                 if uid and key:
-                    self.items[uid] = dict(row)
+                    # The journal reader adds id/ts/kind DB metadata.
+                    # Rewriting those fields inside the compressed payload
+                    # makes future reads fail with duplicate keyword arguments.
+                    self.items[uid] = {
+                        k: v for k, v in row.items() if k not in {"id", "ts", "kind"}
+                    }
                     self.last_seen[key] = max(
                         self.last_seen.get(key, 0), int(row.get("opened_ts") or 0)
                     )
@@ -107,6 +112,12 @@ class OpportunityScout:
                             for x in self.items.values())
         if created_today >= MAX_NEW_PER_DAY:
             return None
+        # Do not retain an unbounded list of old strategy/level names.
+        if len(self.last_seen) > 160:
+            self.last_seen = {
+                k: timestamp for k, timestamp in self.last_seen.items()
+                if now_ms - timestamp <= COOLDOWN_MS * 2
+            }
         key = "|".join((source, direction, setup[:80]))
         if now_ms - self.last_seen.get(key, -COOLDOWN_MS*2) < COOLDOWN_MS:
             return None
