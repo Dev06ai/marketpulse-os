@@ -127,15 +127,18 @@ jobs:
           docker build -t dev-trader-free dev-trader/backend
           # Cold-start and invoke the compiled multi-agent graph under the free host limit.
           docker run --rm --memory=128m --cpus=.25 dev-trader-free python -c 'from app.decision_graph import review_decision; import time; now=int(time.time()*1000); market=dict(health="HEALTHY",connected=True,now_ms=now,market_update_ms=now,bid=99,ask=101,spread_bps=0.1); sig=dict(id="probe",direction="LONG",entry=100,stop=99,target2=103,rr=3,grade="A",evidence={}); out=review_decision(market,[sig],"probe"); assert out["action"]=="APPROVE",out; assert len(out["agents"])==4; print("LANGGRAPH_128MB_OK",out["duration_ms"])'
+          # Ephemeral CI-only credential: NEVER the production broker/owner secret.
+          SMOKE_TOKEN="$(python -c 'import secrets; print(secrets.token_urlsafe(48))')"
           docker volume create dev-trader-smoke-data
           docker run -d --name dev-trader-smoke --memory=128m --cpus=.25 \
+            -e KYVORIQ_API_OWNER_TOKEN="$SMOKE_TOKEN" \
             --read-only --tmpfs /tmp:rw,noexec,size=100m \
             -v dev-trader-smoke-data:/data -p 3000:3000 dev-trader-free
           for attempt in {1..30}; do
             if curl -fsS http://127.0.0.1:3000/health >/dev/null; then break; fi
             sleep 1
           done
-          python dev-trader/backend/tools/smoke_host.py --url http://127.0.0.1:3000
+          KYVORIQ_SMOKE_OWNER_TOKEN="$SMOKE_TOKEN" python dev-trader/backend/tools/smoke_host.py --url http://127.0.0.1:3000
           docker exec dev-trader-smoke python -c 'from pathlib import Path; p=Path("/data/smoke-persistence"); p.write_text("saved")'
           docker restart dev-trader-smoke
           docker exec dev-trader-smoke python -c 'from pathlib import Path; assert Path("/data/smoke-persistence").read_text()=="saved"'
