@@ -82,7 +82,9 @@ def risk_guardian(signal: dict, *, selected: bool, max_leverage: int | None = No
     if any(v is None or v<=0 for v in (entry,stop,target)):
         blockers.append("NONFINITE_OR_MISSING_PRICES")
     elif not ((stop<entry<target) if d=="LONG" else (target<entry<stop)):
-        blockers.append("INVALID_STOP_TARGET_GEOMETRY")
+        blockers.append("INVALID_LONG_STOP_TARGET_GEOMETRY" if d=="LONG" else
+                        "INVALID_SHORT_STOP_TARGET_GEOMETRY" if d=="SHORT" else
+                        "INVALID_STOP_TARGET_GEOMETRY")
     gross=0.0
     if entry and stop and target and entry!=stop and d in {"LONG","SHORT"}:
         gross=((target-entry) if d=="LONG" else (entry-target))/abs(entry-stop)
