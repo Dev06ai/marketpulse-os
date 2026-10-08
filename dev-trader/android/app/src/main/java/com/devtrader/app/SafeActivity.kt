@@ -1963,8 +1963,10 @@ class SafeActivity : FragmentActivity() {
         if (key == lastAmbientKey) return
         lastAmbientKey = key
         val target = when (key) {
-            "LONG", "BULLISH" -> Color.rgb(11, 29, 27)
-            "SHORT", "BEARISH" -> Color.rgb(31, 18, 25)
+            // Ambient lighting stays within the gold/charcoal identity;
+            // green and red remain exclusive to actual trading semantics.
+            "LONG", "BULLISH" -> Color.rgb(27, 24, 17)
+            "SHORT", "BEARISH" -> Color.rgb(31, 21, 16)
             "CAUTION" -> KyvoriqTheme.graphite
             else -> KyvoriqTheme.slate
         }
