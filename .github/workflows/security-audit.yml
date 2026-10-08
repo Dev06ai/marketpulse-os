@@ -28,12 +28,12 @@ jobs:
           node --check storage.js
           node --check server.js
           node --check tests/security-regression.js
-      - name: Security integration regressions
-        run: node tests/security-regression.js
-      - name: Dependency security audit
-        run: npm audit --omit=dev --audit-level=high
       - name: Existing application self-test
         run: npm test
+      - name: Dependency security audit
+        run: npm audit --omit=dev --audit-level=high
+      - name: Security integration regressions
+        run: timeout --signal=TERM --kill-after=5s 80s node tests/security-regression.js
 
   secret-history:
     runs-on: ubuntu-latest
