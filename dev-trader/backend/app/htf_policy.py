@@ -139,52 +139,61 @@ def _atr_hourly(bars: list) -> float | None:
 
 
 def structural_stop(state, signal: dict, features) -> dict:
-    """Require actual stop *beyond* last confirmed 1h pivot and relevant OB.
-
-    No synthetic stop rewrite; otherwise the strategy must generate a new
-    setup with a valid structural stop and attainable targets.
-    """
+    """Require a nearby, observed invalidation; preserve 15m reversal stops."""
     direction=str(signal.get("direction") or "").upper()
-    entry=number(signal.get("entry"))
-    stop=number(signal.get("stop"))
+    entry,stop=number(signal.get("entry")),number(signal.get("stop"))
+    if direction not in {"LONG","SHORT"} or entry is None or stop is None or entry<=0 or stop<=0:
+        return {"ok":False,"why":"INVALID_PLAN","structural_anchor":None}
+    long=direction=="LONG"
     hourly=[c for c in state.candles_60 if c.confirmed]
-    fourhour=state.candles_4h()
-    if len(hourly)<50 or len(fourhour)<45 or entry is None or stop is None or entry<=0 or stop<=0:
-        return {"ok":False,"why":"INSUFFICIENT_CONFIRMED_HTF_DATA","structural_anchor":None}
-    recent=hourly[-80:]
-    atr=_atr_hourly(recent)
+    atr=_atr_hourly(hourly)
     if atr is None:
-        return {"ok":False,"why":"INVALID_HOURLY_ATR","structural_anchor":None}
-    is_long=direction=="LONG"
-    if direction not in {"LONG","SHORT"}:
-        return {"ok":False,"why":"INVALID_DIRECTION","structural_anchor":None}
-    pivot=_recent_pivot(recent,"low" if is_long else "high")
-    if pivot is None or (pivot>=entry if is_long else pivot<=entry):
-        return {"ok":False,"why":"NO_RELEVANT_1H_SWING_INVALIDATION","structural_anchor":pivot}
-    # Stop beyond the structural pivot, with a volatility/noise buffer.
-    buffer=max(0.25*atr,0.0010*entry)
-    anchor=pivot
-    relevant=[]
-    for tf in ("1h","4h"):
+        return {"ok":False,"why":"INSUFFICIENT_CONFIRMED_ATR","structural_anchor":None}
+    # Not a mandatory distant 4h pivot: the nearest observed swing, OB or
+    # mapped reaction can be a valid invalidation even against the macro trend.
+    buffer=max(0.08*atr,0.00025*entry)
+    bounds=[]
+    def add(source,raw):
+        value=number(raw)
+        if value is None or value<=0: return
+        distance=(entry-value) if long else (value-entry)
+        if 0<distance<=4*atr: bounds.append((distance,source,value))
+    add("1H_CONFIRMED_SWING",_recent_pivot(hourly[-80:],"low" if long else "high"))
+    add("4H_CONFIRMED_SWING",_recent_pivot(state.candles_4h()[-35:],"low" if long else "high"))
+    add("15M_CONFIRMED_SWING",_recent_pivot([c for c in state.candles_15 if c.confirmed][-80:],
+                                           "low" if long else "high"))
+    for tf in ("15m","1h","4h"):
         ob=(features.order_blocks or {}).get(tf) or {}
-        side=str(ob.get("direction") or "").upper()
-        bound=number(ob.get("zone_low" if is_long else "zone_high"))
-        if side!=("BULLISH" if is_long else "BEARISH") or bound is None:
-            continue
-        # Only a nearby, correct-side invalidation zone can widen this anchor.
-        if 0 < (entry-bound if is_long else bound-entry) <= 3.5*atr:
-            relevant.append((tf,bound))
-            anchor = min(anchor,bound) if is_long else max(anchor,bound)
-    required=anchor-buffer if is_long else anchor+buffer
-    valid = stop <= required if is_long else stop >= required
+        if str(ob.get("direction") or "").upper()==("BULLISH" if long else "BEARISH"):
+            add(tf+"_CONFIRMED_OB",ob.get("zone_low" if long else "zone_high"))
+    evidence=signal.get("evidence") or {}
+    reaction=evidence.get("level_reaction") or {}
+    age=number(evidence.get("level_reaction_age_ms"))
+    if (str(reaction.get("direction") or "").upper()==direction
+            and str(reaction.get("reaction_status") or "").upper()=="READY"
+            and int(reaction.get("reaction_score") or 0)>=3
+            and age is not None and 0<=age<=120_000):
+        values=[number(reaction.get(key)) for key in (
+            ("reaction_candle_low","zone_low") if long else
+            ("reaction_candle_high","zone_high"))]
+        valid=[v for v in values if v is not None and v>0]
+        if valid: add("FRESH_LEVEL_REACTION",min(valid) if long else max(valid))
+    if not bounds:
+        return {"ok":False,"why":"NO_VERIFIABLE_STRUCTURAL_INVALIDATION",
+                "structural_anchor":None,"hourly_atr":round(atr,4)}
+    bounds.sort(key=lambda row:row[0])
+    _,source,anchor=bounds[0]
+    required=anchor-buffer if long else anchor+buffer
+    valid=stop<=required if long else stop>=required
     return {
-        "ok": valid,
-        "why": "STRUCTURAL_STOP_CONFIRMED" if valid else "STOP_INSIDE_LIQUIDITY_NOISE_OR_INVALIDATION",
-        "structural_anchor": round(anchor,4),
-        "required_stop_boundary": round(required,4),
-        "noise_buffer": round(buffer,4),
-        "hourly_atr": round(atr,4),
-        "nearby_order_blocks": [{"timeframe": tf,"boundary":bound} for tf,bound in relevant],
+        "ok":valid,
+        "why":"STRUCTURAL_STOP_CONFIRMED" if valid else "STOP_INSIDE_LIQUIDITY_NOISE_OR_INVALIDATION",
+        "source":source,
+        "structural_anchor":round(anchor,4),
+        "required_stop_boundary":round(required,4),
+        "noise_buffer":round(buffer,4),
+        "hourly_atr":round(atr,4),
+        "alternative_anchor_count":len(bounds)-1,
     }
 
 
@@ -227,12 +236,10 @@ def derivatives_context(state, now_ms: int) -> dict:
 
 
 def evaluate_htf_policy(state, signal: dict, features, now_ms: int) -> dict:
-    """Explicit decision, with exact plan only if an existing signal is eligible."""
+    """Hard risk/structure admission, flexible evidence scored as information."""
     direction=str(signal.get("direction") or "").upper()
-    entry=number(signal.get("entry"))
-    stop=number(signal.get("stop"))
-    target1=number(signal.get("target1"))
-    target2=number(signal.get("target2"))
+    entry,stop=number(signal.get("entry")),number(signal.get("stop"))
+    target1,target2=number(signal.get("target1")),number(signal.get("target2"))
     blocked=[]
     if not state.ws_connected or state.data_health!="HEALTHY":
         blocked.append("MARKET_DATA_UNHEALTHY")
@@ -245,78 +252,80 @@ def evaluate_htf_policy(state, signal: dict, features, now_ms: int) -> dict:
         blocked.append("INVALID_PRICE_GEOMETRY")
     hourly=[c for c in state.candles_60 if c.confirmed]
     fourhour=state.candles_4h()
-    if len(hourly)<50 or len(fourhour)<45:
-        blocked.append("INSUFFICIENT_1H_4H_HISTORY")
+    if len(hourly)<20 or len(fourhour)<6:
+        blocked.append("INSUFFICIENT_CONFIRMED_1H_4H_CONTEXT")
     else:
-        if now_ms-int(hourly[-1].end)>2*3_600_000 or now_ms-int(fourhour[-1].end)>5*3_600_000:
-            blocked.append("STALE_CONFIRMED_HTF_BARS")
+        if now_ms-int(hourly[-1].end)>2*3_600_000 or now_ms-int(fourhour[-1].end)>6*3_600_000:
+            blocked.append("STALE_HTF_CANDLES")
     hourly_macd=volume_weighted_macd(hourly)
     fourhour_macd=volume_weighted_macd(fourhour)
-    hourly_rsi=rsi_divergence(hourly,rsi_series([c.close for c in hourly])) if len(hourly)>=25 else "UNKNOWN"
-    fourhour_rsi=rsi_divergence(fourhour,rsi_series([c.close for c in fourhour])) if len(fourhour)>=25 else "UNKNOWN"
-    if direction in {"LONG","SHORT"}:
-        wanted="BULLISH" if direction=="LONG" else "BEARISH"
-        trend_wanted="UP" if direction=="LONG" else "DOWN"
-        if features.trend_60!=trend_wanted or features.trend_240!=trend_wanted:
-            blocked.append("1H_4H_TREND_NOT_ALIGNED")
-        if hourly_macd.get("direction")!=wanted or fourhour_macd.get("direction")!=wanted:
-            blocked.append("1H_4H_VOLUME_WEIGHTED_MACD_NOT_ALIGNED")
-        if hourly_rsi in {"BULLISH","BEARISH"} and hourly_rsi!=wanted:
-            blocked.append("OPPOSING_1H_RSI_DIVERGENCE")
-    structural=structural_stop(state,signal,features)
-    if not structural["ok"]:
-        blocked.append(structural["why"])
-    gross_rr=0.0
-    net_rr=0.0
-    if entry is not None and stop is not None and target2 is not None and stop!=entry:
-        is_long=direction=="LONG"
-        reward=(target2-entry) if is_long else (entry-target2)
+    hourly_rsi=rsi_divergence(hourly,rsi_series([c.close for c in hourly]))
+    fourhour_rsi=rsi_divergence(fourhour,rsi_series([c.close for c in fourhour]))
+    wanted="BULLISH" if direction=="LONG" else "BEARISH"
+    trend_wanted="UP" if direction=="LONG" else "DOWN"
+    # Crucial distinction: indicators are supporting evidence, not 4 vetoes.
+    # The existing strategy/playbook has already established a candidate.
+    support=[]
+    caution=[]
+    for label,trend in (("1H",features.trend_60),("4H",features.trend_240)):
+        if trend==trend_wanted: support.append(label+"_TREND")
+        elif trend in {"UP","DOWN"}: caution.append(label+"_COUNTERTREND")
+    for label,macd in (("1H",hourly_macd),("4H",fourhour_macd)):
+        if macd.get("direction")==wanted: support.append(label+"_VOLUME_WEIGHTED_MACD")
+        elif macd.get("direction") in {"BULLISH","BEARISH"}:
+            caution.append(label+"_MACD_LAG_OR_CONFLICT")
+    for label,divergence in (("1H",hourly_rsi),("4H",fourhour_rsi)):
+        if divergence==wanted: support.append(label+"_RSI_DIVERGENCE")
+        elif divergence in {"BULLISH","BEARISH"}:
+            caution.append(label+"_OPPOSING_RSI_DIVERGENCE")
+    # A measured SFP/level reaction with 1H/4H resistance against it is still
+    # eligible when the existing strategy confirmed the reversal. No votes
+    # are added to the existing confidence score.
+    structure=structural_stop(state,signal,features)
+    if not structure["ok"]: blocked.append(structure["why"])
+    gross_rr=net_rr=0.0
+    if direction in {"LONG","SHORT"} and all(v is not None and v>0 for v in (entry,stop,target2)) and entry!=stop:
+        reward=(target2-entry) if direction=="LONG" else (entry-target2)
         risk=abs(entry-stop)
         gross_rr=reward/risk
-        # Conservative estimate: taker entry+exit fees, plus 3bps estimated
-        # adverse slippage on both ends. Exchange final quote rechecks later.
-        friction=(entry+stop)*(0.0006+0.0003)
-        net_rr=(reward-(entry+target2)*(0.0006+0.0003))/(risk+friction)
+        fee_slip=0.0006+0.0003  # taker estimate + adverse-slippage allowance, each side
+        net_rr=(reward-(entry+target2)*fee_slip)/(risk+(entry+stop)*fee_slip)
     if gross_rr<MIN_GROSS_RR or net_rr<MIN_NET_RR:
         blocked.append("REWARD_RISK_BELOW_2_5_AFTER_ESTIMATED_COSTS")
     derivatives=derivatives_context(state,now_ms)
-    structural_catalyst=str(signal.get("setup") or "UNVERIFIED")
-    rationale=[
-        "1H/4H confirmed structure and adaptive volume-weighted MACD"
-        if features.trend_60 in {"UP","DOWN"} and features.trend_240 in {"UP","DOWN"}
-        else "1H/4H structure not yet confirmed",
-        "Structural catalyst: "+structural_catalyst[:90],
-        "RSI divergence: 1H="+hourly_rsi+", 4H="+fourhour_rsi,
-        "Derivatives: OI="+derivatives["oi_status"]+", funding="+derivatives["funding_status"],
-        "Macroeconomic catalyst: NOT VERIFIED (no timestamped macro event feed)",
-    ]
+    if derivatives.get("oi_5m_pct") is not None and abs(derivatives["oi_5m_pct"])>=0.5:
+        support.append("OPEN_INTEREST_VOLATILITY_CONTEXT_ONLY")
+    catalyst=str(signal.get("setup") or "UNVERIFIED")
     approved=not blocked
     return {
-        "policy_version": POLICY_VERSION,
-        "decision": ("BUY/LONG" if direction=="LONG" else "SELL/SHORT") if approved else "HOLD/WAIT",
-        "eligible": approved,
-        "reasons": list(dict.fromkeys(blocked))[:12],
-        "direction_reviewed": direction,
-        "entry": entry if approved else None,
-        "stop_loss": stop if approved else None,
-        "take_profit_1": target1 if approved else None,
-        "take_profit_2": target2 if approved else None,
-        "planned_entry_reference": entry,
-        "planned_stop_reference": stop,
-        "planned_target_reference": target2,
-        "gross_rr": round(gross_rr,3),
-        "estimated_net_rr": round(net_rr,3),
-        "max_leverage": MAX_LEVERAGE,
-        "max_equity_risk_pct": MAX_RISK_PCT,
-        "structural_stop":structural,
-        "indicators": {
-            "trend_1h":features.trend_60,"trend_4h":features.trend_240,
-            "rsi_divergence_1h":hourly_rsi,"rsi_divergence_4h":fourhour_rsi,
-            "vw_macd_1h":hourly_macd,"vw_macd_4h":fourhour_macd,
-        },
-        "derivatives": derivatives,
-        "rationale": rationale,
-        "macro_feed_verified": False,
-        "orders_submitted": False,
-        "meaning": "CANDIDATE_ADMISSION_NOT_A_MARKET_ORDER",
+        "policy_version":POLICY_VERSION,
+        "decision":("BUY/LONG" if direction=="LONG" else "SELL/SHORT") if approved else "HOLD/WAIT",
+        "eligible":approved,"reasons":list(dict.fromkeys(blocked))[:12],
+        "direction_reviewed":direction,
+        "entry":entry if approved else None,
+        "stop_loss":stop if approved else None,
+        "take_profit_1":target1 if approved else None,
+        "take_profit_2":target2 if approved else None,
+        "planned_entry_reference":entry,
+        "planned_stop_reference":stop,
+        "planned_target_reference":target2,
+        "gross_rr":round(gross_rr,3),"estimated_net_rr":round(net_rr,3),
+        "max_leverage":MAX_LEVERAGE,"max_equity_risk_pct":MAX_RISK_PCT,
+        "structural_stop":structure,
+        "indicators":{"trend_1h":features.trend_60,"trend_4h":features.trend_240,
+                      "rsi_divergence_1h":hourly_rsi,"rsi_divergence_4h":fourhour_rsi,
+                      "vw_macd_1h":hourly_macd,"vw_macd_4h":fourhour_macd},
+        "derivatives":derivatives,
+        "supporting_evidence":support[:12],"cautionary_evidence":caution[:12],
+        "evidence_policy":"INDICATOR_DISAGREEMENT_ADVISORY_NOT_HARD_VETO",
+        "rationale":[
+            "Structural catalyst: "+catalyst[:90],
+            "1H/4H trend and indicator conflicts are advisory, not automatic rejections",
+            "SFP and level reversals remain eligible with confirmed invalidation and enough net reward/risk",
+            "Derivatives OI: "+derivatives["oi_status"]+"; funding: "+derivatives["funding_status"],
+            "Macro catalyst: NOT VERIFIED (no timestamped macroeconomic feed)",
+        ],
+        "macro_feed_verified":False,
+        "orders_submitted":False,
+        "meaning":"CANDIDATE_ADMISSION_NOT_A_MARKET_ORDER",
     }
