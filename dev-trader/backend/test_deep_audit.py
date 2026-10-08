@@ -41,7 +41,7 @@ def test_updated_quote_keeps_confidence_margin_and_loss_guard_within_caps(monkey
     risk = trade['requested_qty'] * (100140 - 99500 + (100140 + 99500) * .0006)
     margin = trade['requested_qty'] * 100140 / executor.leverage
     assert trade['execution_reference_price'] == 100140
-    assert trade['leverage'] == 20
+    assert trade['leverage'] == 5
     assert trade['confidence_band'] == 'HIGH'
     assert 76 <= margin <= 100
     assert risk <= 1000 * executor.max_planned_loss_pct / 100
@@ -83,7 +83,7 @@ def test_post_has_durable_intent_before_exchange_can_accept(monkeypatch, tmp_pat
     executor._merge_exchange_open_orders([dict(clientOid=trade['client_oid'], orderId='accepted',
         avgPrice='100110', stopLoss='', takeProfit='', qty='', orderStatus='filled')])
     assert trade['entry_plan'] == 100000 and trade['stop_loss'] == 99500
-    assert trade['take_profit'] == 102000 and trade['requested_qty'] > 0
+    assert trade['take_profit'] == 103000 and trade['requested_qty'] > 0
     assert len(executor.data['trades']) == 1
 
 
