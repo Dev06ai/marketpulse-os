@@ -292,7 +292,13 @@ def _gate_details(direction: str, setup: str, entry: float, stop: float, target:
     ratio = rr(entry, stop, target)
     risk = abs(entry - stop)
     risk_ok = _risk_gate(entry, stop, f)
-    confidence, score_reasons = _score(direction, setup, f)
+    raw_confidence, score_reasons = _score(direction, setup, f)
+    # V3 treats Elliott/harmonic output as observational context, not an
+    # executable vote. Neutralize the legacy Elliott +/- score BEFORE the
+    # detector's first confidence gate; doing it later allowed a strong
+    # counter-wave read to erase an otherwise valid candidate prematurely.
+    pattern_adjustment = experimental_pattern_adjustment(f, direction)
+    confidence = max(0.0, min(0.99, raw_confidence + pattern_adjustment))
     confidence_ok = confidence >= _min_confidence()
     checks = {
         "rr": round(ratio, 3),
@@ -301,6 +307,9 @@ def _gate_details(direction: str, setup: str, entry: float, stop: float, target:
         "atr_15": round(f.atr_15, 4),
         "risk_gate": risk_ok,
         "confidence": round(confidence, 3),
+        "raw_legacy_confidence": round(raw_confidence, 3),
+        "pattern_context_adjustment": round(pattern_adjustment, 3),
+        "pattern_context_scoring": "OBSERVATION_ONLY",
         "min_confidence": _min_confidence(),
         "confidence_gate": confidence_ok,
     }
@@ -444,7 +453,15 @@ def detect_sfp(state: MarketState) -> Optional[Signal]:
         current_start = recent.start
         current_end = recent.end
 
-    if ph is not None and current_high > ph and current_close < ph:
+    bearish_sfp = ph is not None and current_high > ph and current_close < ph
+    bullish_sfp = pl is not None and current_low < pl and current_close > pl
+    if bearish_sfp and bullish_sfp:
+        # A single outside bar that sweeps both sides has no unambiguous
+        # directional liquidity failure. Wait for the next reaction instead of
+        # picking SHORT merely because the bearish branch was evaluated first.
+        return None
+
+    if bearish_sfp:
         entry = current_close
         stop = current_high * 1.0005
         target = min((x[1] for x in lows[-5:]), default=current_low)
@@ -467,7 +484,7 @@ def detect_sfp(state: MarketState) -> Optional[Signal]:
             ],
         )
 
-    if pl is not None and current_low < pl and current_close > pl:
+    if bullish_sfp:
         entry = current_close
         stop = current_low * 0.9995
         target = max((x[1] for x in highs[-5:]), default=current_high)
@@ -496,34 +513,55 @@ def line_value(p1, p2, x):
     return y2 if i2 == i1 else y1 + (y2 - y1) * ((x - i1) / (i2 - i1))
 
 
-def detect_dline(state: MarketState) -> Optional[Signal]:
-    cs = [c for c in state.candles_15 if c.confirmed]
-    if len(cs) < 18 or len(state.candles_60) < 12:
-        return None
-    f = compute_features(state)
-    highs, lows = pivots(cs[:-1], 2)
-    last = cs[-1]
+def _select_dline_candidate(highs, lows):
     candidates = []
-
-    if len(lows) >= 3:
-        for a, b in zip(lows[-5:-1], lows[-4:]):
+    # Work from explicit adjacent pivots. The old overlapping negative slices
+    # became misaligned when only 3-4 pivots existed, pairing a pivot with
+    # itself and silently missing valid early D-Line geometry.
+    recent_lows = lows[-5:]
+    if len(recent_lows) >= 3:
+        for a, b in zip(recent_lows, recent_lows[1:]):
             if b[1] > a[1]:
                 candidates.append(("LONG", a, b))
-    if len(highs) >= 3:
-        for a, b in zip(highs[-5:-1], highs[-4:]):
+    recent_highs = highs[-5:]
+    if len(recent_highs) >= 3:
+        for a, b in zip(recent_highs, recent_highs[1:]):
             if b[1] < a[1]:
                 candidates.append(("SHORT", a, b))
     if not candidates:
         return None
+    # Long candidates used to be appended before shorts, so candidates[-1]
+    # always preferred a short whenever one existed, even if the long geometry
+    # was newer. Recency of the second anchor is the correct tie-break.
+    return max(candidates, key=lambda row: (row[2][0], row[1][0]))
 
-    direction, p1, p2 = candidates[-1]
-    touches = 0
+
+def _dline_touch_count(candles, p1, p2, direction):
     start = max(0, p1[0] - 4)
-    for i, c in enumerate(cs[start:p2[0] + 5], start=start):
+    touches = 0
+    for i, candle in enumerate(candles[start:p2[0] + 5], start=start):
         lv = line_value(p1, p2, i)
         tol = max(1.0, abs(lv) * 0.0015)
-        if abs(c.low - lv) <= tol or abs(c.high - lv) <= tol:
+        observed = candle.low if direction == "LONG" else candle.high
+        if abs(observed - lv) <= tol:
             touches += 1
+    return touches
+
+
+def detect_dline(state: MarketState) -> Optional[Signal]:
+    cs = [c for c in state.candles_15 if c.confirmed]
+    confirmed_60 = [c for c in state.candles_60 if c.confirmed]
+    if len(cs) < 18 or len(confirmed_60) < 12:
+        return None
+    f = compute_features(state)
+    highs, lows = pivots(cs[:-1], 2)
+    last = cs[-1]
+    selected = _select_dline_candidate(highs, lows)
+    if selected is None:
+        return None
+
+    direction, p1, p2 = selected
+    touches = _dline_touch_count(cs, p1, p2, direction)
     if touches < int(RULES["dline"]["preferred_touches"]):
         return None
 
@@ -1364,13 +1402,6 @@ class StrategyEngine:
         signal.thesis.append(f"Human setup memory matched at the mapped zone: {match.get('title', match.get('setup_key', 'saved setup'))}.")
         signal.thesis.append("Memory is advisory: existing live risk/data/setup gates still apply.")
         return match
-        self.last_diagnostics = {
-            "status": "STARTING",
-            "wait_reason": "Engine has not evaluated market data yet.",
-            "blocked_by": [],
-            "setups": {},
-            "signal_state": "NONE",
-        }
 
     def _apply_learning_context(self, signal: Signal, state: MarketState):
         context = self.learning.context(signal.to_dict())
@@ -2599,63 +2630,52 @@ class StrategyEngine:
             ph = highs[-1][1] if highs else None
             pl = lows[-1][1] if lows else None
             sfp_detail = {"status": "WAITING", "prior_swing_high": ph, "prior_swing_low": pl}
-            if ph is not None and recent.high > ph:
-                if recent.close < ph:
-                    entry, stop = recent.close, recent.high * 1.0005
-                    target = min((x[1] for x in lows[-5:]), default=recent.low)
-                    if target >= entry:
-                        target = entry - (stop - entry) * _min_rr()
-                    sfp_detail = {"status": "CANDIDATE", "pattern": "Bearish SFP", "swept_level": ph,
-                                  **self._pattern_gate(state, "Bearish SFP", "SHORT", entry, stop, target, compute_features(state),
-                                                     {"sweep": True, "close_back_inside": True, "entry": entry, "stop": stop, "target": target})}
-                else:
-                    sfp_detail["reason"] = "High swept the prior swing high, but the candle did not close back below it."
+            bearish = ph is not None and recent.high > ph and recent.close < ph
+            bullish = pl is not None and recent.low < pl and recent.close > pl
+            if bearish and bullish:
+                sfp_detail["reason"] = "The candle swept both sides of liquidity; direction is ambiguous, so no SFP is admitted."
+            elif bearish:
+                entry, stop = recent.close, recent.high * 1.0005
+                target = min((x[1] for x in lows[-5:]), default=recent.low)
+                if target >= entry:
+                    target = entry - (stop - entry) * _min_rr()
+                sfp_detail = {"status": "CANDIDATE", "pattern": "Bearish SFP", "swept_level": ph,
+                              **self._pattern_gate(state, "Bearish SFP", "SHORT", entry, stop, target, f0,
+                                                 {"sweep": True, "close_back_inside": True, "entry": entry, "stop": stop, "target": target})}
+            elif bullish:
+                entry, stop = recent.close, recent.low * 0.9995
+                target = max((x[1] for x in highs[-5:]), default=recent.high)
+                if target <= entry:
+                    target = entry + (entry - stop) * _min_rr()
+                sfp_detail = {"status": "CANDIDATE", "pattern": "Bullish SFP", "swept_level": pl,
+                              **self._pattern_gate(state, "Bullish SFP", "LONG", entry, stop, target, f0,
+                                                 {"sweep": True, "close_back_inside": True, "entry": entry, "stop": stop, "target": target})}
+            elif ph is not None and recent.high > ph:
+                sfp_detail["reason"] = "High swept the prior swing high, but the candle did not close back below it."
             elif pl is not None and recent.low < pl:
-                if recent.close > pl:
-                    entry, stop = recent.close, recent.low * 0.9995
-                    target = max((x[1] for x in highs[-5:]), default=recent.high)
-                    if target <= entry:
-                        target = entry + (entry - stop) * _min_rr()
-                    sfp_detail = {"status": "CANDIDATE", "pattern": "Bullish SFP", "swept_level": pl,
-                                  **self._pattern_gate(state, "Bullish SFP", "LONG", entry, stop, target, compute_features(state),
-                                                     {"sweep": True, "close_back_inside": True, "entry": entry, "stop": stop, "target": target})}
-                else:
-                    sfp_detail["reason"] = "Low swept the prior swing low, but the candle did not close back above it."
+                sfp_detail["reason"] = "Low swept the prior swing low, but the candle did not close back above it."
             else:
                 sfp_detail["reason"] = "No confirmed sweep of the latest 15m swing high/low."
             result["setups"]["SFP"] = sfp_detail
 
         # D-Line diagnostics
-        if len(cs) < 18 or len(state.candles_60) < 12:
+        confirmed_60 = [c for c in state.candles_60 if c.confirmed]
+        if len(cs) < 18 or len(confirmed_60) < 12:
             result["setups"]["D-Line"] = {
                 "status": "WAITING",
-                "reason": f"Need 18 confirmed 15m and 12 confirmed 1h candles; have {len(cs)} and {len([c for c in state.candles_60 if c.confirmed])}.",
+                "reason": f"Need 18 confirmed 15m and 12 confirmed 1h candles; have {len(cs)} and {len(confirmed_60)}.",
             }
         else:
-            f = compute_features(state)
-            candidates = []
-            if len(lows) >= 3:
-                for a, b in zip(lows[-5:-1], lows[-4:]):
-                    if b[1] > a[1]:
-                        candidates.append(("LONG", a, b))
-            if len(highs) >= 3:
-                for a, b in zip(highs[-5:-1], highs[-4:]):
-                    if b[1] < a[1]:
-                        candidates.append(("SHORT", a, b))
-            if not candidates:
+            f = f0
+            selected = _select_dline_candidate(highs, lows)
+            if selected is None:
                 result["setups"]["D-Line"] = {
                     "status": "WAITING",
                     "reason": "No qualifying rising-low or falling-high D-Line geometry.",
                 }
             else:
-                direction, p1, p2 = candidates[-1]
-                touches = 0
-                start = max(0, p1[0] - 4)
-                for i, c in enumerate(cs[start:p2[0] + 5], start=start):
-                    lv = line_value(p1, p2, i)
-                    tol = max(1.0, abs(lv) * 0.0015)
-                    if abs(c.low - lv) <= tol or abs(c.high - lv) <= tol:
-                        touches += 1
+                direction, p1, p2 = selected
+                touches = _dline_touch_count(cs, p1, p2, direction)
                 projected = line_value(p1, p2, len(cs) - 1)
                 structural = {
                     "direction": direction,
@@ -3167,7 +3187,6 @@ class StrategyEngine:
             legacy_elite,legacy_elite_reason=self._elite_decision_gate(candidate,state)
             candidate.evidence["legacy_gate_comparison"]={"allow":legacy_quality and legacy_elite,
                 "reason":"; ".join(x for x in (legacy_reason,legacy_elite_reason) if x),"scope":"SAME_CANDIDATE_GATE_COMPARISON"}
-            candidate.confidence=max(0.0,min(.99,candidate.confidence+experimental_pattern_adjustment(f,candidate.direction)))
             candidate.regime=self.regime_state["regime"]
             candidate.evidence["playbook"]=playbook_policy(candidate,state,f,self.regime_state)
             candidate.evidence["structure_map"]=f.structure_map

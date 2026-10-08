@@ -1,7 +1,10 @@
 import time
 
 from app.models import Candle, MarketState
-from app.strategy import detect_sfp, detect_dline, _trade_plan
+from app.strategy import (
+    detect_sfp, detect_dline, _trade_plan, _gate_details,
+    _select_dline_candidate, _dline_touch_count,
+)
 from app.analytics import MarketFeatures
 
 def c(i,o,h,l,cl,confirmed=True):
@@ -18,6 +21,81 @@ def test_bearish_sfp():
     assert sig is not None
     assert sig.direction=="SHORT"
     assert sig.rr >= 3.0
+
+
+
+
+def test_v3_pattern_context_is_neutral_before_candidate_gate():
+    base = MarketFeatures(
+        atr_15=100.0,
+        trend_15="UP",
+        trend_60="UP",
+        trend_240="UP",
+        market_structure="BULLISH",
+        regime="TREND_UP",
+        fvg_direction="BULLISH",
+        order_block_direction="BULLISH",
+    )
+    neutral = _gate_details("LONG", "MSS Continuation", 100000.0, 99900.0, 100300.0, base)
+
+    aligned = MarketFeatures(**{**base.__dict__, "elliott_direction": "LONG", "elliott_confidence": .99})
+    aligned_gate = _gate_details("LONG", "MSS Continuation", 100000.0, 99900.0, 100300.0, aligned)
+
+    opposed = MarketFeatures(**{**base.__dict__, "elliott_direction": "SHORT", "elliott_confidence": .99})
+    opposed_gate = _gate_details("LONG", "MSS Continuation", 100000.0, 99900.0, 100300.0, opposed)
+
+    assert aligned_gate["checks"]["raw_legacy_confidence"] > neutral["checks"]["raw_legacy_confidence"]
+    assert opposed_gate["checks"]["raw_legacy_confidence"] < neutral["checks"]["raw_legacy_confidence"]
+    assert aligned_gate["checks"]["confidence"] == neutral["checks"]["confidence"]
+    assert opposed_gate["checks"]["confidence"] == neutral["checks"]["confidence"]
+    assert aligned_gate["checks"]["pattern_context_scoring"] == "OBSERVATION_ONLY"
+
+
+def test_dline_uses_newest_geometry_across_both_directions():
+    lows = [(1, 90.0), (5, 91.0), (12, 92.0)]
+    highs = [(2, 110.0), (7, 109.0), (10, 108.0)]
+    direction, p1, p2 = _select_dline_candidate(highs, lows)
+    assert direction == "LONG"
+    assert p2[0] == 12
+
+
+def test_dline_adjacent_pivots_work_with_only_three_pivots():
+    lows = [(2, 90.0), (6, 91.0), (11, 92.0)]
+    selected = _select_dline_candidate([], lows)
+    assert selected is not None
+    assert selected[0] == "LONG"
+    assert selected[1] == lows[1]
+    assert selected[2] == lows[2]
+
+
+def test_dline_touch_count_is_directional_not_opposite_wick():
+    candles = [
+        Candle(0, 899999, 95.0, 100.4, 90.0, 96.0, 100, True),
+        Candle(900000, 1799999, 95.0, 100.2, 90.0, 96.0, 100, True),
+    ]
+    p1, p2 = (0, 100.0), (1, 100.0)
+    assert _dline_touch_count(candles, p1, p2, "LONG") == 0
+    assert _dline_touch_count(candles, p1, p2, "SHORT") == 2
+
+
+def test_two_sided_sfp_outside_bar_is_rejected_as_ambiguous():
+    cs=[c(i,100,102+i%2,99,100+(i%3)) for i in range(12)]
+    cs[4]=c(4,100,102,60,100)
+    cs[6]=c(6,100,110,99,100)
+    cs[-2]=c(10,100,102,99,101)
+    cs[-1]=c(11,100,112,50,100)
+    state=MarketState(candles_15=cs,last_price=100,data_health="HEALTHY")
+    assert detect_sfp(state) is None
+
+
+def test_dline_requires_twelve_confirmed_hourly_candles():
+    cs=[]
+    for i in range(24):
+        base=100+i*0.4
+        cs.append(c(i,base+0.5,base+2,base,base+1))
+    hourly=[c(i,100,102,99,101,confirmed=(i < 11)) for i in range(12)]
+    state=MarketState(candles_15=cs,candles_60=hourly,last_price=110)
+    assert detect_dline(state) is None
 
 def test_bullish_dline_smoke():
     cs=[]
