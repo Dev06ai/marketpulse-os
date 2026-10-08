@@ -1,8 +1,8 @@
 {
   "enabled": true,
-  "versionCode": 130,
-  "versionName": "0.21.5",
-  "apkUrl": "https://github.com/Dev06ai/marketpulse-os/releases/download/dev-trader-v0.21.5-130/app-release.apk",
-  "sha256": "7f69ee2bf632047015670df616f009f2081215d1c3fddd865e0b10750c85fad6",
-  "notes": "KYVORIQ 0.21.5 \u2022 optional TradingView Lightweight Charts preview \u2022 native chart default \u2022 demo safety unchanged"
+  "versionCode": 131,
+  "versionName": "0.21.6",
+  "apkUrl": "https://github.com/Dev06ai/marketpulse-os/releases/download/dev-trader-v0.21.6-131/app-release.apk",
+  "sha256": "128586cbdca64ab84ed66b2b02cdb035c37f9711c718204f35061721850af192",
+  "notes": "KYVORIQ 0.21.6 \u2022 opt-in secure device pairing \u2022 existing demo engine unchanged"
 }
