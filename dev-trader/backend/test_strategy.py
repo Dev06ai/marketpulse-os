@@ -3,7 +3,7 @@ import time
 from app.models import Candle, MarketState
 from app.strategy import (
     detect_sfp, detect_dline, _trade_plan, _gate_details,
-    _select_dline_candidate, _dline_touch_count,
+    _select_dline_candidate, _dline_touch_count, _confirmed_trigger_is_fresh,
 )
 from app.analytics import MarketFeatures
 
@@ -863,3 +863,13 @@ def test_just_closed_sfp_requires_current_ticker_to_remain_reclaimed():
     still_reclaimed = _recent_sfp_fixture(now, 30_000, 100.0)
     sig = detect_sfp(still_reclaimed)
     assert sig is not None and sig.direction == "SHORT"
+
+
+def test_confirmed_trigger_freshness_blocks_old_live_bar_but_not_replay():
+    now = 2_000_000_000_000
+    bar = Candle(now - 240_000, now - 120_001, 100, 101, 99, 100, 10, True)
+    live_state = MarketState(last_market_update_ts=now, last_trade_ts=now)
+    assert not _confirmed_trigger_is_fresh(live_state, bar)
+
+    replay_state = MarketState()
+    assert _confirmed_trigger_is_fresh(replay_state, bar)

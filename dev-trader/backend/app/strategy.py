@@ -400,6 +400,28 @@ def _signal(
     )
 
 
+def _market_reference_ts(state: MarketState) -> int:
+    return max(
+        int(state.last_market_update_ts or 0),
+        int(state.last_trade_ts or 0),
+        int(state.exchange_ts or 0),
+        int(state.received_ts or 0),
+    )
+
+
+def _confirmed_trigger_is_fresh(state: MarketState, candle: Candle, max_age_ms: int = 90_000) -> bool:
+    """Reject stale confirmed trigger bars when live-feed time is known.
+
+    Historical unit/replay states intentionally omit live timestamps, in which
+    case the detector remains deterministic and the replay caller owns time.
+    """
+    reference = _market_reference_ts(state)
+    if not reference:
+        return True
+    age = reference - int(candle.end)
+    return 0 <= age <= max_age_ms
+
+
 def detect_sfp(state: MarketState) -> Optional[Signal]:
     """Detect SFPs intrabar so fast reversals are not delayed until candle close.
 
@@ -445,16 +467,8 @@ def detect_sfp(state: MarketState) -> Optional[Signal]:
         # only allow a just-closed bar and require the CURRENT ticker to remain
         # on the reclaimed side of the swept level. Tests/replays without feed
         # timestamps intentionally keep deterministic historical behavior.
-        feed_now = max(
-            int(state.last_market_update_ts or 0),
-            int(state.last_trade_ts or 0),
-            int(state.exchange_ts or 0),
-            int(state.received_ts or 0),
-        )
-        if feed_now:
-            closed_age = feed_now - int(recent.end)
-            if closed_age < 0 or closed_age > 90_000:
-                return None
+        if not _confirmed_trigger_is_fresh(state, recent):
+            return None
         current_high = recent.high
         current_low = recent.low
         current_close = float(state.last_price)
@@ -564,6 +578,8 @@ def detect_dline(state: MarketState) -> Optional[Signal]:
     f = compute_features(state)
     highs, lows = pivots(cs[:-1], 2)
     last = cs[-1]
+    if not _confirmed_trigger_is_fresh(state, last):
+        return None
     selected = _select_dline_candidate(highs, lows)
     if selected is None:
         return None
@@ -629,6 +645,8 @@ def detect_mss(state: MarketState) -> Optional[Signal]:
     f = compute_features(state)
     highs, lows = pivots(cs[:-1], 2)
     last = cs[-1]
+    if not _confirmed_trigger_is_fresh(state, last):
+        return None
     min_rr = float(RULES["risk"]["preferred_min_rr"])
 
     if highs:
@@ -685,6 +703,8 @@ def detect_breakout_retest(state: MarketState) -> Optional[Signal]:
     if len(cs) < 14 or state.last_price is None:
         return None
     base, breakout, retest = cs[-14:-2], cs[-2], cs[-1]
+    if not _confirmed_trigger_is_fresh(state, retest):
+        return None
     if breakout.start-base[-1].start != 900_000 or retest.start-breakout.start != 900_000:
         return None
     f = compute_features(state)
@@ -736,6 +756,8 @@ def detect_trend_pullback(state: MarketState) -> Optional[Signal]:
     if average is None or f.atr_15<=0:
         return None
     last=cs[-1]
+    if not _confirmed_trigger_is_fresh(state, last):
+        return None
     if abs(state.last_price-last.close)>.5*f.atr_15:
         return None
     direction=""
