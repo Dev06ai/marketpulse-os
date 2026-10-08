@@ -252,15 +252,24 @@ jobs:
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
-      - uses: android-actions/setup-android@v3
       - name: Retry transient Android 35 emulator image download failures
         run: |
+          # Hosted runner already has command-line tools. Avoid
+          # android-actions/setup-android, which tries to install the
+          # removed legacy `tools` package and fails before testing.
+          SDK_ROOT="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          SDKMANAGER="$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
+          if [ ! -x "$SDKMANAGER" ]; then
+            SDKMANAGER="$SDK_ROOT/cmdline-tools/16.0/bin/sdkmanager"
+          fi
+          test -x "$SDKMANAGER"
+          yes | "$SDKMANAGER" --licenses > /dev/null || true
           for attempt in 1 2 3; do
             echo "Emulator image preparation attempt $attempt/3"
-            if sdkmanager --install 'system-images;android-35;google_apis;x86_64' --channel=0; then
+            if "$SDKMANAGER" --install 'system-images;android-35;google_apis;x86_64' --channel=0; then
               exit 0
             fi
-            rm -rf "${ANDROID_HOME:-/usr/local/lib/android/sdk}/system-images/android-35/google_apis/x86_64"
+            rm -rf "$SDK_ROOT/system-images/android-35/google_apis/x86_64"
             sleep $((attempt * 10))
           done
           exit 1
