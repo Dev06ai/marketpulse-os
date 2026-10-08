@@ -119,13 +119,13 @@ def test_demo_executor_sizes_from_stop_distance_and_opens_once(monkeypatch):
     ) or {"code": "00000"}
     result = asyncio.run(executor.handle_signal(signal))
     assert result["ok"] is True
-    assert leverage_calls == [("BTCUSDT", "LONG", 5, "isolated")]
+    assert leverage_calls == [("BTCUSDT", "LONG", 20, "isolated")]
     trade = executor.history(1)[0]
     assert trade["status"] == "OPEN"
     assert trade["filled_qty"] == 0.1
     assert trade["entry_price"] == 100000
     assert trade["direction"] == "LONG"
-    assert trade["leverage"] == 5
+    assert trade["leverage"] == 20
     assert 50 <= trade["planned_margin_usdt"] <= 75
     assert trade["confidence_band"] == "MEDIUM"
     assert learner.events[-1][0] == "EXECUTION_OPEN"
@@ -480,11 +480,11 @@ def test_execution_recomputes_fee_adjusted_rr(monkeypatch, tmp_path):
     assert not executor.data['trades']
 
 
-def test_confidence_margin_sizing_uses_high_band_at_5x(monkeypatch, tmp_path):
+def test_confidence_margin_sizing_uses_high_band_at_20x(monkeypatch, tmp_path):
     executor = audit_executor(monkeypatch, tmp_path)
     qty, risk, _ = asyncio.run(executor._risk_size(audit_signal()))
     margin = qty * 100000 / executor.leverage
-    assert executor.leverage == 5
+    assert executor.leverage == 20
     assert 76 <= margin <= 100
     assert abs(risk - qty * (500 + (100000 + 99500) * .0006)) < 1e-8
 
