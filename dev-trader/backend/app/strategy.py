@@ -848,6 +848,8 @@ class StrategyEngine:
         self.journal=DecisionJournal()
         self.candidate_decisions=[]
         self.shadow_candidates=[]
+        self._early_router_last_written_ms=0
+        self._early_router_last_key=""
         self.level_reaction_tracker = LevelReactionTracker()
         self.level_reaction_state = {"status": "IDLE", "levels": [], "armed": [], "trigger": None}
 
@@ -3199,6 +3201,43 @@ class StrategyEngine:
             self._momentum_signal(state, compute_features(state)),
         ]
         signals = [s for s in candidates if s is not None]
+        # Pre-gate LangGraph observation: ALL detected setups plus the live
+        # radar's developing watches, even if quality later rejects them.
+        # It never creates, changes, approves or executes a signal.
+        if os.getenv("KYVORIQ_EARLY_ROUTER_MODE","shadow").lower() == "shadow":
+            try:
+                from .agent_orchestration import graph_market
+                from .decision_graph import review_early_opportunities
+                market_ctx = graph_market(state,f,self.last_evaluated_ts,self.level_reaction_state)
+                early = review_early_opportunities(
+                    market_ctx,[item.to_dict() for item in signals],
+                    self.opportunity_radar_state,
+                )
+                self.last_diagnostics["early_router"] = {
+                    "version":early["version"],
+                    "action":early["action"],
+                    "stage":"EARLY_OBSERVATION_ONLY",
+                    "route":early["route"],
+                    "candidate_reviews":early.get("candidate_reviews",[])[:12],
+                    "sentinel":early.get("data_sentinel",{}),
+                    "execution_capable":False,
+                }
+                # One bounded journal sample per minute or meaningful change.
+                # No per-tick graphs or unbounded retention growth.
+                key="|".join(str(x.get("id") or "")+":"+str(x.get("direction") or "")
+                             for x in early.get("candidate_reviews",[]))
+                if (key != self._early_router_last_key and
+                    self.last_evaluated_ts-self._early_router_last_written_ms >= 15_000
+                    or self.last_evaluated_ts-self._early_router_last_written_ms >= 60_000):
+                    self.journal.record("AGENT_EARLY",self.last_diagnostics["early_router"],
+                                        ts=self.last_evaluated_ts)
+                    self._early_router_last_key=key
+                    self._early_router_last_written_ms=self.last_evaluated_ts
+            except Exception as exc:
+                self.last_diagnostics["early_router"] = {
+                    "action":"ERROR","error_type":type(exc).__name__,
+                    "execution_capable":False,
+                }
         if not signals:
             self._journal_decision(state)
             return None
@@ -3293,29 +3332,9 @@ class StrategyEngine:
         if graph_mode in {"shadow", "guard"}:
             try:
                 from .decision_graph import review_decision
+                from .agent_orchestration import graph_market
                 graph_report = review_decision(
-                    market={
-                        "health": state.data_health,
-                        "connected": state.ws_connected,
-                        "now_ms": self.last_evaluated_ts,
-                        "market_update_ms": state.last_market_update_ts,
-                        "bid": state.bid,
-                        "ask": state.ask,
-                        "spread_bps": f.spread_bps,
-                        "last_price": state.last_price,
-                        "book_update_ms": state.last_book_ts,
-                        "features": {
-                            "trend_60": f.trend_60,
-                            "trend_240": f.trend_240,
-                            "market_structure": f.market_structure,
-                            "atr_15": f.atr_15,
-                            "cvd_price_divergence": f.cvd_price_divergence,
-                            "book_imbalance": f.book_imbalance,
-                            "oi_change_5m_pct": f.oi_change_5m_pct,
-                            "oi_points": len(state.oi_window),
-                        },
-                        "level_reactions": self.level_reaction_state,
-                    },
+                    market=graph_market(state,f,self.last_evaluated_ts,self.level_reaction_state),
                     candidates=[s.to_dict() for s in qualified],
                     original_id=signal.id,
                 )
@@ -3328,6 +3347,9 @@ class StrategyEngine:
                     "blockers": graph_report["blockers"],
                     "agent_disagreement": graph_report.get("agent_disagreement", False),
                     "selected_concerns": graph_report.get("selected_concerns", [])[:4],
+                    "adaptive_supervisor": graph_report.get("adaptive_supervisor",{}),
+                    "data_quality": graph_report.get("data_sentinel",{}),
+                    "risk_guardian": graph_report.get("risk_guardian",{}),
                 }
                 self.journal.record("LANGGRAPH", graph_report,
                                     identity="langgraph:" + signal.id)
