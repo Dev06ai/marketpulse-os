@@ -630,7 +630,13 @@ async function auditAdmin(req,action,category,targetUserId,metadata){
 }
 async function securityEvent(severity,eventType,email,metadata){try{await storage.recordSecurityEvent(severity,eventType,email,metadata||{})}catch{}}
 
-function clientIp(req){return String(req.headers["x-forwarded-for"]||"").split(",")[0].trim()||String(req.socket?.remoteAddress||"unknown")}
+function clientIp(req){
+  const peer=String(req.socket?.remoteAddress||"unknown");
+  // Proxy headers are untrusted unless the deployment explicitly opts in.
+  if(process.env.MARKETPULSE_TRUST_PROXY!=="true")return peer;
+  const chain=String(req.headers["x-forwarded-for"]||"").split(",").map(x=>x.trim()).filter(Boolean);
+  return chain.at(-1)||peer;
+}
 function rateRequest(req,path){
   const method=String(req.method||"GET").toUpperCase();
   const route=String(path||"");
@@ -646,7 +652,13 @@ function rateRequest(req,path){
     route==="/api/chart"
   ))return true;
 
-  const key=clientIp(req),now=Date.now(),x=GLOBAL_RATE.get(key);
+  const key=clientIp(req),now=Date.now();
+  // Prevent a large set of spoofed or rotating IPs from growing this map indefinitely.
+  if(GLOBAL_RATE.size>5000){
+    for(const [id,bucket] of GLOBAL_RATE)if(now-bucket.started>GLOBAL_RATE_WINDOW_MS)GLOBAL_RATE.delete(id);
+    while(GLOBAL_RATE.size>5000)GLOBAL_RATE.delete(GLOBAL_RATE.keys().next().value);
+  }
+  const x=GLOBAL_RATE.get(key);
   if(!x||now-x.started>GLOBAL_RATE_WINDOW_MS){
     GLOBAL_RATE.set(key,{started:now,count:1});
     return true;
@@ -655,6 +667,8 @@ function rateRequest(req,path){
   return x.count<=GLOBAL_RATE_LIMIT;
 }
 function originAllowed(req){
+  const fetchSite=String(req.headers["sec-fetch-site"]||"").toLowerCase();
+  if(fetchSite==="cross-site"||fetchSite==="same-site")return false;
   const origin=req.headers.origin;
   if(!origin)return true;
   const proto=String(req.headers["x-forwarded-proto"]||"http").split(",")[0].trim();
@@ -2060,7 +2074,7 @@ async function callOpenAI(systemPrompt,userPrompt){
 }
 
 function aiAllowed(req){
-  const ip=req.headers["x-forwarded-for"]?.split(",")[0]?.trim()||req.socket.remoteAddress||"unknown";
+  const ip=clientIp(req);
   const last=AI_CALLS.get(ip)||0;
   if(Date.now()-last<4000)return false;
   AI_CALLS.set(ip,Date.now()); return true;
@@ -2396,6 +2410,28 @@ function scheduleLiveSyncBroadcast(symbol){
   },LIVE_SYNC_PUSH_MIN_MS));
 }
 
+// Bound streamed and chunked JSON bodies as well as requests with Content-Length.
+async function readLimitedBody(req,limit=262144){
+  const buffers=[];let bytes=0;
+  for await(const chunk of req){
+    const buffer=Buffer.isBuffer(chunk)?chunk:Buffer.from(chunk);
+    bytes+=buffer.length;
+    if(bytes>limit){const error=new Error("Request too large");error.statusCode=413;throw error}
+    buffers.push(buffer);
+  }
+  return Buffer.concat(buffers,bytes).toString("utf8");
+}
+async function scopedMemoryDevice(req,u){
+  const user=await auth.userFromRequest(req);
+  if(!user)return {status:401,error:"Authentication required"};
+  const originalDevice=String(u.searchParams.get("device")||req.headers["x-marketpulse-device"]||"");
+  if(!/^[a-f0-9-]{16,128}$/i.test(originalDevice))return {status:400,error:"Invalid device ID"};
+  return {device:crypto.createHash("sha256").update(user.id+":"+originalDevice).digest("hex"),originalDevice};
+}
+function tokenEquals(a,b){
+  const left=Buffer.from(String(a||"")),right=Buffer.from(String(b||""));
+  return left.length>0&&left.length===right.length&&crypto.timingSafeEqual(left,right);
+}
 const server=http.createServer(async(req,res)=>{
   const started=Date.now();SERVER_METRICS.requests++;
   const rawPath=String(req.url||"").split("?")[0];
@@ -2408,16 +2444,16 @@ const server=http.createServer(async(req,res)=>{
     const devTraderBridgeToken=String(process.env.DEV_TRADER_BRIDGE_TOKEN||"");
     const devTraderBridgePath=u.pathname.startsWith("/api/dev-trader/");
     if(devTraderBridgePath){
-      if(!devTraderBridgeToken || req.headers["x-dev-trader-bridge"]!==devTraderBridgeToken){
+      if(!devTraderBridgeToken || !tokenEquals(req.headers["x-dev-trader-bridge"],devTraderBridgeToken)){
         return send(res,401,{ok:false,error:"Dev Trader bridge unauthorized"});
       }
       if(req.method==="POST"&&u.pathname==="/api/dev-trader/learning/signal"){
-        let raw="";for await(const chunk of req)raw+=chunk;
+        let raw="";raw=await readLimitedBody(req);
         let body={};try{body=JSON.parse(raw||"{}")}catch{return send(res,400,{ok:false,error:"Invalid JSON"})}
         try{return send(res,200,{ok:true,...await learning.recordLiveSignalOpen(body)})}catch(e){return send(res,400,{ok:false,error:e.message})}
       }
       if(req.method==="POST"&&u.pathname==="/api/dev-trader/learning/outcome"){
-        let raw="";for await(const chunk of req)raw+=chunk;
+        let raw="";raw=await readLimitedBody(req);
         let body={};try{body=JSON.parse(raw||"{}")}catch{return send(res,400,{ok:false,error:"Invalid JSON"})}
         try{return send(res,200,{ok:true,...await learning.resolveLiveSignal(body)})}catch(e){return send(res,400,{ok:false,error:e.message})}
       }
@@ -2445,12 +2481,12 @@ const server=http.createServer(async(req,res)=>{
         try{return send(res,200,{ok:true,memories:await storage.getSetupMemories({symbol,interval,limit:100})})}catch(e){return send(res,503,{ok:false,error:e.message})}
       }
       if(req.method==="POST"&&u.pathname==="/api/dev-trader/setup-memory"){
-        let raw="";for await(const chunk of req)raw+=chunk;
+        let raw="";raw=await readLimitedBody(req);
         let body={};try{body=JSON.parse(raw||"{}")}catch{return send(res,400,{ok:false,error:"Invalid JSON"})}
         try{return send(res,200,{ok:true,...await storage.saveSetupMemory(body)})}catch(e){return send(res,400,{ok:false,error:e.message})}
       }
       if(req.method==="POST"&&u.pathname==="/api/dev-trader/setup-memory/deactivate"){
-        let raw="";for await(const chunk of req)raw+=chunk;
+        let raw="";raw=await readLimitedBody(req);
         let body={};try{body=JSON.parse(raw||"{}")}catch{return send(res,400,{ok:false,error:"Invalid JSON"})}
         try{return send(res,200,{ok:true,...await storage.deactivateSetupMemory(body.id)})}catch(e){return send(res,400,{ok:false,error:e.message})}
       }
@@ -2460,7 +2496,7 @@ const server=http.createServer(async(req,res)=>{
       const watchdogExpected=String(process.env.MARKETPULSE_WATCHDOG_TOKEN||"");
       const autotraderExpected=String(process.env.MARKETPULSE_AUTOTRADER_TOKEN||"");
       const supplied=String(req.headers["x-marketpulse-watchdog-token"]||"");
-      const authorized=Boolean(supplied&&((watchdogExpected&&supplied===watchdogExpected)||(autotraderExpected&&supplied===autotraderExpected)));
+      const authorized=Boolean((watchdogExpected&&tokenEquals(supplied,watchdogExpected))||(autotraderExpected&&tokenEquals(supplied,autotraderExpected)));
       if(!authorized)return send(res,403,{ok:false,error:"WATCHDOG_UNAUTHORIZED"});
       const action=u.searchParams.get("action")||"status";
       try{
@@ -2529,7 +2565,7 @@ const server=http.createServer(async(req,res)=>{
         }
         if(action==="autotrader-status")return send(res,200,await execution.getBotSnapshot());
         if(action==="autotrader-manage"){
-          let raw="";for await(const chunk of req)raw+=chunk;
+          let raw="";raw=await readLimitedBody(req);
           let body={};try{body=JSON.parse(raw||"{}")}catch{return send(res,400,{ok:false,error:"Invalid JSON"})}
           try{
             const result=await execution.manageSimulationPositions(body.markPrices||{},body.options||{});
@@ -2537,7 +2573,7 @@ const server=http.createServer(async(req,res)=>{
           }catch(e){return send(res,400,{ok:false,error:e.message})}
         }
         if(action==="autotrader-execute"){
-          let raw="";for await(const chunk of req)raw+=chunk;
+          let raw="";raw=await readLimitedBody(req);
           let body={};try{body=JSON.parse(raw||"{}")}catch{return send(res,400,{ok:false,error:"Invalid JSON"})}
           try{
             const snap=await execution.getBotSnapshot();
@@ -2654,13 +2690,17 @@ const server=http.createServer(async(req,res)=>{
     if(adminCfg.writesEnabled===false&&unsafe&&!isAdminUser&&!u.pathname.startsWith('/api/auth/')&&!['/api/telemetry/event'].includes(u.pathname))return send(res,423,{ok:false,error:"WRITES_DISABLED"});
     if(req.method==='GET'&&u.pathname==='/health')return send(res,200,{ok:true,service:'marketpulse-os',time:Date.now()});
     if(req.method==='GET'&&u.pathname==='/api/memory'){
-      const device=String(u.searchParams.get('device')||req.headers['x-marketpulse-device']||'');
+      const access=await scopedMemoryDevice(req,u);
+      if(!access.device)return send(res,access.status,{ok:false,error:access.error});
+      const device=access.device;
       const mem=await storage.get(device);
       return send(res,200,{storage:mem.storage,durable:mem.storage==="postgres",payload:mem.payload,updatedAt:mem.updatedAt});
     }
     if(req.method==='POST'&&u.pathname==='/api/memory'){
-      const device=String(u.searchParams.get('device')||req.headers['x-marketpulse-device']||'');
-      let raw="";for await(const chunk of req)raw+=chunk;
+      const access=await scopedMemoryDevice(req,u);
+      if(!access.device)return send(res,access.status,{ok:false,error:access.error});
+      const device=access.device;
+      let raw="";raw=await readLimitedBody(req);
       let body={};try{body=JSON.parse(raw||"{}")}catch{return send(res,400,{error:"Invalid JSON"})}
       const saved=await storage.save(device,body.memory||body);
       return send(res,200,{ok:true,storage:saved.storage,durable:saved.storage==="postgres",updatedAt:saved.updatedAt});
@@ -2671,7 +2711,9 @@ const server=http.createServer(async(req,res)=>{
       try{return send(res,200,await storage.health())}catch(e){return send(res,503,{ok:false,mode:'unknown',connected:false,source:'Unavailable',error:String(e.message||e)})}
     }
     if(req.method==='GET'&&u.pathname==='/api/analytics'){
-      const device=String(u.searchParams.get('device')||requestDevice(req));
+      const access=await scopedMemoryDevice(req,u);
+      if(!access.device)return send(res,access.status,{ok:false,error:access.error});
+      const device=access.device;
       try{
         const mem=await storage.get(device);
         const analytics=phase7.analyzeJournal(mem.payload?.journal||[]);
@@ -2680,7 +2722,9 @@ const server=http.createServer(async(req,res)=>{
     }
     if(req.method==='GET'&&u.pathname==='/api/phase7/health'){
       try{
-        const device=String(u.searchParams.get('device')||requestDevice(req));
+        const access=await scopedMemoryDevice(req,u);
+        if(!access.device)return send(res,access.status,{ok:false,error:access.error});
+        const device=access.device;
         const mem=await storage.get(device);
         const analytics=phase7.analyzeJournal(mem.payload?.journal||[]);
         let marketData=false,deriv=null;
@@ -2705,7 +2749,7 @@ const server=http.createServer(async(req,res)=>{
       return send(res,200,{ok:true,online:Boolean(user),live:liveVisitorStats()});
     }
     if(req.method==='POST'&&(u.pathname==='/api/auth/register'||u.pathname==='/api/auth/login')){
-      let raw="";for await(const chunk of req)raw+=chunk;
+      let raw="";raw=await readLimitedBody(req);
       let body={};try{body=JSON.parse(raw||"{}")}catch{return send(res,400,{ok:false,error:"Invalid JSON"})}
       try{
         if(u.pathname==='/api/auth/register'){
@@ -2748,7 +2792,7 @@ const server=http.createServer(async(req,res)=>{
     }
     if(req.method==='POST'&&u.pathname.startsWith('/api/admin/users/')&&u.pathname.endsWith('/action')){
       const userId=u.pathname.slice('/api/admin/users/'.length,-'/action'.length);
-      let raw="";for await(const chunk of req)raw+=chunk;
+      let raw="";raw=await readLimitedBody(req);
       let body={};try{body=JSON.parse(raw||"{}")}catch{return send(res,400,{ok:false,error:"Invalid JSON"})}
       try{
         const guard=await auth.requireAdmin(req);
@@ -2764,12 +2808,12 @@ const server=http.createServer(async(req,res)=>{
       try{const viewer=await auth.userFromRequest(req),rows=await storage.getActiveBroadcasts();return send(res,200,{ok:true,broadcasts:rows.filter(x=>x.audience==="all"||(x.audience==="registered"&&viewer))})}catch(e){return send(res,503,{ok:false,error:e.message})}
     }
     if(req.method==='POST'&&u.pathname==='/api/telemetry/event'){
-      let raw="";for await(const chunk of req)raw+=chunk;let body={};try{body=JSON.parse(raw||"{}")}catch{return send(res,400,{ok:false,error:"Invalid JSON"})}
+      let raw="";raw=await readLimitedBody(req);let body={};try{body=JSON.parse(raw||"{}")}catch{return send(res,400,{ok:false,error:"Invalid JSON"})}
       const user=await auth.userFromRequest(req);try{await storage.recordUsageEvent(user?.id||null,body.feature||"unknown",body.action||"view",body.symbol||null,body.interval||null,body.metadata||{});return send(res,200,{ok:true})}catch(e){return send(res,200,{ok:false})}
     }
     if(req.method==='POST'&&u.pathname==='/api/support/tickets'){
       const user=await auth.userFromRequest(req);if(!user)return send(res,401,{ok:false,error:"Authentication required"});
-      let raw="";for await(const chunk of req)raw+=chunk;let body={};try{body=JSON.parse(raw||"{}")}catch{return send(res,400,{ok:false,error:"Invalid JSON"})}
+      let raw="";raw=await readLimitedBody(req);let body={};try{body=JSON.parse(raw||"{}")}catch{return send(res,400,{ok:false,error:"Invalid JSON"})}
       try{const ticket=await storage.createSupportTicket(user.id,body);await storage.recordUsageEvent(user.id,"support","ticket_created");return send(res,201,{ok:true,ticket})}catch(e){return send(res,400,{ok:false,error:e.message})}
     }
     if(req.method==='GET'&&u.pathname==='/api/support/tickets'){
@@ -2850,7 +2894,7 @@ const server=http.createServer(async(req,res)=>{
     if(req.method==='GET'&&u.pathname==='/api/admin/analytics')return send(res,200,{ok:true,data:await storage.adminAnalytics()});
     if(req.method==='GET'&&u.pathname==='/api/admin/flags')return send(res,200,{ok:true,flags:await storage.getFeatureFlags()});
     if(req.method==='POST'&&u.pathname==='/api/admin/flags'){
-      let raw="";for await(const chunk of req)raw+=chunk;let body={};try{body=JSON.parse(raw||"{}")}catch{return send(res,400,{ok:false,error:"Invalid JSON"})}
+      let raw="";raw=await readLimitedBody(req);let body={};try{body=JSON.parse(raw||"{}")}catch{return send(res,400,{ok:false,error:"Invalid JSON"})}
       const user=await auth.userFromRequest(req);try{const row=await storage.saveFeatureFlag(body.key,body, user.email);await auditAdmin(req,"Updated feature flag "+row.key,"feature_flags",null,{enabled:row.enabled,rolloutPct:row.rolloutPct});return send(res,200,{ok:true,flag:row})}catch(e){return send(res,400,{ok:false,error:e.message})}
     }
     if(req.method==='GET'&&u.pathname==='/api/admin/notifications/config'){
@@ -2871,7 +2915,7 @@ const server=http.createServer(async(req,res)=>{
       }catch(e){return send(res,503,{ok:false,error:String(e.message||e)})}
     }
     if(req.method==='POST'&&u.pathname==='/api/admin/notifications/subscribe'){
-      let raw="";for await(const chunk of req)raw+=chunk;
+      let raw="";raw=await readLimitedBody(req);
       let body={};try{body=JSON.parse(raw||"{}")}catch{return send(res,400,{ok:false,error:"Invalid JSON"})}
       try{
         const saved=await storage.saveAdminPushSubscription(body);
@@ -2900,12 +2944,12 @@ const server=http.createServer(async(req,res)=>{
       }catch(e){return send(res,503,{ok:false,error:String(e.message||e)})}
     }
     if(req.method==='POST'&&u.pathname==='/api/admin/config'){
-      let raw="";for await(const chunk of req)raw+=chunk;let body={};try{body=JSON.parse(raw||"{}")}catch{return send(res,400,{ok:false,error:"Invalid JSON"})}
+      let raw="";raw=await readLimitedBody(req);let body={};try{body=JSON.parse(raw||"{}")}catch{return send(res,400,{ok:false,error:"Invalid JSON"})}
       const current=await getAdminRuntime(true),next=Object.assign({},current,body);const saved=await storage.saveAdminConfig(next);setAdminRuntime(saved);await auditAdmin(req,"Updated Admin runtime controls","configuration",null,{changed:Object.keys(body)});return send(res,200,{ok:true,config:saved});
     }
     if(req.method==='GET'&&u.pathname==='/api/admin/broadcasts')return send(res,200,{ok:true,rows:await storage.listBroadcasts(100)});
     if(req.method==='POST'&&u.pathname==='/api/admin/broadcasts'){
-      let raw="";for await(const chunk of req)raw+=chunk;let body={};try{body=JSON.parse(raw||"{}")}catch{return send(res,400,{ok:false,error:"Invalid JSON"})}
+      let raw="";raw=await readLimitedBody(req);let body={};try{body=JSON.parse(raw||"{}")}catch{return send(res,400,{ok:false,error:"Invalid JSON"})}
       const user=await auth.userFromRequest(req);try{const row=await storage.createBroadcast(body,user.email);await auditAdmin(req,"Created broadcast","communications",null,{broadcastId:row.id,title:row.title});return send(res,201,{ok:true,row})}catch(e){return send(res,400,{ok:false,error:e.message})}
     }
     if(req.method==='POST'&&u.pathname.startsWith('/api/admin/broadcasts/')&&u.pathname.endsWith('/toggle')){
@@ -2913,7 +2957,7 @@ const server=http.createServer(async(req,res)=>{
     }
     if(req.method==='GET'&&u.pathname==='/api/admin/support')return send(res,200,{ok:true,rows:await storage.listSupportTickets(300)});
     if(req.method==='POST'&&u.pathname.startsWith('/api/admin/support/')&&u.pathname.endsWith('/reply')){
-      const id=u.pathname.slice('/api/admin/support/'.length,-'/reply'.length);let raw="";for await(const chunk of req)raw+=chunk;let body={};try{body=JSON.parse(raw||"{}")}catch{return send(res,400,{ok:false,error:"Invalid JSON"})}
+      const id=u.pathname.slice('/api/admin/support/'.length,-'/reply'.length);let raw="";raw=await readLimitedBody(req);let body={};try{body=JSON.parse(raw||"{}")}catch{return send(res,400,{ok:false,error:"Invalid JSON"})}
       const out=await storage.replySupportTicket(id,body,auth.isAdminEmail((await auth.userFromRequest(req))?.email));await auditAdmin(req,"Replied to support ticket","support",null,{ticketId:id,status:body.status});return send(res,200,out);
     }
     if(req.method==='GET'&&u.pathname==='/api/admin/snapshots')return send(res,200,{ok:true,rows:await storage.listAdminSnapshots(100)});
@@ -2924,7 +2968,7 @@ const server=http.createServer(async(req,res)=>{
       const id=u.pathname.slice('/api/admin/snapshots/'.length,-'/restore'.length),snap=await storage.getAdminSnapshot(id);if(!snap)return send(res,404,{ok:false,error:"Snapshot not found"});await storage.restoreAdminConfig(snap);const saved=await storage.getAdminConfig();setAdminRuntime(saved);await auditAdmin(req,"Restored configuration snapshot","recovery",null,{snapshotId:id});return send(res,200,{ok:true,config:saved});
     }
     if(req.method==='POST'&&u.pathname==='/api/admin/emergency'){
-      let raw="";for await(const chunk of req)raw+=chunk;let body={};try{body=JSON.parse(raw||"{}")}catch{return send(res,400,{ok:false,error:"Invalid JSON"})}
+      let raw="";raw=await readLimitedBody(req);let body={};try{body=JSON.parse(raw||"{}")}catch{return send(res,400,{ok:false,error:"Invalid JSON"})}
       const current=await getAdminRuntime(true),next=Object.assign({},current,body);const saved=await storage.saveAdminConfig(next);setAdminRuntime(saved);await auditAdmin(req,"Changed emergency control state","emergency",null,{changed:Object.keys(body)});return send(res,200,{ok:true,config:saved});
     }
     if(req.method==='GET'&&u.pathname==='/api/account/memory'){
@@ -2936,7 +2980,7 @@ const server=http.createServer(async(req,res)=>{
     }
     if(req.method==='POST'&&u.pathname==='/api/account/memory'){
       const user=await auth.userFromRequest(req);if(!user)return send(res,401,{ok:false,error:"Authentication required"});
-      let raw="";for await(const chunk of req)raw+=chunk;
+      let raw="";raw=await readLimitedBody(req);
       let body={};try{body=JSON.parse(raw||"{}")}catch{return send(res,400,{ok:false,error:"Invalid JSON"})}
       try{return send(res,200,{ok:true,memory:await storage.saveAccountMemory(user.id,body.memory||{})})}catch(e){return send(res,400,{ok:false,error:e.message})}
     }
@@ -2951,7 +2995,7 @@ const server=http.createServer(async(req,res)=>{
       }
     }if(req.method==='POST'&&u.pathname==='/api/ai'){
       if(!aiAllowed(req)) return send(res,429,{error:"Slow down for a few seconds."});
-      let raw=""; for await(const chunk of req) raw+=chunk; let body={}; try{body=JSON.parse(raw||"{}")}catch{return send(res,400,{error:"Invalid JSON"})}
+      let raw=""; raw=await readLimitedBody(req); let body={}; try{body=JSON.parse(raw||"{}")}catch{return send(res,400,{error:"Invalid JSON"})}
       const mode=body.mode==="trade"?"trade":"market";
       const q=String(body.question||"").slice(0,1800);
       const market=body.market||{}; const trade=body.trade||{}; const traderProfile=body.traderProfile||{};
@@ -3353,11 +3397,11 @@ const server=http.createServer(async(req,res)=>{
       try{const x=await phase4.snapshot(requestDevice(req),null,null,null);return send(res,200,{ok:true,health:x.health,paper:x.paper,personalEdge:x.personalEdge,updatedAt:x.updatedAt})}catch(e){return send(res,503,{ok:false,error:e.message})}
     }
     if(req.method==='POST'&&u.pathname==='/api/edge/config'){
-      let raw="";for await(const chunk of req)raw+=chunk;let body={};try{body=JSON.parse(raw||"{}")}catch{return send(res,400,{error:"Invalid JSON"})}
+      let raw="";raw=await readLimitedBody(req);let body={};try{body=JSON.parse(raw||"{}")}catch{return send(res,400,{error:"Invalid JSON"})}
       try{return send(res,200,await phase4.setConfig(requestDevice(req),{account:body.account,riskPct:body.riskPct,minRR:body.minRR,maxOpenRiskPct:body.maxOpenRiskPct}))}catch(e){return send(res,400,{error:e.message})}
     }
     if(req.method==='POST'&&u.pathname==='/api/edge/journal'){
-      let raw="";for await(const chunk of req)raw+=chunk;let body={};try{body=JSON.parse(raw||"{}")}catch{return send(res,400,{error:"Invalid JSON"})}
+      let raw="";raw=await readLimitedBody(req);let body={};try{body=JSON.parse(raw||"{}")}catch{return send(res,400,{error:"Invalid JSON"})}
       try{const row=await phase4.addJournal(requestDevice(req),body.entry||body);return send(res,200,{ok:true,row})}catch(e){return send(res,400,{error:e.message})}
     }
     if(req.method==='GET'&&u.pathname==='/api/edge/events'){
@@ -3407,7 +3451,7 @@ const server=http.createServer(async(req,res)=>{
       }catch(e){return send(res,503,{ok:false,error:e.message})}
     }
     if(req.method==='POST'&&u.pathname==='/api/autotrader/config'){
-      let raw="";for await(const chunk of req)raw+=chunk;let body={};try{body=JSON.parse(raw||"{}")}catch{return send(res,400,{error:"Invalid JSON"})}
+      let raw="";raw=await readLimitedBody(req);let body={};try{body=JSON.parse(raw||"{}")}catch{return send(res,400,{error:"Invalid JSON"})}
       try{
         const cfg=autotrader.normalizeConfig(body);
         if(cfg.mode==="LIVE"&&String(process.env.LIVE_TRADING_ENABLED||"false").toLowerCase()!=="true")return send(res,400,{ok:false,error:"LIVE_TRADING_ENABLED is OFF"});
@@ -3419,7 +3463,7 @@ const server=http.createServer(async(req,res)=>{
       }catch(e){return send(res,400,{error:e.message})}
     }
     if(req.method==='POST'&&u.pathname==='/api/autotrader/arm'){
-      let raw="";for await(const chunk of req)raw+=chunk;let body={};try{body=JSON.parse(raw||"{}")}catch{return send(res,400,{error:"Invalid JSON"})}
+      let raw="";raw=await readLimitedBody(req);let body={};try{body=JSON.parse(raw||"{}")}catch{return send(res,400,{error:"Invalid JSON"})}
       try{
         const mode=String(body.mode||"TESTNET").toUpperCase();
         if(mode==="PAPER"){
@@ -3452,11 +3496,11 @@ const server=http.createServer(async(req,res)=>{
       try{return send(res,200,await execution.snapshot())}catch(e){return send(res,503,{ok:false,error:e.message})}
     }
     if(req.method==='POST'&&u.pathname==='/api/execution/config'){
-      let raw="";for await(const chunk of req)raw+=chunk;let body={};try{body=JSON.parse(raw||"{}")}catch{return send(res,400,{error:"Invalid JSON"})}
+      let raw="";raw=await readLimitedBody(req);let body={};try{body=JSON.parse(raw||"{}")}catch{return send(res,400,{error:"Invalid JSON"})}
       try{return send(res,200,await execution.setConfig({mode:body.mode,account:body.account,riskPct:body.riskPct,maxOpenRiskPct:body.maxOpenRiskPct,maxDailyLossPct:body.maxDailyLossPct,maxPositions:body.maxPositions,maxSymbolExposurePct:body.maxSymbolExposurePct,maxOrdersPerMinute:body.maxOrdersPerMinute,maxSlippageBps:body.maxSlippageBps,maxIntentAgeMs:body.maxIntentAgeMs,allowMarketOrders:false,requireReconciliation:true}))}catch(e){return send(res,400,{error:e.message})}
     }
     if(req.method==='POST'&&u.pathname==='/api/execution/arm'){
-      let raw="";for await(const chunk of req)raw+=chunk;let body={};try{body=JSON.parse(raw||"{}")}catch{return send(res,400,{error:"Invalid JSON"})}
+      let raw="";raw=await readLimitedBody(req);let body={};try{body=JSON.parse(raw||"{}")}catch{return send(res,400,{error:"Invalid JSON"})}
       try{
         const mode=String(body.mode||"TESTNET").toUpperCase();
         return send(res,200,{ok:true,mode,execution:mode==="LIVE"?await execution.armLive():await execution.armTestnet()});
@@ -3469,7 +3513,7 @@ const server=http.createServer(async(req,res)=>{
       try{return send(res,200,await execution.reconcile())}catch(e){return send(res,400,{error:e.message})}
     }
     if(req.method==='POST'&&u.pathname==='/api/execution/prepare'){
-      let raw="";for await(const chunk of req)raw+=chunk;let body={};try{body=JSON.parse(raw||"{}")}catch{return send(res,400,{error:"Invalid JSON"})}
+      let raw="";raw=await readLimitedBody(req);let body={};try{body=JSON.parse(raw||"{}")}catch{return send(res,400,{error:"Invalid JSON"})}
       const symbol=(body.symbol||'BTCUSDT').toUpperCase(),interval=body.interval||'1h';
       try{
         const finalDecision=await buildDecisionSnapshot(symbol,interval,u.searchParams,requestDevice(req));
@@ -3486,19 +3530,19 @@ const server=http.createServer(async(req,res)=>{
       }catch(e){return send(res,400,{error:e.message})}
     }
     if(req.method==='POST'&&u.pathname==='/api/execution/intent'){
-      let raw="";for await(const chunk of req)raw+=chunk;let body={};try{body=JSON.parse(raw||"{}")}catch{return send(res,400,{error:"Invalid JSON"})}
+      let raw="";raw=await readLimitedBody(req);let body={};try{body=JSON.parse(raw||"{}")}catch{return send(res,400,{error:"Invalid JSON"})}
       try{return send(res,200,{ok:true,order:await execution.createIntent(body)})}catch(e){return send(res,400,{error:e.message})}
     }
     if(req.method==='POST'&&u.pathname==='/api/execution/submit'){
-      let raw="";for await(const chunk of req)raw+=chunk;let body={};try{body=JSON.parse(raw||"{}")}catch{return send(res,400,{error:"Invalid JSON"})}
+      let raw="";raw=await readLimitedBody(req);let body={};try{body=JSON.parse(raw||"{}")}catch{return send(res,400,{error:"Invalid JSON"})}
       try{return send(res,200,{ok:true,order:await execution.submitIntent(body.id)})}catch(e){return send(res,400,{error:e.message})}
     }
     if(req.method==='POST'&&u.pathname==='/api/execution/cancel'){
-      let raw="";for await(const chunk of req)raw+=chunk;let body={};try{body=JSON.parse(raw||"{}")}catch{return send(res,400,{error:"Invalid JSON"})}
+      let raw="";raw=await readLimitedBody(req);let body={};try{body=JSON.parse(raw||"{}")}catch{return send(res,400,{error:"Invalid JSON"})}
       try{return send(res,200,{ok:true,order:await execution.cancelOrder(body.id)})}catch(e){return send(res,400,{error:e.message})}
     }
     if(req.method==='POST'&&u.pathname==='/api/execution/close-sim'){
-      let raw="";for await(const chunk of req)raw+=chunk;let body={};try{body=JSON.parse(raw||"{}")}catch{return send(res,400,{error:"Invalid JSON"})}
+      let raw="";raw=await readLimitedBody(req);let body={};try{body=JSON.parse(raw||"{}")}catch{return send(res,400,{error:"Invalid JSON"})}
       try{return send(res,200,await execution.closeSimulationPosition(body.positionId,body.exitPrice))}catch(e){return send(res,400,{error:e.message})}
     }
 
@@ -3531,7 +3575,7 @@ const server=http.createServer(async(req,res)=>{
       }catch(e){return send(res,503,{ok:false,error:e.message})}
     }
     if(req.method==='POST'&&u.pathname==='/api/portfolio/config'){
-      let raw="";for await(const chunk of req)raw+=chunk;let body={};try{body=JSON.parse(raw||"{}")}catch{return send(res,400,{error:"Invalid JSON"})}
+      let raw="";raw=await readLimitedBody(req);let body={};try{body=JSON.parse(raw||"{}")}catch{return send(res,400,{error:"Invalid JSON"})}
       try{return send(res,200,await phase6.setConfig({
         account:body.account,maxPortfolioRiskPct:body.maxPortfolioRiskPct,maxSymbolExposurePct:body.maxSymbolExposurePct,
         maxCorrelatedClusterRiskPct:body.maxCorrelatedClusterRiskPct,correlationLookback:body.correlationLookback,
@@ -3548,7 +3592,7 @@ const server=http.createServer(async(req,res)=>{
       try{return send(res,200,await buildReplayDataset(symbol,interval,{points,bars}))}catch(e){return send(res,503,{ok:false,error:e.message})}
     }
     if(req.method==='POST'&&u.pathname==='/api/dna/refresh'){
-      let raw="";for await(const chunk of req)raw+=chunk;let body={};try{body=JSON.parse(raw||"{}")}catch{return send(res,400,{error:"Invalid JSON"})}
+      let raw="";raw=await readLimitedBody(req);let body={};try{body=JSON.parse(raw||"{}")}catch{return send(res,400,{error:"Invalid JSON"})}
       const requestedSymbol=(body.symbol||"ALL").toUpperCase(),interval=body.interval||"1h",points=Math.min(160,Math.max(20,Number(body.points||80))),bars=Math.min(4200,Math.max(240,Number(body.bars||(interval==="1d"?1800:420))));
       const symbols=requestedSymbol==="ALL"?SYMBOLS:[requestedSymbol];
       if(symbols.some(s=>!SYMBOLS.includes(s)))return send(res,400,{error:"Unsupported symbol"});
@@ -3563,7 +3607,7 @@ const server=http.createServer(async(req,res)=>{
       try{const records=await storage.getSignalDNA({symbol: symbol||undefined,interval:interval||undefined,limit});return send(res,200,{ok:true,records,summary:summarizeDNA(records),storage:storage.status()})}catch(e){return send(res,503,{ok:false,error:e.message})}
     }
     if(req.method==='POST'&&u.pathname==='/api/dna/clear'){
-      let raw="";for await(const chunk of req)raw+=chunk;let body={};try{body=JSON.parse(raw||"{}")}catch{return send(res,400,{error:"Invalid JSON"})}
+      let raw="";raw=await readLimitedBody(req);let body={};try{body=JSON.parse(raw||"{}")}catch{return send(res,400,{error:"Invalid JSON"})}
       await storage.clearSignalDNA({symbol:body.symbol||undefined,interval:body.interval||undefined});return send(res,200,{ok:true})
     }
     if(req.method==='GET'&&u.pathname==='/api/research'){
@@ -3760,13 +3804,22 @@ const server=http.createServer(async(req,res)=>{
       return send(res,200,{interval,rows,marketSource:'coingecko',updatedAt:Date.now()});
     }
     return staticFile(req,res);
-  }catch(e){return send(res,500,{error:e.message||'Server error'})}
+  }catch(e){
+    if(res.headersSent){try{res.end()}catch{};return}
+    const code=e?.statusCode===413?413:500;
+    return send(res,code,{ok:false,error:code===413?"Request too large":"Internal server error"});
+  }
 });
 const liveSyncWss=new WebSocket.Server({noServer:true});
 
 server.on("upgrade",(req,socket,head)=>{
   try{
     const u=new URL(req.url||"/","http://localhost");
+    if(req.headers.origin){
+      const origin=new URL(req.headers.origin);
+      if(origin.host!==req.headers.host){socket.destroy();return}
+    }
+    if(LIVE_SYNC_CLIENTS.size>=500){socket.destroy();return}
     if(u.pathname!=="/api/live-stream"){
       socket.destroy();
       return;
