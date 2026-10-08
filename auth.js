@@ -3,10 +3,8 @@ const storage=require("./storage");
 const totp=require("./totp");
 
 const SESSION_DAYS=Math.max(1,Number(process.env.MARKETPULSE_SESSION_DAYS||30));
-// Owner/admin login is intentionally persistent: once the owner completes MFA,
-// the session remains valid for years and ends only on explicit sign-out, account
-// revocation/moderation, or infrastructure-level session invalidation.
-// A shorter environment value cannot accidentally re-enable frequent owner logouts.
+// Admin sessions expire after at most 24 hours and require fresh MFA.
+// Older long-lived sessions are also subject to a one-hour inactivity limit.
 const configuredAdminHours=Number(process.env.MARKETPULSE_ADMIN_SESSION_HOURS||12);
 const ADMIN_SESSION_HOURS=Number.isFinite(configuredAdminHours)?Math.min(24,Math.max(1,configuredAdminHours)):12;
 const COOKIE="mp_session";
