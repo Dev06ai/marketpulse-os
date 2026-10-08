@@ -51,7 +51,10 @@ def websocket_error(headers: Mapping[str, str]) -> str | None:
     """Require auth AND reject cross-origin browser WebSocket connections."""
     origin = headers.get("origin", "").strip()
     if origin:
-        parsed = urlsplit(origin)
+        try:
+            parsed = urlsplit(origin)
+        except ValueError:
+            return "Unapproved WebSocket origin"
         host = headers.get("host", "").strip().lower()
         configured = {value.strip() for value in os.getenv("KYVORIQ_WS_ALLOWED_ORIGINS", "").split(",") if value.strip()}
         same_origin = (parsed.scheme == "https" and parsed.netloc.lower() == host)
