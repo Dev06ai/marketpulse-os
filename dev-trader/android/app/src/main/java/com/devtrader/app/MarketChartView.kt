@@ -208,7 +208,7 @@ class MarketChartView @JvmOverloads constructor(
     private var signal: JSONObject? = null
     private var ema50: Double? = null
     private var overlays = JSONArray()
-    private var timeframe = "15m"
+    private var timeframe = "1h"
     private var livePrice = Double.NaN
     private var feedHealthy = false
     private var showBollinger = true
@@ -347,6 +347,7 @@ class MarketChartView @JvmOverloads constructor(
     // The reference screenshot is a wide, context-first default chart.
     // One zoom unit shows roughly 65–80 15m candles instead of a tightly
     // cropped 35–45 candle viewport. Pinch gestures still work normally.
+    // Reference viewport: ~3 days of 1h candles, readable vertical volatility.
     private var zoomX = 1.0f
     private var zoomY = 1.0f
 
@@ -401,20 +402,33 @@ class MarketChartView @JvmOverloads constructor(
         invalidate()
     }
 
-    fun setTimeframe(value: String) {
-        if (timeframe == value) return
-        timeframe = value
+    private fun defaultZoomX(): Float = when (timeframe) {
+        // The one-hour chart matches the supplied reference when its
+        // default 70–80-bar market window is left at native scale.
+        "1h" -> 1.0f
+        "15m" -> 1.1f
+        "5m" -> 1.15f
+        else -> 1.0f
+    }
+
+    fun resetViewportToDefault() {
         followLive = true
         candleShift = 0f
         verticalOffset = 0.0
-        zoomX = 1.0f
+        zoomX = defaultZoomX()
         zoomY = 1.0f
         crosshairVisible = false
         invalidate()
     }
 
+    fun setTimeframe(value: String) {
+        if (timeframe == value) return
+        timeframe = value
+        resetViewportToDefault()
+    }
+
     private fun visibleCount(): Int {
-        val widthPx = max(1f, width - dp(62f))
+        val widthPx = max(1f, width - dp(82f))
         val base = max(55f, widthPx / dp(4.15f))
         return max(24, min(180, (base / zoomX).roundToInt()))
     }
@@ -431,7 +445,8 @@ class MarketChartView @JvmOverloads constructor(
         bgPaint.shader = null
 
         val left = dp(6f)
-        val right = width - dp(56f)
+        // Dedicated axis lane for BTC tick values and color-coded level prices.
+        val right = width - dp(82f)
         val top = dp(
             if (height < dp(190f)) 32f
             else if (levelMenuOpen) 70f
@@ -483,24 +498,9 @@ class MarketChartView @JvmOverloads constructor(
             }
         }
 
-        // When following live BTC, include the user-supplied structural map in
-        // the vertical scale so its full Daily/nPOC/OB ladder remains visible.
-        if (hasVisibleLevelLayers() && followLive) {
-            for (i in 0 until overlays.length()) {
-                val row = overlays.optJSONObject(i) ?: continue
-                if (!row.optBoolean("manual", false) || !isOverlayVisible(row)) continue
-                listOf(
-                    row.optDouble("price", Double.NaN),
-                    row.optDouble("zone_low", Double.NaN),
-                    row.optDouble("zone_high", Double.NaN)
-                ).forEach { v ->
-                    if (v.isFinite() && v > 0.0) {
-                        high = max(high, v)
-                        low = min(low, v)
-                    }
-                }
-            }
-        }
+        // Do NOT fit the entire manual Daily/NPOC map into the price range:
+        // distant levels used to flatten 15m candles on every app launch.
+        // Visible levels are still rendered when price enters their range.
 
         if (!high.isFinite() || !low.isFinite() || high <= low) {
             canvas.drawText("No chart data", left, top + dp(30f), labelPaint)
@@ -1387,7 +1387,7 @@ class MarketChartView @JvmOverloads constructor(
                     dragging = true
                     followLive = false
                     crosshairVisible = false
-                    val bar = max(1f, (width - dp(64f)) / visibleCount())
+                    val bar = max(1f, (width - dp(88f)) / visibleCount())
                     candleShift = (candleShift - dx / bar).coerceIn(
                         0f,
                         max(0f, candles.length() - visibleCount().toFloat())
@@ -1434,12 +1434,7 @@ class MarketChartView @JvmOverloads constructor(
                     val now = SystemClock.uptimeMillis()
                     if (liveChipHit || now - lastTapMs < 280L) {
                         KyvoriqHaptics.fire(this, KyvoriqHaptics.Cue.CONFIRM)
-                        followLive = true
-                        candleShift = 0f
-                        verticalOffset = 0.0
-                        zoomX = 1.0f
-                        zoomY = 1.0f
-                        crosshairVisible = false
+                        resetViewportToDefault()
                     } else {
                         KyvoriqHaptics.fire(this, KyvoriqHaptics.Cue.TAP)
                         crosshairVisible = true
