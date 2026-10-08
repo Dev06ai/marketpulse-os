@@ -35,8 +35,8 @@ class KyvoriqLaunchOverlay(context: Context) : FrameLayout(context) {
     }
     private val title = TextView(context).apply {
         text = "KYVORIQ"
-        textSize = 25f
-        typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+        textSize = 24f
+        typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
         setTextColor(gold)
         letterSpacing = 0.10f
         includeFontPadding = false
@@ -46,7 +46,7 @@ class KyvoriqLaunchOverlay(context: Context) : FrameLayout(context) {
     private val subtitle = TextView(context).apply {
         text = "INTELLIGENCE  •  DISCIPLINE  •  EXECUTION"
         textSize = 8.5f
-        typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+        typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
         setTextColor(gray)
         letterSpacing = 0.08f
         includeFontPadding = false
@@ -65,7 +65,7 @@ class KyvoriqLaunchOverlay(context: Context) : FrameLayout(context) {
     private val sweep = View(context).apply {
         background = GradientDrawable(
             GradientDrawable.Orientation.LEFT_RIGHT,
-            intArrayOf(Color.TRANSPARENT, Color.argb(64, 231, 196, 106), Color.TRANSPARENT)
+            intArrayOf(Color.TRANSPARENT, Color.argb(58, 219, 170, 59), Color.TRANSPARENT)
         )
         alpha = 0f
         rotation = -10f
