@@ -169,7 +169,7 @@ class DecisionJournal:
         return dict(ready=self.ready,error=self.error,records=counts[0],price_samples=counts[1],
                     first_ts=counts[2],last_ts=counts[3],retention_days=self.retention_days,max_records=self.max_records,
                     max_blob_bytes=self.max_blob_bytes or None,
-                    storage="LOCAL_SQLITE",durability=durability["mount_check"],
+                    storage="LOCAL_SQLITE",durability="EPHEMERAL_UNLESS_PERSISTENT_VOLUME_CONFIGURED",
                     volume=durability,
                     engine_revision=ENGINE_REVISION)
 
