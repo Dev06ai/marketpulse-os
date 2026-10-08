@@ -63,9 +63,11 @@ assert find(text='SHORT').get('selected') == 'true'
 adb('shell', 'input', 'keyevent', 'KEYCODE_BACK')
 scroll_trade_to('DECISION CENTER')
 find(text='DECISION CENTER')
+adb('shell', 'input', 'swipe', '540', '540', '540', '1720', '300')
 assert find(desc='Chart 1h').get('selected') == 'true'
 assert len([n for n in nodes() if n.get('content-desc', '').startswith('Workspace ')]) == 3
 # Repeat the former duplicate-page path with the on-screen back button.
+scroll_trade_to('P&L CALCULATOR')
 tap(text='P&L CALCULATOR')
 tap(desc='Back to trading workspace')
 assert len([n for n in nodes() if n.get('content-desc', '').startswith('Workspace ')]) == 3
@@ -86,10 +88,12 @@ adb('shell', 'input', 'keyevent', 'KEYCODE_BACK')
 adb('shell', 'settings', 'put', 'global', 'animator_duration_scale', '0')
 adb('shell', 'am', 'start', '-S', '-W', '-n', f'{PKG}/com.devtrader.app.SafeActivity',
     '--ez', 'visual_preview', 'true', '--ei', 'visual_workspace', '0')
+scroll_trade_to('DECISION CENTER')
 find(text='DECISION CENTER')
 tap(desc='Workspace INSIGHTS')
 find(text='ENTRY CHECKS')
 tap(desc='Workspace TRADE')
+scroll_trade_to('DECISION CENTER')
 find(text='DECISION CENTER')
 shot('reduced-motion')
 adb('shell', 'settings', 'put', 'global', 'animator_duration_scale', '1')
