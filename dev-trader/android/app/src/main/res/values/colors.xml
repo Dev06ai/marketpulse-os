@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="kyvoriq_gold">#E7C46A</color>
-    <color name="kyvoriq_amber">#DD9741</color>
+    <color name="kyvoriq_gold">#DBAA3B</color>
+    <color name="kyvoriq_amber">#E0832D</color>
     <color name="kyvoriq_deep_gold">#B8860B</color>
-    <color name="kyvoriq_charcoal">#0D0E10</color>
-    <color name="kyvoriq_slate">#1A1917</color>
-    <color name="kyvoriq_graphite">#27231C</color>
-    <color name="kyvoriq_gray">#B1AB9F</color>
-    <color name="icon_background">#0D0E10</color>
+    <color name="kyvoriq_charcoal">#0C0C0C</color>
+    <color name="kyvoriq_slate">#171512</color>
+    <color name="kyvoriq_graphite">#2C2317</color>
+    <color name="kyvoriq_gray">#B3A893</color>
+    <color name="icon_background">#0C0C0C</color>
 </resources>

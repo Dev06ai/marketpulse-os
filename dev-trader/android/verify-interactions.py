@@ -13,8 +13,21 @@ def adb(*args):
     return subprocess.check_output(['adb', *args], timeout=30)
 
 def nodes():
-    adb('shell', 'uiautomator', 'dump', '/sdcard/interaction.xml')
-    return list(ET.fromstring(adb('shell', 'cat', '/sdcard/interaction.xml')).iter('node'))
+    """Retry transient emulator accessibility null-root errors without hiding app failures."""
+    last_error = None
+    for _ in range(6):
+        try:
+            adb('shell', 'rm', '-f', '/sdcard/interaction.xml')
+            adb('shell', 'uiautomator', 'dump', '/sdcard/interaction.xml')
+            raw = adb('shell', 'cat', '/sdcard/interaction.xml')
+            root = ET.fromstring(raw)
+            found = list(root.iter('node'))
+            if found:
+                return found
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired, ET.ParseError) as exc:
+            last_error = exc
+        time.sleep(.7)
+    raise AssertionError(f'Could not capture Android accessibility hierarchy: {last_error}')
 
 def find(text=None, desc=None):
     for _ in range(4):
@@ -31,6 +44,16 @@ def tap(text=None, desc=None):
     adb('shell', 'input', 'tap', str((x1+x2)//2), str((y1+y2)//2))
     time.sleep(.4)
 
+def scroll_trade_to(text):
+    """The enlarged trade chart intentionally puts decision tools below the fold."""
+    for attempt in range(7):
+        current = nodes()
+        if any(n.get('text') == text for n in current):
+            return
+        adb('shell', 'input', 'swipe', '540', '1730', '540', '570', '290')
+        time.sleep(.35)
+    raise AssertionError(f'Trade control not reachable after scrolling: {text}')
+
 def shot(name):
     OUT.joinpath(name + '.png').write_bytes(adb('exec-out', 'screencap', '-p'))
     OUT.joinpath(name + '.xml').write_bytes(adb('shell', 'cat', '/sdcard/interaction.xml'))
@@ -44,16 +67,20 @@ tap(desc='Workspace POSITIONS')
 find(text='DEMO PERFORMANCE')
 tap(desc='Workspace TRADE')
 assert find(desc='Chart 1h').get('selected') == 'true'
+scroll_trade_to('P&L CALCULATOR')
 tap(text='P&L CALCULATOR')
 find(text='P&L calculator')
 shot('calculator')
 tap(text='SHORT')
 assert find(text='SHORT').get('selected') == 'true'
 adb('shell', 'input', 'keyevent', 'KEYCODE_BACK')
+scroll_trade_to('DECISION CENTER')
 find(text='DECISION CENTER')
+adb('shell', 'input', 'swipe', '540', '540', '540', '1720', '300')
 assert find(desc='Chart 1h').get('selected') == 'true'
 assert len([n for n in nodes() if n.get('content-desc', '').startswith('Workspace ')]) == 3
 # Repeat the former duplicate-page path with the on-screen back button.
+scroll_trade_to('P&L CALCULATOR')
 tap(text='P&L CALCULATOR')
 tap(desc='Back to trading workspace')
 assert len([n for n in nodes() if n.get('content-desc', '').startswith('Workspace ')]) == 3
@@ -74,10 +101,12 @@ adb('shell', 'input', 'keyevent', 'KEYCODE_BACK')
 adb('shell', 'settings', 'put', 'global', 'animator_duration_scale', '0')
 adb('shell', 'am', 'start', '-S', '-W', '-n', f'{PKG}/com.devtrader.app.SafeActivity',
     '--ez', 'visual_preview', 'true', '--ei', 'visual_workspace', '0')
+scroll_trade_to('DECISION CENTER')
 find(text='DECISION CENTER')
 tap(desc='Workspace INSIGHTS')
 find(text='ENTRY CHECKS')
 tap(desc='Workspace TRADE')
+scroll_trade_to('DECISION CENTER')
 find(text='DECISION CENTER')
 shot('reduced-motion')
 adb('shell', 'settings', 'put', 'global', 'animator_duration_scale', '1')

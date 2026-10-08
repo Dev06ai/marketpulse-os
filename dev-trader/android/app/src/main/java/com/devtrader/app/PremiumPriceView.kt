@@ -29,7 +29,7 @@ class PremiumPriceView(context: Context) : LinearLayout(context) {
     private val instrument = TextView(context).apply {
         text = "BTC"
         setTextColor(gold)
-        typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+        typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
         includeFontPadding = false
         gravity = Gravity.CENTER_VERTICAL
     }
@@ -39,7 +39,7 @@ class PremiumPriceView(context: Context) : LinearLayout(context) {
         TextView(context).apply {
             text = "—"
             setTextColor(gold)
-            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
             includeFontPadding = false
             gravity = Gravity.CENTER_VERTICAL
             alpha = if (it == 0) 1f else 0f

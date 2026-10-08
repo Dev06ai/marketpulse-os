@@ -138,7 +138,7 @@ class SafeActivity : FragmentActivity() {
     private lateinit var tradeHistory: TextView
     private lateinit var replay: TextView
     private lateinit var workspaceHost: FrameLayout
-    private val workspacePages = mutableListOf<LinearLayout>()
+    private val workspacePages = mutableListOf<View>()
     private val navigationButtons = mutableListOf<Button>()
     private lateinit var positionSummary: TextView
     private lateinit var ledgerView: TextView
@@ -497,7 +497,7 @@ class SafeActivity : FragmentActivity() {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_VERTICAL
         }
-        brand.addView(label("KYVORIQ", 19f, kyGold, 0.12f))
+        brand.addView(label("KYVORIQ", 20f, kyGold, 0.09f))
         brand.addView(label("DISCIPLINE MEETS INTELLIGENCE", 7.5f, kyGray, 0.08f), margins(top = 3))
         header.addView(brand, LinearLayout.LayoutParams(0, dp(48), 1f))
         alertsButton = compactPillButton("ALERTS").apply { contentDescription = "Enable trade alerts" }
@@ -516,12 +516,22 @@ class SafeActivity : FragmentActivity() {
 
         workspaceHost = FrameLayout(this)
         root.addView(workspaceHost, LinearLayout.LayoutParams(-1, 0, 1f))
-        fun page(): LinearLayout = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            workspacePages.add(this)
-            workspaceHost.addView(this, FrameLayout.LayoutParams(-1, -1))
+        fun page(scrollable: Boolean = false): LinearLayout {
+            val content = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+            val viewport: View = if (scrollable) {
+                ScrollView(this).apply {
+                    isFillViewport = false
+                    clipToPadding = false
+                    overScrollMode = View.OVER_SCROLL_IF_CONTENT_SCROLLS
+                    addView(content, FrameLayout.LayoutParams(-1, -2))
+                }
+            } else content
+            workspacePages.add(viewport)
+            workspaceHost.addView(viewport, FrameLayout.LayoutParams(-1, -1))
+            return content
         }
-        val tradePage = page()
+        // The full-width chart gets dedicated height; controls remain below it.
+        val tradePage = page(scrollable = true)
         val hero = heroCard()
         price = hero.price; oiView = hero.oi; status = hero.status
         tradePage.addView(hero.container, margins(bottom = 6))
@@ -540,16 +550,16 @@ class SafeActivity : FragmentActivity() {
         timeframeButtonRow = tfRow
         tradePage.addView(tfRow, margins(bottom = 4))
         chart = MarketChartView(this).apply {
-            minimumHeight = dp(if (compactViewport) 176 else 248)
+            minimumHeight = dp(if (compactViewport) 325 else 430)
             contentDescription = "Interactive price chart"
             onFullscreenRequested = { toggleChartFullscreen() }
         }
         tradePage.addView(
             chart,
-            LinearLayout.LayoutParams(-1, 0, 1f).apply {
+            LinearLayout.LayoutParams(-1, dp(if (compactViewport) 355 else 470)).apply {
                 leftMargin = -dp(6)
                 rightMargin = -dp(6)
-                bottomMargin = dp(6)
+                bottomMargin = dp(10)
             }
         )
         val setup = premiumCard("DECISION CENTER", "NO TRADE  •  SCANNING\nWaiting for verified market data.", if (compactViewport) 11.5f else 13f)
@@ -618,12 +628,12 @@ class SafeActivity : FragmentActivity() {
         insightsScroll.addView(insightsContent, FrameLayout.LayoutParams(-1, -2))
         insightsPage.addView(insightsScroll, LinearLayout.LayoutParams(-1, 0, 1f))
 
-        val story = premiumCard("MARKET CONTEXT", "Building the market picture…", 13f)
+        val story = premiumCard("MARKET CONTEXT", "Building the market picture…", 12f)
         features = story.second
         features.maxLines = 5
         insightsContent.addView(story.first, margins(bottom = 10))
 
-        val decisions = scrollableCard("ENTRY CHECKS", "Waiting for a qualified setup…", 12f, dp(if (compactViewport) 138 else 165))
+        val decisions = scrollableCard("ENTRY CHECKS", "Waiting for a qualified setup…", 11.5f, dp(if (compactViewport) 128 else 148))
         decisionView = decisions.value
         insightsContent.addView(decisions.container, margins(bottom = 10))
 
@@ -644,13 +654,13 @@ class SafeActivity : FragmentActivity() {
         )
         insightsContent.addView(riskCard.container, margins(bottom = 10))
 
-        val levels = compactCard("LEVELS & FLOW", "Loading confirmed context…", 12f)
+        val levels = compactCard("LEVELS & FLOW", "Loading confirmed context…", 11.5f)
         insightContext = levels.value
         insightsContent.addView(levels.container, margins(bottom = 10))
-        val feed = compactCard("CONNECTION", "BITGET  •  CONNECTING", 11.5f)
+        val feed = compactCard("CONNECTION", "BITGET  •  CONNECTING", 11f)
         integrity = feed.value
         insightsContent.addView(feed.container, margins(bottom = 10))
-        val sys = compactCard("SYSTEM", "Build ${BuildConfig.VERSION_CODE}  •  Checking…", 11.5f)
+        val sys = compactCard("SYSTEM", "Build ${BuildConfig.VERSION_CODE}  •  Checking…", 11f)
         check = sys.value
         insightsContent.addView(sys.container, margins(bottom = 10))
 
@@ -743,7 +753,7 @@ class SafeActivity : FragmentActivity() {
                 animate().cancel()
                 alpha = 0f
                 translationX = dp(if (index > previous) 12 else -12).toFloat()
-                animate().alpha(1f).translationX(0f).setStartDelay(0).setDuration(260L)
+                animate().alpha(1f).translationX(0f).setStartDelay(0).setDuration(300L)
                     .setInterpolator(KyvoriqTheme.motion).start()
             }
         }
@@ -763,8 +773,8 @@ class SafeActivity : FragmentActivity() {
                 .translationY(0f)
                 .scaleX(1f)
                 .scaleY(1f)
-                .setStartDelay(index * 34L)
-                .setDuration(250L)
+                .setStartDelay(index * 38L)
+                .setDuration(300L)
                 .setInterpolator(android.view.animation.PathInterpolator(0.18f, 0.82f, 0.20f, 1f))
                 .withLayer()
                 .start()
@@ -797,7 +807,7 @@ class SafeActivity : FragmentActivity() {
     }
 
     private fun sectionLabel(text: String): TextView =
-        label(text, 9.5f, kyGray, 0.13f)
+        label(text, 10f, kyGray, 0.06f)
 
     private fun weightButton(): LinearLayout.LayoutParams =
         LinearLayout.LayoutParams(0, dp(42), 1f).apply {
@@ -819,12 +829,12 @@ class SafeActivity : FragmentActivity() {
     private fun compactPillButton(text: String): Button =
         KyvoriqButton(this).apply {
             this.text = text
-            textSize = 10.5f
+            textSize = 11f
             setTextColor(android.content.res.ColorStateList(
                 arrayOf(intArrayOf(-android.R.attr.state_enabled), intArrayOf()),
                 intArrayOf(kyGray, kyGold)))
             backgroundTintList = null
-            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
             isAllCaps = false
             isEnabled = true
             isClickable = true
@@ -898,14 +908,14 @@ class SafeActivity : FragmentActivity() {
             setPadding(dp(12), dp(9), dp(12), dp(8))
             background = KyvoriqTheme.surface(this@SafeActivity, prominent = false)
         }
-        val heading = label(title, 9f, kyGold, 0.11f)
+        val heading = label(title, 10f, kyGold, 0.06f)
         val value = TextView(this).apply {
             text = initial
             textSize = valueSize
             setTextColor(kyWhite)
             typeface = Typeface.create("sans-serif", Typeface.NORMAL)
             includeFontPadding = false
-            setLineSpacing(0f, 1.02f)
+            setLineSpacing(0f, 1.12f)
             setHorizontallyScrolling(false)
         }
         box.addView(heading)
@@ -923,7 +933,7 @@ class SafeActivity : FragmentActivity() {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
         }
-        header.addView(label(title, 9f, kyGold, 0.12f),
+        header.addView(label(title, 10f, kyGold, 0.06f),
             LinearLayout.LayoutParams(0, dp(18), 1f))
         header.addView(label(if (title == "DECISION CENTER") "DETAILS  ›" else if (title == "DEMO PERFORMANCE") "DEMO" else "MARKET", 8.5f, kyAmber, 0.08f))
         box.addView(header)
@@ -932,9 +942,9 @@ class SafeActivity : FragmentActivity() {
             text = initial
             textSize = valueSize
             setTextColor(kyWhite)
-            typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+            typeface = Typeface.create("sans-serif", Typeface.NORMAL)
             includeFontPadding = false
-            setLineSpacing(0f, 1.10f)
+            setLineSpacing(0f, 1.13f)
         }
         box.addView(value, margins(top = 5))
         return Pair(box, value)
@@ -945,8 +955,8 @@ class SafeActivity : FragmentActivity() {
             this.text = marketAssetAccent(text)
             textSize = size
             setTextColor(color)
-            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-            letterSpacing = spacing
+            typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+            letterSpacing = spacing.coerceAtMost(0.09f)
             includeFontPadding = false
         }
     }
@@ -962,16 +972,16 @@ class SafeActivity : FragmentActivity() {
     ): CardRefs {
         val box = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(17), dp(15), dp(17), dp(16))
+            setPadding(dp(14), dp(12), dp(14), dp(12))
             background = KyvoriqTheme.surface(this@SafeActivity, prominent = false)
         }
 
         val heading = TextView(this).apply {
             text = marketAssetAccent(title)
-            textSize = 11f
+            textSize = 10f
             setTextColor(kyGold)
-            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-            letterSpacing = 0.11f
+            typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+            letterSpacing = 0.06f
             includeFontPadding = false
         }
         val headingRow = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
@@ -985,7 +995,7 @@ class SafeActivity : FragmentActivity() {
             setTextColor(kyWhite)
             typeface = Typeface.create("sans-serif", Typeface.NORMAL)
             includeFontPadding = false
-            setLineSpacing(0f, 1.24f)
+            setLineSpacing(0f, 1.12f)
         }
 
         val historyScroll = ScrollView(this).apply {
@@ -1021,16 +1031,16 @@ class SafeActivity : FragmentActivity() {
     private fun card(title: String, initial: String, valueSize: Float): CardRefs {
         val box = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(17), dp(15), dp(17), dp(16))
+            setPadding(dp(14), dp(12), dp(14), dp(12))
             background = KyvoriqTheme.surface(this@SafeActivity, prominent = false)
         }
 
         val heading = TextView(this).apply {
             text = marketAssetAccent(title)
-            textSize = 11f
+            textSize = 10f
             setTextColor(kyGold)
-            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-            letterSpacing = 0.11f
+            typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+            letterSpacing = 0.06f
         }
         box.addView(heading)
 
@@ -1040,7 +1050,7 @@ class SafeActivity : FragmentActivity() {
             setTextColor(kyWhite)
             typeface = Typeface.create("sans-serif", Typeface.NORMAL)
             includeFontPadding = false
-            setLineSpacing(0f, 1.24f)
+            setLineSpacing(0f, 1.12f)
         }
         box.addView(value, margins(top = 8))
         return CardRefs(box, value)
@@ -1054,7 +1064,7 @@ class SafeActivity : FragmentActivity() {
                 arrayOf(intArrayOf(-android.R.attr.state_enabled), intArrayOf()),
                 intArrayOf(kyGray, kyGold)))
             backgroundTintList = null
-            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
             isAllCaps = false
             isEnabled = true
             isClickable = true
@@ -1953,8 +1963,10 @@ class SafeActivity : FragmentActivity() {
         if (key == lastAmbientKey) return
         lastAmbientKey = key
         val target = when (key) {
-            "LONG", "BULLISH" -> Color.rgb(11, 29, 27)
-            "SHORT", "BEARISH" -> Color.rgb(31, 18, 25)
+            // Ambient lighting stays within the gold/charcoal identity;
+            // green and red remain exclusive to actual trading semantics.
+            "LONG", "BULLISH" -> Color.rgb(27, 24, 17)
+            "SHORT", "BEARISH" -> Color.rgb(31, 21, 16)
             "CAUTION" -> KyvoriqTheme.graphite
             else -> KyvoriqTheme.slate
         }

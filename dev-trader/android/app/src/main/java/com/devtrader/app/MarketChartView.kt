@@ -1324,7 +1324,9 @@ class MarketChartView @JvmOverloads constructor(
     override fun onTouchEvent(event: MotionEvent): Boolean {
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
-                parent?.requestDisallowInterceptTouchEvent(true)
+                // Embedded chart: let the Trade ScrollView own vertical one-finger
+                // gestures. In fullscreen, the chart keeps full 2D pan control.
+                parent?.requestDisallowInterceptTouchEvent(fullscreenMode)
                 lastTouchX = event.x
                 lastTouchY = event.y
                 touchDownX = event.x
@@ -1337,6 +1339,7 @@ class MarketChartView @JvmOverloads constructor(
 
             MotionEvent.ACTION_POINTER_DOWN -> {
                 if (event.pointerCount >= 2) {
+                    parent?.requestDisallowInterceptTouchEvent(true)
                     pinchActive = true
                     dragging = true
                     if (!dragHapticActive) {
@@ -1366,6 +1369,13 @@ class MarketChartView @JvmOverloads constructor(
 
                 val dx = event.x - lastTouchX
                 val dy = event.y - lastTouchY
+                val totalDx = abs(event.x - touchDownX)
+                val totalDy = abs(event.y - touchDownY)
+                // Keep horizontal chart scrubbing responsive while allowing
+                // a vertical swipe to reach the parent ScrollView.
+                if (fullscreenMode || (totalDx > dp(8f) && totalDx > totalDy * 1.25f)) {
+                    parent?.requestDisallowInterceptTouchEvent(true)
+                }
                 if (abs(event.x - touchDownX) > dp(6f) || abs(event.y - touchDownY) > dp(6f)) {
                     if (!dragging && !dragHapticActive) {
                         KyvoriqHaptics.fire(this, KyvoriqHaptics.Cue.DRAG_START)
