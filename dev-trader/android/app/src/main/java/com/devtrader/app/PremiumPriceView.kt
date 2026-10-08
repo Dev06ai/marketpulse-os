@@ -28,7 +28,7 @@ class PremiumPriceView(context: Context) : LinearLayout(context) {
 
     private val instrument = TextView(context).apply {
         text = "BTC"
-        setTextColor(gold)
+        setTextColor(KyvoriqTheme.white)
         typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
         includeFontPadding = false
         gravity = Gravity.CENTER_VERTICAL
