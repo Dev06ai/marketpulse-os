@@ -497,7 +497,7 @@ class SafeActivity : FragmentActivity() {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_VERTICAL
         }
-        brand.addView(label("KYVORIQ", 20f, kyGold, 0.09f))
+        brand.addView(label("KYVORIQ", 20f, kyGold, 0.08f))
         brand.addView(label("DISCIPLINE MEETS INTELLIGENCE", 7.5f, kyGray, 0.08f), margins(top = 3))
         header.addView(brand, LinearLayout.LayoutParams(0, dp(48), 1f))
         alertsButton = compactPillButton("ALERTS").apply { contentDescription = "Enable trade alerts" }
@@ -744,7 +744,7 @@ class SafeActivity : FragmentActivity() {
         navigationButtons.forEachIndexed { i, button ->
             val active = i == index
             button.isSelected = active
-            button.setTextColor(if (active) kyCharcoal else kyGold)
+            button.setTextColor(if (active) kyCharcoal else kyWhite)
             button.compoundDrawablesRelative.filterNotNull().forEach { it.setTint(if (active) kyCharcoal else kyGold) }
             button.background = KyvoriqTheme.button(this, active, 13f)
         }
@@ -821,7 +821,7 @@ class SafeActivity : FragmentActivity() {
             val tf = child.text.toString()
             val selected = tf == selectedTf
             child.isSelected = selected
-            child.setTextColor(if (selected) kyCharcoal else kyGold)
+            child.setTextColor(if (selected) kyCharcoal else kyWhite)
             child.background = KyvoriqTheme.button(this, selected, 11f)
         }
     }
@@ -832,7 +832,7 @@ class SafeActivity : FragmentActivity() {
             textSize = 11f
             setTextColor(android.content.res.ColorStateList(
                 arrayOf(intArrayOf(-android.R.attr.state_enabled), intArrayOf()),
-                intArrayOf(kyGray, kyGold)))
+                intArrayOf(kyGray, kyWhite)))
             backgroundTintList = null
             typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
             isAllCaps = false
@@ -866,9 +866,9 @@ class SafeActivity : FragmentActivity() {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
         }
-        top.addView(label("BITCOIN / USDT", 9f, kyGold, 0.10f),
+        top.addView(label("BITCOIN / USDT", 9f, kyGray, 0.09f),
             LinearLayout.LayoutParams(0, dp(if (compactViewport) 18 else 22), 1f))
-        val livePill = label("PERPETUAL", 8f, kyAmber, 0.10f)
+        val livePill = label("PERPETUAL", 8f, kyGold, 0.09f)
         top.addView(livePill, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(if (compactViewport) 18 else 22)))
         box.addView(top)
 
@@ -1062,7 +1062,7 @@ class SafeActivity : FragmentActivity() {
             textSize = 13f
             setTextColor(android.content.res.ColorStateList(
                 arrayOf(intArrayOf(-android.R.attr.state_enabled), intArrayOf()),
-                intArrayOf(kyGray, kyGold)))
+                intArrayOf(kyGray, kyWhite)))
             backgroundTintList = null
             typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
             isAllCaps = false
@@ -1363,7 +1363,9 @@ class SafeActivity : FragmentActivity() {
             !freshMarket -> "DATA STALE"
             else -> health
         }
-        setStatusAnimated(statusLabel)
+        // Teal status dot is reserved for verified, fresh Bitget websocket data.
+        setStatusAnimated(if (authoritativeFeedHealthy) "● LIVE" else statusLabel)
+        status.setTextColor(if (authoritativeFeedHealthy) Color.rgb(71, 218, 192) else kyGray)
         price.setPrice(priceValue, animate = !debugPreview)
         oiView.text = "OI  " + if (oi.isNaN()) "—"
             else String.format(Locale.US, "%,.2f", oi)
@@ -1963,11 +1965,11 @@ class SafeActivity : FragmentActivity() {
         if (key == lastAmbientKey) return
         lastAmbientKey = key
         val target = when (key) {
-            // Ambient lighting stays within the gold/charcoal identity;
-            // green and red remain exclusive to actual trading semantics.
-            "LONG", "BULLISH" -> Color.rgb(27, 24, 17)
-            "SHORT", "BEARISH" -> Color.rgb(31, 21, 16)
-            "CAUTION" -> KyvoriqTheme.graphite
+            // Ambient lighting stays navy/slate with a restrained directional tint;
+            // saturated red and green remain exclusive to market data.
+            "LONG", "BULLISH" -> Color.rgb(15, 38, 44)
+            "SHORT", "BEARISH" -> Color.rgb(34, 25, 40)
+            "CAUTION" -> Color.rgb(30, 36, 47)
             else -> KyvoriqTheme.slate
         }
         ambientAnimator?.cancel()
