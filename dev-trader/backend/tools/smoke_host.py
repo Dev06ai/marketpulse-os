@@ -4,6 +4,7 @@ import asyncio
 import json
 import os
 import urllib.request
+import urllib.error
 
 import websockets
 
@@ -22,6 +23,15 @@ def get(origin, path):
 async def probe(origin, require_feed):
     health = await asyncio.to_thread(get, origin, "/health")
     assert health.get("ok") is True, "Backend HTTP health failed"
+    if auth_headers():
+        # Test the actual HTTP service, not just a helper function, for data isolation.
+        unauthorized_request = urllib.request.Request(origin + "/trades?limit=1")
+        try:
+            await asyncio.to_thread(urllib.request.urlopen, unauthorized_request, timeout=12)
+        except urllib.error.HTTPError as exc:
+            assert exc.code == 401, "Private history returned an unexpected status"
+        else:
+            raise AssertionError("Private trade history was publicly accessible")
     checks = await asyncio.to_thread(get, origin, "/system-check")
     assert checks.get("backend_ok") is True, "Backend system check failed"
     # system-check only returns status. Trade credentials are never read here.
