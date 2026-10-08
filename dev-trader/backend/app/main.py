@@ -5,7 +5,7 @@ import os
 import time
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, Response
 from starlette.middleware.gzip import GZipMiddleware
 from pydantic import BaseModel
 from dotenv import load_dotenv
@@ -27,6 +27,10 @@ from .agent_metrics import summarize_agent_reviews
 from .opportunity_scout import OpportunityScout
 from .performance_learning_agent import analyze_performance
 from .agent_orchestration import risk_guardian, graph_market, data_sentinel
+from .smc_shadow import compare_structure
+from .observability import (
+    record_eval, record_smc, expose as expose_metrics, CONTENT_TYPE_LATEST
+)
 from .htf_policy import evaluate_htf_policy, MAX_LEVERAGE, MAX_RISK_PCT, MIN_NET_RR
 
 load_dotenv()
@@ -85,6 +89,10 @@ shadow=ShadowEvaluator(engine.journal)
 scout = OpportunityScout(engine.journal)
 agent_learning_snapshot = {}
 agent_learning_updated_ms = 0
+smc_snapshot: dict = {}
+last_smc_observed_ms = 0
+last_smc_saved_ms = 0
+last_smc_disagreement = None
 push = PushService()
 stream = None
 server_started_ms = int(time.time() * 1000)
@@ -524,7 +532,7 @@ async def execute_signal(payload: dict):
 
 
 async def on_state(s: MarketState):
-    global state, last_engine_eval_ms
+    global state, last_engine_eval_ms, smc_snapshot, last_smc_observed_ms, last_smc_saved_ms, last_smc_disagreement
     state = s
     now = int(time.time() * 1000)
 
@@ -541,6 +549,22 @@ async def on_state(s: MarketState):
         if state.last_market_update_ts and now-state.last_market_update_ts<=3000:
             engine.journal.tick(now,state.last_price)
         sig = engine.evaluate(state)
+        record_eval(state.data_health)
+        # Original, confirmed-bar SMC cross-check. It never changes any
+        # trade candidate and runs at a bounded 60-second cadence.
+        if now-last_smc_observed_ms>=60_000:
+            last_smc_observed_ms=now
+            try:
+                smc_snapshot=compare_structure(state,compute_features(state),now)
+                disagreement=bool(smc_snapshot.get("structure_disagreement"))
+                record_smc(disagreement)
+                if disagreement!=last_smc_disagreement or now-last_smc_saved_ms>=300_000:
+                    engine.journal.record("SMC_SHADOW",smc_snapshot,ts=now)
+                    last_smc_saved_ms=now
+                    last_smc_disagreement=disagreement
+            except Exception as exc:
+                smc_snapshot={"status":"ERROR","error_type":type(exc).__name__,
+                              "execution_capable":False}
         shadow.tick(state,now,compute_features(state).structure_map)
         for candidate in engine.shadow_candidates:
             shadow.observe_candidate(candidate["signal"],now,
@@ -953,6 +977,11 @@ async def agent_status():
         },
         "statistics": summarize_agent_reviews(records),
         "scout": {k: v for k, v in scout.summary().items() if k != "latest"},
+        "smc_shadow": {
+            "status":smc_snapshot.get("mode","STARTING"),
+            "structure_disagreement":bool(smc_snapshot.get("structure_disagreement")),
+            "execution_capable":False,
+        },
         "performance_learning": {
             "mode": "READ_ONLY_NO_AUTOTUNING",
             "updated_ts": agent_learning_updated_ms,
@@ -1004,6 +1033,21 @@ async def strict_trade_decision():
                 structural_catalyst=sig.get("setup"),
                 macroeconomic_catalyst="NOT VERIFIED (no macro event feed)",
                 execution_capable=False)
+
+
+@app.get("/agents/smc")
+async def agent_smc_status():
+    """Confirmed-candle SMC reference research, never execution signals."""
+    return dict(smc_snapshot or {
+        "mode":"SHADOW_ONLY","status":"AWAITING_MARKET_DATA",
+        "execution_capable":False
+    }, persisted_samples=len(engine.journal.records(100,"SMC_SHADOW")))
+
+
+@app.get("/metrics")
+async def metrics():
+    """Public, low-cardinality, privacy-safe operational metrics."""
+    return Response(content=expose_metrics(), media_type=CONTENT_TYPE_LATEST)
 
 
 @app.get("/agents/scout")
