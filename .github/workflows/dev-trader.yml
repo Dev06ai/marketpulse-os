@@ -27,6 +27,8 @@ jobs:
       - name: Require current-source and full-history secret checks
         run: python dev-trader/tools/security_scan.py --history
   native-host:
+    # Never restart the live Deplexo service while reviewing a PR.
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
