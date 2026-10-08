@@ -1,4 +1,4 @@
-# Build 127: final KYVORIQ Gold Typography + Expanded Chart release pipeline.
+# Build 128: KYVORIQ Midnight Champagne visual reference + wider candle-history default.
 name: KYVORIQ CI
 
 on:
@@ -128,10 +128,10 @@ jobs:
             --read-only --tmpfs /tmp:rw,noexec,size=100m \
             -v dev-trader-smoke-data:/data -p 3000:3000 dev-trader-free
           for attempt in {1..30}; do
-            if curl -fsS http://127.0.0.1:3000/health >/dev/null; then break; fi
+            if curl -fsS http://128.0.0.1:3000/health >/dev/null; then break; fi
             sleep 1
           done
-          python dev-trader/backend/tools/smoke_host.py --url http://127.0.0.1:3000
+          python dev-trader/backend/tools/smoke_host.py --url http://128.0.0.1:3000
           docker exec dev-trader-smoke python -c 'from pathlib import Path; p=Path("/data/smoke-persistence"); p.write_text("saved")'
           docker restart dev-trader-smoke
           docker exec dev-trader-smoke python -c 'from pathlib import Path; assert Path("/data/smoke-persistence").read_text()=="saved"'
@@ -193,7 +193,7 @@ jobs:
           gradle-version: '9.6.0'
       - name: Build Android debug APK
         working-directory: dev-trader/android
-        run: gradle assembleDebug --stacktrace -PdevTraderVersionCode=127 -PdevTraderVersionName=0.21.2
+        run: gradle assembleDebug --stacktrace -PdevTraderVersionCode=128 -PdevTraderVersionName=0.21.3
       - name: Build signed Android release APK
         if: steps.changed.outputs.android_changed == 'true'
         working-directory: dev-trader/android
@@ -204,7 +204,7 @@ jobs:
           DEV_TRADER_KEY_PASSWORD: ${{ secrets.DEV_TRADER_KEY_PASSWORD }}
         run: |
           echo "${{ secrets.DEV_TRADER_KEYSTORE_BASE64 }}" | base64 --decode > "$DEV_TRADER_KEYSTORE_PATH"
-          gradle assembleRelease --stacktrace -PdevTraderVersionCode=127 -PdevTraderVersionName=0.21.2
+          gradle assembleRelease --stacktrace -PdevTraderVersionCode=128 -PdevTraderVersionName=0.21.3
           if unzip -l app/build/outputs/apk/release/app-release.apk | grep -q ui_preview.json; then
             echo 'Debug preview data must never be included in release APKs.'
             exit 1
@@ -277,7 +277,7 @@ jobs:
           mkdir -p release
           cp dist/app-release.apk release/app-release.apk
           sha256sum release/app-release.apk | awk '{print $1}' > release/app-release.sha256
-          echo "tag=dev-trader-v0.21.2-127" >> "$GITHUB_OUTPUT"
+          echo "tag=dev-trader-v0.21.3-128" >> "$GITHUB_OUTPUT"
           echo "sha256=$(cat release/app-release.sha256)" >> "$GITHUB_OUTPUT"
       - name: Create GitHub release
         env:
@@ -287,7 +287,7 @@ jobs:
             echo "This release already exists; refusing to replace a published APK."
             exit 1
           fi
-          gh release create "${{ steps.release.outputs.tag }}" release/app-release.apk --target "$GITHUB_SHA" --title "KYVORIQ 0.21.2 (127)" --notes "KYVORIQ Gold Edition: refined sans-serif typography, warm charcoal/ember/deep-gold materials, larger 355–470dp chart with scrollable Trade workspace, enhanced native lighting and transitions. All trading safety gates remain unchanged."
+          gh release create "${{ steps.release.outputs.tag }}" release/app-release.apk --target "$GITHUB_SHA" --title "KYVORIQ 0.21.3 (128)" --notes "KYVORIQ Midnight Champagne: reference-matched navy glass surfaces, champagne/gold gradients, slate outlines, refined quote/navigation, and 65–80 candle default viewport. Demo trading logic and safety unchanged."
       - name: Publish verified update manifest
         env:
           SHA256: "${{ steps.release.outputs.sha256 }}"
@@ -301,11 +301,11 @@ jobs:
           data = json.loads(p.read_text())
           data.update({
               "enabled": True,
-              "versionCode": 127,
-              "versionName": "0.21.2",
-              "apkUrl": "https://github.com/Dev06ai/marketpulse-os/releases/download/dev-trader-v0.21.2-127/app-release.apk",
+              "versionCode": 128,
+              "versionName": "0.21.3",
+              "apkUrl": "https://github.com/Dev06ai/marketpulse-os/releases/download/dev-trader-v0.21.3-128/app-release.apk",
               "sha256": os.environ["SHA256"],
-              "notes": "KYVORIQ 0.21.2 • gold/charcoal refined typography • larger scrollable chart • polished native transitions • trading safety preserved"
+              "notes": "KYVORIQ 0.21.3 • midnight navy and champagne palette • wider 15m chart context • polished glass cards and buttons • trading safety preserved"
           })
           p.write_text(json.dumps(data, indent=2) + "\n")
           PY
