@@ -165,6 +165,19 @@ class MarketChartView @JvmOverloads constructor(
         textSize = dp(8.1f)
         typeface = android.graphics.Typeface.create(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD)
     }
+    // Price-axis level rail: colored values are outside the candle plot.
+    private val axisLevelBgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = KyvoriqTheme.slate
+        alpha = 246
+    }
+    private val axisLevelTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        textSize = dp(8.2f)
+        typeface = android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.NORMAL)
+    }
+    private val axisLevelGuidePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        strokeWidth = dp(0.7f)
+        alpha = 155
+    }
     private val zoneFillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
     private val zoneBorderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
@@ -606,6 +619,8 @@ class MarketChartView @JvmOverloads constructor(
             }
             drawTradeHitEffect(canvas, signal, left, right, top, priceBottom, low, high)
         }
+
+        drawAxisLevelLabels(canvas, right, top, priceBottom, low, high)
 
         if (!livePrice.isNaN() && visibleLive) {
             val y = mapY(livePrice, low, high, top, priceBottom)
@@ -1238,30 +1253,8 @@ class MarketChartView @JvmOverloads constructor(
                 canvas.drawCircle(right - dp(8f), lineY, dp(3f + 7f * pulse), reactionGlowPaint)
             }
 
-            val rawLabel = row.optString("label", kind).uppercase(Locale.US)
-            val manual = row.optBoolean("manual", false)
-            val formattedPrice = String.format(Locale.US, "%,.1f", value)
-            val numericOnlyLabel = rawLabel.replace(",", "").toDoubleOrNull() != null
-            val text = when {
-                manual && numericOnlyLabel -> formattedPrice
-                manual -> rawLabel.take(18) + "  " + formattedPrice
-                else -> rawLabel.take(14)
-            }
-            structureLabelTextPaint.color = color
-            structureLabelTextPaint.alpha = (255f * retirementFade).toInt().coerceIn(0, 255)
-            structureLabelBgPaint.alpha = (235f * retirementFade).toInt().coerceIn(0, 235)
-            val pad = dp(4f)
-            val w = structureLabelTextPaint.measureText(text) + pad * 2f
-            val h = dp(15f) * (0.92f + 0.08f * retirementFade)
-            var labelTop = (lineY - h / 2f).coerceIn(top + dp(2f), bottom - h - dp(2f))
-            if (labelTop < lastLabelBottom + dp(2f)) {
-                labelTop = (lastLabelBottom + dp(2f)).coerceAtMost(bottom - h - dp(2f))
-            }
-            val labelLeft = if (manual) right - w - dp(3f) else left + dp(3f)
-            val rect = RectF(labelLeft, labelTop, labelLeft + w, labelTop + h)
-            canvas.drawRoundRect(rect, dp(4f), dp(4f), structureLabelBgPaint)
-            canvas.drawText(text, rect.left + pad, rect.centerY() + dp(2.8f), structureLabelTextPaint)
-            lastLabelBottom = rect.bottom
+            // Structural price numbers render in the reserved right-axis lane
+            // below, not on top of candles, Bollinger bands or order blocks.
 
             if (confirmedPulse > 0f) {
                 val confirmedText = "REACTION CONFIRMED"
@@ -1286,6 +1279,76 @@ class MarketChartView @JvmOverloads constructor(
             structureLabelTextPaint.alpha = 255
             reactionChipPaint.alpha = 255
             reactionChipTextPaint.alpha = 255
+        }
+    }
+
+    private data class AxisLevelMark(val originalY: Float, val value: Double, val text: String, val color: Int)
+
+    private fun drawAxisLevelLabels(
+        canvas: Canvas,
+        right: Float,
+        top: Float,
+        bottom: Float,
+        low: Double,
+        high: Double
+    ) {
+        if (overlays.length() == 0 || !hasVisibleLevelLayers()) return
+        val wallNow = System.currentTimeMillis()
+        val liveY = if (livePrice.isFinite() && livePrice in low..high) mapY(livePrice, low, high, top, bottom)
+                    else Float.NaN
+        val markers = (0 until overlays.length()).mapNotNull { overlays.optJSONObject(it) }.mapNotNull { row ->
+            if (!isOverlayVisible(row)) return@mapNotNull null
+            val zLow = row.optDouble("zone_low", Double.NaN)
+            val zHigh = row.optDouble("zone_high", Double.NaN)
+            if (zLow.isFinite() && zHigh.isFinite() && zLow > 0 && zHigh > 0) return@mapNotNull null
+            if (row.optLong("hide_after_ms", 0L).let { it > 0L && it <= wallNow }) return@mapNotNull null
+            val value = row.optDouble("price", Double.NaN)
+            if (!value.isFinite() || value !in low..high) return@mapNotNull null
+            val kind = row.optString("kind", "LEVEL").uppercase(Locale.US)
+            val type = when(kind) {
+                "DAILY" -> "D"
+                "NPOC" -> "N"
+                "WEEKLY_NPOC", "WEEKLY_OPEN" -> "W"
+                "RANGE_POC" -> "P"
+                "SFP" -> "S"
+                "OB", "OB_ZONE" -> "OB"
+                else -> "L"
+            }
+            val color = when(kind) {
+                "DAILY" -> Color.rgb(54, 211, 153)
+                "NPOC", "RANGE_POC" -> Color.rgb(255, 82, 105)
+                "SFP", "WEEKLY_OPEN", "WEEKLY_NPOC" -> KyvoriqTheme.gold
+                "OB", "OB_ZONE" -> KyvoriqTheme.white
+                else -> KyvoriqTheme.muted
+            }
+            AxisLevelMark(mapY(value, low, high, top, bottom), value,
+                type + " " + String.format(Locale.US, "%,.1f", value), color)
+        }.distinctBy { (it.value * 10).roundToInt() }
+         .sortedBy { it.originalY }
+
+        // Keep tags aligned with the same right-side strip as BTC axis values.
+        // A sparse lane prevents stacked level pills from concealing the plot.
+        val minGap = dp(15f)
+        val maxRows = ((bottom - top) / minGap).toInt().coerceAtLeast(1)
+        val nearLive = markers.filter { !liveY.isFinite() || abs(it.originalY - liveY) > dp(11f) }
+        val selected = if (nearLive.size <= maxRows) nearLive else
+            nearLive.sortedBy { if (liveY.isFinite()) abs(it.originalY - liveY) else abs(it.originalY - (top + bottom) / 2f) }
+                .take(maxRows).sortedBy { it.originalY }
+
+        var previous = top - minGap
+        val axisLeft = right + dp(3f)
+        val axisRight = width - dp(2f)
+        for (mark in selected) {
+            val tagY = max(mark.originalY.coerceIn(top + dp(8f), bottom - dp(8f)), previous + minGap)
+            if (tagY > bottom - dp(7f)) break
+            previous = tagY
+            val rect = RectF(axisLeft, tagY - dp(7f), axisRight, tagY + dp(7f))
+            axisLevelBgPaint.color = KyvoriqTheme.slate
+            canvas.drawRoundRect(rect, dp(3f), dp(3f), axisLevelBgPaint)
+            axisLevelGuidePaint.color = mark.color
+            canvas.drawLine(right, mark.originalY, axisLeft, tagY, axisLevelGuidePaint)
+            axisLevelTextPaint.color = mark.color
+            canvas.drawText(mark.text, axisLeft + dp(3f), tagY + dp(2.8f), axisLevelTextPaint)
         }
     }
 
