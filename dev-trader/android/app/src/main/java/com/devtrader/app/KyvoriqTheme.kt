@@ -15,18 +15,18 @@ import android.widget.Button
 /** Shared visual tokens: gold is identity; green/red remain trading information. */
 object KyvoriqTheme {
     // KYVORIQ brand board — exact palette values.
-    val gold = Color.rgb(247, 201, 72)       // #F7C948
-    val ember = Color.rgb(224, 167, 46)      // #E0A72E
+    val gold = Color.rgb(219, 170, 59)       // #DBAA3B
+    val ember = Color.rgb(224, 131, 45)      // #E0832D
     val deepGold = Color.rgb(184, 134, 11)   // #B8860B
-    val charcoal = Color.rgb(11, 15, 20)     // #0B0F14
-    val slate = Color.rgb(18, 24, 33)        // #121821
-    val graphite = Color.rgb(31, 41, 54)     // #1F2936
-    val gray = Color.rgb(156, 163, 175)      // #9CA3AF
+    val charcoal = Color.rgb(12, 12, 12)     // #0C0C0C
+    val slate = Color.rgb(23, 21, 18)        // #171512
+    val graphite = Color.rgb(44, 35, 23)     // #2C2317
+    val gray = Color.rgb(179, 168, 147)      // #B3A893
     val surface = slate
     val raised = graphite
-    val border = Color.argb(170, 184, 134, 11)
+    val border = Color.argb(148, 184, 134, 11)
     val muted = gray
-    val white = Color.rgb(245, 247, 250)
+    val white = Color.rgb(247, 240, 227)
     val motion = PathInterpolator(0.20f, 0.80f, 0.20f, 1f)
 
     fun motionEnabled(context: Context): Boolean = ValueAnimator.areAnimatorsEnabled() &&
@@ -44,7 +44,7 @@ object KyvoriqTheme {
                 arrayOf(intArrayOf(android.R.attr.state_focused), intArrayOf()),
                 intArrayOf(gold, if (selected) deepGold else Color.argb(150, 184, 134, 11))))
         }
-        return RippleDrawable(ColorStateList.valueOf(Color.argb(46, 247, 201, 72)), shape, null)
+        return RippleDrawable(ColorStateList.valueOf(Color.argb(42, 219, 170, 59)), shape, null)
     }
 
     fun surface(context: Context, prominent: Boolean = false, radius: Float = 18f): Drawable =
@@ -84,6 +84,7 @@ private class GoldSurfaceDrawable(
     private var drawableAlpha = 255
     private var fill: Shader? = null
     private var glow: Shader? = null
+    private var sheen: Shader? = null
     private var rim: Shader? = null
     override fun onBoundsChange(bounds: Rect) {
         rect.set(bounds); rect.inset(density * 0.5f, density * 0.5f)
@@ -97,6 +98,9 @@ private class GoldSurfaceDrawable(
         glow = RadialGradient(rect.left + rect.width() * .12f, rect.top,
             rect.width().coerceAtLeast(1f) * .85f,
             Color.argb(if (prominent) 34 else 12, 224, 167, 46), Color.TRANSPARENT, Shader.TileMode.CLAMP)
+        sheen = LinearGradient(rect.left, rect.bottom, rect.right, rect.top,
+            intArrayOf(Color.TRANSPARENT, Color.argb(if (prominent) 23 else 9, 224, 131, 45), Color.TRANSPARENT),
+            floatArrayOf(0f, .38f, 1f), Shader.TileMode.CLAMP)
         rim = LinearGradient(rect.left, rect.top, rect.right, rect.bottom,
             intArrayOf(
                 if (prominent) KyvoriqTheme.deepGold else Color.argb(120, 184, 134, 11),
@@ -110,11 +114,13 @@ private class GoldSurfaceDrawable(
         canvas.drawRoundRect(rect, radiusPx, radiusPx, paint)
         paint.shader = glow
         canvas.drawRoundRect(rect, radiusPx, radiusPx, paint)
+        paint.shader = sheen
+        canvas.drawRoundRect(rect, radiusPx, radiusPx, paint)
         edge.shader = rim
         canvas.drawRoundRect(rect, radiusPx, radiusPx, edge)
         if (prominent) {
             val save = canvas.save(); canvas.clipPath(clip)
-            paint.shader = null; paint.color = Color.argb(16 * drawableAlpha / 255, 247, 201, 72)
+            paint.shader = null; paint.color = Color.argb(16 * drawableAlpha / 255, 219, 170, 59)
             val x = rect.right - rect.width() * .22f
             val facet = Path().apply {
                 moveTo(x, rect.top); lineTo(rect.right, rect.top)
