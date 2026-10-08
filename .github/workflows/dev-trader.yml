@@ -164,8 +164,15 @@ jobs:
         run: |
           rm -rf deplexo-package KYVORIQ-deplexo-backend.zip
           mkdir -p deplexo-package
-          cp -R app knowledge Dockerfile deplexo.yaml requirements-core.txt requirements.txt .dockerignore .env.example deplexo-package/
+          # Deplexo validates deplexo.yaml against a schema that does not
+          # accept the old framework: dockerfile field. Let it detect the
+          # top-level Dockerfile instead, as its ZIP upload UI recommends.
+          cp -R app knowledge Dockerfile requirements-core.txt requirements.txt .dockerignore .env.example deplexo-package/
+          find deplexo-package -type d -name __pycache__ -prune -exec rm -rf {} +
+          find deplexo-package -type f \( -name '*.pyc' -o -name '*.pyo' \) -delete
           (cd deplexo-package && zip -qr ../KYVORIQ-deplexo-backend.zip .)
+          # Prevent a future broken manifest or nested-root ZIP release.
+          python -c 'import zipfile; z=zipfile.ZipFile("KYVORIQ-deplexo-backend.zip"); names=set(z.namelist()); assert "Dockerfile" in names and "app/main.py" in names; assert "deplexo.yaml" not in names; assert z.testzip() is None'
       - uses: actions/upload-artifact@v4
         with:
           name: kyvoriq-deplexo-backend

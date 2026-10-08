@@ -1,5 +1,0 @@
-# Select dev-trader/backend as the deployment root in the dashboard.
-framework: dockerfile
-dockerfile: Dockerfile
-port: 3000
-# Reaction-map backend revision: market-decision-v3.6
