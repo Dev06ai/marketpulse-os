@@ -342,6 +342,8 @@ class MarketChartView @JvmOverloads constructor(
     }
 
     private var followLive = true
+    // Signed shift: positive browses older history; negative creates a limited
+    // future-side gutter so dragging right can move the latest candle left.
     private var candleShift = 0f
     private var verticalOffset = 0.0
     // The reference screenshot is a wide, context-first default chart.
@@ -389,7 +391,7 @@ class MarketChartView @JvmOverloads constructor(
             val added = (newCount - lastDataCount).coerceAtLeast(0)
             if (added > 0) candleShift += added.toFloat()
             val maxShift = max(0f, newCount.toFloat() - visibleCount())
-            candleShift = candleShift.coerceIn(0f, maxShift)
+            candleShift = candleShift.coerceIn(-maxFutureShift(), maxShift)
         }
         lastDataCount = newCount
         invalidate()
@@ -426,6 +428,8 @@ class MarketChartView @JvmOverloads constructor(
         timeframe = value
         resetViewportToDefault()
     }
+
+    private fun maxFutureShift(): Float = min(16f, visibleCount() * 0.20f)
 
     private fun visibleCount(): Int {
         val widthPx = max(1f, width - dp(82f))
@@ -465,8 +469,10 @@ class MarketChartView @JvmOverloads constructor(
 
         val visible = min(candles.length(), visibleCount())
         val maxShift = max(0f, candles.length().toFloat() - visible.toFloat())
-        if (followLive) candleShift = 0f else candleShift = candleShift.coerceIn(0f, maxShift)
+        if (followLive) candleShift = 0f else candleShift = candleShift.coerceIn(-maxFutureShift(), maxShift)
 
+        // Virtual future bars remain blank; real OHLC arrays are never extended
+        // or fabricated. This keeps reversed-direction pan usable at live edge.
         val endExclusive = candles.length() - candleShift.roundToInt()
         val start = max(0, endExclusive - visible)
         val actualVisible = max(1, endExclusive - start)
@@ -1327,9 +1333,10 @@ class MarketChartView @JvmOverloads constructor(
     override fun onTouchEvent(event: MotionEvent): Boolean {
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
-                // Embedded chart: let the Trade ScrollView own vertical one-finger
-                // gestures. In fullscreen, the chart keeps full 2D pan control.
-                parent?.requestDisallowInterceptTouchEvent(fullscreenMode)
+                // Chart-area one-finger gestures manipulate price/time in both
+                // axes (opposite the finger). Scroll Trade from its surrounding
+                // hero/timeframe/decision cards; chart controls remain tappable.
+                parent?.requestDisallowInterceptTouchEvent(true)
                 lastTouchX = event.x
                 lastTouchY = event.y
                 touchDownX = event.x
@@ -1374,9 +1381,10 @@ class MarketChartView @JvmOverloads constructor(
                 val dy = event.y - lastTouchY
                 val totalDx = abs(event.x - touchDownX)
                 val totalDy = abs(event.y - touchDownY)
-                // Keep horizontal chart scrubbing responsive while allowing
-                // a vertical swipe to reach the parent ScrollView.
-                if (fullscreenMode || (totalDx > dp(8f) && totalDx > totalDy * 1.25f)) {
+                // Reversed-chart behavior: horizontal and vertical drags are
+                // captured by the chart. dx>0 moves candles LEFT via negative
+                // shift; dy>0 moves price graphics UP via negative offset.
+                if (totalDx > dp(8f) || totalDy > dp(8f)) {
                     parent?.requestDisallowInterceptTouchEvent(true)
                 }
                 if (abs(event.x - touchDownX) > dp(6f) || abs(event.y - touchDownY) > dp(6f)) {
@@ -1388,8 +1396,9 @@ class MarketChartView @JvmOverloads constructor(
                     followLive = false
                     crosshairVisible = false
                     val bar = max(1f, (width - dp(88f)) / visibleCount())
+                    // Opposite-to-finger pan with bounded blank future region.
                     candleShift = (candleShift - dx / bar).coerceIn(
-                        0f,
+                        -maxFutureShift(),
                         max(0f, candles.length() - visibleCount().toFloat())
                     )
                     val visiblePriceRange = estimateVisibleRange()
