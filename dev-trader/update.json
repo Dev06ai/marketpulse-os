@@ -1,8 +1,8 @@
 {
   "enabled": true,
-  "versionCode": 127,
-  "versionName": "0.21.2",
-  "apkUrl": "https://github.com/Dev06ai/marketpulse-os/releases/download/dev-trader-v0.21.2-127/app-release.apk",
-  "sha256": "dbacfae23912eb39ebf1579bee8c11c7a8aa9062317521d97266b0bcb873619c",
-  "notes": "KYVORIQ 0.21.2 \u2022 gold/charcoal refined typography \u2022 larger scrollable chart \u2022 polished native transitions \u2022 trading safety preserved"
+  "versionCode": 129,
+  "versionName": "0.21.4",
+  "apkUrl": "https://github.com/Dev06ai/marketpulse-os/releases/download/dev-trader-v0.21.4-129/app-release.apk",
+  "sha256": "c78cdc8da8a9afc8f29d3b8380f894888f02dc3f9eb3895484735b11e659a10e",
+  "notes": "KYVORIQ 0.21.4 \u2022 default 1h chart \u2022 clearer right-axis level prices \u2022 reverse drag gestures \u2022 trading safety preserved"
 }
