@@ -12,6 +12,7 @@ const crypto=require("node:crypto");
 async function main(){
   const temp=fs.mkdtempSync(path.join(os.tmpdir(),"mp-sec-"));
   const port=22000+Math.floor(Math.random()*20000);
+  const emergency=setTimeout(()=>{console.error("security regression: timed out");process.exit(1)},90000);
   const child=spawn(process.execPath,["server.js"],{
     cwd:path.join(__dirname,".."),
     env:{...process.env,PORT:String(port),DATABASE_URL:"",NODE_ENV:"test",
@@ -27,16 +28,16 @@ async function main(){
   const base="http://127.0.0.1:"+port;
   const device="11111111-1111-4111-8111-111111111111";
   async function req(url,opts={}){
-    const response=await fetch(base+url,{...opts,signal:AbortSignal.timeout(8000)});
+    const response=await fetch(base+url,{signal:AbortSignal.timeout(8000),...opts});
     const body=await response.text();
     let parsed;try{parsed=JSON.parse(body)}catch{parsed={}};
     return {response,data:parsed};
   }
   try{
     let live=false;
-    for(let i=0;i<100;i++){
+    for(let i=0;i<20;i++){
       if(child.exitCode!==null)break;
-      try{const h=await req("/health");if(h.response.status===200){live=true;break}}catch{}
+      try{const h=await req("/health",{signal:AbortSignal.timeout(1000)});if(h.response.status===200){live=true;break}}catch{}
       await delay(100);
     }
     assert(live,"server did not start: "+output.slice(0,1000));
@@ -107,6 +108,7 @@ async function main(){
 
     console.log("security regression: PASS (admin isolation, memory isolation, MFA, XSS headers, CSRF, streamed body)");
   }finally{
+    clearTimeout(emergency);
     child.kill("SIGTERM");
     await delay(100);
     try{fs.rmSync(temp,{recursive:true,force:true})}catch{}
