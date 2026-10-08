@@ -3263,6 +3263,28 @@ class StrategyEngine:
                 s.rr,
             )
         signal = max(qualified, key=decision_rank)
+        # Hard higher-timeframe policy: no signal becomes ACTIVE, enters the
+        # Android notification path or reaches Bitget unless the actual 1H/4H
+        # structure, cost-adjusted R:R and external stop are verified.
+        from .htf_policy import evaluate_htf_policy
+        htf_report = evaluate_htf_policy(state, signal.to_dict(), f, self.last_evaluated_ts)
+        self.last_diagnostics["htf_policy"] = htf_report
+        signal.evidence["htf_policy"] = {
+            "policy_version": htf_report["policy_version"],
+            "eligible": htf_report["eligible"],
+            "estimated_net_rr": htf_report["estimated_net_rr"],
+            "reasons": htf_report["reasons"],
+        }
+        self.journal.record("HTF_POLICY", dict(htf_report, signal_id=signal.id),
+                            identity="htf-policy:" + signal.id)
+        if not htf_report["eligible"]:
+            self.last_diagnostics.update(
+                status="QUALITY_LOCK", wait_reason="HTF policy: " +
+                ", ".join(htf_report["reasons"][:3]),
+                blocked_by=["htf_structural_risk"],
+            )
+            self._journal_decision(state)
+            return None
         # LangGraph orchestrates a read-only review of candidates that already
         # passed the existing playbook, learning and elite quality gates.
         # Shadow (default) cannot change a trading decision. Guard can only veto;
