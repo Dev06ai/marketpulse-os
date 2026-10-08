@@ -2784,6 +2784,8 @@ const server=http.createServer(async(req,res)=>{
       }catch(e){
         const map={
           EMAIL_EXISTS:["Unable to create an account with those details.",400],
+          ADMIN_SIGNUP_DISABLED:["Owner identity must be provisioned privately.",403],
+          ADMIN_MFA_NOT_CONFIGURED:["Owner login is temporarily unavailable until MFA is configured.",503],
           INVALID_CREDENTIALS:["Email or password is incorrect.",400],
           ACCOUNT_LOCKED:[e.message,423],
           AUTH_RATE_LIMIT:["Too many attempts. Please wait and try again.",429],
