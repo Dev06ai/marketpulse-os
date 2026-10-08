@@ -172,3 +172,35 @@ def supervisor_context(review: dict) -> dict:
         "confidence_is_probability":False,
         "may_override_execution_rules":False,
     }
+
+
+
+def graph_market(state, features, now_ms: int, reactions: dict | None = None) -> dict:
+    """Cheap immutable-ish bounded observation snapshot shared by both stages."""
+    oi=getattr(state,"oi_window",[]) or []
+    liquidations=getattr(state,"liquidation_window",[]) or []
+    return {
+        "health":getattr(state,"data_health","UNKNOWN"),
+        "connected":bool(getattr(state,"ws_connected",False)),
+        "now_ms":now_ms,
+        "market_update_ms":getattr(state,"last_market_update_ts",None),
+        "book_update_ms":getattr(state,"last_book_ts",None),
+        "trade_update_ms":getattr(state,"last_trade_ts",None),
+        "oi_update_ms":oi[-1][0] if oi else None,
+        "liquidation_update_ms":liquidations[-1][0] if liquidations else None,
+        "bid":getattr(state,"bid",None),
+        "ask":getattr(state,"ask",None),
+        "spread_bps":getattr(features,"spread_bps",0),
+        "last_price":getattr(state,"last_price",None),
+        "level_reactions":reactions or {},
+        "features":{
+            "trend_60":getattr(features,"trend_60","UNKNOWN"),
+            "trend_240":getattr(features,"trend_240","UNKNOWN"),
+            "market_structure":getattr(features,"market_structure","UNKNOWN"),
+            "atr_15":getattr(features,"atr_15",0),
+            "cvd_price_divergence":getattr(features,"cvd_price_divergence","NONE"),
+            "book_imbalance":getattr(features,"book_imbalance",0),
+            "oi_change_5m_pct":getattr(features,"oi_change_5m_pct",0),
+            "oi_points":len(oi),
+        },
+    }
