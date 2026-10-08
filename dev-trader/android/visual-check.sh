@@ -110,7 +110,9 @@ for path in Path('ui-check').glob('*.xml'):
     for node in nav:
         x1, y1, x2, y2 = map(int, re.findall(r'\d+', node.get('bounds')))
         assert 0 <= x1 < x2 <= width and 0 < y1 < y2 < height, (path, node.attrib)
-    assert any(n.get('text') == 'LIVE' for n in nodes) if workspace == 0 else True
+    # The verified websocket badge includes a teal dot in the new visual theme.
+    if workspace == 0:
+        assert any(n.get('text') in ('LIVE', '● LIVE') for n in nodes), (path, 'Live badge missing')
 print('Six native workspace layouts verified; navigation stays inside both viewports.')
 PY
 

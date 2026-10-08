@@ -33,9 +33,9 @@ class MarketChartView @JvmOverloads constructor(
 
     private val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val gridPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = KyvoriqTheme.graphite
-        strokeWidth = dp(.72f)
-        alpha = 96
+        color = Color.rgb(73, 88, 107)
+        strokeWidth = dp(.65f)
+        alpha = 75
     }
     private val axisPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = KyvoriqTheme.muted
@@ -91,10 +91,10 @@ class MarketChartView @JvmOverloads constructor(
         alpha = 242
     }
     private val emaLabelBorderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = KyvoriqTheme.deepGold
+        color = KyvoriqTheme.ember
         style = Paint.Style.STROKE
         strokeWidth = dp(.75f)
-        alpha = 190
+        alpha = 175
     }
     private val emaLabelTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = KyvoriqTheme.gold
@@ -137,11 +137,11 @@ class MarketChartView @JvmOverloads constructor(
         color = KyvoriqTheme.ember
         strokeWidth = dp(1f)
     }
-    private val volumeUpPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(49, 137, 115); alpha = 170 }
-    private val volumeDownPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(167, 70, 86); alpha = 170 }
+    private val volumeUpPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(40, 158, 144); alpha = 185 }
+    private val volumeDownPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(188, 76, 99); alpha = 185 }
     private val liveChipPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = KyvoriqTheme.graphite }
     private val liveDotPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(71, 191, 149) }
-    private val controlActivePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = KyvoriqTheme.deepGold }
+    private val controlActivePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = KyvoriqTheme.gold }
     private val controlInactivePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = KyvoriqTheme.graphite }
     private val controlBorderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
@@ -344,6 +344,9 @@ class MarketChartView @JvmOverloads constructor(
     private var followLive = true
     private var candleShift = 0f
     private var verticalOffset = 0.0
+    // The reference screenshot is a wide, context-first default chart.
+    // One zoom unit shows roughly 65–80 15m candles instead of a tightly
+    // cropped 35–45 candle viewport. Pinch gestures still work normally.
     private var zoomX = 1.0f
     private var zoomY = 1.0f
 
@@ -412,15 +415,15 @@ class MarketChartView @JvmOverloads constructor(
 
     private fun visibleCount(): Int {
         val widthPx = max(1f, width - dp(62f))
-        val base = max(34f, widthPx / dp(7.4f))
-        return max(24, min(140, (base / zoomX).roundToInt()))
+        val base = max(55f, widthPx / dp(4.15f))
+        return max(24, min(180, (base / zoomX).roundToInt()))
     }
 
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
         bgPaint.shader = LinearGradient(
             0f, 0f, 0f, height.toFloat(),
-            intArrayOf(KyvoriqTheme.slate, KyvoriqTheme.charcoal, KyvoriqTheme.graphite),
+            intArrayOf(KyvoriqTheme.slate, KyvoriqTheme.charcoal, Color.rgb(19, 30, 42)),
             null,
             Shader.TileMode.CLAMP
         )
