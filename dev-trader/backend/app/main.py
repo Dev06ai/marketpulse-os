@@ -24,6 +24,8 @@ from .evaluation import ShadowEvaluator, chronological_split, replay_decisions
 from .transport import Subscription, alert_payload, dashboard_payload, event_key
 from .manual_levels import load_manual_level_pack
 from .agent_metrics import summarize_agent_reviews
+from .opportunity_scout import OpportunityScout
+from .performance_learning_agent import analyze_performance
 
 load_dotenv()
 
@@ -54,6 +56,9 @@ def verify_entry_feed(_signal: dict) -> tuple[bool, str]:
 
 execution.entry_guard = verify_entry_feed
 shadow=ShadowEvaluator(engine.journal)
+scout = OpportunityScout(engine.journal)
+agent_learning_snapshot = {}
+agent_learning_updated_ms = 0
 push = PushService()
 stream = None
 server_started_ms = int(time.time() * 1000)
@@ -503,6 +508,16 @@ async def on_state(s: MarketState):
             shadow.observe_candidate(candidate["signal"],now,
                 selected=bool(sig and candidate["signal"]["id"]==sig.id),
                 legacy_allow=candidate["legacy_allow"])
+        # Read-only scouting runs even when no Grade-A signal is selected.
+        # A scout fault cannot interrupt data processing or change demo orders.
+        try:
+            scout.observe(
+                state, engine.candidate_decisions, engine.opportunity_radar_state,
+                selected_id=sig.id if sig else None, now_ms=now,
+            )
+            scout.resolve_due(now)
+        except Exception as exc:
+            scout.last_error = type(exc).__name__
 
         # Notify only on meaningful opportunity transitions, not on every radar refresh.
         global last_opportunity_alert
@@ -606,6 +621,35 @@ async def on_state(s: MarketState):
             dispatch_signal(sig.to_dict())
 
 
+async def performance_learning_loop():
+    """Periodic read-only attribution, never adaptive trading parameter writes."""
+    global agent_learning_snapshot, agent_learning_updated_ms
+    while True:
+        try:
+            now_ms = int(time.time() * 1000)
+            report = analyze_performance(
+                execution.history(500),
+                engine.journal.records(300, "LANGGRAPH"),
+                engine.journal.records(300, "SCOUT"),
+                (execution.data.get("fill_ledger") or {}),
+            )
+            agent_learning_snapshot = report
+            agent_learning_updated_ms = now_ms
+            # One durable hourly record, updated in place within the hour.
+            engine.journal.record(
+                "AGENT_LEARNING", report, ts=now_ms,
+                identity="agent-learning:" + str(now_ms // 3_600_000),
+            )
+        except Exception as exc:
+            agent_learning_snapshot = {
+                "mode": "READ_ONLY_NO_AUTOTUNING",
+                "status": "EVALUATION_ERROR",
+                "error_type": type(exc).__name__,
+                "execution_capable": False,
+            }
+        await asyncio.sleep(300)
+
+
 async def setup_memory_refresh_loop():
     global last_learning_rehydrate_ts
     while True:
@@ -677,6 +721,7 @@ async def lifespan(app: FastAPI):
         asyncio.create_task(stream.rest_fallback_loop()),
         asyncio.create_task(broadcast_loop()),
         asyncio.create_task(setup_memory_refresh_loop()),
+        asyncio.create_task(performance_learning_loop()),
         asyncio.create_task(execution.run()),
     ]
     yield
@@ -842,7 +887,7 @@ async def agent_status():
         "mode": mode if mode in {"off", "shadow", "guard"} else "off",
         "ready": mode in {"shadow", "guard"},
         "execution_capable": False,
-        "agent_names": ["regime", "liquidity", "orderflow", "entry_timing"],
+        "agent_names": ["regime", "liquidity", "orderflow", "entry_timing", "opportunity_scout", "performance_learning"],
         "last_review": {
             "version": latest.get("version"),
             "action": latest.get("action"),
@@ -852,8 +897,30 @@ async def agent_status():
             "duration_ms": latest.get("duration_ms"),
         },
         "statistics": summarize_agent_reviews(records),
+        "scout": {k: v for k, v in scout.summary().items() if k != "latest"},
+        "performance_learning": {
+            "mode": "READ_ONLY_NO_AUTOTUNING",
+            "updated_ts": agent_learning_updated_ms,
+            "tracked_demo_closes": (agent_learning_snapshot.get("exchange_demo") or {}).get("verified_closed"),
+        },
         "journal": engine.journal.status(),
     }
+
+
+@app.get("/agents/scout")
+async def scout_status():
+    """Read-only scout observations: no signals, orders, or missed-PnL claims."""
+    return scout.summary()
+
+
+@app.get("/agents/learning")
+async def performance_learning_status():
+    """Last completed forward-study snapshot; no trading controls."""
+    return dict(agent_learning_snapshot or {
+        "mode": "READ_ONLY_NO_AUTOTUNING",
+        "status": "NO_REPORT_YET",
+        "execution_capable": False,
+    }, updated_ts=agent_learning_updated_ms)
 
 
 @app.get("/decisions")
@@ -1055,6 +1122,7 @@ async def config():
         "decision_policy": "PLAYBOOK_V3",
         "langgraph_mode": os.getenv("KYVORIQ_LANGGRAPH_MODE", "shadow").strip().lower(),
         "langgraph_agent_count": 4,
+        "additional_observer_agents": ["opportunity_scout", "performance_learning"],
         "exit_experiments": "SHADOW_ONLY",
         "snapshot_seconds": SNAPSHOT,
         "manual_execution_only": not execution.enabled,
