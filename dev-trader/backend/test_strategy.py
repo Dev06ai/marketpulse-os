@@ -15,7 +15,9 @@ def test_bearish_sfp():
     cs[4]=c(4,100,102,60,100)
     cs[6]=c(6,100,110,99,100)
     cs[-2]=c(10,100,102,99,101)
-    cs[-1]=c(11,100,112,95,100)
+    # Sweep only the prior high; keep the low above the latest pivot low so
+    # this remains an unambiguous bearish SFP fixture.
+    cs[-1]=c(11,100,112,99.5,100)
     state=MarketState(candles_15=cs, last_price=100, data_health="HEALTHY")
     sig=detect_sfp(state)
     assert sig is not None
