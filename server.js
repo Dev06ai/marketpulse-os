@@ -2033,6 +2033,10 @@ async function derivatives(symbol,interval){
 }
 
 function send(res,code,p){
+  // Keep operational errors in server logs; avoid returning stack and SQL details.
+  if(code>=500&&p&&typeof p.error==="string"&&!/^[A-Z][A-Z0-9_]{2,60}$/.test(p.error)){
+    p={...p,error:code===503?"Service temporarily unavailable":"Internal server error"};
+  }
   res.writeHead(code,{
     'Content-Type':'application/json; charset=utf-8',
     'Cache-Control':'no-store',
@@ -2263,10 +2267,19 @@ function staticFile(req,res){
   // '/?app=marketpulse-mobile', so comparing the raw req.url to '/' would
   // incorrectly try to read the public directory instead of public/index.html.
   const urlPath=String(req.url||'/').split('?')[0]||'/';
+  if(req.method!=="GET"&&req.method!=="HEAD")return send(res,405,{ok:false,error:"Method not allowed"});
   const reqPath=urlPath==='/'?'/index.html':urlPath;
+  // Defend against accidental publication of backups, env files and dot-directories.
+  if(reqPath.split("/").some(part=>part.startsWith(".")))return send(res,404,{ok:false,error:"Not found"});
   const root=path.resolve(__dirname,'public'),file=path.resolve(root,'.'+reqPath),relative=path.relative(root,file);
   if(relative.startsWith('..')||path.isAbsolute(relative))return send(res,403,{error:'Forbidden'});
-  fs.readFile(file,(e,d)=>{
+  const safeExt=new Set([".html",".js",".mjs",".css",".json",".svg",".png",".jpg",".jpeg",".webp",".ico"]);
+  if(!safeExt.has(path.extname(file).toLowerCase()))return send(res,404,{error:"Not found"});
+  fs.realpath(file,(err,actual)=>{
+    if(err)return send(res,404,{error:"Not found"});
+    const realRelative=path.relative(root,actual);
+    if(realRelative.startsWith("..")||path.isAbsolute(realRelative))return send(res,403,{error:"Forbidden"});
+  fs.readFile(actual,(e,d)=>{
     if(e)return send(res,404,{error:'Not found'});
     const ext=path.extname(file).toLowerCase();
     const mime={
@@ -2308,7 +2321,8 @@ function staticFile(req,res){
       'Cross-Origin-Resource-Policy':'same-origin',
       'Content-Security-Policy':csp
     });
-    res.end(body);
+    res.end(req.method==="HEAD"?undefined:body);
+  });
   });
 }
 
