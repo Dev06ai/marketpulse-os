@@ -1,19 +1,23 @@
-"""KYVORIQ LangGraph decision-review pipeline.
+"""KYVORIQ multi-agent LangGraph decision-review pipeline.
 
-A short-lived, deterministic graph: no LLM calls, broker credentials, order placement,
-or autonomous tool execution. The existing playbook and Bitget executor remain authoritative.
-Runs only for already-qualified candidates, with a bounded diagnostic result.
+Deterministic, bounded, read-only specialist agents. No LLM or external API
+calls; they cannot invent a trade, overwrite a price, change risk parameters
+or execute a Bitget order. The pre-existing quality gate remains authoritative.
 """
 from __future__ import annotations
 
 import math
+import operator
 import time
 from functools import lru_cache
-from typing import Any, TypedDict
+from typing import Annotated, Any, TypedDict
 
 from langgraph.graph import END, START, StateGraph
 
-VERSION = "langgraph-review-v1"
+from . import decision_agents as agents
+
+VERSION = "langgraph-specialists-v2"
+AGENT_NAMES = ("regime", "liquidity", "orderflow", "entry_timing")
 
 
 class ReviewState(TypedDict, total=False):
@@ -21,6 +25,7 @@ class ReviewState(TypedDict, total=False):
     candidates: list[dict[str, Any]]
     original_id: str
     blockers: list[str]
+    agent_reports: Annotated[list[dict[str, Any]], operator.add]
     reviews: list[dict[str, Any]]
     selected_id: str | None
     action: str
@@ -55,44 +60,73 @@ def _market_health(state: ReviewState) -> dict:
 
 
 def _after_market(state: ReviewState) -> str:
-    return "supervisor" if state.get("blockers") else "liquidity"
+    return "supervisor" if state.get("blockers") else "dispatch_specialists"
+
+
+def _dispatch_specialists(state: ReviewState) -> dict:
+    return {"trace": state.get("trace", []) + ["dispatch_specialists"]}
+
+
+def _regime(state: ReviewState) -> dict:
+    return {"agent_reports": [agents.regime_agent(state["market"], state["candidates"])]}
 
 
 def _liquidity(state: ReviewState) -> dict:
-    """Annotate proximity/trigger context without fabricating a level touch."""
-    market = state["market"]
-    reaction = market.get("level_reactions") or {}
-    status = str(reaction.get("status") or "IDLE").upper()
-    trigger = reaction.get("trigger") or {}
-    return {
-        "trace": state.get("trace", []) + ["liquidity"],
-        "market": dict(market, level_status=status,
-                       level_trigger_type=str(trigger.get("type") or "")),
-    }
+    return {"agent_reports": [agents.liquidity_agent(state["market"], state["candidates"])]}
+
+
+def _orderflow(state: ReviewState) -> dict:
+    return {"agent_reports": [agents.orderflow_agent(state["market"], state["candidates"])]}
+
+
+def _entry_timing(state: ReviewState) -> dict:
+    return {"agent_reports": [agents.entry_timing_agent(state["market"], state["candidates"])]}
 
 
 def _candidate_review(state: ReviewState) -> dict:
+    reports = {report["agent"]: report.get("results", {})
+               for report in state.get("agent_reports", [])}
+    reactions = state["market"].get("level_reactions") or {}
     reviews = []
     for signal in state.get("candidates", [])[:16]:
         evidence = signal.get("evidence") or {}
         decision = evidence.get("decision_engine") or {}
         playbook = evidence.get("playbook") or {}
+        sid = str(signal.get("id") or "")
+        agent_verdicts = {name: reports.get(name, {}).get(sid, {
+            "verdict": "UNKNOWN", "support": [], "concerns": [],
+            "unknown": ["AGENT_RESULT_UNAVAILABLE"],
+        }) for name in AGENT_NAMES}
+        concerns = [name + ":" + reason for name, review in agent_verdicts.items()
+                    for reason in review.get("concerns", [])]
+        support_count = sum(v["verdict"] == "SUPPORT" for v in agent_verdicts.values())
+        caution_count = sum(v["verdict"] == "CAUTION" for v in agent_verdicts.values())
         reviews.append({
-            "id": str(signal.get("id") or ""),
+            "id": sid,
             "setup": str(signal.get("setup") or ""),
             "direction": str(signal.get("direction") or "").upper(),
             "family": str(playbook.get("family") or "UNKNOWN"),
             "confirmations": int(decision.get("confirmations") or 0),
-            "level_status": state["market"].get("level_status", "IDLE"),
+            "level_status": str(reactions.get("status") or "IDLE"),
             "rank": [
                 int(decision.get("confirmations") or 0),
                 _positive(signal.get("confidence")),
                 _positive(signal.get("rr")),
             ],
+            "supporting_agents": support_count,
+            "caution_agents": caution_count,
+            "disagreement": bool(caution_count),
+            "concerns": concerns[:8],
+            "agents": agent_verdicts,
             "signal": signal,
             "blockers": [],
         })
-    return {"reviews": reviews, "trace": state.get("trace", []) + ["candidate_review"]}
+    return {
+        "reviews": reviews,
+        "trace": state.get("trace", []) + [
+            "regime", "liquidity", "orderflow", "entry_timing", "candidate_review"
+        ],
+    }
 
 
 def _risk_preflight(state: ReviewState) -> dict:
@@ -138,8 +172,8 @@ def _supervisor(state: ReviewState) -> dict:
         else:
             blockers = list(original["blockers"])
     else:
-        # Graph never silently substitutes another setup for the engine's
-        # selected signal. Existing elite/playbook gates own signal ranking.
+        # Agent disagreements are *recorded* for shadow evaluation; not an
+        # uncalibrated vote to change trade direction or live execution.
         action = "APPROVE"
         selected_id = original["id"]
     return {
@@ -154,14 +188,25 @@ def _supervisor(state: ReviewState) -> dict:
 def _graph():
     builder = StateGraph(ReviewState)
     builder.add_node("market_health", _market_health)
+    builder.add_node("dispatch_specialists", _dispatch_specialists)
+    builder.add_node("regime", _regime)
     builder.add_node("liquidity", _liquidity)
+    builder.add_node("orderflow", _orderflow)
+    builder.add_node("entry_timing", _entry_timing)
     builder.add_node("candidate_review", _candidate_review)
     builder.add_node("risk_preflight", _risk_preflight)
     builder.add_node("supervisor", _supervisor)
     builder.add_edge(START, "market_health")
-    builder.add_conditional_edges("market_health", _after_market,
-                                  {"liquidity": "liquidity", "supervisor": "supervisor"})
-    builder.add_edge("liquidity", "candidate_review")
+    builder.add_conditional_edges(
+        "market_health", _after_market,
+        {"dispatch_specialists": "dispatch_specialists", "supervisor": "supervisor"},
+    )
+    # Four agents run in one parallel graph step; fan-in waits for all four.
+    # Separate keys are merged through an append reducer, avoiding concurrent
+    # writes to scalar fields.
+    for node in AGENT_NAMES:
+        builder.add_edge("dispatch_specialists", node)
+    builder.add_edge(list(AGENT_NAMES), "candidate_review")
     builder.add_edge("candidate_review", "risk_preflight")
     builder.add_edge("risk_preflight", "supervisor")
     builder.add_edge("supervisor", END)
@@ -169,27 +214,33 @@ def _graph():
 
 
 def review_decision(market: dict, candidates: list[dict], original_id: str) -> dict:
-    """Review only; never execute. Failures are handled fail-closed by the caller in guard mode."""
+    """Review only; fail-closed exceptions are handled by strategy.py in guard mode."""
     started = time.perf_counter()
     result = _graph().invoke({
         "market": market,
         "candidates": candidates[:16],
         "original_id": original_id,
         "blockers": [],
+        "agent_reports": [],
         "trace": [],
         "reviews": [],
     })
+    selected = next(
+        (row for row in result.get("reviews", []) if row["id"] == original_id),
+        {},
+    )
     return {
         "version": VERSION,
         "action": result["action"],
         "selected_id": result.get("selected_id"),
         "engine_selected_id": original_id,
         "blockers": result.get("blockers", [])[:8],
-        "trace": result.get("trace", [])[:8],
-        "candidate_reviews": [
-            {k: v for k, v in row.items() if k != "signal"}
-            for row in result.get("reviews", [])[:16]
-        ],
+        "trace": result.get("trace", [])[:12],
+        "agents": list(AGENT_NAMES),
+        "agent_disagreement": bool(selected.get("disagreement")),
+        "selected_concerns": selected.get("concerns", [])[:8],
+        "candidate_reviews": result.get("reviews", [])[:16],
         "duration_ms": round((time.perf_counter() - started) * 1000, 2),
         "execution_capable": False,
+        "confidence_is_probability": False,
     }
