@@ -17,8 +17,9 @@ from typing import Mapping
 
 
 PUBLIC_GET_PATHS = frozenset({
-    "/health", "/heartbeat", "/chart", "/features", "/app-config",
-    "/level-pack", "/config", "/risk", "/backtest/recent",
+    # Only price/availability and APK configuration: never expose private
+    # accounts, strategy diagnostics, owner levels, or computational backtests.
+    "/health", "/heartbeat", "/chart", "/app-config",
 })
 MAX_CLIENTS = 24
 MAX_HTTP_BODY_BYTES = 65536
