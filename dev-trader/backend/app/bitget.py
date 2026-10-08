@@ -14,6 +14,8 @@ from typing import Any
 
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
+from .observability import safe_get_retry_notice
+
 
 class BitgetDemoError(RuntimeError):
     pass
@@ -155,6 +157,7 @@ class BitgetDemoClient:
         retry=retry_if_exception_type(BitgetTransientError),
         wait=wait_exponential(multiplier=0.2, min=0.2, max=1.0),
         stop=stop_after_attempt(3),
+        before_sleep=safe_get_retry_notice,
         reraise=True,
     )
     def _get(self, path: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
