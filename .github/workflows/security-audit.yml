@@ -47,6 +47,10 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Full repository history scan across branches
-        uses: docker://ghcr.io/gitleaks/gitleaks:v8.30.1
-        with:
-          args: git --redact --log-opts=--all .
+        run: |
+          test "$(git rev-list --all --count)" -gt 0
+          docker run --rm -v "$PWD:/src:ro" -w /src \
+            -e GIT_CONFIG_COUNT=1 \
+            -e GIT_CONFIG_KEY_0=safe.directory \
+            -e GIT_CONFIG_VALUE_0=/src \
+            ghcr.io/gitleaks/gitleaks:v8.30.1 git --redact --log-opts=--all .
