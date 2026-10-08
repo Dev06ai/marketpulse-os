@@ -66,7 +66,7 @@ class PerformanceCurveView(context: Context) : View(context) {
             if (i == 0) path.moveTo(x, lastY) else path.lineTo(x, lastY)
         }
         val fillPath = Path(path).apply { lineTo(right, bottom); lineTo(left, bottom); close() }
-        area.shader = LinearGradient(0f, top, 0f, bottom, Color.argb(50, 184, 134, 11), Color.TRANSPARENT, Shader.TileMode.CLAMP)
+        area.shader = LinearGradient(0f, top, 0f, bottom, Color.argb(38, 234, 194, 137), Color.TRANSPARENT, Shader.TileMode.CLAMP)
         val save = canvas.save()
         canvas.clipRect(left - 3*d, top - 4*d, left + (right-left)*reveal + 3*d, bottom + 4*d)
         canvas.drawPath(fillPath, area); canvas.drawPath(path, line)
