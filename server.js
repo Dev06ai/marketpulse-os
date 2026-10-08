@@ -2424,7 +2424,7 @@ async function readLimitedBody(req,limit=262144){
 async function scopedMemoryDevice(req,u){
   const user=await auth.userFromRequest(req);
   if(!user)return {status:401,error:"Authentication required"};
-  const originalDevice=String(u.searchParams.get("device")||req.headers["x-marketpulse-device"]||"");
+  const originalDevice=String(u.searchParams.get("device")||req.headers["x-marketpulse-device"]||requestDevice(req));
   if(!/^[a-f0-9-]{16,128}$/i.test(originalDevice))return {status:400,error:"Invalid device ID"};
   return {device:crypto.createHash("sha256").update(user.id+":"+originalDevice).digest("hex"),originalDevice};
 }
