@@ -76,6 +76,8 @@ function lockMessage(until){
 async function register(email,password,key="register"){
   rateCheck(key);
   const e=normalizeEmail(email),err=passwordRules(password);
+  // Never let an unauthenticated visitor reserve the configured owner identity.
+  if(isAdminEmail(e))throw new Error("ADMIN_SIGNUP_DISABLED");
   if(!validEmail(e))throw new Error("Enter a valid email address.");
   if(err)throw new Error(err);
   const existing=await storage.findUserByEmail(e);if(existing)throw new Error("EMAIL_EXISTS");
