@@ -26,6 +26,7 @@ from .manual_levels import load_manual_level_pack
 from .agent_metrics import summarize_agent_reviews
 from .opportunity_scout import OpportunityScout
 from .performance_learning_agent import analyze_performance
+from .htf_policy import evaluate_htf_policy, MAX_LEVERAGE, MAX_RISK_PCT, MIN_NET_RR
 
 load_dotenv()
 
@@ -51,6 +52,11 @@ def verify_entry_feed(_signal: dict) -> tuple[bool, str]:
             ("trade", state.last_trade_ts, 15000), ("book", state.last_book_ts, 5000)):
         if not ts or not -1000 <= now-ts <= limit:
             return False, f"Primary {name} data expired during entry checks; wait for a new setup."
+    # Re-evaluate on the CURRENT live feed. A signal's saved evidence is
+    # informational, not authorization that survives a new quote/bar.
+    report = evaluate_htf_policy(state, _signal, compute_features(state), now)
+    if not report["eligible"]:
+        return False, "Higher-timeframe trade policy: " + ", ".join(report["reasons"][:3])
     return True, ""
 
 
@@ -272,6 +278,13 @@ def mobile_payload(include_research=True):
             "regime_selector": engine.regime_state,
             "structure_map": f.structure_map,
             "candidate_decisions": engine.candidate_decisions,
+            "htf_policy": {
+                "decision": (diag.get("htf_policy") or {}).get("decision", "HOLD/WAIT"),
+                "eligible": bool((diag.get("htf_policy") or {}).get("eligible")),
+                "reasons": (diag.get("htf_policy") or {}).get("reasons", []),
+                "min_net_rr": MIN_NET_RR,
+                "max_leverage": MAX_LEVERAGE,
+            },
             "langgraph": {
                 "mode": os.getenv("KYVORIQ_LANGGRAPH_MODE", "shadow").strip().lower(),
                 "version": (diag.get("langgraph") or {}).get("version"),
@@ -907,6 +920,32 @@ async def agent_status():
     }
 
 
+@app.get("/decision/signal")
+async def strict_trade_decision():
+    """Actual current best candidate or explicit HOLD/WAIT; never invent a plan."""
+    sig = engine.active_signal
+    if not sig:
+        return {
+            "decision": "HOLD/WAIT",
+            "eligible": False,
+            "reasons": [(engine.last_diagnostics or {}).get("wait_reason") or
+                        "No currently eligible 1H/4H candidate"],
+            "entry": None, "stop_loss": None,
+            "take_profit_1": None, "take_profit_2": None,
+            "structural_catalyst": None,
+            "macroeconomic_catalyst": "NOT VERIFIED (no macro event feed)",
+            "data_ts": state.last_market_update_ts,
+            "execution_capable": False,
+        }
+    report = evaluate_htf_policy(
+        state, sig, compute_features(state), int(time.time()*1000),
+    )
+    return dict(report, signal_id=sig.get("id"), data_ts=state.last_market_update_ts,
+                structural_catalyst=sig.get("setup"),
+                macroeconomic_catalyst="NOT VERIFIED (no macro event feed)",
+                execution_capable=False)
+
+
 @app.get("/agents/scout")
 async def scout_status():
     """Read-only scout observations: no signals, orders, or missed-PnL claims."""
@@ -1120,6 +1159,15 @@ async def config():
         "symbol": SYMBOL,
         "engine_revision": ENGINE_REVISION,
         "decision_policy": "PLAYBOOK_V3",
+        "htf_policy": {
+            "mode": "STRICT",
+            "signal_timeframes": ["1h", "4h"],
+            "max_leverage": MAX_LEVERAGE,
+            "max_risk_pct": min(execution.max_planned_loss_pct, MAX_RISK_PCT),
+            "min_net_rr": MIN_NET_RR,
+            "require_structural_stop": True,
+            "macro_feed_available": False,
+        },
         "langgraph_mode": os.getenv("KYVORIQ_LANGGRAPH_MODE", "shadow").strip().lower(),
         "langgraph_agent_count": 4,
         "additional_observer_agents": ["opportunity_scout", "performance_learning"],
