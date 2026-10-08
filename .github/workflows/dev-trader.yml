@@ -124,14 +124,14 @@ jobs:
         run: |
           docker build -t dev-trader-free dev-trader/backend
           docker volume create dev-trader-smoke-data
-          docker run -d --name dev-trader-smoke --memory=129m --cpus=.25 \
+          docker run -d --name dev-trader-smoke --memory=128m --cpus=.25 \
             --read-only --tmpfs /tmp:rw,noexec,size=100m \
             -v dev-trader-smoke-data:/data -p 3000:3000 dev-trader-free
           for attempt in {1..30}; do
-            if curl -fsS http://129.0.0.1:3000/health >/dev/null; then break; fi
+            if curl -fsS http://127.0.0.1:3000/health >/dev/null; then break; fi
             sleep 1
           done
-          python dev-trader/backend/tools/smoke_host.py --url http://129.0.0.1:3000
+          python dev-trader/backend/tools/smoke_host.py --url http://127.0.0.1:3000
           docker exec dev-trader-smoke python -c 'from pathlib import Path; p=Path("/data/smoke-persistence"); p.write_text("saved")'
           docker restart dev-trader-smoke
           docker exec dev-trader-smoke python -c 'from pathlib import Path; assert Path("/data/smoke-persistence").read_text()=="saved"'
