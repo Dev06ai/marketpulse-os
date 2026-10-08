@@ -304,6 +304,7 @@ class SafeActivity : FragmentActivity() {
             latestRoot = preview
             renderState(preview, requestChart = false)
             val candles = preview.getJSONObject("chart").getJSONArray("candles")
+            latestChartCandles = candles
             chart.setData(candles, preview.optJSONObject("signal"), calculateEma(candles, 50), preview.getDouble("last_price"), chartOverlays(preview))
             check.text = "Build ${BuildConfig.VERSION_CODE}  •  Visual verification"
             selectWorkspace(intent.getIntExtra("visual_workspace", 0).coerceIn(0, 2))
