@@ -212,8 +212,9 @@ class BitgetDemoClient:
             leverage_value = int(leverage)
         except (TypeError, ValueError) as exc:
             raise BitgetDemoError("Leverage must be an integer.") from exc
-        if leverage_value < 1 or leverage_value > 125:
-            raise BitgetDemoError("Requested leverage is outside the verified 1x-125x guard.")
+        # Hard defense in depth: no direct client caller can set >5x.
+        if leverage_value < 1 or leverage_value > 5:
+            raise BitgetDemoError("KYVORIQ demo leverage must remain within 1x-5x.")
 
         raw_mode = str(margin_mode or os.getenv("BITGET_MARGIN_MODE", "isolated")).lower()
         mode = "isolated" if raw_mode == "isolated" else "crossed"
