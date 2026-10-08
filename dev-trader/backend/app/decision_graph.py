@@ -15,8 +15,9 @@ from typing import Annotated, Any, TypedDict
 from langgraph.graph import END, START, StateGraph
 
 from . import decision_agents as agents
+from .agent_orchestration import data_sentinel, risk_guardian, supervisor_context, build_early_candidates
 
-VERSION = "langgraph-specialists-v2"
+VERSION = "langgraph-specialists-v3"
 AGENT_NAMES = ("regime", "liquidity", "orderflow", "entry_timing")
 
 
@@ -30,6 +31,8 @@ class ReviewState(TypedDict, total=False):
     selected_id: str | None
     action: str
     trace: list[str]
+    sentinel: dict[str, Any]
+    early: bool
 
 
 def _positive(value: Any) -> float:
@@ -42,7 +45,8 @@ def _positive(value: Any) -> float:
 
 def _market_health(state: ReviewState) -> dict:
     market = state["market"]
-    blockers: list[str] = []
+    sentinel = data_sentinel(market)
+    blockers: list[str] = list(sentinel["critical_blockers"])
     if market.get("health") != "HEALTHY" or not market.get("connected"):
         blockers.append("MARKET_FEED_NOT_HEALTHY")
     now_ms = int(market.get("now_ms") or 0)
@@ -56,7 +60,7 @@ def _market_health(state: ReviewState) -> dict:
     spread = _positive(market.get("spread_bps"))
     if spread > 25:
         blockers.append("EXCESSIVE_MARKET_SPREAD")
-    return {"blockers": blockers, "trace": ["market_health"]}
+    return {"blockers": list(dict.fromkeys(blockers)), "sentinel": sentinel, "trace": ["market_health"]}
 
 
 def _after_market(state: ReviewState) -> str:
@@ -118,6 +122,8 @@ def _candidate_review(state: ReviewState) -> dict:
             "disagreement": bool(caution_count),
             "concerns": concerns[:8],
             "agents": agent_verdicts,
+            "adaptive_supervisor": supervisor_context(dict(signal, agents=agent_verdicts)),
+            "source": signal.get("_origin", "QUALIFIED_DETECTOR"),
             "signal": signal,
             "blockers": [],
         })
@@ -130,31 +136,17 @@ def _candidate_review(state: ReviewState) -> dict:
 
 
 def _risk_preflight(state: ReviewState) -> dict:
-    reviewed = []
-    for review in state.get("reviews", []):
-        row = dict(review)
-        signal = row.pop("signal")
-        direction = row["direction"]
-        entry = _positive(signal.get("entry"))
-        stop = _positive(signal.get("stop"))
-        target = _positive(signal.get("target2"))
-        rr = _positive(signal.get("rr"))
-        reasons = []
-        if direction not in {"LONG", "SHORT"}:
-            reasons.append("INVALID_DIRECTION")
-        if not all((entry, stop, target)):
-            reasons.append("NONFINITE_OR_MISSING_PRICES")
-        elif direction == "LONG" and not (stop < entry < target):
-            reasons.append("INVALID_LONG_STOP_TARGET_GEOMETRY")
-        elif direction == "SHORT" and not (target < entry < stop):
-            reasons.append("INVALID_SHORT_STOP_TARGET_GEOMETRY")
-        if rr < 1.5:
-            reasons.append("INADEQUATE_GROSS_REWARD_RISK")
-        if str(signal.get("grade") or "").upper() != "A":
-            reasons.append("NOT_GRADE_A")
-        row["blockers"] = reasons
+    reviewed=[]
+    for review in state.get("reviews",[]):
+        row=dict(review)
+        signal=row.pop("signal")
+        report=risk_guardian(signal,selected=not state.get("early",False))
+        # Watches can contain no prices by design. A watch NEVER converts
+        # into an approved order through LangGraph.
+        row["risk_guardian"]=report
+        row["blockers"]=report["blockers"]
         reviewed.append(row)
-    return {"reviews": reviewed, "trace": state.get("trace", []) + ["risk_preflight"]}
+    return {"reviews":reviewed,"trace":state.get("trace",[])+["risk_preflight"]}
 
 
 def _supervisor(state: ReviewState) -> dict:
@@ -163,6 +155,11 @@ def _supervisor(state: ReviewState) -> dict:
     original = next((r for r in reviews if r["id"] == state.get("original_id")), None)
     if blockers:
         action = "WAIT"
+        selected_id = None
+    elif state.get("early"):
+        # Route all pre-gate detections through the SAME parallel specialists
+        # while making it impossible for the graph to approve a trade.
+        action = "OBSERVE"
         selected_id = None
     elif not original or original.get("blockers"):
         action = "REJECT"
@@ -213,13 +210,14 @@ def _graph():
     return builder.compile()
 
 
-def review_decision(market: dict, candidates: list[dict], original_id: str) -> dict:
+def review_decision(market: dict, candidates: list[dict], original_id: str, *, early: bool = False) -> dict:
     """Review only; fail-closed exceptions are handled by strategy.py in guard mode."""
     started = time.perf_counter()
     result = _graph().invoke({
         "market": market,
         "candidates": candidates[:16],
         "original_id": original_id,
+        "early": early,
         "blockers": [],
         "agent_reports": [],
         "trace": [],
@@ -231,7 +229,11 @@ def review_decision(market: dict, candidates: list[dict], original_id: str) -> d
     )
     return {
         "version": VERSION,
+        "stage": "EARLY_OBSERVATION_ONLY" if early else "QUALIFIED_SHADOW_REVIEW",
         "action": result["action"],
+        "data_sentinel": result.get("sentinel", {}),
+        "adaptive_supervisor": selected.get("adaptive_supervisor", {}),
+        "risk_guardian": selected.get("risk_guardian", {}),
         "selected_id": result.get("selected_id"),
         "engine_selected_id": original_id,
         "blockers": result.get("blockers", [])[:8],
@@ -244,3 +246,22 @@ def review_decision(market: dict, candidates: list[dict], original_id: str) -> d
         "execution_capable": False,
         "confidence_is_probability": False,
     }
+
+
+
+def review_early_opportunities(market: dict, detected: list[dict],
+                               radar: list[dict]) -> dict:
+    """Read-only LangGraph fan-out BEFORE the conventional quality gates.
+
+    Both detected candidates and indicator-only radar watches are reviewed.
+    No phantom entry/stop is assigned to watches, and action cannot APPROVE.
+    """
+    candidates,counts=build_early_candidates(detected,radar)
+    if not candidates:
+        return {"version":VERSION,"stage":"EARLY_OBSERVATION_ONLY",
+                "action":"NO_WATCH","candidate_reviews":[],
+                "route":counts,"execution_capable":False}
+    report=review_decision(market,candidates,"__NOT_EXECUTABLE__",early=True)
+    return dict(report,route=counts,selected_id=None,
+                action="WAIT" if report["action"]=="WAIT" else "OBSERVE",
+                execution_capable=False,can_create_new_signal=False)
