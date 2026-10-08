@@ -23,6 +23,7 @@ from .journal import ENGINE_REVISION, performance_scorecard
 from .evaluation import ShadowEvaluator, chronological_split, replay_decisions
 from .transport import Subscription, alert_payload, dashboard_payload, event_key
 from .manual_levels import load_manual_level_pack
+from .agent_metrics import summarize_agent_reviews
 
 load_dotenv()
 
@@ -266,6 +267,13 @@ def mobile_payload(include_research=True):
             "regime_selector": engine.regime_state,
             "structure_map": f.structure_map,
             "candidate_decisions": engine.candidate_decisions,
+            "langgraph": {
+                "mode": os.getenv("KYVORIQ_LANGGRAPH_MODE", "shadow").strip().lower(),
+                "version": (diag.get("langgraph") or {}).get("version"),
+                "action": (diag.get("langgraph") or {}).get("action"),
+                "agent_disagreement": (diag.get("langgraph") or {}).get("agent_disagreement"),
+                "selected_concerns": (diag.get("langgraph") or {}).get("selected_concerns", []),
+            },
         },
         "features": {
             "trend_15": f.trend_15,
@@ -824,6 +832,30 @@ async def evaluation():
                 scorecard=performance_scorecard(execution.history(500)))
 
 
+@app.get("/agents")
+async def agent_status():
+    """Read-only evidence review; no broker credentials or control API."""
+    mode = os.getenv("KYVORIQ_LANGGRAPH_MODE", "shadow").strip().lower()
+    records = engine.journal.records(250, "LANGGRAPH")
+    latest = (engine.last_diagnostics or {}).get("langgraph") or {}
+    return {
+        "mode": mode if mode in {"off", "shadow", "guard"} else "off",
+        "ready": mode in {"shadow", "guard"},
+        "execution_capable": False,
+        "agent_names": ["regime", "liquidity", "orderflow", "entry_timing"],
+        "last_review": {
+            "version": latest.get("version"),
+            "action": latest.get("action"),
+            "selected_id": latest.get("selected_id"),
+            "agent_disagreement": latest.get("agent_disagreement"),
+            "selected_concerns": latest.get("selected_concerns", []),
+            "duration_ms": latest.get("duration_ms"),
+        },
+        "statistics": summarize_agent_reviews(records),
+        "journal": engine.journal.status(),
+    }
+
+
 @app.get("/decisions")
 async def decisions(limit: int=25):
     records=engine.journal.records(limit,"DECISION")
@@ -1021,6 +1053,8 @@ async def config():
         "symbol": SYMBOL,
         "engine_revision": ENGINE_REVISION,
         "decision_policy": "PLAYBOOK_V3",
+        "langgraph_mode": os.getenv("KYVORIQ_LANGGRAPH_MODE", "shadow").strip().lower(),
+        "langgraph_agent_count": 4,
         "exit_experiments": "SHADOW_ONLY",
         "snapshot_seconds": SNAPSHOT,
         "manual_execution_only": not execution.enabled,

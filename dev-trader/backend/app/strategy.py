@@ -3263,6 +3263,76 @@ class StrategyEngine:
                 s.rr,
             )
         signal = max(qualified, key=decision_rank)
+        # LangGraph orchestrates a read-only review of candidates that already
+        # passed the existing playbook, learning and elite quality gates.
+        # Shadow (default) cannot change a trading decision. Guard can only veto;
+        # it cannot create a signal or bypass the Bitget execution admission gate.
+        graph_mode = os.getenv("KYVORIQ_LANGGRAPH_MODE", "shadow").strip().lower()
+        if graph_mode in {"shadow", "guard"}:
+            try:
+                from .decision_graph import review_decision
+                graph_report = review_decision(
+                    market={
+                        "health": state.data_health,
+                        "connected": state.ws_connected,
+                        "now_ms": self.last_evaluated_ts,
+                        "market_update_ms": state.last_market_update_ts,
+                        "bid": state.bid,
+                        "ask": state.ask,
+                        "spread_bps": f.spread_bps,
+                        "last_price": state.last_price,
+                        "book_update_ms": state.last_book_ts,
+                        "features": {
+                            "trend_60": f.trend_60,
+                            "trend_240": f.trend_240,
+                            "market_structure": f.market_structure,
+                            "atr_15": f.atr_15,
+                            "cvd_price_divergence": f.cvd_price_divergence,
+                            "book_imbalance": f.book_imbalance,
+                            "oi_change_5m_pct": f.oi_change_5m_pct,
+                            "oi_points": len(state.oi_window),
+                        },
+                        "level_reactions": self.level_reaction_state,
+                    },
+                    candidates=[s.to_dict() for s in qualified],
+                    original_id=signal.id,
+                )
+                graph_report["mode"] = graph_mode
+                self.last_diagnostics["langgraph"] = graph_report
+                signal.evidence["langgraph"] = {
+                    "version": graph_report["version"],
+                    "mode": graph_mode,
+                    "action": graph_report["action"],
+                    "blockers": graph_report["blockers"],
+                    "agent_disagreement": graph_report.get("agent_disagreement", False),
+                    "selected_concerns": graph_report.get("selected_concerns", [])[:4],
+                }
+                self.journal.record("LANGGRAPH", graph_report,
+                                    identity="langgraph:" + signal.id)
+                if graph_mode == "guard" and graph_report["action"] != "APPROVE":
+                    self.last_diagnostics.update(
+                        status="QUALITY_LOCK",
+                        wait_reason="LangGraph review: " + ", ".join(graph_report["blockers"] or ["WAIT"]),
+                        blocked_by=["langgraph_review"],
+                    )
+                    self._journal_decision(state)
+                    return None
+            except Exception as exc:
+                # A broken reviewer must never introduce an order or crash the
+                # streaming callback. In guard mode, fail closed.
+                self.last_diagnostics["langgraph"] = {
+                    "mode": graph_mode,
+                    "action": "ERROR",
+                    "error_type": type(exc).__name__,
+                }
+                if graph_mode == "guard":
+                    self.last_diagnostics.update(
+                        status="QUALITY_LOCK",
+                        wait_reason="LangGraph review unavailable; no new exposure admitted.",
+                        blocked_by=["langgraph_unavailable"],
+                    )
+                    self._journal_decision(state)
+                    return None
         self.governor_last_quality_rejection = ""
         previous_signal = dict(self.active_signal) if self.active_signal else None
         self.position_management = self._build_position_management(previous_signal, signal, state)
