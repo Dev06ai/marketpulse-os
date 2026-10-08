@@ -88,6 +88,9 @@ def risk_guardian(signal: dict, *, selected: bool, max_leverage: int | None = No
         gross=((target-entry) if d=="LONG" else (entry-target))/abs(entry-stop)
         if gross<2.5:
             blockers.append("GROSS_RR_BELOW_2_5")
+    reported_rr=numeric(signal.get("rr"))
+    if reported_rr is not None and reported_rr<2.5:
+        blockers.append("INADEQUATE_GROSS_REWARD_RISK")
     if str(signal.get("grade") or "").upper()!="A" and selected:
         blockers.append("NOT_GRADE_A")
     evidence=signal.get("evidence") or {}
