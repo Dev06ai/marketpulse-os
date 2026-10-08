@@ -1,0 +1,24 @@
+# Prevent secrets and development artifacts from entering a deployment image
+.git
+.github
+.env
+.env.*
+!.env.example
+node_modules
+npm-debug.log*
+*.log
+*.key
+*.pem
+*.p12
+*.pfx
+*.sqlite
+*.sqlite3
+*.db
+*.bak
+*.backup
+coverage
+dist
+build
+.cache
+.DS_Store
+SECURITY-ROLLOUT.md
