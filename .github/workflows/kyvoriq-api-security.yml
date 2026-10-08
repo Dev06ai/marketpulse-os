@@ -26,6 +26,8 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - name: Install reviewed backend dependencies for real route integration checks
+        run: pip install -r dev-trader/backend/requirements-core.txt httpx
       - name: Verify Python syntax
         run: python -m compileall -q dev-trader/backend/app dev-trader/backend/test_api_security.py
       - name: Test private API and WebSocket security
