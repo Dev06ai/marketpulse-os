@@ -225,4 +225,4 @@ def test_agent_status_endpoint_is_readonly_and_bounded(monkeypatch):
     assert status["mode"] == "shadow"
     assert status["execution_capable"] is False
     assert status["statistics"]["sampled_reviews"] == 0
-    assert status["agent_names"] == ["regime", "liquidity", "orderflow", "entry_timing", "opportunity_scout", "performance_learning"]
+    assert status["agent_names"] == ["regime", "liquidity", "orderflow", "entry_timing", "opportunity_scout", "performance_learning", "early_opportunity_router", "adaptive_supervisor", "data_quality_sentinel", "risk_guardian"]
