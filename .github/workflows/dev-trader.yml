@@ -89,7 +89,7 @@ jobs:
         continue-on-error: true
         run: |
           gradle -p dev-trader/tools/host-probe run --args='https://dev-trader-engine.de.deplexo.com' --stacktrace
-      - name: Wait for audited Deplexo decision-engine backend
+      - name: Wait for audited Deplexo decision-engine backend v3.8
         if: steps.backend_changed.outputs.backend_changed == 'true'
         run: |
           ok=false
@@ -100,7 +100,7 @@ jobs:
             PACK="$(curl -fsS --max-time 12 'https://dev-trader-engine.de.deplexo.com/level-pack' 2>/dev/null || true)"
             PACK_OK="$(printf '%s' "$PACK" | jq -r '(.pack_id == "dewald_levels_2026_10_07") and (.enabled == true)' 2>/dev/null || echo false)"
             echo "Deplexo check $attempt/42 • revision=$REVISION • policy=$POLICY • reaction_pack=$PACK_OK"
-            if [ "$REVISION" = "market-decision-v3.7" ] &&                [ "$POLICY" = "CONFIDENCE_MARGIN_20X_FEE_ADJUSTED" ] &&                [ "$PACK_OK" = "true" ]; then
+            if [ "$REVISION" = "market-decision-v3.8" ] &&                [ "$POLICY" = "CONFIDENCE_MARGIN_20X_FEE_ADJUSTED" ] &&                [ "$PACK_OK" = "true" ]; then
               ok=true
               break
             fi

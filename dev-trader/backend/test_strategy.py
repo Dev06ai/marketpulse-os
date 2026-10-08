@@ -827,3 +827,39 @@ def test_execution_failure_is_not_mislearned_as_market_invalidation(monkeypatch,
     assert engine.last_lifecycle_event["outcome"] == "EXECUTION_FAILED"
     assert engine.last_lifecycle_event["signal"]["lifecycle"] == "EXECUTION_FAILED"
 
+
+
+def _recent_sfp_fixture(now_ms: int, closed_age_ms: int, current_price: float) -> MarketState:
+    interval = 15 * 60_000
+    base = now_ms - 12 * interval - closed_age_ms
+    def rc(i, o, h, l, cl):
+        start = base + i * interval
+        return Candle(start, start + interval - 1, o, h, l, cl, 100, True)
+    cs = [rc(i, 100, 102 + i % 2, 99, 100 + (i % 3)) for i in range(12)]
+    cs[4] = rc(4, 100, 102, 60, 100)
+    cs[6] = rc(6, 100, 110, 99, 100)
+    cs[-2] = rc(10, 100, 102, 99, 101)
+    cs[-1] = rc(11, 100, 112, 99.5, 100)
+    return MarketState(
+        candles_15=cs,
+        last_price=current_price,
+        last_market_update_ts=now_ms,
+        last_trade_ts=now_ms,
+        data_health="HEALTHY",
+    )
+
+
+def test_stale_closed_sfp_is_not_resurrected_after_restart():
+    now = 2_000_000_000_000
+    state = _recent_sfp_fixture(now, 120_000, 100.0)
+    assert detect_sfp(state) is None
+
+
+def test_just_closed_sfp_requires_current_ticker_to_remain_reclaimed():
+    now = 2_000_000_000_000
+    invalidated = _recent_sfp_fixture(now, 30_000, 111.0)
+    assert detect_sfp(invalidated) is None
+
+    still_reclaimed = _recent_sfp_fixture(now, 30_000, 100.0)
+    sig = detect_sfp(still_reclaimed)
+    assert sig is not None and sig.direction == "SHORT"

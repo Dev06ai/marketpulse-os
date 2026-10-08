@@ -440,9 +440,24 @@ def detect_sfp(state: MarketState) -> Optional[Signal]:
         current_end = live.end
     else:
         recent = source[-1]
+        # A closed historical SFP must never be resurrected as a fresh setup
+        # after reconnect/restart. When live feed timestamps are available,
+        # only allow a just-closed bar and require the CURRENT ticker to remain
+        # on the reclaimed side of the swept level. Tests/replays without feed
+        # timestamps intentionally keep deterministic historical behavior.
+        feed_now = max(
+            int(state.last_market_update_ts or 0),
+            int(state.last_trade_ts or 0),
+            int(state.exchange_ts or 0),
+            int(state.received_ts or 0),
+        )
+        if feed_now:
+            closed_age = feed_now - int(recent.end)
+            if closed_age < 0 or closed_age > 90_000:
+                return None
         current_high = recent.high
         current_low = recent.low
-        current_close = recent.close
+        current_close = float(state.last_price)
         current_start = recent.start
         current_end = recent.end
 
