@@ -3568,8 +3568,9 @@ class SafeActivity : FragmentActivity() {
                             }.getOrNull()
                         }
                         val saved = runCatching {
-                            val token = received?.getString("access_token") ?: error("Pairing denied")
-                            val expiry = received.getLong("expires_at")
+                            val reply = received ?: error("Pairing denied")
+                            val token = reply.getString("access_token")
+                            val expiry = reply.getLong("expires_at")
                             KyvoriqSecureSession.save(this@SafeActivity, token, expiry)
                         }.isSuccess
                         handler.post {
