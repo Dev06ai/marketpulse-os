@@ -65,7 +65,7 @@ class KyvoriqLaunchOverlay(context: Context) : FrameLayout(context) {
     private val sweep = View(context).apply {
         background = GradientDrawable(
             GradientDrawable.Orientation.LEFT_RIGHT,
-            intArrayOf(Color.TRANSPARENT, Color.argb(58, 219, 170, 59), Color.TRANSPARENT)
+            intArrayOf(Color.TRANSPARENT, Color.argb(52, 234, 194, 137), Color.TRANSPARENT)
         )
         alpha = 0f
         rotation = -10f
