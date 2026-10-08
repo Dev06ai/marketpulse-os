@@ -13,8 +13,21 @@ def adb(*args):
     return subprocess.check_output(['adb', *args], timeout=30)
 
 def nodes():
-    adb('shell', 'uiautomator', 'dump', '/sdcard/interaction.xml')
-    return list(ET.fromstring(adb('shell', 'cat', '/sdcard/interaction.xml')).iter('node'))
+    """Retry transient emulator accessibility null-root errors without hiding app failures."""
+    last_error = None
+    for _ in range(6):
+        try:
+            adb('shell', 'rm', '-f', '/sdcard/interaction.xml')
+            adb('shell', 'uiautomator', 'dump', '/sdcard/interaction.xml')
+            raw = adb('shell', 'cat', '/sdcard/interaction.xml')
+            root = ET.fromstring(raw)
+            found = list(root.iter('node'))
+            if found:
+                return found
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired, ET.ParseError) as exc:
+            last_error = exc
+        time.sleep(.7)
+    raise AssertionError(f'Could not capture Android accessibility hierarchy: {last_error}')
 
 def find(text=None, desc=None):
     for _ in range(4):
