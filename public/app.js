@@ -39,6 +39,9 @@ function runtime(text,kind="warn",meta=""){
 function statusPill(text,kind="wait"){
   const el=$("gate");el.textContent=text;el.className="status-pill "+kind;
 }
+function escapeHtml(value){
+  return String(value??"").replace(/[&<>"']/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[ch]));
+}
 function cleanSymbol(x){return String(x||"").replace(/[^A-Z0-9]/g,"").toUpperCase()}
 function displaySymbol(x){return cleanSymbol(x).replace("USDT","/USDT")}
 function populateSymbols(symbols){
@@ -494,7 +497,7 @@ function renderSystemChecks(checks){
   $("systemChecks").innerHTML="";
   Object.entries(checks||{}).forEach(([k,v])=>{
     const el=document.createElement("div");el.className="check";
-    el.innerHTML='<b><span class="dot '+(v?"ok":"bad")+'"></span>'+String(k)+'</b><span>'+String(v?"PASS":"BLOCKED")+"</span>";
+    el.innerHTML='<b><span class="dot '+(v?"ok":"bad")+'"></span>'+escapeHtml(k)+'</b><span>'+String(v?"PASS":"BLOCKED")+"</span>";
     $("systemChecks").appendChild(el);
   });
 }
@@ -619,13 +622,13 @@ async function loadPhases(){
     const pending=list.filter(x=>/PENDING_RUNTIME/.test(String(x.status))).length;
     $("phaseHeadline").textContent="PHASE 1 → 500 · "+(d.engineeringPhase||"ENGINEERING REGISTRY");
     $("phaseSummary").innerHTML=
-      '<div class="phase-chip"><b>'+list.length+'</b><span>registry items</span></div>'+
+      '<div class="phase-chip"><b>'+Number(list.length)+'</b><span>registry items</span></div>'+
       '<div class="phase-chip"><b>'+complete+'</b><span>complete</span></div>'+
       '<div class="phase-chip"><b>'+validated+'</b><span>validated</span></div>'+
       '<div class="phase-chip"><b>'+pending+'</b><span>runtime pending</span></div>'+
-      '<div class="phase-highlight"><strong>PHASE '+String(d.currentPhase||499)+' · '+String((list.find(x=>x.phase===Number(d.currentPhase||499))||{}).title||"CURRENT ENGINEERING PHASE")+'</strong><span>'+String(d.promotion?.engineeringStatus||"PROMOTED")+' · engine '+String(d.promotion?.signalEngineVersion||"500.0.0")+'</span></div>';
+      '<div class="phase-highlight"><strong>PHASE '+String(d.currentPhase||499)+' · '+escapeHtml((list.find(x=>x.phase===Number(d.currentPhase||499))||{}).title||"CURRENT ENGINEERING PHASE")+'</strong><span>'+escapeHtml(d.promotion?.engineeringStatus||"PROMOTED")+' · engine '+escapeHtml(d.promotion?.signalEngineVersion||"500.0.0")+'</span></div>';
     $("phaseList").innerHTML=list.length
-      ?list.slice().reverse().slice(0,60).map(x=>'<div class="phase"><b>#'+x.phase+'</b><strong>'+String(x.title||"")+'</strong><em>'+String(x.status||"")+'</em></div>').join("")
+      ?list.slice().reverse().slice(0,60).map(x=>'<div class="phase"><b>#'+escapeHtml(x.phase)+'</b><strong>'+escapeHtml(x.title||"")+'</strong><em>'+escapeHtml(x.status||"")+'</em></div>').join("")
       :'<div class="placeholder">Registry returned no phase rows.</div>';
   }catch(e){
     $("phaseList").innerHTML='<div class="placeholder">Live registry is temporarily unavailable. The verified 500-item summary above remains available.</div>';
