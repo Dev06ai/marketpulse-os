@@ -45,6 +45,8 @@ async function main(){
     assert(page.response.headers.get("content-security-policy")?.includes("frame-ancestors 'none'"));
     assert.equal(page.response.headers.get("x-content-type-options"),"nosniff");
     assert.equal((await req("/api/admin/security")).response.status,401);
+    assert.equal((await req("/api/edge")).response.status,401);
+    assert.equal((await req("/api/ai",{method:"POST",body:"{}"})).response.status,401);
     assert.equal((await req("/api/memory?device="+device)).response.status,401);
     assert.equal((await req("/api/analytics?device="+device)).response.status,401);
     assert.equal((await req("/api/dev-trader/learning/status")).response.status,401);
