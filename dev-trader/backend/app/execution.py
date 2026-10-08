@@ -31,12 +31,12 @@ class DemoExecutionEngine:
         self.symbol = os.getenv("SYMBOL", "BTCUSDT")
         self.session_start_ms = int(os.getenv("DEMO_SESSION_START_MS", "0") or 0)
         self.session_baseline = self._num(os.getenv("DEMO_SESSION_BASELINE_EQUITY_USDT", "0"))
-        configured_leverage = int(os.getenv("BITGET_DEMO_LEVERAGE", "5"))
+        configured_leverage = int(os.getenv("BITGET_DEMO_LEVERAGE", "20"))
         if configured_leverage < 1:
             raise ValueError("BITGET_DEMO_LEVERAGE must be at least 1.")
-        # The operator may still have legacy 20x settings on the host;
-        # never send >5x to Bitget even when env has not been migrated.
-        self.leverage = min(configured_leverage, 5)
+        # Operator permits up to 20x; lower explicitly selected leverage is
+        # respected. A stale high-leverage setting cannot exceed this ceiling.
+        self.leverage = min(configured_leverage, 20)
         self.medium_margin_min = float(os.getenv("BITGET_DEMO_MEDIUM_MARGIN_MIN_USDT", "50"))
         self.medium_margin_max = float(os.getenv("BITGET_DEMO_MEDIUM_MARGIN_MAX_USDT", "75"))
         self.high_margin_min = float(os.getenv("BITGET_DEMO_HIGH_MARGIN_MIN_USDT", "76"))
