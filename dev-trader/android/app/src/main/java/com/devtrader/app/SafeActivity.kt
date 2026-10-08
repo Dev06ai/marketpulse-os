@@ -166,7 +166,7 @@ class SafeActivity : FragmentActivity() {
     private lateinit var alertsButton: Button
     private lateinit var privacyButton: Button
     private lateinit var widgetButton: Button
-    private var selectedTf = "15m"
+    private var selectedTf = "1h"
     private var lastStateReceivedMs = 0L
     private var latestRoot: JSONObject? = null
     private var lastSignalId: String? = null

@@ -50,7 +50,8 @@ def scroll_trade_to(text):
         current = nodes()
         if any(n.get('text') == text for n in current):
             return
-        adb('shell', 'input', 'swipe', '540', '1730', '540', '570', '290')
+        # Right price-axis rail scrolls the page; plot swipes pan the chart.
+        adb('shell', 'input', 'swipe', '1015', '1730', '1015', '570', '290')
         time.sleep(.35)
     raise AssertionError(f'Trade control not reachable after scrolling: {text}')
 
@@ -58,9 +59,12 @@ def shot(name):
     OUT.joinpath(name + '.png').write_bytes(adb('exec-out', 'screencap', '-p'))
     OUT.joinpath(name + '.xml').write_bytes(adb('shell', 'cat', '/sdcard/interaction.xml'))
 
-# Native tap navigation, tab state, local calculator, and preserved return path.
+# Native default 1h chart, scroll-safe inverse panning, navigation and calculator.
+
 adb('shell', 'am', 'start', '-S', '-W', '-n', f'{PKG}/com.devtrader.app.SafeActivity',
     '--ez', 'visual_preview', 'true', '--ei', 'visual_workspace', '0')
+# Launch default must be the same 1h chart as the supplied reference.
+assert find(desc='Chart 1h').get('selected') == 'true'
 tap(desc='Chart 1h')
 assert find(desc='Chart 1h').get('selected') == 'true'
 tap(desc='Workspace POSITIONS')
