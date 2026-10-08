@@ -1352,8 +1352,14 @@ async def socket(ws: WebSocket):
     if len(clients) >= MAX_CLIENTS:
         await ws.close(code=1013)
         return
-    await ws.accept()
+    # Reserve the listener slot before awaiting accept to prevent a parallel
+    # handshake burst from bypassing the connection cap.
     clients.add(ws)
+    try:
+        await ws.accept()
+    except Exception:
+        clients.discard(ws)
+        return
     client_failures[ws] = 0
     profile = ws.query_params.get("profile", "legacy")
     profile = profile if profile in {"dashboard", "alerts"} else "legacy"
