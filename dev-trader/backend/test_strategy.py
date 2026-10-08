@@ -46,11 +46,11 @@ def test_v3_pattern_context_is_neutral_before_candidate_gate():
     opposed = MarketFeatures(**{**base.__dict__, "elliott_direction": "SHORT", "elliott_confidence": .99})
     opposed_gate = _gate_details("LONG", "MSS Continuation", 100000.0, 99900.0, 100300.0, opposed)
 
-    assert aligned_gate["checks"]["raw_legacy_confidence"] > neutral["checks"]["raw_legacy_confidence"]
-    assert opposed_gate["checks"]["raw_legacy_confidence"] < neutral["checks"]["raw_legacy_confidence"]
     assert aligned_gate["checks"]["confidence"] == neutral["checks"]["confidence"]
     assert opposed_gate["checks"]["confidence"] == neutral["checks"]["confidence"]
     assert aligned_gate["checks"]["pattern_context_scoring"] == "OBSERVATION_ONLY"
+    assert any("observation only" in reason.lower() for reason in aligned_gate["score_reasons"])
+    assert any("observation only" in reason.lower() for reason in opposed_gate["score_reasons"])
 
 
 def test_dline_uses_newest_geometry_across_both_directions():

@@ -9,7 +9,7 @@ from .models import Candle, MarketState
 from .knowledge import RULES, MARKET_KNOWLEDGE, knowledge_summary
 from .learning import AdaptiveLearning
 from .structure import RegimeSelector
-from .playbooks import policy as playbook_policy, admission as playbook_admission, experimental_pattern_adjustment
+from .playbooks import policy as playbook_policy, admission as playbook_admission
 from .journal import DecisionJournal, ENGINE_REVISION
 from .level_reactions import LevelReactionTracker, TRIGGER_FRESH_MS
 
@@ -253,12 +253,13 @@ def _score(direction: str, setup: str, f: MarketFeatures) -> tuple[float, list[s
 
     wave_align = f.elliott_direction == ("LONG" if direction == "LONG" else "SHORT")
     wave_strong = f.elliott_confidence >= float(RULES.get("signal_policy", {}).get("quality_governor", {}).get("elliott_min_confidence", 0.55))
+    # V3 retains Elliott as explainable market context only. It must not add to
+    # or subtract from executable confidence; otherwise a pattern estimate can
+    # manufacture or erase a candidate before the explicit playbook gates run.
     if wave_align and wave_strong:
-        score += 0.08
-        reasons.append(f"Elliott Wave context aligns ({f.elliott_phase}, {f.elliott_wave})")
+        reasons.append(f"Elliott reference context aligns ({f.elliott_phase}, {f.elliott_wave}); observation only")
     elif f.elliott_direction not in {"NEUTRAL", "UNKNOWN"} and not wave_align and f.elliott_confidence >= 0.65:
-        score -= 0.06
-        reasons.append("Elliott Wave context is strongly counter-directional")
+        reasons.append("Elliott reference context is counter-directional; observation only")
 
 
     if f.fvg_direction == ("BULLISH" if direction == "LONG" else "BEARISH"):
@@ -292,13 +293,7 @@ def _gate_details(direction: str, setup: str, entry: float, stop: float, target:
     ratio = rr(entry, stop, target)
     risk = abs(entry - stop)
     risk_ok = _risk_gate(entry, stop, f)
-    raw_confidence, score_reasons = _score(direction, setup, f)
-    # V3 treats Elliott/harmonic output as observational context, not an
-    # executable vote. Neutralize the legacy Elliott +/- score BEFORE the
-    # detector's first confidence gate; doing it later allowed a strong
-    # counter-wave read to erase an otherwise valid candidate prematurely.
-    pattern_adjustment = experimental_pattern_adjustment(f, direction)
-    confidence = max(0.0, min(0.99, raw_confidence + pattern_adjustment))
+    confidence, score_reasons = _score(direction, setup, f)
     confidence_ok = confidence >= _min_confidence()
     checks = {
         "rr": round(ratio, 3),
@@ -307,8 +302,6 @@ def _gate_details(direction: str, setup: str, entry: float, stop: float, target:
         "atr_15": round(f.atr_15, 4),
         "risk_gate": risk_ok,
         "confidence": round(confidence, 3),
-        "raw_legacy_confidence": round(raw_confidence, 3),
-        "pattern_context_adjustment": round(pattern_adjustment, 3),
         "pattern_context_scoring": "OBSERVATION_ONLY",
         "min_confidence": _min_confidence(),
         "confidence_gate": confidence_ok,
