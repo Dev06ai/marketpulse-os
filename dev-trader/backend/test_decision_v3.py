@@ -365,15 +365,20 @@ def test_engine_selects_a_v3_playbook_and_journals_the_decision(monkeypatch,tmp_
     now=int(time.time()*1000)
     f=features();f.market_structure="BULLISH"
     monkeypatch.setattr(strategy,"compute_features",lambda state:f)
-    signal=Signal(id="v3-integration",direction="LONG",setup="Trend Pullback",entry=100000,stop=99500,
-        target1=100700,target2=101750,rr=3.5,confidence=.85,grade="A",regime="TREND_UP",
+    signal=Signal(id="v3-integration",direction="LONG",setup="Trend Pullback",entry=100000,stop=99000,
+        target1=102000,target2=104500,rr=4.5,confidence=.85,grade="A",regime="TREND_UP",
         invalidation="pullback low",thesis=[],evidence={},timeframe="15m",trade_style="SWING",style_reason="1h context")
     for name in ("detect_sfp","detect_dline","detect_mss","detect_breakout_retest"):
         monkeypatch.setattr(strategy,name,lambda state:None)
     monkeypatch.setattr(strategy,"detect_trend_pullback",lambda state:signal)
     engine=StrategyEngine()
     monkeypatch.setattr(engine,"_momentum_signal",lambda state,f:None)
-    state=MarketState(last_price=100000,data_health="HEALTHY",last_market_update_ts=now,last_trade_ts=now,last_book_ts=now)
+    # Use a full real 1H/4H candle history: entries must pass the
+    # same structural-stop and fee-aware risk policy as production.
+    from test_htf_policy import scenario
+    _,state=scenario()
+    state.last_trade_ts=state.last_market_update_ts
+    state.last_book_ts=state.last_market_update_ts
     assert engine.evaluate(state).id==signal.id
     assert engine.active_signal["engine_revision"]=="market-decision-v3.8"
     record=engine.journal.records(1,"DECISION")[0]
