@@ -1205,8 +1205,6 @@ class MarketChartView @JvmOverloads constructor(
 
         val elapsedNow = SystemClock.elapsedRealtime()
         val wallNow = System.currentTimeMillis()
-        var lastLabelBottom = top - dp(20f)
-
         rows.forEach { (row, value, lineY) ->
             val kind = row.optString("kind", "LEVEL").uppercase(Locale.US)
             val color = when (kind) {
@@ -1399,7 +1397,9 @@ class MarketChartView @JvmOverloads constructor(
                 // Chart-area one-finger gestures manipulate price/time in both
                 // axes (opposite the finger). Scroll Trade from its surrounding
                 // hero/timeframe/decision cards; chart controls remain tappable.
-                parent?.requestDisallowInterceptTouchEvent(true)
+                // The right-hand price-axis gutter stays scroll-through for
+                // navigating the long Trade page; plot gestures pan the chart.
+                parent?.requestDisallowInterceptTouchEvent(fullscreenMode || event.x < width - dp(82f))
                 lastTouchX = event.x
                 lastTouchY = event.y
                 touchDownX = event.x
@@ -1444,9 +1444,14 @@ class MarketChartView @JvmOverloads constructor(
                 val dy = event.y - lastTouchY
                 val totalDx = abs(event.x - touchDownX)
                 val totalDy = abs(event.y - touchDownY)
-                // Reversed-chart behavior: horizontal and vertical drags are
-                // captured by the chart. dx>0 moves candles LEFT via negative
-                // shift; dy>0 moves price graphics UP via negative offset.
+                // Start swipes on the right-hand axis to scroll the Trade page.
+                // Swipes starting inside the plot pan in the direction opposite
+                // the finger, horizontally and vertically.
+                if (!fullscreenMode && touchDownX >= width - dp(82f)) {
+                    lastTouchX = event.x
+                    lastTouchY = event.y
+                    return true
+                }
                 if (totalDx > dp(8f) || totalDy > dp(8f)) {
                     parent?.requestDisallowInterceptTouchEvent(true)
                 }
