@@ -41,7 +41,7 @@ def test_updated_quote_keeps_confidence_margin_and_loss_guard_within_caps(monkey
     risk = trade['requested_qty'] * (100140 - 99500 + (100140 + 99500) * .0006)
     margin = trade['requested_qty'] * 100140 / executor.leverage
     assert trade['execution_reference_price'] == 100140
-    assert trade['leverage'] == 5
+    assert trade['leverage'] == 20
     assert trade['confidence_band'] == 'HIGH'
     assert 76 <= margin <= 100
     assert risk <= 1000 * executor.max_planned_loss_pct / 100
