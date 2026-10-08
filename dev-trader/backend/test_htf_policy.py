@@ -121,20 +121,20 @@ def test_rsi_and_volume_weighted_macd_are_confirmed_only():
     assert volume_weighted_macd(state.candles_60)["direction"]=="UNKNOWN"
 
 
-def test_old_host_20x_setting_clamps_to_5x_and_risk_3_to_2(monkeypatch,tmp_path):
+def test_user_selected_20x_is_respected_but_risk_3_clamps_to_2(monkeypatch,tmp_path):
     monkeypatch.setenv("BITGET_DEMO_LEVERAGE","20")
     monkeypatch.setenv("BITGET_DEMO_MAX_PLANNED_LOSS_PCT","3")
     monkeypatch.setenv("BITGET_EXECUTION_STATE_FILE",str(tmp_path/"execution.json"))
     executor=DemoExecutionEngine(learning=None)
-    assert executor.leverage==5
+    assert executor.leverage==20
     assert executor.max_planned_loss_pct==2.0
     assert executor.risk_pct==2.0
 
 
-def test_exchange_client_rejects_any_direct_request_above_5x():
+def test_exchange_client_rejects_any_direct_request_above_20x():
     client=BitgetDemoClient("k","s","p")
-    with pytest.raises(BitgetDemoError,match="1x-5x"):
-        client.set_leverage("BTCUSDT","LONG",20,"isolated")
+    with pytest.raises(BitgetDemoError,match="1x-20x"):
+        client.set_leverage("BTCUSDT","LONG",25,"isolated")
 
 
 def test_unknown_structure_never_generates_an_invented_stop():
