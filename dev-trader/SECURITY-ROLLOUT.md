@@ -1,29 +1,32 @@
-# KYVORIQ private API hardening — deployment hold
+# KYVORIQ rollout — do not merge without coordinated hosting update
 
-This change is a **proposed, fail-closed backend gate**, not a production release. It protects the Python app's private trade journal, Bitget demo account/execution data, diagnostic exports, and outbound trading WebSocket stream.
+## Scope
+This branch protects private KYVORIQ trade/account execution data and the mobile WebSocket. Its Android client now includes an opt-in "PAIR DEVICE" flow, and stores only a short-lived device access token encrypted with Android Keystore. **The master secret is typed only when pairing, never compiled into the APK or persisted by the phone.**
 
-## What is private by default
-- All HTTP routes except an explicit set of safe, read-only market/status routes require an owner bearer token.
-- The WebSocket at `/ws` also requires a valid bearer token. Arbitrary web origins are rejected.
-- Unconfigured or short owner credentials return HTTP 503 for private REST routes and WebSocket policy closure. Invalid credentials return HTTP 401 or WebSocket policy closure.
-- In-browser API reference endpoints are disabled. Private responses use no-store, clickjacking and MIME-sniffing protection headers.
-- The WebSocket caps concurrent listeners and incoming application message size. HTTP endpoints reject oversized declared Content-Length values.
-- Direct trading mutation endpoints remain absent. Existing demo-only execution constraints are not loosened.
+### Owner provisioning
+1. Generate a high-entropy 48+-character master secret using a reputable password manager. Store it only as `KYVORIQ_API_OWNER_TOKEN` in the **active Deplexo backend** secret manager (not in chat, code, GitHub Actions logs, or BuildConfig).
+2. Release the updated Android APK first, preserving existing backend compatibility. After the APK is installed, stage the new backend and verify `/health` remains available while `/trades` returns 401 without credentials and `/auth/pair` returns 401 for a wrong secret.
+3. From **KYVORIQ > INSIGHTS > PAIR DEVICE**, paste the secret once over the app's pinned HTTPS-origin backend; the server issues a randomly identified HMAC-protected device bearer valid for up to seven days. Android stores only this session encrypted with AES-GCM via Android Keystore.
+4. Verify Android bootstrap, private trade history, dashboard and background WebSocket, demo-trade continuity, notification updates, renew pairing after token expiry, and revocation by rotating the master secret.
+5. Configure provider-side external IP restrictions, per-host rate limits, logs that omit credentials, and backup/restore. Active Deplexo configuration and true production secrets **cannot be verified through the currently available GitHub/Render connectors**.
 
-## RELEASE BLOCKER — Android application is not yet paired
-The existing Android `SafeActivity` and `SignalService` currently connect without authentication. **If this branch were deployed as-is, private trade views, bootstrap and the WebSocket would stop working.**
+### Security boundaries and limitations
+- By default, `/bootstrap`, `/trades`, `/execution/status`, decision logs, exports, and `/ws` require owner authentication; unprovisioned servers refuse private access (503).
+- `/auth/pair` is the sole public POST endpoint added; constant-time secret comparison and a bounded global per-process attempt window help resist brute force. Secrets must be high entropy.
+- Device sessions are HMAC-signed and **stateless**, expire in seven days, and are invalidated collectively by rotating the master token. **Individual device revocation, replay resistance after bearer theft, and server-side device-specific ACLs are NOT implemented**; those require a more advanced owner-root-of-trust protocol with persistent state and device keypairs before multi-user use.
+- Access tokens are bearer credentials. Android Keystore mitigates stored token theft but cannot completely protect tokens on a compromised or rooted device.
+- No exchange API key is shipped to Android. Broker execution endpoints remain demo-only and no new order mutation API was added.
+- Origin checks protect browser WebSockets, not native client identity. Use HTTPS/WSS exclusively.
+- The app's REST fallback and WebSocket will fail if the secured backend is activated **before** the new Android build is installed and paired. Thus the two releases require coordination.
+- An HTTP Content-Length cap, query size bound, and WebSocket message cap are not a replacement for an ingress-level streaming body limit or DDoS protection.
+- Secret scanner passing doesn't prove there were never secrets leaked; rotate any known exposed credentials.
 
-Before merging or deploying:
-1. Implement a device-specific owner pairing flow: generate asymmetric keys on-device with Android Keystore; approve a challenge through a separately authenticated owner channel; issue short-lived server-side device access tokens (or verify signed requests) with revocation/rotation and per-device ACLs.
-2. Update the Android REST and WebSocket clients to authenticate using those device-specific credentials. **Never embed the backend master bearer token in the APK, BuildConfig, git, JavaScript, client config, or update manifest.**
-3. Configure `KYVORIQ_API_OWNER_TOKEN` securely in the backend secret manager with a randomly generated value **at least 32 characters long**. This is an operator/break-glass credential, not a mobile-app token. Avoid sending token values through chat, CI output or logs.
-4. Run integration and pairing tests, verify application bootstrap/chart/trade log/WebSocket/reconnection, and test demo trade continuity in a staging deployment.
-5. Confirm deployed services and active host. Render's legacy dev-trader-engine is suspended; Android currently targets Deplexo. Do not switch hosts or modify the Bitget demo/live trading configuration as part of this PR.
-6. Review external ingress rate limits, broker API scope (demo and withdrawals disabled), push token controls and deployment environment variable names in the hosting provider.
+### Engineering gates
+- `python dev-trader/backend/test_api_security.py`
+- Full `pytest` backend suite and real ASGI pairing/trade-data tests
+- Free-host constrained container smoke using an ephemeral CI-only token (never a production secret)
+- Android debug build, Git-history scans, signed release validation
+- No rollout until all gates pass and the **current active** Deplexo deployment is identified; previous Render services remain suspended.
 
-## Operational constraints
-- This is not a substitute for an ingress WAF, multi-device authorization or encrypted Keystore credentials on Android.
-- Rejected oversized declared bodies do not by themselves cover arbitrary chunked streaming body sizes. Apply an ingress body-size cap at the proxy.
-- Endpoint defenses cannot prevent secrets leaked from *old* git history; revoke exposed keys immediately. Security scans report no known matches, not proof of absence.
-- This security branch is intentionally based on `dev-trader-v1`, **not** MarketPulse `main`. Do not merge MarketPulse's separate PR #116 blindly into the trading branch.
-- Run `python dev-trader/backend/test_api_security.py` and GitHub's KYVORIQ API Security Regression workflow before approving the PR.
+### Separate PR
+MarketPulse PR #116 targets `main` and has separate database-cert/MFA compatibility work. Never merge it indiscriminately with this KYVORIQ backend PR.
