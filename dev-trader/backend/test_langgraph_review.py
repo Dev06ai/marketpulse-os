@@ -50,8 +50,12 @@ def test_healthy_long_sfp_passes_read_only_review():
     assert result["selected_id"] == "long-sfp-123"
     assert result["execution_capable"] is False
     assert result["trace"] == [
-        "market_health", "liquidity", "candidate_review", "risk_preflight", "supervisor"
+        "market_health", "dispatch_specialists",
+        "regime", "liquidity", "orderflow", "entry_timing",
+        "candidate_review", "risk_preflight", "supervisor",
     ]
+    assert result["agents"] == ["regime", "liquidity", "orderflow", "entry_timing"]
+    assert result["confidence_is_probability"] is False
     assert result["candidate_reviews"][0]["family"] == "LEVEL_REACTION"
     assert result["candidate_reviews"][0]["level_status"] == "TRIGGERED"
     assert "signal" not in result["candidate_reviews"][0]
@@ -115,3 +119,83 @@ def test_graph_never_replaces_existing_engine_selected_id():
     assert result["action"] == "APPROVE"
     assert result["selected_id"] == "long-sfp-123"
     assert len(result["candidate_reviews"]) == 2
+
+
+def test_parallel_agents_evaluate_confirmations_without_creating_trade():
+    m = market(
+        last_price=100030.0,
+        book_update_ms=int(time.time()*1000),
+        level_reactions={"status": "TRIGGERED", "trigger": {"direction": "LONG", "type": "SFP"}},
+        features={
+            "trend_60": "UP", "trend_240": "UP", "market_structure": "BULLISH",
+            "atr_15": 300.0, "cvd_price_divergence": "BULLISH",
+            "book_imbalance": 0.2, "oi_change_5m_pct": 0.3, "oi_points": 5,
+        },
+    )
+    result = review(m)
+    row = result["candidate_reviews"][0]
+    assert result["action"] == "APPROVE"
+    assert row["supporting_agents"] == 4
+    assert row["caution_agents"] == 0
+    assert row["agents"]["regime"]["verdict"] == "SUPPORT"
+    assert row["agents"]["liquidity"]["verdict"] == "SUPPORT"
+    assert row["agents"]["orderflow"]["verdict"] == "SUPPORT"
+    assert row["agents"]["entry_timing"]["verdict"] == "SUPPORT"
+    assert not result["agent_disagreement"]
+    assert result["execution_capable"] is False
+
+
+def test_agents_surface_countertrend_flow_conflict_and_chasing_as_caution_only():
+    m = market(
+        last_price=102000.0,
+        book_update_ms=int(time.time()*1000),
+        level_reactions={"status": "TRIGGERED", "trigger": {"direction": "SHORT"}},
+        features={
+            "trend_60": "DOWN", "trend_240": "DOWN", "market_structure": "BEARISH",
+            "atr_15": 400.0, "cvd_price_divergence": "BEARISH",
+            "book_imbalance": -0.25, "oi_change_5m_pct": 0.5, "oi_points": 5,
+        },
+    )
+    result = review(m)
+    row = result["candidate_reviews"][0]
+    assert result["action"] == "APPROVE"  # Advisory, not an unvalidated entry veto.
+    assert result["selected_id"] == "long-sfp-123"
+    assert row["caution_agents"] == 4
+    assert result["agent_disagreement"]
+    assert "entry_timing:ENTRY_CHASING_BEYOND_PLAN" in result["selected_concerns"]
+    assert "regime:1H_TREND_OPPOSES" in result["selected_concerns"]
+
+
+def test_absent_or_stale_orderbook_never_counts_as_buy_confirmation():
+    m = market(features={
+        "trend_60": "UNKNOWN", "trend_240": "UNKNOWN",
+        "cvd_price_divergence": "NONE", "book_imbalance": 0.9,
+        "oi_change_5m_pct": 0.0, "oi_points": 0,
+    }, book_update_ms=0)
+    result = review(m)
+    flow = result["candidate_reviews"][0]["agents"]["orderflow"]
+    assert flow["verdict"] == "UNKNOWN"
+    assert "NO_SIGNIFICANT_FRESH_BOOK_IMBALANCE" in flow["unknown"]
+    assert "OI_CONTEXT_INSUFFICIENT" in flow["unknown"]
+
+
+def test_open_interest_is_not_a_directional_confirmation():
+    m = market(features={
+        "cvd_price_divergence": "NONE", "book_imbalance": 0.0,
+        "oi_change_5m_pct": 10.0, "oi_points": 5,
+    })
+    flow = review(m)["candidate_reviews"][0]["agents"]["orderflow"]
+    assert flow["verdict"] == "UNKNOWN"
+    assert "OI_CHANGE_CONTEXT_ONLY_NOT_DIRECTIONAL" in flow["unknown"]
+    assert flow["support"] == []
+
+
+def test_all_agent_reports_stay_bound_to_original_selected_signal():
+    other = signal(id="short-alt", direction="SHORT", entry=100000.0,
+                   stop=100500.0, target2=98500.0, confidence=0.99)
+    result = review(candidates=[signal(), other])
+    assert result["selected_id"] == "long-sfp-123"
+    rows = {row["id"]: row for row in result["candidate_reviews"]}
+    assert set(rows) == {"long-sfp-123", "short-alt"}
+    assert len(rows["long-sfp-123"]["agents"]) == 4
+    assert len(rows["short-alt"]["agents"]) == 4
