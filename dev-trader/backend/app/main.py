@@ -5,8 +5,9 @@ import os
 import time
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, Response
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, Response, Request
 from starlette.middleware.gzip import GZipMiddleware
+from starlette.responses import JSONResponse
 from pydantic import BaseModel
 from dotenv import load_dotenv
 
@@ -32,6 +33,10 @@ from .observability import (
     record_eval, record_smc, expose as expose_metrics, CONTENT_TYPE_LATEST
 )
 from .htf_policy import evaluate_htf_policy, MAX_LEVERAGE, MAX_RISK_PCT, MIN_NET_RR
+from .api_security import (
+    MAX_CLIENTS, MAX_HTTP_BODY_BYTES, PUBLIC_GET_PATHS,
+    private_http_error, websocket_error, security_headers,
+)
 
 load_dotenv()
 
@@ -792,8 +797,45 @@ async def lifespan(app: FastAPI):
         t.cancel()
 
 
-app = FastAPI(title="KYVORIQ AI Trading Assistant", version="0.15.0", lifespan=lifespan)
+app = FastAPI(
+    title="KYVORIQ AI Trading Assistant", version="0.15.0", lifespan=lifespan,
+    docs_url=None, redoc_url=None, openapi_url=None,
+)
 app.add_middleware(GZipMiddleware, minimum_size=700)
+
+
+@app.middleware("http")
+async def security_boundary(request: Request, call_next):
+    """Guard private data by default; allow only explicitly reviewed public market reads."""
+    path = request.url.path
+    method = request.method.upper()
+    private = not (method in {"GET", "HEAD"} and path in PUBLIC_GET_PATHS)
+
+    content_length = request.headers.get("content-length")
+    if content_length is not None:
+        try:
+            size = int(content_length)
+        except ValueError:
+            size = MAX_HTTP_BODY_BYTES + 1
+        if size < 0 or size > MAX_HTTP_BODY_BYTES:
+            response = JSONResponse({"detail": "Request body too large"}, status_code=413)
+            for key, value in security_headers(private).items():
+                response.headers[key] = value
+            return response
+
+    if len(request.scope.get("query_string", b"")) > 4096:
+        response = JSONResponse({"detail": "Query string too long"}, status_code=414)
+    else:
+        denied = private_http_error(method, path, request.headers)
+        if denied:
+            status, detail = denied
+            response = JSONResponse({"detail": detail}, status_code=status)
+        else:
+            response = await call_next(request)
+
+    for key, value in security_headers(private).items():
+        response.headers[key] = value
+    return response
 
 
 @app.get("/health")
@@ -1303,6 +1345,13 @@ async def system_check_push(payload: PushTestPayload):
 
 @app.websocket("/ws")
 async def socket(ws: WebSocket):
+    # Browser Origin alone is not authentication. Owner authorization is mandatory.
+    if websocket_error(ws.headers):
+        await ws.close(code=1008)
+        return
+    if len(clients) >= MAX_CLIENTS:
+        await ws.close(code=1013)
+        return
     await ws.accept()
     clients.add(ws)
     client_failures[ws] = 0
@@ -1334,6 +1383,10 @@ async def socket(ws: WebSocket):
                 if message.get("type") == "websocket.receive":
                     raw_text = message.get("text")
                     if raw_text:
+                        # Reject oversized application messages before JSON decoding.
+                        if len(raw_text) > 2048:
+                            await ws.close(code=1009)
+                            break
                         try:
                             incoming = json.loads(raw_text)
                         except (TypeError, ValueError):
