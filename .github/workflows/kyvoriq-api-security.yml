@@ -1,0 +1,34 @@
+name: KYVORIQ API Security Regression
+on:
+  pull_request:
+    branches: [dev-trader-v1]
+    paths:
+      - 'dev-trader/backend/**'
+      - 'dev-trader/tools/security_scan.py'
+      - '.github/workflows/kyvoriq-api-security.yml'
+  push:
+    branches: [dev-trader-v1]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Prepare Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Verify Python syntax
+        run: python -m compileall -q dev-trader/backend/app dev-trader/backend/test_api_security.py
+      - name: Test private API and WebSocket security
+        run: python dev-trader/backend/test_api_security.py
+      - name: Check tracked files and Git history for secrets
+        run: python dev-trader/tools/security_scan.py --history
