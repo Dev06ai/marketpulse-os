@@ -8,9 +8,9 @@ from __future__ import annotations
 
 import math
 from typing import Any
+from .risk import MAX_RISK_PCT
 
 MAX_LEVERAGE = 20
-MAX_RISK_PCT = 2.0
 MIN_GROSS_RR = 2.5
 MIN_NET_RR = 2.5
 POLICY_VERSION = "btc-htf-derivatives-risk-v1"

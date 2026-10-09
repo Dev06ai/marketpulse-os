@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "updated_date": "2026-10-10",
+  "timezone": "Asia/Calcutta",
+  "repository": "https://github.com/Dev06ai/marketpulse-os",
+  "source_branch": "dev-trader-v1",
+  "work_branch": "codex/kyvoriq-upgrade-20261009",
+  "source_commit": "a92bea883902e1702d9da9fe2447c422e5012a12",
+  "phase": 1,
+  "status": "release_code_verified_pending_archive_and_ci",
+  "completed_phases": [],
+  "application_changes": [
+    "isolated six execution test fixtures",
+    "integrated private HTTP/WS auth; bounded bodies and pairing; existing-session revocation",
+    "0.5% default / 1% hard risk; downward-only margin preference sizing and final reserve check",
+    "Immediate closed 5m/15m/1H bar evaluation independent of callback receipt equality",
+    "Source manifest, reproducible committed ZIP packaging, and security/backend/container-dependent CI release gate"
+  ],
+  "tests": {
+    "status": "passed",
+    "passed": 395,
+    "failed": 0,
+    "initial_failures": 3,
+    "limitations": "offline mocks; 6 filesystem fixtures isolated",
+    "subtests": 3
+  },
+  "deployment": {
+    "render": "billing_suspended",
+    "deplexo": "owner verified; existing app 5a86072f-c595-4200-80ba-0bd3be2ba352 uses KYVORIQ-Deplexo-Integrations-v4.zip; source SHA unverified; /data mount",
+    "changed_this_session": false,
+    "blocker": "Required owner token absent; user must authorize/provision credential before secured backend rollout"
+  },
+  "android": {
+    "source_version": "0.21.6",
+    "source_build": 131,
+    "verification": "User confirms 131 installed; pairing and local build unverified"
+  },
+  "constraints": [
+    "bitget_demo_only",
+    "no_paid_dependencies",
+    "preserve_existing_work",
+    "never_commit_secrets",
+    "preserve_daily_trade_and_signal_caps",
+    "preserve_hard_protections",
+    "never_bypass_automatic_review"
+  ],
+  "next_action": "Prepare tested source-attested release and rollout checks; user provisions missing owner token before deployment; continue timing/selection improvements.",
+  "rollback_source": "a92bea883902e1702d9da9fe2447c422e5012a12",
+  "last_verified_application_commit": "a0b605e"
+}

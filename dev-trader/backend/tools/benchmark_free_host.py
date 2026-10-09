@@ -4,7 +4,11 @@ import math
 import os
 from pathlib import Path
 import random
-import resource
+try:
+    import resource
+except ImportError:
+    resource = None
+import statistics
 import sys
 import tempfile
 import time
@@ -47,10 +51,12 @@ def run():
         state.oi_window = [(now-i*1000, 100000+rng.uniform(-10, 10)) for i in range(120)]
         # Evaluate candidates without ever calling the exchange execution layer.
         os.environ["DEMO_EXECUTION_PAUSED"] = "false"
-        start = time.perf_counter()
+        durations = []
         for _ in range(20):
+            start = time.perf_counter()
             main.engine.evaluate(state)
-        average_ms = (time.perf_counter()-start)*1000/20
+            durations.append((time.perf_counter()-start)*1000)
+        average_ms = statistics.mean(durations)
         full = main.mobile_payload()
         compact = dashboard_payload(full)
         sizes = {name: len(json.dumps(payload, separators=(",", ":")).encode()) for name, payload in
@@ -74,7 +80,11 @@ def run():
         journal_bytes = main.engine.journal.path.stat().st_size
         records = main.engine.journal.status()["records"]
         result = dict(offline=True, samples=20, average_evaluation_ms=round(average_ms, 2),
-                      peak_rss_mib=round(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss/1024, 2),
+                      median_evaluation_ms=round(statistics.median(durations), 2),
+                      p95_evaluation_ms=round(sorted(durations)[18], 2),
+                      worst_evaluation_ms=round(max(durations), 2),
+                      peak_rss_mib=(round(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss/
+                          (1024*1024 if sys.platform == "darwin" else 1024), 2) if resource else None),
                       payload_bytes=sizes, old_two_sockets_bytes_per_minute=baseline,
                       new_two_sockets_bytes_per_minute=total,
                       socket_savings_pct=round(100*(1-total/baseline), 2),

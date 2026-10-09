@@ -15,6 +15,7 @@ from .bitget import BitgetDemoClient, BitgetDemoError
 from .ledger import build_fill_ledger
 from .protection import stop_coverage
 from .trade_identity import client_identity, decode_identity
+from .risk import DEFAULT_RISK_PCT, MAX_RISK_PCT
 
 
 class DemoExecutionEngine:
@@ -46,10 +47,10 @@ class DemoExecutionEngine:
             raise ValueError("Demo confidence-margin bands are invalid.")
         if not 0.70 <= self.high_confidence_threshold < 1.0:
             raise ValueError("BITGET_DEMO_HIGH_CONFIDENCE must be between 0.70 and 1.0.")
-        requested_risk_pct = float(os.getenv("BITGET_DEMO_MAX_PLANNED_LOSS_PCT", "2.0"))
+        requested_risk_pct = float(os.getenv("BITGET_DEMO_MAX_PLANNED_LOSS_PCT", str(DEFAULT_RISK_PCT)))
         if not math.isfinite(requested_risk_pct) or requested_risk_pct <= 0:
             raise ValueError("BITGET_DEMO_MAX_PLANNED_LOSS_PCT must be finite and positive.")
-        self.max_planned_loss_pct = min(requested_risk_pct, 2.0)
+        self.max_planned_loss_pct = min(requested_risk_pct, MAX_RISK_PCT)
         self.risk_pct = self.max_planned_loss_pct
         self.margin_reserve = max(0.0, float(os.getenv("BITGET_DEMO_MARGIN_RESERVE_USDT", "25")))
         # New key intentionally supersedes the old 500-USDT notional cap from the
@@ -230,7 +231,7 @@ class DemoExecutionEngine:
 
     async def _sizing_balance_and_risk_cap(self) -> tuple[float, float]:
         balance = await asyncio.to_thread(self.client.available_balance, self.symbol)
-        if balance <= 0:
+        if not math.isfinite(balance) or balance <= 0:
             raise BitgetDemoError("Bitget Demo futures balance is 0 USDT. Add demo funds before autonomous execution can open a position.")
         account = self.data.get("account_metrics") or {}
         equity = self._num(account.get("equity_usdt"))
@@ -281,55 +282,30 @@ class DemoExecutionEngine:
 
         balance, risk_cap = await self._sizing_balance_and_risk_cap()
 
-        target_margin, band_min, band_max, band = self._confidence_margin_target(confidence)
+        target_margin, _, band_max, band = self._confidence_margin_target(confidence)
         spendable = max(0.0, balance - self.margin_reserve)
-        if spendable < band_min:
-            raise BitgetDemoError(
-                f"Available demo margin is below the {band} confidence minimum ({band_min:.0f} USDT)."
-            )
+        if spendable <= 0:
+            raise BitgetDemoError("Available demo margin cannot preserve the configured reserve.")
         target_margin = min(target_margin, spendable, band_max)
         target_notional = min(target_margin * self.leverage, self.max_notional)
-        if target_notional < band_min * self.leverage:
-            raise BitgetDemoError(
-                f"Configured notional cap cannot fund the {band} confidence margin band at {self.leverage}x."
-            )
-
         config = await self._contract()
-        raw_qty = target_notional / entry
-        qty = self._normalize_qty(raw_qty, config)
-        actual_margin = qty * entry / self.leverage if qty > 0 else 0.0
-        if actual_margin < band_min:
-            qty = self._normalize_qty_up((band_min * self.leverage) / entry, config)
-            actual_margin = qty * entry / self.leverage
-        if actual_margin > band_max or qty * entry > self.max_notional:
-            qty = self._normalize_qty(min((band_max * self.leverage) / entry, self.max_notional / entry), config)
-            actual_margin = qty * entry / self.leverage if qty > 0 else 0.0
-
         distance = abs(entry - stop)
         fee_rate = max(0.0, float(os.getenv("BITGET_DEMO_TAKER_FEE_RATE", "0.0006")))
         unit_risk = distance + (entry + stop) * fee_rate
+        # Margin is a preference, never a reason to round UP exposure. Equity,
+        # remaining daily loss budget, reserve and exchange increments dominate.
+        qty = self._normalize_qty(min(target_notional / entry, risk_cap / unit_risk), config)
+        actual_margin = qty * entry / self.leverage if qty > 0 else 0.0
         planned_risk = qty * unit_risk
-        if planned_risk > risk_cap and unit_risk > 0:
-            reduced = self._normalize_qty(min(risk_cap / unit_risk, self.max_notional / entry), config)
-            reduced_margin = reduced * entry / self.leverage if reduced > 0 else 0.0
-            if reduced_margin < band_min:
-                raise BitgetDemoError(
-                    f"{band.title()}-confidence sizing needs at least {band_min:.0f} USDT margin, "
-                    f"but the stop/fee risk guard allows only {reduced_margin:.2f} USDT at {self.leverage}x."
-                )
-            qty = reduced
-            actual_margin = reduced_margin
-            planned_risk = qty * unit_risk
 
         min_usdt = self._num(config.get("minTradeUSDT") or config.get("minOrderAmount"), 0.0)
         if qty <= 0:
-            raise BitgetDemoError("Exchange minimum quantity cannot fit inside the selected confidence margin band.")
+            raise BitgetDemoError("Exchange minimum quantity cannot fit within the stop/fee risk guard and margin limits.")
         if min_usdt > 0 and qty * entry < min_usdt:
             raise BitgetDemoError(f"Calculated position is below Bitget minimum notional ({min_usdt:g} USDT).")
-        if not (band_min - 1e-6 <= actual_margin <= band_max + 1e-6):
+        if planned_risk > risk_cap + 1e-9 or actual_margin > min(spendable, band_max) + 1e-6:
             raise BitgetDemoError(
-                f"Exchange quantity precision cannot keep the trade inside the {band} margin band "
-                f"({band_min:.0f}-{band_max:.0f} USDT)."
+                f"Exchange quantity precision exceeds the {band} margin or stop/fee risk guard."
             )
         return qty, planned_risk, config
 
@@ -536,22 +512,17 @@ class DemoExecutionEngine:
                 return {"ok": False, "skipped": True, "reason": str(exc)}
             fee_rate = max(0.0, float(os.getenv("BITGET_DEMO_TAKER_FEE_RATE", "0.0006")))
             unit_risk = abs(reference_price-stop)+(reference_price+stop)*fee_rate
-            _, refreshed_risk_cap = await self._sizing_balance_and_risk_cap()
-            if qty*unit_risk > refreshed_risk_cap or qty*reference_price > self.max_notional:
-                qty = min(qty, self._normalize_qty(min(refreshed_risk_cap/unit_risk, self.max_notional/reference_price), config))
+            refreshed_balance, refreshed_risk_cap = await self._sizing_balance_and_risk_cap()
+            refreshed_notional_cap = min(self.max_notional,
+                max(0.0, refreshed_balance - self.margin_reserve) * self.leverage)
+            if qty*unit_risk > refreshed_risk_cap or qty*reference_price > refreshed_notional_cap:
+                qty = min(qty, self._normalize_qty(min(refreshed_risk_cap/unit_risk, refreshed_notional_cap/reference_price), config))
             planned_margin = qty * reference_price / self.leverage if qty > 0 else 0.0
-            if planned_margin < margin_min:
-                raised = self._normalize_qty_up((margin_min * self.leverage) / reference_price, config)
-                if raised * unit_risk <= refreshed_risk_cap + 1e-9 and raised * reference_price <= self.max_notional:
-                    qty = raised
-                    planned_margin = qty * reference_price / self.leverage
             if planned_margin > margin_max:
                 qty = self._normalize_qty((margin_max * self.leverage) / reference_price, config)
                 planned_margin = qty * reference_price / self.leverage if qty > 0 else 0.0
             if qty <= 0 or qty*reference_price < self._num(config.get("minTradeUSDT") or config.get("minOrderAmount")):
                 return {"ok": False, "skipped": True, "reason": "Updated execution quote leaves less than the exchange minimum position size."}
-            if planned_margin < margin_min - 1e-6:
-                return {"ok": False, "skipped": True, "reason": f"Updated quote cannot preserve the {confidence_band} margin band ({margin_min:.0f}-{margin_max:.0f} USDT)."}
             risk_usdt = qty*unit_risk
             planned_notional = qty * reference_price
             # Sizing/settings requests can take time. Do not submit an entry
@@ -584,7 +555,7 @@ class DemoExecutionEngine:
             except BitgetDemoError as exc:
                 return {"ok": False, "skipped": True, "reason": str(exc)}
             final_unit_risk = abs(final_reference_price - stop) + (final_reference_price + stop) * fee_rate
-            _, final_risk_cap = await self._sizing_balance_and_risk_cap()
+            final_balance, final_risk_cap = await self._sizing_balance_and_risk_cap()
             final_margin = qty * final_reference_price / self.leverage if qty > 0 else 0.0
             final_notional = qty * final_reference_price
             final_risk = qty * final_unit_risk
@@ -592,11 +563,11 @@ class DemoExecutionEngine:
                 return {"ok": False, "skipped": True, "reason": "Final Bitget quote exceeds the planned-loss guard; wait for a new setup."}
             if final_notional > self.max_notional + 1e-9:
                 return {"ok": False, "skipped": True, "reason": "Final Bitget quote exceeds the configured notional cap."}
-            if final_margin < margin_min - 1e-6 or final_margin > margin_max + 1e-6:
+            if final_margin > min(margin_max, max(0.0, final_balance - self.margin_reserve)) + 1e-6:
                 return {
                     "ok": False,
                     "skipped": True,
-                    "reason": f"Final Bitget quote cannot preserve the {confidence_band} margin band ({margin_min:.0f}-{margin_max:.0f} USDT).",
+                    "reason": f"Final Bitget quote exceeds the {confidence_band} margin maximum or available margin reserve.",
                 }
             reference_price = final_reference_price
             reference_drift_pct = final_drift_pct
