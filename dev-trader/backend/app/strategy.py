@@ -3247,6 +3247,8 @@ class StrategyEngine:
         # adjustments. This prevents frequent low-conviction direction flips.
         qualified = []
         rejected = []
+        from .htf_policy import evaluate_htf_policy
+        htf_reports = {}
         for candidate in signals:
             self._apply_memory_context(candidate, state)
             self._apply_learning_context(candidate, state)
@@ -3266,7 +3268,23 @@ class StrategyEngine:
                 if elite_ok:
                     duplicate, duplicate_reason = self._duplicate_setup_blocked(candidate, state)
                     if not duplicate:
-                        qualified.append(candidate)
+                        # Structural risk is candidate-specific. Rejecting one
+                        # high score must not hide another independently safe
+                        # setup, or label the rejected candidate as admitted.
+                        report = evaluate_htf_policy(
+                            state, candidate.to_dict(), f, self.last_evaluated_ts)
+                        htf_reports[candidate.id] = report
+                        candidate.evidence["htf_policy"] = {
+                            key: report[key] for key in
+                            ("policy_version", "eligible", "estimated_net_rr", "reasons")
+                        }
+                        self.journal.record("HTF_POLICY", dict(report, signal_id=candidate.id),
+                                            identity="htf-policy:" + candidate.id)
+                        if report["eligible"]:
+                            qualified.append(candidate)
+                        else:
+                            rejected.append(f"{candidate.setup}: HTF policy: " +
+                                            ", ".join(report["reasons"][:3]))
                     else:
                         rejected.append(f"{candidate.setup}: {duplicate_reason}")
                 else:
@@ -3280,12 +3298,23 @@ class StrategyEngine:
                 legacy_gate=candidate.evidence["legacy_gate_comparison"],signal=candidate.to_dict()))
             self.shadow_candidates.append(dict(signal=candidate.to_dict(),v3_allow=allow,
                 legacy_allow=candidate.evidence["legacy_gate_comparison"]["allow"]))
+        self.last_diagnostics["htf_candidate_policies"] = [
+            dict(signal_id=identity, eligible=report["eligible"], reasons=report["reasons"])
+            for identity, report in htf_reports.items()
+        ]
         if not qualified:
             self.governor_last_quality_rejection = " | ".join(rejected[:3])
             self.governor_lock_reason = "WAITING: no candidate met the elite quality gate."
             self.last_diagnostics["status"] = "QUALITY_LOCK"
             self.last_diagnostics["wait_reason"] = "No candidate met the elite quality gate."
             self.last_diagnostics["blocked_by"] = ["quality_governor"]
+            if htf_reports:
+                report = next(iter(htf_reports.values()))
+                self.last_diagnostics.update(
+                    htf_policy=report,
+                    wait_reason="HTF policy: " + ", ".join(report["reasons"][:3]),
+                    blocked_by=["htf_structural_risk"],
+                )
             self._journal_decision(state)
             return None
 
@@ -3302,28 +3331,9 @@ class StrategyEngine:
                 s.rr,
             )
         signal = max(qualified, key=decision_rank)
-        # Hard higher-timeframe policy: no signal becomes ACTIVE, enters the
-        # Android notification path or reaches Bitget unless the actual 1H/4H
-        # structure, cost-adjusted R:R and external stop are verified.
-        from .htf_policy import evaluate_htf_policy
-        htf_report = evaluate_htf_policy(state, signal.to_dict(), f, self.last_evaluated_ts)
-        self.last_diagnostics["htf_policy"] = htf_report
-        signal.evidence["htf_policy"] = {
-            "policy_version": htf_report["policy_version"],
-            "eligible": htf_report["eligible"],
-            "estimated_net_rr": htf_report["estimated_net_rr"],
-            "reasons": htf_report["reasons"],
-        }
-        self.journal.record("HTF_POLICY", dict(htf_report, signal_id=signal.id),
-                            identity="htf-policy:" + signal.id)
-        if not htf_report["eligible"]:
-            self.last_diagnostics.update(
-                status="QUALITY_LOCK", wait_reason="HTF policy: " +
-                ", ".join(htf_report["reasons"][:3]),
-                blocked_by=["htf_structural_risk"],
-            )
-            self._journal_decision(state)
-            return None
+        # Every ranked candidate passed the unchanged structural/cost policy;
+        # the execution engine also rechecks the CURRENT feed before an order.
+        self.last_diagnostics["htf_policy"] = htf_reports[signal.id]
         # LangGraph orchestrates a read-only review of candidates that already
         # passed the existing playbook, learning and elite quality gates.
         # Shadow (default) cannot change a trading decision. Guard can only veto;

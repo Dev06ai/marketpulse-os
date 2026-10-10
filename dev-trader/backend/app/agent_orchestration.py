@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import math
 from typing import Any
+from .risk import MAX_RISK_PCT
 
 VERSION = "router-supervisor-v3"
 MAX_EARLY = 12
@@ -104,8 +105,8 @@ def risk_guardian(signal: dict, *, selected: bool, max_leverage: int | None = No
         blockers.append("HTF_STRUCTURAL_RISK_BLOCKED")
     if max_leverage is not None and (max_leverage<1 or max_leverage>20):
         blockers.append("LEVERAGE_OUTSIDE_1_TO_20")
-    if max_risk_pct is not None and (not 0<max_risk_pct<=2):
-        blockers.append("EQUITY_RISK_EXCEEDS_2_PERCENT")
+    if max_risk_pct is not None and (not 0<max_risk_pct<=MAX_RISK_PCT):
+        blockers.append("EQUITY_RISK_EXCEEDS_1_PERCENT")
     return {
         "status":"REJECT" if blockers else ("PRECHECK_PASS" if net is not None else "PARTIAL_CHECK"),
         "blockers":blockers[:8],
