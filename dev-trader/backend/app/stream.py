@@ -886,16 +886,26 @@ class BitgetMarketStream:
                 data = rows[0]
                 try:
                     sequence = int(data.get("seq", self.state.orderbook_seq or 0))
+                    # Bitget data.ts is generation time; the envelope ts is
+                    # push time. A delayed snapshot must retain its true age.
+                    # Legacy packets may use an explicit envelope timestamp,
+                    # but missing timestamps must never become receipt time.
+                    book_ts = int(data.get("ts", msg.get("ts")))
+                    if book_ts <= 0 or book_ts > now + 1000:
+                        raise ValueError("Unverifiable depth timestamp")
                 except (TypeError, ValueError, OverflowError):
                     self._invalidate_book()
+                    self._refresh_data_health(now)
                     return
                 if self.state.orderbook_seq and sequence and sequence <= self.state.orderbook_seq:
                     return  # A duplicate/replayed book cannot refresh depth.
+                if self.state.last_book_ts and book_ts < self.state.last_book_ts:
+                    return  # Regressing generation time cannot replace newer depth.
                 if self._apply_book(data, str(msg.get("action") or "snapshot")):
                     self.state.orderbook_seq = sequence
                     # A replayed packet is not fresh depth just because it was
                     # received now. Admission uses this exchange timestamp.
-                    self.state.last_book_ts = exchange_ts
+                    self.state.last_book_ts = book_ts
         elif topic == "liquidation":
             for liq in rows:
                 if not isinstance(liq, dict):

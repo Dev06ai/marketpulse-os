@@ -1,13 +1,17 @@
 import asyncio
+import hmac
 import json
 import math
 import os
 import time
+from collections import deque
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, Response
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, Response, Request
+from fastapi.exceptions import RequestValidationError
 from starlette.middleware.gzip import GZipMiddleware
-from pydantic import BaseModel
+from starlette.responses import JSONResponse
+from pydantic import BaseModel, Field
 from dotenv import load_dotenv
 
 from .models import MarketState
@@ -17,6 +21,8 @@ from .bridge import MarketPulseBridge
 from .push import PushService
 from .analytics import compute_features
 from .risk import calculate_risk
+from .build_info import BUILD_INFO
+from .evaluation_cadence import evaluation_due
 from .backtest import run_walk_forward
 from .execution import DemoExecutionEngine
 from .journal import ENGINE_REVISION, performance_scorecard
@@ -29,9 +35,14 @@ from .performance_learning_agent import analyze_performance
 from .agent_orchestration import risk_guardian, graph_market, data_sentinel
 from .smc_shadow import compare_structure
 from .observability import (
-    record_eval, record_smc, expose as expose_metrics, CONTENT_TYPE_LATEST
+    record_eval, record_eval_duration, record_smc, expose as expose_metrics, CONTENT_TYPE_LATEST
 )
 from .htf_policy import evaluate_htf_policy, MAX_LEVERAGE, MAX_RISK_PCT, MIN_NET_RR
+from .api_security import (
+    MAX_CLIENTS, MAX_HTTP_BODY_BYTES, PUBLIC_GET_PATHS,
+    private_http_error, websocket_error, security_headers,
+    owner_token, issue_device_token, BodyLimitMiddleware,
+)
 
 load_dotenv()
 
@@ -97,6 +108,7 @@ push = PushService()
 stream = None
 server_started_ms = int(time.time() * 1000)
 last_engine_eval_ms = 0
+last_evaluated_bars = None
 last_opportunity_alert = {"key": "", "ts": 0, "title": "", "body": ""}
 last_trade_event = {}
 last_learning_rehydrate_ts = 0.0
@@ -156,6 +168,10 @@ def reconcile_execution_truth():
 
 class PushTestPayload(BaseModel):
     token: str | None = None
+
+
+class PairDevicePayload(BaseModel):
+    pairing_secret: str = Field(min_length=32, max_length=512, strict=True)
 
 
 class RiskPayload(BaseModel):
@@ -418,6 +434,14 @@ async def broadcast_loop():
         except Exception:
             continue
         async def push(ws):
+            # Expiry/owner rotation must terminate existing quiet subscriptions,
+            # not just reject their next reconnect or HTTP request.
+            if websocket_error(ws.headers):
+                clients.discard(ws)
+                client_failures.pop(ws, None)
+                subscriptions.pop(ws, None)
+                await asyncio.wait_for(ws.close(code=1008), timeout=1.5)
+                return
             kind = kinds.get(ws)
             if kind is None:
                 return
@@ -533,22 +557,24 @@ async def execute_signal(payload: dict):
 
 async def on_state(s: MarketState):
     global state, last_engine_eval_ms, smc_snapshot, last_smc_observed_ms, last_smc_saved_ms, last_smc_disagreement
+    global last_evaluated_bars
     state = s
     now = int(time.time() * 1000)
 
     # Do not run the full strategy stack on every trade/order-book tick.
     # The feed can arrive many times per second; the engine only needs a
     # bounded evaluation cadence to keep the event loop responsive.
-    should_evaluate = (
-        now - last_engine_eval_ms >= 1000
-        or s.last_kline_5_ts == now
-        or s.last_kline_15_ts == now
-    )
+    should_evaluate, bar_key = evaluation_due(s, now, last_engine_eval_ms, last_evaluated_bars)
     if should_evaluate:
         last_engine_eval_ms = now
+        last_evaluated_bars = bar_key
         if state.last_market_update_ts and now-state.last_market_update_ts<=3000:
             engine.journal.tick(now,state.last_price)
-        sig = engine.evaluate(state)
+        evaluation_started = time.perf_counter()
+        try:
+            sig = engine.evaluate(state)
+        finally:
+            record_eval_duration(time.perf_counter() - evaluation_started)
         record_eval(state.data_health)
         # Original, confirmed-bar SMC cross-check. It never changes any
         # trade candidate and runs at a bounded 60-second cadence.
@@ -792,8 +818,83 @@ async def lifespan(app: FastAPI):
         t.cancel()
 
 
-app = FastAPI(title="KYVORIQ AI Trading Assistant", version="0.15.0", lifespan=lifespan)
+app = FastAPI(
+    title="KYVORIQ AI Trading Assistant", version="0.15.0", lifespan=lifespan,
+    docs_url=None, redoc_url=None, openapi_url=None,
+)
 app.add_middleware(GZipMiddleware, minimum_size=700)
+app.add_middleware(BodyLimitMiddleware)
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_error(request: Request, exc: RequestValidationError):
+    # Pairing validation errors must never echo credential input to a response.
+    if request.url.path == "/auth/pair":
+        return JSONResponse({"detail": "Invalid pairing request"}, status_code=422)
+    from fastapi.exception_handlers import request_validation_exception_handler
+    return await request_validation_exception_handler(request, exc)
+
+
+@app.middleware("http")
+async def security_boundary(request: Request, call_next):
+    """Guard private data by default; allow only explicitly reviewed public market reads."""
+    path = request.url.path
+    method = request.method.upper()
+    private = not (method in {"GET", "HEAD"} and path in PUBLIC_GET_PATHS)
+
+    content_length = request.headers.get("content-length")
+    if content_length is not None:
+        try:
+            size = int(content_length)
+        except ValueError:
+            size = MAX_HTTP_BODY_BYTES + 1
+        if size < 0 or size > MAX_HTTP_BODY_BYTES:
+            response = JSONResponse({"detail": "Request body too large"}, status_code=413)
+            for key, value in security_headers(private).items():
+                response.headers[key] = value
+            return response
+
+    if len(request.scope.get("query_string", b"")) > 4096:
+        response = JSONResponse({"detail": "Query string too long"}, status_code=414)
+    else:
+        denied = private_http_error(method, path, request.headers)
+        if denied:
+            status, detail = denied
+            response = JSONResponse({"detail": detail}, status_code=status)
+        else:
+            if method == "POST" and path == "/auth/pair":
+                now = time.monotonic()
+                while pair_attempts and now - pair_attempts[0] >= 60.0:
+                    pair_attempts.popleft()
+                if len(pair_attempts) >= 10:
+                    response = JSONResponse({"detail": "Pairing temporarily unavailable"}, status_code=429)
+                    for key, value in security_headers(True).items():
+                        response.headers[key] = value
+                    return response
+                # Include malformed/oversized bodies in the attempt budget.
+                pair_attempts.append(now)
+            response = await call_next(request)
+
+    for key, value in security_headers(private).items():
+        response.headers[key] = value
+    return response
+
+
+# Bounded global rate limit resists spoofed client IPs and credential guessing
+# in the single-worker demo-only backend. Independent ingress throttling is still advised.
+pair_attempts: deque[float] = deque(maxlen=12)
+
+
+@app.post("/auth/pair")
+async def pair_device(payload: PairDevicePayload):
+    expected = owner_token()
+    if not expected:
+        raise HTTPException(status_code=503, detail="Private API is not provisioned")
+    candidate = payload.pairing_secret
+    if not candidate or len(candidate) > 512 or not hmac.compare_digest(candidate.encode("utf-8"), expected.encode("utf-8")):
+        raise HTTPException(status_code=401, detail="Pairing refused")
+    access_token, expires = issue_device_token(expected)
+    return {"access_token": access_token, "expires_at": expires, "token_type": "Bearer"}
 
 
 @app.get("/health")
@@ -804,6 +905,7 @@ async def health():
     return {
         "ok": True,
         "engine_revision": ENGINE_REVISION,
+        "build": BUILD_INFO,
         "symbol": state.symbol,
         "data_health": state.data_health,
         "ws_connected": state.ws_connected,
@@ -812,7 +914,8 @@ async def health():
         "data_age_ms": data_age,
         "book_age_ms": now - state.last_book_ts if state.last_book_ts else None,
         "trade_age_ms": now - state.last_trade_ts if state.last_trade_ts else None,
-        "signal": engine.active_signal,
+        # Health probes must not publish private trade plans or execution evidence.
+        "signal": None,
         "signal_state": engine.signal_status,
     }
 
@@ -1286,7 +1389,7 @@ async def config():
         ),
         "min_confidence": float(os.getenv("MIN_CONFIDENCE", str(engine.last_diagnostics.get("min_confidence", 0.52))),
         ),
-        "max_risk_pct": float(os.getenv("MAX_RISK_PCT", "1")),
+        "max_risk_pct": min(float(os.getenv("MAX_RISK_PCT", "1")), MAX_RISK_PCT),
         "max_daily_signals": int(os.getenv("MAX_DAILY_SIGNALS", str((engine.governor_status() or {}).get("daily_max", 3)))),
         "signal_cooldown_minutes": int(os.getenv("SIGNAL_COOLDOWN_MINUTES", str((engine.governor_status() or {}).get("cooldown_minutes", 120)))),
         "quality_min_confidence": float(os.getenv("QUALITY_MIN_CONFIDENCE", str((engine.governor_status() or {}).get("min_confidence", 0.70)))),
@@ -1303,8 +1406,21 @@ async def system_check_push(payload: PushTestPayload):
 
 @app.websocket("/ws")
 async def socket(ws: WebSocket):
-    await ws.accept()
+    # Browser Origin alone is not authentication. Owner authorization is mandatory.
+    if websocket_error(ws.headers):
+        await ws.close(code=1008)
+        return
+    if len(clients) >= MAX_CLIENTS:
+        await ws.close(code=1013)
+        return
+    # Reserve the listener slot before awaiting accept to prevent a parallel
+    # handshake burst from bypassing the connection cap.
     clients.add(ws)
+    try:
+        await ws.accept()
+    except Exception:
+        clients.discard(ws)
+        return
     client_failures[ws] = 0
     profile = ws.query_params.get("profile", "legacy")
     profile = profile if profile in {"dashboard", "alerts"} else "legacy"
@@ -1328,17 +1444,27 @@ async def socket(ws: WebSocket):
                 message = await asyncio.wait_for(ws.receive(), timeout=25.0)
                 if message.get("type") == "websocket.disconnect":
                     break
+                if websocket_error(ws.headers):
+                    await ws.close(code=1008)
+                    break
 
                 # Application-level keepalive creates regular inbound traffic on
                 # the long-lived mobile socket in addition to transport ping/pong.
                 if message.get("type") == "websocket.receive":
+                    if len(message.get("bytes") or b"") > 2048:
+                        await ws.close(code=1009)
+                        break
                     raw_text = message.get("text")
                     if raw_text:
+                        # Reject oversized application messages before JSON decoding.
+                        if len(raw_text.encode("utf-8")) > 2048:
+                            await ws.close(code=1009)
+                            break
                         try:
                             incoming = json.loads(raw_text)
                         except (TypeError, ValueError):
                             incoming = {}
-                        if incoming.get("type") == "keepalive":
+                        if isinstance(incoming, dict) and incoming.get("type") == "keepalive":
                             await asyncio.wait_for(
                                 ws.send_json({
                                     "type": "ack",
