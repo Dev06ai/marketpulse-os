@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import math
 from typing import Any
+from .risk import MAX_RISK_PCT
 
 VERSION = "router-supervisor-v3"
 MAX_EARLY = 12
@@ -37,12 +38,14 @@ def classify_setup(signal: dict) -> dict:
 
 def data_sentinel(market: dict) -> dict:
     """Critical quote freshness is blocking; stale auxiliary feeds are UNKNOWN."""
-    now = int(market.get("now_ms") or 0)
+    now_value = numeric(market.get("now_ms"))
+    now = int(now_value) if now_value is not None and now_value > 0 and now_value.is_integer() else 0
     def age(field: str, max_ms: int) -> dict:
-        ts = int(market.get(field) or 0)
-        if not now or not ts:
+        observed = numeric(market.get(field))
+        if (not now or observed is None or observed <= 0
+                or not observed.is_integer()):
             return {"status":"UNKNOWN","age_ms":None,"fresh_limit_ms":max_ms}
-        age_ms=now-ts
+        age_ms = now - int(observed)
         return {"status":"FRESH" if -1000<=age_ms<=max_ms else "STALE",
                 "age_ms":age_ms,"fresh_limit_ms":max_ms}
     quote=age("market_update_ms",3000)
@@ -104,8 +107,8 @@ def risk_guardian(signal: dict, *, selected: bool, max_leverage: int | None = No
         blockers.append("HTF_STRUCTURAL_RISK_BLOCKED")
     if max_leverage is not None and (max_leverage<1 or max_leverage>20):
         blockers.append("LEVERAGE_OUTSIDE_1_TO_20")
-    if max_risk_pct is not None and (not 0<max_risk_pct<=2):
-        blockers.append("EQUITY_RISK_EXCEEDS_2_PERCENT")
+    if max_risk_pct is not None and (not 0<max_risk_pct<=MAX_RISK_PCT):
+        blockers.append("EQUITY_RISK_EXCEEDS_1_PERCENT")
     return {
         "status":"REJECT" if blockers else ("PRECHECK_PASS" if net is not None else "PARTIAL_CHECK"),
         "blockers":blockers[:8],

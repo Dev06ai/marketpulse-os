@@ -27,88 +27,27 @@ jobs:
       - name: Require current-source and full-history secret checks
         run: python dev-trader/tools/security_scan.py --history
   native-host:
-    # Never restart the live Deplexo service while reviewing a PR.
-    if: github.event_name != 'pull_request'
+    name: Verified ZIP release gate
+    # The existing Deplexo app uses an uploaded ZIP, not Git auto-deploy.
+    # Restarting that app would rebuild the OLD ZIP, not this commit.
+    needs: [security, backend, free-container]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
-          fetch-depth: 2
-      - name: Detect backend execution changes
-        id: backend_changed
-        run: |
-          if git diff --name-only HEAD^ HEAD | grep -q '^dev-trader/backend/'; then
-            echo "backend_changed=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "backend_changed=false" >> "$GITHUB_OUTPUT"
-          fi
-      - uses: actions/setup-java@v4
+          python-version: '3.12'
+      - name: Package the tested source with its commit identity
+        run: python dev-trader/tools/package_release.py --output release-artifacts/KYVORIQ-deplexo-backend.zip > release-artifacts-manifest.json
+      - uses: actions/upload-artifact@v4
         with:
-          distribution: temurin
-          java-version: '21'
-      - name: Request Deplexo backend redeploy
-        if: steps.backend_changed.outputs.backend_changed == 'true'
-        env:
-          DEPLEXO_TOKEN: ${{ secrets.DEPLEXO_TOKEN }}
-          DEPLEXO_APP_ID: ${{ secrets.DEPLEXO_APP_ID }}
-        run: |
-          if [ -z "${DEPLEXO_TOKEN:-}" ]; then
-            echo "DEPLEXO_TOKEN is not configured in repository secrets; relying on Deplexo git auto-deploy."
-            exit 0
-          fi
-          APP_ID="${DEPLEXO_APP_ID:-}"
-          if [ -z "$APP_ID" ]; then
-            ME="$(curl -fsS --max-time 20 -H "Authorization: Bearer $DEPLEXO_TOKEN" https://deplexo.com/user/api/v1/me)"
-            APP_ID="$(printf '%s' "$ME" | jq -r '.apps[]? | select(((.name // "") | ascii_downcase | contains("dev-trader"))) | .id' | head -n 1)"
-          fi
-          if [ -z "$APP_ID" ] || [ "$APP_ID" = "null" ]; then
-            echo "Could not resolve the Deplexo app id. Set DEPLEXO_APP_ID in repository secrets."
-            exit 1
-          fi
-          curl -fsS --max-time 30             -H "Authorization: Bearer $DEPLEXO_TOKEN"             -H 'Content-Type: application/json'             --data "{\"commitSha\":\"$GITHUB_SHA\"}"             "https://deplexo.com/user/api/v1/apps/$APP_ID/restart"
-          echo
-          echo "Deplexo rebuild requested for $GITHUB_SHA"
-      - uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: '9.6.0'
-      - name: Verify live host after backend changes
-        if: steps.backend_changed.outputs.backend_changed == 'true'
-        run: |
-          ok=false
-          for attempt in {1..4}; do
-            echo "Strict host probe attempt $attempt/4"
-            if gradle -p dev-trader/tools/host-probe run --args='https://dev-trader-engine.de.deplexo.com' --stacktrace; then
-              ok=true
-              break
-            fi
-            if [ "$attempt" -lt 4 ]; then
-              sleep $((attempt * 10))
-            fi
-          done
-          test "$ok" = "true"
-      - name: Report live host health for client-only changes
-        if: steps.backend_changed.outputs.backend_changed != 'true'
-        continue-on-error: true
-        run: |
-          gradle -p dev-trader/tools/host-probe run --args='https://dev-trader-engine.de.deplexo.com' --stacktrace
-      - name: Wait for audited Deplexo decision-engine backend v3.8
-        if: steps.backend_changed.outputs.backend_changed == 'true'
-        run: |
-          ok=false
-          for attempt in {1..42}; do
-            BOOTSTRAP="$(curl -fsS --max-time 12 'https://dev-trader-engine.de.deplexo.com/bootstrap?profile=dashboard' 2>/dev/null || true)"
-            POLICY="$(printf '%s' "$BOOTSTRAP" | jq -r '.execution.summary.execution_policy // "UNKNOWN"' 2>/dev/null || echo UNKNOWN)"
-            REVISION="$(printf '%s' "$BOOTSTRAP" | jq -r '.engine.engine_revision // .engine_revision // "UNKNOWN"' 2>/dev/null || echo UNKNOWN)"
-            PACK="$(curl -fsS --max-time 12 'https://dev-trader-engine.de.deplexo.com/level-pack' 2>/dev/null || true)"
-            PACK_OK="$(printf '%s' "$PACK" | jq -r '(.pack_id == "dewald_levels_2026_10_07") and (.enabled == true)' 2>/dev/null || echo false)"
-            echo "Deplexo check $attempt/42 • revision=$REVISION • policy=$POLICY • reaction_pack=$PACK_OK"
-            if [ "$REVISION" = "market-decision-v3.8" ] &&                [ "$POLICY" = "CONFIDENCE_MARGIN_20X_FEE_ADJUSTED" ] &&                [ "$PACK_OK" = "true" ]; then
-              ok=true
-              break
-            fi
-            sleep 10
-          done
-          test "$ok" = "true"
+          name: kyvoriq-deplexo-backend
+          path: |
+            release-artifacts/KYVORIQ-deplexo-backend.zip
+            release-artifacts-manifest.json
+          if-no-files-found: error
+      - name: Record rollout requirement
+        run: echo 'ZIP ready for the existing service. Follow dev-trader/SECURITY-ROLLOUT.md; no production deployment was performed by CI.'
   free-container:
     runs-on: ubuntu-latest
     steps:
@@ -127,10 +66,14 @@ jobs:
           docker build -t dev-trader-free dev-trader/backend
           # Cold-start and invoke the compiled multi-agent graph under the free host limit.
           docker run --rm --memory=128m --cpus=.25 dev-trader-free python -c 'from app.decision_graph import review_decision; import time; now=int(time.time()*1000); market=dict(health="HEALTHY",connected=True,now_ms=now,market_update_ms=now,bid=99,ask=101,spread_bps=0.1); sig=dict(id="probe",direction="LONG",entry=100,stop=99,target2=103,rr=3,grade="A",evidence={}); out=review_decision(market,[sig],"probe"); assert out["action"]=="APPROVE",out; assert len(out["agents"])==4; print("LANGGRAPH_128MB_OK",out["duration_ms"])'
+          # Ephemeral CI-only auth: never reuse or log a production credential.
+          export KYVORIQ_API_OWNER_TOKEN="$(python -c 'import secrets; print(secrets.token_urlsafe(48))')"
+          echo "::add-mask::$KYVORIQ_API_OWNER_TOKEN"
+          export KYVORIQ_SMOKE_OWNER_TOKEN="$KYVORIQ_API_OWNER_TOKEN"
           docker volume create dev-trader-smoke-data
           docker run -d --name dev-trader-smoke --memory=128m --cpus=.25 \
             --read-only --tmpfs /tmp:rw,noexec,size=100m \
-            -v dev-trader-smoke-data:/data -p 3000:3000 dev-trader-free
+            -v dev-trader-smoke-data:/data -p 3000:3000 -e KYVORIQ_API_OWNER_TOKEN dev-trader-free
           for attempt in {1..30}; do
             if curl -fsS http://127.0.0.1:3000/health >/dev/null; then break; fi
             sleep 1
@@ -160,24 +103,6 @@ jobs:
       - run: pip install -r requirements.txt pytest hypothesis==6.168.5
       - run: python -m py_compile app/*.py
       - run: pytest -q
-      - name: Package verified Deplexo backend
-        run: |
-          rm -rf deplexo-package KYVORIQ-deplexo-backend.zip
-          mkdir -p deplexo-package
-          # Deplexo validates deplexo.yaml against a schema that does not
-          # accept the old framework: dockerfile field. Let it detect the
-          # top-level Dockerfile instead, as its ZIP upload UI recommends.
-          cp -R app knowledge Dockerfile requirements-core.txt requirements.txt .dockerignore .env.example deplexo-package/
-          find deplexo-package -type d -name __pycache__ -prune -exec rm -rf {} +
-          find deplexo-package -type f \( -name '*.pyc' -o -name '*.pyo' \) -delete
-          (cd deplexo-package && zip -qr ../KYVORIQ-deplexo-backend.zip .)
-          # Prevent a future broken manifest or nested-root ZIP release.
-          python -c 'import zipfile; z=zipfile.ZipFile("KYVORIQ-deplexo-backend.zip"); names=set(z.namelist()); assert "Dockerfile" in names and "app/main.py" in names; assert "deplexo.yaml" not in names; assert z.testzip() is None'
-      - uses: actions/upload-artifact@v4
-        with:
-          name: kyvoriq-deplexo-backend
-          path: dev-trader/backend/KYVORIQ-deplexo-backend.zip
-          if-no-files-found: error
 
   android:
     runs-on: ubuntu-latest
@@ -204,7 +129,7 @@ jobs:
           gradle-version: '9.6.0'
       - name: Build Android debug APK
         working-directory: dev-trader/android
-        run: gradle assembleDebug --stacktrace -PdevTraderVersionCode=131 -PdevTraderVersionName=0.21.6
+        run: gradle assembleDebug --stacktrace
       - name: Build signed Android release APK
         if: steps.changed.outputs.android_changed == 'true'
         working-directory: dev-trader/android
@@ -215,7 +140,7 @@ jobs:
           DEV_TRADER_KEY_PASSWORD: ${{ secrets.DEV_TRADER_KEY_PASSWORD }}
         run: |
           echo "${{ secrets.DEV_TRADER_KEYSTORE_BASE64 }}" | base64 --decode > "$DEV_TRADER_KEYSTORE_PATH"
-          gradle assembleRelease --stacktrace -PdevTraderVersionCode=131 -PdevTraderVersionName=0.21.6
+          gradle assembleRelease --stacktrace
           if unzip -l app/build/outputs/apk/release/app-release.apk | grep -q ui_preview.json; then
             echo 'Debug preview data must never be included in release APKs.'
             exit 1
@@ -309,7 +234,9 @@ jobs:
           mkdir -p release
           cp dist/app-release.apk release/app-release.apk
           sha256sum release/app-release.apk | awk '{print $1}' > release/app-release.sha256
-          echo "tag=dev-trader-v0.21.6-131" >> "$GITHUB_OUTPUT"
+          # Derive the tag/manifest version from the same Gradle defaults
+          # used to build this APK. Refuse to overwrite a released version.
+          python3 dev-trader/tools/android_release_version.py --github-output "$GITHUB_OUTPUT"
           echo "sha256=$(cat release/app-release.sha256)" >> "$GITHUB_OUTPUT"
       - name: Create GitHub release
         env:
@@ -319,10 +246,14 @@ jobs:
             echo "This release already exists; refusing to replace a published APK."
             exit 1
           fi
-          gh release create "${{ steps.release.outputs.tag }}" release/app-release.apk --target "$GITHUB_SHA" --title "KYVORIQ 0.21.6 (131)" --notes "Opt-in Android Keystore device pairing; no backend or Bitget strategy changes. Existing mobile functionality remains compatible."
+          gh release create "${{ steps.release.outputs.tag }}" release/app-release.apk --target "$GITHUB_SHA" --title "KYVORIQ ${{ steps.release.outputs.version_name }} (${{ steps.release.outputs.version_code }})" --notes "${{ steps.release.outputs.notes }}"
       - name: Publish verified update manifest
         env:
           SHA256: "${{ steps.release.outputs.sha256 }}"
+          VERSION_CODE: "${{ steps.release.outputs.version_code }}"
+          VERSION_NAME: "${{ steps.release.outputs.version_name }}"
+          APK_URL: "${{ steps.release.outputs.apk_url }}"
+          RELEASE_NOTES: "${{ steps.release.outputs.notes }}"
         run: |
           git fetch origin dev-trader-v1
           git reset --hard origin/dev-trader-v1
@@ -331,13 +262,16 @@ jobs:
           from pathlib import Path
           p = Path("dev-trader/update.json")
           data = json.loads(p.read_text())
+          next_code = int(os.environ["VERSION_CODE"])
+          if int(data.get("versionCode", 0)) >= next_code:
+              raise SystemExit("Update manifest is already at or above this version")
           data.update({
               "enabled": True,
-              "versionCode": 131,
-              "versionName": "0.21.6",
-              "apkUrl": "https://github.com/Dev06ai/marketpulse-os/releases/download/dev-trader-v0.21.6-131/app-release.apk",
+              "versionCode": next_code,
+              "versionName": os.environ["VERSION_NAME"],
+              "apkUrl": os.environ["APK_URL"],
               "sha256": os.environ["SHA256"],
-              "notes": "KYVORIQ 0.21.6 • opt-in secure device pairing • existing demo engine unchanged"
+              "notes": os.environ["RELEASE_NOTES"]
           })
           p.write_text(json.dumps(data, indent=2) + "\n")
           PY

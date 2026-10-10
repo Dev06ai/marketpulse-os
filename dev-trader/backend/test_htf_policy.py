@@ -121,14 +121,14 @@ def test_rsi_and_volume_weighted_macd_are_confirmed_only():
     assert volume_weighted_macd(state.candles_60)["direction"]=="UNKNOWN"
 
 
-def test_user_selected_20x_is_respected_but_risk_3_clamps_to_2(monkeypatch,tmp_path):
+def test_user_selected_20x_is_respected_but_risk_3_clamps_to_1(monkeypatch,tmp_path):
     monkeypatch.setenv("BITGET_DEMO_LEVERAGE","20")
     monkeypatch.setenv("BITGET_DEMO_MAX_PLANNED_LOSS_PCT","3")
     monkeypatch.setenv("BITGET_EXECUTION_STATE_FILE",str(tmp_path/"execution.json"))
     executor=DemoExecutionEngine(learning=None)
     assert executor.leverage==20
-    assert executor.max_planned_loss_pct==2.0
-    assert executor.risk_pct==2.0
+    assert executor.max_planned_loss_pct==1.0
+    assert executor.risk_pct==1.0
 
 
 def test_exchange_client_rejects_any_direct_request_above_20x():

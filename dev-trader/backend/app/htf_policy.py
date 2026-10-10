@@ -8,9 +8,10 @@ from __future__ import annotations
 
 import math
 from typing import Any
+from .risk import MAX_RISK_PCT
+from .models import aggregate_candles
 
 MAX_LEVERAGE = 20
-MAX_RISK_PCT = 2.0
 MIN_GROSS_RR = 2.5
 MIN_NET_RR = 2.5
 POLICY_VERSION = "btc-htf-derivatives-risk-v1"
@@ -138,14 +139,17 @@ def _atr_hourly(bars: list) -> float | None:
     return result if result>0 and math.isfinite(result) else None
 
 
-def structural_stop(state, signal: dict, features) -> dict:
+def structural_stop(state, signal: dict, features, now_ms: int | None = None) -> dict:
     """Require a nearby, observed invalidation; preserve 15m reversal stops."""
     direction=str(signal.get("direction") or "").upper()
     entry,stop=number(signal.get("entry")),number(signal.get("stop"))
     if direction not in {"LONG","SHORT"} or entry is None or stop is None or entry<=0 or stop<=0:
         return {"ok":False,"why":"INVALID_PLAN","structural_anchor":None}
     long=direction=="LONG"
-    hourly=[c for c in state.candles_60 if c.confirmed]
+    # A future-stamped "confirmed" bar cannot anchor a live protective stop.
+    # Direct callers retain the old snapshot contract when no cutoff is passed.
+    eligible = lambda c: c.confirmed and (now_ms is None or c.end < now_ms)
+    hourly=sorted((c for c in state.candles_60 if eligible(c)), key=lambda c:c.start)
     atr=_atr_hourly(hourly)
     if atr is None:
         return {"ok":False,"why":"INSUFFICIENT_CONFIRMED_ATR","structural_anchor":None}
@@ -159,8 +163,9 @@ def structural_stop(state, signal: dict, features) -> dict:
         distance=(entry-value) if long else (value-entry)
         if 0<distance<=4*atr: bounds.append((distance,source,value))
     add("1H_CONFIRMED_SWING",_recent_pivot(hourly[-80:],"low" if long else "high"))
-    add("4H_CONFIRMED_SWING",_recent_pivot(state.candles_4h()[-35:],"low" if long else "high"))
-    add("15M_CONFIRMED_SWING",_recent_pivot([c for c in state.candles_15 if c.confirmed][-80:],
+    add("4H_CONFIRMED_SWING",_recent_pivot(aggregate_candles(hourly,4)[-35:],"low" if long else "high"))
+    add("15M_CONFIRMED_SWING",_recent_pivot(sorted(
+        (c for c in state.candles_15 if eligible(c)), key=lambda c:c.start)[-80:],
                                            "low" if long else "high"))
     for tf in ("15m","1h","4h"):
         ob=(features.order_blocks or {}).get(tf) or {}
@@ -171,7 +176,7 @@ def structural_stop(state, signal: dict, features) -> dict:
     age=number(evidence.get("level_reaction_age_ms"))
     if (str(reaction.get("direction") or "").upper()==direction
             and str(reaction.get("reaction_status") or "").upper()=="READY"
-            and int(reaction.get("reaction_score") or 0)>=3
+            and (number(reaction.get("reaction_score")) or 0)>=3
             and age is not None and 0<=age<=120_000):
         values=[number(reaction.get(key)) for key in (
             ("reaction_candle_low","zone_low") if long else
@@ -198,8 +203,17 @@ def structural_stop(state, signal: dict, features) -> dict:
 
 
 def derivatives_context(state, now_ms: int) -> dict:
-    oi=list(state.oi_window or [])
-    oi=sorted((int(t),float(v)) for t,v in oi if number(v) is not None and v>0 and int(t)<=now_ms+1000)
+    oi=[]
+    # Malformed optional derivatives telemetry must not interrupt price/structure
+    # admission, nor fabricate a current 5-minute OI observation.
+    for row in (state.oi_window or [])[-500:]:
+        if not isinstance(row,(tuple,list)) or len(row)<2:
+            continue
+        timestamp, value = number(row[0]), number(row[1])
+        if (timestamp is not None and timestamp.is_integer() and
+                0 < timestamp <= now_ms and value is not None and value > 0):
+            oi.append((int(timestamp), value))
+    oi.sort()
     oi_5m=None
     if oi and now_ms-oi[-1][0] <= 120_000:
         end_ts,end_value=oi[-1]
@@ -210,9 +224,10 @@ def derivatives_context(state, now_ms: int) -> dict:
     fresh_liqs=[]
     for raw in (state.liquidation_window or [])[-240:]:
         try:
-            if 0<=now_ms-int(raw[0])<=300_000:
+            timestamp=number(raw[0])
+            if timestamp is not None and timestamp.is_integer() and 0 <= now_ms-timestamp <= 300_000:
                 fresh_liqs.append(raw)
-        except (ValueError, TypeError, IndexError):
+        except (ValueError, TypeError, IndexError, KeyError):
             continue
     funding=number(state.funding_rate)
     # MarketState currently has no venue-specific funding update timestamp;
@@ -224,8 +239,8 @@ def derivatives_context(state, now_ms: int) -> dict:
         "oi_5m_pct": oi_5m,
         "oi_status": "OBSERVED_RECENT_5M_CHANGE" if oi_5m is not None else "UNVERIFIED",
         "fresh_liquidation_events": len(fresh_liqs),
-        "long_liquidations_5m": round(float(state.liquidation_long_5m or 0),4) if fresh_liqs else None,
-        "short_liquidations_5m": round(float(state.liquidation_short_5m or 0),4) if fresh_liqs else None,
+        "long_liquidations_5m": round(number(state.liquidation_long_5m),4) if fresh_liqs and number(state.liquidation_long_5m) is not None else None,
+        "short_liquidations_5m": round(number(state.liquidation_short_5m),4) if fresh_liqs and number(state.liquidation_short_5m) is not None else None,
         "squeeze_hypothesis": "NO_CONFIRMED_SQUEEZE",
         "squeeze_reliability": "INSUFFICIENT_FUNDING_FRESHNESS",
     }
@@ -243,15 +258,19 @@ def evaluate_htf_policy(state, signal: dict, features, now_ms: int) -> dict:
     blocked=[]
     if not state.ws_connected or state.data_health!="HEALTHY":
         blocked.append("MARKET_DATA_UNHEALTHY")
-    quote=int(state.last_market_update_ts or 0)
-    if not quote or not -1000<=now_ms-quote<=3000:
+    quote=number(state.last_market_update_ts)
+    if quote is None or quote <= 0 or not -1000 <= now_ms-quote <= 3000:
         blocked.append("MARKET_QUOTE_STALE")
     if direction not in {"LONG","SHORT"} or any(x is None or x<=0 for x in (entry,stop,target2)):
         blocked.append("INVALID_PLAN")
     elif (direction=="LONG" and not stop<entry<target2) or (direction=="SHORT" and not target2<entry<stop):
         blocked.append("INVALID_PRICE_GEOMETRY")
-    hourly=[c for c in state.candles_60 if c.confirmed]
-    fourhour=state.candles_4h()
+    # Only fully ended, confirmed context existing at the decision timestamp
+    # is admissible. Derived 4H bars must come from the same causal 1H prefix.
+    hourly=sorted((c for c in state.candles_60
+                   if c.confirmed and 0 < c.start <= c.end < now_ms),
+                  key=lambda c:c.start)
+    fourhour=aggregate_candles(hourly,4)
     if len(hourly)<20 or len(fourhour)<6:
         blocked.append("INSUFFICIENT_CONFIRMED_1H_4H_CONTEXT")
     else:
@@ -281,7 +300,7 @@ def evaluate_htf_policy(state, signal: dict, features, now_ms: int) -> dict:
     # A measured SFP/level reaction with 1H/4H resistance against it is still
     # eligible when the existing strategy confirmed the reversal. No votes
     # are added to the existing confidence score.
-    structure=structural_stop(state,signal,features)
+    structure=structural_stop(state,signal,features,now_ms=now_ms)
     if not structure["ok"]: blocked.append(structure["why"])
     gross_rr=net_rr=0.0
     if direction in {"LONG","SHORT"} and all(v is not None and v>0 for v in (entry,stop,target2)) and entry!=stop:
