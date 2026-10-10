@@ -176,7 +176,7 @@ def structural_stop(state, signal: dict, features, now_ms: int | None = None) ->
     age=number(evidence.get("level_reaction_age_ms"))
     if (str(reaction.get("direction") or "").upper()==direction
             and str(reaction.get("reaction_status") or "").upper()=="READY"
-            and int(reaction.get("reaction_score") or 0)>=3
+            and (number(reaction.get("reaction_score")) or 0)>=3
             and age is not None and 0<=age<=120_000):
         values=[number(reaction.get(key)) for key in (
             ("reaction_candle_low","zone_low") if long else
@@ -259,7 +259,7 @@ def evaluate_htf_policy(state, signal: dict, features, now_ms: int) -> dict:
     if not state.ws_connected or state.data_health!="HEALTHY":
         blocked.append("MARKET_DATA_UNHEALTHY")
     quote=number(state.last_market_update_ts)
-    if quote is None or not 0 < quote <= now_ms or now_ms-quote > 3000:
+    if quote is None or quote <= 0 or not -1000 <= now_ms-quote <= 3000:
         blocked.append("MARKET_QUOTE_STALE")
     if direction not in {"LONG","SHORT"} or any(x is None or x<=0 for x in (entry,stop,target2)):
         blocked.append("INVALID_PLAN")
