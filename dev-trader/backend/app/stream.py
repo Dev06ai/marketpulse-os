@@ -449,10 +449,21 @@ class BitgetMarketStream:
         self.on_state = on_state
         self.state = MarketState(symbol=symbol)
         demo = str(os.getenv("BITGET_DEMO_TRADING", "false")).lower() in {"1", "true", "yes", "on"}
+        # Demo orders use authenticated Bitget PAP; observation uses the same
+        # real-market public venue as the exchange-price admission REST quote.
+        # The PAP public WS can have sparse books/trades on virtual markets,
+        # so never depend on that feed for genuine market participation.
+        # The old PAP public feed remains an explicit, reversible override.
         self.url = os.getenv(
-            "BITGET_PUBLIC_WS_URL",
-            "wss://wspap.bitget.com/v3/ws/public" if demo else "wss://ws.bitget.com/v3/ws/public",
+            "BITGET_PUBLIC_WS_URL", "wss://ws.bitget.com/v3/ws/public",
         )
+        known_public_sources = {
+            "wss://ws.bitget.com/v3/ws/public": "LIVE_PUBLIC_MARKET_DATA",
+            "wss://wspap.bitget.com/v3/ws/public": "DEMO_PUBLIC_MARKET_DATA",
+        }
+        if self.url not in known_public_sources:
+            raise ValueError("Untrusted Bitget public market WebSocket URL; only official v3 endpoints are permitted.")
+        self.public_market_venue = known_public_sources[self.url]
         self.rest_base = os.getenv("BITGET_BASE_URL", "https://api.bitget.com").rstrip("/")
         self.product_type = os.getenv("BITGET_PRODUCT_TYPE", "USDT-FUTURES")
         self.stop = False
@@ -1020,9 +1031,18 @@ class BitgetMarketStream:
         await self.on_state(self.state)
 
     def feed_diagnostics(self) -> dict:
+        now = int(time.time() * 1000)
+        def age(ts):
+            return now-ts if ts else None
         return {"subscriptions": self.subscription_status, "packets": self.channel_packets,
-                "binary_packets": self.binary_packets, "last_book_ts": self.state.last_book_ts,
-                "critical_stall": self._critical_channel_stall(int(time.time()*1000)),
+                "public_market_venue": self.public_market_venue,
+                "binary_packets": self.binary_packets,
+                "last_book_ts": self.state.last_book_ts,
+                "quote_age_ms": age(self.state.last_market_update_ts),
+                "book_age_ms": age(self.state.last_book_ts),
+                "trade_age_ms": age(self.state.last_trade_ts),
+                "kline_15_age_ms": age(self.state.last_kline_15_ts),
+                "critical_stall": self._critical_channel_stall(now),
                 "critical_reconnect_count": self.critical_reconnect_count}
 
     def _refresh_data_health(self, now: int):
