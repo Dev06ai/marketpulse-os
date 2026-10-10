@@ -22,6 +22,13 @@ Last updated: 2026-10-10; current draft PR #124 branch \`codex/kyvoriq-live-feed
 | 14. Insufficient available margin | \`test_execution.py::test_demo_execution_rejects_zero_futures_balance\`, \`test_risk_sizing_contract.py::test_final_balance_drop_blocks_submission_even_when_risk_fits\` | Live demo account constraint/fee risk evidence for safe skip without order |
 | 15. Stale or inconsistent market data | \`test_book_freshness.py::test_delayed_book_cannot_use_newer_push_timestamp_as_freshness\`, \`test_system_audit.py::test_feed_loss_during_leverage_verification_blocks_submission\`, \`test_critical_feed_stall.py::test_quote_only_is_not_critical_depth_and_trades\` | Live Bitget demo channel freshness, bounded reconnect, zero new entries under DEGRADED and recovery when truly fresh |
 
+## Latest execution-accounting integrity fixes
+
+- **Original Phases 7/10/14/15:** `execution._finalize_trade` no longer assumes an unknown local fill owns 100% of Bitget's aggregate closed-position PnL. Missing/excessive aggregate quantity and explicitly unconfirmed fills remain `RECONCILIATION_PENDING`, with no finalized win/loss and no learning feedback.
+- Missing, malformed, NaN or infinite exchange `netProfit` can no longer silently fall back to *gross* PnL and be presented as a fee-aware trade return.
+- Regression module `test_phase14_realized_fill_attribution.py` covers unknown sizes, contradictory fills, proportional ownership of verified aggregate results, missing/invalid net PnL and no learning from unverified outcomes.
+- These checks protect metrics integrity, not guaranteed trading profitability. No artificial Bitget trades were placed during this code review.
+
 ## Distinct acceptance layers
 
 1. **Deterministic/mock**: Confirm correct decisions under artificial state. CI backend suite is necessary but not a Bitget fill.
