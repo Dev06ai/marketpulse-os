@@ -1523,7 +1523,7 @@ class DemoExecutionEngine:
         quantity_tolerance = max(1e-8, aggregate_qty * 1e-6)
         if (local_qty <= 0 or aggregate_qty <= 0 or
                 local_qty > aggregate_qty + quantity_tolerance or
-                not trade.get("actual_fill_confirmed")):
+                trade.get("actual_fill_confirmed") is False):
             trade["status"] = "RECONCILIATION_PENDING"
             trade["reconciliation_warning"] = (
                 "Closed exchange position found, but entry fill ownership or "
