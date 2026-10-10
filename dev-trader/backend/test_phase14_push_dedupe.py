@@ -87,3 +87,19 @@ def test_cache_is_bounded_and_clock_allows_expiry(monkeypatch):
     for i in range(1100):
         service._notification_sent("phone-one","opportunity",str(i))
     assert len(service._sent_notifications)<=1024
+
+
+def test_distinct_management_actions_on_same_signal_are_delivered(monkeypatch):
+    service,client=configured(monkeypatch)
+    signal={"id":"pos-1","evidence":{"position_management":{
+        "from_direction":"LONG","to_direction":"LONG",
+        "type":"STOP_ADJUSTMENT","status":"PROTECTION","action":"Tighten stop",
+        "open_pnl_r":1.5,
+    }}}
+    service.send_signal(signal)
+    service.send_signal(signal)
+    signal["evidence"]["position_management"] = {
+        **signal["evidence"]["position_management"], "action":"Exit invalidated position",
+    }
+    service.send_signal(signal)
+    assert len(client.messages)==4
