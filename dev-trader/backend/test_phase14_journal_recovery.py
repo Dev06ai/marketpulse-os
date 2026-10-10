@@ -91,3 +91,42 @@ def test_background_save_refuses_to_destroy_unreadable_original(monkeypatch,tmp_
     bot.data["last_sync_ts"]=9_999_999
     assert bot._save() is False
     assert p.read_text()==original
+
+
+def test_new_order_history_trim_never_loses_older_live_exposure(monkeypatch,tmp_path):
+    p=tmp_path/"ongoing.json"
+    bot=engine_at(monkeypatch,p)
+    existing=[{"status":"CLOSED","execution_id":f"done-{i}"} for i in range(650)]
+    existing.extend([
+        {"status":"OPEN","execution_id":"old-open","client_oid":"DTDEMO-old-open"},
+        {"status":"SUBMISSION_UNKNOWN","execution_id":"unknown","client_oid":"DTDEMO-unknown"},
+        {"status":"RECONCILIATION_PENDING","execution_id":"reconcile","client_oid":"DTDEMO-reconcile"},
+    ])
+    bot.data["trades"]=[{"status":"ORDER_PENDING","execution_id":"new","client_oid":"DTDEMO-new"}]+existing
+    bot.data["trades"]=bot._cap_terminal_history(bot.data["trades"])
+    assert sum(t["status"]=="CLOSED" for t in bot.data["trades"])==500
+    assert {t["execution_id"] for t in bot.data["trades"] if t["status"]!="CLOSED"}=={
+        "new","old-open","unknown","reconcile"}
+    assert bot._save()
+    restarted=engine_at(monkeypatch,p)
+    ids={t.get("execution_id") for t in restarted.data["trades"]}
+    assert {"new","old-open","unknown","reconcile"}.issubset(ids)
+
+
+def test_failed_submission_record_does_not_evict_pending_order():
+    from app.execution import DemoExecutionEngine
+    rows=[{"status":"FAILED","execution_id":str(i)} for i in range(520)]
+    rows.append({"status":"SUBMISSION_UNKNOWN","execution_id":"ambiguous"})
+    result=DemoExecutionEngine._cap_terminal_history(
+        [{"status":"SUBMISSION_UNKNOWN","execution_id":"newest"}]+rows
+    )
+    assert sum(t["status"]=="FAILED" for t in result)==500
+    assert {"newest","ambiguous"}.issubset({t["execution_id"] for t in result})
+
+
+def test_cap_preserves_all_unresolved_under_memory_pressure():
+    from app.execution import DemoExecutionEngine
+    rows=[{"status":"OPEN","execution_id":str(i)} for i in range(520)]
+    trimmed=DemoExecutionEngine._cap_terminal_history(rows)
+    assert len(trimmed)==520
+    assert len({row["execution_id"] for row in trimmed})==520
