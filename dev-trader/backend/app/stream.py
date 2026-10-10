@@ -467,6 +467,7 @@ class BitgetMarketStream:
         self.delta_base = 0.0
         self.recent_exec_ids: set[str] = set()
         self._last_windows_trim_ms = 0
+        self._last_liquidation_count = 0
         self.last_ws_packet_ms = 0
         self.subscription_status: dict[str, dict] = {}
         self.channel_packets: dict[str, int] = {}
@@ -791,7 +792,8 @@ class BitgetMarketStream:
         # windows remain intact, and cleanup is forced for oversized bursts.
         elapsed = now - self._last_windows_trim_ms
         if (0 <= elapsed < 1000 and len(self.state.flow_history) <= 5500
-                and len(self.recent_exec_ids) <= 2500):
+                and len(self.recent_exec_ids) <= 2500
+                and len(self.state.liquidation_window) == self._last_liquidation_count):
             return
         self._last_windows_trim_ms = now
         cutoff = now - 15 * 60_000
@@ -807,6 +809,8 @@ class BitgetMarketStream:
             v for ts, side, v in self.state.liquidation_window
             if side == "SHORT" and ts >= now - 5 * 60_000
         )
+        # New liquidation evidence must never wait for the next batch.
+        self._last_liquidation_count = len(self.state.liquidation_window)
         if len(self.recent_exec_ids) > 2000:
             self.recent_exec_ids = set(list(self.recent_exec_ids)[-2000:])
 
