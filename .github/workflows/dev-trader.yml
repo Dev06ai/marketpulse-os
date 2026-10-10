@@ -13,9 +13,16 @@ on:
       - 'dev-trader/**'
       - '.github/workflows/dev-trader.yml'
   workflow_dispatch:
+    inputs:
+      publish_android:
+        description: 'Explicitly publish a KYVORIQ APK asset (PUBLIC when repository is public)'
+        type: boolean
+        required: true
+        default: false
 
+# Least privilege by default. Only the opt-in publish job can write releases.
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   security:
@@ -220,7 +227,7 @@ jobs:
       group: dev-trader-release
       cancel-in-progress: false
     needs: [android, backend, visual-check, free-container, native-host, security]
-    if: github.event_name != 'pull_request' && needs.android.outputs.android_changed == 'true'
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev-trader-v1' && inputs.publish_android == true && needs.android.outputs.android_changed == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
