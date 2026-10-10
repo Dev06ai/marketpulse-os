@@ -291,13 +291,15 @@ def test_only_exchange_trade_profile_exact_npoc_can_arm_level():
         "untouched_poc": 100.0, "exact_npoc": False,
         "profile_status": "ESTIMATED",
     })
-    assert not any(r["kind"] == "NPOC" for r in collect_reaction_levels(estimated))
+    assert not any(r["kind"] == "NPOC" and r.get("source") == "EXECUTED_TRADE_PROFILE"
+                   for r in collect_reaction_levels(estimated))
     exact = MarketFeatures(volume_context={
         "untouched_poc": 100.0, "exact_npoc": True,
         "profile_status": "VERIFIED",
     })
     rows = collect_reaction_levels(exact)
-    assert any(r["kind"] == "NPOC" and r["price"] == 100 for r in rows)
+    assert any(r["kind"] == "NPOC" and r["price"] == 100
+               and r.get("source") == "EXECUTED_TRADE_PROFILE" for r in rows)
 
 
 def test_verified_npoc_touch_only_arms_until_fresh_reclaim():
