@@ -17,7 +17,7 @@ daily trade quotas, exchange reconciliation, or protective order behavior.
 | Workstream | Existing implementation/evidence | Required to claim accepted |
 | --- | --- | --- |
 | 1. Baseline and observability | Backend unit tests; CI; build/source hash | Time-stamped frozen baseline of rejected setups, trade latency, feed health, fee-aware fills |
-| 2. Market structure | `strategy.py`, `structure.py`, higher-timeframe policy | Independent replay scenarios with confirmed market structure and no future candles |
+| 2. Market structure | `strategy.py`, `structure.py`, higher-timeframe policy; causal confirmed-bar replay filtering under PR #122 | Independent replay scenarios with confirmed market structure and no future candles |
 | 3. Trading concepts | SFP, breakout, D-Line, liquidity context detectors | Detector-level precision/recall on pre-registered event data; no synthetic fill claims |
 | 4. Anticipatory lifecycle | Radar and developing/confirmed opportunities | Transitions WAIT→ARMED→CONFIRMED→CANCELLED with dedup/cooldown tests under reconnect |
 | 5. Missed opportunities | Candidate fallback fix + 8 regressions in `32ea6ca` | Chronological old/new replay and missed-vs-false-positive measurements |
@@ -89,3 +89,7 @@ estimates.
 **Latest work branch:** `codex/kyvoriq-phase-evidence-20261010`.
 This branch adds an independent evaluator and acceptance record; it does not
 change order entry rules or active server deployment.
+
+## Causal-replay safety milestone (PR #122)
+
+Review of `app/evaluation.py::replay_decisions` found an unconditional inclusion of historical unconfirmed candles, even when their recorded `end` timestamp was in the future. This created retrospective look-ahead contamination. The inspector now strictly accepts only geometrically valid confirmed candles with `end < decision_timestamp` for each timeframe and excludes malformed/noncausal rows. Regression tests cover future/open bars, malformed data, invalid decision timestamps and corrected duplicate bars. This is **not** an independent trading performance test; it is a necessary prerequisite for chronological review. Do not use its historical displayed setup outcomes to promote a strategy without broker-reconciled forward evidence.
