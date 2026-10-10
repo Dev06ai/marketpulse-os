@@ -129,7 +129,7 @@ jobs:
           gradle-version: '9.6.0'
       - name: Build Android debug APK
         working-directory: dev-trader/android
-        run: gradle assembleDebug --stacktrace -PdevTraderVersionCode=131 -PdevTraderVersionName=0.21.6
+        run: gradle assembleDebug --stacktrace
       - name: Build signed Android release APK
         if: steps.changed.outputs.android_changed == 'true'
         working-directory: dev-trader/android
@@ -140,7 +140,7 @@ jobs:
           DEV_TRADER_KEY_PASSWORD: ${{ secrets.DEV_TRADER_KEY_PASSWORD }}
         run: |
           echo "${{ secrets.DEV_TRADER_KEYSTORE_BASE64 }}" | base64 --decode > "$DEV_TRADER_KEYSTORE_PATH"
-          gradle assembleRelease --stacktrace -PdevTraderVersionCode=131 -PdevTraderVersionName=0.21.6
+          gradle assembleRelease --stacktrace
           if unzip -l app/build/outputs/apk/release/app-release.apk | grep -q ui_preview.json; then
             echo 'Debug preview data must never be included in release APKs.'
             exit 1
@@ -234,7 +234,9 @@ jobs:
           mkdir -p release
           cp dist/app-release.apk release/app-release.apk
           sha256sum release/app-release.apk | awk '{print $1}' > release/app-release.sha256
-          echo "tag=dev-trader-v0.21.6-131" >> "$GITHUB_OUTPUT"
+          # Derive the tag/manifest version from the same Gradle defaults
+          # used to build this APK. Refuse to overwrite a released version.
+          python3 dev-trader/tools/android_release_version.py --github-output "$GITHUB_OUTPUT"
           echo "sha256=$(cat release/app-release.sha256)" >> "$GITHUB_OUTPUT"
       - name: Create GitHub release
         env:
@@ -244,10 +246,14 @@ jobs:
             echo "This release already exists; refusing to replace a published APK."
             exit 1
           fi
-          gh release create "${{ steps.release.outputs.tag }}" release/app-release.apk --target "$GITHUB_SHA" --title "KYVORIQ 0.21.6 (131)" --notes "Opt-in Android Keystore device pairing; no backend or Bitget strategy changes. Existing mobile functionality remains compatible."
+          gh release create "${{ steps.release.outputs.tag }}" release/app-release.apk --target "$GITHUB_SHA" --title "KYVORIQ ${{ steps.release.outputs.version_name }} (${{ steps.release.outputs.version_code }})" --notes "${{ steps.release.outputs.notes }}"
       - name: Publish verified update manifest
         env:
           SHA256: "${{ steps.release.outputs.sha256 }}"
+          VERSION_CODE: "${{ steps.release.outputs.version_code }}"
+          VERSION_NAME: "${{ steps.release.outputs.version_name }}"
+          APK_URL: "${{ steps.release.outputs.apk_url }}"
+          RELEASE_NOTES: "${{ steps.release.outputs.notes }}"
         run: |
           git fetch origin dev-trader-v1
           git reset --hard origin/dev-trader-v1
@@ -256,13 +262,16 @@ jobs:
           from pathlib import Path
           p = Path("dev-trader/update.json")
           data = json.loads(p.read_text())
+          next_code = int(os.environ["VERSION_CODE"])
+          if int(data.get("versionCode", 0)) >= next_code:
+              raise SystemExit("Update manifest is already at or above this version")
           data.update({
               "enabled": True,
-              "versionCode": 131,
-              "versionName": "0.21.6",
-              "apkUrl": "https://github.com/Dev06ai/marketpulse-os/releases/download/dev-trader-v0.21.6-131/app-release.apk",
+              "versionCode": next_code,
+              "versionName": os.environ["VERSION_NAME"],
+              "apkUrl": os.environ["APK_URL"],
               "sha256": os.environ["SHA256"],
-              "notes": "KYVORIQ 0.21.6 • opt-in secure device pairing • existing demo engine unchanged"
+              "notes": os.environ["RELEASE_NOTES"]
           })
           p.write_text(json.dumps(data, indent=2) + "\n")
           PY
