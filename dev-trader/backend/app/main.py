@@ -977,6 +977,7 @@ async def health():
         # Public, bounded market-feed diagnosis: shows failed/absent demo
         # subscriptions without exposing tokens, positions or strategy plans.
         "feed_channels": ({
+            "public_market_venue": str(stream.public_market_venue),
             "depth_subscription": str((stream.subscription_status.get("books5") or {}).get("event") or "UNKNOWN"),
             "trades_subscription": str((stream.subscription_status.get("publicTrade") or {}).get("event") or "UNKNOWN"),
             "depth_packets": int(stream.channel_packets.get("books5", 0)),
