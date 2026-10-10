@@ -90,5 +90,7 @@ def test_healthy_market_retains_radar_alert_and_signal_path(monkeypatch):
     s.last_market_update_ts=None
     asyncio.run(main.on_state(s))
     assert len(submitted)==1
-    assert len(sent)==1
-    assert sent[0]["key"].startswith("radar:LONG")
+    # Radar alerts are in-app only. Only the independently confirmed signal
+    # and actual exchange lifecycle are eligible for device notifications.
+    assert not sent
+    assert main.current_alerts()["opportunity_alert"]["key"].startswith("radar:LONG")
