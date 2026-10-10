@@ -99,9 +99,14 @@ def run(expected_source: str, expected_digest: str, count: int = 2, interval: in
             result = summarize(read_health(), expected_source, expected_digest)
             print(json.dumps({"sample": i+1, **result}, sort_keys=True), flush=True)
         except Exception as exc:
-            # Do not print a remote response, token, redirect target, or URL.
+            # HTTP status alone is safe and distinguishes 403/WAF denial from
+            # 5xx availability failures. Never print remote response bodies,
+            # upstream redirects, proxy headers, or authentication details.
+            code = getattr(exc, "code", None)
             print(json.dumps({"sample": i+1, "reachable": False,
-                              "error_type": type(exc).__name__}), flush=True)
+                              "error_type": type(exc).__name__,
+                              "http_status": code if type(code) is int and 100 <= code <= 599 else None}),
+                  flush=True)
         if i != count-1:
             time.sleep(interval)
     # Observation only: a mismatched version does not cause hidden deployment.
