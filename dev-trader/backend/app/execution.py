@@ -1235,6 +1235,11 @@ class DemoExecutionEngine:
                     event = self._finalize_trade(trade, closed, orders)
                     if event:
                         newly_closed.append(event)
+                    elif trade.get("reconciliation_warning"):
+                        reconciliation_warnings.append(
+                            str(trade.get("execution_id")) + ": " +
+                            str(trade["reconciliation_warning"])
+                        )
                     continue
                 if current_created > 0 and self._num(trade.get("opened_ts")) < current_created - 5000:
                     trade["status"] = "RECONCILIATION_PENDING"
@@ -1313,6 +1318,11 @@ class DemoExecutionEngine:
                     event = self._finalize_trade(trade, closed, orders)
                     if event:
                         newly_closed.append(event)
+                    elif trade.get("reconciliation_warning"):
+                        reconciliation_warnings.append(
+                            str(trade.get("execution_id")) + ": " +
+                            str(trade["reconciliation_warning"])
+                        )
                 elif trade.get("status") in {"OPEN", "RECONCILIATION_PENDING"}:
                     trade["status"] = "RECONCILIATION_PENDING"
                     reconciliation_warnings.append(str(trade.get("execution_id")) + ": missing exchange position/history")
@@ -1506,11 +1516,25 @@ class DemoExecutionEngine:
         local_qty = self._num(trade.get("filled_qty"), 0.0)
         aggregate_qty = self._num(closed.get("closeTotalPos"), 0.0)
 
-        # Bitget may report one aggregate position-history PnL for several
-        # same-direction entries. Attribute that result proportionally by each
-        # signal's actual filled quantity instead of copying the full PnL to
-        # every local trade.
-        share = min(1.0, local_qty / aggregate_qty) if aggregate_qty > 0 and local_qty > 0 else 1.0
+        # Bitget can aggregate multiple same-side entries in one history row.
+        # Neither zero/unknown fills nor missing aggregate closed quantity
+        # prove ownership of the PnL. Never award a complete exchange result
+        # to an unverified local signal or train the strategy on fabricated R.
+        quantity_tolerance = max(1e-8, aggregate_qty * 1e-6)
+        if (local_qty <= 0 or aggregate_qty <= 0 or
+                local_qty > aggregate_qty + quantity_tolerance or
+                not trade.get("actual_fill_confirmed")):
+            trade["status"] = "RECONCILIATION_PENDING"
+            trade["reconciliation_warning"] = (
+                "Closed exchange position found, but entry fill ownership or "
+                "aggregate closed quantity is unverified. Await fee/fill attribution."
+            )
+            trade["unrealized_pnl_usdt"] = None
+            trade["learning_review"] = None
+            return None
+
+        # Use only the portion of an exchange aggregate proven by the fill.
+        share = min(1.0, local_qty / aggregate_qty)
         pnl = aggregate_pnl * share
         funding = aggregate_funding * share
         fees = aggregate_fees * share
