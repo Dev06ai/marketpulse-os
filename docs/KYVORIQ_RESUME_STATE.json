@@ -7,18 +7,20 @@
   "work_branch": "codex/kyvoriq-upgrade-20261009",
   "source_commit": "a92bea883902e1702d9da9fe2447c422e5012a12",
   "phase": 1,
-  "status": "secured_release_deployed_and_phone_connected",
+  "status": "selection_and_book_timestamp_fixes_local_verified_pending_ci",
   "completed_phases": [],
   "application_changes": [
     "isolated six execution test fixtures",
     "integrated private HTTP/WS auth; bounded bodies and pairing; existing-session revocation",
     "0.5% default / 1% hard risk; downward-only margin preference sizing and final reserve check",
     "Immediate closed 5m/15m/1H bar evaluation independent of callback receipt equality",
-    "Source manifest, reproducible committed ZIP packaging, and security/backend/container-dependent CI release gate"
+    "Source manifest, reproducible committed ZIP packaging, and security/backend/container-dependent CI release gate",
+    "HTF policy checks each candidate before ranking; truthful rejection records",
+    "Book freshness uses exchange generation time; rejects missing/invalid/future/regressing timestamps"
   ],
   "tests": {
     "status": "passed",
-    "passed": 395,
+    "passed": 412,
     "failed": 0,
     "initial_failures": 3,
     "limitations": "offline mocks; 6 filesystem fixtures isolated",
@@ -42,15 +44,15 @@
     "live_money_execution": false,
     "settings": "Preserved; exchange credentials unchanged; no forced orders",
     "pending": [
-      "authenticated production execution/history/protection reconciliation",
-      "natural demo entry/fill/protective-order lifecycle",
-      "notification delivery on phone"
+      "deploy selection/book timestamp fixes after CI",
+      "independent authenticated risk/protection inspection",
+      "natural demo entry/fill/protection/close lifecycle"
     ]
   },
   "android": {
     "source_version": "0.21.6",
     "source_build": 131,
-    "verification": "User confirms build 131 paired and dashboard connected after deployment; server heartbeat has one authenticated WS client; CI Android debug build passed; no new APK required."
+    "verification": "User confirms secure pairing, dashboard, System Check, notification test, demo information and preserved previous trade history. Build131 source unchanged; no new APK required."
   },
   "constraints": [
     "bitget_demo_only",
@@ -61,12 +63,12 @@
     "preserve_hard_protections",
     "never_bypass_automatic_review"
   ],
-  "next_action": "Verify Android build 131 pairing; monitor market freshness without weakening admission; inspect remaining selection/timing gaps; preserve separate tested and deployed revisions.",
+  "next_action": "Verify CI, package committed source, deploy selection/book fixes to existing Deplexo, then compare health source/content identity and confirm device continuity.",
   "rollback_source": "Retain tested secured archive and /data. Previous runtime uploaded KYVORIQ-Deplexo-Integrations-v4.zip has no verifiable SHA; do not restore unauthenticated source blindly.",
   "last_verified_application_commit": "5aacf5bc136b67509670eef46b09fec102153984",
   "remote_checkpoint": {
-    "commit": "ee60c755f907e9d44ad82c777e48a88998336940",
-    "tree": "db09aa1460932802de63c5db831c12d2005075f1",
+    "commit": "ce9f0b2a23402ce3282547140c626c37e115d583",
+    "tree": "3592863f52a54e8eae3ed492405827ccaea46cc6",
     "pull_request": 119,
     "local_tree_matches": true
   },
@@ -79,5 +81,6 @@
     "verified_zip_gate": "success",
     "signed_apk": "skipped_no_android_change",
     "visual_check": "skipped_no_android_change"
-  }
+  },
+  "last_interruption": "Automatic review usage limit prevented the previous documentation/scan/commit command from executing. Not an unsafe determination. Normal reviewed tools work again after user resumed; no restriction bypass."
 }
