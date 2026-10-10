@@ -1248,8 +1248,23 @@ class DemoExecutionEngine:
                     # aggregate Bitget position can hide a partial fill.
                     if trade.get("status") == "ORDER_PENDING" and not trade.get("actual_fill_confirmed"):
                         trade["partial_position_detected"] = True
-                        if self._num(trade.get("filled_qty"))>0:
+                        if self._num(trade.get("filled_qty")) > 0:
+                            # The exchange has supplied a partial fill size.
+                            # Attempt protection without claiming a full fill.
                             await self._ensure_trade_protection(trade)
+                        elif not (self.data.get("stop_protection") or {}).get("all_positions_protected"):
+                            # Exchange position exists but size/ownership of
+                            # this entry are unknown. Never open more risk or
+                            # invent the quantity of a forced market close.
+                            warning = (
+                                "Exchange reports partial exposure but fill quantity "
+                                "and complete protective stop coverage are unverified."
+                            )
+                            self.data["protection_halt"] = warning
+                            trade["protection_error"] = warning
+                            reconciliation_warnings.append(
+                                str(trade.get("execution_id")) + ": " + warning
+                            )
                         continue
 
                     trade["status"] = "OPEN"
