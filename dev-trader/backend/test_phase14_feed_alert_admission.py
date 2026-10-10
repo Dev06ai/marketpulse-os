@@ -94,3 +94,20 @@ def test_healthy_market_retains_radar_alert_and_signal_path(monkeypatch):
     # and actual exchange lifecycle are eligible for device notifications.
     assert not sent
     assert main.current_alerts()["opportunity_alert"]["key"].startswith("radar:LONG")
+
+
+def test_stale_alert_removed_immediately_from_websocket_and_dashboard_payloads(monkeypatch):
+    alert={"key":"radar:SHORT:DEVELOPING:SFP","title":"Old short",
+           "body":"Old evidence","ts":1234567}
+    s=MarketState()
+    s.data_health="DEGRADED"
+    monkeypatch.setattr(main,"state",s)
+    monkeypatch.setattr(main,"last_opportunity_alert",alert)
+    monkeypatch.setattr(main,"last_trade_event",{"key":"stop-real","type":"SL_HIT"})
+    assert main.active_opportunity_snapshot()["key"]==""
+    background=main.current_alerts()
+    assert background["opportunity_alert"]["key"]==""
+    assert background["trade_event"]["key"]=="stop-real"
+    # The unaltered historical entry can be inspected in a journal; it is
+    # no longer misrepresented as the current opportunity on a stale feed.
+    assert alert["key"]=="radar:SHORT:DEVELOPING:SFP"
