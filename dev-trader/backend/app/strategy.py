@@ -422,6 +422,22 @@ def _confirmed_trigger_is_fresh(state: MarketState, candle: Candle, max_age_ms: 
     return 0 <= age <= max_age_ms
 
 
+def _forming_candle_is_current(state: MarketState, candle: Candle) -> bool:
+    """An open wick is usable only during its own interval.
+
+    Never pair a cached sweep from a disconnected WebSocket with a current
+    quote. The one-second edge tolerance is for exchange/receipt clock skew,
+    not a grace period for an expired setup. Replay states without quote time
+    remain deterministic and are not proof of executable intrabar signals.
+    """
+    ref = _market_reference_ts(state)
+    if not ref:
+        return True
+    return (not candle.confirmed and
+            isinstance(candle.start, int) and isinstance(candle.end, int)
+            and candle.start <= ref <= candle.end + 1000)
+
+
 def detect_sfp(state: MarketState) -> Optional[Signal]:
     """Detect SFPs intrabar so fast reversals are not delayed until candle close.
 
@@ -445,6 +461,11 @@ def detect_sfp(state: MarketState) -> Optional[Signal]:
 
     if len(source) < 10 or state.last_price is None:
         return None
+
+    # Old open candles can survive a reconnect while the ticker advances.
+    # Do not call a stale wick + new price an intrabar sweep/reclaim.
+    if live is not None and not _forming_candle_is_current(state, live):
+        live = None
 
     f = compute_features(state)
     highs, lows = pivots(source, 2)
