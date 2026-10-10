@@ -1507,7 +1507,21 @@ class DemoExecutionEngine:
         return candidates[0]
 
     def _finalize_trade(self, trade: dict[str, Any], closed: dict[str, Any], orders: list[dict[str, Any]]) -> dict[str, Any] | None:
-        aggregate_net = self._num(closed.get("netProfit"), self._num(closed.get("pnl"), 0.0))
+        raw_net = closed.get("netProfit")
+        # Never present gross PnL as fee-adjusted expectancy. Exchange net
+        # accounting must be present and finite before closing a learning row.
+        if (type(raw_net) not in (str, int, float) or
+                not str(raw_net).strip() or
+                not math.isfinite(self._num(raw_net, float("nan")))):
+            trade["status"] = "RECONCILIATION_PENDING"
+            trade["reconciliation_warning"] = (
+                "Exchange closed position has no verified finite net PnL; "
+                "await exchange fee/funding reconciliation."
+            )
+            trade["unrealized_pnl_usdt"] = None
+            trade["learning_review"] = None
+            return None
+        aggregate_net = self._num(raw_net)
         aggregate_pnl = self._num(closed.get("pnl"), aggregate_net)
         aggregate_funding = self._num(closed.get("totalFunding"), 0.0)
         aggregate_fees = self._num(closed.get("openFee"), 0.0) + self._num(closed.get("closeFee"), 0.0)
