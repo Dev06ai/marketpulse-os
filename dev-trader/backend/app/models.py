@@ -1,4 +1,5 @@
-from dataclasses import dataclass, asdict, field
+from dataclasses import dataclass, asdict, field, fields
+from copy import deepcopy
 from typing import Any
 
 
@@ -86,7 +87,14 @@ class MarketState:
         return aggregate_candles(self.candles_60, 4)
 
     def snapshot(self, history: bool=False) -> dict[str, Any]:
-        d = asdict(self)
+        # Bound each history collection BEFORE copying it.  A deep asdict(self)
+        # used to duplicate the entire live trade/CVD tape (often thousands of
+        # rows) before discarding most of it. Under a 128 MiB cgroup that
+        # transient allocation can cause an OOM kill during journaling.
+        d = {part.name: getattr(self, part.name) for part in fields(self)}
+        # Keep callers' isolation contract for mutable profile metadata while
+        # avoiding needless copies of unselected candle/tick history.
+        d["trade_volume_profile"] = deepcopy(self.trade_volume_profile)
         d["candles_5"] = [c.to_dict() for c in self.candles_5[-(240 if history else 180):]]
         d["candles_15"] = [c.to_dict() for c in self.candles_15[-(240 if history else 120):]]
         d["candles_60"] = [c.to_dict() for c in self.candles_60[-(720 if history else 120):]]
