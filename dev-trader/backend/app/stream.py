@@ -484,7 +484,13 @@ class BitgetMarketStream:
         self.subscription_status: dict[str, dict] = {}
         self.channel_packets: dict[str, int] = {}
         self.binary_packets = 0
-        self.volume_profile = TradeVolumeProfile("BITGET_DEMO_USDT_FUTURES" if demo else "BITGET_USDT_FUTURES")
+        # Source provenance tracks the observed market, not the account that
+        # will later simulate orders. Live-market volume must not be relabeled
+        # as demo-matching-engine volume in performance evidence.
+        self.volume_profile = TradeVolumeProfile(
+            "BITGET_LIVE_PUBLIC_USDT_FUTURES" if self.public_market_venue == "LIVE_PUBLIC_MARKET_DATA"
+            else "BITGET_DEMO_PUBLIC_USDT_FUTURES"
+        )
 
     @staticmethod
     def _interval_ms(interval: str) -> int:
