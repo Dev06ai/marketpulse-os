@@ -914,6 +914,16 @@ async def health():
         "data_age_ms": data_age,
         "book_age_ms": now - state.last_book_ts if state.last_book_ts else None,
         "trade_age_ms": now - state.last_trade_ts if state.last_trade_ts else None,
+        # Public, bounded market-feed diagnosis: shows failed/absent demo
+        # subscriptions without exposing tokens, positions or strategy plans.
+        "feed_channels": ({
+            "depth_subscription": str((stream.subscription_status.get("books5") or {}).get("event") or "UNKNOWN"),
+            "trades_subscription": str((stream.subscription_status.get("publicTrade") or {}).get("event") or "UNKNOWN"),
+            "depth_packets": int(stream.channel_packets.get("books5", 0)),
+            "trade_packets": int(stream.channel_packets.get("publicTrade", 0)),
+            "critical_stall": stream._critical_channel_stall(now),
+            "bounded_reconnects": stream.critical_reconnect_count,
+        } if stream is not None and hasattr(stream, "_critical_channel_stall") else None),
         # Health probes must not publish private trade plans or execution evidence.
         "signal": None,
         "signal_state": engine.signal_status,
