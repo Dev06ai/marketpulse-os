@@ -92,3 +92,40 @@ def test_wilson_interval_for_small_sample_is_not_certain():
     lower,upper=wilson_interval(1,2)
     assert lower < 50 < upper
     assert wilson_interval(0,0) is None
+
+
+def test_large_valid_subset_cannot_hide_rejected_trades():
+    rows = [trade(i) for i in range(1, 31)]
+    rows.append(trade(31, entry_confirmed=False))
+    result = evaluate(rows, as_of_ms=NOW, min_samples=30)
+    assert result["accepted_trades"] == 30 and result["rejected_count"] == 1
+    assert result["input_records_complete"] is False
+    assert result["exchange_history_completeness_verified"] is False
+    assert result["all"]["net_pnl_usdt"] > 0
+    assert result["all"]["sample_sufficient"] is False
+    assert result["all"]["win_rate_pct"] is None
+    assert result["all"]["net_expectancy_r"] is None
+    assert result["all"]["net_profit_factor"] is None
+    assert result["all"]["win_rate_wilson_95"] is None
+
+
+def test_holdout_metrics_withheld_if_any_input_is_invalid():
+    rows = [trade(i, signaled_ms=100+i*100, entered_ms=110+i*100,
+                  exited_ms=120+i*100) for i in range(1, 33)]
+    rows.append(trade(33, entry_fee_usdt=None))
+    result = evaluate(rows, as_of_ms=NOW, split_ms=1700, min_samples=1)
+    assert result["chronological_split"]["holdout"]["net_expectancy_r"] is None
+    assert result["chronological_split"]["train"]["win_rate_pct"] is None
+
+
+def test_overflowing_pnl_is_rejected_even_if_individual_fields_are_finite():
+    row = trade(gross=1e308, entry_fee=0.0, exit_fee=0.0,
+                funding=1e308, risk=2.0)
+    assert evaluate([row], as_of_ms=NOW)["accepted_trades"] == 0
+
+
+def test_valid_input_is_not_broker_coverage_attestation():
+    result = evaluate([trade(i) for i in range(1, 31)], as_of_ms=NOW)
+    assert result["input_records_complete"] is True
+    assert result["exchange_history_completeness_verified"] is False
+    assert result["all"]["sample_sufficient"] is True
