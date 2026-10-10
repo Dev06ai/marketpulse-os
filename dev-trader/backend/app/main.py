@@ -1,12 +1,15 @@
 import asyncio
+import hmac
 import json
 import math
 import os
 import time
+from collections import deque
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, Response
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, Response, Request
 from starlette.middleware.gzip import GZipMiddleware
+from starlette.responses import JSONResponse
 from pydantic import BaseModel
 from dotenv import load_dotenv
 
@@ -32,6 +35,11 @@ from .observability import (
     record_eval, record_smc, expose as expose_metrics, CONTENT_TYPE_LATEST
 )
 from .htf_policy import evaluate_htf_policy, MAX_LEVERAGE, MAX_RISK_PCT, MIN_NET_RR
+from .api_security import (
+    MAX_CLIENTS, MAX_HTTP_BODY_BYTES, PUBLIC_GET_PATHS,
+    private_http_error, websocket_error, security_headers,
+    owner_token, issue_device_token,
+)
 
 load_dotenv()
 
@@ -156,6 +164,10 @@ def reconcile_execution_truth():
 
 class PushTestPayload(BaseModel):
     token: str | None = None
+
+
+class PairDevicePayload(BaseModel):
+    pairing_secret: str
 
 
 class RiskPayload(BaseModel):
@@ -792,8 +804,68 @@ async def lifespan(app: FastAPI):
         t.cancel()
 
 
-app = FastAPI(title="KYVORIQ AI Trading Assistant", version="0.15.0", lifespan=lifespan)
+app = FastAPI(
+    title="KYVORIQ AI Trading Assistant", version="0.15.0", lifespan=lifespan,
+    docs_url=None, redoc_url=None, openapi_url=None,
+)
 app.add_middleware(GZipMiddleware, minimum_size=700)
+
+
+@app.middleware("http")
+async def security_boundary(request: Request, call_next):
+    """Guard private data by default; allow only explicitly reviewed public market reads."""
+    path = request.url.path
+    method = request.method.upper()
+    private = not (method in {"GET", "HEAD"} and path in PUBLIC_GET_PATHS)
+
+    content_length = request.headers.get("content-length")
+    if content_length is not None:
+        try:
+            size = int(content_length)
+        except ValueError:
+            size = MAX_HTTP_BODY_BYTES + 1
+        if size < 0 or size > MAX_HTTP_BODY_BYTES:
+            response = JSONResponse({"detail": "Request body too large"}, status_code=413)
+            for key, value in security_headers(private).items():
+                response.headers[key] = value
+            return response
+
+    if len(request.scope.get("query_string", b"")) > 4096:
+        response = JSONResponse({"detail": "Query string too long"}, status_code=414)
+    else:
+        denied = private_http_error(method, path, request.headers)
+        if denied:
+            status, detail = denied
+            response = JSONResponse({"detail": detail}, status_code=status)
+        else:
+            response = await call_next(request)
+
+    for key, value in security_headers(private).items():
+        response.headers[key] = value
+    return response
+
+
+# Bounded global rate limit resists spoofed client IPs and credential guessing
+# in the single-worker demo-only backend. Independent ingress throttling is still advised.
+pair_attempts: deque[float] = deque(maxlen=12)
+
+
+@app.post("/auth/pair")
+async def pair_device(payload: PairDevicePayload):
+    now = time.monotonic()
+    while pair_attempts and now - pair_attempts[0] >= 60.0:
+        pair_attempts.popleft()
+    if len(pair_attempts) >= 10:
+        raise HTTPException(status_code=429, detail="Pairing temporarily unavailable")
+    pair_attempts.append(now)
+    expected = owner_token()
+    if not expected:
+        raise HTTPException(status_code=503, detail="Private API is not provisioned")
+    candidate = payload.pairing_secret
+    if not candidate or len(candidate) > 512 or not hmac.compare_digest(candidate.encode("utf-8"), expected.encode("utf-8")):
+        raise HTTPException(status_code=401, detail="Pairing refused")
+    access_token, expires = issue_device_token(expected)
+    return {"access_token": access_token, "expires_at": expires, "token_type": "Bearer"}
 
 
 @app.get("/health")
@@ -812,7 +884,8 @@ async def health():
         "data_age_ms": data_age,
         "book_age_ms": now - state.last_book_ts if state.last_book_ts else None,
         "trade_age_ms": now - state.last_trade_ts if state.last_trade_ts else None,
-        "signal": engine.active_signal,
+        # Health probes must not publish private trade plans or execution evidence.
+        "signal": None,
         "signal_state": engine.signal_status,
     }
 
@@ -1303,8 +1376,21 @@ async def system_check_push(payload: PushTestPayload):
 
 @app.websocket("/ws")
 async def socket(ws: WebSocket):
-    await ws.accept()
+    # Browser Origin alone is not authentication. Owner authorization is mandatory.
+    if websocket_error(ws.headers):
+        await ws.close(code=1008)
+        return
+    if len(clients) >= MAX_CLIENTS:
+        await ws.close(code=1013)
+        return
+    # Reserve the listener slot before awaiting accept to prevent a parallel
+    # handshake burst from bypassing the connection cap.
     clients.add(ws)
+    try:
+        await ws.accept()
+    except Exception:
+        clients.discard(ws)
+        return
     client_failures[ws] = 0
     profile = ws.query_params.get("profile", "legacy")
     profile = profile if profile in {"dashboard", "alerts"} else "legacy"
@@ -1334,6 +1420,10 @@ async def socket(ws: WebSocket):
                 if message.get("type") == "websocket.receive":
                     raw_text = message.get("text")
                     if raw_text:
+                        # Reject oversized application messages before JSON decoding.
+                        if len(raw_text) > 2048:
+                            await ws.close(code=1009)
+                            break
                         try:
                             incoming = json.loads(raw_text)
                         except (TypeError, ValueError):
