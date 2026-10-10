@@ -65,3 +65,21 @@ def test_only_confirmed_partial_fill_earns_its_proportion_of_realized_pnl(execut
     assert trade["net_profit_usdt"] == 4.0
     assert len(learning.resolved) == 1
     assert event["net_profit_usdt"] == 4.0
+
+
+@pytest.mark.parametrize("net", [None, "", "nan", "inf", float("inf"), float("nan"), True])
+def test_missing_or_nonfinite_fee_adjusted_net_never_teaches_strategy(executor,net):
+    model, learner = executor
+    trade = pending_trade(.005, confirmed=True)
+    closed = exchange_closed(aggregate_qty=".005")
+    closed["pnl"] = "25"  # positive gross cannot replace missing true net
+    if net is None:
+        closed.pop("netProfit")
+    else:
+        closed["netProfit"] = net
+    event = model._finalize_trade(trade, closed, [])
+    assert event is None
+    assert trade["status"] == "RECONCILIATION_PENDING"
+    assert "net PnL" in trade["reconciliation_warning"]
+    assert not learner.resolved
+    assert "result_r" not in trade
