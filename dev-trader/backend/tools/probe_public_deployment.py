@@ -94,10 +94,14 @@ def run(expected_source: str, expected_digest: str, count: int = 2, interval: in
         raise ValueError("expected content digest must be 64 lowercase hex characters")
     if not (1 <= count <= 3 and 1 <= interval <= 15):
         raise ValueError("probe frequency outside safe bounds")
+    attested = False
     for i in range(count):
         try:
             result = summarize(read_health(), expected_source, expected_digest)
             print(json.dumps({"sample": i+1, **result}, sort_keys=True), flush=True)
+            attested = attested or (
+                result["reachable"] and result["release"] == "TARGET_DEPLOYED"
+            )
         except Exception as exc:
             # HTTP status alone is safe and distinguishes 403/WAF denial from
             # 5xx availability failures. Never print remote response bodies,
@@ -109,8 +113,15 @@ def run(expected_source: str, expected_digest: str, count: int = 2, interval: in
                   flush=True)
         if i != count-1:
             time.sleep(interval)
-    # Observation only: a mismatched version does not cause hidden deployment.
-    return 0
+    # A successful runner is NOT successful deployment attestation.
+    # Exit code 2 flags either mismatched source or inaccessible public health.
+    # Never attempt a deployment or modify Deplexo just to make this pass.
+    print(json.dumps({
+        "attestation": "SOURCE_CONFIRMED" if attested else "NOT_VERIFIED",
+        "safe_to_trade": False,  # Source attestation alone never admits risk.
+        "human_review_required": not attested,
+    }, sort_keys=True), flush=True)
+    return 0 if attested else 2
 
 
 def main(argv=None):
