@@ -16,7 +16,10 @@ def test_eval_latency_observed_without_identifying_trade():
     record_eval_duration(.024)
     after = _sample("kyvoriq_strategy_eval_duration_seconds_count")
     assert after == before + 1
-    assert all(not sample.labels for sample in strategy_eval_duration.collect()[0].samples)
+    # Prometheus histograms add the standard bucket "le" label. No signal,
+    # account, trade ID or other high-cardinality custom label is permitted.
+    assert all(set(sample.labels) <= {"le"}
+               for sample in strategy_eval_duration.collect()[0].samples)
 
 
 def test_bad_and_future_invalid_measurements_ignored():
