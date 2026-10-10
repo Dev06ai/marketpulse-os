@@ -122,18 +122,8 @@ class DemoExecutionEngine:
             )
             self.data["trades"] = []
             return
-        # Pending/open/unknown orders cannot be dropped due to a history cap.
-        # Limit only terminal CLOSED/FAILED records in working memory.
-        rows = list(self.data.get("trades") or [])
-        terminal_seen = 0
-        retained = []
-        for row in rows:
-            if row.get("status") in {"CLOSED", "FAILED"}:
-                terminal_seen += 1
-                if terminal_seen > 500:
-                    continue
-            retained.append(row)
-        self.data["trades"] = retained
+        # Never discard pending/open/unknown orders as history grows.
+        self.data["trades"] = self._cap_terminal_history(self.data.get("trades") or [])
         intent = self.data.pop("pending_submission", None)
         if intent:
             if not isinstance(intent, dict):
@@ -148,6 +138,24 @@ class DemoExecutionEngine:
                 self.data["persistence_halt"] = (
                     "Cannot persist recovered demo order intent; block new exposure."
                 )
+
+    @staticmethod
+    def _cap_terminal_history(rows: list[dict[str, Any]], limit: int = 500) -> list[dict[str, Any]]:
+        """Retain all potentially live/ambiguous orders; cap terminal history only.
+
+        Called when loading AND when appending after an exchange request.
+        A blind [:500] here could erase an older OPEN or SUBMISSION_UNKNOWN
+        record even while Bitget still held the corresponding position.
+        """
+        retained: list[dict[str, Any]] = []
+        completed = 0
+        for row in rows:
+            if row.get("status") in {"CLOSED", "FAILED"}:
+                completed += 1
+                if completed > limit:
+                    continue
+            retained.append(row)
+        return retained
 
     def _save(self):
         # A background sync must never overwrite an existing corrupt journal.
@@ -692,7 +700,7 @@ class DemoExecutionEngine:
             with self.lock:
                 self.data.pop("pending_submission", None)
                 self.data["trades"].insert(0, trade)
-                self.data["trades"] = self.data["trades"][:500]
+                self.data["trades"] = self._cap_terminal_history(self.data["trades"])
                 self._daily_count += 1
                 self.data["last_event"] = {
                     "key": f"EXECUTION_PENDING:{client_oid}",
@@ -782,7 +790,7 @@ class DemoExecutionEngine:
             with self.lock:
                 self.data.pop("pending_submission", None)
                 self.data["trades"].insert(0, failed)
-                self.data["trades"] = self.data["trades"][:500]
+                self.data["trades"] = self._cap_terminal_history(self.data["trades"])
                 self.data["last_event"] = {
                     "key": f"EXECUTION_FAILED:{failed['execution_id']}",
                     "type": "EXECUTION_RECONCILING" if submission_oid else "EXECUTION_FAILED",
