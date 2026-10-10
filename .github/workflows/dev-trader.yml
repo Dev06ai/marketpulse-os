@@ -55,6 +55,38 @@ jobs:
           if-no-files-found: error
       - name: Record rollout requirement
         run: echo 'ZIP ready for the existing service. Follow dev-trader/SECURITY-ROLLOUT.md; no production deployment was performed by CI.'
+  deploy-deplexo-existing:
+    name: Existing Deplexo app rollout (explicit opt-in)
+    # Auto deployments remain OFF unless the owner enables the GitHub variable.
+    # Never deploy a PR/draft branch, and never create a replacement service.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/dev-trader-v1' && vars.KYVORIQ_AUTODEPLOY_ENABLED == 'true'
+    needs: [security, backend, free-container, android, native-host]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    concurrency:
+      group: kyvoriq-existing-deplexo-service
+      cancel-in-progress: false
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@v4
+        with:
+          name: kyvoriq-deplexo-backend
+          path: dist
+      - name: Upload verified source and redeploy original service
+        env:
+          DEPLEXO_TOKEN: ${{ secrets.DEPLEXO_TOKEN }}
+          DEPLEXO_APP_ID: ${{ secrets.DEPLEXO_APP_ID }}
+        run: |
+          python dev-trader/tools/deploy_existing_deplexo.py \
+            --archive dist/release-artifacts/KYVORIQ-deplexo-backend.zip \
+            --expected-commit "$GITHUB_SHA" \
+            --deploy
+
   free-container:
     runs-on: ubuntu-latest
     steps:
