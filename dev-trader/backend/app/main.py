@@ -393,12 +393,7 @@ def mobile_payload(include_research=True):
             "weekly_open": f.weekly_open,
             "volume_context": f.volume_context,
         },
-        "opportunity_alert": {
-            "key": last_opportunity_alert.get("key", ""),
-            "title": last_opportunity_alert.get("title", ""),
-            "body": last_opportunity_alert.get("body", ""),
-            "ts": last_opportunity_alert.get("ts", 0),
-        },
+        "opportunity_alert": active_opportunity_snapshot(),
         "trade_event": dict(last_trade_event) if last_trade_event else (execution_state.get("last_event") or {}),
         "execution": execution_state,
         "learning": diag.get("learning", {}),
@@ -436,8 +431,20 @@ def market_tick():
         })
 
 
+def active_opportunity_snapshot() -> dict:
+    """Never expose a stale candidate as a current actionable alert.
+
+    This is evaluated for every payload, not only on the slower strategy
+    cadence. Position/stop notifications remain a separate authoritative path.
+    """
+    if state.data_health != "HEALTHY":
+        return {"key": "", "ts": 0, "title": "", "body": ""}
+    return {k: last_opportunity_alert.get(k, default) for k, default in (
+        ("key", ""), ("ts", 0), ("title", ""), ("body", ""))}
+
+
 def current_alerts():
-    return alert_payload(engine.active_signal, last_opportunity_alert,
+    return alert_payload(engine.active_signal, active_opportunity_snapshot(),
         last_trade_event or execution.data.get("last_event"), int(time.time()*1000))
 
 
