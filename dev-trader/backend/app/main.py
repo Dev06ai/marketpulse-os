@@ -700,9 +700,12 @@ async def on_state(s: MarketState):
             if last_opportunity_alert.get("key"):
                 last_opportunity_alert = {"key": "", "ts": 0, "title": "", "body": ""}
         if alert:
+            # Developing/triggered radar evidence is informative, not a
+            # confirmed executable order. Stream it to the private in-app
+            # radar but never send a priority FCM notification for it.
+            # Confirmed actionable signals and position/stop events retain
+            # their independent alert paths.
             last_opportunity_alert = {"key": alert["key"], "ts": now_alert, "title": alert["title"], "body": alert["body"]}
-            if push.ready and not clients:
-                queue_push(push.send_opportunity, alert)
 
         lifecycle_events = list(getattr(engine, "last_lifecycle_events", []) or [])
         if lifecycle_events:
