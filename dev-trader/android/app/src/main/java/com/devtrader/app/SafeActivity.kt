@@ -1766,6 +1766,7 @@ class SafeActivity : FragmentActivity() {
         val armedLevels = reactionMap?.optJSONArray("armed")
         val nearestLevel = reactionTrigger ?: armedLevels?.optJSONObject(0)
         val levelState = when {
+            !sourceHealthy -> "MONITOR ONLY"
             reactionTrigger != null -> "READY"
             reactionMap?.optString("status") == "CONFIRMING" -> "CONFIRMING"
             reactionMap?.optString("status") == "ARMED" -> "ARMED"
@@ -1783,7 +1784,8 @@ class SafeActivity : FragmentActivity() {
             "LEVEL MAP  $levelState\n" +
             activeLevelText +
             "\nCVD  ${f.optString("cvd_price_divergence", "—")}  •  OI5m ${money(f.optDouble("oi_change_5m_pct", Double.NaN), true)}%\n" +
-            "Structure  ${f.optString("market_structure", "—")}"
+            "Structure  ${f.optString("market_structure", "—")}" +
+            if (!sourceHealthy) "\nFeed unverified • zones are research-only, not trade confirmations." else ""
         if (s != null) {
             val direction = s.optString("direction", "WAIT")
             val lifecycle = s.optString("lifecycle", "ACTIVE")
