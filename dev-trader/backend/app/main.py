@@ -131,10 +131,17 @@ async def _deliver_push_background(sender, payload: dict):
 
 
 def queue_push(sender, payload: dict) -> bool:
-    """Queue best-effort secondary notifications without blocking signals."""
-    if not push.ready or len(_push_delivery_tasks) >= 32:
+    """Queue secondary notifications; never block an active market event loop."""
+    if not getattr(push, "ready", True) or len(_push_delivery_tasks) >= 32:
         return False
-    task = asyncio.create_task(_deliver_push_background(sender, dict(payload)))
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        # Direct non-async callers (e.g. legacy synchronous integrations)
+        # cannot schedule a task. They have no market event loop to block.
+        sender(dict(payload))
+        return True
+    task = loop.create_task(_deliver_push_background(sender, dict(payload)))
     _push_delivery_tasks.add(task)
     task.add_done_callback(_push_delivery_tasks.discard)
     return True
