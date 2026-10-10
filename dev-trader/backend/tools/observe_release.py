@@ -39,7 +39,7 @@ def classify(health: dict, heartbeat: dict, expected_commit: str, expected_diges
     consistent = health.get("data_health") == heartbeat.get("data_health")
     connected = health.get("ws_connected") is True and heartbeat.get("market_ws") is True
     fresh = (
-        connected and consistent and health.get("data_health") == "HEALTHY"
+        health.get("ok") is True and connected and consistent and health.get("data_health") == "HEALTHY"
         and book_age is not None and heartbeat_book_age is not None
         and book_age <= MAX_BOOK_AGE_MS and heartbeat_book_age <= MAX_BOOK_AGE_MS
     )
