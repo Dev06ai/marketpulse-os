@@ -81,3 +81,13 @@ def test_invalid_historical_created_timestamp_does_not_crash_daily_risk_check(mo
     p.write_text(json.dumps({"trades":[{"status":"CLOSED","opened_ts":"not-a-time"}]}))
     bot=engine_at(monkeypatch,p)
     assert bot._today_trades()==0
+
+
+def test_background_save_refuses_to_destroy_unreadable_original(monkeypatch,tmp_path):
+    p=tmp_path/"original.json"
+    original='{"trades": [corrupt]}'
+    p.write_text(original)
+    bot=engine_at(monkeypatch,p)
+    bot.data["last_sync_ts"]=9_999_999
+    assert bot._save() is False
+    assert p.read_text()==original
