@@ -38,12 +38,14 @@ def classify_setup(signal: dict) -> dict:
 
 def data_sentinel(market: dict) -> dict:
     """Critical quote freshness is blocking; stale auxiliary feeds are UNKNOWN."""
-    now = int(market.get("now_ms") or 0)
+    now_value = numeric(market.get("now_ms"))
+    now = int(now_value) if now_value is not None and now_value > 0 and now_value.is_integer() else 0
     def age(field: str, max_ms: int) -> dict:
-        ts = int(market.get(field) or 0)
-        if not now or not ts:
+        observed = numeric(market.get(field))
+        if (not now or observed is None or observed <= 0
+                or not observed.is_integer()):
             return {"status":"UNKNOWN","age_ms":None,"fresh_limit_ms":max_ms}
-        age_ms=now-ts
+        age_ms = now - int(observed)
         return {"status":"FRESH" if -1000<=age_ms<=max_ms else "STALE",
                 "age_ms":age_ms,"fresh_limit_ms":max_ms}
     quote=age("market_update_ms",3000)
