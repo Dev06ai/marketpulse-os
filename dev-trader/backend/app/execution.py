@@ -150,6 +150,10 @@ class DemoExecutionEngine:
                 )
 
     def _save(self):
+        # A background sync must never overwrite an existing corrupt journal.
+        # Keep its forensic contents until an authorized manual restoration.
+        if self.data.get("persistence_halt"):
+            return False
         try:
             self.path.parent.mkdir(parents=True, exist_ok=True)
             tmp = self.path.with_suffix(".tmp")
