@@ -98,24 +98,56 @@ class DemoExecutionEngine:
         day_start = int(time.time()) // 86400 * 86400
         count = 0
         for row in self.data.get("trades", []):
-            opened_ms = int(row.get("opened_ts") or row.get("created_ts") or 0)
+            opened_ms = int(self._num(row.get("opened_ts") or row.get("created_ts")))
             if opened_ms >= self.session_start_ms and opened_ms // 1000 >= day_start and str(row.get("status")) != "FAILED":
                 count += 1
         return count
 
     def _load(self):
+        # A corrupt/truncated journal is a risk event, not proof that the
+        # exchange is flat or that previously sent orders never existed.
+        # Preserve the original file for recovery; never overwrite it.
         try:
             if self.path.exists():
-                parsed = json.loads(self.path.read_text())
-                if isinstance(parsed, dict):
-                    self.data.update(parsed)
+                parsed = json.loads(self.path.read_text(encoding="utf-8"))
+                if (not isinstance(parsed, dict) or
+                        not isinstance(parsed.get("trades", []), list) or
+                        any(not isinstance(row, dict) for row in parsed.get("trades", []))):
+                    raise ValueError("Malformed execution journal structure")
+                self.data.update(parsed)
         except Exception:
-            pass
-        self.data["trades"] = list(self.data.get("trades") or [])[:500]
+            self.data["persistence_halt"] = (
+                "Cannot verify saved demo execution history. "
+                "Preserve the journal and reconcile with Bitget before new entries."
+            )
+            self.data["trades"] = []
+            return
+        # Pending/open/unknown orders cannot be dropped due to a history cap.
+        # Limit only terminal CLOSED/FAILED records in working memory.
+        rows = list(self.data.get("trades") or [])
+        terminal_seen = 0
+        retained = []
+        for row in rows:
+            if row.get("status") in {"CLOSED", "FAILED"}:
+                terminal_seen += 1
+                if terminal_seen > 500:
+                    continue
+            retained.append(row)
+        self.data["trades"] = retained
         intent = self.data.pop("pending_submission", None)
-        if intent and not any(t.get("client_oid") == intent.get("client_oid") for t in self.data["trades"]):
-            self.data["trades"].insert(0, dict(intent, status="SUBMISSION_UNKNOWN",
-                error="Restart during order submission; exchange outcome must be reconciled."))
+        if intent:
+            if not isinstance(intent, dict):
+                self.data["persistence_halt"] = "Corrupted in-flight order intent; operator reconciliation required."
+                return
+            if not any(t.get("client_oid") == intent.get("client_oid") for t in self.data["trades"]):
+                self.data["trades"].insert(0, dict(intent, status="SUBMISSION_UNKNOWN",
+                    error="Restart during order submission; exchange outcome must be reconciled."))
+            # Make the crash-recovered unknown intent durable immediately,
+            # including on a second restart before the first sync finishes.
+            if not self._save():
+                self.data["persistence_halt"] = (
+                    "Cannot persist recovered demo order intent; block new exposure."
+                )
 
     def _save(self):
         try:
@@ -312,6 +344,8 @@ class DemoExecutionEngine:
     def _signal_allowed(self, signal: dict[str, Any], *, reconciliation_locked: bool = False) -> tuple[bool, str]:
         if os.getenv("DEMO_EXECUTION_PAUSED", "false").lower() == "true" or os.getenv("DEMO_RESET_REQUEST_MS", ""):
             return False, "Operator demo reset/test preparation is paused; no new exposure is admitted."
+        if self.data.get("persistence_halt"):
+            return False, "Saved execution history or order intent could not be verified; new entries halted."
         if self.data.get("protection_halt"):
             return False, "Exchange stop protection could not be verified; operator review is required."
         if self.data.get("ledger_error"):
