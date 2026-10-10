@@ -9,6 +9,7 @@ from dataclasses import dataclass
 import json
 import math
 from pathlib import Path
+from statistics import median
 from typing import Iterable
 
 MIN_MEANINGFUL_SAMPLES = 30
@@ -114,6 +115,17 @@ def collect(records: Iterable[object], *, as_of_ms: int) -> dict:
     return {"trades": accepted, "rejected": rejected, "seen": len(all_rows)}
 
 
+def wilson_interval(wins: int, n: int) -> list[float] | None:
+    """95% Wilson score interval in percentage units; descriptive only."""
+    if n <= 0 or not 0 <= wins <= n:
+        return None
+    z = 1.95996398454
+    p = wins / n
+    denominator = 1 + z*z/n
+    center = (p + z*z/(2*n)) / denominator
+    margin = z * math.sqrt(p*(1-p)/n + z*z/(4*n*n)) / denominator
+    return [round(max(0.0, center-margin)*100, 4), round(min(1.0, center+margin)*100, 4)]
+
 def summarize(trades: Iterable[ClosedDemoTrade], *, min_samples: int = MIN_MEANINGFUL_SAMPLES) -> dict:
     ordered = sorted(trades, key=lambda row: (row.exited_ms, row.signal_id))
     count = len(ordered)
@@ -124,6 +136,7 @@ def summarize(trades: Iterable[ClosedDemoTrade], *, min_samples: int = MIN_MEANI
     gross_losses = abs(sum(x.net_pnl_usdt for x in ordered if x.net_pnl_usdt < 0))
     equity = peak = worst_dd_usdt = net_r = peak_r = worst_dd_r = 0.0
     losing_streak = worst_streak = 0
+    latencies = sorted(x.entered_ms - x.signaled_ms for x in ordered)
     for row in ordered:
         equity += row.net_pnl_usdt
         net_r += row.net_r
@@ -142,10 +155,11 @@ def summarize(trades: Iterable[ClosedDemoTrade], *, min_samples: int = MIN_MEANI
         "max_peak_to_trough_drawdown_usdt": round(worst_dd_usdt, 8),
         "max_peak_to_trough_drawdown_r": round(worst_dd_r, 8),
         "longest_losing_streak": worst_streak,
-        "median_signal_to_entry_ms": (
-            sorted(x.entered_ms - x.signaled_ms for x in ordered)[count // 2] if count else None),
+        "median_signal_to_entry_ms": median(latencies) if count else None,
+        "p95_signal_to_entry_ms": (latencies[math.ceil(0.95 * count) - 1] if count else None),
         "sample_sufficient": count >= min_samples,
         "win_rate_pct": round(wins * 100 / count, 4) if count >= min_samples else None,
+        "win_rate_wilson_95": wilson_interval(wins, count) if count >= min_samples else None,
         "net_expectancy_r": round(net_r / count, 6) if count >= min_samples else None,
         "net_profit_factor": (round(gross_wins / gross_losses, 6)
                               if count >= min_samples and gross_losses > EPS else None),
