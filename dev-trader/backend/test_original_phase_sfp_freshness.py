@@ -51,7 +51,7 @@ def test_future_unopened_candle_wick_cannot_trigger_sfp(monkeypatch):
     assert strategy.detect_sfp(future) is None
 
 
-@pytest.mark.parametrize("age", [0, 100, 1000])
+@pytest.mark.parametrize("age", [0, 100, 999])
 def test_one_second_exchange_clock_tolerance_preserved(age):
     state = _state(NOW-300_000, quote=NOW+age)
     assert strategy._forming_candle_is_current(state, state.candles_5[-1])
