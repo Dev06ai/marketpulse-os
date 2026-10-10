@@ -88,7 +88,7 @@ def test_network_failure_logs_error_type_only_not_remote_payload(monkeypatch,cap
     def boom():
         raise ValueError("secret QWERTY123 and private response")
     monkeypatch.setattr(probe,"read_health",boom)
-    assert probe.run(SOURCE,DIGEST,count=1)==0
+    assert probe.run(SOURCE,DIGEST,count=1)==2
     out=capsys.readouterr().out
     assert "QWERTY123" not in out
     assert '"error_type": "ValueError"' in out
@@ -97,3 +97,29 @@ def test_network_failure_logs_error_type_only_not_remote_payload(monkeypatch,cap
 def test_probe_bounds_sample_interval():
     with pytest.raises(ValueError):
         probe.run(SOURCE,DIGEST,count=100)
+
+
+def test_probe_confirms_only_exact_commit_and_digest(monkeypatch,capsys):
+    monkeypatch.setattr(probe,"read_health",lambda: health())
+    assert probe.run(SOURCE,DIGEST,count=1)==0
+    result=capsys.readouterr().out
+    assert '"attestation": "SOURCE_CONFIRMED"' in result
+    assert '"safe_to_trade": false' in result
+
+
+def test_http_200_old_release_is_observed_but_not_verified(monkeypatch,capsys):
+    monkeypatch.setattr(probe,"read_health",lambda:health(probe.PREVIOUS_SOURCE))
+    assert probe.run(SOURCE,DIGEST,count=1)==2
+    result=capsys.readouterr().out
+    assert "OLDER_RELEASE_STILL_ACTIVE" in result
+    assert '"attestation": "NOT_VERIFIED"' in result
+
+
+def test_http_error_never_reports_source_confirmation(monkeypatch,capsys):
+    from urllib.error import HTTPError
+    monkeypatch.setattr(probe,"read_health",lambda: (_ for _ in ()).throw(
+        HTTPError(probe.PUBLIC_HEALTH,403,"Forbidden",{},None)))
+    assert probe.run(SOURCE,DIGEST,count=1)==2
+    output=capsys.readouterr().out
+    assert '"http_status": 403' in output
+    assert '"attestation": "NOT_VERIFIED"' in output
