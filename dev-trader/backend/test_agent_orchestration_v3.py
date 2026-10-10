@@ -64,14 +64,14 @@ def test_data_sentinel_marks_nonfresh_derivatives_as_unknown_not_block():
 
 def test_guardian_checks_leverage_risk_rr_but_cannot_execute():
     good=signal()
-    result=risk_guardian(good,selected=True,max_leverage=20,max_risk_pct=2)
+    result=risk_guardian(good,selected=True,max_leverage=20,max_risk_pct=1)
     assert not result["blockers"] and not result["execution_capable"]
     bad=risk_guardian(signal(target2=100600,rr=1.2),selected=True,
                       max_leverage=21,max_risk_pct=3.0)
     assert "GROSS_RR_BELOW_2_5" in bad["blockers"]
     assert "INADEQUATE_GROSS_REWARD_RISK" in bad["blockers"]
     assert "LEVERAGE_OUTSIDE_1_TO_20" in bad["blockers"]
-    assert "EQUITY_RISK_EXCEEDS_2_PERCENT" in bad["blockers"]
+    assert "EQUITY_RISK_EXCEEDS_1_PERCENT" in bad["blockers"]
 
 
 def test_journal_status_never_claims_restart_durability_without_evidence(tmp_path):

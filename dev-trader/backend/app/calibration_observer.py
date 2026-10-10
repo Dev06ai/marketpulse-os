@@ -6,6 +6,7 @@ parameter is ever fed back into strategy/risk. No hindsight-based optimization.
 from __future__ import annotations
 
 from collections import defaultdict
+import math
 
 MIN_TOTAL = 30
 MIN_HOLDOUT = 10
@@ -13,17 +14,30 @@ MIN_BUCKET = 10
 
 
 def summarize_forward_cohorts(matched: list[tuple[dict,dict]], fee_complete: bool) -> dict:
-    clean=sorted(
-        [(t,r) for t,r in matched if isinstance(t.get("_net"),(int,float))
-         and t.get("closed_ts")],
-        key=lambda x:int(x[0]["closed_ts"]),
-    )
+    # Reject contaminated cohorts rather than silently discarding losing,
+    # malformed, or infinite-PnL records and claiming a strong mean from survivors.
+    clean = []
+    for item in matched:
+        if not isinstance(item, (tuple, list)) or len(item) != 2:
+            continue
+        trade, review = item
+        if not isinstance(trade, dict) or not isinstance(review, dict):
+            continue
+        net, closed = trade.get("_net"), trade.get("closed_ts")
+        if (type(net) not in (int, float) or not math.isfinite(net) or
+                type(closed) is not int or closed <= 0):
+            continue
+        clean.append((trade, review))
+    clean.sort(key=lambda x: x[0]["closed_ts"])
     n=len(clean)
-    if not fee_complete or n<MIN_TOTAL:
+    input_complete = len(clean) == len(matched)
+    if not fee_complete or not input_complete or n<MIN_TOTAL:
         return {
             "status":"INSUFFICIENT_VERIFIED_FORWARD_SAMPLE",
             "verified_matched":n,"required":MIN_TOTAL,
             "fee_accounting_complete":fee_complete,
+            "input_records_complete":input_complete,
+            "rejected_records":len(matched)-len(clean),
             "strategy_changed":False,
         }
     boundary=int(n*0.70)

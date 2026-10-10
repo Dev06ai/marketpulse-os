@@ -43,7 +43,8 @@ def test_updated_quote_keeps_confidence_margin_and_loss_guard_within_caps(monkey
     assert trade['execution_reference_price'] == 100140
     assert trade['leverage'] == 20
     assert trade['confidence_band'] == 'HIGH'
-    assert 76 <= margin <= 100
+    assert margin == 30.042
+    assert risk <= 5.0
     assert risk <= 1000 * executor.max_planned_loss_pct / 100
     assert trade['requested_qty'] * 100140 <= executor.max_notional
     assert abs(trade['planned_risk_usdt'] - risk) < 1e-8
