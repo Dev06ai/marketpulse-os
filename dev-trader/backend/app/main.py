@@ -35,7 +35,7 @@ from .performance_learning_agent import analyze_performance
 from .agent_orchestration import risk_guardian, graph_market, data_sentinel
 from .smc_shadow import compare_structure
 from .observability import (
-    record_eval, record_smc, expose as expose_metrics, CONTENT_TYPE_LATEST
+    record_eval, record_eval_duration, record_smc, expose as expose_metrics, CONTENT_TYPE_LATEST
 )
 from .htf_policy import evaluate_htf_policy, MAX_LEVERAGE, MAX_RISK_PCT, MIN_NET_RR
 from .api_security import (
@@ -570,7 +570,11 @@ async def on_state(s: MarketState):
         last_evaluated_bars = bar_key
         if state.last_market_update_ts and now-state.last_market_update_ts<=3000:
             engine.journal.tick(now,state.last_price)
-        sig = engine.evaluate(state)
+        evaluation_started = time.perf_counter()
+        try:
+            sig = engine.evaluate(state)
+        finally:
+            record_eval_duration(time.perf_counter() - evaluation_started)
         record_eval(state.data_health)
         # Original, confirmed-bar SMC cross-check. It never changes any
         # trade candidate and runs at a bounded 60-second cadence.
