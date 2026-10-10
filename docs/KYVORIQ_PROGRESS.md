@@ -1,71 +1,45 @@
-# KYVORIQ persistent development checkpoint
+# KYVORIQ recovery checkpoint — 2026-10-10 (Asia/Calcutta)
 
-Updated: 2026-10-10 (Asia/Calcutta). Evidence, not promises of completion.
+## Resume here
 
-## Recovery summary
+The secured backend release is deployed to the existing Deplexo service. No full phase of the original 16-phase mandate is claimed complete. Current work: production acceptance, then incremental signal selection/timing improvements. Read this file and KYVORIQ_RESUME_STATE.json before edits; inspect actual Git and health identity.
 
-- CURRENT PHASE: Phase 1 audit; partial Phases 9/10 sizing and Phase 14 security.
-- LAST VERIFIED TASK: Recovered risk commit 1478d01 and completed its pending candle cadence fix; 388 tests plus 3 subtests pass (12.71s).
-- CURRENT UNFINISHED TASK: Verify the release archive/container and coordinate required owner-secret provisioning.
-- LAST VERIFIED APPLICATION COMMIT: 1478d01 (risk milestone); source baseline a92bea883902e1702d9da9fe2447c422e5012a12.
-- MODIFIED FILES: app/main.py, app/evaluation_cadence.py, test_evaluation_cadence.py and continuity documents.
-- TEST FAILURES: None in completed recovery run. Earlier attempts stalled at sandboxed Windows event-loop socket creation; network permission resolved it.
-- DEPLOYMENT: Unchanged. Deplexo owner and uploaded ZIP verified; exact source SHA unverified. Render billing-suspended.
-- NEXT EXACT ACTION: Package and remotely verify the committed release; provision owner auth with user authorization before rollout.
+- Repository: Dev06ai/marketpulse-os; KYVORIQ source branch dev-trader-v1 (a92bea883902e1702d9da9fe2447c422e5012a12), work branch codex/kyvoriq-upgrade-20261009. Main contains separate MarketPulse/NOVA work; do not replace it or merge unrelated audits wholesale.
+- Deployed application commit: 5aacf5bc136b67509670eef46b09fec102153984. GitHub snapshot ee60c755f907e9d44ad82c777e48a88998336940 has the identical tree db09aa1460932802de63c5db831c12d2005075f1. PR https://github.com/Dev06ai/marketpulse-os/pull/119 remains draft.
+- Local application tree was clean before this documentation milestone. Local multi-commit history is preserved in outputs/KYVORIQ-recovery.bundle. GitHub connector preserves the remote snapshot; sandboxed Git credential-manager push failed. Never force-push to resolve this history difference.
+- Full backend suite: 395 tests plus 3 subtests passed locally and in CI. All required CI jobs passed, including Android debug build and the 128 MiB / 0.25 CPU container. Signed APK/visual jobs skipped because Android is unchanged.
 
-## Preserved source and milestones
+## Deployed evidence
 
-Repository: https://github.com/Dev06ai/marketpulse-os. Source branch: dev-trader-v1. Work branch: codex/kyvoriq-upgrade-20261009. Preserve unrelated MarketPulse/main and NOVA. No applicable AGENTS.md found. Existing engine, LangGraph, HTF, execution and UI work is incorporated, sometimes through squashes; scout branch backend matches baseline. Do not merge MarketPulse-focused security/hardening-audit-20261009 wholesale.
+Existing app: 5a86072f-c595-4200-80ba-0bd3be2ba352, https://dev-trader-engine.de.deplexo.com. Google-linked owner access is resolved. Production uses uploaded ZIPs, not a Git deployment branch. Uploaded KYVORIQ-verified-backend.zip (51 files); provider reports RUNNING and exact source name. New container 3f98caa984cbe8e23d1982c20c75ccf72a517c9c7032e2ddcba04f59a3eecf8e. Root '.', Dockerfile, /data mount and existing settings retained. No exchange credential was changed.
 
-1. 6660f98: Established Git-backed continuity documents before application edits.
-2. 146ff22: Isolated six filesystem fixtures; 333 baseline tests passed without relaxing behavioral assertions.
-3. b4f45be: Integrated backend-only auth from audit/backend-hardening-review. Added bounded streamed bodies, credential-safe pairing validation, malformed-attempt throttling and active/quiet WebSocket revocation. 350 tests plus 3 subtests passed and now reproduced.
+Archive SHA256: 8467b15b9f2673c7cbb8765aef3aa66808868fdd5f4e36419e130d7d2a2032fc. Public health reports source 5aacf5b and content digest 35b6100ae68cd9ac1ca10e0557d243f14e9321133c3abbb2702be442511e5147, matching the verified archive. Owner token was entered/saved by the user; only its masked name was inspected. Private HTTP returns 401 (not unprovisioned 503), invalid pairing is refused, unauthenticated dashboard/alerts WebSockets reject connections.
 
-The broad risk edit was rejected by automatic safety review for removing daily caps and was never applied. The later narrowed edit was interrupted by usage exhaustion and never applied. Recovery found a clean working tree. Existing trade cap (default 3/day), signal cap, daily loss limit, consecutive-loss limit, reconciliation, freshness and protective-stop gates remain intact. Do not bypass review or retry cap removal.
+Health HTTP 200, connected BTC WebSocket and changing price. 5m/15m/1h/4h charts each provide 120 candles. The app configuration reports demo_auto_execution true and live_money_execution false. Intermittent DEGRADED freshness must not be called fully healthy: observed demo book age 10–15 seconds. An independent public demo-book observation also had only three packets over 18 seconds. This supports sparse upstream updates; it does not prove all network causes. Keep the existing 5-second book freshness guard unchanged. Provider measurement roughly 80 MiB / 128 MiB and 0.04 / 0.25 CPU after startup is one observation, not a steady-state guarantee.
 
-## Verified gaps and blockers
+Immediately before rollout: demo ready/enabled, zero open exchange positions/trades/unknown submissions/unreconciled entries, accounting complete, daily cap 3. Historical records previously showed two closed fills and protection; these are not fresh post-deployment execution validation. Persistent /data was retained, but authenticated history/reconciliation after restart is still pending. No order was forced, cancelled or closed. Real-money trading was never enabled. Startup caused a short provider transition; the old process logged a shutdown PermissionError after application shutdown completed, while the new process started successfully.
 
-- Per-trade risk now defaults to 0.5% with a shared 1% hard ceiling; not deployed.
-- Preferred confidence margin now permits smaller risk-sized positions and never rounds exposure upward; exchange minimums still apply.
-- Closed 5m/15m/1H bars and latest-bar corrections now trigger one immediate evaluation even with delayed callbacks. Open-bar ticks retain 1s cadence; future bars do not trigger early evaluation.
-- CI now builds a source-stamped ZIP only after backend, security and constrained-container gates. It no longer restarts the old uploaded ZIP while claiming to deploy new Git code.
-- Deployed dashboard previously returned private execution metadata without authentication; local security changes are not deployed.
-- https://dev-trader-engine.de.deplexo.com reported market-decision-v3.8/BITGET_DEMO, which does not establish deployed commit identity.
-- After explicit sign-out approval, Google-linked dubeydevbhushan owns the existing app 5a86072f-c595-4200-80ba-0bd3be2ba352. Current source is uploaded KYVORIQ-Deplexo-Integrations-v4.zip, not a connected Git branch. Persistent volume is /data, build root ., Dockerfile Dockerfile. Container 93884dab09bd653079c9c862900a69e7780bf35bff52895aba7fbe19fe93708d. Source commit remains unverified; never infer SHA from version label.
-- Render service srv-dau32aad0e5s73e27qrg tracks dev-trader-v1 and is billing-suspended. No hosting settings changed.
-- Android source/manifest remain 0.21.6/build 131. User confirms 131 installed; current build, signature and pairing against secured backend remain unverified.
-- Local tests used mocks, not real exchange credentials or orders. Real demo fills, strategy expectancy and host persistence remain unverified.
+## Phone and remaining acceptance
 
-## Remaining mandate and constraints
+User confirms Android 0.21.6/build 131 installed. Existing Insights > PAIR DEVICE supports this release and stores only a seven-day encrypted device token. User confirms DEVICE PAIRED and dashboard connected; server heartbeat shows one authenticated WebSocket client. Never ask for the owner secret in chat. Android source unchanged and debug build passed; no replacement APK is required for this backend-only release. Phone dashboard connectivity is user-confirmed. Notifications, existing trade history and authenticated demo status still need acceptance; a combined phone-side check was requested. Natural entry/fill/protective orders and measurable strategy expectancy remain unverified.
 
-No complete upgrade phase is claimed. Continue all 16 phases from existing code: baseline; structure; trading concepts; anticipation; missed opportunities; latency; orchestration; signal quality; demo execution; risk; regimes; evaluation; Android; security; end-to-end tests; release.
+## Preserved milestones
 
-Use Bitget demo only and existing free infrastructure. Keep deterministic risk/execution gates and alert thresholds separate. Preserve all caps and hard protections. Do not claim profitability from tests or hypothetical trades. Do not deploy untested code.
+1. 6660f98: persistent continuity docs.
+2. 146ff22: six isolated execution filesystem fixtures; 333 tests passed.
+3. b4f45be: backend HTTP/WS authentication, bounded requests/pairing, session revocation; 350 tests passed.
+4. 1478d01: 0.5% default / 1% immutable hard risk, downward-only sizing below margin preferences and final reserve check; 381 tests passed.
+5. a0b605e: newly confirmed 5m/15m/1H candles and corrections evaluated immediately despite delayed callback; open bars bounded to 1s; 388 tests passed.
+6. 5aacf5b: validated release identity, reproducible committed ZIP, CI-gated packaging; 395 tests passed. This release is now deployed.
 
-## Checkpoint and rollback
+Previously rejected broad risk edit removed daily caps and was never applied. Narrow approved risk work preserved daily trade/signal caps, daily loss/consecutive-loss gates, reconciliation and stop protections. Do not bypass review. No pending rejected code remains in the working tree.
 
-After each verified milestone, update these documents and commit a focused, secret-checked diff. On resume read this file and resume JSON, then inspect Git status/history; current evidence supersedes stale documents. Record incomplete work without calling it complete.
+## Next exact work and remaining mandate
 
-Rollback through reviewed revert commits, never destructive resets or shared force-pushes. Source baseline: a92bea883902e1702d9da9fe2447c422e5012a12. No deployment, order, position or published Android release has been changed by this upgrade session.
+Confirm phone pairing and authenticated post-restart state. Observe fresh demo data without weakening guards. Investigate candidate selection ordering (currently top-ranked candidate alone gets HTF review), cold graph latency and full event-to-fill measurements with regression tests before changes. Preserve deployed 5aacf5b while new code is unverified.
 
-## Milestone 3: conservative risk sizing
+All 16 phases retain outstanding acceptance: baseline completeness; structure; trading concepts; anticipatory lifecycle; missed opportunities; latency; orchestration; signal quality; demo lifecycle; risk; regimes; comparable chronological out-of-sample evaluation; Android visual/notification checks; security/reliability; requested end-to-end scenarios; final integration. Existing features are preserved, not all reimplemented or declared complete. No profitability claim follows from unit tests.
 
-381 tests plus 3 subtests pass (11.62s). Risk defaults to 0.5%, clamps at 1%, and the independent guardian rejects over 1%. Manual calculator cannot override 1%. Lot sizing rounds down below the margin preference when necessary; daily budget, reserve, notional and margin maximum remain enforced. Final balance refresh can block submission if reserve would be consumed. Added 31 regression cases including smaller accounts, wide stops, invalid settings and last-moment balance changes. Existing daily trade/signal caps, stop protection and loss gates are unchanged. Five old expectations were updated to the requested stricter sizing semantics; no unrelated assertion was removed. Offline mocks only; no trading or deployment.
+## Recovery and rollback
 
-## Milestone 4: cadence and production verification
-
-Full suite: 388 passed plus 3 subtests in 12.71s. Seven new tests cover delayed callbacks for all three timeframes, open-bar throttling, corrected/future bars, clock rollback and the actual on_state integration. No thresholds, caps or execution gates changed.
-
-Production read-only probes on resumed session: health HTTP 200, HEALTHY feed, connected WebSocket, engine market-decision-v3.8; dashboard SCANNING, no active signal. Bitget demo client ready, zero open trades/unknown submissions/unreconciled entries, accounting complete. Two historical CLOSED records report actual fills and verified stop coverage; these are existing records, not newly executed validation trades. Production still reports 2% planned risk, proving local tightening is not deployed.
-
-The required KYVORIQ_API_OWNER_TOKEN is absent from the host environment-variable names. Deploying the auth changes now would return 503 for private/mobile routes. User explicitly forbids credential changes without authorization; browser credential creation requires user handoff. Prepare the tested archive and exact release instructions before asking the user to provision that secret. Do not change exchange credentials, force a demo trade, bypass auth or deploy an unusable client.
-
-## Milestone 5: release source identity and verified archive gate
-
-Local full suite: 395 passed plus 3 subtests, 12.03s. Public health now reports a validated release-manifest commit/content hash when packaged; unstamped source reports UNATTESTED. Release packaging reads committed allowlisted files only, refuses dirty backend source, omits runtime secrets/data and stamps a reproducible ZIP. CI artifact production depends on security, backend and free-container jobs; constrained-container auth uses an ephemeral masked test secret.
-
-Production read-only Node transport probes passed dashboard/alerts WebSocket initial frames and keepalive, bootstrap HTTP 200 and 120 chart candles from BITGET_WS. Demo enabled/ready, operator not paused, reconciliation HEALTHY, zero exchange positions and no protection halt. An earlier Python urllib probe received HTTP 403 before health; it is not recorded as a passed smoke test. No trade was forced. Existing historical fill/protection records are not fresh execution validation.
-
-Synthetic local benchmark (20 evaluations, current hardware, includes cold first call): median 10.30ms, P95 nearest-rank 13.86ms, worst 1452.20ms, mean 82.24ms. Windows RSS measurement unavailable/null. This does not establish real market-event-to-fill latency or profitability. Investigate initial graph import overhead separately before claiming performance improvement.
-
-Git CLI push failed in sandboxed credential-manager startup; preserve local history and use the already authorized GitHub connector for the remote recovery branch. No changes to dev-trader-v1 or main have been published.
+After each meaningful milestone, update docs, secret-scan staged changes and commit. Preserve the verified archive, release manifest and Git bundle under outputs. Local application history and remote snapshot differ in commit ancestry but match content; never reset or force-push either. Retain /data during any redeploy. Previous runtime was KYVORIQ-Deplexo-Integrations-v4.zip with unverified SHA; do not blindly roll back to its unauthenticated API. Prefer a tested corrective release. Render remains billing-suspended and unchanged. Use existing free infrastructure, Bitget demo only, no paid dependencies.

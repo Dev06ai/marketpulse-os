@@ -1,23 +1,23 @@
-# KYVORIQ release acceptance
+# KYVORIQ release acceptance — 2026-10-10
 
-Status: NOT READY — baseline audit in progress. No deployment or release performed in this session.
+The tested secured backend is deployed; full 16-phase acceptance remains incomplete.
 
-- [ ] Verify source/deployed branch and commit identity.
-- [ ] Reconcile relevant completed branches without losing existing upgrades.
-- [ ] Reproduce backend baseline and document confirmed defects.
-- [ ] Verify closed-candle timing, no future leakage and intended market structures.
-- [ ] Verify opportunity lifecycle, strategy-specific confirmations and rejection reporting.
-- [ ] Measure acquisition, decision, notification and execution latency.
-- [ ] Verify hard equity risk, aggregate exposure, daily loss and drawdown limits.
-- [ ] Verify demo-only transport, idempotency, uncertain submissions and restart reconciliation.
-- [ ] Verify partial fills and protective stops independently of AI reasoning.
-- [ ] Verify authenticated HTTP/WebSocket/admin/trading surfaces and secret handling.
-- [ ] Compare strategies on identical chronological datasets after realistic costs.
-- [ ] Report out-of-sample and forward-demo evidence separately; no profitability claim without evidence.
-- [ ] Run all 25 requested end-to-end scenarios with limitations recorded.
-- [ ] Build and visually verify Android, chart interactions, notifications and restart.
-- [ ] Verify signed APK version and checksum; retain prior verified release.
-- [ ] Stage backend safely and verify actual deployed revision, protection and persistence.
-- [ ] Update checkpoints, test results and rollback instructions; inspect staged secrets.
+- [x] Preserve existing source and verified Git recovery checkpoints.
+- [x] 395 backend tests + 3 subtests pass.
+- [x] Security and full-history secret scan pass.
+- [x] Constrained 128 MiB / 0.25 CPU container, auth/WS and persisted-volume checks pass.
+- [x] Android debug build passes; existing build 131 pairing code unchanged.
+- [x] User provisions owner token; value never exposed by agent.
+- [x] Upload tested archive to existing app without changing host settings/credentials/data mount.
+- [x] Deployed health identity matches 5aacf5b and release content digest.
+- [x] Public charts available; private HTTP/WS deny unauthenticated access; invalid pairing refused.
+- [x] App configuration explicitly disables real-money execution; demo transport remains locked.
+- [x] User confirms phone secure pairing and dashboard connection; server sees authenticated WS client.
+- [ ] Confirm phone notifications and background reconnect.
+- [ ] Confirm authenticated post-restart history, caps, reconciliation and protective-order state.
+- [ ] Observe stable fresh demo book/trade data; intermittent degradation remains protected.
+- [ ] Observe natural qualified demo entry, fill, protection and close with auditable evidence.
+- [ ] Finish full timestamp pipeline, comparable out-of-sample evaluation and all requested E2E scenarios.
+- [ ] Finish remaining 16-phase acceptance; no profitability claims from tests.
 
-Unchecked items are unverified, not passed.
+Unchecked items are pending, not passed. No new APK is required for this backend-only release. Do not merge unrelated branches or restore the old unauthenticated ZIP blindly. Preserve /data and the tested source-stamped release for recovery.

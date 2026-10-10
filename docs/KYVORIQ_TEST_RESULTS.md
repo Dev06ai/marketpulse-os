@@ -54,3 +54,9 @@ Full backend suite: **388 passed, 3 subtests passed**, 12.71s, one upstream warn
 ## Source identity / release gate (2026-10-10)
 
 **395 passed, 3 subtests passed**, 12.03s; one upstream warning. Log work/release-pytest.log. Workflow YAML parsed and archive job dependencies verified. Container/Android CI execution remains pending. Synthetic benchmark: median 10.30ms, nearest-rank P95 13.86ms, maximum 1452.20ms over 20 evaluations including cold start; not production latency. Public read-only Node probes verified dashboard/alerts frames and keepalive, bootstrap and 120 chart candles. No current position exists to test protective orders freshly.
+
+## Verified rollout (2026-10-10)
+
+CI run 37977517483: backend, security, free-container, Android debug and verified ZIP gate SUCCESS. Container verified HTTP/WS auth and keepalive, read-only root, writable persisted /data across restart, 128 MiB / 0.25 CPU, no OOM. Signed APK and visual jobs skipped (Android unchanged). Linux synthetic benchmark median 3.72ms/P95 4.5ms/worst 563.08ms, 20 evaluations; not live trading latency.
+
+Production health source_commit 5aacf5b and content hash match verified release. HTTP 200 health/chart/config, 120 candles each 5m/15m/1h/4h. Bootstrap/diagnostics/trades return 401 with private no-store; invalid pairing refused401; both unauthenticated WS profiles rejected. BTC feed connected with changing prices, intermittent DEGRADED because demo book freshness exceeded 5s. Independent demo-public socket saw 3 book packets in 18s, ~555–577ms arrival age. Do not weaken stale-data admission or call feed uniformly healthy. App-config live_money_execution=false. Phone pairing, notification delivery, authenticated history after restart and fresh real demo fills/protection remain pending.

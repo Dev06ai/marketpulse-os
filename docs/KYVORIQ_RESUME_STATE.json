@@ -7,7 +7,7 @@
   "work_branch": "codex/kyvoriq-upgrade-20261009",
   "source_commit": "a92bea883902e1702d9da9fe2447c422e5012a12",
   "phase": 1,
-  "status": "release_code_verified_pending_archive_and_ci",
+  "status": "secured_release_deployed_and_phone_connected",
   "completed_phases": [],
   "application_changes": [
     "isolated six execution test fixtures",
@@ -25,15 +25,32 @@
     "subtests": 3
   },
   "deployment": {
-    "render": "billing_suspended",
-    "deplexo": "owner verified; existing app 5a86072f-c595-4200-80ba-0bd3be2ba352 uses KYVORIQ-Deplexo-Integrations-v4.zip; source SHA unverified; /data mount",
-    "changed_this_session": false,
-    "blocker": "Required owner token absent; user must authorize/provision credential before secured backend rollout"
+    "render": "billing_suspended_unchanged",
+    "deplexo_app_id": "5a86072f-c595-4200-80ba-0bd3be2ba352",
+    "url": "https://dev-trader-engine.de.deplexo.com",
+    "changed_this_session": true,
+    "source_type": "uploaded_zip_not_git_auto_deploy",
+    "source_commit": "5aacf5bc136b67509670eef46b09fec102153984",
+    "content_sha256": "35b6100ae68cd9ac1ca10e0557d243f14e9321133c3abbb2702be442511e5147",
+    "archive_sha256": "8467b15b9f2673c7cbb8765aef3aa66808868fdd5f4e36419e130d7d2a2032fc",
+    "container_id": "3f98caa984cbe8e23d1982c20c75ccf72a517c9c7032e2ddcba04f59a3eecf8e",
+    "persistent_mount": "/data",
+    "owner_token": "user_saved; masked name verified; private and invalid-pair responses 401 confirm configured; secret not read",
+    "health": "HTTP 200, exact release identity; connected BTC feed; intermittent DEGRADED due stale demo order book",
+    "private_routes": "bootstrap/diagnostics/trades return 401; dashboard/alerts unauthenticated WS rejected",
+    "charts": "5m/15m/1h/4h each 120 candles",
+    "live_money_execution": false,
+    "settings": "Preserved; exchange credentials unchanged; no forced orders",
+    "pending": [
+      "authenticated production execution/history/protection reconciliation",
+      "natural demo entry/fill/protective-order lifecycle",
+      "notification delivery on phone"
+    ]
   },
   "android": {
     "source_version": "0.21.6",
     "source_build": 131,
-    "verification": "User confirms 131 installed; pairing and local build unverified"
+    "verification": "User confirms build 131 paired and dashboard connected after deployment; server heartbeat has one authenticated WS client; CI Android debug build passed; no new APK required."
   },
   "constraints": [
     "bitget_demo_only",
@@ -44,7 +61,23 @@
     "preserve_hard_protections",
     "never_bypass_automatic_review"
   ],
-  "next_action": "Prepare tested source-attested release and rollout checks; user provisions missing owner token before deployment; continue timing/selection improvements.",
-  "rollback_source": "a92bea883902e1702d9da9fe2447c422e5012a12",
-  "last_verified_application_commit": "a0b605e"
+  "next_action": "Verify Android build 131 pairing; monitor market freshness without weakening admission; inspect remaining selection/timing gaps; preserve separate tested and deployed revisions.",
+  "rollback_source": "Retain tested secured archive and /data. Previous runtime uploaded KYVORIQ-Deplexo-Integrations-v4.zip has no verifiable SHA; do not restore unauthenticated source blindly.",
+  "last_verified_application_commit": "5aacf5bc136b67509670eef46b09fec102153984",
+  "remote_checkpoint": {
+    "commit": "ee60c755f907e9d44ad82c777e48a88998336940",
+    "tree": "db09aa1460932802de63c5db831c12d2005075f1",
+    "pull_request": 119,
+    "local_tree_matches": true
+  },
+  "ci": {
+    "run_id": 37977517483,
+    "backend": "success",
+    "security": "success",
+    "free_container": "success",
+    "android_debug_build": "success",
+    "verified_zip_gate": "success",
+    "signed_apk": "skipped_no_android_change",
+    "visual_check": "skipped_no_android_change"
+  }
 }
