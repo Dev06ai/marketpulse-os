@@ -77,7 +77,7 @@ class PushService:
                 ))
                 self.last_test_sent += 1
             except Exception as exc:
-                errors.append(str(exc))
+                errors.append(type(exc).__name__)
         if errors:
             self.last_error = "; ".join(errors[:3])
         return {"sent": self.last_test_sent, "ready": True, "error": self.last_error}
@@ -93,8 +93,15 @@ class PushService:
             title=f"BTC {signal['direction']} • {style} • {signal['setup']}"
             body=f"{style} · Entry {signal['entry']:.2f} · SL {signal['stop']:.2f} · TP1 {signal['target1']:.2f} · TP2 {signal['target2']:.2f} · R:R {signal['rr']:.2f}"
         signal_id = str(signal.get("id") or "")
+        # Management actions for the same position may legitimately change.
+        # Dedupe ordinary repeated signals, not distinct protective actions.
+        dedupe_key = (
+            signal_id + ":" + str(management.get("type") or "") +
+            ":" + str(management.get("status") or "") +
+            ":" + str(management.get("action") or "")
+        ) if management else signal_id
         for token in list(self.tokens):
-            if not self._should_notify(token, "signal", signal_id, 900):
+            if not self._should_notify(token, "signal", dedupe_key, 900):
                 continue
             try:
                 messaging.send(messaging.Message(
@@ -102,7 +109,7 @@ class PushService:
                     notification=messaging.Notification(title=title, body=body),
                     data={"type":"trade_signal","signal_id":signal_id,
                           "management_type": management.get("type","")}))
-                self._notification_sent(token, "signal", signal_id)
+                self._notification_sent(token, "signal", dedupe_key)
             except Exception as exc:
                 self.last_error="FCM signal delivery failed: " + type(exc).__name__
 
