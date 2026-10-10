@@ -152,24 +152,68 @@ def chronological_split(records,train_fraction=.6):
                 use="Freeze the strategy before evaluating the unseen period",profitability_proven=False)
 
 
+def _causal_confirmed_candles(raw_candles, cutoff, candle_type):
+    """Keep only candles fully finished *before* a recorded decision.
+
+    Historical OPEN bars can be revised after the decision; replaying their
+    final high/low/close is look-ahead contamination. Never pass them through.
+    A malformed stored row is excluded rather than crashing an audit view.
+    """
+    import math
+    if not isinstance(raw_candles, list):
+        return []
+    selected = {}
+    for row in raw_candles[-1000:]:
+        if not isinstance(row, dict) or row.get("confirmed") is not True:
+            continue
+        try:
+            start, end = row["start"], row["end"]
+            if (isinstance(start, bool) or isinstance(end, bool)
+                    or not isinstance(start, int) or not isinstance(end, int)
+                    or not 0 < start <= end < cutoff):
+                continue
+            values = [float(row[k]) for k in ("open", "high", "low", "close", "volume")]
+            op, high, low, close, volume = values
+            if (not all(math.isfinite(x) for x in values) or
+                    min(op, low, close) <= 0 or high < max(op, close, low) or
+                    low > min(op, close) or volume < 0):
+                continue
+            selected[start] = candle_type(start=start, end=end, open=op,
+                high=high, low=low, close=close, volume=volume, confirmed=True)
+        except (KeyError, ValueError, TypeError, OverflowError):
+            continue
+    return [selected[k] for k in sorted(selected)]
+
+
 def replay_decisions(records):
-    """Rebuild structure from recorded inputs without future bars or live state."""
+    """Inspect confirmed structure causally; never imply a fill backtest."""
     from dataclasses import fields
     from .models import MarketState,Candle
     from .structure import structure_map
     allowed={f.name for f in fields(MarketState)}
     results=[]
-    for record in sorted(records,key=lambda r:r["ts"]):
+    skipped=0
+    ordered = sorted((r for r in records if isinstance(r, dict)),
+                     key=lambda r: r.get("ts") if isinstance(r.get("ts"),int)
+                     and not isinstance(r.get("ts"),bool) else -1)
+    for record in ordered:
         if record.get("kind")!="DECISION":
             continue
-        ts=record["ts"]
-        raw={k:v for k,v in record.get("market",{}).items() if k in allowed}
+        ts=record.get("ts")
+        if isinstance(ts,bool) or not isinstance(ts,int) or ts<=0:
+            skipped+=1
+            continue
+        market=record.get("market")
+        if not isinstance(market,dict):
+            skipped+=1
+            continue
+        raw={k:v for k,v in market.items() if k in allowed}
         for name in ("candles_5","candles_15","candles_60"):
-            raw[name]=[Candle(**c) for c in raw.get(name,[]) if not c.get("confirmed") or c["end"]<ts]
+            raw[name]=_causal_confirmed_candles(raw.get(name),ts,Candle)
         state=MarketState(**raw)
         mapping=structure_map(state,ts)
         results.append(dict(ts=ts,decision=record.get("report"),structure_map=mapping,
                             candidates=record.get("candidates",[])))
     return dict(scope="CAUSAL_DECISION_INSPECTION",records=results,
-                profitability_backtest_available=False,
-                limitation="Recorded snapshots and sampled prices do not reconstruct every exchange trade or fill.")
+                skipped_invalid_decisions=skipped, profitability_backtest_available=False,
+                limitation="Unconfirmed/future bars are excluded; recorded snapshots and sampled prices cannot prove exchange fills.")
