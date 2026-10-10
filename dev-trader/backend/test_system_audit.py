@@ -15,7 +15,7 @@ from test_ledger import fill
 
 
 @pytest.mark.parametrize('connected,firebase', [(True, False), (False, False), (True, True), (False, True)])
-def test_opportunity_transition_is_delivered_independently_of_firebase(monkeypatch, connected, firebase):
+def test_healthy_opportunity_reaches_in_app_radar_without_developing_fcm(monkeypatch, connected, firebase):
     from app import main
     sent = []
     fake_engine = SimpleNamespace(
@@ -32,10 +32,13 @@ def test_opportunity_transition_is_delivered_independently_of_firebase(monkeypat
     monkeypatch.setattr(main, 'last_engine_eval_ms', 0)
     monkeypatch.setattr(main, 'last_opportunity_alert', dict(key='', ts=0))
     monkeypatch.setattr(main, 'last_trade_event', {})
-    monkeypatch.setattr(main, 'state', MarketState())
+    healthy = MarketState()
+    healthy.data_health = 'HEALTHY'
+    monkeypatch.setattr(main, 'state', healthy)
     asyncio.run(main.on_state(main.state))
     assert main.current_alerts()['opportunity_alert']['key'] == 'radar:LONG:CONFIRMED:SFP'
-    assert len(sent) == int(firebase and not connected)
+    # Developing / watch alerts are in-app only; never priority FCM.
+    assert sent == []
 
 
 @pytest.mark.parametrize('fee', [None, 'NaN', 'Infinity', 'broken'])
