@@ -1,5 +1,7 @@
 # KYVORIQ — 16-workstream acceptance ledger (2026-10-10)
 
+**NOTICE:** This is a preliminary workstream reconstruction, **not** the owner's original phase numbering. The owner's original 16 phases are now available and are authoritative; see [`KYVORIQ_ORIGINAL_16_PHASE_TRACEABILITY.md`](KYVORIQ_ORIGINAL_16_PHASE_TRACEABILITY.md). Do not identify rows in this older ledger as Phase 1–16.
+
 This is a conservative implementation/acceptance map reconstructed from the existing
 `docs/KYVORIQ_PROGRESS.md` recovery checkpoint. It does **not** replace an original
 unavailable 16-phase prompt or assert that all workstreams are complete.
