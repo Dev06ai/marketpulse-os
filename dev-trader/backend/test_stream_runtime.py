@@ -43,6 +43,7 @@ def test_bitget_demo_execution_uses_real_public_ws_market_data_by_default(monkey
     stream = BitgetMarketStream("BTCUSDT", on_state)
     assert stream.url == "wss://ws.bitget.com/v3/ws/public"
     assert stream.public_market_venue == "LIVE_PUBLIC_MARKET_DATA"
+    assert stream.volume_profile.venue == "BITGET_LIVE_PUBLIC_USDT_FUTURES"
     assert stream.product_type == "USDT-FUTURES"
     assert stream.feed_diagnostics()["public_market_venue"] == "LIVE_PUBLIC_MARKET_DATA"
 
@@ -52,6 +53,7 @@ def test_bitget_demo_endpoint_remains_explicit_reversible_override(monkeypatch):
     monkeypatch.setenv("BITGET_PUBLIC_WS_URL", "wss://wspap.bitget.com/v3/ws/public")
     stream = BitgetMarketStream("BTCUSDT", lambda _: None)
     assert stream.public_market_venue == "DEMO_PUBLIC_MARKET_DATA"
+    assert stream.volume_profile.venue == "BITGET_DEMO_PUBLIC_USDT_FUTURES"
 
 
 def test_untrusted_bitget_public_market_ws_is_rejected(monkeypatch):
