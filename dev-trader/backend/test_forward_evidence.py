@@ -1,5 +1,5 @@
 import pytest
-from tools.forward_evidence import evaluate, parse_closed, summarize, collect, read_jsonl
+from tools.forward_evidence import evaluate, parse_closed, summarize, collect, read_jsonl, wilson_interval
 
 NOW = 1900000000000
 
@@ -77,3 +77,18 @@ def test_empty_or_huge_jsonl_defended(tmp_path):
     p=tmp_path/'log.jsonl';p.write_text('{"a":1}\n')
     assert read_jsonl(p)==[{'a':1}]
     with pytest.raises(ValueError): read_jsonl(p,max_bytes=2)
+
+def test_latency_median_and_tail_not_confused():
+    rows=[trade(1,signaled_ms=100,entered_ms=110,exited_ms=130),
+          trade(2,signaled_ms=200,entered_ms=240,exited_ms=260),
+          trade(3,signaled_ms=300,entered_ms=600,exited_ms=630),
+          trade(4,signaled_ms=700,entered_ms=1100,exited_ms=1130)]
+    result=evaluate(rows,as_of_ms=NOW,min_samples=4)['all']
+    assert result['median_signal_to_entry_ms']==170
+    assert result['p95_signal_to_entry_ms']==400
+
+
+def test_wilson_interval_for_small_sample_is_not_certain():
+    lower,upper=wilson_interval(1,2)
+    assert lower < 50 < upper
+    assert wilson_interval(0,0) is None
