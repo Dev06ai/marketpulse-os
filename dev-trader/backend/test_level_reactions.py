@@ -253,3 +253,33 @@ def test_zone_midpoint_touch_does_not_retire_whole_zone():
         lr.collect_reaction_levels = original
     assert "zone" not in tracker.tapped
     assert any(row["id"]=="zone" for row in result["levels"])
+
+
+def test_expired_unconfirmed_candle_cannot_trigger_new_reclaim_with_later_price():
+    tracker = LevelReactionTracker()
+    start = 3_000_000
+    state = MarketState(
+        last_price=102.0,
+        candles_5=[candle(start, 100.0, 103.0, 99.0, 102.0, False)],
+    )
+    f = MarketFeatures(atr_15=5.0, previous_day_low=100.0)
+    tracker.update(state, f, now_ms=start+60_000)
+    # In the next bar, the cached open candle is already expired even
+    # though a fresh quote arrives; it cannot supply an old sweep wick.
+    state.last_price = 100.0
+    touched = tracker.update(state, f, now_ms=start+300_000+20_000)
+    assert touched["reaction_candle_fresh"] is False
+    assert touched["trigger"] is None
+    state.last_price = 102.0
+    late = tracker.update(state, f, now_ms=start+300_000+40_000)
+    assert late["reaction_candle_fresh"] is False
+    assert late["trigger"] is None
+
+
+def test_forming_candle_timing_allows_one_second_edge_not_90s():
+    start = 5_000_000
+    raw = candle(start,100,102,99,100,False)
+    state = MarketState(last_price=100,candles_5=[raw])
+    assert LevelReactionTracker._live_candle(state,raw.end) is raw
+    assert LevelReactionTracker._live_candle(state,raw.end+1000) is raw
+    assert LevelReactionTracker._live_candle(state,raw.end+1001) is None
