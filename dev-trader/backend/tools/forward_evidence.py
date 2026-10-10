@@ -77,6 +77,8 @@ def parse_closed(record: object, *, as_of_ms: int) -> ClosedDemoTrade:
     if risk <= 0:
         raise ValueError("risk must be positive")
     expected_net = gross - entry_fee - exit_fee + funding
+    if not math.isfinite(expected_net) or not math.isfinite(expected_net / risk):
+        raise ValueError("net pnl or risk-normalized result is not finite")
     # Explicit net reconciliation is required to prevent claiming fictitious
     # net profits from incomplete fee/funding accounting.
     supplied_net = _finite_num(record.get("exchange_net_pnl_usdt"))
@@ -167,6 +169,16 @@ def summarize(trades: Iterable[ClosedDemoTrade], *, min_samples: int = MIN_MEANI
     }
 
 
+def _withhold_incomplete_statistics(summary: dict) -> dict:
+    """Keep factual totals but prohibit a win-rate/expectancy claim on partial input."""
+    summary = dict(summary)
+    summary["sample_sufficient"] = False
+    for key in ("win_rate_pct", "win_rate_wilson_95", "net_expectancy_r", "net_profit_factor"):
+        summary[key] = None
+    summary["limitations"] += " Rejected or duplicate input rows: statistical claims withheld."
+    return summary
+
+
 def evaluate(records: Iterable[object], *, as_of_ms: int, split_ms: int | None = None,
              min_samples: int = MIN_MEANINGFUL_SAMPLES) -> dict:
     if not isinstance(as_of_ms, int) or as_of_ms <= 0:
@@ -177,15 +189,22 @@ def evaluate(records: Iterable[object], *, as_of_ms: int, split_ms: int | None =
         raise ValueError("invalid split_ms")
     collected = collect(records, as_of_ms=as_of_ms)
     trades = collected["trades"]
+    rejected_count = collected["seen"] - len(trades)
+    input_complete = rejected_count == 0
+    overall = summarize(trades, min_samples=min_samples)
+    if not input_complete:
+        overall = _withhold_incomplete_statistics(overall)
     report = {
-        "schema_version": 1,
+        "schema_version": 2,
         "as_of_ms": as_of_ms,
         "source": "EXCHANGE_CONFIRMED_BITGET_DEMO_ONLY",
         "records_seen": collected["seen"],
         "accepted_trades": len(trades),
-        "rejected_count": collected["seen"] - len(trades),
+        "rejected_count": rejected_count,
         "rejected_reason_counts": collected["rejected"],
-        "all": summarize(trades, min_samples=min_samples),
+        "input_records_complete": input_complete,
+        "exchange_history_completeness_verified": False,
+        "all": overall,
         "no_profitability_claim": True,
     }
     if split_ms is not None:
@@ -194,8 +213,10 @@ def evaluate(records: Iterable[object], *, as_of_ms: int, split_ms: int | None =
         straddling = len(trades) - len(training) - len(test)
         report["chronological_split"] = {
             "cutoff_ms": split_ms,
-            "train": summarize(training, min_samples=min_samples),
-            "holdout": summarize(test, min_samples=min_samples),
+            "train": (summarize(training, min_samples=min_samples) if input_complete else
+                      _withhold_incomplete_statistics(summarize(training, min_samples=min_samples))),
+            "holdout": (summarize(test, min_samples=min_samples) if input_complete else
+                        _withhold_incomplete_statistics(summarize(test, min_samples=min_samples))),
             "boundary_excluded": straddling,
             "warning": "Holdout is truly out-of-sample ONLY if this cutoff and model were frozen before seeing holdout outcomes."
         }
