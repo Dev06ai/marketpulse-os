@@ -748,9 +748,15 @@ async def on_state(s: MarketState):
 
         if sig and state.data_health == "HEALTHY":
             dispatch_signal(sig.to_dict())
-        # Even if the strategy erroneously emits a candidate during a
-        # degraded feed, it is not dispatched to Bitget or Android. Protective
-        # position-management events above still flow independently.
+        elif sig:
+            # A candidate generated around a feed transition must not remain
+            # an ACTIVE phantom setup that consumes the daily signal quota.
+            # The retirement helper refuses to touch confirmed/open exposure.
+            engine.retire_unexecuted_signal(
+                str(sig.id), "Bitget market feed is not HEALTHY; no order or signal delivered.",
+                "SKIPPED",
+            )
+        # Position-management events still flow when new entries are paused.
 
 
 async def performance_learning_loop():
