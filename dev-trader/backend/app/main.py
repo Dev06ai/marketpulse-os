@@ -113,6 +113,32 @@ last_opportunity_alert = {"key": "", "ts": 0, "title": "", "body": ""}
 last_trade_event = {}
 last_learning_rehydrate_ts = 0.0
 
+# FCM is a secondary delivery path. Do not block the primary Bitget market
+# event loop or delay the exchange submission task on a remote FCM request.
+# Serializing the bounded background queue also keeps per-device dedupe stable.
+_push_delivery_lock = asyncio.Lock()
+_push_delivery_tasks: set[asyncio.Task] = set()
+
+
+async def _deliver_push_background(sender, payload: dict):
+    async with _push_delivery_lock:
+        try:
+            await asyncio.to_thread(sender, dict(payload))
+        except Exception:
+            # FCM has its own redacted delivery-status diagnostics. Push
+            # problems must never interrupt exchange reconciliation.
+            pass
+
+
+def queue_push(sender, payload: dict) -> bool:
+    """Queue best-effort secondary notifications without blocking signals."""
+    if not push.ready or len(_push_delivery_tasks) >= 32:
+        return False
+    task = asyncio.create_task(_deliver_push_background(sender, dict(payload)))
+    _push_delivery_tasks.add(task)
+    task.add_done_callback(_push_delivery_tasks.discard)
+    return True
+
 
 def reconcile_execution_truth():
     """Make exchange execution state authoritative over cached strategy signals."""
@@ -490,9 +516,9 @@ def dispatch_signal(signal_payload: dict):
             )
             return {"scheduled": False, "skipped": True, "reason": reason}
 
-        if not clients:
-            push.send_signal(signal_payload)
         schedule_execution(signal_payload)
+        if not clients:
+            queue_push(push.send_signal, signal_payload)
         return {"scheduled": True, "skipped": False, "reason": ""}
 
     # Manual/signal-only mode still needs durable prediction persistence because
@@ -505,7 +531,7 @@ def dispatch_signal(signal_payload: dict):
             )
         )
     if not clients:
-        push.send_signal(signal_payload)
+        queue_push(push.send_signal, signal_payload)
     return {"scheduled": False, "skipped": False, "reason": "manual signal mode"}
 
 
@@ -661,7 +687,7 @@ async def on_state(s: MarketState):
         if alert:
             last_opportunity_alert = {"key": alert["key"], "ts": now_alert, "title": alert["title"], "body": alert["body"]}
             if push.ready and not clients:
-                push.send_opportunity(alert)
+                queue_push(push.send_opportunity, alert)
 
         lifecycle_events = list(getattr(engine, "last_lifecycle_events", []) or [])
         if lifecycle_events:
@@ -672,7 +698,7 @@ async def on_state(s: MarketState):
                 # persistent socket. FCM is the secondary path when the foreground
                 # app has no connected client.
                 if push.ready and not clients:
-                    push.send_trade_event(event)
+                    queue_push(push.send_trade_event, event)
             final_event = next((e for e in reversed(lifecycle_events) if e.get("final")), None)
             if final_event and bridge.enabled and engine.last_lifecycle_event:
                 asyncio.create_task(
@@ -703,7 +729,7 @@ async def on_state(s: MarketState):
                         )
                     )
             if push.ready and not clients:
-                push.send_trade_event(execution_event)
+                queue_push(push.send_trade_event, execution_event)
 
         if sig:
             dispatch_signal(sig.to_dict())
