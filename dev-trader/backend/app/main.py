@@ -691,6 +691,14 @@ async def on_state(s: MarketState):
                     "title": f"BTC {breakout.get('event','BREAKOUT')}",
                     "body": breakout.get('message', 'Breakout/reclaim detected.'),
                 }
+        # Developing/setup alerts require a healthy execution-quality feed.
+        # Ticker-only WebSocket connectivity does not prove current Bitget
+        # trades and market depth. Keep the in-app radar available as research,
+        # but never deliver an actionable-sounding opportunity on stale data.
+        if state.data_health != "HEALTHY":
+            alert = None
+            if last_opportunity_alert.get("key"):
+                last_opportunity_alert = {"key": "", "ts": 0, "title": "", "body": ""}
         if alert:
             last_opportunity_alert = {"key": alert["key"], "ts": now_alert, "title": alert["title"], "body": alert["body"]}
             if push.ready and not clients:
@@ -738,8 +746,11 @@ async def on_state(s: MarketState):
             if push.ready and not clients:
                 queue_push(push.send_trade_event, execution_event)
 
-        if sig:
+        if sig and state.data_health == "HEALTHY":
             dispatch_signal(sig.to_dict())
+        # Even if the strategy erroneously emits a candidate during a
+        # degraded feed, it is not dispatched to Bitget or Android. Protective
+        # position-management events above still flow independently.
 
 
 async def performance_learning_loop():
