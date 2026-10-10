@@ -41,6 +41,12 @@ def test_stale_disconnected_or_inconsistent_feed_cannot_pass():
     assert classify(health, hb, SOURCE, DIGEST)["book_fresh"] is False
 
 
+def test_unhealthy_http_cannot_be_called_fresh():
+    health, heartbeat = sample()
+    health["ok"] = False
+    assert classify(health, heartbeat, SOURCE, DIGEST)["book_fresh"] is False
+
+
 def test_release_identity_mismatch_fails_closed():
     result = classify(*sample(), "c" * 40, DIGEST)
     assert result["identity_ok"] is False
