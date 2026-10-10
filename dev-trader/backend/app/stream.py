@@ -467,6 +467,9 @@ class BitgetMarketStream:
         self.delta_base = 0.0
         self.recent_exec_ids: set[str] = set()
         self.last_ws_packet_ms = 0
+        self.last_connected_ms = 0
+        self.last_critical_reconnect_ms = 0
+        self.critical_reconnect_count = 0
         self.subscription_status: dict[str, dict] = {}
         self.channel_packets: dict[str, int] = {}
         self.binary_packets = 0
@@ -502,6 +505,11 @@ class BitgetMarketStream:
                     self.state.data_health = "CONNECTING"
                     self.last_data_source = "BITGET_WS"
                     self.last_ws_packet_ms = int(time.time() * 1000)
+                    self.last_connected_ms = self.last_ws_packet_ms
+                    # These diagnostics describe THIS connection, not a
+                    # previous socket whose subscription may have failed.
+                    self.subscription_status.clear()
+                    self.channel_packets.clear()
                     self._invalidate_book()
                     self.state.last_trade_ts = None
                     self.state.last_market_update_ts = None
@@ -558,6 +566,26 @@ class BitgetMarketStream:
         self.state.book_bid_qty = self.state.book_ask_qty = self.state.book_imbalance = 0.0
         self.state.spread_bps = 0.0
 
+    def _critical_channel_stall(self, now: int) -> str | None:
+        """Distinguish healthy ticker traffic from stalled depth/trade topics.
+
+        Read-only diagnosis. Reconnect is a bounded transport recovery, never
+        permission to relax the hard 5s book or 15s trade admission gates.
+        120s tolerance avoids reconnecting for ordinary brief demo inactivity.
+        """
+        if not self.state.ws_connected or now-self.last_connected_ms < 120_000:
+            return None
+        for topic, observed in (("books5", self.state.last_book_ts),
+                                ("publicTrade", self.state.last_trade_ts)):
+            subscription = self.subscription_status.get(topic) or {}
+            if subscription.get("event") == "error":
+                return topic + "_SUBSCRIPTION_ERROR"
+            # An old channel cannot be declared healthy by fresh ticker
+            # traffic or REST refresh. Missing trade/book counts as stale.
+            if not observed or observed > now+1000 or now-observed > 120_000:
+                return topic + "_NO_FRESH_DATA"
+        return None
+
     async def _heartbeat(self, ws):
         last_ping_ms = int(time.time() * 1000)
         while not self.stop:
@@ -566,6 +594,19 @@ class BitgetMarketStream:
                 now = int(time.time() * 1000)
                 if now - self.last_ws_packet_ms > 45_000:
                     self.last_upstream_error = "Bitget WS stopped receiving packets; reconnecting."
+                    await ws.close()
+                    return
+                stall_reason = self._critical_channel_stall(now)
+                # No more than one channel-stall reconnect in five minutes.
+                # Sparse demo feeds may genuinely lack matches/books; never
+                # spin or falsely call stale data HEALTHY.
+                if (stall_reason and
+                        now-self.last_critical_reconnect_ms >= 300_000):
+                    self.last_critical_reconnect_ms = now
+                    self.critical_reconnect_count += 1
+                    self.last_upstream_error = (
+                        "Bitget public channel stale: "+stall_reason+
+                        "; bounded WebSocket reconnect requested.")
                     await ws.close()
                     return
                 if now - last_ping_ms >= 30_000:
@@ -980,7 +1021,9 @@ class BitgetMarketStream:
 
     def feed_diagnostics(self) -> dict:
         return {"subscriptions": self.subscription_status, "packets": self.channel_packets,
-                "binary_packets": self.binary_packets, "last_book_ts": self.state.last_book_ts}
+                "binary_packets": self.binary_packets, "last_book_ts": self.state.last_book_ts,
+                "critical_stall": self._critical_channel_stall(int(time.time()*1000)),
+                "critical_reconnect_count": self.critical_reconnect_count}
 
     def _refresh_data_health(self, now: int):
         market_age = now - self.state.last_market_update_ts if self.state.last_market_update_ts else 10**9
