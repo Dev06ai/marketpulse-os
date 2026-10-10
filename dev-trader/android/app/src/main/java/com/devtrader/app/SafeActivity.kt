@@ -1885,15 +1885,20 @@ class SafeActivity : FragmentActivity() {
         if (!::alertIntelligenceView.isInitialized) return
         val event = root.optJSONObject("trade_event")
         val eventType = event?.optString("type", "").orEmpty()
+        val eventTs = event?.optLong("ts", 0L) ?: 0L
+        val eventAgeMs = System.currentTimeMillis() - eventTs
+        // Last exchange event is durably replayed after reconnect/restart.
+        // A past fill/close is history, not a CURRENT execution condition.
+        val currentEvent = eventTs > 0L && eventAgeMs in 0L..300_000L
         val signalObj = root.optJSONObject("signal")
         val confidence = signalObj?.optDouble("confidence", 0.0) ?: 0.0
         val health = root.optString("data_health", "UNKNOWN")
         // Feed degradation is a PAUSED trading condition, not proof that a
-        // critical notification has just been delivered. Execution and stop
-        // events retain their own priority routing independently.
+        // critical notification has just been delivered. Fresh stop/order
+        // events retain their priority, even if the feed is degraded.
         val tier = when {
-            eventType in setOf("SL_HIT", "EXECUTION_FAILED") -> "CRITICAL"
-            eventType in setOf("TP1_HIT", "TP2_HIT", "EXECUTION_PENDING", "EXECUTION_OPEN", "EXECUTION_CLOSED") -> "EXECUTION"
+            currentEvent && eventType in setOf("SL_HIT", "EXECUTION_FAILED") -> "CRITICAL"
+            currentEvent && eventType in setOf("TP1_HIT", "TP2_HIT", "EXECUTION_PENDING", "EXECUTION_OPEN", "EXECUTION_CLOSED") -> "EXECUTION"
             health != "HEALTHY" -> "PAUSED"
             confidence >= 0.85 -> "PRIORITY"
             else -> "INFO"
