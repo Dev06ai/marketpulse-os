@@ -35,13 +35,32 @@ def test_stream_marks_rest_only_feed_as_degraded():
     assert stream.state.data_health == "DEGRADED"
 
 
-def test_bitget_stream_uses_demo_public_endpoint(monkeypatch):
+def test_bitget_demo_execution_uses_real_public_ws_market_data_by_default(monkeypatch):
     monkeypatch.setenv("BITGET_DEMO_TRADING", "true")
+    monkeypatch.delenv("BITGET_PUBLIC_WS_URL", raising=False)
     async def on_state(_state):
         return None
     stream = BitgetMarketStream("BTCUSDT", on_state)
-    assert stream.url == "wss://wspap.bitget.com/v3/ws/public"
+    assert stream.url == "wss://ws.bitget.com/v3/ws/public"
+    assert stream.public_market_venue == "LIVE_PUBLIC_MARKET_DATA"
+    assert stream.volume_profile.venue == "BITGET_LIVE_PUBLIC_USDT_FUTURES"
     assert stream.product_type == "USDT-FUTURES"
+    assert stream.feed_diagnostics()["public_market_venue"] == "LIVE_PUBLIC_MARKET_DATA"
+
+
+def test_bitget_demo_endpoint_remains_explicit_reversible_override(monkeypatch):
+    monkeypatch.setenv("BITGET_DEMO_TRADING", "true")
+    monkeypatch.setenv("BITGET_PUBLIC_WS_URL", "wss://wspap.bitget.com/v3/ws/public")
+    stream = BitgetMarketStream("BTCUSDT", lambda _: None)
+    assert stream.public_market_venue == "DEMO_PUBLIC_MARKET_DATA"
+    assert stream.volume_profile.venue == "BITGET_DEMO_PUBLIC_USDT_FUTURES"
+
+
+def test_untrusted_bitget_public_market_ws_is_rejected(monkeypatch):
+    import pytest
+    monkeypatch.setenv("BITGET_PUBLIC_WS_URL", "wss://attacker.invalid/v3/ws/public")
+    with pytest.raises(ValueError, match="Untrusted Bitget public market"):
+        BitgetMarketStream("BTCUSDT", lambda _: None)
 
 
 def test_bitget_ticker_and_public_trade_are_authoritative():

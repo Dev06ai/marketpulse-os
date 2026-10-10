@@ -1,4 +1,4 @@
-import os,json
+import os,json,time
 firebase_admin=credentials=messaging=None
 
 class PushService:
@@ -6,6 +6,9 @@ class PushService:
         global firebase_admin, credentials, messaging
         self.tokens=set(); self.ready=False
         self.last_test_ts=None; self.last_test_sent=0; self.last_error=None
+        # In-process, per-device dedupe. A failed send is never cached.
+        # Bounded memory: do not let arbitrary alert IDs exhaust free hosting.
+        self._sent_notifications = {}
         if os.getenv("PUSH_ENABLED","false").lower()=="true" and os.getenv("FIREBASE_SERVICE_ACCOUNT_JSON"):
             try:
                 import firebase_admin
@@ -15,6 +18,29 @@ class PushService:
                 self.ready=True
             except Exception as exc:
                 self.last_error = "FCM initialization failed: " + type(exc).__name__
+    def _should_notify(self, token, family, key, quiet_seconds):
+        if not key:
+            return True
+        now = time.monotonic()
+        cache_key = (token, family, str(key))
+        previous = self._sent_notifications.get(cache_key)
+        return previous is None or now - previous >= quiet_seconds
+
+    def _notification_sent(self, token, family, key):
+        if not key:
+            return
+        now = time.monotonic()
+        if len(self._sent_notifications) >= 1024:
+            # Purge old values first, then evict one oldest key if needed.
+            self._sent_notifications = {
+                k: v for k, v in self._sent_notifications.items()
+                if now-v < 24*3600
+            }
+            if len(self._sent_notifications) >= 1024:
+                oldest = min(self._sent_notifications, key=self._sent_notifications.get)
+                self._sent_notifications.pop(oldest, None)
+        self._sent_notifications[(token, family, str(key))] = now
+
     def register(self,token):
         if token: self.tokens.add(token)
 
@@ -51,7 +77,7 @@ class PushService:
                 ))
                 self.last_test_sent += 1
             except Exception as exc:
-                errors.append(str(exc))
+                errors.append(type(exc).__name__)
         if errors:
             self.last_error = "; ".join(errors[:3])
         return {"sent": self.last_test_sent, "ready": True, "error": self.last_error}
@@ -66,16 +92,26 @@ class PushService:
             style = str(signal.get("trade_style", "SCALP")).upper()
             title=f"BTC {signal['direction']} • {style} • {signal['setup']}"
             body=f"{style} · Entry {signal['entry']:.2f} · SL {signal['stop']:.2f} · TP1 {signal['target1']:.2f} · TP2 {signal['target2']:.2f} · R:R {signal['rr']:.2f}"
+        signal_id = str(signal.get("id") or "")
+        # Management actions for the same position may legitimately change.
+        # Dedupe ordinary repeated signals, not distinct protective actions.
+        dedupe_key = (
+            signal_id + ":" + str(management.get("type") or "") +
+            ":" + str(management.get("status") or "") +
+            ":" + str(management.get("action") or "")
+        ) if management else signal_id
         for token in list(self.tokens):
+            if not self._should_notify(token, "signal", dedupe_key, 900):
+                continue
             try:
                 messaging.send(messaging.Message(
                     token=token,
                     notification=messaging.Notification(title=title, body=body),
-                    data={"type":"trade_signal","signal_id":signal["id"],
+                    data={"type":"trade_signal","signal_id":signal_id,
                           "management_type": management.get("type","")}))
+                self._notification_sent(token, "signal", dedupe_key)
             except Exception as exc:
-                self.last_error=str(exc)
-                print(f"FCM send failed: {exc}")
+                self.last_error="FCM signal delivery failed: " + type(exc).__name__
 
     def send_trade_event(self, event: dict):
         if not (self.ready and messaging):
@@ -98,21 +134,24 @@ class PushService:
             body += f" • level {level:.2f}"
         if event.get("note"):
             body += f" • {event['note']}"
+        event_key = str(event.get("key") or "")
         for token in list(self.tokens):
+            if not self._should_notify(token, "trade_event", event_key, 86400):
+                continue
             try:
                 messaging.send(messaging.Message(
                     token=token,
                     notification=messaging.Notification(title=title, body=body),
                     data={
                         "type": "trade_event",
-                        "event_key": str(event.get("key") or ""),
+                        "event_key": event_key,
                         "event_type": event_type,
                         "signal_id": str(event.get("signal_id") or ""),
                     },
                 ))
+                self._notification_sent(token, "trade_event", event_key)
             except Exception as exc:
-                self.last_error=str(exc)
-                print(f"FCM trade event send failed: {exc}")
+                self.last_error="FCM trade event delivery failed: " + type(exc).__name__
 
     def send_opportunity(self, alert: dict):
         if not (self.ready and messaging):
@@ -120,13 +159,16 @@ class PushService:
         title = str(alert.get("title") or "Dev Trader Opportunity")
         body = str(alert.get("body") or "Opportunity developing.")
         data = {"type": "opportunity_alert", "alert_key": str(alert.get("key") or "")}
+        alert_key = str(alert.get("key") or "")
         for token in list(self.tokens):
+            if not self._should_notify(token, "opportunity", alert_key, 900):
+                continue
             try:
                 messaging.send(messaging.Message(
                     token=token,
                     notification=messaging.Notification(title=title, body=body),
                     data=data,
                 ))
+                self._notification_sent(token, "opportunity", alert_key)
             except Exception as exc:
-                self.last_error = str(exc)
-                print(f"FCM opportunity send failed: {exc}")
+                self.last_error = "FCM opportunity delivery failed: " + type(exc).__name__

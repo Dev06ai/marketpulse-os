@@ -253,3 +253,73 @@ def test_zone_midpoint_touch_does_not_retire_whole_zone():
         lr.collect_reaction_levels = original
     assert "zone" not in tracker.tapped
     assert any(row["id"]=="zone" for row in result["levels"])
+
+
+def test_expired_unconfirmed_candle_cannot_trigger_new_reclaim_with_later_price():
+    tracker = LevelReactionTracker()
+    start = 3_000_000
+    state = MarketState(
+        last_price=102.0,
+        candles_5=[candle(start, 100.0, 103.0, 99.0, 102.0, False)],
+    )
+    f = MarketFeatures(atr_15=5.0, previous_day_low=100.0)
+    tracker.update(state, f, now_ms=start+60_000)
+    # In the next bar, the cached open candle is already expired even
+    # though a fresh quote arrives; it cannot supply an old sweep wick.
+    state.last_price = 100.0
+    touched = tracker.update(state, f, now_ms=start+300_000+20_000)
+    assert touched["reaction_candle_fresh"] is False
+    assert touched["trigger"] is None
+    state.last_price = 102.0
+    late = tracker.update(state, f, now_ms=start+300_000+40_000)
+    assert late["reaction_candle_fresh"] is False
+    assert late["trigger"] is None
+
+
+def test_forming_candle_timing_allows_one_second_edge_not_90s():
+    start = 5_000_000
+    raw = candle(start,100,102,99,100,False)
+    state = MarketState(last_price=100,candles_5=[raw])
+    assert LevelReactionTracker._live_candle(state,raw.end) is raw
+    assert LevelReactionTracker._live_candle(state,raw.end+1000) is raw
+    assert LevelReactionTracker._live_candle(state,raw.end+1001) is None
+
+
+def test_only_exchange_trade_profile_exact_npoc_can_arm_level():
+    from app.level_reactions import collect_reaction_levels
+    estimated = MarketFeatures(volume_context={
+        "untouched_poc": 100.0, "exact_npoc": False,
+        "profile_status": "ESTIMATED",
+    })
+    assert not any(r["kind"] == "NPOC" and r.get("source") == "EXECUTED_TRADE_PROFILE"
+                   for r in collect_reaction_levels(estimated))
+    exact = MarketFeatures(volume_context={
+        "untouched_poc": 100.0, "exact_npoc": True,
+        "profile_status": "VERIFIED",
+    })
+    rows = collect_reaction_levels(exact)
+    assert any(r["kind"] == "NPOC" and r["price"] == 100
+               and r.get("source") == "EXECUTED_TRADE_PROFILE" for r in rows)
+
+
+def test_verified_npoc_touch_only_arms_until_fresh_reclaim():
+    tracker = LevelReactionTracker()
+    start = 8_000_000
+    state = MarketState(
+        last_price=102.0,
+        candles_5=[candle(start,100,102.3,99.2,102,False)],
+    )
+    f = MarketFeatures(
+        atr_15=5.0, market_structure="BULLISH",
+        volume_context={"untouched_poc": 100.0, "exact_npoc": True},
+    )
+    observed = tracker.update(state,f,now_ms=start+60_000)
+    assert observed["trigger"] is None  # No hindsight on discovery.
+    state.last_price = 100.0
+    touched = tracker.update(state,f,now_ms=start+61_000)
+    assert touched["trigger"] is None  # Level contact alone is not a trade.
+    state.last_price = 102.0
+    reclaim = tracker.update(state,f,now_ms=start+62_000)
+    assert reclaim["trigger"] is not None
+    assert reclaim["trigger"]["kind"] == "NPOC"
+    assert reclaim["trigger"]["direction"] == "LONG"

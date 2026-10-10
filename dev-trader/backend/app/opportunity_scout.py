@@ -33,10 +33,20 @@ def price_path_outcome(observation: dict, prices: list[tuple[int, float]]) -> di
     end_ts = open_ts + HORIZON_MS
     entry = finite_positive(observation.get("reference_price"))
     direction = observation.get("direction")
-    valid = sorted(
-        {(int(ts), float(p)) for ts, p in prices
-         if open_ts <= int(ts) <= end_ts + GRACE_MS and finite_positive(p) is not None}
-    )
+    valid_by_ts = {}
+    # Bad history must never look like complete, high-quality hindsight data.
+    # Validate before computing "favorable" moves; no execution inference.
+    for sample in prices:
+        if (not isinstance(sample, (list, tuple)) or len(sample) != 2 or
+                type(sample[0]) is not int or type(sample[1]) not in (int, float) or
+                not math.isfinite(sample[1]) or sample[1] <= 0):
+            return {"status": "UNVERIFIABLE", "why": "INVALID_PRICE_SAMPLES"}
+        timestamp, price = sample
+        if open_ts <= timestamp <= end_ts + GRACE_MS:
+            if timestamp in valid_by_ts and valid_by_ts[timestamp] != price:
+                return {"status": "UNVERIFIABLE", "why": "CONFLICTING_PRICE_SAMPLES"}
+            valid_by_ts[timestamp] = float(price)
+    valid = sorted(valid_by_ts.items())
     if not entry or direction not in {"LONG", "SHORT"}:
         return {"status": "UNVERIFIABLE", "why": "INVALID_REFERENCE"}
     if not valid:

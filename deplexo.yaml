@@ -1,0 +1,11 @@
+# KYVORIQ Git-source deployment only. Deplexo reads this at the REPO root.
+# Existing ZIP deployment does not switch sources automatically.
+# Keep the existing Deplexo app, env, /data volume and domain unchanged.
+version: 1
+type: web
+build:
+  framework: dockerfile
+  root_dir: dev-trader/backend
+  dockerfile: Dockerfile
+run:
+  port: 3000

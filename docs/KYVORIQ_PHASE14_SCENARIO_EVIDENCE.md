@@ -1,0 +1,40 @@
+# KYVORIQ original Phase 14 — fifteen-scenario evidence register
+
+Based **exactly** on the owner's original "ELITE TRADING INTELLIGENCE & PRECISION EXECUTION" Phase 14. Every row distinguishes deterministic unit/mock evidence from **independently observed Bitget demo trades**. The existence of code or a green build does NOT satisfy exchange/forward acceptance. Do not substitute a synthetic price path for actual historical exchange fills.
+
+Last updated: 2026-10-10; current draft PR #124 branch \`codex/kyvoriq-live-feed-recovery-20261010\`.
+
+| Original Phase 14 scenario | Existing automated regression anchors | Unverified acceptance gate |
+| --- | --- | --- |
+| 1. Daily low sweep/reclaim bullish SFP | \`test_level_reactions.py::test_daily_reaction_triggers_then_hides_after_30_minutes\`; \`test_strategy.py::test_bearish_sfp\`; \`test_original_phase_sfp_freshness.py::test_stale_intrabar_wick_never_retriggered_after_disconnect\` | Causal predeclared daily low, actual 1H/15m setup readiness, fresh exchange-confirmed demo entry/stop |
+| 2. Momentum breakout + valid retest | \`test_refined_engine.py::test_breakout_needs_confirmed_hold_volume_and_unextended_entry\` | Chronological breakout/retest signal→exchange fill, fees, stable invalidation and P95 entry delay |
+| 3. Order block touch without confirmation | \`test_level_reactions.py::test_proximity_only_arms_level_without_trigger\`, \`test_zone_midpoint_touch_does_not_retire_whole_zone\`; \`test_refined_engine.py::test_invalidated_order_block_is_not_returned_as_active_level\` | Dedicated OB-no-reaction integration test and zero Bitget POST despite OB contact |
+| 4. Bull trap after breakout | \`test_refined_engine.py::test_breakout_needs_confirmed_hold_volume_and_unextended_entry\` tests invalid hold/retest rejection | Dedicated 1H→15m bull trap cancellation/late-long prevention across engine and simulated execution |
+| 5. NPOC touch and reaction | \`test_level_reactions.py::test_only_exchange_trade_profile_exact_npoc_can_arm_level\`, \`test_verified_npoc_touch_only_arms_until_fresh_reclaim\`; \`test_refined_engine.py::test_volume_proxy_requires_complete_previous_day_and_touch_history\` | Verified underlying *executed-trade* volume profile, confirmed fresh reaction, forward demo fill and stop |
+| 6. Conditions flip while setup ARMED | \`test_level_reactions.py::test_fully_tapped_level_retires_after_five_minutes_without_blind_trade\`, \`test_strategy.py::test_quality_governor_enforces_post_resolution_cooldown\` | Dedicated ARMED→INVALIDATED→no-entry test on HTF/regime flip |
+| 7. Disconnect mid-order submission | \`test_execution.py::test_timeout_blocks_new_exposure_and_recovers_by_stable_client_id\`, \`test_property_integrations.py::test_post_is_never_retried_even_when_transport_is_ambiguous\` | Actual controlled demo uncertain-ack recovery; never duplicate or misclassify fill |
+| 8. Restart during active trade | \`test_refined_engine.py::test_restart_outcome_alias_does_not_duplicate_learning\`, \`test_transport.py::test_free_journal_enforces_byte_budget_and_retention\`, CI's container volume restart smoke | Restart same Deplexo /data volume while owner-authorized demo position exists; verify protective coverage and history |
+| 9. Duplicate incoming signal | \`test_execution.py::test_concurrent_signal_submissions_only_open_once\`, \`test_candidate_selection.py::test_fallback_still_requires_guard_review\` | Broker-side same-client-OID single order confirmed under reconnection |
+| 10. Higher and lower timeframes conflict | \`test_htf_policy.py::test_countertrend_reversal_not_blocked_by_macd_rsi_or_trend_votes\`, \`test_htf_policy.py::test_short_reversal_can_qualify_against_higher_timeframe_trend\` | Chronological countertrend setup sample with a coherent structural invalidation and cost |
+| 11. Prolonged sideways conditions | \`test_strategy.py::test_quality_governor_enforces_daily_cap\`, \`test_htf_policy.py::test_missing_or_stale_market_inputs_always_wait\` | Dedicated range/chop signal churn, flip, missed-trade and false-positive comparison versus baseline |
+| 12. Repeated same-setup alerts | \`test_phase14_push_dedupe.py::test_developing_opportunity_deduplicates_per_device\`, \`test_transport.py::test_quiet_alerts_send_changes_and_retry_failed_delivery\` | 24h actual phone notification soak including restart and background mode |
+| 13. Exchange partial fill | \`test_execution.py::test_partial_bitget_fill_does_not_become_open\`, \`test_phase14_unknown_partial_protection.py::test_uncovered_unknown_partial_halts_new_risk_and_never_blind_closes\` | Broker partial fill/stop quantity/cancel/reconciliation proof, no unprotected residual |
+| 14. Insufficient available margin | \`test_execution.py::test_demo_execution_rejects_zero_futures_balance\`, \`test_risk_sizing_contract.py::test_final_balance_drop_blocks_submission_even_when_risk_fits\` | Live demo account constraint/fee risk evidence for safe skip without order |
+| 15. Stale or inconsistent market data | \`test_book_freshness.py::test_delayed_book_cannot_use_newer_push_timestamp_as_freshness\`, \`test_system_audit.py::test_feed_loss_during_leverage_verification_blocks_submission\`, \`test_critical_feed_stall.py::test_quote_only_is_not_critical_depth_and_trades\` | Live Bitget demo channel freshness, bounded reconnect, zero new entries under DEGRADED and recovery when truly fresh |
+
+## Latest execution-accounting integrity fixes
+
+- **Original Phases 7/10/14/15:** `execution._finalize_trade` no longer assumes an unknown local fill owns 100% of Bitget's aggregate closed-position PnL. Missing/excessive aggregate quantity and explicitly unconfirmed fills remain `RECONCILIATION_PENDING`, with no finalized win/loss and no learning feedback.
+- Missing, malformed, NaN or infinite exchange `netProfit` can no longer silently fall back to *gross* PnL and be presented as a fee-aware trade return.
+- Regression module `test_phase14_realized_fill_attribution.py` covers unknown sizes, contradictory fills, proportional ownership of verified aggregate results, missing/invalid net PnL and no learning from unverified outcomes.
+- These checks protect metrics integrity, not guaranteed trading profitability. No artificial Bitget trades were placed during this code review.
+
+## Distinct acceptance layers
+
+1. **Deterministic/mock**: Confirm correct decisions under artificial state. CI backend suite is necessary but not a Bitget fill.
+2. **Bounded container/Android UI**: GitHub CI tests one free-size 128 MiB container and emulator screenshot; not 24/7 Deplexo + physical Android soak.
+3. **Verified deployment**: Release ZIP source/digest must match active **Deplexo** \`/health.build\`; GitHub-hosted probe currently gets HTTP 403, so production attestation is **NOT VERIFIED**. Do not weaken WAF/auth.
+4. **True demo lifecycle**: Authorized Bitget demo orders, order IDs, partial/full fill ledger, protective stops, take profits, incomplete and failed order states independently reconciled from exchange.
+5. **Forward quality**: Freeze strategy/version and metric definitions first. Collect sufficient naturally occurring fee- and funding-aware forward results, including regime mix and missed/false signals; compare predeclared baseline with drawdown and uncertainty. Neither a 30-trade reporting threshold nor two historical demo trades prove positive expectancy.
+
+**Status: NOT FULLY ACCEPTED.** Do not force a demo trade just to close an acceptance row, and never switch to real-money execution. Original Phase 1–16 crosswalk remains in \`KYVORIQ_ORIGINAL_16_PHASE_TRACEABILITY.md\`.

@@ -1,0 +1,50 @@
+name: KYVORIQ read-only deployed source verification
+
+on:
+  pull_request:
+    branches: [dev-trader-v1]
+    paths:
+      - 'dev-trader/backend/tools/probe_public_deployment.py'
+      - '.github/workflows/kyvoriq-public-deployment-probe.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: kyvoriq-public-observer-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify-observed-production:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Observe public health source and freshness (GET only)
+        id: observe
+        continue-on-error: true
+        run: |
+          python dev-trader/backend/tools/probe_public_deployment.py \
+            --source 32eaf2c4ba9d6e91138c8f4942645bfbd0d2fe91 \
+            --content-sha256 36d351cf51bae1c5751a8d7a3717d03000a6c8aa2be015f1bd44bd144565b74e
+      - name: Write explicit attestation outcome
+        if: always()
+        env:
+          OBSERVED_OUTCOME: ${{ steps.observe.outcome }}
+        run: |
+          if [ "$OBSERVED_OUTCOME" = "success" ]; then
+            echo "### Public source identity: CONFIRMED" >> "$GITHUB_STEP_SUMMARY"
+            echo "Verified source/digest only. Trading safety and profit remain unverified." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "::warning::PRODUCTION NOT VERIFIED. Deplexo returned 403 or source identity mismatched. This does not mean production was deployed or updated."
+            echo "### Public source identity: NOT VERIFIED" >> "$GITHUB_STEP_SUMMARY"
+            echo "GitHub runner cannot attest the deployed Deplexo release. Do not equate this job's successful completion with production verification." >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Explain safety boundary
+        run: |
+          echo "This check does NOT deploy, restart, touch private APIs, read tokens, or place Bitget orders."
+          echo "Older source or DEGRADED is diagnostic; it does not mean failed public HTTP health or profitable trading."

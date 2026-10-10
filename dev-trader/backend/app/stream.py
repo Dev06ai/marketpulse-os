@@ -449,10 +449,21 @@ class BitgetMarketStream:
         self.on_state = on_state
         self.state = MarketState(symbol=symbol)
         demo = str(os.getenv("BITGET_DEMO_TRADING", "false")).lower() in {"1", "true", "yes", "on"}
+        # Demo orders use authenticated Bitget PAP; observation uses the same
+        # real-market public venue as the exchange-price admission REST quote.
+        # The PAP public WS can have sparse books/trades on virtual markets,
+        # so never depend on that feed for genuine market participation.
+        # The old PAP public feed remains an explicit, reversible override.
         self.url = os.getenv(
-            "BITGET_PUBLIC_WS_URL",
-            "wss://wspap.bitget.com/v3/ws/public" if demo else "wss://ws.bitget.com/v3/ws/public",
+            "BITGET_PUBLIC_WS_URL", "wss://ws.bitget.com/v3/ws/public",
         )
+        known_public_sources = {
+            "wss://ws.bitget.com/v3/ws/public": "LIVE_PUBLIC_MARKET_DATA",
+            "wss://wspap.bitget.com/v3/ws/public": "DEMO_PUBLIC_MARKET_DATA",
+        }
+        if self.url not in known_public_sources:
+            raise ValueError("Untrusted Bitget public market WebSocket URL; only official v3 endpoints are permitted.")
+        self.public_market_venue = known_public_sources[self.url]
         self.rest_base = os.getenv("BITGET_BASE_URL", "https://api.bitget.com").rstrip("/")
         self.product_type = os.getenv("BITGET_PRODUCT_TYPE", "USDT-FUTURES")
         self.stop = False
@@ -467,10 +478,19 @@ class BitgetMarketStream:
         self.delta_base = 0.0
         self.recent_exec_ids: set[str] = set()
         self.last_ws_packet_ms = 0
+        self.last_connected_ms = 0
+        self.last_critical_reconnect_ms = 0
+        self.critical_reconnect_count = 0
         self.subscription_status: dict[str, dict] = {}
         self.channel_packets: dict[str, int] = {}
         self.binary_packets = 0
-        self.volume_profile = TradeVolumeProfile("BITGET_DEMO_USDT_FUTURES" if demo else "BITGET_USDT_FUTURES")
+        # Source provenance tracks the observed market, not the account that
+        # will later simulate orders. Live-market volume must not be relabeled
+        # as demo-matching-engine volume in performance evidence.
+        self.volume_profile = TradeVolumeProfile(
+            "BITGET_LIVE_PUBLIC_USDT_FUTURES" if self.public_market_venue == "LIVE_PUBLIC_MARKET_DATA"
+            else "BITGET_DEMO_PUBLIC_USDT_FUTURES"
+        )
 
     @staticmethod
     def _interval_ms(interval: str) -> int:
@@ -502,6 +522,11 @@ class BitgetMarketStream:
                     self.state.data_health = "CONNECTING"
                     self.last_data_source = "BITGET_WS"
                     self.last_ws_packet_ms = int(time.time() * 1000)
+                    self.last_connected_ms = self.last_ws_packet_ms
+                    # These diagnostics describe THIS connection, not a
+                    # previous socket whose subscription may have failed.
+                    self.subscription_status.clear()
+                    self.channel_packets.clear()
                     self._invalidate_book()
                     self.state.last_trade_ts = None
                     self.state.last_market_update_ts = None
@@ -558,6 +583,26 @@ class BitgetMarketStream:
         self.state.book_bid_qty = self.state.book_ask_qty = self.state.book_imbalance = 0.0
         self.state.spread_bps = 0.0
 
+    def _critical_channel_stall(self, now: int) -> str | None:
+        """Distinguish healthy ticker traffic from stalled depth/trade topics.
+
+        Read-only diagnosis. Reconnect is a bounded transport recovery, never
+        permission to relax the hard 5s book or 15s trade admission gates.
+        120s tolerance avoids reconnecting for ordinary brief demo inactivity.
+        """
+        if not self.state.ws_connected or now-self.last_connected_ms < 120_000:
+            return None
+        for topic, observed in (("books5", self.state.last_book_ts),
+                                ("publicTrade", self.state.last_trade_ts)):
+            subscription = self.subscription_status.get(topic) or {}
+            if subscription.get("event") == "error":
+                return topic + "_SUBSCRIPTION_ERROR"
+            # An old channel cannot be declared healthy by fresh ticker
+            # traffic or REST refresh. Missing trade/book counts as stale.
+            if not observed or observed > now+1000 or now-observed > 120_000:
+                return topic + "_NO_FRESH_DATA"
+        return None
+
     async def _heartbeat(self, ws):
         last_ping_ms = int(time.time() * 1000)
         while not self.stop:
@@ -566,6 +611,19 @@ class BitgetMarketStream:
                 now = int(time.time() * 1000)
                 if now - self.last_ws_packet_ms > 45_000:
                     self.last_upstream_error = "Bitget WS stopped receiving packets; reconnecting."
+                    await ws.close()
+                    return
+                stall_reason = self._critical_channel_stall(now)
+                # No more than one channel-stall reconnect in five minutes.
+                # Sparse demo feeds may genuinely lack matches/books; never
+                # spin or falsely call stale data HEALTHY.
+                if (stall_reason and
+                        now-self.last_critical_reconnect_ms >= 300_000):
+                    self.last_critical_reconnect_ms = now
+                    self.critical_reconnect_count += 1
+                    self.last_upstream_error = (
+                        "Bitget public channel stale: "+stall_reason+
+                        "; bounded WebSocket reconnect requested.")
                     await ws.close()
                     return
                 if now - last_ping_ms >= 30_000:
@@ -886,16 +944,26 @@ class BitgetMarketStream:
                 data = rows[0]
                 try:
                     sequence = int(data.get("seq", self.state.orderbook_seq or 0))
+                    # Bitget data.ts is generation time; the envelope ts is
+                    # push time. A delayed snapshot must retain its true age.
+                    # Legacy packets may use an explicit envelope timestamp,
+                    # but missing timestamps must never become receipt time.
+                    book_ts = int(data.get("ts", msg.get("ts")))
+                    if book_ts <= 0 or book_ts > now + 1000:
+                        raise ValueError("Unverifiable depth timestamp")
                 except (TypeError, ValueError, OverflowError):
                     self._invalidate_book()
+                    self._refresh_data_health(now)
                     return
                 if self.state.orderbook_seq and sequence and sequence <= self.state.orderbook_seq:
                     return  # A duplicate/replayed book cannot refresh depth.
+                if self.state.last_book_ts and book_ts < self.state.last_book_ts:
+                    return  # Regressing generation time cannot replace newer depth.
                 if self._apply_book(data, str(msg.get("action") or "snapshot")):
                     self.state.orderbook_seq = sequence
                     # A replayed packet is not fresh depth just because it was
                     # received now. Admission uses this exchange timestamp.
-                    self.state.last_book_ts = exchange_ts
+                    self.state.last_book_ts = book_ts
         elif topic == "liquidation":
             for liq in rows:
                 if not isinstance(liq, dict):
@@ -969,8 +1037,19 @@ class BitgetMarketStream:
         await self.on_state(self.state)
 
     def feed_diagnostics(self) -> dict:
+        now = int(time.time() * 1000)
+        def age(ts):
+            return now-ts if ts else None
         return {"subscriptions": self.subscription_status, "packets": self.channel_packets,
-                "binary_packets": self.binary_packets, "last_book_ts": self.state.last_book_ts}
+                "public_market_venue": self.public_market_venue,
+                "binary_packets": self.binary_packets,
+                "last_book_ts": self.state.last_book_ts,
+                "quote_age_ms": age(self.state.last_market_update_ts),
+                "book_age_ms": age(self.state.last_book_ts),
+                "trade_age_ms": age(self.state.last_trade_ts),
+                "kline_15_age_ms": age(self.state.last_kline_15_ts),
+                "critical_stall": self._critical_channel_stall(now),
+                "critical_reconnect_count": self.critical_reconnect_count}
 
     def _refresh_data_health(self, now: int):
         market_age = now - self.state.last_market_update_ts if self.state.last_market_update_ts else 10**9

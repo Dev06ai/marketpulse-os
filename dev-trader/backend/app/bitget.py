@@ -26,6 +26,12 @@ class BitgetTransientError(BitgetDemoError):
     pass
 
 
+class _RejectExchangeRedirects(urllib.request.HTTPRedirectHandler):
+    """Never forward signed exchange headers to an unexpected redirect target."""
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
 class BitgetDemoClient:
     """Bitget Unified Trading Account (UTA v3) Futures REST client, demo-only.
 
@@ -113,6 +119,22 @@ class BitgetDemoClient:
             raise BitgetDemoError("Bitget client is locked to demo trading. Set BITGET_DEMO_TRADING=true.")
         if private and not self.configured:
             raise BitgetDemoError("Bitget Demo API credentials are not configured.")
+        # This client carries Bitget credentials in request headers. An
+        # operator typo or compromised BITGET_BASE_URL must never forward them
+        # to another host. Public quotes must use the same trusted authority.
+        try:
+            parsed = urllib.parse.urlsplit(self.base_url)
+            trusted_origin = (
+                parsed.scheme == "https"
+                and parsed.hostname == "api.bitget.com"
+                and parsed.port in (None, 443)
+                and parsed.username is None and parsed.password is None
+                and not parsed.path and not parsed.query and not parsed.fragment
+            )
+        except ValueError:
+            trusted_origin = False
+        if not trusted_origin:
+            raise BitgetDemoError("Untrusted Bitget API origin; only official HTTPS Bitget is permitted.")
 
         query = self._canonical_query(params)
         body = json.dumps(payload or {}, separators=(",", ":")) if payload is not None else ""
@@ -133,7 +155,11 @@ class BitgetDemoClient:
             method=method.upper(),
         )
         try:
-            with urllib.request.urlopen(request, timeout=self.timeout) as response:
+            # The standard urllib redirect handler may copy ACCESS-* headers
+            # to the redirect destination. Reject all redirects before retry,
+            # instead of sending signed requests to another authority.
+            opener = urllib.request.build_opener(_RejectExchangeRedirects())
+            with opener.open(request, timeout=self.timeout) as response:
                 raw = response.read().decode("utf-8")
         except urllib.error.HTTPError as exc:
             raw = exc.read().decode("utf-8", errors="replace")

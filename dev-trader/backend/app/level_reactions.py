@@ -119,7 +119,10 @@ class LevelReactionTracker:
         if state.candles_5:
             last = state.candles_5[-1]
             if not last.confirmed:
-                if int(last.start) - 1_000 <= now_ms <= int(last.end) + 90_000:
+                # A forming candle is mutable. Never combine its old wick
+                # with a newer quote after the bar has expired; a one-second
+                # edge tolerance is sufficient for exchange clock skew.
+                if int(last.start) - 1_000 <= now_ms <= int(last.end) + 1_000:
                     return last
                 return None
             confirmed = [c for c in state.candles_5 if c.confirmed]

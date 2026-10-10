@@ -1766,6 +1766,7 @@ class SafeActivity : FragmentActivity() {
         val armedLevels = reactionMap?.optJSONArray("armed")
         val nearestLevel = reactionTrigger ?: armedLevels?.optJSONObject(0)
         val levelState = when {
+            !sourceHealthy -> "MONITOR ONLY"
             reactionTrigger != null -> "READY"
             reactionMap?.optString("status") == "CONFIRMING" -> "CONFIRMING"
             reactionMap?.optString("status") == "ARMED" -> "ARMED"
@@ -1783,7 +1784,8 @@ class SafeActivity : FragmentActivity() {
             "LEVEL MAP  $levelState\n" +
             activeLevelText +
             "\nCVD  ${f.optString("cvd_price_divergence", "—")}  •  OI5m ${money(f.optDouble("oi_change_5m_pct", Double.NaN), true)}%\n" +
-            "Structure  ${f.optString("market_structure", "—")}"
+            "Structure  ${f.optString("market_structure", "—")}" +
+            if (!sourceHealthy) "\nFeed unverified • zones are research-only, not trade confirmations." else ""
         if (s != null) {
             val direction = s.optString("direction", "WAIT")
             val lifecycle = s.optString("lifecycle", "ACTIVE")
@@ -1883,33 +1885,45 @@ class SafeActivity : FragmentActivity() {
         if (!::alertIntelligenceView.isInitialized) return
         val event = root.optJSONObject("trade_event")
         val eventType = event?.optString("type", "").orEmpty()
+        val eventTs = event?.optLong("ts", 0L) ?: 0L
+        val eventAgeMs = System.currentTimeMillis() - eventTs
+        // Last exchange event is durably replayed after reconnect/restart.
+        // A past fill/close is history, not a CURRENT execution condition.
+        val currentEvent = eventTs > 0L && eventAgeMs in 0L..300_000L
         val signalObj = root.optJSONObject("signal")
         val confidence = signalObj?.optDouble("confidence", 0.0) ?: 0.0
         val health = root.optString("data_health", "UNKNOWN")
+        // Feed degradation is a PAUSED trading condition, not proof that a
+        // critical notification has just been delivered. Fresh stop/order
+        // events retain their priority, even if the feed is degraded.
         val tier = when {
-            eventType in setOf("SL_HIT", "EXECUTION_FAILED") -> "CRITICAL"
-            health == "DEGRADED" || health == "STALE" -> "CRITICAL"
-            eventType in setOf("TP1_HIT", "TP2_HIT", "EXECUTION_PENDING", "EXECUTION_OPEN", "EXECUTION_CLOSED") -> "EXECUTION"
+            currentEvent && eventType in setOf("SL_HIT", "EXECUTION_FAILED") -> "CRITICAL"
+            currentEvent && eventType in setOf("TP1_HIT", "TP2_HIT", "EXECUTION_PENDING", "EXECUTION_OPEN", "EXECUTION_CLOSED") -> "EXECUTION"
+            health != "HEALTHY" -> "PAUSED"
             confidence >= 0.85 -> "PRIORITY"
-            signalObj != null -> "INFO"
             else -> "INFO"
         }
         val explanation = when (tier) {
-            "CRITICAL" -> "Safety / stop / degraded-feed events use the strongest alert route."
-            "EXECUTION" -> "Orders, fills and TP lifecycle use execution-priority feedback."
-            "PRIORITY" -> "High-confidence setups use priority notification + haptic routing."
+            "CRITICAL" -> "A stop or execution failure requires immediate attention."
+            "EXECUTION" -> "Exchange order and position updates remain important."
+            "PAUSED" -> "Bitget feed is not verified fresh. New demo entries and developing alerts are paused."
+            "PRIORITY" -> "Confirmed high-quality signals receive priority notification."
             else -> "Routine monitoring stays quiet until something deserves attention."
         }
         val prefs = getSharedPreferences("kyvoriq_alert_intelligence", Context.MODE_PRIVATE)
         val lastTier = prefs.getString("last_tier", "—") ?: "—"
         val lastTitle = prefs.getString("last_title", "").orEmpty()
-        alertIntelligenceView.text =
-            "LIVE TIER  •  $tier\n$explanation" +
-                if (lastTitle.isBlank()) "" else "\nLast delivered  •  $lastTier  •  " + lastTitle.take(42)
+        val lastAt = prefs.getLong("last_ts", 0L)
+        val age = System.currentTimeMillis() - lastAt
+        val previous = if (lastTitle.isNotBlank() && age in 0L..86_400_000L) {
+            "\nPrevious notification  •  $lastTier  •  " + lastTitle.take(42)
+        } else ""
+        alertIntelligenceView.text = "CURRENT STATE  •  $tier\n$explanation" + previous
         alertIntelligenceView.setTextColor(
             when (tier) {
                 "CRITICAL" -> Color.rgb(255, 82, 105)
                 "EXECUTION" -> Color.rgb(54, 211, 153)
+                "PAUSED" -> Color.rgb(243, 180, 104)
                 "PRIORITY" -> kyGold
                 else -> kyGray
             }
@@ -3363,6 +3377,8 @@ class SafeActivity : FragmentActivity() {
                 message.startsWith("Checking") -> "CHECKING…"
                 message.startsWith("DOWNLOADING") -> "DOWNLOADING…"
                 message.startsWith("UPDATE VERIFIED") -> "INSTALLING…"
+                message.startsWith("PUBLISHED CHANNEL") -> "CHECK UPDATE"
+                message.startsWith("PRIVATE CHANNEL") -> "CHECK UPDATE"
                 message.startsWith("UP TO DATE") -> "UP TO DATE"
                 message.contains("FAILED", ignoreCase = true) ||
                     message.contains("BLOCKED", ignoreCase = true) ||
@@ -3392,9 +3408,13 @@ class SafeActivity : FragmentActivity() {
                     val currentCode = packageManager.getPackageInfo(packageName, 0).longVersionCode
                     val remoteName = j.optString("versionName", "new")
 
-                    if (!j.optBoolean("enabled", false) || remoteCode <= currentCode) {
+                    if (!j.optBoolean("enabled", false)) {
                         updateButton.isEnabled = true
-                        setUpdateStatus("UP TO DATE  • build " + currentCode)
+                        setUpdateStatus("PRIVATE CHANNEL  • public auto-update disabled")
+                    } else if (remoteCode <= currentCode) {
+                        updateButton.isEnabled = true
+                        // Do not claim there is no newer private CI candidate.
+                        setUpdateStatus("PUBLISHED CHANNEL  • build " + currentCode)
                     } else {
                         val apkUrl = j.optString("apkUrl", "")
                         val expectedSha = j.optString("sha256", "")
