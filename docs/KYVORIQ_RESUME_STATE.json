@@ -1,0 +1,86 @@
+{
+  "schema_version": 1,
+  "updated_date": "2026-10-10",
+  "timezone": "Asia/Calcutta",
+  "repository": "https://github.com/Dev06ai/marketpulse-os",
+  "source_branch": "dev-trader-v1",
+  "work_branch": "codex/kyvoriq-upgrade-20261009",
+  "source_commit": "a92bea883902e1702d9da9fe2447c422e5012a12",
+  "phase": 1,
+  "status": "selection_and_book_timestamp_fixes_local_verified_pending_ci",
+  "completed_phases": [],
+  "application_changes": [
+    "isolated six execution test fixtures",
+    "integrated private HTTP/WS auth; bounded bodies and pairing; existing-session revocation",
+    "0.5% default / 1% hard risk; downward-only margin preference sizing and final reserve check",
+    "Immediate closed 5m/15m/1H bar evaluation independent of callback receipt equality",
+    "Source manifest, reproducible committed ZIP packaging, and security/backend/container-dependent CI release gate",
+    "HTF policy checks each candidate before ranking; truthful rejection records",
+    "Book freshness uses exchange generation time; rejects missing/invalid/future/regressing timestamps"
+  ],
+  "tests": {
+    "status": "passed",
+    "passed": 412,
+    "failed": 0,
+    "initial_failures": 3,
+    "limitations": "offline mocks; 6 filesystem fixtures isolated",
+    "subtests": 3
+  },
+  "deployment": {
+    "render": "billing_suspended_unchanged",
+    "deplexo_app_id": "5a86072f-c595-4200-80ba-0bd3be2ba352",
+    "url": "https://dev-trader-engine.de.deplexo.com",
+    "changed_this_session": true,
+    "source_type": "uploaded_zip_not_git_auto_deploy",
+    "source_commit": "5aacf5bc136b67509670eef46b09fec102153984",
+    "content_sha256": "35b6100ae68cd9ac1ca10e0557d243f14e9321133c3abbb2702be442511e5147",
+    "archive_sha256": "8467b15b9f2673c7cbb8765aef3aa66808868fdd5f4e36419e130d7d2a2032fc",
+    "container_id": "3f98caa984cbe8e23d1982c20c75ccf72a517c9c7032e2ddcba04f59a3eecf8e",
+    "persistent_mount": "/data",
+    "owner_token": "user_saved; masked name verified; private and invalid-pair responses 401 confirm configured; secret not read",
+    "health": "HTTP 200, exact release identity; connected BTC feed; intermittent DEGRADED due stale demo order book",
+    "private_routes": "bootstrap/diagnostics/trades return 401; dashboard/alerts unauthenticated WS rejected",
+    "charts": "5m/15m/1h/4h each 120 candles",
+    "live_money_execution": false,
+    "settings": "Preserved; exchange credentials unchanged; no forced orders",
+    "pending": [
+      "deploy selection/book timestamp fixes after CI",
+      "independent authenticated risk/protection inspection",
+      "natural demo entry/fill/protection/close lifecycle"
+    ]
+  },
+  "android": {
+    "source_version": "0.21.6",
+    "source_build": 131,
+    "verification": "User confirms secure pairing, dashboard, System Check, notification test, demo information and preserved previous trade history. Build131 source unchanged; no new APK required."
+  },
+  "constraints": [
+    "bitget_demo_only",
+    "no_paid_dependencies",
+    "preserve_existing_work",
+    "never_commit_secrets",
+    "preserve_daily_trade_and_signal_caps",
+    "preserve_hard_protections",
+    "never_bypass_automatic_review"
+  ],
+  "next_action": "Verify CI, package committed source, deploy selection/book fixes to existing Deplexo, then compare health source/content identity and confirm device continuity.",
+  "rollback_source": "Retain tested secured archive and /data. Previous runtime uploaded KYVORIQ-Deplexo-Integrations-v4.zip has no verifiable SHA; do not restore unauthenticated source blindly.",
+  "last_verified_application_commit": "5aacf5bc136b67509670eef46b09fec102153984",
+  "remote_checkpoint": {
+    "commit": "ce9f0b2a23402ce3282547140c626c37e115d583",
+    "tree": "3592863f52a54e8eae3ed492405827ccaea46cc6",
+    "pull_request": 119,
+    "local_tree_matches": true
+  },
+  "ci": {
+    "run_id": 37977517483,
+    "backend": "success",
+    "security": "success",
+    "free_container": "success",
+    "android_debug_build": "success",
+    "verified_zip_gate": "success",
+    "signed_apk": "skipped_no_android_change",
+    "visual_check": "skipped_no_android_change"
+  },
+  "last_interruption": "Automatic review usage limit prevented the previous documentation/scan/commit command from executing. Not an unsafe determination. Normal reviewed tools work again after user resumed; no restriction bypass."
+}
