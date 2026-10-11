@@ -531,8 +531,8 @@ class SafeActivity : FragmentActivity() {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_VERTICAL
         }
-        brand.addView(label("KYVORIQ", 20f, kyGold, 0.08f))
-        brand.addView(label("DISCIPLINE MEETS INTELLIGENCE", 7.5f, kyGray, 0.08f), margins(top = 3))
+        brand.addView(label("KYVORIQ", 21f, kyGold, 0.025f))
+        brand.addView(label("Locked in. No FOMO.", 9f, kyGray, 0.01f), margins(top = 3))
         header.addView(brand, LinearLayout.LayoutParams(0, dp(48), 1f))
         alertsButton = compactPillButton("ALERTS").apply { contentDescription = "Enable trade alerts" }
         alertsButton.setOnClickListener {
@@ -671,20 +671,20 @@ class SafeActivity : FragmentActivity() {
         insightsScroll.addView(insightsContent, FrameLayout.LayoutParams(-1, -2))
         insightsPage.addView(insightsScroll, LinearLayout.LayoutParams(-1, 0, 1f))
 
-        val story = premiumCard("MARKET CONTEXT", "Building the market picture…", 12f)
+        val story = premiumCard("MARKET CONTEXT", "Reading the market…", 13f)
         features = story.second
-        features.maxLines = 5
+        features.maxLines = 8
         insightsContent.addView(story.first, margins(bottom = 10))
 
-        val decisions = scrollableCard("ENTRY CHECKS", "Waiting for a qualified setup…", 11.5f, dp(if (compactViewport) 128 else 148))
+        val decisions = scrollableCard("ENTRY CHECKS", "Waiting for a qualified setup…", 12.5f, dp(if (compactViewport) 142 else 158))
         decisionView = decisions.value
         insightsContent.addView(decisions.container, margins(bottom = 10))
 
-        val alertCard = compactCard("ALERT INTELLIGENCE", "INFO  •  Routine monitoring\nSmart routing is active.", 11f)
+        val alertCard = compactCard("ALERT INTELLIGENCE", "Info • No spam, just the real updates.", 12.5f)
         alertIntelligenceView = alertCard.value
         insightsContent.addView(alertCard.container, margins(bottom = 10))
 
-        val riskCard = compactCard("POSITION RISK HEAT", "IDLE  •  No open demo position.", 11f)
+        val riskCard = compactCard("POSITION RISK HEAT", "Idle • No open demo position.", 12.5f)
         riskHeatText = riskCard.value
         riskHeatMeter = RiskHeatMeterView(this).apply {
             contentDescription = "Position risk heat meter"
@@ -697,13 +697,13 @@ class SafeActivity : FragmentActivity() {
         )
         insightsContent.addView(riskCard.container, margins(bottom = 10))
 
-        val levels = compactCard("LEVELS & FLOW", "Loading confirmed context…", 11.5f)
+        val levels = compactCard("LEVELS & FLOW", "Loading confirmed context…", 12.5f)
         insightContext = levels.value
         insightsContent.addView(levels.container, margins(bottom = 10))
-        val feed = compactCard("CONNECTION", "BITGET  •  CONNECTING", 11f)
+        val feed = compactCard("CONNECTION", "Bitget • Connecting", 12.5f)
         integrity = feed.value
         insightsContent.addView(feed.container, margins(bottom = 10))
-        val sys = compactCard("SYSTEM", "Build ${BuildConfig.VERSION_CODE}  •  Checking…", 11f)
+        val sys = compactCard("SYSTEM", "Build ${BuildConfig.VERSION_CODE} • Checking…", 12.5f)
         check = sys.value
         insightsContent.addView(sys.container, margins(bottom = 10))
 
@@ -766,7 +766,7 @@ class SafeActivity : FragmentActivity() {
             background = KyvoriqTheme.surface(this@SafeActivity, radius = 18f)
         }
         listOf("TRADE", "POSITIONS", "INSIGHTS").forEachIndexed { index, title ->
-            val button = compactPillButton(title).apply { contentDescription = "Workspace $title"; textSize = 10f
+            val button = compactPillButton(title.lowercase(Locale.US).replaceFirstChar { it.titlecase(Locale.US) }).apply { contentDescription = "Workspace $title"; textSize = 11f
                 compoundDrawablePadding = dp(5)
                 val icon = getDrawable(listOf(R.drawable.ic_nav_trade, R.drawable.ic_nav_positions, R.drawable.ic_nav_insights)[index])!!.mutate()
                 icon.setBounds(0, 0, dp(16), dp(16))
@@ -856,6 +856,22 @@ class SafeActivity : FragmentActivity() {
 
     private fun LinearLayout.isFillViewportCompat() {
         // Kept as a no-op marker so the main root remains a normal fixed viewport.
+    }
+
+    // Presentation-only labels: never modify execution, safety or protocol keys.
+    private fun humanHeading(raw: String): String = when (raw) {
+        "MARKET CONTEXT" -> "Market context"
+        "ENTRY CHECKS" -> "Entry checks"
+        "ALERT INTELLIGENCE" -> "Alert intelligence"
+        "POSITION RISK HEAT" -> "Position risk"
+        "LEVELS & FLOW" -> "Levels & flow"
+        "CONNECTION" -> "Connection"
+        "SYSTEM" -> "System"
+        "DECISION CENTER" -> "Decision center"
+        "DEMO PERFORMANCE" -> "Demo performance"
+        "ACCOUNTING & RISK" -> "Accounting & risk"
+        "EXCHANGE POSITIONS" -> "Exchange positions"
+        else -> raw
     }
 
     private fun sectionLabel(text: String): TextView =
@@ -960,7 +976,7 @@ class SafeActivity : FragmentActivity() {
             setPadding(dp(12), dp(9), dp(12), dp(8))
             background = KyvoriqTheme.surface(this@SafeActivity, prominent = false)
         }
-        val heading = label(title, 10f, kyGold, 0.06f)
+        val heading = label(humanHeading(title), 11.5f, kyGold, 0.012f)
         val value = TextView(this).apply {
             text = initial
             textSize = valueSize
@@ -985,7 +1001,7 @@ class SafeActivity : FragmentActivity() {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
         }
-        header.addView(label(title, 10f, kyGold, 0.06f),
+        header.addView(label(humanHeading(title), 11.5f, kyGold, 0.012f),
             LinearLayout.LayoutParams(0, dp(18), 1f))
         header.addView(label(if (title == "DECISION CENTER") "DETAILS  ›" else if (title == "DEMO PERFORMANCE") "DEMO" else "MARKET", 8.5f, kyAmber, 0.08f))
         box.addView(header)
@@ -1008,7 +1024,7 @@ class SafeActivity : FragmentActivity() {
             textSize = size
             setTextColor(color)
             typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
-            letterSpacing = spacing.coerceAtMost(0.09f)
+            letterSpacing = spacing.coerceAtMost(0.035f)
             includeFontPadding = false
         }
     }
@@ -1029,11 +1045,11 @@ class SafeActivity : FragmentActivity() {
         }
 
         val heading = TextView(this).apply {
-            text = marketAssetAccent(title)
-            textSize = 10f
+            text = humanHeading(title)
+            textSize = 11.5f
             setTextColor(kyGold)
             typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
-            letterSpacing = 0.06f
+            letterSpacing = 0.012f
             includeFontPadding = false
         }
         val headingRow = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
@@ -1088,11 +1104,11 @@ class SafeActivity : FragmentActivity() {
         }
 
         val heading = TextView(this).apply {
-            text = marketAssetAccent(title)
-            textSize = 10f
+            text = humanHeading(title)
+            textSize = 11.5f
             setTextColor(kyGold)
             typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
-            letterSpacing = 0.06f
+            letterSpacing = 0.012f
         }
         box.addView(heading)
 
@@ -1648,12 +1664,19 @@ class SafeActivity : FragmentActivity() {
         val mtf4h = f?.optString("trend_240", "UNKNOWN") ?: "UNKNOWN"
         val regime = f?.optString("regime", "—") ?: "—"
         val structure = f?.optString("market_structure", "—") ?: "—"
-        val triggerCompact = triggerText.replace("\n", " ").trim().take(32)
+        val triggerCompact = triggerText.replace("\n", " ").trim().take(46)
+        val marketAside = when {
+            !authoritativeFeedHealthy -> "Feed unverified — entries stay on hold."
+            signalObj != null -> "Setup in focus. Risk checks call the shots."
+            regime.contains("RANGE", ignoreCase = true) -> "Range market? The chart's on a side quest."
+            else -> "No FOMO. Clean triggers only."
+        }
         features.text =
-            "BIAS  $storyBias" +
-            "\nMTF   4H $mtf4h  •  1H $mtf1h  •  15m $mtf15" +
-            "\nREGIME  $regime  •  $structure" +
-            "\nTRIGGERS  " + if (triggerCompact.isBlank()) "WATCH" else triggerCompact
+            "Bias • $storyBias" +
+            "\nTrend • 4H $mtf4h / 1H $mtf1h / 15m $mtf15" +
+            "\nRegime • $regime / $structure" +
+            "\nTrigger • " + (if (triggerCompact.isBlank()) "Waiting for confirmation" else triggerCompact) +
+            "\n" + marketAside
 
         chart.setLivePrice(priceValue)
         if (requestChart) requestChartIfNeeded()
@@ -1803,7 +1826,9 @@ class SafeActivity : FragmentActivity() {
                  else if (resources.configuration.screenHeightDp < 760) ""
                  else "Evidence ${money(s.optDouble("confidence", 0.0) * 100)} / 100  •  Heuristic score"))
         } else {
-            setTradeSetupText("NO TRADE  •  ${if (openCount > 0) "EXPOSURE OPEN" else "SCANNING"}\n$reason\nTap details for entry checks.")
+            setTradeSetupText("NO TRADE  •  ${if (openCount > 0) "EXPOSURE OPEN" else "SCANNING"}\n$reason\n" +
+                (if (sourceHealthy && openCount == 0 && unresolved == 0 && unknown == 0)
+                    "No FOMO. Clean setups only." else "Tap details for entry checks."))
         }
     }
 
@@ -1895,16 +1920,16 @@ class SafeActivity : FragmentActivity() {
             else -> "INFO"
         }
         val explanation = when (tier) {
-            "CRITICAL" -> "Safety / stop / degraded-feed events use the strongest alert route."
+            "CRITICAL" -> "Safety, stop-loss and degraded-feed alerts take priority."
             "EXECUTION" -> "Orders, fills and TP lifecycle use execution-priority feedback."
             "PRIORITY" -> "High-confidence setups use priority notification + haptic routing."
-            else -> "Routine monitoring stays quiet until something deserves attention."
+            else -> "No spam. Only updates worth your attention."
         }
         val prefs = getSharedPreferences("kyvoriq_alert_intelligence", Context.MODE_PRIVATE)
         val lastTier = prefs.getString("last_tier", "—") ?: "—"
         val lastTitle = prefs.getString("last_title", "").orEmpty()
         alertIntelligenceView.text =
-            "LIVE TIER  •  $tier\n$explanation" +
+            "Alert priority • $tier\n$explanation" +
                 if (lastTitle.isBlank()) "" else "\nLast delivered  •  $lastTier  •  " + lastTitle.take(42)
         alertIntelligenceView.setTextColor(
             when (tier) {
@@ -1930,7 +1955,7 @@ class SafeActivity : FragmentActivity() {
         }
         if (openTrade == null) {
             riskHeatMeter.setRisk(0f, "IDLE", animate = lastDecisionVisualKey.isNotBlank())
-            riskHeatText.text = "No open demo position  •  monitoring stays armed."
+            riskHeatText.text = "No open demo position • no FOMO, just setups."
             riskHeatText.setTextColor(kyGray)
             return
         }
