@@ -38,17 +38,17 @@ class KyvoriqLaunchOverlay(context: Context) : FrameLayout(context) {
         textSize = 24f
         typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
         setTextColor(gold)
-        letterSpacing = 0.10f
+        letterSpacing = 0.025f
         includeFontPadding = false
         alpha = 0f
         translationY = dp(8f)
     }
     private val subtitle = TextView(context).apply {
-        text = "INTELLIGENCE  •  DISCIPLINE  •  EXECUTION"
+        text = "LOCKED IN  •  NO FOMO  •  CLEAN SETUPS"
         textSize = 8.5f
         typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
         setTextColor(gray)
-        letterSpacing = 0.08f
+        letterSpacing = 0.012f
         includeFontPadding = false
         alpha = 0f
         translationY = dp(6f)
