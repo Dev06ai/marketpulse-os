@@ -3,7 +3,7 @@ set -euo pipefail
 mkdir -p ui-check
 
 app_package="com.devtrader.app.debug"
-headings=('BITCOIN / USDT' 'DEMO PERFORMANCE' 'ENTRY CHECKS')
+headings=('BITCOIN / USDT' 'Demo performance' 'Entry checks')
 
 app_health_failed() {
   local log_file="$1"
@@ -89,7 +89,7 @@ python3 - <<'PY'
 from pathlib import Path
 import re
 import xml.etree.ElementTree as ET
-headings = ['BITCOIN / USDT', 'DEMO PERFORMANCE', 'ENTRY CHECKS']
+headings = ['BITCOIN / USDT', 'Demo performance', 'Entry checks']
 for path in Path('ui-check').glob('*.xml'):
     root = ET.parse(path).getroot()
     nodes = list(root.iter('node'))
