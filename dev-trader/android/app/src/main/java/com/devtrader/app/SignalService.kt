@@ -417,7 +417,7 @@ class SignalService : Service() {
             ServiceUiState.LIVE -> ServiceNotificationModel(
                 chip = "LIVE",
                 subtitle = "Connected • we’re locked in",
-                body = "Watching BTCUSDT • patience is the flex"
+                body = "Watching BTCUSDT • patience is the flex",
                 chipBackground = R.drawable.notification_chip_live,
                 chipTextColor = getColor(R.color.kyvoriq_charcoal),
                 animate = true
