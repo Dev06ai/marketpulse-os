@@ -10,10 +10,10 @@ android {
         applicationId = "com.devtrader.app"
         minSdk = 26
         targetSdk = 37
-        versionCode = (providers.gradleProperty("devTraderVersionCode").orNull ?: "134").toInt()
-        versionName = providers.gradleProperty("devTraderVersionName").orNull ?: "0.21.9"
+        versionCode = (providers.gradleProperty("devTraderVersionCode").orNull ?: "135").toInt()
+        versionName = providers.gradleProperty("devTraderVersionName").orNull ?: "0.21.10"
         val backendUrl = providers.gradleProperty("devTraderBackendUrl").orNull
-            ?: "https://dev-trader-engine.de.deplexo.com"
+            ?: "https://kyvoriq-staging.getvoroa.com"
         require(Regex("https://[A-Za-z0-9.-]+(?::[0-9]+)?/?").matches(backendUrl)) {
             "devTraderBackendUrl must be an HTTPS origin without credentials or a path"
         }
