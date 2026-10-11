@@ -131,8 +131,8 @@ def test_fresh_session_skips_legacy_entries_but_retains_global_loss_budget(monke
         daily_net_usdt={str(epoch//DAY_MS*DAY_MS): -9.5})
     qty, risk, _ = asyncio.run(executor._risk_size(audit_signal()))
     assert qty > 0
-    assert 76 <= qty * 100000 / executor.leverage <= 100
-    assert risk > 0
+    assert qty * 100000 / executor.leverage == 40
+    assert 0 < risk <= 5
     allowed, reason = executor._signal_allowed(audit_signal())
     assert allowed, reason
     executor.data["fill_ledger"]["daily_net_usdt"][str(epoch//DAY_MS*DAY_MS)] = -10.1

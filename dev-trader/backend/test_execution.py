@@ -1,5 +1,4 @@
 import asyncio
-import os
 
 from app.execution import DemoExecutionEngine
 
@@ -86,13 +85,9 @@ class FakeClient:
         }
 
 
-def test_demo_executor_sizes_from_stop_distance_and_opens_once(monkeypatch):
+def test_demo_executor_sizes_from_stop_distance_and_opens_once(monkeypatch, tmp_path):
     monkeypatch.setenv("BITGET_DEMO_TRADING", "true")
-    monkeypatch.setenv("BITGET_EXECUTION_STATE_FILE", "/tmp/dev-trader-test-execution.json")
-    try:
-        os.remove("/tmp/dev-trader-test-execution.json")
-    except FileNotFoundError:
-        pass
+    monkeypatch.setenv("BITGET_EXECUTION_STATE_FILE", str(tmp_path / "dev-trader-test-execution.json"))
 
     learner = FakeLearning()
     executor = DemoExecutionEngine(learner)
@@ -126,7 +121,8 @@ def test_demo_executor_sizes_from_stop_distance_and_opens_once(monkeypatch):
     assert trade["entry_price"] == 100000
     assert trade["direction"] == "LONG"
     assert trade["leverage"] == 20
-    assert 50 <= trade["planned_margin_usdt"] <= 75
+    assert trade["planned_margin_usdt"] == 40
+    assert 0 < trade["planned_risk_usdt"] <= 5.0
     assert trade["confidence_band"] == "MEDIUM"
     assert learner.events[-1][0] == "EXECUTION_OPEN"
 
@@ -161,13 +157,9 @@ def test_close_reason_and_r_math():
     assert reason == "SL"
 
 
-def test_demo_execution_rejects_zero_futures_balance(monkeypatch):
+def test_demo_execution_rejects_zero_futures_balance(monkeypatch, tmp_path):
     monkeypatch.setenv("BITGET_DEMO_TRADING", "true")
-    monkeypatch.setenv("BITGET_EXECUTION_STATE_FILE", "/tmp/dev-trader-test-zero-balance.json")
-    try:
-        os.remove("/tmp/dev-trader-test-zero-balance.json")
-    except FileNotFoundError:
-        pass
+    monkeypatch.setenv("BITGET_EXECUTION_STATE_FILE", str(tmp_path / "dev-trader-test-zero-balance.json"))
 
     class ZeroBalanceClient(FakeClient):
         def available_balance(self, symbol):
@@ -242,14 +234,10 @@ class MultiSignalClient(FakeClient):
         return {"code": "00000", "data": {"orderId": "close-123", "clientOid": client_oid}}
 
 
-def test_new_signal_is_blocked_while_existing_position_is_unresolved(monkeypatch):
+def test_new_signal_is_blocked_while_existing_position_is_unresolved(monkeypatch, tmp_path):
     monkeypatch.setenv("BITGET_DEMO_TRADING", "true")
-    monkeypatch.setenv("BITGET_EXECUTION_STATE_FILE", "/tmp/dev-trader-test-multi.json")
+    monkeypatch.setenv("BITGET_EXECUTION_STATE_FILE", str(tmp_path / "dev-trader-test-multi.json"))
     monkeypatch.setenv("BITGET_DEMO_MAX_DAILY_TRADES", "3")
-    try:
-        os.remove("/tmp/dev-trader-test-multi.json")
-    except FileNotFoundError:
-        pass
 
     learner = FakeLearning()
     executor = DemoExecutionEngine(learner)
@@ -280,14 +268,10 @@ def test_new_signal_is_blocked_while_existing_position_is_unresolved(monkeypatch
     assert executor.client.close_calls == []
 
 
-def test_execution_rejects_large_bitget_price_drift(monkeypatch):
+def test_execution_rejects_large_bitget_price_drift(monkeypatch, tmp_path):
     monkeypatch.setenv("BITGET_DEMO_TRADING", "true")
-    monkeypatch.setenv("BITGET_EXECUTION_STATE_FILE", "/tmp/dev-trader-test-drift.json")
+    monkeypatch.setenv("BITGET_EXECUTION_STATE_FILE", str(tmp_path / "dev-trader-test-drift.json"))
     monkeypatch.setenv("BITGET_MAX_ENTRY_DRIFT_PCT", "0.15")
-    try:
-        os.remove("/tmp/dev-trader-test-drift.json")
-    except FileNotFoundError:
-        pass
 
     class DriftClient(FakeClient):
         def market_ticker(self, symbol):
@@ -317,13 +301,9 @@ def test_execution_rejects_large_bitget_price_drift(monkeypatch):
     assert "price drift" in result["reason"].lower()
 
 
-def test_partial_bitget_fill_does_not_become_open(monkeypatch):
+def test_partial_bitget_fill_does_not_become_open(monkeypatch, tmp_path):
     monkeypatch.setenv("BITGET_DEMO_TRADING", "true")
-    monkeypatch.setenv("BITGET_EXECUTION_STATE_FILE", "/tmp/dev-trader-test-partial.json")
-    try:
-        os.remove("/tmp/dev-trader-test-partial.json")
-    except FileNotFoundError:
-        pass
+    monkeypatch.setenv("BITGET_EXECUTION_STATE_FILE", str(tmp_path / "dev-trader-test-partial.json"))
 
     class PartialFillClient(FakeClient):
         def __init__(self):
@@ -367,13 +347,9 @@ def test_partial_bitget_fill_does_not_become_open(monkeypatch):
     assert [event[0] for event in learner.events].count("EXECUTION_OPEN") == 1
 
 
-def test_sync_does_not_promote_partial_exchange_position(monkeypatch):
+def test_sync_does_not_promote_partial_exchange_position(monkeypatch, tmp_path):
     monkeypatch.setenv("BITGET_DEMO_TRADING", "true")
-    monkeypatch.setenv("BITGET_EXECUTION_STATE_FILE", "/tmp/dev-trader-test-sync-partial.json")
-    try:
-        os.remove("/tmp/dev-trader-test-sync-partial.json")
-    except FileNotFoundError:
-        pass
+    monkeypatch.setenv("BITGET_EXECUTION_STATE_FILE", str(tmp_path / "dev-trader-test-sync-partial.json"))
 
     class PartialPositionClient(FakeClient):
         def positions(self, symbol):
@@ -481,15 +457,18 @@ def test_execution_recomputes_fee_adjusted_rr(monkeypatch, tmp_path):
 
 
 def test_confidence_margin_sizing_uses_high_band_at_20x(monkeypatch, tmp_path):
+    monkeypatch.setenv("BITGET_DEMO_MAX_PLANNED_LOSS_PCT", "1")
     executor = audit_executor(monkeypatch, tmp_path)
     qty, risk, _ = asyncio.run(executor._risk_size(audit_signal()))
     margin = qty * 100000 / executor.leverage
     assert executor.leverage == 20
-    assert 76 <= margin <= 100
+    assert margin == 75  # 76 USDT preference rounded DOWN to the exchange lot.
+    assert risk <= 10
     assert abs(risk - qty * (500 + (100000 + 99500) * .0006)) < 1e-8
 
 
 def test_medium_confidence_margin_scales_from_50_to_75(monkeypatch, tmp_path):
+    monkeypatch.setenv("BITGET_DEMO_MAX_PLANNED_LOSS_PCT", "1")
     executor = audit_executor(monkeypatch, tmp_path)
     low = dict(audit_signal(), confidence=.70)
     mid = dict(audit_signal(), confidence=.80)
@@ -619,18 +598,19 @@ def test_partial_aggregate_exits_are_not_reported_as_all_entries_open(monkeypatc
 
 
 def test_v3_instrument_rules_reach_sizing(monkeypatch, tmp_path):
+    monkeypatch.setenv("BITGET_DEMO_MAX_PLANNED_LOSS_PCT", "1")
     executor = audit_executor(monkeypatch, tmp_path)
     config = dict(sizeMultiplier='.002', volumePlace=3, minTradeNum='.002',
                   priceEndStep='.5', pricePlace=1, minOrderAmount='5')
     executor.client.contract_config = lambda _: config
     qty, risk, actual = asyncio.run(executor._risk_size(audit_signal()))
     assert actual == config
-    assert qty == .016
-    assert 76 <= qty * 100000 / executor.leverage <= 100
+    assert qty == .014  # Never round up to meet a preferred minimum margin.
+    assert qty * 100000 / executor.leverage == 70
     assert risk > 0
     executor.client.contract_config = lambda _: dict(config, minTradeNum='.03')
     import pytest
-    with pytest.raises(Exception, match='margin band'):
+    with pytest.raises(Exception, match='risk guard'):
         asyncio.run(executor._risk_size(audit_signal()))
 
 
@@ -785,6 +765,10 @@ def test_confidence_sizing_respects_authoritative_remaining_daily_budget(monkeyp
         fee_accounting_complete=True,
         daily_net_usdt={str(day_start): -8.0},
     )
+    qty, risk, _ = asyncio.run(executor._risk_size(audit_signal()))
+    assert 0 < risk <= 2.0
+    assert qty * 100000 / executor.leverage < 50
+    executor.data['fill_ledger']['daily_net_usdt'][str(day_start)] = -10.0
     with pytest.raises(Exception, match='risk guard'):
         asyncio.run(executor._risk_size(audit_signal()))
 

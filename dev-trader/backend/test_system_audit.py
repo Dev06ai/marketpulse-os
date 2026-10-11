@@ -137,13 +137,17 @@ def test_feed_loss_during_leverage_verification_blocks_submission(monkeypatch, t
 @pytest.mark.parametrize('query', ['entry=nan&stop=99', 'entry=100&stop=inf',
     'entry=100&stop=100', 'entry=-100&stop=99', 'entry=100&stop=99&target=98',
     'entry=100&stop=99&risk_pct=-1', 'entry=100&stop=99&account_balance=nan'])
-def test_invalid_risk_input_returns_validation_error(query):
+def test_invalid_risk_input_returns_validation_error(query, monkeypatch):
     from app.main import app
-    assert TestClient(app).get('/risk?'+query).status_code == 422
+    secret = 'example-risk-test-only-' + 'x' * 40
+    monkeypatch.setenv('KYVORIQ_API_OWNER_TOKEN', secret)
+    assert TestClient(app).get('/risk?'+query, headers={'Authorization': 'Bearer ' + secret}).status_code == 422
 
 
-def test_valid_short_risk_geometry_retains_risk_cap():
+def test_valid_short_risk_geometry_retains_risk_cap(monkeypatch):
     from app.main import app
-    result = TestClient(app).get('/risk?entry=100&stop=102&target=94&account_balance=5000&risk_pct=2').json()
+    secret = 'example-risk-test-only-' + 'x' * 40
+    monkeypatch.setenv('KYVORIQ_API_OWNER_TOKEN', secret)
+    result = TestClient(app).get('/risk?entry=100&stop=102&target=94&account_balance=5000&risk_pct=2', headers={'Authorization': 'Bearer ' + secret}).json()
     assert result['ready'] and result['risk_capped'] and result['rr'] == 3
     assert result['risk_amount'] == 50

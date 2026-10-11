@@ -1,6 +1,9 @@
 from __future__ import annotations
 import math
 
+MAX_RISK_PCT = 1.0
+DEFAULT_RISK_PCT = 0.5
+
 def calculate_risk(
     account_balance: float,
     risk_pct: float,
@@ -21,7 +24,7 @@ def calculate_risk(
         raise ValueError("Target must be positive and on the profit side of entry.")
     account_balance = max(float(account_balance), 0.0)
     requested_pct = max(float(risk_pct), 0.0)
-    applied_pct = min(requested_pct, float(hard_cap_pct))
+    applied_pct = min(requested_pct, float(hard_cap_pct), MAX_RISK_PCT)
     entry = float(entry)
     stop = float(stop)
     target_value = None if target is None else float(target)
