@@ -44,7 +44,7 @@
             android:textStyle="bold"
             android:fontFamily="sans-serif-medium"
             android:includeFontPadding="false"
-            android:letterSpacing="0.045"/>
+            android:letterSpacing="0.015"/>
 
         <TextView
             android:id="@+id/notif_subtitle"
@@ -55,7 +55,8 @@
             android:ellipsize="end"
             android:text="Signal engine online"
             android:textColor="#E5E7EB"
-            android:textSize="10sp"
+            android:textSize="11sp"
+            android:fontFamily="sans-serif"
             android:includeFontPadding="false"/>
     </LinearLayout>
 
