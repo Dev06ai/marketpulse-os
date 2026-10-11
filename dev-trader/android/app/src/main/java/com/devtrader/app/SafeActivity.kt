@@ -673,7 +673,7 @@ class SafeActivity : FragmentActivity() {
 
         val story = premiumCard("MARKET CONTEXT", "Reading the market…", 13f)
         features = story.second
-        features.maxLines = 5
+        features.maxLines = 8
         insightsContent.addView(story.first, margins(bottom = 10))
 
         val decisions = scrollableCard("ENTRY CHECKS", "Waiting for a qualified setup…", 12.5f, dp(if (compactViewport) 142 else 158))
