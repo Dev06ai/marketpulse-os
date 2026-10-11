@@ -65,18 +65,23 @@ def test_compaction_preserves_account_and_position_truth_without_mutation():
 def test_profiles_bootstrap_and_keepalive_use_real_asgi_routes(monkeypatch):
     from app import main
     monkeypatch.setattr(main, "stream", None)
+    secret = "unit-test-temporary-bearer-" + "x" * 40
+    monkeypatch.setenv("KYVORIQ_API_OWNER_TOKEN", secret)
+    auth = {"Authorization": "Bearer " + secret}
     client = TestClient(main.app)  # No lifespan: never contact the exchange in tests.
-    with client.websocket_connect("/ws?profile=alerts") as ws:
+    assert client.get("/bootstrap?profile=dashboard").status_code == 401
+    assert client.get("/chart").status_code == 200
+    with client.websocket_connect("/ws?profile=alerts", headers=auth) as ws:
         first = ws.receive_json()
         assert first["profile"] == "alerts"
         assert "execution" not in first and "engine" not in first
         ws.send_json({"type": "keepalive"})
         assert ws.receive_json()["type"] == "ack"
-    with client.websocket_connect("/ws?profile=dashboard") as ws:
+    with client.websocket_connect("/ws?profile=dashboard", headers=auth) as ws:
         assert ws.receive_json()["profile"] == "dashboard"
-    with client.websocket_connect("/ws?profile=unknown") as ws:
+    with client.websocket_connect("/ws?profile=unknown", headers=auth) as ws:
         assert "structure_map" in ws.receive_json()["engine"]
-    response = client.get("/bootstrap?profile=dashboard", headers={"Accept-Encoding": "gzip"})
+    response = client.get("/bootstrap?profile=dashboard", headers={**auth, "Accept-Encoding": "gzip"})
     assert response.status_code == 200
     assert response.headers["content-encoding"] == "gzip"
     assert "chart" in response.json() and "structure_map" not in response.json()["engine"]

@@ -41,6 +41,11 @@ jobs:
           pip install -r requirements.txt pytest
           python -m compileall app
           pytest -q test_analytics.py test_strategy.py
+      - name: Verify private API regression before shipping
+        run: |
+          python -m compileall -q dev-trader/backend/app
+          python dev-trader/backend/test_api_security.py
+          python dev-trader/tools/security_scan.py --history
       - name: Verify signing configuration
         shell: bash
         run: |
