@@ -23,6 +23,7 @@ object KyvoriqSecureSession {
     private const val PREFS = "kyvoriq_secure_session_v1"
     private const val TOKEN = "access_token_encrypted"
     private const val EXP = "expires_at"
+    private const val BACKEND_ORIGIN = "backend_origin"
     private const val MAX_LIFETIME_SECONDS = 7L * 24L * 60L * 60L
 
     private fun secretKey(): SecretKey {
@@ -55,11 +56,27 @@ object KyvoriqSecureSession {
         val blob = iv + ciphertext
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
             .putString(TOKEN, Base64.encodeToString(blob, Base64.NO_WRAP))
-            .putLong(EXP, expiresAt).apply()
+            .putLong(EXP, expiresAt)
+            .putString(BACKEND_ORIGIN, URI(BackendEndpoint.base).run {
+                require(scheme.equals("https", ignoreCase = true) && !host.isNullOrBlank())
+                "${scheme.lowercase()}://${host.lowercase()}:${if (port < 0) 443 else port}"
+            }).apply()
     }
 
     fun accessToken(context: Context): String? {
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        // A build that migrates from Deplexo to Voroa must not claim the
+        // old bearer is still paired. Old pre-origin tokens require re-pair.
+        val expectedOrigin = runCatching {
+            URI(BackendEndpoint.base).run {
+                require(scheme.equals("https", ignoreCase = true) && !host.isNullOrBlank())
+                "${scheme.lowercase()}://${host.lowercase()}:${if (port < 0) 443 else port}"
+            }
+        }.getOrNull()
+        if (expectedOrigin == null || prefs.getString(BACKEND_ORIGIN, null) != expectedOrigin) {
+            clear(context)
+            return null
+        }
         if (prefs.getLong(EXP, 0L) <= System.currentTimeMillis() / 1000L + 10L) {
             clear(context)
             return null
