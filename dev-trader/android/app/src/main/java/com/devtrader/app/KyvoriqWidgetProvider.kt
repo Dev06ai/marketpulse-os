@@ -93,6 +93,12 @@ class KyvoriqWidgetProvider : AppWidgetProvider() {
             if (price.isFinite()) {
                 updatePriceAndLiveFields(context, price, health, push = false)
             }
+            // The detailed dashboard's reconciled value takes precedence over
+            // the local price-only gross estimate on this authoritative update.
+            // Subsequent price ticks display their own estimate explicitly.
+            if (serverPnl.isFinite()) {
+                prefs.edit().putString(KEY_PNL, pnlText).apply()
+            }
             updateAll(context)
         }
 
@@ -149,7 +155,7 @@ class KyvoriqWidgetProvider : AppWidgetProvider() {
                 .putString(KEY_HEALTH, health)
                 .putString(
                     KEY_PNL,
-                    if (estimatedPnl.isFinite()) String.format(Locale.US, "%+.2f USDT", estimatedPnl)
+                    if (estimatedPnl.isFinite()) String.format(Locale.US, "≈%+.2f USDT", estimatedPnl)
                     else prefs.getString(KEY_PNL, "—") ?: "—"
                 )
                 .putLong(KEY_UPDATED, System.currentTimeMillis())
@@ -229,8 +235,8 @@ class KyvoriqWidgetProvider : AppWidgetProvider() {
             if (expanded) {
                 views.setTextViewText(R.id.widget_pnl, "P&L  $pnl")
                 val pnlColor = when {
-                    pnl.startsWith("+") -> Color.rgb(54, 211, 153)
-                    pnl.startsWith("-") -> Color.rgb(255, 82, 105)
+                    pnl.startsWith("+") || pnl.startsWith("≈+") -> Color.rgb(54, 211, 153)
+                    pnl.startsWith("-") || pnl.startsWith("≈-") -> Color.rgb(255, 82, 105)
                     else -> KyvoriqTheme.white
                 }
                 views.setTextColor(R.id.widget_pnl, pnlColor)

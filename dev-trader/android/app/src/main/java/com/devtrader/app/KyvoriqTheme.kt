@@ -12,21 +12,21 @@ import android.view.View
 import android.view.animation.PathInterpolator
 import android.widget.Button
 
-/** Premium midnight / champagne identity. Teal and red remain reserved for market data. */
+/** KYVORIQ cyberpunk: obsidian, kinetic gold and cyan accents. Trading P&L semantics remain unchanged. */
 object KyvoriqTheme {
-    // Design reference: cool blue-black glass, champagne accents and subtle silver rims.
-    val gold = Color.rgb(234, 194, 137)      // #EAC289 champagne
-    val ember = Color.rgb(206, 164, 109)     // #CEA46D satin bronze
-    val deepGold = Color.rgb(177, 132, 77)   // #B1844D antique gold
-    val charcoal = Color.rgb(10, 16, 23)     // #0A1017
-    val slate = Color.rgb(19, 28, 39)        // #131C27
-    val graphite = Color.rgb(37, 48, 61)     // #25303D
-    val gray = Color.rgb(175, 187, 201)      // #AFBBC9
+    // Gold cyberpunk reference with dark glass, cyan ion traces and responsive press feedback.
+    val gold = Color.rgb(255, 204, 78)      // neon gold
+    val ember = Color.rgb(245, 166, 52)     // ember gold
+    val deepGold = Color.rgb(199, 138, 41)   // oxidized gold
+    val charcoal = Color.rgb(7, 11, 18)     // obsidian
+    val slate = Color.rgb(16, 23, 35)        // dark navy
+    val graphite = Color.rgb(27, 41, 56)     // night steel
+    val gray = Color.rgb(170, 191, 206)      // moonlit silver
     val surface = slate
     val raised = graphite
-    val border = Color.argb(148, 123, 141, 158) // restrained slate/silver
+    val border = Color.argb(148, 73, 125, 149) // cyan steel
     val muted = gray
-    val white = Color.rgb(238, 242, 247)     // #EEF2F7
+    val white = Color.rgb(241, 247, 249)     // silver white
     val motion = PathInterpolator(0.20f, 0.80f, 0.20f, 1f)
 
     fun motionEnabled(context: Context): Boolean = ValueAnimator.areAnimatorsEnabled() &&
@@ -36,7 +36,7 @@ object KyvoriqTheme {
         val density = context.resources.displayMetrics.density
         val shape = GradientDrawable(
             GradientDrawable.Orientation.TL_BR,
-            if (selected) intArrayOf(Color.rgb(250, 224, 177), gold, deepGold)
+            if (selected) intArrayOf(Color.rgb(255, 229, 133), gold, deepGold)
             else intArrayOf(graphite, slate, charcoal)
         ).apply {
             cornerRadius = radius * density
@@ -45,7 +45,7 @@ object KyvoriqTheme {
                 intArrayOf(if (selected) gold else Color.argb(185, 151, 166, 182),
                     if (selected) deepGold else Color.argb(118, 120, 144, 167))))
         }
-        return RippleDrawable(ColorStateList.valueOf(Color.argb(42, 234, 194, 137)), shape, null)
+        return RippleDrawable(ColorStateList.valueOf(Color.argb(42, 255, 204, 78)), shape, null)
     }
 
     fun surface(context: Context, prominent: Boolean = false, radius: Float = 18f): Drawable =
@@ -71,7 +71,7 @@ class KyvoriqButton(context: Context) : Button(context) {
     }
 }
 
-/** Static satin-metal lighting; no GPU particle loop or shimmer animation. */
+/** Static cyberpunk metal accents; avoids unbounded GPU particle loops. */
 private class GoldSurfaceDrawable(
     private val density: Float, private val prominent: Boolean, radius: Float
 ) : Drawable() {
@@ -98,15 +98,15 @@ private class GoldSurfaceDrawable(
         )
         glow = RadialGradient(rect.left + rect.width() * .12f, rect.top,
             rect.width().coerceAtLeast(1f) * .85f,
-            Color.argb(if (prominent) 24 else 10, 234, 194, 137), Color.TRANSPARENT, Shader.TileMode.CLAMP)
+            Color.argb(if (prominent) 29 else 14, 37, 226, 249), Color.TRANSPARENT, Shader.TileMode.CLAMP)
         sheen = LinearGradient(rect.left, rect.bottom, rect.right, rect.top,
             intArrayOf(Color.TRANSPARENT, Color.argb(if (prominent) 26 else 11, 175, 199, 218), Color.TRANSPARENT),
             floatArrayOf(0f, .38f, 1f), Shader.TileMode.CLAMP)
         rim = LinearGradient(rect.left, rect.top, rect.right, rect.bottom,
             intArrayOf(
                 if (prominent) Color.argb(192, 186, 192, 201) else Color.argb(122, 134, 151, 170),
-                Color.argb(175, 123, 141, 158),
-                Color.argb(140, 67, 83, 103)
+                Color.argb(175, 57, 140, 167),
+                Color.argb(140, 112, 71, 162)
             ), null, Shader.TileMode.CLAMP)
     }
     override fun draw(canvas: Canvas) {
@@ -128,6 +128,15 @@ private class GoldSurfaceDrawable(
                 lineTo(rect.right, rect.bottom); close()
             }
             canvas.drawPath(facet, paint); canvas.restoreToCount(save)
+            // Delicate neon circuitry: static drawing, never a permanent repaint timer.
+            paint.color = Color.argb(118 * drawableAlpha / 255, 37, 226, 249)
+            paint.strokeWidth = density * .85f
+            paint.shader = null
+            canvas.drawLine(rect.left + density * 15f, rect.top + density * 1.2f,
+                rect.left + rect.width() * .27f, rect.top + density * 1.2f, paint)
+            paint.color = Color.argb(145 * drawableAlpha / 255, 255, 204, 78)
+            canvas.drawLine(rect.right - rect.width() * .18f, rect.bottom - density * 1.2f,
+                rect.right - density * 15f, rect.bottom - density * 1.2f, paint)
         }
         paint.shader = null
     }

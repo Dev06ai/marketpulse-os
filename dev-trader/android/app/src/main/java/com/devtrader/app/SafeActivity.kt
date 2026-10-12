@@ -521,18 +521,16 @@ class SafeActivity : FragmentActivity() {
         }
         setContentView(root)
         val header = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
-        val brandMark = ImageView(this).apply {
-            setImageResource(R.drawable.kyvoriq_mark)
-            contentDescription = "KYVORIQ"
-            scaleType = ImageView.ScaleType.FIT_CENTER
-        }
-        header.addView(brandMark, LinearLayout.LayoutParams(dp(40), dp(40)).apply { rightMargin = dp(10) })
+        // Native VSYNC vector motion, scoped to the header rather than the chart surface.
+        val brandMark = CyberpunkMarkView(this)
+        header.addView(brandMark, LinearLayout.LayoutParams(dp(40), dp(40)).apply { rightMargin = dp(8) })
         val brand = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_VERTICAL
         }
-        brand.addView(label("KYVORIQ", 21f, kyGold, 0.025f))
-        brand.addView(label("Locked in. No FOMO.", 9f, kyGray, 0.01f), margins(top = 3))
+        brand.addView(CyberpunkWordmarkView(this),
+            LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(32)))
+        brand.addView(label("LOCKED IN  //  STAY SHARP", 8f, kyGray, 0.08f), margins(top = 0))
         header.addView(brand, LinearLayout.LayoutParams(0, dp(48), 1f))
         alertsButton = compactPillButton("ALERTS").apply { contentDescription = "Enable trade alerts" }
         alertsButton.setOnClickListener {
