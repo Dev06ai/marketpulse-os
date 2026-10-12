@@ -160,7 +160,7 @@ jobs:
             echo "Existing signed APK must not be replaced."
             exit 1
           fi
-          gh release create "$TAG" --target "$GITHUB_SHA" "$APK" "dev-trader-update.json#dev-trader-update.json" --title "KYVORIQ ${{ steps.meta.outputs.version_name }}" --notes "Signed KYVORIQ Build 140: bespoke gold flame and razor-cyan Lottie identity, cleaner 1.7s cinematic intro, adaptive header and price rail; trading engine unchanged."
+          gh release create "$TAG" --target "$GITHUB_SHA" "$APK" "dev-trader-update.json#dev-trader-update.json" --title "KYVORIQ ${{ steps.meta.outputs.version_name }}" --notes "Signed KYVORIQ Build 140: secure backend-sourced updated daily, weekly and nPOC levels, weekly layer controls, and transient five-minute TAPPED markers. No private level prices bundled inside the APK."
 
       - name: Publish update manifest
         env:
