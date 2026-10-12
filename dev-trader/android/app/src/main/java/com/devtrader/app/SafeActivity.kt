@@ -523,13 +523,13 @@ class SafeActivity : FragmentActivity() {
         val header = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
         // Native VSYNC vector motion, scoped to the header rather than the chart surface.
         val brandMark = CyberpunkMarkView(this)
-        header.addView(brandMark, LinearLayout.LayoutParams(dp(40), dp(40)).apply { rightMargin = dp(8) })
+        header.addView(brandMark, LinearLayout.LayoutParams(dp(49), dp(49)).apply { rightMargin = dp(4) })
         val brand = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_VERTICAL
         }
         brand.addView(CyberpunkWordmarkView(this),
-            LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(32)))
+            LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(36)))
         brand.addView(label("LOCKED IN  //  STAY SHARP", 8f, kyGray, 0.08f), margins(top = 0))
         header.addView(brand, LinearLayout.LayoutParams(0, dp(48), 1f))
         alertsButton = compactPillButton("ALERTS").apply { contentDescription = "Enable trade alerts" }
@@ -544,7 +544,9 @@ class SafeActivity : FragmentActivity() {
             safe { forceReconnectFromUser() }
         }
         header.addView(retryButton, LinearLayout.LayoutParams(dp(56), dp(44)))
-        root.addView(header, margins(bottom = 8))
+        root.addView(header, margins(bottom = 1))
+        root.addView(CyberpunkHeaderRail(this),
+            LinearLayout.LayoutParams(-1, dp(2)).apply { bottomMargin = dp(7) })
 
         workspaceHost = FrameLayout(this)
         root.addView(workspaceHost, LinearLayout.LayoutParams(-1, 0, 1f))
