@@ -11,97 +11,86 @@ import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
 
-/** One-second, non-blocking cinematic intro. VSYNC-driven native vector motion. */
+/**
+ * Cyberpunk boot sequence (~1.8s). Circuit-board boot, violet ignition, emblem
+ * materialization, RGB tear, cyan/gold razor wordmark, dashboard reveal.
+ * Visual only: application/network bootstrap runs separately and is never blocked.
+ */
 class KyvoriqLaunchOverlay(context: Context) : FrameLayout(context) {
-    private val gold = KyvoriqTheme.gold
-    private val cyan = Color.rgb(37, 226, 249)
-    private val ease = PathInterpolator(.18f, .82f, .20f, 1f)
-    private val emblem = CyberpunkMarkView(context).apply {
-        alpha = 0f; scaleX = .74f; scaleY = .74f; translationY = dp(12f)
+    private val ease=PathInterpolator(.15f,.80f,.20f,1f)
+    private val circuit=CyberpunkCircuitBackdrop(context)
+    private val emblem=CyberpunkMarkView(context).apply {
+        alpha=0f;scaleX=.42f;scaleY=.42f;translationY=dp(28f)
     }
-    private val wordmark = CyberpunkWordmarkView(context).apply {
-        alpha = 0f; translationY = dp(9f)
+    private val wordmark=CyberpunkWordmarkView(context).apply {
+        alpha=0f;scaleX=1.18f;translationX=-dp(22f)
     }
-    private val caption = TextView(context).apply {
-        text = "SYSTEM ONLINE  //  STAY SHARP"
-        textSize = 9f
-        typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
-        setTextColor(Color.rgb(170, 191, 206))
-        letterSpacing = .12f
-        includeFontPadding = false
-        alpha = 0f
+    private val tag=TextView(context).apply {
+        text="SYSTEM BOOT  //  QUANTUM MARKET INTERFACE"
+        setTextColor(0xFFABB8D2.toInt())
+        textSize=9f;letterSpacing=.12f
+        typeface=Typeface.create("monospace",Typeface.BOLD)
+        gravity=Gravity.CENTER
+        includeFontPadding=false
+        alpha=0f
     }
-    private val bootline = View(context).apply {
-        background = GradientDrawable(
-            GradientDrawable.Orientation.LEFT_RIGHT,
-            intArrayOf(Color.TRANSPARENT, cyan, gold, Color.TRANSPARENT)
-        )
-        scaleX = 0f; alpha = 0f
+    private val charge=View(context).apply {
+        background=GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,intArrayOf(
+            Color.TRANSPARENT,0xFF8F43FF.toInt(),0xFF18E8FF.toInt(),0xFFFFCE47.toInt(),Color.TRANSPARENT))
+        alpha=0f;scaleX=0f
     }
-    private val sweep = View(context).apply {
-        background = GradientDrawable(
-            GradientDrawable.Orientation.LEFT_RIGHT,
-            intArrayOf(Color.TRANSPARENT, Color.argb(105, 37, 226, 249), Color.TRANSPARENT)
-        )
-        rotation = -13f; alpha = 0f
+    private val lens=View(context).apply {
+        background=GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,intArrayOf(
+            Color.TRANSPARENT,0x6630E9FF,0x889B39FF.toInt(),Color.TRANSPARENT))
+        alpha=0f;rotation=-16f
     }
+
     init {
-        isClickable = true
-        isFocusable = true
-        background = GradientDrawable(
-            GradientDrawable.Orientation.TL_BR,
-            intArrayOf(Color.rgb(6, 10, 17), Color.rgb(16, 20, 36), Color.rgb(6, 10, 17))
-        )
-        val center = LinearLayout(context).apply {
-            orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER
-        }
-        center.addView(emblem, LinearLayout.LayoutParams(dp(128f).toInt(), dp(128f).toInt()).apply {
-            gravity = Gravity.CENTER_HORIZONTAL
+        isClickable=true
+        isFocusable=true
+        setBackgroundColor(0xFF090713.toInt())
+        addView(circuit, LayoutParams(-1,-1))
+        val center=LinearLayout(context).apply { orientation=LinearLayout.VERTICAL;gravity=Gravity.CENTER }
+        center.addView(emblem,LinearLayout.LayoutParams(dp(180f).toInt(),dp(180f).toInt()).apply {
+            gravity=Gravity.CENTER_HORIZONTAL
         })
-        center.addView(wordmark, LinearLayout.LayoutParams(dp(220f).toInt(), dp(47f).toInt()).apply {
-            gravity = Gravity.CENTER_HORIZONTAL
-            topMargin = dp(7f).toInt()
+        center.addView(wordmark,LinearLayout.LayoutParams(dp(284f).toInt(),dp(69f).toInt()).apply {
+            gravity=Gravity.CENTER_HORIZONTAL;topMargin=dp(6f).toInt()
         })
-        center.addView(caption, LinearLayout.LayoutParams(-2, -2).apply {
-            gravity = Gravity.CENTER_HORIZONTAL
-            topMargin = dp(3f).toInt()
+        center.addView(tag,LinearLayout.LayoutParams(-1,-2).apply { topMargin=dp(2f).toInt() })
+        center.addView(charge,LinearLayout.LayoutParams(dp(256f).toInt(),dp(2f).toInt()).apply {
+            gravity=Gravity.CENTER_HORIZONTAL;topMargin=dp(21f).toInt()
         })
-        center.addView(bootline, LinearLayout.LayoutParams(dp(220f).toInt(), dp(2f).toInt()).apply {
-            gravity = Gravity.CENTER_HORIZONTAL
-            topMargin = dp(17f).toInt()
-        })
-        addView(center, LayoutParams(-1, -1))
-        addView(sweep, LayoutParams(dp(56f).toInt(), dp(250f).toInt()).apply {
-            gravity = Gravity.CENTER_VERTICAL or Gravity.START
+        addView(center,LayoutParams(-1,-1))
+        addView(lens,LayoutParams(dp(72f).toInt(),dp(280f).toInt()).apply {
+            gravity=Gravity.START or Gravity.CENTER_VERTICAL
         })
     }
 
-    fun play(onEnd: () -> Unit) {
-        if (!KyvoriqTheme.motionEnabled(context)) { onEnd(); return }
+    fun play(onEnd:()->Unit) {
+        if(!KyvoriqTheme.motionEnabled(context)){onEnd();return}
         post {
+            // Real Android display VSYNC drives all motion; no per-frame bitmap decode.
             emblem.animate().alpha(1f).scaleX(1f).scaleY(1f).translationY(0f)
-                .setDuration(320L).setInterpolator(ease).withLayer().start()
-            wordmark.animate().alpha(1f).translationY(0f)
-                .setStartDelay(90L).setDuration(280L).setInterpolator(ease).withLayer().start()
-            caption.animate().alpha(1f)
-                .setStartDelay(205L).setDuration(225L).setInterpolator(ease).start()
-            bootline.animate().alpha(1f).scaleX(1f)
-                .setStartDelay(175L).setDuration(330L).setInterpolator(ease).start()
-            sweep.translationX = -dp(125f)
-            sweep.animate().alpha(.50f).translationX(width + dp(90f))
-                .setStartDelay(190L).setDuration(520L).setInterpolator(ease).withLayer().start()
-            animate().alpha(0f).scaleX(1.018f).scaleY(1.018f)
-                .setStartDelay(730L).setDuration(230L).setInterpolator(ease)
+                .setStartDelay(240L).setDuration(620L).setInterpolator(ease).withLayer().start()
+            wordmark.animate().alpha(1f).scaleX(1f).translationX(0f)
+                .setStartDelay(650L).setDuration(490L).setInterpolator(ease).withLayer().start()
+            tag.animate().alpha(.93f)
+                .setStartDelay(1050L).setDuration(230L).setInterpolator(ease).start()
+            charge.animate().alpha(1f).scaleX(1f)
+                .setStartDelay(880L).setDuration(470L).setInterpolator(ease).start()
+            lens.translationX=-dp(160f)
+            lens.animate().alpha(.45f).translationX(width+dp(120f))
+                .setStartDelay(650L).setDuration(550L).setInterpolator(ease).withLayer().start()
+            animate().alpha(0f).scaleX(1.013f).scaleY(1.013f)
+                .setStartDelay(1550L).setDuration(230L).setInterpolator(ease)
                 .withEndAction { onEnd() }.start()
         }
     }
-
-    override fun onDetachedFromWindow() {
+    override fun onDetachedFromWindow(){
         animate().cancel()
-        listOf(emblem, wordmark, caption, bootline, sweep).forEach { it.animate().cancel() }
+        listOf(emblem,wordmark,tag,charge,lens).forEach{it.animate().cancel()}
         super.onDetachedFromWindow()
     }
-
-    private fun dp(value: Float): Float = value * resources.displayMetrics.density
+    private fun dp(value:Float):Float = value*resources.displayMetrics.density
 }
