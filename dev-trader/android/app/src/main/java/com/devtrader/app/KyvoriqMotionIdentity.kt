@@ -34,14 +34,27 @@ class KyvoriqEmblemMotionView(context: Context) : FrameLayout(context) {
         scaleType = ImageView.ScaleType.FIT_CENTER
     }
     init {
-        contentDescription = "KYVORIQ gold emblem with gold flame crown"
+        contentDescription = "KYVORIQ gold emblem with restrained amber flame crown"
         clipChildren = false
         clipToPadding = false
-        addView(flame, LayoutParams(-1, -1))
-        addView(mark, LayoutParams(-1, -1).apply {
+        // A smaller flame frame is visually subordinate to the logo, not a spiky replacement.
+        addView(flame, LayoutParams(dp(54f).toInt(), dp(43f).toInt()).apply {
             gravity = Gravity.CENTER
-            topMargin = dp(10f).toInt()
+            topMargin = dp(4f).toInt()
         })
+        val darkKeyline = ImageView(context).apply {
+            setImageResource(R.drawable.kyvoriq_mark)
+            scaleType = ImageView.ScaleType.FIT_CENTER
+            setColorFilter(0xFF05080E.toInt(), android.graphics.PorterDuff.Mode.SRC_IN)
+            scaleX = 1.16f
+            scaleY = 1.16f
+            translationY = dp(7f)
+        }
+        addView(darkKeyline, LayoutParams(-1, -1))
+        mark.scaleX = 1.08f
+        mark.scaleY = 1.08f
+        mark.translationY = dp(7f)
+        addView(mark, LayoutParams(-1, -1))
     }
     private fun refresh() {
         if (KyvoriqTheme.motionEnabled(context) && isShown && hasWindowFocus()) flame.resumeAnimation()
