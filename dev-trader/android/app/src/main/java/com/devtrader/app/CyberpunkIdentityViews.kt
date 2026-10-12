@@ -32,7 +32,7 @@ class CyberpunkMarkView(context: Context) : View(context) {
     private var glowShader: Shader? = null
 
     init {
-        contentDescription = "KYVORIQ animated gold emblem with purple plasma flames"
+        contentDescription = "KYVORIQ animated gold emblem with amber energy flames"
         importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_YES
         setLayerType(LAYER_TYPE_HARDWARE, null)
     }
@@ -42,7 +42,7 @@ class CyberpunkMarkView(context: Context) : View(context) {
         if (w < 1 || h < 1) { boundsReady = false; return }
         emblem.setBounds((w*.12f).toInt(), (h*.26f).toInt(), (w*.88f).toInt(), (h*.94f).toInt())
         glowShader = RadialGradient(w*.5f,h*.54f,(minOf(w,h)*.48f).coerceAtLeast(1f),
-            intArrayOf(0x776522B9,0x3333187E,Color.TRANSPARENT), null,Shader.TileMode.CLAMP)
+            intArrayOf(0x77D89013,0x334F2B08,Color.TRANSPARENT), null,Shader.TileMode.CLAMP)
         boundsReady = true
     }
 
@@ -82,9 +82,9 @@ class CyberpunkMarkView(context: Context) : View(context) {
                 flame.cubicTo(tipX+radius*.44f,tipY+reach*.19f,x+radius*1.20f,baseY-reach*.25f,x+radius,baseY)
                 flame.close()
                 paint.color = when(layer) {
-                    0 -> Ion.alpha(if(compact) 75 else 90,Ion.VIOLET)
-                    1 -> Ion.alpha(if(compact) 112 else 132,Ion.VIOLET)
-                    else -> Ion.alpha(if(compact) 78 else 105,Ion.MAGENTA)
+                    0 -> Ion.alpha(if(compact) 75 else 90,Ion.GOLD)
+                    1 -> Ion.alpha(if(compact) 112 else 132,Ion.GOLD)
+                    else -> Ion.alpha(if(compact) 78 else 105,Ion.GOLD)
                 }
                 canvas.drawPath(flame,paint)
             }
@@ -96,7 +96,7 @@ class CyberpunkMarkView(context: Context) : View(context) {
             val x = w*(.18f + (.618034f*i % 1f)*.64f) + sin((t*2f+i).toDouble()).toFloat()*w*.035f
             val travel = ((t*.15f+i*.197f)%1f)
             val y = h*(.67f-travel*.65f)
-            paint.color = Ion.alpha(((1f-travel)*135f).toInt(),if(i%4==0) Ion.CYAN else Ion.MAGENTA)
+            paint.color = Ion.alpha(((1f-travel)*135f).toInt(),if(i%4==0) Ion.CYAN else Ion.GOLD)
             canvas.drawCircle(x,y,if(compact) density*.38f else density*.8f,paint)
         }
 
@@ -108,7 +108,7 @@ class CyberpunkMarkView(context: Context) : View(context) {
             canvas.save()
             canvas.translate(if(pass==0) -density*.7f else density*.7f,0f)
             emblem.colorFilter = PorterDuffColorFilter(
-                if(pass==0) Ion.alpha(65,Ion.MAGENTA) else Ion.alpha(65,Ion.GOLD), PorterDuff.Mode.SRC_IN)
+                if(pass==0) Ion.alpha(65,Ion.GOLD) else Ion.alpha(65,Ion.GOLD), PorterDuff.Mode.SRC_IN)
             emblem.alpha = 80
             emblem.draw(canvas)
             canvas.restore()
@@ -126,7 +126,7 @@ class CyberpunkMarkView(context: Context) : View(context) {
                 canvas.clipRect(0f,bandY,w,bandY+h*.085f)
                 canvas.translate((if(i%2==0) 1 else -1)*w*.055f,0f)
                 emblem.colorFilter=PorterDuffColorFilter(
-                    if(i%2==0) Ion.CYAN else Ion.MAGENTA, PorterDuff.Mode.SRC_IN)
+                    if(i%2==0) Ion.CYAN else Ion.GOLD, PorterDuff.Mode.SRC_IN)
                 emblem.alpha=if(i==1) 215 else 155
                 emblem.draw(canvas)
                 canvas.restoreToCount(saveBand)
@@ -149,7 +149,7 @@ class CyberpunkMarkView(context: Context) : View(context) {
                 sparks.lineTo(xx+w*.055f,yy-h*.15f)
                 paint.style=Paint.Style.STROKE
                 paint.strokeWidth=density*.85f
-                paint.color=Ion.alpha((55f+Ion.wave(u)*110f).toInt(),if(i==1) Ion.CYAN else Ion.MAGENTA)
+                paint.color=Ion.alpha((55f+Ion.wave(u)*110f).toInt(),if(i==1) Ion.CYAN else Ion.GOLD)
                 canvas.drawPath(sparks,paint)
             }
         }
@@ -226,7 +226,7 @@ class CyberpunkWordmarkView(context: Context) : View(context) {
         // Held states are deliberately long: reference transitions cyan -> gold in glitch bursts.
         val goldState=phase>3.45f
         val ink=if(goldState)Ion.GOLD else Ion.CYAN
-        val other=if(goldState)Ion.CYAN else Ion.MAGENTA
+        val other=if(goldState)Ion.CYAN else Ion.GOLD
         // Black undercut / deep outline to reproduce the cut-out industrial silhouette.
         paint.shader=null;paint.style=Paint.Style.STROKE;paint.strokeWidth=density*2.8f
         paint.color=Ion.BLACK;canvas.drawPath(main,paint);canvas.drawPath(blade,paint)
@@ -254,7 +254,7 @@ class CyberpunkWordmarkView(context: Context) : View(context) {
                 val save=canvas.save()
                 canvas.clipRect(0f,y,width.toFloat(),y+height*(if(i%2==0).07f else .045f))
                 canvas.translate((if(i%2==0)1 else -1)*width*(.023f+.009f*i),0f)
-                paint.color=Ion.alpha(if(i==2)220 else 140,if(i%2==0)Ion.CYAN else Ion.MAGENTA)
+                paint.color=Ion.alpha(if(i==2)220 else 140,if(i%2==0)Ion.CYAN else Ion.GOLD)
                 canvas.drawPath(main,paint)
                 canvas.restoreToCount(save)
             }
