@@ -2130,11 +2130,11 @@ class SafeActivity : FragmentActivity() {
         if (key == lastAmbientKey) return
         lastAmbientKey = key
         val target = when (key) {
-            // Ambient lighting stays navy/slate with a restrained directional tint;
-            // saturated red and green remain exclusive to market data.
-            "LONG", "BULLISH" -> Color.rgb(15, 38, 44)
-            "SHORT", "BEARISH" -> Color.rgb(34, 25, 40)
-            "CAUTION" -> Color.rgb(30, 36, 47)
+            // Market direction must not recolor the monochrome terminal background.
+            // Preserve directional meaning in price, trade levels and risk indicators.
+            "LONG", "BULLISH" -> Color.rgb(14, 15, 17)
+            "SHORT", "BEARISH" -> Color.rgb(15, 14, 17)
+            "CAUTION" -> Color.rgb(19, 19, 21)
             else -> KyvoriqTheme.slate
         }
         ambientAnimator?.cancel()
