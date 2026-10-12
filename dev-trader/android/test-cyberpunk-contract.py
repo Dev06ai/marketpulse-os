@@ -1,41 +1,55 @@
-"""Sanity checks for visual-only KYVORIQ Build 139; executed before Gradle."""
+"""Fail-closed KYVORIQ Build 140 Android visual and release contract."""
 from pathlib import Path
 import json
 
 root = Path(__file__).resolve().parent
-source = root / "app/src/main"
-gradle = (root/"app/build.gradle.kts").read_text()
-activity = (source/"java/com/devtrader/app/SafeActivity.kt").read_text()
-chart = (source/"java/com/devtrader/app/MarketChartView.kt").read_text()
-motion = (source/"java/com/devtrader/app/KyvoriqMotionIdentity.kt").read_text()
-splash = (source/"java/com/devtrader/app/KyvoriqLaunchOverlay.kt").read_text()
+src = root / "app/src/main"
+gradle = (root / "app/build.gradle.kts").read_text()
+activity = (src / "java/com/devtrader/app/SafeActivity.kt").read_text()
+chart = (src / "java/com/devtrader/app/MarketChartView.kt").read_text()
+motion = (src / "java/com/devtrader/app/KyvoriqMotionIdentity.kt").read_text()
+splash = (src / "java/com/devtrader/app/KyvoriqLaunchOverlay.kt").read_text()
 
 assert 'implementation("com.airbnb.android:lottie:6.7.1")' in gradle
-assert 'orNull ?: "139"' in gradle and 'orNull ?: "0.21.14"' in gradle
-assert "KyvoriqEmblemMotionView(this)" in activity
-assert "KyvoriqRazorWordmarkView(this)" in activity
-assert "CyberpunkHeaderRail(this)" not in activity
-assert "CyberpunkMarkView(this)" not in activity
-assert "KyvoriqEmblemMotionView(context)" in splash
-assert "KyvoriqRazorWordmarkView(context)" in splash
-assert "setAnimation(filename)" in motion
-assert "LottieDrawable.INFINITE" in motion
-assert "pauseAnimation()" in motion and "resumeAnimation()" in motion
-assert "KyvoriqTheme.motionEnabled(context)" in motion
+assert 'orNull ?: "140"' in gradle and 'orNull ?: "0.21.15"' in gradle
+assert 'applicationId = "com.devtrader.app"' in gradle
+assert 'KyvoriqEmblemMotionView(this)' in activity
+assert 'KyvoriqRazorWordmarkView(this)' in activity
+assert 'CyberpunkHeaderRail(this)' not in activity
+assert 'CyberpunkMarkView(this)' not in activity
+assert 'narrowHeader' in activity and 'identityRow' in activity
+assert 'KyvoriqEmblemMotionView(context)' in splash
+assert 'KyvoriqRazorWordmarkView(context)' in splash
+assert 'showVerificationFrame()' in splash
+assert 'postDelayed(timeout, 1900L)' in splash
+assert 'setAnimation(filename)' in motion
+assert 'LottieDrawable.INFINITE' in motion
+assert 'pauseAnimation()' in motion and 'resumeAnimation()' in motion
+assert 'KyvoriqTheme.motionEnabled(context)' in motion
+assert 'still.visibility' in motion  # static fallback under reduced motion or slow Lottie parse
 
-flames = json.loads((source/"assets/kyvoriq_gold_flames.json").read_text())
-wordmark = json.loads((source/"assets/kyvoriq_razor_wordmark.json").read_text())
-assert flames["w"] == 180 and flames["h"] == 140 and len(flames["layers"]) >= 20
-assert wordmark["w"] == 490 and wordmark["h"] == 105
-assert len(wordmark["layers"]) >= 3 and len(wordmark["layers"][0]["shapes"][0]["it"]) >= 20
-assert "molten gold" in json.dumps(flames)
-assert "cyan" in json.dumps(wordmark).lower()
-assert all(layer["ty"] == 4 for layer in flames["layers"] + wordmark["layers"])
-assert len(chart.split("val right = width - dp(50f)")) == 2
-assert "val axisLeft = right - dp(14f)" in chart
-assert "touchDownX >= width - dp(50f)" in chart
-assert "width - dp(82f)" in chart  # preserve historical default candle count
+flames = json.loads((src / "assets/kyvoriq_gold_flames.json").read_text())
+wordmark = json.loads((src / "assets/kyvoriq_razor_wordmark.json").read_text())
+intro = json.loads((src / "assets/kyvoriq_ignition_intro.json").read_text())
+assert (flames["w"], flames["h"]) == (280, 280)
+assert (wordmark["w"], wordmark["h"]) == (740, 160)
+assert len(flames["layers"]) >= 12 and len(wordmark["layers"]) >= 10
+assert all(l["ty"] == 4 for l in flames["layers"] + wordmark["layers"])
+names = {l["nm"] for l in wordmark["layers"]}
+assert {f"Letter {c}" for c in "KYVORIQ"} <= names
+assert any("gold emblem" in l.get("nm", "").lower() for l in flames["layers"])
+# Intro is now purely circuit art; foreground emblem and wordmark are separate.
+assert not any(l.get("ty") == 0 for l in intro["layers"])
+assert intro.get("assets", []) == []
+
+# Candle positions, touches, and axis labels must share the same width calculation.
+assert "private fun axisWidth()" in chart
+assert "private fun plotRight(): Float = width - axisWidth()" in chart
+assert "val right = plotRight()" in chart
+assert "touchDownX >= plotRight()" in chart
+assert "right + dp(1f)" in chart
+
 for code in (motion, splash):
     for forbidden in ("WebSocket", "Bitget", "DEMO_EXECUTION_PAUSED", "Runtime.getRuntime", "java.net."):
         assert forbidden not in code, forbidden
-print("KYVORIQ_BUILD_139_LOTTIE_AND_CHART_CONTRACT_OK")
+print("KYVORIQ_BUILD140_MOTION_AND_CHART_CONTRACT_OK")

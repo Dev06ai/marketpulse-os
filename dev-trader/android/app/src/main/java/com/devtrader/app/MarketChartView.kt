@@ -446,7 +446,7 @@ class MarketChartView @JvmOverloads constructor(
 
     private fun visibleCount(): Int {
         // Preserve the familiar candle count while reclaiming plot space from the price rail.
-        val widthPx = max(1f, width - dp(82f))
+        val widthPx = max(1f, plotRight() - dp(6f))
         val base = max(55f, widthPx / dp(4.15f))
         return max(24, min(180, (base / zoomX).roundToInt()))
     }
@@ -463,10 +463,9 @@ class MarketChartView @JvmOverloads constructor(
         bgPaint.shader = null
 
         val left = dp(6f)
-        // Dedicated axis lane for BTC tick values and color-coded level prices.
-        // Compact price-scale rail; level chips may overlap the outer 13dp of the plot.
-        // Leaves substantially more room for candles without shrinking market labels.
-        val right = width - dp(50f)
+        // One compact rail is shared by drawing, bar count and gesture coordinates.
+        // Exact live price remains in the hero; crosshair shows full precision.
+        val right = plotRight()
         val top = dp(
             if (height < dp(190f)) 32f
             else if (levelMenuOpen) 70f
@@ -634,7 +633,7 @@ class MarketChartView @JvmOverloads constructor(
         if (!livePrice.isNaN() && visibleLive) {
             val y = mapY(livePrice, low, high, top, priceBottom)
             canvas.drawLine(left, y, right, y, currentPricePaint)
-            drawPriceTag(canvas, right - dp(12f), y, String.format(Locale.US, "%.2f", livePrice), true)
+            drawPriceTag(canvas, right, y, compactPrice(livePrice), true)
         }
 
         drawTimeAxis(canvas, start, actualVisible, left, right, bottom, step)
@@ -866,7 +865,7 @@ class MarketChartView @JvmOverloads constructor(
         )
         canvas.drawText(dateLabel, dateLeft + dp(6f), dateTop + dp(14f), strongLabelPaint)
 
-        drawPriceTag(canvas, right - dp(12f), clampedY, priceLabel, false)
+        drawPriceTag(canvas, right, clampedY, priceLabel, false)
 
         val open = candle.optDouble("open", Double.NaN)
         val close = candle.optDouble("close", Double.NaN)
@@ -878,7 +877,7 @@ class MarketChartView @JvmOverloads constructor(
             "   C " + compactPrice(close)
         val line2 = "VOL " + compactVolume(volume) +
             if (changePct.isFinite()) "   Δ " + String.format(Locale.US, "%+.2f%%", changePct) else ""
-        val infoWidth = min(width - dp(28f), dp(278f))
+        val infoWidth = min(right - left, dp(278f))
         val infoLeft = (snappedX - infoWidth / 2f).coerceIn(left, right - infoWidth)
         val infoTop = max(dp(47f), clampedY - dp(52f))
         canvas.drawRoundRect(
@@ -897,23 +896,24 @@ class MarketChartView @JvmOverloads constructor(
     }
 
     private fun drawPriceTag(canvas: Canvas, x: Float, y: Float, text: String, live: Boolean) {
-        val tagWidth = if (live) dp(56f) else dp(59f)
-        val tagLeft = if (live) x + dp(2f) else x
+        val textPaint = if (live) livePriceTextPaint else strongLabelPaint
+        val tagWidth = textPaint.measureText(text) + dp(8f)
+        val tagLeft = min(x + dp(2f), width - dp(2f) - tagWidth)
         val rect = RectF(tagLeft, y - dp(10f), tagLeft + tagWidth, y + dp(10f))
         if (live) {
             val pointer = Path().apply {
-                moveTo(x - dp(3f), y)
+                moveTo(x, y)
                 lineTo(tagLeft, y - dp(5f))
                 lineTo(tagLeft, y + dp(5f))
                 close()
             }
             canvas.drawPath(pointer, livePriceTagPaint)
             canvas.drawRoundRect(rect, dp(5.5f), dp(5.5f), livePriceTagPaint)
-            canvas.drawText(text, tagLeft + dp(5f), y + dp(3.5f), livePriceTextPaint)
+            canvas.drawText(text, tagLeft + dp(4f), y + dp(3.5f), livePriceTextPaint)
         } else {
             val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = KyvoriqTheme.raised }
             canvas.drawRoundRect(rect, dp(5f), dp(5f), paint)
-            canvas.drawText(text, tagLeft + dp(5f), y + dp(3.5f), strongLabelPaint)
+            canvas.drawText(text, tagLeft + dp(4f), y + dp(3.5f), strongLabelPaint)
         }
     }
 
@@ -1329,37 +1329,49 @@ class MarketChartView @JvmOverloads constructor(
                 else -> KyvoriqTheme.muted
             }
             AxisLevelMark(mapY(value, low, high, top, bottom), value,
-                type + " " + String.format(Locale.US, "%,.1f", value), color)
+                type + " " + compactPrice(value), color)
         }.distinctBy { (it.value * 10).roundToInt() }
          .sortedBy { it.originalY }
 
         // Keep tags aligned with the same right-side strip as BTC axis values.
         // A sparse lane prevents stacked level pills from concealing the plot.
-        val minGap = dp(15f)
-        val maxRows = ((bottom - top) / minGap).toInt().coerceAtLeast(1)
-        val nearLive = markers.filter { !liveY.isFinite() || abs(it.originalY - liveY) > dp(11f) }
-        val selected = if (nearLive.size <= maxRows) nearLive else
-            nearLive.sortedBy { if (liveY.isFinite()) abs(it.originalY - liveY) else abs(it.originalY - (top + bottom) / 2f) }
-                .take(maxRows).sortedBy { it.originalY }
-
-        var previous = top - minGap
-        // Float translucent level labels just inside the plot edge, like TradingView.
-        // The actual OHLC plot continues behind this minimal overlay.
-        val axisLeft = right - dp(14f)
+        val minGap = dp(16f)
+        val occupied = mutableListOf<Pair<Float, Float>>()
+        if (liveY.isFinite()) occupied.add(liveY - dp(11f) to liveY + dp(11f))
+        if (crosshairVisible) {
+            val crossY = crosshairY.coerceIn(top, bottom)
+            occupied.add(crossY - dp(11f) to crossY + dp(11f))
+        }
+        val axisLeft = right + dp(1f)
         val axisRight = width - dp(2f)
-        for (mark in selected) {
-            val tagY = max(mark.originalY.coerceIn(top + dp(8f), bottom - dp(8f)), previous + minGap)
-            if (tagY > bottom - dp(7f)) break
-            previous = tagY
+        for (mark in markers) {
+            val ideal = mark.originalY.coerceIn(top + dp(8f), bottom - dp(8f))
+            val candidates = listOf(ideal) + (-3..3).map { ideal + it * minGap }
+            val tagY = candidates.filter { center ->
+                center >= top + dp(8f) && center <= bottom - dp(8f) &&
+                    occupied.none { center + dp(8f) > it.first && center - dp(8f) < it.second }
+            }.minByOrNull { abs(it - ideal) } ?: continue
+            occupied.add(tagY - dp(8f) to tagY + dp(8f))
             val rect = RectF(axisLeft, tagY - dp(7f), axisRight, tagY + dp(7f))
             axisLevelBgPaint.color = KyvoriqTheme.slate
             canvas.drawRoundRect(rect, dp(3f), dp(3f), axisLevelBgPaint)
             axisLevelGuidePaint.color = mark.color
-            canvas.drawLine(right, mark.originalY, axisLeft, tagY, axisLevelGuidePaint)
+            canvas.drawLine(right, mark.originalY, axisLeft + dp(2f), tagY, axisLevelGuidePaint)
             axisLevelTextPaint.color = mark.color
-            canvas.drawText(mark.text, axisLeft + dp(3f), tagY + dp(2.8f), axisLevelTextPaint)
+            canvas.save()
+            canvas.clipRect(rect)
+            canvas.drawText(mark.text, axisLeft + dp(2f), tagY + dp(2.8f), axisLevelTextPaint)
+            canvas.restore()
         }
     }
+
+    private fun axisWidth(): Float {
+        val sample = compactPrice(if (livePrice.isFinite()) livePrice else 99999.0)
+        return max(dp(42f), max(livePriceTextPaint.measureText(sample) + dp(10f),
+            axisLevelTextPaint.measureText("OB $sample") + dp(7f)))
+    }
+
+    private fun plotRight(): Float = width - axisWidth()
 
     private fun mapY(value: Double, low: Double, high: Double, top: Float, bottom: Float): Float {
         return bottom - (((value - low) / (high - low)).toFloat() * (bottom - top))
@@ -1410,7 +1422,7 @@ class MarketChartView @JvmOverloads constructor(
                 // hero/timeframe/decision cards; chart controls remain tappable.
                 // The right-hand price-axis gutter stays scroll-through for
                 // navigating the long Trade page; plot gestures pan the chart.
-                parent?.requestDisallowInterceptTouchEvent(fullscreenMode || event.x < width - dp(50f))
+                parent?.requestDisallowInterceptTouchEvent(fullscreenMode || event.x < plotRight())
                 lastTouchX = event.x
                 lastTouchY = event.y
                 touchDownX = event.x
@@ -1458,7 +1470,7 @@ class MarketChartView @JvmOverloads constructor(
                 // Start swipes on the right-hand axis to scroll the Trade page.
                 // Swipes starting inside the plot pan in the direction opposite
                 // the finger, horizontally and vertically.
-                if (!fullscreenMode && touchDownX >= width - dp(50f)) {
+                if (!fullscreenMode && touchDownX >= plotRight()) {
                     lastTouchX = event.x
                     lastTouchY = event.y
                     return true
@@ -1474,7 +1486,7 @@ class MarketChartView @JvmOverloads constructor(
                     dragging = true
                     followLive = false
                     crosshairVisible = false
-                    val bar = max(1f, (width - dp(56f)) / visibleCount())
+                    val bar = max(1f, (plotRight() - dp(6f)) / visibleCount())
                     // Opposite-to-finger pan with bounded blank future region.
                     candleShift = (candleShift - dx / bar).coerceIn(
                         -maxFutureShift(),
