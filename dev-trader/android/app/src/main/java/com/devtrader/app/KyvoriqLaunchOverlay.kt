@@ -49,14 +49,14 @@ class KyvoriqLaunchOverlay(context: Context) : FrameLayout(context) {
         textSize = 9f
         letterSpacing = .12f
         gravity = Gravity.CENTER
-        setTextColor(Color.rgb(169, 190, 203))
+        setTextColor(KyvoriqTheme.gray)
         typeface = Typeface.create("monospace", Typeface.BOLD)
         includeFontPadding = false
         alpha = 0f
     }
 
     init {
-        setBackgroundColor(0xFF070C12.toInt())
+        setBackgroundColor(KyvoriqTheme.charcoal)
         isClickable = true
         importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
         addView(circuit, LayoutParams(-1, -1))
