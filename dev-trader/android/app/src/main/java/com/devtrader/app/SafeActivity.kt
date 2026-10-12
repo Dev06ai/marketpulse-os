@@ -310,6 +310,7 @@ class SafeActivity : FragmentActivity() {
             chart.setData(candles, preview.optJSONObject("signal"), calculateEma(candles, 50), preview.getDouble("last_price"), chartOverlays(preview))
             check.text = "Build ${BuildConfig.VERSION_CODE}  •  Visual verification"
             selectWorkspace(intent.getIntExtra("visual_workspace", 0).coerceIn(0, 2))
+            if (intent.getBooleanExtra("visual_intro", false)) showLaunchSequence()
             return
         }
         val privacyLockEnabled = privacyPrefs().getBoolean("biometric_enabled", false)
@@ -337,7 +338,7 @@ class SafeActivity : FragmentActivity() {
     }
 
     private fun showLaunchSequence() {
-        if (!KyvoriqTheme.motionEnabled(this) || debugPreview || launchSequenceShown || isFinishing || isDestroyed) return
+        if (!KyvoriqTheme.motionEnabled(this) || (debugPreview && !intent.getBooleanExtra("visual_intro", false)) || launchSequenceShown || isFinishing || isDestroyed) return
         launchSequenceShown = true
         val host = findViewById<ViewGroup>(android.R.id.content) ?: return
         val overlay = KyvoriqLaunchOverlay(this)
@@ -520,31 +521,48 @@ class SafeActivity : FragmentActivity() {
             insets
         }
         setContentView(root)
-        val header = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
-        // Lottie-authored gold flame and bespoke cyan wordmark; chart rendering remains independent.
+        val narrowHeader = resources.configuration.screenWidthDp < 400 || resources.configuration.fontScale > 1.2f
+        val header = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        val identityRow = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
+        val actions = LinearLayout(this).apply { gravity = Gravity.END or Gravity.CENTER_VERTICAL }
+        // Original emblem and custom outlines retain their aspect ratio at every width.
         val brandMark = KyvoriqEmblemMotionView(this)
-        header.addView(brandMark, LinearLayout.LayoutParams(dp(56), dp(56)).apply { rightMargin = dp(2) })
+        identityRow.addView(brandMark, LinearLayout.LayoutParams(dp(58), dp(58)).apply { rightMargin = dp(2) })
         val brand = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_VERTICAL
         }
         brand.addView(KyvoriqRazorWordmarkView(this),
             LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(36)))
-        brand.addView(label("LOCKED IN  /  STAY SHARP", 7f, kyGray, 0.035f),
+        brand.addView(label("LOCKED IN  /  STAY SHARP", 7f, kyGray, 0.035f).apply {
+            gravity = Gravity.CENTER
+            isSingleLine = true
+        },
             LinearLayout.LayoutParams(-1, dp(10)))
-        header.addView(brand, LinearLayout.LayoutParams(0, dp(48), 1f))
-        alertsButton = compactPillButton("ALERTS").apply { contentDescription = "Enable trade alerts" }
+        identityRow.addView(brand, LinearLayout.LayoutParams(0, dp(48), 1f).apply { rightMargin = dp(8) })
+        alertsButton = compactPillButton("ALERTS").apply {
+            contentDescription = "Enable trade alerts"
+            isSingleLine = true
+            setAutoSizeTextTypeUniformWithConfiguration(7, 10, 1, android.util.TypedValue.COMPLEX_UNIT_SP)
+        }
         alertsButton.setOnClickListener {
             haptic(it, KyvoriqHaptics.Cue.ACTION)
             safe { requestAlertPermission() }
         }
-        header.addView(alertsButton, LinearLayout.LayoutParams(dp(66), dp(44)).apply { rightMargin = dp(6) })
-        retryButton = compactPillButton("RETRY").apply { contentDescription = "Reconnect market data" }
+        actions.addView(alertsButton, LinearLayout.LayoutParams(dp(80), dp(44)).apply { rightMargin = dp(6) })
+        retryButton = compactPillButton("RETRY").apply {
+            contentDescription = "Reconnect market data"
+            isSingleLine = true
+            setAutoSizeTextTypeUniformWithConfiguration(7, 10, 1, android.util.TypedValue.COMPLEX_UNIT_SP)
+        }
         retryButton?.setOnClickListener {
             haptic(it, KyvoriqHaptics.Cue.ACTION)
             safe { forceReconnectFromUser() }
         }
-        header.addView(retryButton, LinearLayout.LayoutParams(dp(56), dp(44)))
+        actions.addView(retryButton, LinearLayout.LayoutParams(dp(58), dp(44)))
+        if (!narrowHeader) identityRow.addView(actions, LinearLayout.LayoutParams(-2, -2))
+        header.addView(identityRow, LinearLayout.LayoutParams(-1, -2))
+        if (narrowHeader) header.addView(actions, LinearLayout.LayoutParams(-1, dp(44)))
         root.addView(header, margins(bottom = 7))
 
         workspaceHost = FrameLayout(this)

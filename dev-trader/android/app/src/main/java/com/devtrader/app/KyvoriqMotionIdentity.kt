@@ -1,105 +1,97 @@
 package com.devtrader.app
 
 import android.content.Context
-import android.graphics.Color
-import android.graphics.Typeface
-import android.view.Gravity
+import android.content.BroadcastReceiver
+import android.content.Intent
+import android.content.IntentFilter
+import android.database.ContentObserver
+import android.os.Handler
+import android.os.Looper
+import android.os.PowerManager
+import android.provider.Settings
 import android.view.View
 import android.widget.FrameLayout
 import android.widget.ImageView
-import android.widget.TextView
+import androidx.core.content.ContextCompat
 import com.airbnb.lottie.LottieAnimationView
 import com.airbnb.lottie.LottieDrawable
+import com.airbnb.lottie.RenderMode
 
-/** Reusable vector/motion assets, authored as independent Lottie compositions.
- *  The existing gold icon remains a static vector above an amber/gold flame crown;
- *  the cyan/gold custom razor wordmark is geometry, not a generic italic font.
- */
-private fun newLottie(context: Context, filename: String): LottieAnimationView =
-    LottieAnimationView(context).apply {
-        setAnimation(filename)
-        repeatCount = LottieDrawable.INFINITE
-        repeatMode = LottieDrawable.RESTART
-        setRenderMode(com.airbnb.lottie.RenderMode.AUTOMATIC)
-        setCacheComposition(true)
+/** Aspect-preserving vectors with a matching native fallback and no offscreen animation. */
+open class KyvoriqIdentityMotionView(
+    context: Context, filename: String, fallbackResource: Int, description: String
+) : FrameLayout(context) {
+    private var loaded = false
+    private var observing = false
+    private val still = ImageView(context).apply {
+        setImageResource(fallbackResource)
+        scaleType = ImageView.ScaleType.FIT_CENTER
         importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
     }
-
-class KyvoriqEmblemMotionView(context: Context) : FrameLayout(context) {
-    private val flame = newLottie(context, "kyvoriq_gold_flames.json").apply {
-        scaleType = ImageView.ScaleType.FIT_XY
-    }
-    private val mark = ImageView(context).apply {
-        setImageResource(R.drawable.kyvoriq_mark)
+    private val motion = LottieAnimationView(context).apply {
         scaleType = ImageView.ScaleType.FIT_CENTER
+        repeatCount = LottieDrawable.INFINITE
+        repeatMode = LottieDrawable.RESTART
+        setRenderMode(RenderMode.AUTOMATIC)
+        setCacheComposition(true)
+        importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+        visibility = View.INVISIBLE
+    }
+    private val motionSetting = object : ContentObserver(Handler(Looper.getMainLooper())) {
+        override fun onChange(selfChange: Boolean) = refresh()
+    }
+    private val powerSetting = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) = refresh()
     }
     init {
-        contentDescription = "KYVORIQ gold emblem with restrained amber flame crown"
-        clipChildren = false
-        clipToPadding = false
-        // A smaller flame frame is visually subordinate to the logo, not a spiky replacement.
-        addView(flame, LayoutParams(dp(54f).toInt(), dp(43f).toInt()).apply {
-            gravity = Gravity.CENTER
-            topMargin = dp(4f).toInt()
-        })
-        val darkKeyline = ImageView(context).apply {
-            setImageResource(R.drawable.kyvoriq_mark)
-            scaleType = ImageView.ScaleType.FIT_CENTER
-            setColorFilter(0xFF05080E.toInt(), android.graphics.PorterDuff.Mode.SRC_IN)
-            scaleX = 1.16f
-            scaleY = 1.16f
-            translationY = dp(7f)
+        contentDescription = description
+        addView(still, LayoutParams(-1, -1))
+        addView(motion, LayoutParams(-1, -1))
+        motion.addLottieOnCompositionLoadedListener { loaded = true; refresh() }
+        motion.setFailureListener { loaded = false; refresh() }
+        motion.setAnimation(filename)
+    }
+    private fun refresh() {
+        val animate = loaded && KyvoriqTheme.motionEnabled(context)
+        still.visibility = if (animate) View.INVISIBLE else View.VISIBLE
+        motion.visibility = if (animate) View.VISIBLE else View.INVISIBLE
+        if (animate && isAttachedToWindow && isShown && hasWindowFocus()) {
+            if (!motion.isAnimating) motion.resumeAnimation()
+        } else motion.pauseAnimation()
+    }
+    override fun onAttachedToWindow() {
+        super.onAttachedToWindow()
+        if (!observing) {
+            context.contentResolver.registerContentObserver(
+                Settings.Global.getUriFor(Settings.Global.ANIMATOR_DURATION_SCALE), false, motionSetting
+            )
+            ContextCompat.registerReceiver(context, powerSetting,
+                IntentFilter(PowerManager.ACTION_POWER_SAVE_MODE_CHANGED), ContextCompat.RECEIVER_NOT_EXPORTED)
+            observing = true
         }
-        addView(darkKeyline, LayoutParams(-1, -1))
-        mark.scaleX = 1.08f
-        mark.scaleY = 1.08f
-        mark.translationY = dp(7f)
-        addView(mark, LayoutParams(-1, -1))
+        refresh()
     }
-    private fun refresh() {
-        if (KyvoriqTheme.motionEnabled(context) && isShown && hasWindowFocus()) flame.resumeAnimation()
-        else flame.pauseAnimation()
+    override fun onDetachedFromWindow() {
+        motion.pauseAnimation()
+        if (observing) {
+            context.contentResolver.unregisterContentObserver(motionSetting)
+            context.unregisterReceiver(powerSetting)
+            observing = false
+        }
+        super.onDetachedFromWindow()
     }
-    override fun onAttachedToWindow() { super.onAttachedToWindow(); refresh() }
-    override fun onDetachedFromWindow() { flame.pauseAnimation(); super.onDetachedFromWindow() }
     override fun onWindowFocusChanged(hasWindowFocus: Boolean) {
         super.onWindowFocusChanged(hasWindowFocus); refresh()
     }
     override fun onVisibilityAggregated(isVisible: Boolean) {
         super.onVisibilityAggregated(isVisible); refresh()
     }
-    private fun dp(d:Float) = d * resources.displayMetrics.density
 }
 
-class KyvoriqRazorWordmarkView(context: Context) : FrameLayout(context) {
-    private val fallback = TextView(context).apply {
-        text = "KYVORIQ"
-        textSize = 23f
-        setTextColor(0xFF17E6FC.toInt())
-        typeface = Typeface.create("sans-serif-condensed-black", Typeface.BOLD_ITALIC)
-        gravity = Gravity.CENTER
-        letterSpacing = -.03f
-    }
-    private val animation = newLottie(context, "kyvoriq_razor_wordmark.json").apply {
-        scaleType = ImageView.ScaleType.FIT_CENTER
-        addLottieOnCompositionLoadedListener { fallback.visibility = View.INVISIBLE }
-        setFailureListener { fallback.visibility = View.VISIBLE }
-    }
-    init {
-        contentDescription = "KYVORIQ neon cyan electric wordmark"
-        addView(fallback, LayoutParams(-1, -1))
-        addView(animation, LayoutParams(-1, -1))
-    }
-    private fun refresh() {
-        if (KyvoriqTheme.motionEnabled(context) && isShown && hasWindowFocus()) animation.resumeAnimation()
-        else animation.pauseAnimation()
-    }
-    override fun onAttachedToWindow() { super.onAttachedToWindow(); refresh() }
-    override fun onDetachedFromWindow() { animation.pauseAnimation(); super.onDetachedFromWindow() }
-    override fun onWindowFocusChanged(hasWindowFocus: Boolean) {
-        super.onWindowFocusChanged(hasWindowFocus); refresh()
-    }
-    override fun onVisibilityAggregated(isVisible: Boolean) {
-        super.onVisibilityAggregated(isVisible); refresh()
-    }
-}
+class KyvoriqEmblemMotionView(context: Context) : KyvoriqIdentityMotionView(
+    context, "kyvoriq_gold_flames.json", R.drawable.kyvoriq_emblem_static, "KYVORIQ gold emblem"
+)
+
+class KyvoriqRazorWordmarkView(context: Context) : KyvoriqIdentityMotionView(
+    context, "kyvoriq_razor_wordmark.json", R.drawable.kyvoriq_wordmark_static, "KYVORIQ"
+)
