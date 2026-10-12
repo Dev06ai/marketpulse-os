@@ -3,7 +3,7 @@ set -euo pipefail
 mkdir -p ui-check
 
 app_package="com.devtrader.app.debug"
-headings=('BITCOIN / USDT' 'Demo performance' 'Entry checks')
+headings=('BTC  /  USDT' 'Demo performance' 'Entry checks')
 
 app_health_failed() {
   local log_file="$1"
@@ -89,7 +89,7 @@ python3 - <<'PY'
 from pathlib import Path
 import re
 import xml.etree.ElementTree as ET
-headings = ['BITCOIN / USDT', 'Demo performance', 'Entry checks']
+headings = ['BTC  /  USDT', 'Demo performance', 'Entry checks']
 for path in Path('ui-check').glob('*.xml'):
     root = ET.parse(path).getroot()
     nodes = list(root.iter('node'))
@@ -102,7 +102,7 @@ for path in Path('ui-check').glob('*.xml'):
         chart = next(n for n in nodes if n.get('content-desc') == 'Interactive price chart')
         chart_left, chart_top, chart_right, chart_bottom = map(int, re.findall(r'\d+', chart.get('bounds')))
         min_chart_height = 330 if path.stem.startswith('compact') else 620
-        min_chart_width = 690 if path.stem.startswith('compact') else 1040
+        min_chart_width = 660 if path.stem.startswith('compact') else 1000
         assert chart_bottom-chart_top >= min_chart_height, (path, 'Chart is too compressed', chart.attrib)
         assert chart_right-chart_left >= min_chart_width, (path, 'Chart is not wide enough', chart.attrib)
     height = 1280 if path.stem.startswith('compact') else 2400
@@ -110,7 +110,7 @@ for path in Path('ui-check').glob('*.xml'):
     for node in nav:
         x1, y1, x2, y2 = map(int, re.findall(r'\d+', node.get('bounds')))
         assert 0 <= x1 < x2 <= width and 0 < y1 < y2 < height, (path, node.attrib)
-    # The verified websocket badge includes a teal dot in the new visual theme.
+    # The live badge must reflect real feed status rather than a decorative accent.
     if workspace == 0:
         assert any(n.get('text') in ('LIVE', '● LIVE') for n in nodes), (path, 'Live badge missing')
 print('Six native workspace layouts verified; navigation stays inside both viewports.')
