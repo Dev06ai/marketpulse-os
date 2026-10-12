@@ -26,7 +26,9 @@
             android:layout_weight="1"
             android:layout_marginStart="8dp"
             android:text="KYVORIQ"
-            android:textColor="#E7C46A"
+            android:letterSpacing="0.09"
+            android:fontFamily="sans-serif-condensed"
+            android:textColor="#FFCC4E"
             android:textStyle="bold"
             android:textSize="12sp"/>
 
@@ -51,7 +53,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="BTC"
-            android:textColor="#F5F7FA"
+            android:textColor="#F1F7F9"
             android:textStyle="bold"
             android:textSize="18sp"/>
 
@@ -71,7 +73,7 @@
                 android:layout_height="match_parent"
                 android:gravity="center_vertical"
                 android:text="—"
-                android:textColor="#F5F7FA"
+                android:textColor="#F1F7F9"
                 android:textStyle="bold"
                 android:textSize="19sp"/>
 
@@ -81,7 +83,7 @@
                 android:layout_height="match_parent"
                 android:gravity="center_vertical"
                 android:text="—"
-                android:textColor="#F5F7FA"
+                android:textColor="#F1F7F9"
                 android:textStyle="bold"
                 android:textSize="19sp"/>
         </ViewFlipper>
@@ -92,7 +94,7 @@
             android:layout_height="match_parent"
             android:gravity="center"
             android:text="•"
-            android:textColor="#B1AB9F"
+            android:textColor="#AABFCE"
             android:textStyle="bold"
             android:textSize="11sp"/>
     </LinearLayout>
@@ -109,7 +111,7 @@
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:text="WAIT"
-            android:textColor="#E7C46A"
+            android:textColor="#FFCC4E"
             android:textStyle="bold"
             android:textSize="10sp"/>
 
@@ -118,7 +120,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="SCANNING"
-            android:textColor="#B1AB9F"
+            android:textColor="#AABFCE"
             android:textSize="9sp"/>
     </LinearLayout>
 </LinearLayout>

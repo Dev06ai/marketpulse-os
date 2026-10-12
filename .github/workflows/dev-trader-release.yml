@@ -81,7 +81,7 @@ jobs:
             -PdevTraderVersionCode="${{ steps.meta.outputs.version_code }}" \
             --stacktrace
 
-      - name: Verify matching Build 135 signing certificate
+      - name: Verify matching Build 136 signing certificate
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -90,7 +90,7 @@ jobs:
           CURRENT="dev-trader/android/app/build/outputs/apk/release/app-release.apk"
           test -s "$CURRENT"
           mkdir -p /tmp/kyvoriq-prior
-          gh release download dev-trader-v0.21.10-135 --pattern app-release.apk --dir /tmp/kyvoriq-prior
+          gh release download dev-trader-v0.21.11-136 --pattern app-release.apk --dir /tmp/kyvoriq-prior
           PREVIOUS="/tmp/kyvoriq-prior/app-release.apk"
           test -s "$PREVIOUS"
           SDKROOT="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
@@ -108,9 +108,9 @@ jobs:
           test -n "$CURRENT_CERT" || { echo "New certificate fingerprint unavailable"; exit 1; }
           test "$PREVIOUS_CERT" = "$CURRENT_CERT" || { echo "Different APK signing identity: release refused"; exit 1; }
           "$AAPT" dump badging "$CURRENT" > /tmp/kyvoriq-new-package.txt
-          grep -Fq "package: name='com.devtrader.app' versionCode='136' versionName='0.21.11'" /tmp/kyvoriq-new-package.txt || { echo "Package identifier or version mismatch"; exit 1; }
+          grep -Fq "package: name='com.devtrader.app' versionCode='137' versionName='0.21.12'" /tmp/kyvoriq-new-package.txt || { echo "Package identifier or version mismatch"; exit 1; }
           ! unzip -l "$CURRENT" | grep -Ei 'ui_preview.json|signing.jks|\.env'
-          echo "Build 136 package, version, signature and preview exclusion verified."
+          echo "Build 137 package, version, signature and preview exclusion verified."
 
       - name: Prepare release metadata
         shell: bash
@@ -160,7 +160,7 @@ jobs:
             echo "Existing signed APK must not be replaced."
             exit 1
           fi
-          gh release create "$TAG" --target "$GITHUB_SHA" "$APK" "dev-trader-update.json#dev-trader-update.json" --title "KYVORIQ ${{ steps.meta.outputs.version_name }}" --notes "Signed KYVORIQ Build 136: manual Bitget Demo exposure and trade notifications."
+          gh release create "$TAG" --target "$GITHUB_SHA" "$APK" "dev-trader-update.json#dev-trader-update.json" --title "KYVORIQ ${{ steps.meta.outputs.version_name }}" --notes "Signed KYVORIQ Build 137: cyberpunk gold identity, motion graphics, widgets, session security; trading engine unchanged."
 
       - name: Publish update manifest
         env:
