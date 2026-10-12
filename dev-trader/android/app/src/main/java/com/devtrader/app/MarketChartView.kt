@@ -445,6 +445,7 @@ class MarketChartView @JvmOverloads constructor(
     private fun maxFutureShift(): Float = min(16f, visibleCount() * 0.20f)
 
     private fun visibleCount(): Int {
+        // Preserve the familiar candle count while reclaiming plot space from the price rail.
         val widthPx = max(1f, width - dp(82f))
         val base = max(55f, widthPx / dp(4.15f))
         return max(24, min(180, (base / zoomX).roundToInt()))
@@ -463,7 +464,9 @@ class MarketChartView @JvmOverloads constructor(
 
         val left = dp(6f)
         // Dedicated axis lane for BTC tick values and color-coded level prices.
-        val right = width - dp(82f)
+        // Compact price-scale rail; level chips may overlap the outer 13dp of the plot.
+        // Leaves substantially more room for candles without shrinking market labels.
+        val right = width - dp(50f)
         val top = dp(
             if (height < dp(190f)) 32f
             else if (levelMenuOpen) 70f
@@ -631,7 +634,7 @@ class MarketChartView @JvmOverloads constructor(
         if (!livePrice.isNaN() && visibleLive) {
             val y = mapY(livePrice, low, high, top, priceBottom)
             canvas.drawLine(left, y, right, y, currentPricePaint)
-            drawPriceTag(canvas, right + dp(4f), y, String.format(Locale.US, "%.2f", livePrice), true)
+            drawPriceTag(canvas, right - dp(12f), y, String.format(Locale.US, "%.2f", livePrice), true)
         }
 
         drawTimeAxis(canvas, start, actualVisible, left, right, bottom, step)
@@ -863,7 +866,7 @@ class MarketChartView @JvmOverloads constructor(
         )
         canvas.drawText(dateLabel, dateLeft + dp(6f), dateTop + dp(14f), strongLabelPaint)
 
-        drawPriceTag(canvas, right + dp(4f), clampedY, priceLabel, false)
+        drawPriceTag(canvas, right - dp(12f), clampedY, priceLabel, false)
 
         val open = candle.optDouble("open", Double.NaN)
         val close = candle.optDouble("close", Double.NaN)
@@ -894,7 +897,7 @@ class MarketChartView @JvmOverloads constructor(
     }
 
     private fun drawPriceTag(canvas: Canvas, x: Float, y: Float, text: String, live: Boolean) {
-        val tagWidth = if (live) dp(56f) else dp(64f)
+        val tagWidth = if (live) dp(56f) else dp(59f)
         val tagLeft = if (live) x + dp(2f) else x
         val rect = RectF(tagLeft, y - dp(10f), tagLeft + tagWidth, y + dp(10f))
         if (live) {
@@ -1340,7 +1343,9 @@ class MarketChartView @JvmOverloads constructor(
                 .take(maxRows).sortedBy { it.originalY }
 
         var previous = top - minGap
-        val axisLeft = right + dp(3f)
+        // Float translucent level labels just inside the plot edge, like TradingView.
+        // The actual OHLC plot continues behind this minimal overlay.
+        val axisLeft = right - dp(14f)
         val axisRight = width - dp(2f)
         for (mark in selected) {
             val tagY = max(mark.originalY.coerceIn(top + dp(8f), bottom - dp(8f)), previous + minGap)
@@ -1405,7 +1410,7 @@ class MarketChartView @JvmOverloads constructor(
                 // hero/timeframe/decision cards; chart controls remain tappable.
                 // The right-hand price-axis gutter stays scroll-through for
                 // navigating the long Trade page; plot gestures pan the chart.
-                parent?.requestDisallowInterceptTouchEvent(fullscreenMode || event.x < width - dp(82f))
+                parent?.requestDisallowInterceptTouchEvent(fullscreenMode || event.x < width - dp(50f))
                 lastTouchX = event.x
                 lastTouchY = event.y
                 touchDownX = event.x
@@ -1453,7 +1458,7 @@ class MarketChartView @JvmOverloads constructor(
                 // Start swipes on the right-hand axis to scroll the Trade page.
                 // Swipes starting inside the plot pan in the direction opposite
                 // the finger, horizontally and vertically.
-                if (!fullscreenMode && touchDownX >= width - dp(82f)) {
+                if (!fullscreenMode && touchDownX >= width - dp(50f)) {
                     lastTouchX = event.x
                     lastTouchY = event.y
                     return true
@@ -1469,7 +1474,7 @@ class MarketChartView @JvmOverloads constructor(
                     dragging = true
                     followLive = false
                     crosshairVisible = false
-                    val bar = max(1f, (width - dp(88f)) / visibleCount())
+                    val bar = max(1f, (width - dp(56f)) / visibleCount())
                     // Opposite-to-finger pan with bounded blank future region.
                     candleShift = (candleShift - dx / bar).coerceIn(
                         -maxFutureShift(),
