@@ -20,7 +20,7 @@ import java.util.Locale
  * instead of using a hand-written timer.
  */
 class PremiumPriceView(context: Context) : LinearLayout(context) {
-    private val gold = KyvoriqTheme.gold
+    private val gold = KyvoriqTheme.white
     private val green = Color.rgb(54, 211, 153)
     private val red = Color.rgb(255, 82, 105)
     private val motionInterpolator = PathInterpolator(0.18f, 0.82f, 0.20f, 1f)
