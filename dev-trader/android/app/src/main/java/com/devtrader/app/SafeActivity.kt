@@ -523,7 +523,7 @@ class SafeActivity : FragmentActivity() {
         val header = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
         // Native VSYNC vector motion, scoped to the header rather than the chart surface.
         val brandMark = CyberpunkMarkView(this)
-        header.addView(brandMark, LinearLayout.LayoutParams(dp(49), dp(49)).apply { rightMargin = dp(4) })
+        header.addView(brandMark, LinearLayout.LayoutParams(dp(42), dp(42)).apply { rightMargin = dp(6) })
         val brand = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_VERTICAL
