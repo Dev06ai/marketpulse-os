@@ -40,7 +40,7 @@ class KyvoriqEmblemMotionView(context: Context) : FrameLayout(context) {
         addView(flame, LayoutParams(-1, -1))
         addView(mark, LayoutParams(-1, -1).apply {
             gravity = Gravity.CENTER
-            topMargin = dp(10f)
+            topMargin = dp(10f).toInt()
         })
     }
     private fun refresh() {
