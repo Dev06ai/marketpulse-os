@@ -201,6 +201,8 @@ jobs:
           else
             echo "android_changed=false" >> "$GITHUB_OUTPUT"
           fi
+      - name: Verify visual-only cyberpunk contract
+        run: python3 dev-trader/android/test-cyberpunk-contract.py
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
