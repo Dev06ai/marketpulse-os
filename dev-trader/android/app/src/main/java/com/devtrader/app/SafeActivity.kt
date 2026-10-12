@@ -512,12 +512,12 @@ class SafeActivity : FragmentActivity() {
                 intArrayOf(kyCharcoal, KyvoriqTheme.slate, kyCharcoal),
                 GradientDrawable.Orientation.TOP_BOTTOM
             )
-            setPadding(dp(6), dp(8), dp(6), dp(8))
+            setPadding(dp(10), dp(8), dp(10), dp(8))
         }
         rootSurface = root
         ViewCompat.setOnApplyWindowInsetsListener(root) { view, insets ->
             val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
-            view.setPadding(dp(6), bars.top + dp(8), dp(6), bars.bottom + dp(8))
+            view.setPadding(dp(10), bars.top + dp(8), dp(10), bars.bottom + dp(8))
             insets
         }
         setContentView(root)
@@ -527,19 +527,19 @@ class SafeActivity : FragmentActivity() {
         val actions = LinearLayout(this).apply { gravity = Gravity.END or Gravity.CENTER_VERTICAL }
         // Original emblem and custom outlines retain their aspect ratio at every width.
         val brandMark = KyvoriqEmblemMotionView(this)
-        identityRow.addView(brandMark, LinearLayout.LayoutParams(dp(58), dp(58)).apply { rightMargin = dp(2) })
+        identityRow.addView(brandMark, LinearLayout.LayoutParams(dp(48), dp(48)).apply { rightMargin = dp(5) })
         val brand = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_VERTICAL
         }
         brand.addView(KyvoriqRazorWordmarkView(this),
-            LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(36)))
-        brand.addView(label("LOCKED IN  /  STAY SHARP", 7f, kyGray, 0.035f).apply {
+            LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(30)))
+        brand.addView(label("AI POWERED TRADING", 8f, kyGray, 0.035f).apply {
             gravity = Gravity.CENTER
             isSingleLine = true
         },
             LinearLayout.LayoutParams(-1, dp(10)))
-        identityRow.addView(brand, LinearLayout.LayoutParams(0, dp(48), 1f).apply { rightMargin = dp(8) })
+        identityRow.addView(brand, LinearLayout.LayoutParams(0, dp(44), 1f).apply { rightMargin = dp(6) })
         alertsButton = compactPillButton("ALERTS").apply {
             contentDescription = "Enable trade alerts"
             isSingleLine = true
@@ -549,7 +549,7 @@ class SafeActivity : FragmentActivity() {
             haptic(it, KyvoriqHaptics.Cue.ACTION)
             safe { requestAlertPermission() }
         }
-        actions.addView(alertsButton, LinearLayout.LayoutParams(dp(80), dp(44)).apply { rightMargin = dp(6) })
+        actions.addView(alertsButton, LinearLayout.LayoutParams(dp(69), dp(42)).apply { rightMargin = dp(4) })
         retryButton = compactPillButton("RETRY").apply {
             contentDescription = "Reconnect market data"
             isSingleLine = true
@@ -559,7 +559,7 @@ class SafeActivity : FragmentActivity() {
             haptic(it, KyvoriqHaptics.Cue.ACTION)
             safe { forceReconnectFromUser() }
         }
-        actions.addView(retryButton, LinearLayout.LayoutParams(dp(58), dp(44)))
+        actions.addView(retryButton, LinearLayout.LayoutParams(dp(56), dp(42)))
         if (!narrowHeader) identityRow.addView(actions, LinearLayout.LayoutParams(-2, -2))
         header.addView(identityRow, LinearLayout.LayoutParams(-1, -2))
         if (narrowHeader) header.addView(actions, LinearLayout.LayoutParams(-1, dp(44)))
@@ -608,8 +608,8 @@ class SafeActivity : FragmentActivity() {
         tradePage.addView(
             chart,
             LinearLayout.LayoutParams(-1, dp(if (compactViewport) 355 else 470)).apply {
-                leftMargin = -dp(6)
-                rightMargin = -dp(6)
+                leftMargin = -dp(10)
+                rightMargin = -dp(10)
                 bottomMargin = dp(10)
             }
         )
@@ -657,7 +657,9 @@ class SafeActivity : FragmentActivity() {
         tradePage.addView(tradeTools)
         refreshTimeframeButtons(tfRow)
 
-        val positionsPage = page()
+        val positionsPage = page(scrollable = true)
+        positionsPage.addView(label("POSITIONS", 20f, kyWhite, 0.01f), margins(top = 6, bottom = 5))
+        positionsPage.addView(label("Demo account  /  position monitoring", 10f, kyGray, 0.015f), margins(bottom = 12))
         val overview = premiumCard("DEMO PERFORMANCE", "Waiting for exchange accounting…", 18f)
         positionSummary = overview.second
         positionsPage.addView(overview.first, margins(bottom = 10))
@@ -666,9 +668,9 @@ class SafeActivity : FragmentActivity() {
         val ledgerCard = compactCard("ACCOUNTING & RISK", "Checking fills and exposure…", 12f)
         ledgerView = ledgerCard.value
         positionsPage.addView(ledgerCard.container, margins(bottom = 10))
-        val exposureCard = scrollableCard("EXCHANGE POSITIONS", "No verified position data yet.", 13f, dp(120), expandToFill = true)
+        val exposureCard = scrollableCard("EXCHANGE POSITIONS", "No verified position data yet.", 13f, dp(182), expandToFill = false)
         tradeHistory = exposureCard.value
-        positionsPage.addView(exposureCard.container, LinearLayout.LayoutParams(-1, 0, 1f).apply { bottomMargin = dp(10) })
+        positionsPage.addView(exposureCard.container, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(10) })
         val historyButton = compactPillButton("OPEN EXECUTION HISTORY")
         historyButton.setOnClickListener {
             haptic(it, KyvoriqHaptics.Cue.ACTION)
@@ -687,6 +689,40 @@ class SafeActivity : FragmentActivity() {
         }
         insightsScroll.addView(insightsContent, FrameLayout.LayoutParams(-1, -2))
         insightsPage.addView(insightsScroll, LinearLayout.LayoutParams(-1, 0, 1f))
+        insightsContent.addView(label("INSIGHTS", 20f, kyWhite, 0.01f), margins(top = 6, bottom = 5))
+        insightsContent.addView(label("Live market intelligence  /  verified engine context", 10f, kyGray, 0.01f), margins(bottom = 12))
+
+        // Filter only existing, truthful live telemetry. No invented holder, heatmap or flow data.
+        var selectedInsightTab = 0
+        val insightTabs = mutableListOf<Button>()
+        val insightSections = mutableListOf<Pair<Int, View>>()
+        val insightTabsRow = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
+        listOf("All", "Structure", "Risk", "System").forEachIndexed { tab, title ->
+            val button = compactPillButton(title).apply {
+                textSize = 10f
+                isSelected = tab == 0
+                setTextColor(if (tab == 0) kyCharcoal else kyWhite)
+                background = KyvoriqTheme.button(this@SafeActivity, tab == 0, 10f)
+            }
+            button.setOnClickListener {
+                if (selectedInsightTab != tab) haptic(it, KyvoriqHaptics.Cue.SELECT)
+                selectedInsightTab = tab
+                insightTabs.forEachIndexed { i, chip ->
+                    val selected = i == selectedInsightTab
+                    chip.isSelected = selected
+                    chip.setTextColor(if (selected) kyCharcoal else kyWhite)
+                    chip.background = KyvoriqTheme.button(this@SafeActivity, selected, 10f)
+                }
+                insightSections.forEach { (category, card) ->
+                    card.visibility = if (tab == 0 || tab == category) View.VISIBLE else View.GONE
+                }
+            }
+            insightTabs.add(button)
+            insightTabsRow.addView(button, LinearLayout.LayoutParams(0, dp(40), 1f).apply {
+                leftMargin = dp(2); rightMargin = dp(2)
+            })
+        }
+        insightsContent.addView(insightTabsRow, margins(bottom = 12))
 
         val story = premiumCard("MARKET CONTEXT", "Reading the market…", 13f)
         features = story.second
@@ -761,6 +797,18 @@ class SafeActivity : FragmentActivity() {
             showPairingDialog(pairButton)
         }
         insightsContent.addView(pairButton, margins(top = 7, bottom = 8))
+        insightSections.addAll(listOf(
+            1 to story.first,
+            1 to decisions.container,
+            2 to alertCard.container,
+            2 to riskCard.container,
+            1 to levels.container,
+            3 to feed.container,
+            3 to sys.container,
+            3 to tools,
+            3 to deviceTools,
+            3 to pairButton
+        ))
         insightsMotionViews.clear()
         insightsMotionViews.addAll(
             listOf(
@@ -951,9 +999,9 @@ class SafeActivity : FragmentActivity() {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
         }
-        top.addView(label("BITCOIN / USDT", 9f, kyGray, 0.09f),
+        top.addView(label("BTC  /  USDT", 10.5f, kyWhite, 0.04f),
             LinearLayout.LayoutParams(0, dp(if (compactViewport) 18 else 22), 1f))
-        val livePill = label("PERPETUAL", 8f, kyGold, 0.09f)
+        val livePill = label("PERPETUAL", 8f, kyGray, 0.035f)
         top.addView(livePill, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(if (compactViewport) 18 else 22)))
         box.addView(top)
 
@@ -962,10 +1010,10 @@ class SafeActivity : FragmentActivity() {
             gravity = Gravity.CENTER_VERTICAL
         }
         val priceView = PremiumPriceView(this).apply {
-            setTextSizeSp(if (compactViewport) 22f else 26f)
+            setTextSizeSp(if (compactViewport) 26f else 32f)
             setPrice(Double.NaN, animate = false)
         }
-        row.addView(priceView, LinearLayout.LayoutParams(0, dp(if (compactViewport) 34 else 40), 1f))
+        row.addView(priceView, LinearLayout.LayoutParams(0, dp(if (compactViewport) 40 else 49), 1f))
 
         val statusView = TextView(this).apply {
             text = "DATA CONNECTING"
@@ -979,7 +1027,7 @@ class SafeActivity : FragmentActivity() {
                 setStroke(dp(1), kyLine)
             }
         }
-        row.addView(statusView, LinearLayout.LayoutParams(dp(94), dp(28)))
+        row.addView(statusView, LinearLayout.LayoutParams(dp(92), dp(30)))
         box.addView(row)
 
         val oi = label("OI  —", 9f, kyGray, 0.02f)
@@ -993,7 +1041,7 @@ class SafeActivity : FragmentActivity() {
             setPadding(dp(12), dp(9), dp(12), dp(8))
             background = KyvoriqTheme.surface(this@SafeActivity, prominent = false)
         }
-        val heading = label(humanHeading(title), 11.5f, kyGold, 0.012f)
+        val heading = label(humanHeading(title), 11.5f, kyWhite, 0.012f)
         val value = TextView(this).apply {
             text = initial
             textSize = valueSize
@@ -1018,9 +1066,9 @@ class SafeActivity : FragmentActivity() {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
         }
-        header.addView(label(humanHeading(title), 11.5f, kyGold, 0.012f),
+        header.addView(label(humanHeading(title), 11.5f, kyWhite, 0.012f),
             LinearLayout.LayoutParams(0, dp(18), 1f))
-        header.addView(label(if (title == "DECISION CENTER") "DETAILS  ›" else if (title == "DEMO PERFORMANCE") "DEMO" else "MARKET", 8.5f, kyAmber, 0.08f))
+        header.addView(label(if (title == "DECISION CENTER") "DETAILS  ›" else if (title == "DEMO PERFORMANCE") "DEMO" else "MARKET", 8.5f, kyGray, 0.08f))
         box.addView(header)
 
         val value = TextView(this).apply {
@@ -1064,14 +1112,14 @@ class SafeActivity : FragmentActivity() {
         val heading = TextView(this).apply {
             text = humanHeading(title)
             textSize = 11.5f
-            setTextColor(kyGold)
+            setTextColor(kyWhite)
             typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
             letterSpacing = 0.012f
             includeFontPadding = false
         }
         val headingRow = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
         headingRow.addView(heading, LinearLayout.LayoutParams(0, -2, 1f))
-        if (!expandToFill) headingRow.addView(label("SCROLL ↓", 8f, kyAmber, 0.04f))
+        if (!expandToFill) headingRow.addView(label("SCROLL ↓", 8f, kyGray, 0.04f))
         box.addView(headingRow)
 
         val value = TextView(this).apply {
