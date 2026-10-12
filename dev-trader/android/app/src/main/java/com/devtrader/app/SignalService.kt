@@ -91,6 +91,7 @@ class SignalService : Service() {
     private var lastMessageMs = 0L
     private var reconnectScheduled = false
     private var staleChecks = 0
+    private var lastTradeFallbackMs = 0L
     private val client by lazy {
         OkHttpClient.Builder()
             .connectTimeout(8, TimeUnit.SECONDS)
@@ -272,14 +273,7 @@ class SignalService : Service() {
                         }
 
                         val tradeEvent = root.optJSONObject("trade_event")
-                        if (tradeEvent != null) {
-                            val eventKey = tradeEvent.optString("key")
-                            val previousEvent = prefs.getString(PREF_LAST_TRADE_EVENT_KEY, null)
-                            if (eventKey.isNotBlank() && eventKey != previousEvent) {
-                                prefs.edit().putString(PREF_LAST_TRADE_EVENT_KEY, eventKey).apply()
-                                notifyTradeEvent(tradeEvent)
-                            }
-                        }
+                        if (tradeEvent != null) notifyVerifiedTradeEventOnce(tradeEvent)
 
                         val signal = root.optJSONObject("signal") ?: return
                         val id = signal.optString("id")
@@ -341,11 +335,63 @@ class SignalService : Service() {
             if (age > 30_000L) {
                 staleChecks += 1
                 checkHeartbeatAndRecover()
+                pollPrivateTradeFallback()
             } else if (socket == null) {
                 staleChecks = 0
                 connect()
+                pollPrivateTradeFallback()
             }
             handler.postDelayed(this, 4_000L)
+        }
+    }
+
+    private fun notifyVerifiedTradeEventOnce(event: JSONObject) {
+        val key = event.optString("key")
+        if (key.isBlank()) return
+        // Without notification permission, don't mark an event delivered:
+        // Android may grant permission later while that event is still current.
+        if (Build.VERSION.SDK_INT >= 33 &&
+            checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) !=
+                android.content.pm.PackageManager.PERMISSION_GRANTED
+        ) return
+        val prefs = getSharedPreferences(PREFS, MODE_PRIVATE)
+        // WebSocket and fallback HTTP callbacks can race on reconnect.
+        synchronized(this) {
+            if (key == prefs.getString(PREF_LAST_TRADE_EVENT_KEY, null)) return
+            prefs.edit().putString(PREF_LAST_TRADE_EVENT_KEY, key).apply()
+        }
+        notifyTradeEvent(event)
+    }
+
+    private fun pollPrivateTradeFallback() {
+        if (stopped) return
+        val now = System.currentTimeMillis()
+        if (now - lastTradeFallbackMs < 15_000L) return
+        lastTradeFallbackMs = now
+        // When the socket stalls, a private authenticated REST snapshot can
+        // still deliver the most recent durable event. This does not send
+        // orders or request exchange credentials from the Android client.
+        runCatching {
+            val url = BackendEndpoint.base + "/bootstrap?profile=dashboard"
+            val request = KyvoriqSecureSession.authenticate(
+                this,
+                Request.Builder().url(url),
+                url
+            ).get().build()
+            restClient.newCall(request).enqueue(object : okhttp3.Callback {
+                override fun onFailure(call: okhttp3.Call, e: java.io.IOException) = Unit
+
+                override fun onResponse(call: okhttp3.Call, response: Response) {
+                    response.use {
+                        if (stopped || !it.isSuccessful) return
+                        val text = it.body?.string() ?: return
+                        runCatching {
+                            JSONObject(text).optJSONObject("trade_event")
+                                ?.let { event -> notifyVerifiedTradeEventOnce(event) }
+                        }
+                    }
+                }
+            })
         }
     }
 
@@ -618,6 +664,8 @@ class SignalService : Service() {
             "EXECUTION_OPEN" -> "BTC $direction • DEMO TRADE OPENED"
             "EXECUTION_CLOSED" -> "BTC $direction • DEMO TRADE CLOSED"
             "EXECUTION_FAILED" -> "BTC $direction • DEMO TRADE FAILED"
+            "EXTERNAL_DEMO_OPEN" -> "BTC $direction • MANUAL DEMO OPENED"
+            "EXTERNAL_DEMO_CLOSED" -> "BTC $direction • MANUAL DEMO CLOSED"
             else -> "BTC $direction • " + type.replace('_', ' ')
         }
         var body = "$setup\nPrice $price • Level $level"
@@ -658,6 +706,14 @@ class SignalService : Service() {
                 "\nClose " + reason + " • Bitget Demo"
         } else if (type == "EXECUTION_FAILED") {
             body = "$setup\nDemo execution failed\n" + event.optString("note", "Unknown execution error.")
+        } else if (type == "EXTERNAL_DEMO_OPEN" || type == "EXTERNAL_DEMO_CLOSED") {
+            val entry = event.optDouble("entry_price", Double.NaN)
+            val exit = event.optDouble("exit_price", Double.NaN)
+            val qty = event.optDouble("filled_qty", Double.NaN)
+            body = "Manual Bitget Demo position • not placed by KYVORIQ" +
+                "\nEntry " + format(entry) +
+                (if (type == "EXTERNAL_DEMO_CLOSED") " • Exit " + format(exit) else "") +
+                (if (qty.isFinite()) "\nObserved " + String.format(Locale.US, "%.6f BTC", qty) else "")
         }
         if (note.isNotBlank()) body += "\n$note"
         if (learning != null) {
@@ -669,7 +725,8 @@ class SignalService : Service() {
 
         val tier = when (type) {
             "SL_HIT", "EXECUTION_FAILED" -> "CRITICAL"
-            "TP1_HIT", "TP2_HIT", "EXECUTION_PENDING", "EXECUTION_OPEN", "EXECUTION_CLOSED" -> "EXECUTION"
+            "TP1_HIT", "TP2_HIT", "EXECUTION_PENDING", "EXECUTION_OPEN", "EXECUTION_CLOSED",
+            "EXTERNAL_DEMO_OPEN", "EXTERNAL_DEMO_CLOSED" -> "EXECUTION"
             else -> "PRIORITY"
         }
         val launchIntent = Intent(this, SafeActivity::class.java)
