@@ -1954,9 +1954,30 @@ class SafeActivity : FragmentActivity() {
             }
         }
         if (openTrade == null) {
-            riskHeatMeter.setRisk(0f, "IDLE", animate = lastDecisionVisualKey.isNotBlank())
-            riskHeatText.text = "No open demo position • no FOMO, just setups."
-            riskHeatText.setTextColor(kyGray)
+            val summary = execution.optJSONObject("summary") ?: JSONObject()
+            val exchangeCount = summary.optInt("exchange_open_positions", 0)
+            val syncVerified = summary.optJSONObject("client_status")
+                ?.optBoolean("position_sync_verified", false) ?: false
+            when {
+                exchangeCount > 0 -> {
+                    // Never show a falsely reassuring IDLE state just because
+                    // the exchange position was opened manually outside KYVORIQ.
+                    riskHeatMeter.setRisk(0f, "UNVERIFIED", animate = false)
+                    riskHeatText.text = "Bitget Demo: $exchangeCount open exchange position(s) • " +
+                        "not attributed to KYVORIQ. Check stops in Bitget."
+                    riskHeatText.setTextColor(kyAmber)
+                }
+                !syncVerified -> {
+                    riskHeatMeter.setRisk(0f, "UNKNOWN", animate = false)
+                    riskHeatText.text = "Bitget position status unavailable • reconnecting."
+                    riskHeatText.setTextColor(kyAmber)
+                }
+                else -> {
+                    riskHeatMeter.setRisk(0f, "IDLE", animate = lastDecisionVisualKey.isNotBlank())
+                    riskHeatText.text = "No open demo position • no FOMO, just setups."
+                    riskHeatText.setTextColor(kyGray)
+                }
+            }
             return
         }
 
