@@ -445,7 +445,7 @@ class MarketChartView @JvmOverloads constructor(
     private fun maxFutureShift(): Float = min(16f, visibleCount() * 0.20f)
 
     private fun visibleCount(): Int {
-        val widthPx = max(1f, width - dp(82f))
+        val widthPx = max(1f, width - dp(65f))
         val base = max(55f, widthPx / dp(4.15f))
         return max(24, min(180, (base / zoomX).roundToInt()))
     }
@@ -463,7 +463,7 @@ class MarketChartView @JvmOverloads constructor(
 
         val left = dp(6f)
         // Dedicated axis lane for BTC tick values and color-coded level prices.
-        val right = width - dp(82f)
+        val right = width - dp(65f)
         val top = dp(
             if (height < dp(190f)) 32f
             else if (levelMenuOpen) 70f
@@ -1405,7 +1405,7 @@ class MarketChartView @JvmOverloads constructor(
                 // hero/timeframe/decision cards; chart controls remain tappable.
                 // The right-hand price-axis gutter stays scroll-through for
                 // navigating the long Trade page; plot gestures pan the chart.
-                parent?.requestDisallowInterceptTouchEvent(fullscreenMode || event.x < width - dp(82f))
+                parent?.requestDisallowInterceptTouchEvent(fullscreenMode || event.x < width - dp(65f))
                 lastTouchX = event.x
                 lastTouchY = event.y
                 touchDownX = event.x
@@ -1453,7 +1453,7 @@ class MarketChartView @JvmOverloads constructor(
                 // Start swipes on the right-hand axis to scroll the Trade page.
                 // Swipes starting inside the plot pan in the direction opposite
                 // the finger, horizontally and vertically.
-                if (!fullscreenMode && touchDownX >= width - dp(82f)) {
+                if (!fullscreenMode && touchDownX >= width - dp(65f)) {
                     lastTouchX = event.x
                     lastTouchY = event.y
                     return true
