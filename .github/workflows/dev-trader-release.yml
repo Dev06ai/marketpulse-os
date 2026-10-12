@@ -81,7 +81,7 @@ jobs:
             -PdevTraderVersionCode="${{ steps.meta.outputs.version_code }}" \
             --stacktrace
 
-      - name: Verify signing identity against installed KYVORIQ Build 135
+      - name: Verify matching Build 135 signing certificate
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -89,88 +89,24 @@ jobs:
           set -euo pipefail
           CURRENT="dev-trader/android/app/build/outputs/apk/release/app-release.apk"
           test -s "$CURRENT"
-          mkdir -p /tmp/kyvoriq-previous-signed
-          gh release download dev-trader-v0.21.10-135 --pattern app-release.apk --dir /tmp/kyvoriq-previous-signed
-          PREVIOUS="/tmp/kyvoriq-previous-signed/app-release.apk"
+          mkdir -p /tmp/kyvoriq-prior
+          gh release download dev-trader-v0.21.10-135 --pattern app-release.apk --dir /tmp/kyvoriq-prior
+          PREVIOUS="/tmp/kyvoriq-prior/app-release.apk"
           test -s "$PREVIOUS"
-          APKSIGNER="$(find "${ANDROID_HOME:-/usr/local/lib/android/sdk}/build-tools" -type f -name apksigner | sort -V | tail -n 1)"
-          AAPT="$(find "${ANDROID_HOME:-/usr/local/lib/android/sdk}/build-tools" -type f -name aapt | sort -V | tail -n 1)"
+          SDKROOT="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          APKSIGNER="$(find "$SDKROOT/build-tools" -type f -name apksigner | sort -V | tail -n 1)"
+          AAPT="$(find "$SDKROOT/build-tools" -type f -name aapt | sort -V | tail -n 1)"
           test -n "$APKSIGNER"
           test -n "$AAPT"
-          "$APKSIGNER" verify --verbose "$PREVIOUS" > /dev/null
-          "$APKSIGNER" verify --verbose "$CURRENT" > /dev/null
-          OLD_CERT="$("$APKSIGNER" verify --print-certs "$PREVIOUS" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' | head -1)"
-          NEW_CERT="$("$APKSIGNER" verify --print-certs "$CURRENT" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' | head -1)"
-          test -n "$OLD_CERT"
-          test "$OLD_CERT" = "$NEW_CERT" || { echo 'Signing identity differs; refusing incompatible update'; exit 1; }
+          "$APKSIGNER" verify --verbose "$PREVIOUS" >/dev/null
+          "$APKSIGNER" verify --verbose "$CURRENT" >/dev/null
+          PREVIOUS_CERT="$("$APKSIGNER" verify --print-certs "$PREVIOUS" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' | head -n 1)"
+          CURRENT_CERT="$("$APKSIGNER" verify --print-certs "$CURRENT" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' | head -n 1)"
+          test -n "$PREVIOUS_CERT"
+          test "$PREVIOUS_CERT" = "$CURRENT_CERT" || { echo 'Different APK signing identity: release refused'; exit 1; }
           "$AAPT" dump badging "$CURRENT" | grep -q "package: name='com.devtrader.app' versionCode='136' versionName='0.21.11'"
-          ! unzip -l "$CURRENT" | grep -Eq 'ui_preview.json|\.jks$|\.env        shell: bash
-        run: |
-          set -euo pipefail
-          TAG="${{ steps.meta.outputs.release_tag }}"
-          VERSION_NAME="${{ steps.meta.outputs.version_name }}"
-          VERSION_CODE="${{ steps.meta.outputs.version_code }}"
-          APK="dev-trader/android/app/build/outputs/apk/release/app-release.apk"
-          SHA256="$(sha256sum "$APK" | cut -d " " -f1)"
-          APK_URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/app-release.apk"
-          cat > dev-trader-update.json <<EOF
-          {
-            "enabled": true,
-            "versionCode": ${VERSION_CODE},
-            "versionName": "${VERSION_NAME}",
-            "apkUrl": "${APK_URL}",
-            "sha256": "${SHA256}",
-            "notes": "Signed KYVORIQ release ${VERSION_NAME}"
-          }
-          EOF
-          echo "version_name=${VERSION_NAME}" >> "$GITHUB_OUTPUT"
-          echo "version_code=${VERSION_CODE}" >> "$GITHUB_OUTPUT"
-
-      - name: Create release tag
-        env:
-          GH_TOKEN: ${{ github.token }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          TAG="${{ steps.meta.outputs.release_tag }}"
-          if gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${TAG}" >/dev/null 2>&1; then
-            echo "Tag ${TAG} already exists."
-          else
-            gh api --method POST "repos/${GITHUB_REPOSITORY}/git/refs" -f "ref=refs/tags/${TAG}" -f "sha=${GITHUB_SHA}" >/dev/null
-            echo "Created tag ${TAG} at ${GITHUB_SHA}."
-          fi
-
-      - name: Create or update GitHub release
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          TAG="${{ steps.meta.outputs.release_tag }}"
-          APK="dev-trader/android/app/build/outputs/apk/release/app-release.apk"
-          if gh release view "$TAG" >/dev/null 2>&1; then
-            echo "Release $TAG already exists; refusing to replace a published signed APK."
-            exit 1
-          fi
-          gh release create "$TAG" \
-            --target "$GITHUB_SHA" \
-            "$APK" \
-            "dev-trader-update.json#dev-trader-update.json" \
-            --title "KYVORIQ ${{ steps.meta.outputs.version_name }}" \
-            --notes "Signed Build 136: manual Bitget Demo position observation and verified trade notifications."
-      - name: Publish update manifest
-        env:
-          GH_TOKEN: ${{ github.token }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          CONTENT="$(base64 -w0 dev-trader-update.json)"
-          SHA="$(gh api "repos/${GITHUB_REPOSITORY}/contents/dev-trader/update.json?ref=dev-trader-v1" --jq .sha)"
-          gh api --method PUT "repos/${GITHUB_REPOSITORY}/contents/dev-trader/update.json" \
-            -f message="Publish KYVORIQ self-update manifest ${GITHUB_REF_NAME}" \
-            -f content="${CONTENT}" \
-            -f branch="dev-trader-v1" \
-            -f sha="${SHA}" >/dev/null
-
-          echo "Version 136 signed with the Build 135 signing identity."
+          ! unzip -l "$CURRENT" | grep -Ei 'ui_preview.json|signing.jks|\.env'
+          echo "Build 136 package, version, signature and preview exclusion verified."
 
       - name: Prepare release metadata
         shell: bash
@@ -209,23 +145,18 @@ jobs:
             echo "Created tag ${TAG} at ${GITHUB_SHA}."
           fi
 
-      - name: Create or update GitHub release
+      - name: Create immutable GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          set -euo pipefail
           TAG="${{ steps.meta.outputs.release_tag }}"
           APK="dev-trader/android/app/build/outputs/apk/release/app-release.apk"
           if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release upload "$TAG" "$APK" --clobber
-            gh release upload "$TAG" "dev-trader-update.json#dev-trader-update.json" --clobber
-          else
-            gh release create "$TAG" \
-              --target "$GITHUB_SHA" \
-              "$APK" \
-              "dev-trader-update.json#dev-trader-update.json" \
-              --title "KYVORIQ ${{ steps.meta.outputs.version_name }}" \
-              --notes "Signed self-update release for KYVORIQ."
+            echo "Existing signed APK must not be replaced."
+            exit 1
           fi
+          gh release create "$TAG" --target "$GITHUB_SHA" "$APK" "dev-trader-update.json#dev-trader-update.json" --title "KYVORIQ ${{ steps.meta.outputs.version_name }}" --notes "Signed KYVORIQ Build 136: manual Bitget Demo exposure and trade notifications."
 
       - name: Publish update manifest
         env:
