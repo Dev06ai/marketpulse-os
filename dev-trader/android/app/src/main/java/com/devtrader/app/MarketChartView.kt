@@ -253,10 +253,10 @@ class MarketChartView @JvmOverloads constructor(
         val label = row.optString("label", kind).uppercase(Locale.US)
         return when {
             kind == "SFP" || label.startsWith("SFP") -> showSfpLevels
+            kind in setOf("WEEKLY", "WEEKLY_OPEN", "WEEKLY_NPOC") || label.startsWith("WEEKLY") -> showWeeklyLevels
             kind in setOf("NPOC", "RANGE_POC") || label.contains("NPOC") || label.contains("POC") -> showNpocLevels
             kind in setOf("OB", "OB_ZONE", "SUPPLY_ZONE", "DEMAND_ZONE") || label.contains(" OB") || label.endsWith("OB") -> showObLevels
             kind == "DAILY" || label.startsWith("D HIGH") || label.startsWith("D LOW") || label.startsWith("DAILY") -> showDailyLevels
-            kind in setOf("WEEKLY_OPEN", "WEEKLY_NPOC") || label.contains("WEEK") -> showWeeklyLevels
             else -> showOtherLevels
         }
     }
@@ -1217,7 +1217,7 @@ class MarketChartView @JvmOverloads constructor(
         rows.forEach { (row, value, lineY) ->
             val kind = row.optString("kind", "LEVEL").uppercase(Locale.US)
             val color = when (kind) {
-                "SFP", "WEEKLY_OPEN", "WEEKLY_NPOC" -> KyvoriqTheme.gold
+                "SFP", "WEEKLY", "WEEKLY_OPEN", "WEEKLY_NPOC" -> KyvoriqTheme.gold
                 "DLINE" -> KyvoriqTheme.ember
                 "OB", "OB_ZONE" -> KyvoriqTheme.white
                 "NPOC", "RANGE_POC", "SUPPLY_ZONE" -> Color.rgb(255, 82, 105)
@@ -1258,6 +1258,24 @@ class MarketChartView @JvmOverloads constructor(
                 reactionGlowPaint.alpha = (150f * pulse * retirementFade).toInt().coerceIn(0, 255)
                 reactionGlowPaint.strokeWidth = dp(1.6f + 2.8f * pulse)
                 canvas.drawCircle(right - dp(8f), lineY, dp(3f + 7f * pulse), reactionGlowPaint)
+            }
+
+            // A fresh observed touch publishes TAPPED for five minutes; display
+            // a temporary chip here without cluttering the reserved price rail.
+            if (status == "TAPPED" || row.optLong("tapped_at_ms", 0L) > 0L) {
+                val tag = "TAPPED"
+                val tagW = reactionChipTextPaint.measureText(tag) + dp(10f)
+                val tagH = dp(16f)
+                val tagX = left + dp(7f)
+                val tagY = (lineY - tagH - dp(5f)).coerceIn(top + dp(2f), bottom - tagH - dp(2f))
+                val oldBgColor = reactionChipPaint.color
+                reactionChipPaint.color = KyvoriqTheme.charcoal
+                reactionChipPaint.alpha = (225f * retirementFade).toInt().coerceIn(0, 225)
+                reactionChipTextPaint.color = color
+                reactionChipTextPaint.alpha = (255f * retirementFade).toInt().coerceIn(0, 255)
+                canvas.drawRoundRect(RectF(tagX, tagY, tagX + tagW, tagY + tagH), dp(5f), dp(5f), reactionChipPaint)
+                canvas.drawText(tag, tagX + dp(5f), tagY + dp(11f), reactionChipTextPaint)
+                reactionChipPaint.color = oldBgColor
             }
 
             // Structural price numbers render in the reserved right-axis lane
@@ -1315,7 +1333,7 @@ class MarketChartView @JvmOverloads constructor(
             val type = when(kind) {
                 "DAILY" -> "D"
                 "NPOC" -> "N"
-                "WEEKLY_NPOC", "WEEKLY_OPEN" -> "W"
+                "WEEKLY", "WEEKLY_NPOC", "WEEKLY_OPEN" -> "W"
                 "RANGE_POC" -> "P"
                 "SFP" -> "S"
                 "OB", "OB_ZONE" -> "OB"
@@ -1324,7 +1342,7 @@ class MarketChartView @JvmOverloads constructor(
             val color = when(kind) {
                 "DAILY" -> Color.rgb(54, 211, 153)
                 "NPOC", "RANGE_POC" -> Color.rgb(255, 82, 105)
-                "SFP", "WEEKLY_OPEN", "WEEKLY_NPOC" -> KyvoriqTheme.gold
+                "SFP", "WEEKLY", "WEEKLY_OPEN", "WEEKLY_NPOC" -> KyvoriqTheme.gold
                 "OB", "OB_ZONE" -> KyvoriqTheme.white
                 else -> KyvoriqTheme.muted
             }
