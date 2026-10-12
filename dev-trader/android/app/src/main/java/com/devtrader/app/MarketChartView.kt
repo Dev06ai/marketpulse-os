@@ -33,9 +33,9 @@ class MarketChartView @JvmOverloads constructor(
 
     private val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val gridPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.rgb(73, 88, 107)
+        color = Color.rgb(74, 76, 82)
         strokeWidth = dp(.65f)
-        alpha = 75
+        alpha = 52
     }
     private val axisPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = KyvoriqTheme.muted
@@ -63,15 +63,15 @@ class MarketChartView @JvmOverloads constructor(
     }
     private val bodyPaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val bbPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = KyvoriqTheme.ember
+        color = Color.rgb(136, 140, 146)
         strokeWidth = dp(.95f)
         style = Paint.Style.STROKE
         strokeCap = Paint.Cap.ROUND
         strokeJoin = Paint.Join.ROUND
-        alpha = 205
+        alpha = 120
     }
     private val bbMiddlePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = KyvoriqTheme.ember
+        color = Color.rgb(162, 166, 171)
         strokeWidth = dp(1.0f)
         style = Paint.Style.STROKE
         strokeCap = Paint.Cap.ROUND
@@ -79,7 +79,7 @@ class MarketChartView @JvmOverloads constructor(
         alpha = 175
     }
     private val emaPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = KyvoriqTheme.gold
+        color = KyvoriqTheme.white
         strokeWidth = dp(1.7f)
         style = Paint.Style.STROKE
         strokeCap = Paint.Cap.ROUND
@@ -91,25 +91,25 @@ class MarketChartView @JvmOverloads constructor(
         alpha = 242
     }
     private val emaLabelBorderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = KyvoriqTheme.ember
+        color = KyvoriqTheme.gray
         style = Paint.Style.STROKE
         strokeWidth = dp(.75f)
         alpha = 175
     }
     private val emaLabelTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = KyvoriqTheme.gold
+        color = KyvoriqTheme.white
         textSize = dp(8.8f)
         typeface = android.graphics.Typeface.create(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD)
     }
     private val currentPricePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = KyvoriqTheme.gold
+        color = KyvoriqTheme.gray
         strokeWidth = dp(.95f)
         style = Paint.Style.STROKE
         pathEffect = DashPathEffect(floatArrayOf(dp(5f), dp(4f)), 0f)
         alpha = 225
     }
     private val livePriceTagPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = KyvoriqTheme.gold
+        color = KyvoriqTheme.white
         style = Paint.Style.FILL
     }
     private val livePriceTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -134,14 +134,14 @@ class MarketChartView @JvmOverloads constructor(
         )
     }
     private val crosshairPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = KyvoriqTheme.ember
+        color = KyvoriqTheme.gray
         strokeWidth = dp(1f)
     }
-    private val volumeUpPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(40, 158, 144); alpha = 185 }
-    private val volumeDownPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(188, 76, 99); alpha = 185 }
+    private val volumeUpPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(206, 207, 210); alpha = 175 }
+    private val volumeDownPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(109, 112, 119); alpha = 175 }
     private val liveChipPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = KyvoriqTheme.graphite }
-    private val liveDotPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(71, 191, 149) }
-    private val controlActivePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = KyvoriqTheme.gold }
+    private val liveDotPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(198, 201, 205) }
+    private val controlActivePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(216, 218, 221) }
     private val controlInactivePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = KyvoriqTheme.graphite }
     private val controlBorderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
@@ -224,7 +224,7 @@ class MarketChartView @JvmOverloads constructor(
     private var timeframe = "1h"
     private var livePrice = Double.NaN
     private var feedHealthy = false
-    private var showBollinger = true
+    private var showBollinger = false
     private var showEma = true
     private var showVolume = true
 
@@ -455,7 +455,7 @@ class MarketChartView @JvmOverloads constructor(
         super.onDraw(canvas)
         bgPaint.shader = LinearGradient(
             0f, 0f, 0f, height.toFloat(),
-            intArrayOf(KyvoriqTheme.slate, KyvoriqTheme.charcoal, Color.rgb(19, 30, 42)),
+            intArrayOf(KyvoriqTheme.slate, KyvoriqTheme.charcoal, KyvoriqTheme.slate),
             null,
             Shader.TileMode.CLAMP
         )
@@ -565,8 +565,8 @@ class MarketChartView @JvmOverloads constructor(
             val cl = c.optDouble("close")
             val up = cl >= o
 
-            wickPaint.color = if (up) Color.rgb(76, 211, 166) else Color.rgb(242, 91, 111)
-            bodyPaint.color = if (up) Color.rgb(54, 188, 148) else Color.rgb(214, 73, 94)
+            wickPaint.color = if (up) Color.rgb(247, 247, 248) else Color.rgb(154, 157, 164)
+            bodyPaint.color = if (up) Color.rgb(233, 234, 236) else Color.rgb(105, 108, 115)
 
             canvas.drawLine(x, mapY(h, low, high, top, priceBottom), x, mapY(l, low, high, top, priceBottom), wickPaint)
 
@@ -653,11 +653,11 @@ class MarketChartView @JvmOverloads constructor(
                     else -> false
                 }
                 canvas.drawRoundRect(rect, dp(5f), dp(5f), if (active) controlActivePaint else controlInactivePaint)
-                controlBorderPaint.color = if (active || (key == "LVL" && levelMenuOpen)) KyvoriqTheme.deepGold else KyvoriqTheme.border
+                controlBorderPaint.color = if (active || (key == "LVL" && levelMenuOpen)) KyvoriqTheme.gray else KyvoriqTheme.border
                 canvas.drawRoundRect(rect, dp(5f), dp(5f), controlBorderPaint)
                 controlTextPaint.color = when {
                     active -> KyvoriqTheme.charcoal
-                    key == "FULL" -> KyvoriqTheme.gold
+                    key == "FULL" -> KyvoriqTheme.white
                     else -> KyvoriqTheme.muted
                 }
                 val label = if (key == "FULL" && fullscreenMode) "EXIT" else key
@@ -675,7 +675,7 @@ class MarketChartView @JvmOverloads constructor(
         val resetting = !followLive
         liveDotPaint.color = when {
             resetting -> KyvoriqTheme.gold
-            feedHealthy -> Color.rgb(71, 191, 149)
+            feedHealthy -> Color.rgb(198, 201, 205)
             else -> KyvoriqTheme.muted
         }
         canvas.drawCircle(chipLeft + dp(10f), chipTop + dp(12f), dp(3.2f), liveDotPaint)
@@ -729,7 +729,7 @@ class MarketChartView @JvmOverloads constructor(
         levelFilterChipRects(left).forEach { (key, rect) ->
             val active = layerEnabled(key)
             canvas.drawRoundRect(rect, dp(5f), dp(5f), if (active) controlActivePaint else controlInactivePaint)
-            controlBorderPaint.color = if (active) KyvoriqTheme.deepGold else KyvoriqTheme.border
+            controlBorderPaint.color = if (active) KyvoriqTheme.gray else KyvoriqTheme.border
             canvas.drawRoundRect(rect, dp(5f), dp(5f), controlBorderPaint)
             controlTextPaint.color = if (active) KyvoriqTheme.charcoal else KyvoriqTheme.muted
             val tw = controlTextPaint.measureText(key)
