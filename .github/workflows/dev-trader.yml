@@ -201,6 +201,8 @@ jobs:
           else
             echo "android_changed=false" >> "$GITHUB_OUTPUT"
           fi
+      - name: Verify visual-only cyberpunk contract
+        run: python3 dev-trader/android/test-cyberpunk-contract.py
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -210,7 +212,7 @@ jobs:
           gradle-version: '9.6.0'
       - name: Build Android debug APK
         working-directory: dev-trader/android
-        run: gradle assembleDebug --stacktrace -PdevTraderVersionCode=137 -PdevTraderVersionName=0.21.12
+        run: gradle assembleDebug --stacktrace -PdevTraderVersionCode=138 -PdevTraderVersionName=0.21.13
       - name: Build signed Android release APK
         if: steps.changed.outputs.android_changed == 'true'
         working-directory: dev-trader/android
@@ -221,7 +223,7 @@ jobs:
           DEV_TRADER_KEY_PASSWORD: ${{ secrets.DEV_TRADER_KEY_PASSWORD }}
         run: |
           echo "${{ secrets.DEV_TRADER_KEYSTORE_BASE64 }}" | base64 --decode > "$DEV_TRADER_KEYSTORE_PATH"
-          gradle assembleRelease --stacktrace -PdevTraderVersionCode=137 -PdevTraderVersionName=0.21.12
+          gradle assembleRelease --stacktrace -PdevTraderVersionCode=138 -PdevTraderVersionName=0.21.13
           if unzip -l app/build/outputs/apk/release/app-release.apk | grep -q ui_preview.json; then
             echo 'Debug preview data must never be included in release APKs.'
             exit 1
@@ -315,7 +317,7 @@ jobs:
           mkdir -p release
           cp dist/app-release.apk release/app-release.apk
           sha256sum release/app-release.apk | awk '{print $1}' > release/app-release.sha256
-          echo "tag=dev-trader-v0.21.12-137" >> "$GITHUB_OUTPUT"
+          echo "tag=dev-trader-v0.21.13-138" >> "$GITHUB_OUTPUT"
           echo "sha256=$(cat release/app-release.sha256)" >> "$GITHUB_OUTPUT"
       - name: Create GitHub release
         env:
@@ -325,7 +327,7 @@ jobs:
             echo "This release already exists; refusing to replace a published APK."
             exit 1
           fi
-          gh release create "${{ steps.release.outputs.tag }}" release/app-release.apk --target "$GITHUB_SHA" --title "KYVORIQ 0.21.12 (137)" --notes "KYVORIQ Voroa migration client. Publish only when Voroa private API pairing, signed APK compatibility and demo-trade handover are verified."
+          gh release create "${{ steps.release.outputs.tag }}" release/app-release.apk --target "$GITHUB_SHA" --title "KYVORIQ 0.21.13 (137)" --notes "KYVORIQ Voroa migration client. Publish only when Voroa private API pairing, signed APK compatibility and demo-trade handover are verified."
       - name: Publish verified update manifest
         env:
           SHA256: "${{ steps.release.outputs.sha256 }}"
@@ -341,9 +343,9 @@ jobs:
               "enabled": True,
               "versionCode": 137,
               "versionName": "0.21.12",
-              "apkUrl": "https://github.com/Dev06ai/marketpulse-os/releases/download/dev-trader-v0.21.12-137/app-release.apk",
+              "apkUrl": "https://github.com/Dev06ai/marketpulse-os/releases/download/dev-trader-v0.21.13-138/app-release.apk",
               "sha256": os.environ["SHA256"],
-              "notes": "KYVORIQ 0.21.12 • Voroa private backend • pair device after verified cutover"
+              "notes": "KYVORIQ 0.21.13 • Voroa private backend • pair device after verified cutover"
           })
           p.write_text(json.dumps(data, indent=2) + "\n")
           PY
