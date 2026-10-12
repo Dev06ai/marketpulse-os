@@ -8,6 +8,7 @@ import android.graphics.drawable.Drawable
 import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.RippleDrawable
 import android.os.PowerManager
+import android.provider.Settings
 import android.view.animation.PathInterpolator
 import android.widget.Button
 
@@ -27,7 +28,10 @@ object KyvoriqTheme {
     val white = Color.rgb(244, 245, 247)
     val motion = PathInterpolator(0.20f, 0.80f, 0.20f, 1f)
 
-    fun motionEnabled(context: Context): Boolean = ValueAnimator.areAnimatorsEnabled() &&
+    fun motionEnabled(context: Context): Boolean =
+        Settings.Global.getFloat(
+            context.contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f
+        ) > 0f && ValueAnimator.areAnimatorsEnabled() &&
         !(context.getSystemService(Context.POWER_SERVICE) as PowerManager).isPowerSaveMode
 
     fun button(context: Context, selected: Boolean = false, radius: Float = 12f): Drawable {
