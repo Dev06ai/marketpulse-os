@@ -53,7 +53,7 @@ class KyvoriqWidgetProvider : AppWidgetProvider() {
             val bias = when {
                 direction == "LONG" || direction == "SHORT" -> direction
                 engineBias.isNotBlank() -> engineBias
-                else -> "WAIT"
+                else -> "SCANNING"
             }
 
             var openDirection = ""
@@ -180,16 +180,18 @@ class KyvoriqWidgetProvider : AppWidgetProvider() {
             val minHeight = options.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT, 100)
             // Only vertical resizing expands details; width alone should not
             // turn a slim 4x1 price card back into a bulky two-row widget.
-            val expanded = minHeight >= 142
+            val expanded = minHeight >= 170
             val layout = if (expanded) R.layout.widget_kyvoriq_expanded else R.layout.widget_kyvoriq_compact
             val views = RemoteViews(context.packageName, layout)
+
+            views.setViewVisibility(R.id.widget_alerts, if (expanded || minWidth >= 230) android.view.View.VISIBLE else android.view.View.GONE)
 
             val price = prefs.getString(KEY_PRICE, "—") ?: "—"
             val previous = prefs.getString(KEY_PREVIOUS_PRICE, "—") ?: "—"
             val slot = prefs.getInt(KEY_PRICE_SLOT, 0)
             val motion = prefs.getInt(KEY_PRICE_DIRECTION, 0)
             val state = prefs.getString(KEY_STATE, "SCANNING") ?: "SCANNING"
-            val bias = prefs.getString(KEY_BIAS, "WAIT") ?: "WAIT"
+            val bias = prefs.getString(KEY_BIAS, "SCANNING") ?: "SCANNING"
             val health = prefs.getString(KEY_HEALTH, "UNKNOWN") ?: "UNKNOWN"
             val pnl = if (hideAmounts) "••••" else (prefs.getString(KEY_PNL, "—") ?: "—")
 
@@ -220,8 +222,8 @@ class KyvoriqWidgetProvider : AppWidgetProvider() {
             val healthLabel = when {
                 !paired -> "PAIR"
                 !quoteFresh -> "STALE"
-                health == "HEALTHY" -> "LIVE"
-                else -> "WAIT"
+                health in setOf("HEALTHY", "LIVE") -> "LIVE"
+                else -> "SYNCING"
             }
             val healthColor = if (paired && quoteFresh && health == "HEALTHY")
                 KyvoriqTheme.gold else KyvoriqTheme.muted
@@ -240,8 +242,9 @@ class KyvoriqWidgetProvider : AppWidgetProvider() {
             views.setTextColor(R.id.widget_delta, deltaColor)
 
             if (expanded) views.setTextViewText(R.id.widget_state, if (paired) state else "PAIR DEVICE")
-            views.setTextViewText(R.id.widget_bias, if (paired) bias else "WAIT")
+            views.setTextViewText(R.id.widget_bias, if (!paired) "Private" else if (bias == "WAIT") "Scanning" else bias.lowercase().replaceFirstChar { it.uppercase() })
             views.setTextColor(R.id.widget_bias, biasColor)
+            if (!expanded) views.setViewVisibility(R.id.widget_bias, android.view.View.GONE)
             views.setTextViewText(R.id.widget_health, healthLabel)
             views.setTextColor(R.id.widget_health, healthColor)
             if (expanded) {
@@ -254,6 +257,22 @@ class KyvoriqWidgetProvider : AppWidgetProvider() {
                 views.setTextColor(R.id.widget_pnl, pnlColor)
             }
 
+            fun destination(name: String, index: Int): PendingIntent {
+                val route = Intent(context, SafeActivity::class.java).apply {
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                    data = android.net.Uri.parse("kyvoriq://widget/$appWidgetId/$name")
+                    putExtra("widget_destination", name)
+                }
+                return PendingIntent.getActivity(context, appWidgetId * 10 + index, route,
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+            }
+            views.setOnClickPendingIntent(R.id.widget_price_flipper, destination("chart", 1))
+            views.setOnClickPendingIntent(R.id.widget_health, destination("insights", 2))
+            views.setOnClickPendingIntent(R.id.widget_alerts, destination("alerts", 3))
+            if (expanded) {
+                views.setOnClickPendingIntent(R.id.widget_chart, destination("chart", 4))
+                views.setOnClickPendingIntent(R.id.widget_positions, destination("positions", 5))
+            }
             val open = Intent(context, SafeActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
             }
