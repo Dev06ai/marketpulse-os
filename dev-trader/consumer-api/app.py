@@ -21,7 +21,10 @@ app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 
 @app.middleware("http")
 async def safety_headers(request: Request, call_next):
-    if request.headers.get("content-length") and int(request.headers.get("content-length", "0")) > 16_384:
+    supplied_length = request.headers.get("content-length", "0")
+    if not supplied_length.isascii() or not supplied_length.isdecimal() or len(supplied_length) > 12:
+        return JSONResponse({"detail": "Invalid content length"}, status_code=400)
+    if int(supplied_length) > 16_384:
         return JSONResponse({"detail": "Request too large"}, status_code=413)
     response = await call_next(request)
     response.headers.update({
