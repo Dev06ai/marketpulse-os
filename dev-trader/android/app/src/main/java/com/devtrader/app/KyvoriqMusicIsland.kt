@@ -37,7 +37,8 @@ import androidx.fragment.app.FragmentActivity
  */
 internal class KyvoriqMusicIsland(
     private val activity: FragmentActivity,
-    private val importAudio: (Int) -> Unit
+    private val importAudio: (Int) -> Unit,
+    private val importZip: () -> Unit = {}
 ) {
     data class Track(val title: String, val artist: String, val first: Int, val second: Int)
 
@@ -247,14 +248,19 @@ internal class KyvoriqMusicIsland(
     private fun bundledPath(trackIndex: Int): String? = bundledName(trackIndex)
         ?.takeIf { it in packagedNames() }?.let { "music/$it" }
 
+    private fun privateAudio(trackIndex: Int) = KyvoriqPrivateMusic.track(activity, trackIndex)
+
     private fun hasAudio(trackIndex: Int): Boolean =
-        linked(trackIndex) != null || bundledPath(trackIndex) != null
+        linked(trackIndex) != null || privateAudio(trackIndex) != null || bundledPath(trackIndex) != null
 
     private fun applyMediaSource(player: MediaPlayer, trackIndex: Int) {
         // A user-imported track takes precedence over the bundled copy.
         val imported = linked(trackIndex)
+        val privateCopy = privateAudio(trackIndex)
         if (imported != null) {
             player.setDataSource(activity, imported)
+        } else if (privateCopy != null) {
+            player.setDataSource(privateCopy.absolutePath)
         } else {
             val path = bundledPath(trackIndex)
                 ?: throw IllegalArgumentException("Missing music asset for slot $trackIndex")
@@ -271,7 +277,7 @@ internal class KyvoriqMusicIsland(
         status.text = when {
             preparing -> "LOADING AUDIO"
             playing -> "●  NOW PLAYING"
-            !hasAudio(index) -> "TAP PLAY TO IMPORT AUDIO"
+            !hasAudio(index) -> "TAP PLAY TO IMPORT ALL 5"
             else -> "READY  •  OFFLINE AUDIO"
         }
         play.text = if (playing) "Ⅱ" else "▶"
@@ -295,7 +301,7 @@ internal class KyvoriqMusicIsland(
             auraColor = target
             updateAura()
         }
-        val uri = linked(index)
+        val uri = linked(index) ?: privateAudio(index)?.let { Uri.fromFile(it) }
         val packaged = if (uri == null) bundledPath(index) else null
         if (uri != null || packaged != null) {
             val key = uri?.toString() ?: "asset:$packaged"
@@ -400,6 +406,24 @@ internal class KyvoriqMusicIsland(
         startTrack(trackIndex)
     }
 
+    fun importPrivateBundle(uri: Uri) {
+        if (destroyed) return
+        status.text = "IMPORTING FIVE TRACKS…"
+        Thread({
+            val outcome = runCatching { KyvoriqPrivateMusic.install(activity, uri) }
+            main.post {
+                if (destroyed) return@post
+                outcome.onSuccess { count ->
+                    Toast.makeText(activity, "All $count tracks installed for offline playback", Toast.LENGTH_LONG).show()
+                    select(index, true)
+                }.onFailure { error ->
+                    status.text = "IMPORT FAILED  •  TRY AGAIN"
+                    Toast.makeText(activity, error.message ?: "Could not import ZIP", Toast.LENGTH_LONG).show()
+                }
+            }
+        }, "KYVORIQ-Private-Music-Import").start()
+    }
+
     private fun togglePlayback() {
         if (preparing) return
         if (playing) { pause(); return }
@@ -418,7 +442,7 @@ internal class KyvoriqMusicIsland(
                 updateAppearance(false)
             }.onFailure { startTrack(index) }
         } else if (!hasAudio(index)) {
-            importAudio(index)
+            importZip()
         } else startTrack(index)
     }
 
@@ -580,7 +604,8 @@ internal class KyvoriqMusicIsland(
                 select(which, hasAudio(which))
                 if (!hasAudio(which)) importAudio(which)
             }
-            .setPositiveButton("LINK AUDIO FILE") { _, _ -> importAudio(index) }
+            .setPositiveButton("LINK THIS TRACK") { _, _ -> importAudio(index) }
+            .setNeutralButton("IMPORT ALL 5") { _, _ -> importZip() }
             .setNegativeButton("CLOSE", null)
             .show()
     }
