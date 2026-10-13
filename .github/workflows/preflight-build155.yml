@@ -1,7 +1,7 @@
 name: KYVORIQ Build 155 responsive visual preflight
 on:
   push:
-    branches: ['prep/build155-design-refinement']
+    branches: ['prep/build155-music-island']
   workflow_dispatch:
 permissions:
   contents: read
