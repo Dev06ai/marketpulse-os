@@ -4,137 +4,95 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:padding="14dp"
-    android:background="@drawable/widget_kyvoriq_surface">
+    android:gravity="center_vertical"
+    android:background="@drawable/widget_kyvoriq_surface"
+    android:paddingStart="13dp"
+    android:paddingEnd="13dp"
+    android:paddingTop="9dp"
+    android:paddingBottom="9dp">
 
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:gravity="center_vertical">
-
+    <LinearLayout android:layout_width="match_parent" android:layout_height="33dp"
+        android:gravity="center_vertical" android:orientation="horizontal">
         <ImageView
-            android:layout_width="26dp"
-            android:layout_height="26dp"
-            android:src="@drawable/kyvoriq_mark"
-            android:contentDescription="KYVORIQ"/>
-
+            android:layout_width="28dp" android:layout_height="28dp"
+            android:src="@drawable/kyvoriq_emblem_static"
+            android:scaleType="fitCenter" android:contentDescription="KYVORIQ emblem"/>
         <LinearLayout
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:layout_marginStart="9dp"
-            android:orientation="vertical">
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="KYVORIQ"
-                android:letterSpacing="0.035"
-                android:fontFamily="serif"
-                android:textColor="#B68C4B"
-                android:textStyle="bold"
-                android:textSize="13sp"/>
-
-            <TextView
-                android:id="@+id/widget_state"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="SCANNING"
-                android:textColor="#A1A4AB"
-                android:textSize="9sp"/>
+            android:layout_width="0dp" android:layout_height="match_parent"
+            android:layout_weight="1" android:layout_marginStart="9dp"
+            android:orientation="vertical" android:gravity="center_vertical">
+            <ImageView
+                android:layout_width="138dp" android:layout_height="22dp"
+                android:scaleType="fitStart" android:src="@drawable/kyvoriq_concentric_wordmark"
+                android:contentDescription="KYVORIQ"/>
+            <ImageView
+                android:layout_width="107dp" android:layout_height="11dp"
+                android:scaleType="fitStart" android:src="@drawable/kyvoriq_trade_the_plot"
+                android:contentDescription="Trade the Plot"/>
         </LinearLayout>
-
         <TextView
             android:id="@+id/widget_health"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="LIVE"
-            android:textColor="#B68C4B"
-            android:textStyle="bold"
-            android:textSize="9sp"/>
+            android:layout_width="wrap_content" android:layout_height="wrap_content"
+            android:text="WAIT" android:maxLines="1"
+            android:textColor="#C0A171" android:textSize="10sp"
+            android:fontFamily="sans-serif-medium"/>
     </LinearLayout>
 
     <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="54dp"
-        android:layout_marginTop="11dp"
-        android:orientation="horizontal"
-        android:gravity="center_vertical">
-
+        android:layout_width="match_parent" android:layout_height="42dp"
+        android:layout_marginTop="5dp" android:gravity="center_vertical"
+        android:orientation="horizontal">
         <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="BTC"
-            android:textColor="#F4F5F7"
-            android:textStyle="bold"
-            android:textSize="25sp"/>
-
+            android:layout_width="wrap_content" android:layout_height="match_parent"
+            android:gravity="center_vertical" android:text="BTC"
+            android:textColor="#F4F5F7" android:textSize="19sp"
+            android:fontFamily="sans-serif-medium"/>
         <ViewFlipper
             android:id="@+id/widget_price_flipper"
-            android:layout_width="0dp"
-            android:layout_height="match_parent"
-            android:layout_weight="1"
-            android:layout_marginStart="12dp"
+            android:layout_width="0dp" android:layout_height="match_parent"
+            android:layout_weight="1" android:layout_marginStart="10dp"
             android:inAnimation="@anim/widget_price_in"
             android:outAnimation="@anim/widget_price_out"
             android:animateFirstView="false">
-
-            <TextView
-                android:id="@+id/widget_price_0"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:gravity="center_vertical"
-                android:text="—"
-                android:textColor="#F4F5F7"
-                android:textStyle="bold"
-                android:textSize="28sp"/>
-
-            <TextView
-                android:id="@+id/widget_price_1"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:gravity="center_vertical"
-                android:text="—"
-                android:textColor="#F4F5F7"
-                android:textStyle="bold"
-                android:textSize="28sp"/>
+            <TextView android:id="@+id/widget_price_0"
+                android:layout_width="match_parent" android:layout_height="match_parent"
+                android:gravity="center_vertical" android:text="—"
+                android:singleLine="true" android:ellipsize="end"
+                android:textSize="27sp" android:textColor="#F4F5F7"
+                android:fontFamily="sans-serif-medium"/>
+            <TextView android:id="@+id/widget_price_1"
+                android:layout_width="match_parent" android:layout_height="match_parent"
+                android:gravity="center_vertical" android:text="—"
+                android:singleLine="true" android:ellipsize="end"
+                android:textSize="27sp" android:textColor="#F4F5F7"
+                android:fontFamily="sans-serif-medium"/>
         </ViewFlipper>
-
         <TextView
             android:id="@+id/widget_delta"
-            android:layout_width="30dp"
-            android:layout_height="match_parent"
-            android:gravity="center"
-            android:text="•"
-            android:textColor="#A1A4AB"
-            android:textStyle="bold"
-            android:textSize="13sp"/>
+            android:layout_width="22dp" android:layout_height="match_parent"
+            android:gravity="center" android:text="•" android:textSize="12sp"
+            android:textColor="#C0A171" android:fontFamily="sans-serif-medium"/>
     </LinearLayout>
 
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="7dp"
-        android:orientation="horizontal">
-
-        <TextView
-            android:id="@+id/widget_bias"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="WAIT"
-            android:textColor="#B68C4B"
-            android:textStyle="bold"
-            android:textSize="12sp"/>
-
-        <TextView
-            android:id="@+id/widget_pnl"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="P&amp;L  —"
-            android:textColor="#F4F5F7"
-            android:textStyle="bold"
-            android:textSize="11sp"/>
+    <LinearLayout android:layout_width="match_parent"
+        android:layout_height="20dp" android:layout_marginTop="5dp"
+        android:orientation="horizontal" android:gravity="center_vertical">
+        <TextView android:id="@+id/widget_bias"
+            android:layout_width="wrap_content" android:layout_height="match_parent"
+            android:gravity="center_vertical" android:text="WAIT"
+            android:textSize="10sp" android:textColor="#C0A171"
+            android:fontFamily="sans-serif-medium" android:singleLine="true"/>
+        <TextView android:id="@+id/widget_state"
+            android:layout_width="0dp" android:layout_height="match_parent"
+            android:layout_weight="1" android:layout_marginStart="8dp"
+            android:gravity="center_vertical" android:text="SCANNING"
+            android:textSize="9sp" android:textColor="#A1A4AB"
+            android:singleLine="true" android:ellipsize="end"/>
+        <TextView android:id="@+id/widget_pnl"
+            android:layout_width="wrap_content" android:layout_height="match_parent"
+            android:gravity="center_vertical" android:text="P&amp;L —"
+            android:textSize="10sp" android:textColor="#F4F5F7"
+            android:fontFamily="sans-serif-medium"
+            android:singleLine="true" android:ellipsize="end"/>
     </LinearLayout>
 </LinearLayout>
