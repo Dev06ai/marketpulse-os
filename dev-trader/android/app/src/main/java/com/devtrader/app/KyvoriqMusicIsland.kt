@@ -84,6 +84,9 @@ internal class KyvoriqMusicIsland(
     private var fade: ValueAnimator? = null
     private var auraPulse: ObjectAnimator? = null
     private var auraColor = tracks[index].first
+    // Album artwork extraction must not block the UI or animations.
+    private val artworkCache = mutableMapOf<String, android.graphics.Bitmap?>()
+    private val artworkLoading = mutableSetOf<String>()
     private val textColor = Color.rgb(245, 245, 248)
     private val mutedColor = Color.rgb(164, 166, 176)
 
@@ -257,19 +260,36 @@ internal class KyvoriqMusicIsland(
             updateAura()
         }
         val uri = linked(index)
-        if (uri != null) runCatching {
-            val retriever = MediaMetadataRetriever()
-            try {
-                retriever.setDataSource(activity, uri)
-                retriever.embeddedPicture?.let { bytes ->
-                    val opts = BitmapFactory.Options().apply { inSampleSize = 2 }
-                    BitmapFactory.decodeByteArray(bytes, 0, bytes.size, opts)?.let { bitmap ->
-                        coverImage.setImageBitmap(bitmap)
-                        coverImage.visibility = View.VISIBLE
-                        coverText.visibility = View.GONE
+        if (uri != null) {
+            val key = uri.toString()
+            fun showArt(art: android.graphics.Bitmap?) {
+                if (art == null) return
+                coverImage.setImageBitmap(art)
+                coverImage.visibility = View.VISIBLE
+                coverText.visibility = View.GONE
+            }
+            if (artworkCache.containsKey(key)) showArt(artworkCache[key])
+            else if (artworkLoading.add(key)) {
+                Thread({
+                    val bitmap = runCatching {
+                        val retriever = MediaMetadataRetriever()
+                        try {
+                            retriever.setDataSource(activity, uri)
+                            retriever.embeddedPicture?.let { bytes ->
+                                val opts = BitmapFactory.Options().apply { inSampleSize = 4 }
+                                BitmapFactory.decodeByteArray(bytes, 0, bytes.size, opts)
+                            }
+                        } finally { retriever.release() }
+                    }.getOrNull()
+                    main.post {
+                        artworkLoading.remove(key)
+                        if (!destroyed) {
+                            artworkCache[key] = bitmap
+                            if (linked(index)?.toString() == key) showArt(bitmap)
+                        }
                     }
-                }
-            } finally { retriever.release() }
+                }, "KYVORIQ-Music-Art").start()
+            }
         }
     }
 
