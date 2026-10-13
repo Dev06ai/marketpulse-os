@@ -336,7 +336,7 @@ class SafeActivity : FragmentActivity() {
         }
         val privacyLockEnabled = privacyPrefs().getBoolean("biometric_enabled", false)
         enforceInitialPrivacyGate()
-        if (!privacyLockEnabled) showLaunchSequence()
+        if (!privacyLockEnabled) { showLaunchSequence(); consumeWidgetDestination() }
         registerNetworkCallback()
         ensureChannel()
         if (KyvoriqSecureSession.isPaired(this)) {
@@ -360,6 +360,18 @@ class SafeActivity : FragmentActivity() {
             safe { watchdog() }
         }, 3000L)
         handler.postDelayed(keepaliveRunnable, KEEPALIVE_INTERVAL_MS)
+    }
+
+    private fun consumeWidgetDestination() {
+        val destination = intent.getStringExtra("widget_destination") ?: return
+        if (!privacyAuthenticated) return
+        intent.removeExtra("widget_destination")
+        when (destination) {
+            "alerts" -> handler.post { if (!isFinishing && privacyAuthenticated) showBtcPriceAlerts() }
+            "positions" -> selectWorkspace(1)
+            "insights" -> selectWorkspace(2)
+            else -> selectWorkspace(0)
+        }
     }
 
     private fun showLaunchSequence() {
@@ -782,10 +794,10 @@ class SafeActivity : FragmentActivity() {
         val narrowHeader = layout.stackedActions
         val header = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         val identityRow = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
-        val actions = LinearLayout(this).apply { gravity = Gravity.END or Gravity.CENTER_VERTICAL }
+        val actions = LinearLayout(this).apply { gravity = Gravity.START or Gravity.CENTER_VERTICAL }
         // Original emblem and custom outlines retain their aspect ratio at every width.
         val brandMark = KyvoriqEmblemMotionView(this)
-        identityRow.addView(brandMark, LinearLayout.LayoutParams(dp(layout.emblemDp), dp(layout.emblemDp)).apply { rightMargin = dp(4) })
+        identityRow.addView(brandMark, LinearLayout.LayoutParams(dp(layout.emblemDp), dp(layout.emblemDp)).apply { rightMargin = dp(10) })
         val brand = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_VERTICAL
@@ -801,22 +813,22 @@ class SafeActivity : FragmentActivity() {
             gravity = Gravity.END
             rightMargin = dp(3)
         })
-        identityRow.addView(brand, LinearLayout.LayoutParams(0, dp(50), 1f).apply { rightMargin = dp(6) })
+        identityRow.addView(brand, LinearLayout.LayoutParams(0, dp(58), 1f).apply { rightMargin = dp(6) })
         alertsButton = compactPillButton(compactHeaderLabel("ALERTS")).apply {
             contentDescription = "Enable trade alerts"
-            if (layout.compactActions) textSize = 17f
+            textSize = if (layout.compactActions) 11f else 12f
             isSingleLine = true
-            setAutoSizeTextTypeUniformWithConfiguration(7, 10, 1, android.util.TypedValue.COMPLEX_UNIT_SP)
+            setAutoSizeTextTypeUniformWithConfiguration(10, 13, 1, android.util.TypedValue.COMPLEX_UNIT_SP)
         }
         alertsButton.setOnClickListener {
             haptic(it, KyvoriqHaptics.Cue.ACTION)
             safe { requestAlertPermission() }
         }
-        actions.addView(alertsButton, LinearLayout.LayoutParams(dp(layout.alertsDp), dp(44)).apply { rightMargin = dp(4) })
+        actions.addView(alertsButton, LinearLayout.LayoutParams(dp(layout.alertsDp), dp(44)).apply { rightMargin = dp(8) })
         retryButton = compactPillButton(compactHeaderLabel("RETRY", retry = true)).apply {
             contentDescription = "Reconnect market data"
             isSingleLine = true
-            setAutoSizeTextTypeUniformWithConfiguration(7, 10, 1, android.util.TypedValue.COMPLEX_UNIT_SP)
+            setAutoSizeTextTypeUniformWithConfiguration(10, 13, 1, android.util.TypedValue.COMPLEX_UNIT_SP)
         }
         retryButton?.setOnClickListener {
             haptic(it, KyvoriqHaptics.Cue.ACTION)
@@ -825,7 +837,7 @@ class SafeActivity : FragmentActivity() {
         actions.addView(retryButton, LinearLayout.LayoutParams(dp(layout.retryDp), dp(44)))
         if (!narrowHeader) identityRow.addView(actions, LinearLayout.LayoutParams(-2, -2))
         header.addView(identityRow, LinearLayout.LayoutParams(-1, -2))
-        if (narrowHeader) header.addView(actions, LinearLayout.LayoutParams(-1, dp(46)))
+        if (narrowHeader) header.addView(actions, LinearLayout.LayoutParams(-1, dp(48)).apply { topMargin = dp(5) })
         root.addView(header, margins(bottom = 7))
 
         workspaceHost = FrameLayout(this)
@@ -1521,12 +1533,13 @@ class SafeActivity : FragmentActivity() {
     }
 
     private fun compactHeaderLabel(original: String, retry: Boolean = false): String {
-        val cfg = resources.configuration
-        val dpWidth = minOf(cfg.screenWidthDp,
-            (resources.displayMetrics.widthPixels / resources.displayMetrics.density).toInt())
-        val compact = KyvoriqResponsiveLayout.forViewport(dpWidth,
-            cfg.screenHeightDp, cfg.fontScale).compactActions
-        return if (compact) { if (retry) "↻" else "✦" } else original
+        return if (retry) "Refresh" else when (original) {
+            "ALERTS ON" -> "Alerts on"
+            "ALLOW ALERTS" -> "Enable alerts"
+            "ALERTS RETRY" -> "Retry alerts"
+            "PRIVATE" -> "Pair device"
+            else -> "Alerts"
+        }
     }
 
     private fun showPublicAccessInfo() {
@@ -2614,6 +2627,7 @@ class SafeActivity : FragmentActivity() {
                 rootSurface.alpha = 0f
                 rootSurface.animate().alpha(1f).setDuration(220L).start()
                 showLaunchSequence()
+                consumeWidgetDestination()
             },
             onFailure = { finishAndRemoveTask() }
         )
@@ -4289,3 +4303,4 @@ class SafeActivity : FragmentActivity() {
         super.onDestroy()
     }
 }
+
