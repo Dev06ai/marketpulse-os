@@ -17,7 +17,7 @@ internal object KyvoriqResponsiveLayout {
     fun forViewport(widthDp: Int, heightDp: Int, fontScale: Float): Header {
         val width = widthDp.coerceAtLeast(240)
         val font = fontScale.coerceIn(0.8f, 2.5f)
-        val narrow = width < 600 || font > 1.15f
+        val narrow = width < 620 || font > 1.15f
         val emblem = when {
             width < 320 -> 40
             width < 380 -> 44
@@ -29,7 +29,7 @@ internal object KyvoriqResponsiveLayout {
             width < 345 -> 165
             width < 390 -> 191
             else -> 205
-        }).coerceAtMost((width - emblem - 80).coerceAtLeast(106))
+        }).coerceAtMost((width - emblem - 96).coerceAtLeast(96))
         return Header(
             stackedActions = narrow,
             compactActions = width < 520 || font > 1.15f,
@@ -40,10 +40,10 @@ internal object KyvoriqResponsiveLayout {
             wordmarkWidthDp = wordmark,
             taglineWidthDp = if (width < 300) 86 else 105,
             chartHeightDp = when {
-                heightDp < 640 -> 280
-                heightDp < 760 -> 330
-                heightDp < 920 -> 365
-                else -> 405
+                heightDp < 640 -> 405
+                heightDp < 760 -> 455
+                heightDp < 920 -> 510
+                else -> 570
             }
         )
     }
