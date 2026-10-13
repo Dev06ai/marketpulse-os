@@ -303,8 +303,26 @@ class SafeActivity : FragmentActivity() {
         ViewCompat.requestApplyInsets(rootSurface)
     }
 
+    // Build 157 removes the retired music feature, including files imported
+    // by old builds. Do not delete user-owned files outside this app sandbox.
+    private fun removeRetiredMusicState() {
+        val oldPrefs = getSharedPreferences("kyvoriq_music_island_v1", Context.MODE_PRIVATE)
+        oldPrefs.all.filterKeys { it.startsWith("uri_") }.values
+            .filterIsInstance<String>().forEach { prior ->
+                runCatching {
+                    contentResolver.releasePersistableUriPermission(
+                        android.net.Uri.parse(prior), Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                }
+            }
+        oldPrefs.edit().clear().commit()
+        runCatching {
+            File(filesDir, "kyvoriq_private_music").deleteRecursively()
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        removeRetiredMusicState()
         WindowCompat.setDecorFitsSystemWindows(window, false)
         window.statusBarColor = kyCharcoal
         window.navigationBarColor = kyCharcoal
