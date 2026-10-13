@@ -68,17 +68,22 @@ class BrandVisualTest {
             SystemClock.sleep(1000)
             inst.runOnMainSync {
                 val root = activity.window.decorView
-                val insights = children(root).filterIsInstance<Button>().first {
+                children(root).filterIsInstance<Button>().first {
                     it.contentDescription == "Workspace INSIGHTS"
-                }
-                insights.performClick()
-                save(root, "insights")
+                }.performClick()
+            }
+            // A visibility/layout switch is committed on the next UI traversal.
+            SystemClock.sleep(450)
+            inst.runOnMainSync {
+                val root = activity.window.decorView
                 val entryHeading = children(root).filterIsInstance<TextView>().first {
                     it.text.toString() == "Entry checks"
                 }
+                assertTrue("Insights must actually be visible after switching", entryHeading.isShown)
                 val card = entryHeading.parent as ViewGroup
                 assertFalse("Entry report must not be in a nested fixed-height scroll",
                     children(card).any { it is android.widget.ScrollView })
+                save(root, "insights")
             }
         } finally { inst.runOnMainSync { activity.finish() } }
     }
@@ -103,6 +108,8 @@ class BrandVisualTest {
                         if(width < 230) remote.setViewVisibility(R.id.widget_alerts,View.GONE)
                     } else {
                         remote.setTextViewText(R.id.notif_chip,"SYNCING")
+                        remote.setInt(R.id.notif_chip, "setBackgroundResource", R.drawable.notification_chip_reconnecting)
+                        remote.setTextColor(R.id.notif_chip, android.graphics.Color.rgb(199, 165, 103))
                         remote.setTextViewText(R.id.notif_subtitle,"Restoring live monitoring")
                     }
                     val view = remote.apply(ctx,null)
