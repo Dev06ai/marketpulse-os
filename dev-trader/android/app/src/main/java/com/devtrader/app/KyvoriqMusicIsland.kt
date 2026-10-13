@@ -62,7 +62,11 @@ internal class KyvoriqMusicIsland(
         .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
         .build()
     private val focusListener = AudioManager.OnAudioFocusChangeListener { change ->
-        if (change <= AudioManager.AUDIOFOCUS_LOSS_TRANSIENT) main.post { pause() }
+        if (change == AudioManager.AUDIOFOCUS_LOSS ||
+            change == AudioManager.AUDIOFOCUS_LOSS_TRANSIENT ||
+            change == AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK) {
+            main.post { pause() }
+        }
     }
     private val focusRequest = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
         .setAudioAttributes(focusAttributes)
