@@ -192,8 +192,8 @@ class KyvoriqWidgetProvider : AppWidgetProvider() {
             val pnl = if (hideAmounts) "••••" else (prefs.getString(KEY_PNL, "—") ?: "—")
 
             val currentColor = when {
-                motion > 0 -> Color.rgb(54, 211, 153)
-                motion < 0 -> Color.rgb(255, 82, 105)
+                motion > 0 -> KyvoriqTheme.gold
+                motion < 0 -> KyvoriqTheme.white
                 else -> KyvoriqTheme.white
             }
             val delta = when {
@@ -202,17 +202,17 @@ class KyvoriqWidgetProvider : AppWidgetProvider() {
                 else -> "•"
             }
             val deltaColor = when {
-                motion > 0 -> Color.rgb(54, 211, 153)
-                motion < 0 -> Color.rgb(255, 82, 105)
+                motion > 0 -> KyvoriqTheme.gold
+                motion < 0 -> KyvoriqTheme.white
                 else -> KyvoriqTheme.muted
             }
             val biasColor = when (bias) {
-                "LONG", "BULLISH" -> Color.rgb(54, 211, 153)
-                "SHORT", "BEARISH" -> Color.rgb(255, 82, 105)
+                "LONG", "BULLISH" -> KyvoriqTheme.gold
+                "SHORT", "BEARISH" -> KyvoriqTheme.white
                 else -> KyvoriqTheme.gold
             }
             val healthLabel = if (health == "HEALTHY") "LIVE" else health
-            val healthColor = if (health == "HEALTHY") Color.rgb(54, 211, 153) else KyvoriqTheme.gold
+            val healthColor = if (health == "HEALTHY") KyvoriqTheme.gold else KyvoriqTheme.gold
 
             if (slot == 0) {
                 views.setTextViewText(R.id.widget_price_0, price)
@@ -235,8 +235,8 @@ class KyvoriqWidgetProvider : AppWidgetProvider() {
             if (expanded) {
                 views.setTextViewText(R.id.widget_pnl, "P&L  $pnl")
                 val pnlColor = when {
-                    pnl.startsWith("+") || pnl.startsWith("≈+") -> Color.rgb(54, 211, 153)
-                    pnl.startsWith("-") || pnl.startsWith("≈-") -> Color.rgb(255, 82, 105)
+                    pnl.startsWith("+") || pnl.startsWith("≈+") -> KyvoriqTheme.gold
+                    pnl.startsWith("-") || pnl.startsWith("≈-") -> KyvoriqTheme.white
                     else -> KyvoriqTheme.white
                 }
                 views.setTextColor(R.id.widget_pnl, pnlColor)

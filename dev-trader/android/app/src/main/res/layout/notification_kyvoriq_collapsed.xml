@@ -39,12 +39,12 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="KYVORIQ"
-            android:textColor="#FFCC4E"
+            android:textColor="#B68C4B"
             android:textSize="13sp"
             android:textStyle="bold"
-            android:fontFamily="sans-serif-condensed"
+            android:fontFamily="serif"
             android:includeFontPadding="false"
-            android:letterSpacing="0.12"/>
+            android:letterSpacing="0.035"/>
 
         <TextView
             android:id="@+id/notif_subtitle"
@@ -54,7 +54,7 @@
             android:maxLines="1"
             android:ellipsize="end"
             android:text="Signal engine online"
-            android:textColor="#D8F3FA"
+            android:textColor="#F4F5F7"
             android:textSize="11sp"
             android:fontFamily="sans-serif"
             android:includeFontPadding="false"/>

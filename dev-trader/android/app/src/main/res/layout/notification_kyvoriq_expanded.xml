@@ -39,8 +39,8 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="CYBERPUNK SIGNAL TERMINAL"
-                android:textColor="#9EBAC7"
+                android:text="AI POWERED TRADING"
+                android:textColor="#A1A4AB"
                 android:textSize="8sp"
                 android:fontFamily="sans-serif-medium"
                 android:includeFontPadding="false"
@@ -52,12 +52,12 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="1dp"
                 android:text="KYVORIQ"
-                android:textColor="#FFCC4E"
+                android:textColor="#B68C4B"
                 android:textSize="17sp"
                 android:textStyle="bold"
-                android:fontFamily="sans-serif-condensed"
+                android:fontFamily="serif"
                 android:includeFontPadding="false"
-                android:letterSpacing="0.12"/>
+                android:letterSpacing="0.035"/>
 
             <TextView
                 android:id="@+id/notif_subtitle"
@@ -67,7 +67,7 @@
                 android:maxLines="1"
                 android:ellipsize="end"
                 android:text="Signal engine online"
-                android:textColor="#D8F3FA"
+                android:textColor="#F4F5F7"
                 android:textSize="12sp"
                 android:includeFontPadding="false"/>
         </LinearLayout>
@@ -95,7 +95,7 @@
         android:layout_height="wrap_content"
         android:layout_marginTop="8dp"
         android:text="Monitoring BTCUSDT • background alerts armed"
-        android:textColor="#B8C0CC"
+        android:textColor="#C5C7CD"
         android:textSize="12sp"
         android:fontFamily="sans-serif"
         android:maxLines="2"
@@ -117,7 +117,7 @@
         android:layout_height="wrap_content"
         android:layout_marginTop="6dp"
         android:text="KYVORIQ  //  NO FOMO  //  EXECUTE CLEAN"
-        android:textColor="#8FABB9"
+        android:textColor="#A1A4AB"
         android:textSize="9sp"
         android:fontFamily="sans-serif-medium"
         android:includeFontPadding="false"
