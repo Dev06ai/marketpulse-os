@@ -36,28 +36,20 @@
             android:layout_marginStart="10dp"
             android:orientation="vertical">
 
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="AI POWERED TRADING"
-                android:textColor="#A1A4AB"
-                android:textSize="8sp"
-                android:fontFamily="sans-serif-medium"
-                android:includeFontPadding="false"
-                android:letterSpacing="0.025"/>
-
-            <TextView
+            <ImageView
                 android:id="@+id/notif_title"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="1dp"
-                android:text="KYVORIQ"
-                android:textColor="#B68C4B"
-                android:textSize="17sp"
-                android:textStyle="bold"
-                android:fontFamily="serif"
-                android:includeFontPadding="false"
-                android:letterSpacing="0.035"/>
+                android:layout_width="129dp"
+                android:layout_height="29dp"
+                android:src="@drawable/kyvoriq_concentric_wordmark"
+                android:scaleType="fitCenter"
+                android:contentDescription="KYVORIQ geometric wordmark"/>
+            <ImageView
+                android:layout_width="103dp"
+                android:layout_height="17dp"
+                android:layout_gravity="end"
+                android:src="@drawable/kyvoriq_trade_the_plot"
+                android:scaleType="fitCenter"
+                android:contentDescription="Trade the Plot"/>
 
             <TextView
                 android:id="@+id/notif_subtitle"
@@ -116,7 +108,7 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginTop="6dp"
-        android:text="KYVORIQ  //  NO FOMO  //  EXECUTE CLEAN"
+        android:text="KYVORIQ  //  TRADE THE PLOT."
         android:textColor="#A1A4AB"
         android:textSize="9sp"
         android:fontFamily="sans-serif-medium"
