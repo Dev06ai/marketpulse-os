@@ -48,7 +48,6 @@ import android.widget.SeekBar
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricPrompt
 import androidx.core.app.NotificationCompat
@@ -140,14 +139,9 @@ class SafeActivity : FragmentActivity() {
     private lateinit var journal: TextView
     private lateinit var tradeHistory: TextView
     private lateinit var replay: TextView
-    private var musicIsland: KyvoriqMusicIsland? = null
-    private var pendingMusicSlot = 0
-    private val pickMusicFile = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri != null) musicIsland?.importFile(pendingMusicSlot, uri)
-    }
-    private val pickMusicBundle = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri != null) musicIsland?.importPrivateBundle(uri)
-    }
+    private var accountButton: Button? = null
+    private val adminOnlyViews = mutableListOf<View>()
+    private var consumerPositionTab: Button? = null
     private lateinit var workspaceHost: FrameLayout
     private val workspacePages = mutableListOf<View>()
     private val navigationButtons = mutableListOf<Button>()
@@ -781,6 +775,7 @@ class SafeActivity : FragmentActivity() {
     private fun buildUi() {
         workspacePages.clear()
         navigationButtons.clear()
+        adminOnlyViews.clear()
         val compactViewport = resources.configuration.screenHeightDp < 760
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -788,12 +783,12 @@ class SafeActivity : FragmentActivity() {
                 intArrayOf(kyCharcoal, KyvoriqTheme.slate, kyCharcoal),
                 GradientDrawable.Orientation.TOP_BOTTOM
             )
-            setPadding(dp(12), dp(8), dp(12), dp(8))
+            setPadding(dp(8), dp(8), dp(8), dp(8))
         }
         rootSurface = root
         ViewCompat.setOnApplyWindowInsetsListener(root) { view, insets ->
             val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
-            view.setPadding(dp(12), bars.top + dp(8), dp(12), bars.bottom + dp(8))
+            view.setPadding(dp(8), bars.top + dp(8), dp(8), bars.bottom + dp(8))
             insets
         }
         setContentView(root)
@@ -823,32 +818,23 @@ class SafeActivity : FragmentActivity() {
             leftMargin = dp((layout.wordmarkWidthDp - layout.taglineWidthDp - 8).coerceAtLeast(0))
         })
         identityRow.addView(brand, LinearLayout.LayoutParams(0, dp(54), 1f))
-        // In-app Dynamic Island: a real layout row below the status bar, never
-        // SYSTEM_ALERT_WINDOW and never an overlay over price/chart gestures.
-        musicIsland = KyvoriqMusicIsland(this, importAudio = { slot ->
-            pendingMusicSlot = slot
-            pickMusicFile.launch(arrayOf("audio/*"))
-        }, importZip = {
-            pickMusicBundle.launch(arrayOf("application/zip", "application/x-zip-compressed", "application/x-zip", "application/octet-stream"))
-        })
-        val musicToggle = TextView(this).apply {
-            text = "♫"
-            textSize = 23f
-            gravity = Gravity.CENTER
+        // Consumer-facing entry point. No role, entitlement, or payment is
+        // ever inferred from this button or mutable local Android preferences.
+        val account = compactPillButton(
+            if (KyvoriqSecureSession.isPaired(this)) "ADMIN" else "SIGN IN"
+        ).apply {
+            textSize = 10f
+            contentDescription = "Account: sign in or create account"
             setTextColor(kyGold)
-            contentDescription = "Open KYVORIQ music island"
-            background = GradientDrawable().apply {
-                setColor(kySlate)
-                cornerRadius = dp(16).toFloat()
-                setStroke(dp(1), kyLine)
-            }
+            setAutoSizeTextTypeUniformWithConfiguration(9, 12, 1, android.util.TypedValue.COMPLEX_UNIT_SP)
             setOnClickListener {
                 haptic(it, KyvoriqHaptics.Cue.ACTION)
-                musicIsland?.toggleIsland()
+                showConsumerAccountPanel()
             }
         }
-        identityRow.addView(musicToggle, LinearLayout.LayoutParams(dp(40), dp(40)).apply {
-            rightMargin = dp(if (narrowHeader) 0 else 8)
+        accountButton = account
+        identityRow.addView(account, LinearLayout.LayoutParams(dp(76), dp(40)).apply {
+            rightMargin = dp(if (narrowHeader) 0 else 6)
         })
         alertsButton = compactPillButton(compactHeaderLabel("ALERTS")).apply {
             contentDescription = "Enable trade alerts"
@@ -879,9 +865,6 @@ class SafeActivity : FragmentActivity() {
             })
         if (!narrowHeader) identityRow.addView(actions, LinearLayout.LayoutParams(-2, -2))
         header.addView(identityRow, LinearLayout.LayoutParams(-1, -2))
-        musicIsland?.island?.let { panel ->
-            header.addView(panel, LinearLayout.LayoutParams(-1, dp(76)).apply { topMargin = dp(7) })
-        }
         if (narrowHeader) header.addView(actions, LinearLayout.LayoutParams(-1, dp(40)).apply { topMargin = dp(8) })
         root.addView(header, margins(bottom = 10))
 
@@ -955,6 +938,7 @@ class SafeActivity : FragmentActivity() {
         tradePage.addView(priceAlertsButton, LinearLayout.LayoutParams(-1, dp(42)).apply {
             bottomMargin = dp(7)
         })
+        adminOnlyViews.add(priceAlertsButton)
         // Native chart remains default; v5 lightweight renderer is a
         // manually opened beta preview with no order-placement capability.
         val tvPreviewButton = compactPillButton("TRADINGVIEW CHART  ↗").apply {
@@ -964,6 +948,7 @@ class SafeActivity : FragmentActivity() {
         tradePage.addView(tvPreviewButton, LinearLayout.LayoutParams(-1, dp(37)).apply {
             bottomMargin = dp(8)
         })
+        adminOnlyViews.add(tvPreviewButton)
         val setup = premiumCard("DECISION CENTER", "NO TRADE  •  SCANNING\nWaiting for verified market data.", if (compactViewport) 11.5f else 13f)
         decisionContainer = setup.first
         signal = setup.second
@@ -983,6 +968,7 @@ class SafeActivity : FragmentActivity() {
         decisionMotionView = DecisionMotionView(this)
         decisionHost.addView(decisionMotionView, FrameLayout.LayoutParams(-1, -1))
         tradePage.addView(decisionHost, LinearLayout.LayoutParams(-1, dp(if (compactViewport) 96 else 118)).apply { bottomMargin = dp(6) })
+        adminOnlyViews.add(decisionHost)
         val tradeTools = LinearLayout(this)
         val details = compactPillButton("SETUP DETAILS")
         details.setOnClickListener {
@@ -997,6 +983,7 @@ class SafeActivity : FragmentActivity() {
         }
         tradeTools.addView(pnl, LinearLayout.LayoutParams(0, dp(42), 1f))
         tradePage.addView(tradeTools)
+        adminOnlyViews.add(tradeTools)
         refreshTimeframeButtons(tfRow)
 
         val positionsPage = page(scrollable = true)
@@ -1075,6 +1062,7 @@ class SafeActivity : FragmentActivity() {
             showInfoDialog("Market context", features.text.toString())
         }
         insightsContent.addView(story.first, margins(bottom = 12))
+        adminOnlyViews.add(story.first)
 
         // The page itself scrolls: a fixed-height nested report clipped critical text.
         // Keep a concise preview here and expose the entire verified policy on tap.
@@ -1088,10 +1076,12 @@ class SafeActivity : FragmentActivity() {
             showInfoDialog("Entry checks", entryChecksFullText)
         }
         insightsContent.addView(decisions.container, margins(bottom = 12))
+        adminOnlyViews.add(decisions.container)
 
         val alertCard = compactCard("ALERT INTELLIGENCE", "Info • No spam, just the real updates.", 12.5f)
         alertIntelligenceView = alertCard.value
         insightsContent.addView(alertCard.container, margins(bottom = 10))
+        adminOnlyViews.add(alertCard.container)
 
         val riskCard = compactCard("POSITION RISK HEAT", "Idle • No open demo position.", 12.5f)
         riskHeatText = riskCard.value
@@ -1105,16 +1095,20 @@ class SafeActivity : FragmentActivity() {
             LinearLayout.LayoutParams(-1, dp(42)).apply { topMargin = dp(4); bottomMargin = dp(2) }
         )
         insightsContent.addView(riskCard.container, margins(bottom = 10))
+        adminOnlyViews.add(riskCard.container)
 
         val levels = compactCard("LEVELS & FLOW", "Loading confirmed context…", 12.5f)
         insightContext = levels.value
         insightsContent.addView(levels.container, margins(bottom = 10))
+        adminOnlyViews.add(levels.container)
         val feed = compactCard("CONNECTION", "Bitget • Connecting", 12.5f)
         integrity = feed.value
         insightsContent.addView(feed.container, margins(bottom = 10))
+        adminOnlyViews.add(feed.container)
         val sys = compactCard("SYSTEM", "Build ${BuildConfig.VERSION_CODE} • Checking…", 12.5f)
         check = sys.value
         insightsContent.addView(sys.container, margins(bottom = 10))
+        adminOnlyViews.add(sys.container)
 
         val tools = LinearLayout(this)
         checkButton = compactPillButton("SYSTEM CHECK")
@@ -1130,6 +1124,7 @@ class SafeActivity : FragmentActivity() {
         }
         tools.addView(updateButton, LinearLayout.LayoutParams(0, dp(44), 1f))
         insightsContent.addView(tools, margins(bottom = 8))
+        adminOnlyViews.add(tools)
 
         val deviceTools = LinearLayout(this)
         privacyButton = compactPillButton("PRIVACY")
@@ -1145,6 +1140,7 @@ class SafeActivity : FragmentActivity() {
         }
         deviceTools.addView(widgetButton, LinearLayout.LayoutParams(0, dp(44), 1f))
         insightsContent.addView(deviceTools)
+        adminOnlyViews.add(deviceTools)
         val pairButton = compactPillButton(
             if (KyvoriqSecureSession.isPaired(this)) "DEVICE PAIRED  •  SECURE" else "PAIR DEVICE  •  PRIVATE API"
         )
@@ -1154,6 +1150,7 @@ class SafeActivity : FragmentActivity() {
             showPairingDialog(pairButton)
         }
         insightsContent.addView(pairButton, margins(top = 7, bottom = 8))
+        adminOnlyViews.add(pairButton)
         insightSections.addAll(listOf(
             1 to story.first,
             1 to decisions.container,
@@ -1201,14 +1198,20 @@ class SafeActivity : FragmentActivity() {
                 selectWorkspace(index)
             }
             navigationButtons.add(button)
+            if (index == 1) consumerPositionTab = button
             navigation.addView(button, LinearLayout.LayoutParams(0, dp(44), 1f).apply { leftMargin = dp(3); rightMargin = dp(3) })
         }
         root.addView(navigation, margins(top = 8))
         update = TextView(this); risk = TextView(this); journal = TextView(this); replay = TextView(this)
         selectWorkspace(0)
+        refreshConsumerPresentation()
     }
 
     private fun selectWorkspace(index: Int) {
+        if (index == 1 && !KyvoriqSecureSession.isPaired(this)) {
+            showConsumerAccountPanel()
+            return
+        }
         val previous = selectedWorkspace
         selectedWorkspace = index
         workspacePages.forEachIndexed { i, page ->
@@ -4334,9 +4337,6 @@ class SafeActivity : FragmentActivity() {
     }
 
     override fun onStop() {
-        // No media foreground service: avoid silently playing after the owner
-        // leaves KYVORIQ or privacy shield hides the app.
-        musicIsland?.pause()
         if (!debugPreview && !biometricPromptActive && privacyPrefs().getBoolean("biometric_enabled", false)) {
             backgroundedAtMs = System.currentTimeMillis()
         }
@@ -4354,8 +4354,6 @@ class SafeActivity : FragmentActivity() {
     }
 
     override fun onDestroy() {
-        musicIsland?.release()
-        musicIsland = null
         ambientAnimator?.cancel()
         ambientAnimator = null
         stopped = true
