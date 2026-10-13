@@ -16,7 +16,7 @@ class KyvoriqEmblemMotionView(context: Context) :
     KyvoriqIdentityMotionView(context, "KYVORIQ angular deep-gold emblem") {
     init {
         addView(ImageView(context).apply {
-            setImageResource(R.drawable.kyvoriq_mark)
+            setImageResource(R.drawable.kyvoriq_emblem_intro_tight)
             scaleType = ImageView.ScaleType.FIT_CENTER
             importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
         }, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
@@ -33,3 +33,4 @@ class KyvoriqRazorWordmarkView(context: Context) : FrameLayout(context) {
         }, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
     }
 }
+
