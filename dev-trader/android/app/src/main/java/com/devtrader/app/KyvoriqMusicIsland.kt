@@ -32,8 +32,8 @@ import androidx.fragment.app.FragmentActivity
 
 /**
  * In-app music island, deliberately NOT a system overlay or a remote downloader.
- * All media comes from the Android document picker and stays behind a persisted
- * read-only URI grant. No audio permissions, background microphones or network APIs.
+ * Audio can be bundled privately under assets/music/ or linked with Android's
+ * document picker. Both remain offline, with no broad storage permission.
  */
 internal class KyvoriqMusicIsland(
     private val activity: FragmentActivity,
@@ -228,6 +228,40 @@ internal class KyvoriqMusicIsland(
     private fun linked(trackIndex: Int): Uri? = prefs.getString("uri_" + trackIndex, null)
         ?.takeIf { it.isNotBlank() }?.let { Uri.parse(it) }
 
+    // Playlist positions are zero-based; the missing third song deliberately
+    // remains unbundled and can still be supplied through the document picker.
+    private fun bundledName(trackIndex: Int): String? = when (trackIndex) {
+        0 -> "track_01_bipolar.mp3"
+        1 -> "track_02_iris.mp3"
+        3 -> "track_04_akai.mp3"
+        4 -> "track_05_written.mp3"
+        else -> null
+    }
+
+    private val packagedNames: Set<String> by lazy {
+        activity.assets.list("music")?.toSet().orEmpty()
+    }
+
+    private fun bundledPath(trackIndex: Int): String? = bundledName(trackIndex)
+        ?.takeIf { it in packagedNames }?.let { "music/$it" }
+
+    private fun hasAudio(trackIndex: Int): Boolean =
+        linked(trackIndex) != null || bundledPath(trackIndex) != null
+
+    private fun applyMediaSource(player: MediaPlayer, trackIndex: Int) {
+        // A user-imported track takes precedence over the bundled copy.
+        val imported = linked(trackIndex)
+        if (imported != null) {
+            player.setDataSource(activity, imported)
+        } else {
+            val path = bundledPath(trackIndex)
+                ?: throw IllegalArgumentException("Missing music asset for slot $trackIndex")
+            activity.assets.openFd(path).use { afd ->
+                player.setDataSource(afd.fileDescriptor, afd.startOffset, afd.length)
+            }
+        }
+    }
+
     private fun updateAppearance(animated: Boolean) {
         val track = tracks[index]
         trackTitle.text = track.title
@@ -235,8 +269,8 @@ internal class KyvoriqMusicIsland(
         status.text = when {
             preparing -> "LOADING AUDIO"
             playing -> "●  NOW PLAYING"
-            linked(index) == null -> "TAP PLAY TO IMPORT AUDIO"
-            else -> "READY  •  LOCAL AUDIO"
+            !hasAudio(index) -> "TAP PLAY TO IMPORT AUDIO"
+            else -> "READY  •  OFFLINE AUDIO"
         }
         play.text = if (playing) "Ⅱ" else "▶"
         play.contentDescription = if (playing) "Pause music" else "Play music"
@@ -260,8 +294,9 @@ internal class KyvoriqMusicIsland(
             updateAura()
         }
         val uri = linked(index)
-        if (uri != null) {
-            val key = uri.toString()
+        val packaged = if (uri == null) bundledPath(index) else null
+        if (uri != null || packaged != null) {
+            val key = uri?.toString() ?: "asset:$packaged"
             fun showArt(art: android.graphics.Bitmap?) {
                 if (art == null) return
                 coverImage.setImageBitmap(art)
@@ -274,7 +309,10 @@ internal class KyvoriqMusicIsland(
                     val bitmap = runCatching {
                         val retriever = MediaMetadataRetriever()
                         try {
-                            retriever.setDataSource(activity, uri)
+                            if (uri != null) retriever.setDataSource(activity, uri)
+                            else activity.assets.openFd(packaged!!).use { afd ->
+                                retriever.setDataSource(afd.fileDescriptor, afd.startOffset, afd.length)
+                            }
                             retriever.embeddedPicture?.let { bytes ->
                                 val opts = BitmapFactory.Options().apply { inSampleSize = 4 }
                                 BitmapFactory.decodeByteArray(bytes, 0, bytes.size, opts)
@@ -285,7 +323,9 @@ internal class KyvoriqMusicIsland(
                         artworkLoading.remove(key)
                         if (!destroyed) {
                             artworkCache[key] = bitmap
-                            if (linked(index)?.toString() == key) showArt(bitmap)
+                            val currentKey = linked(index)?.toString()
+                                ?: bundledPath(index)?.let { "asset:$it" }
+                            if (currentKey == key) showArt(bitmap)
                         }
                     }
                 }, "KYVORIQ-Music-Art").start()
@@ -332,7 +372,7 @@ internal class KyvoriqMusicIsland(
         island.translationY = -dp(9).toFloat()
         island.animate().alpha(1f).translationY(0f).setDuration(280L)
             .setInterpolator(DecelerateInterpolator()).start()
-        if (linked(index) != null && !playing && media == null) startTrack(index)
+        if (hasAudio(index) && !playing && media == null) startTrack(index)
     }
 
     private fun ensureShown() {
@@ -372,7 +412,7 @@ internal class KyvoriqMusicIsland(
                 pulse(true)
                 updateAppearance(false)
             }.onFailure { startTrack(index) }
-        } else if (linked(index) == null) {
+        } else if (!hasAudio(index)) {
             importAudio(index)
         } else startTrack(index)
     }
@@ -423,12 +463,12 @@ internal class KyvoriqMusicIsland(
         progress.progress = 0
         pulse(false)
         updateAppearance(true)
-        if (autoplay && linked(trackIndex) != null) startTrack(trackIndex)
+        if (autoplay && hasAudio(trackIndex)) startTrack(trackIndex)
         else manager.abandonAudioFocusRequest(focusRequest)
     }
 
     private fun autoNext() {
-        val found = (1..tracks.size).map { (index + it) % tracks.size }.firstOrNull { linked(it) != null }
+        val found = (1..tracks.size).map { (index + it) % tracks.size }.firstOrNull { hasAudio(it) }
         if (found == null) {
             pause()
             return
@@ -438,7 +478,11 @@ internal class KyvoriqMusicIsland(
 
     private fun startTrack(trackIndex: Int) {
         if (destroyed) return
-        val uri = linked(trackIndex) ?: run { select(trackIndex, false); importAudio(trackIndex); return }
+        if (!hasAudio(trackIndex)) {
+            select(trackIndex, false)
+            importAudio(trackIndex)
+            return
+        }
         if (!requestFocus()) {
             Toast.makeText(activity, "Audio output unavailable right now", Toast.LENGTH_SHORT).show()
             return
@@ -455,7 +499,7 @@ internal class KyvoriqMusicIsland(
         updateAppearance(false)
         runCatching {
             p.setAudioAttributes(focusAttributes)
-            p.setDataSource(activity, uri)
+            applyMediaSource(p, trackIndex)
             p.setVolume(0f, 0f)
             p.setOnPreparedListener { prepared ->
                 if (destroyed || media !== prepared) return@setOnPreparedListener
@@ -522,14 +566,14 @@ internal class KyvoriqMusicIsland(
 
     private fun showPlaylist() {
         val items = tracks.mapIndexed { i, t ->
-            (if (linked(i) != null) "♪  " else "＋  ") + t.title + "  ·  " + t.artist
+            (if (hasAudio(i)) "♪  " else "＋  ") + t.title + "  ·  " + t.artist
         }.toTypedArray()
         AlertDialog.Builder(activity)
             .setTitle("KYVORIQ  ·  MUSIC")
             .setSingleChoiceItems(items, index) { dialog, which ->
                 dialog.dismiss()
-                select(which, linked(which) != null)
-                if (linked(which) == null) importAudio(which)
+                select(which, hasAudio(which))
+                if (!hasAudio(which)) importAudio(which)
             }
             .setPositiveButton("LINK AUDIO FILE") { _, _ -> importAudio(index) }
             .setNegativeButton("CLOSE", null)
