@@ -359,6 +359,114 @@ class SafeActivity : FragmentActivity() {
         if (chartFullscreenHost == null) showChartFullscreen() else closeChartFullscreen()
     }
 
+    private fun showBtcPriceAlerts() {
+        val surface = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(20), dp(14), dp(20), dp(6))
+            setBackgroundColor(kyCharcoal)
+        }
+        surface.addView(label(
+            "Set a BTC/USDT target. KYVORIQ will notify you once when a fresh " +
+                "Bitget price reaches it. No trades will be placed.",
+            12f, kyWhite, 0f
+        ), margins(bottom = 12))
+        val editor = numberField("BTC target price (USDT)", "").apply {
+            contentDescription = "Enter custom BTC price alert target in USDT"
+        }
+        surface.addView(editor, LinearLayout.LayoutParams(-1, dp(50)))
+        surface.addView(label(
+            "Monitored on this device while the KYVORIQ background service is running " +
+                "and connected. Alerts require notification permission and a fresh Bitget feed.",
+            10f, kyGray, 0f
+        ), margins(top = 10, bottom = 12))
+        surface.addView(label("ACTIVE LEVELS", 12f, kyGold, 0.04f), margins(bottom = 6))
+        val records = BtcPriceAlerts.all(this)
+        val active = (0 until records.length()).mapNotNull { records.optJSONObject(it) }
+            .filter { it.optString("status") == "ARMED" }.asReversed()
+        val removeActions = mutableListOf<Pair<Button, String>>()
+        if (active.isEmpty()) {
+            surface.addView(label("No custom levels armed yet.", 12f, kyGray, 0f), margins(bottom = 8))
+        }
+        active.forEach { alert ->
+            val id = alert.optString("id")
+            val target = alert.optDouble("level", Double.NaN)
+            val direction = if (alert.optString("direction") == "ABOVE") "↑" else "↓"
+            val row = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
+            row.addView(label(
+                direction + "  BTC " + String.format(Locale.US, "%,.2f", target) + " USDT",
+                12.5f, kyWhite, 0f
+            ), LinearLayout.LayoutParams(0, dp(40), 1f))
+            val remove = compactPillButton("REMOVE").apply {
+                contentDescription = "Remove BTC price alert at " + String.format(Locale.US, "%.2f", target)
+            }
+            row.addView(remove, LinearLayout.LayoutParams(dp(92), dp(38)))
+            removeActions.add(remove to id)
+            surface.addView(row, margins(bottom = 4))
+        }
+        val triggered = (0 until records.length()).mapNotNull { records.optJSONObject(it) }
+            .filter { it.optString("status") == "TRIGGERED" }.takeLast(3).asReversed()
+        if (triggered.isNotEmpty()) {
+            surface.addView(label("RECENTLY REACHED", 11f, kyGray, 0f), margins(top = 10, bottom = 5))
+            triggered.forEach { entry ->
+                surface.addView(label(
+                    "✓  " + String.format(Locale.US, "%,.2f", entry.optDouble("level")) +
+                        " USDT", 11.5f, kyGray, 0f
+                ), margins(bottom = 3))
+            }
+        }
+        val scroll = ScrollView(this).apply { addView(surface) }
+        val dialog = android.app.AlertDialog.Builder(this)
+            .setTitle("BTC PRICE ALERTS")
+            .setView(scroll)
+            .setNegativeButton("CLOSE", null)
+            .setPositiveButton("SET ALERT", null)
+            .create()
+        dialog.setOnShowListener {
+            dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val requested = editor.text.toString().trim().toDoubleOrNull()
+                val snapshot = latestRoot
+                val now = System.currentTimeMillis()
+                val quoteTs = snapshot?.optLong("last_market_update_ts", 0L) ?: 0L
+                val quote = snapshot?.optDouble("last_price", Double.NaN) ?: Double.NaN
+                val healthy = snapshot != null && snapshot.optString("data_health") == "HEALTHY" &&
+                    snapshot.optBoolean("ws_connected") &&
+                    snapshot.optJSONObject("upstream")?.optString("source") == "BITGET_WS" &&
+                    quote.isFinite() && quote > 0.0 &&
+                    quoteTs > 0 && now - quoteTs in -2_000L..8_000L
+                if (!healthy) {
+                    Toast.makeText(this, "Wait for fresh BTC WebSocket price before arming a level.", Toast.LENGTH_LONG).show()
+                    return@setOnClickListener
+                }
+                val result = runCatching {
+                    BtcPriceAlerts.add(this, requested ?: Double.NaN, quote)
+                }
+                result.onSuccess {
+                    chart.setCustomPriceAlerts(BtcPriceAlerts.armedLevels(this))
+                    haptic(chart, KyvoriqHaptics.Cue.CONFIRM)
+                    dialog.dismiss()
+                    Toast.makeText(this, "BTC price alert armed.", Toast.LENGTH_SHORT).show()
+                    if (Build.VERSION.SDK_INT >= 33 &&
+                        checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+                    ) startBackgroundAlerts()
+                }.onFailure { error ->
+                    Toast.makeText(this, error.message ?: "Could not save alert.", Toast.LENGTH_LONG).show()
+                }
+            }
+        }
+        removeActions.forEach { (button, id) ->
+            button.setOnClickListener {
+                if (BtcPriceAlerts.remove(this, id)) {
+                    chart.setCustomPriceAlerts(BtcPriceAlerts.armedLevels(this))
+                    dialog.dismiss()
+                    showBtcPriceAlerts()
+                } else {
+                    Toast.makeText(this, "Unable to remove this alert.", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+        dialog.show()
+    }
+
     private fun showTradingViewPreview() {
         if (latestChartCandles.length() == 0) {
             Toast.makeText(this, "Waiting for confirmed market candles. Refresh chart first.", Toast.LENGTH_SHORT).show()
@@ -616,6 +724,17 @@ class SafeActivity : FragmentActivity() {
                 bottomMargin = dp(10)
             }
         )
+        chart.setCustomPriceAlerts(BtcPriceAlerts.armedLevels(this))
+        val priceAlertsButton = compactPillButton("＋  BTC PRICE ALERTS").apply {
+            contentDescription = "Create or remove custom BTC price alerts"
+            setOnClickListener {
+                haptic(it, KyvoriqHaptics.Cue.ACTION)
+                showBtcPriceAlerts()
+            }
+        }
+        tradePage.addView(priceAlertsButton, LinearLayout.LayoutParams(-1, dp(42)).apply {
+            bottomMargin = dp(7)
+        })
         // Native chart remains default; v5 lightweight renderer is a
         // manually opened beta preview with no order-placement capability.
         val tvPreviewButton = compactPillButton("TRADINGVIEW CHART  ↗").apply {
@@ -1535,6 +1654,7 @@ class SafeActivity : FragmentActivity() {
         val verifiedRestSnapshot = freshMarket && source.contains("REST", ignoreCase = true) &&
             health in setOf("HEALTHY", "DEGRADED")
         chart.setFeedHealthy(authoritativeFeedHealthy)
+        chart.setCustomPriceAlerts(BtcPriceAlerts.armedLevels(this))
         chart.setSignal(signalObj)
         val statusLabel = when {
             authoritativeFeedHealthy -> "LIVE"
