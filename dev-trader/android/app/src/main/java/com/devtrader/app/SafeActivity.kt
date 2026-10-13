@@ -186,13 +186,19 @@ class SafeActivity : FragmentActivity() {
     private var lastBootstrapSuccessMs = 0L
     // Persistent HTTP routing/auth errors must not be hidden by the WS retry UI.
     private var lastHardHttpStatus: String? = null
+    // Public BTC chart only on unpaired devices; no private account or signals.
+    private var publicMarketOnly = false
+    private var publicMarketMessage: TextView? = null
     private var bootstrapInFlight = false
     private val healthWatchdogRunnable = Runnable { safe { watchdog() } }
     private val snapshotPollRunnable = object : Runnable {
         override fun run() {
             if (stopped) return
             val now = System.currentTimeMillis()
-            if (socket == null || now - lastStateReceivedMs > 5000L) bootstrap(false)
+            if (publicMarketOnly || !KyvoriqSecureSession.isPaired(this)) {
+                enterPublicMarketMode()
+                requestChartIfNeeded()
+            } else if (socket == null || now - lastStateReceivedMs > 5000L) bootstrap(false)
             else requestChartIfNeeded()
             handler.postDelayed(this, 3000L)
         }
@@ -321,14 +327,18 @@ class SafeActivity : FragmentActivity() {
         if (!privacyLockEnabled) showLaunchSequence()
         registerNetworkCallback()
         ensureChannel()
-        startBackgroundAlerts()
-        loadJournal()
-        loadTradeHistory()
+        if (KyvoriqSecureSession.isPaired(this)) {
+            startBackgroundAlerts()
+            loadJournal()
+            loadTradeHistory()
+        } else {
+            enterPublicMarketMode()
+        }
 
         handler.postDelayed({
             safe {
                 bootstrap(true)
-                loadTradeHistory()
+                if (KyvoriqSecureSession.isPaired(this)) loadTradeHistory()
             }
         }, 150L)
         handler.postDelayed({
@@ -753,30 +763,34 @@ class SafeActivity : FragmentActivity() {
             insets
         }
         setContentView(root)
-        val narrowHeader = resources.configuration.screenWidthDp < 400 || resources.configuration.fontScale > 1.2f
+        val config = resources.configuration
+        val availableDp = minOf(config.screenWidthDp,
+            (resources.displayMetrics.widthPixels / resources.displayMetrics.density).toInt())
+        val layout = KyvoriqResponsiveLayout.forViewport(availableDp, config.screenHeightDp, config.fontScale)
+        val narrowHeader = layout.stackedActions
         val header = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         val identityRow = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
         val actions = LinearLayout(this).apply { gravity = Gravity.END or Gravity.CENTER_VERTICAL }
         // Original emblem and custom outlines retain their aspect ratio at every width.
         val brandMark = KyvoriqEmblemMotionView(this)
-        identityRow.addView(brandMark, LinearLayout.LayoutParams(dp(48), dp(48)).apply { rightMargin = dp(5) })
+        identityRow.addView(brandMark, LinearLayout.LayoutParams(dp(layout.emblemDp), dp(layout.emblemDp)).apply { rightMargin = dp(4) })
         val brand = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_VERTICAL
         }
         brand.addView(KyvoriqRazorWordmarkView(this),
-            LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(30)))
+            LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(layout.wordmarkHeightDp)))
         brand.addView(ImageView(this).apply {
             setImageResource(R.drawable.kyvoriq_trade_the_plot)
             scaleType = ImageView.ScaleType.FIT_CENTER
             contentDescription = "Trade the Plot"
             importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
-        }, LinearLayout.LayoutParams(dp(if (narrowHeader) 124 else 109), dp(17)).apply {
+        }, LinearLayout.LayoutParams(dp(layout.taglineWidthDp), dp(17)).apply {
             gravity = Gravity.END
             rightMargin = dp(3)
         })
         identityRow.addView(brand, LinearLayout.LayoutParams(0, dp(50), 1f).apply { rightMargin = dp(6) })
-        alertsButton = compactPillButton("ALERTS").apply {
+        alertsButton = compactPillButton(if (layout.compactActions) "♧" else "ALERTS").apply {
             contentDescription = "Enable trade alerts"
             isSingleLine = true
             setAutoSizeTextTypeUniformWithConfiguration(7, 10, 1, android.util.TypedValue.COMPLEX_UNIT_SP)
@@ -785,8 +799,8 @@ class SafeActivity : FragmentActivity() {
             haptic(it, KyvoriqHaptics.Cue.ACTION)
             safe { requestAlertPermission() }
         }
-        actions.addView(alertsButton, LinearLayout.LayoutParams(dp(69), dp(42)).apply { rightMargin = dp(4) })
-        retryButton = compactPillButton("RETRY").apply {
+        actions.addView(alertsButton, LinearLayout.LayoutParams(dp(layout.alertsDp), dp(44)).apply { rightMargin = dp(4) })
+        retryButton = compactPillButton(if (layout.compactActions) "↻" else "RETRY").apply {
             contentDescription = "Reconnect market data"
             isSingleLine = true
             setAutoSizeTextTypeUniformWithConfiguration(7, 10, 1, android.util.TypedValue.COMPLEX_UNIT_SP)
@@ -795,10 +809,10 @@ class SafeActivity : FragmentActivity() {
             haptic(it, KyvoriqHaptics.Cue.ACTION)
             safe { forceReconnectFromUser() }
         }
-        actions.addView(retryButton, LinearLayout.LayoutParams(dp(56), dp(42)))
+        actions.addView(retryButton, LinearLayout.LayoutParams(dp(layout.retryDp), dp(44)))
         if (!narrowHeader) identityRow.addView(actions, LinearLayout.LayoutParams(-2, -2))
         header.addView(identityRow, LinearLayout.LayoutParams(-1, -2))
-        if (narrowHeader) header.addView(actions, LinearLayout.LayoutParams(-1, dp(44)))
+        if (narrowHeader) header.addView(actions, LinearLayout.LayoutParams(-1, dp(46)))
         root.addView(header, margins(bottom = 7))
 
         workspaceHost = FrameLayout(this)
@@ -822,6 +836,17 @@ class SafeActivity : FragmentActivity() {
         val hero = heroCard()
         price = hero.price; oiView = hero.oi; status = hero.status
         tradePage.addView(hero.container, margins(bottom = 6))
+        publicMarketMessage = label(
+            "PUBLIC BTC CHART • VIEW ONLY\nPrivate signals and account tools require owner-approved pairing.",
+            11f, kyGold, 0f
+        ).apply {
+            setPadding(dp(12), dp(11), dp(12), dp(11))
+            background = KyvoriqTheme.surface(this@SafeActivity, radius = 12f)
+            visibility = View.GONE
+            contentDescription = "Public read-only chart. Owner pairing required for private tools."
+            setOnClickListener { showPublicAccessInfo() }
+        }
+        tradePage.addView(publicMarketMessage!!, margins(bottom = 8))
         val tfRow = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
         listOf("5m", "15m", "1h", "4h").forEach { tf ->
             val button = compactPillButton(tf).apply { contentDescription = "Chart $tf" }
@@ -843,9 +868,9 @@ class SafeActivity : FragmentActivity() {
         }
         tradePage.addView(
             chart,
-            LinearLayout.LayoutParams(-1, dp(if (compactViewport) 355 else 470)).apply {
-                leftMargin = -dp(10)
-                rightMargin = -dp(10)
+            LinearLayout.LayoutParams(-1, dp(layout.chartHeightDp)).apply {
+                leftMargin = 0
+                rightMargin = 0
                 bottomMargin = dp(10)
             }
         )
