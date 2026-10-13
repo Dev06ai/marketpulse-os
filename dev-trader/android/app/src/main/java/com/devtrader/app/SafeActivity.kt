@@ -199,6 +199,7 @@ class SafeActivity : FragmentActivity() {
     }
 
     private var retryButton: Button? = null
+    private var pairingButton: Button? = null
     private var networkCallback: ConnectivityManager.NetworkCallback? = null
     private var lastSocketActivityMs = 0L
     private var lastRetryRequestMs = 0L
@@ -794,6 +795,7 @@ class SafeActivity : FragmentActivity() {
         val pairButton = compactPillButton(
             if (KyvoriqSecureSession.isPaired(this)) "DEVICE PAIRED  •  SECURE" else "PAIR DEVICE  •  PRIVATE API"
         )
+        pairingButton = pairButton
         pairButton.setOnClickListener {
             haptic(it, KyvoriqHaptics.Cue.ACTION)
             showPairingDialog(pairButton)
@@ -1443,7 +1445,9 @@ class SafeActivity : FragmentActivity() {
         if (!force && now - lastBootstrapMs < 4000L) return
         lastBootstrapMs = now
         bootstrapInFlight = true
-        integrity.text = "HTTP  •  SYNCING MARKET SNAPSHOT"
+        if (lastHardHttpStatus == null) {
+            integrity.text = "HTTP  •  SYNCING MARKET SNAPSHOT"
+        }
         val requestTf = selectedTf
         getJson(backendBase + "/bootstrap?profile=dashboard&interval=" + requestTf) { ok, body ->
             handler.post {
@@ -1462,6 +1466,10 @@ class SafeActivity : FragmentActivity() {
                         else -> if (body.startsWith("HTTP ")) "BACKEND " + body else "RECONNECTING…"
                     }
                     lastHardHttpStatus = if (body in setOf("HTTP 401", "HTTP 403", "HTTP 404")) fault else null
+                    if (body == "HTTP 401") {
+                        pairingButton?.text = "SESSION EXPIRED  •  TAP TO RE-PAIR"
+                        check.text = "Device pairing rejected (401). Re-pair securely, then retry."
+                    }
                     if (lastBootstrapSuccessMs == 0L || nowFail - lastBootstrapSuccessMs > 10_000L) {
                         status.text = fault
                         integrity.text = "HTTP  •  " + body.ifEmpty { "SNAPSHOT FAILED" } + "  •  RETRY SCHEDULED"
@@ -2938,7 +2946,7 @@ class SafeActivity : FragmentActivity() {
         // HTTP snapshot is a valid live market state.
         if (stateAge > 5000L) {
             val bootstrapFresh = lastBootstrapSuccessMs > 0L && now - lastBootstrapSuccessMs <= 10_000L
-            if (!bootstrapFresh) {
+            if (!bootstrapFresh && lastHardHttpStatus == null) {
                 integrity.text = "Feed  •  REFRESHING •  HTTP SNAPSHOT"
             }
             bootstrap(false)
@@ -3401,8 +3409,49 @@ class SafeActivity : FragmentActivity() {
         getJson(backendBase + "/system-check") { ok, body ->
             handler.post {
                 if (!ok) {
-                    check.text = "Backend diagnostics failed."
-                    checkButton.isEnabled = true
+                    val fault = when (body) {
+                        "HTTP 401" -> "PAIRING EXPIRED (401)"
+                        "HTTP 403" -> "ACCESS DENIED (403)"
+                        "HTTP 404" -> "BACKEND ROUTE UNAVAILABLE (404)"
+                        "HTTP 429" -> "RATE LIMITED (429)"
+                        "HTTP 502", "HTTP 503", "HTTP 504" -> "HOST UNAVAILABLE (" + body + ")"
+                        "NETWORK TIMEOUT" -> "REQUEST TIMED OUT"
+                        "NETWORK UNAVAILABLE" -> "NETWORK UNAVAILABLE"
+                        else -> if (body.startsWith("HTTP ")) "SERVER ERROR " + body else "DIAGNOSTICS UNAVAILABLE"
+                    }
+                    if (body == "HTTP 401") pairingButton?.text = "SESSION EXPIRED  •  TAP TO RE-PAIR"
+                    check.text = "PRIVATE DIAGNOSTICS  •  " + fault + "\nChecking public backend health…"
+                    // A public health response verifies the server only; it must
+                    // never be presented as authenticated Bitget order readiness.
+                    getJson(backendBase + "/health") { publicOk, publicBody ->
+                        handler.post {
+                            if (stopped) {
+                                checkButton.isEnabled = true
+                                return@post
+                            }
+                            val publicReport = if (publicOk) {
+                                runCatching {
+                                    val health = JSONObject(publicBody)
+                                    val state = health.optString("data_health", "UNKNOWN")
+                                    if (health.optBoolean("ok", false)) {
+                                        "PUBLIC BACKEND  •  REACHABLE\nMarket feed  •  " + state
+                                    } else "PUBLIC BACKEND  •  RESPONDING (NOT READY)"
+                                }.getOrDefault("PUBLIC BACKEND  •  INVALID RESPONSE")
+                            } else {
+                                "PUBLIC BACKEND  •  " + when (publicBody) {
+                                    "HTTP 404" -> "ROUTING OFFLINE (404)"
+                                    "NETWORK TIMEOUT" -> "TIMEOUT"
+                                    "NETWORK UNAVAILABLE" -> "UNREACHABLE"
+                                    else -> publicBody.take(32)
+                                }
+                            }
+                            check.text = "PRIVATE DIAGNOSTICS  •  " + fault +
+                                "\n" + publicReport +
+                                "\nBitget execution readiness  •  UNVERIFIED" +
+                                if (body == "HTTP 401") "\nACTION  •  TAP RE-PAIR DEVICE" else "\nACTION  •  RETRY AFTER RESTORING CONNECTION"
+                            checkButton.isEnabled = true
+                        }
+                    }
                     return@post
                 }
                 safe {
