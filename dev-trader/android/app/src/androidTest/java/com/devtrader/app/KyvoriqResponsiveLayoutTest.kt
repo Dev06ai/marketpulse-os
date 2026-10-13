@@ -12,7 +12,8 @@ class KyvoriqResponsiveLayoutTest {
             assertTrue(spec.emblemDp in 40..48)
             assertTrue(spec.wordmarkWidthDp <= width - spec.emblemDp - 36)
             assertTrue(spec.alertsDp>=112)
-            assertTrue(spec.chartHeightDp in 280..405)
+            assertTrue(spec.chartHeightDp in 405..570)
+            assertTrue(spec.wordmarkWidthDp <= width - spec.emblemDp - 80)
         }
     }
     @Test fun tabletCanFitInlineActions() {
