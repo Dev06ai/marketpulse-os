@@ -195,7 +195,7 @@ class SafeActivity : FragmentActivity() {
         override fun run() {
             if (stopped) return
             val now = System.currentTimeMillis()
-            if (publicMarketOnly || !KyvoriqSecureSession.isPaired(this)) {
+            if (publicMarketOnly || !KyvoriqSecureSession.isPaired(this@SafeActivity)) {
                 enterPublicMarketMode()
                 requestChartIfNeeded()
             } else if (socket == null || now - lastStateReceivedMs > 5000L) bootstrap(false)
