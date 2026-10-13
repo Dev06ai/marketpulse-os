@@ -38,6 +38,9 @@ android {
         }
         debug { applicationIdSuffix = ".debug" }
     }
+    // MediaPlayer uses AssetFileDescriptor; the MP3s must remain uncompressed
+    // inside the APK or openFd() cannot provide their file descriptor.
+    androidResources { noCompress += "mp3" }
     packaging { resources.excludes += "/META-INF/{AL2.0,LGPL2.1}" }
     buildFeatures { buildConfig = true }
 }
