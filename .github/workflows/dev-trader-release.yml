@@ -133,7 +133,7 @@ jobs:
           test -s "$LAYOUT"
           test -s dev-trader/android/app/src/androidTest/java/com/devtrader/app/KyvoriqResponsiveLayoutTest.kt
           grep -Fq 'layout.compactActions' "$UI"
-          grep -Fq 'layout.stackedActions' "$LAYOUT"
+          grep -Fq 'layout.stackedActions' "$UI"
           grep -Fq 'enterPublicMarketMode()' "$UI"
           grep -Fq 'if (publicMarketOnly) JSONArray() else chartOverlays(latestRoot)' "$UI"
           grep -Fq 'chart.setFeedHealthy(false)' "$UI"
