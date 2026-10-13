@@ -17,7 +17,10 @@ class KyvoriqLaunchOverlay(context: Context) : FrameLayout(context) {
     private var completed = false
     private var onComplete: (() -> Unit)? = null
     private val timeout = Runnable { finish() }
-    private val emblem = KyvoriqEmblemMotionView(context).apply {
+    private val emblem = ImageView(context).apply {
+        setImageResource(R.drawable.kyvoriq_emblem_intro_tight)
+        scaleType = ImageView.ScaleType.FIT_CENTER
+        contentDescription = "KYVORIQ gold emblem"
         alpha = 0f; scaleX = .76f; scaleY = .76f
     }
     private val wordmark = KyvoriqRazorWordmarkView(context).apply {
@@ -45,28 +48,18 @@ class KyvoriqLaunchOverlay(context: Context) : FrameLayout(context) {
             intArrayOf(KyvoriqTheme.charcoal, KyvoriqTheme.slate, KyvoriqTheme.charcoal))
         isClickable = true
         importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
-        val top = TextView(context).apply {
-            text = "K / /   01"
-            setTextColor(KyvoriqTheme.deepGold)
-            letterSpacing = .28f
-            textSize = 11f
-            typeface = Typeface.create("monospace", Typeface.BOLD)
-        }
-        addView(top, LayoutParams(-2, dp(32f).toInt(), Gravity.TOP or Gravity.START).apply {
-            leftMargin = dp(28f).toInt(); topMargin = dp(52f).toInt()
-        })
         val lockup = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
         }
-        lockup.addView(emblem, LinearLayout.LayoutParams(dp(194f).toInt(), dp(194f).toInt()).apply {
+        lockup.addView(emblem, LinearLayout.LayoutParams(dp(152f).toInt(), dp(128f).toInt()).apply {
             gravity = Gravity.CENTER_HORIZONTAL
         })
-        lockup.addView(wordmark, LinearLayout.LayoutParams(dp(308f).toInt(), dp(68f).toInt()).apply {
-            gravity = Gravity.CENTER_HORIZONTAL; topMargin = dp(16f).toInt()
+        lockup.addView(wordmark, LinearLayout.LayoutParams(dp(300f).toInt(), dp(66f).toInt()).apply {
+            gravity = Gravity.CENTER_HORIZONTAL; topMargin = dp(3f).toInt()
         })
         lockup.addView(subtitle, LinearLayout.LayoutParams(dp(186f).toInt(), dp(29f).toInt()).apply {
-            gravity = Gravity.END; rightMargin = dp(15f).toInt(); topMargin = dp(1f).toInt()
+            gravity = Gravity.END; rightMargin = dp(20f).toInt(); topMargin = 0
         })
         lockup.addView(hairline, LinearLayout.LayoutParams(dp(206f).toInt(), dp(1f).toInt().coerceAtLeast(1)).apply {
             gravity = Gravity.CENTER_HORIZONTAL; topMargin = dp(11f).toInt()
