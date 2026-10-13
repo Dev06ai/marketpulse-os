@@ -1,143 +1,129 @@
 package com.devtrader.app
 
 import android.content.Context
-import android.graphics.Color
 import android.graphics.Typeface
+import android.graphics.drawable.GradientDrawable
 import android.view.Gravity
 import android.view.View
-import android.view.ViewGroup
 import android.view.animation.PathInterpolator
 import android.widget.FrameLayout
-import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
-import com.airbnb.lottie.LottieAnimationView
-import com.airbnb.lottie.RenderMode
 
-/**
- * Build 140 cinematic intro: three independent authored Lottie compositions.
- *
- * Nested precomps in the original all-in-one intro were not rendering on the
- * Android 35 emulator. Keep its verified circuit artwork as the background,
- * while overlaying the known-good emblem and wordmark Lottie views. This
- * preserves the original motion assets without blanking the branding.
- */
+/** Build 143: native black/white/deep-gold intro, never the old flame animation. */
 class KyvoriqLaunchOverlay(context: Context) : FrameLayout(context) {
     private val easing = PathInterpolator(.18f, .78f, .20f, 1f)
     private var completed = false
     private var onComplete: (() -> Unit)? = null
     private val timeout = Runnable { finish() }
-
-    private val circuit = LottieAnimationView(context).apply {
-        setAnimation("kyvoriq_ignition_intro.json")
-        repeatCount = 0
-        scaleType = ImageView.ScaleType.FIT_CENTER
-        setRenderMode(RenderMode.AUTOMATIC)
-        importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
-    }
     private val emblem = KyvoriqEmblemMotionView(context).apply {
-        alpha = 0f
-        scaleX = .76f
-        scaleY = .76f
+        alpha = 0f; scaleX = .76f; scaleY = .76f
     }
     private val wordmark = KyvoriqRazorWordmarkView(context).apply {
-        alpha = 0f
-        translationX = -dp(16f)
+        alpha = 0f; translationY = dp(12f)
     }
     private val subtitle = TextView(context).apply {
-        text = "KYVORIQ  //  MARKET INTELLIGENCE"
-        textSize = 9f
-        letterSpacing = .12f
-        gravity = Gravity.CENTER
+        text = "AI POWERED TRADING"
         setTextColor(KyvoriqTheme.gray)
-        typeface = Typeface.create("monospace", Typeface.BOLD)
+        typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+        textSize = 10f
+        letterSpacing = .24f
+        gravity = Gravity.CENTER
         includeFontPadding = false
         alpha = 0f
     }
-
+    private val hairline = View(context).apply { setBackgroundColor(KyvoriqTheme.deepGold); alpha = 0f }
+    private val footer = TextView(context).apply {
+        text = "MARKET INTELLIGENCE    / /    EST. 2026"
+        gravity = Gravity.CENTER
+        setTextColor(KyvoriqTheme.gray)
+        typeface = Typeface.create("monospace", Typeface.NORMAL)
+        letterSpacing = .05f
+        textSize = 9f
+        alpha = 0f
+    }
     init {
-        setBackgroundColor(KyvoriqTheme.charcoal)
+        background = GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
+            intArrayOf(KyvoriqTheme.charcoal, KyvoriqTheme.slate, KyvoriqTheme.charcoal))
         isClickable = true
         importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
-        addView(circuit, LayoutParams(-1, -1))
+        val top = TextView(context).apply {
+            text = "K / /   01"
+            setTextColor(KyvoriqTheme.deepGold)
+            letterSpacing = .28f
+            textSize = 11f
+            typeface = Typeface.create("monospace", Typeface.BOLD)
+        }
+        addView(top, LayoutParams(-2, dp(32f).toInt(), Gravity.TOP or Gravity.START).apply {
+            leftMargin = dp(28f).toInt(); topMargin = dp(52f).toInt()
+        })
         val lockup = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
         }
-        lockup.addView(emblem,
-            LinearLayout.LayoutParams(dp(168f).toInt(), dp(168f).toInt()).apply {
-                gravity = Gravity.CENTER_HORIZONTAL
-            })
-        lockup.addView(wordmark,
-            LinearLayout.LayoutParams(dp(294f).toInt(), dp(70f).toInt()).apply {
-                gravity = Gravity.CENTER_HORIZONTAL
-                topMargin = dp(5f).toInt()
-            })
-        lockup.addView(subtitle,
-            LinearLayout.LayoutParams(-1, dp(30f).toInt()).apply {
-                topMargin = dp(8f).toInt()
-            })
-        addView(lockup, LayoutParams(-1, -1))
+        lockup.addView(emblem, LinearLayout.LayoutParams(dp(194f).toInt(), dp(194f).toInt()).apply {
+            gravity = Gravity.CENTER_HORIZONTAL
+        })
+        lockup.addView(wordmark, LinearLayout.LayoutParams(dp(308f).toInt(), dp(68f).toInt()).apply {
+            gravity = Gravity.CENTER_HORIZONTAL; topMargin = dp(16f).toInt()
+        })
+        lockup.addView(hairline, LinearLayout.LayoutParams(dp(206f).toInt(), dp(1f).toInt().coerceAtLeast(1)).apply {
+            gravity = Gravity.CENTER_HORIZONTAL; topMargin = dp(6f).toInt()
+        })
+        lockup.addView(subtitle, LinearLayout.LayoutParams(-1, dp(36f).toInt()).apply {
+            topMargin = dp(12f).toInt()
+        })
+        addView(lockup, LayoutParams(-1, -1, Gravity.CENTER))
+        addView(footer, LayoutParams(-1, dp(48f).toInt(), Gravity.BOTTOM).apply {
+            bottomMargin = dp(44f).toInt()
+        })
     }
-
     fun play(onEnd: () -> Unit) {
         if (completed) { onEnd(); return }
         onComplete = onEnd
         if (!KyvoriqTheme.motionEnabled(context)) { finish(); return }
         post {
             if (completed || onComplete == null) return@post
-            postDelayed(timeout, 1900L)
-            circuit.playAnimation()
-            emblem.animate().alpha(1f).scaleX(1f).scaleY(1f)
-                .setStartDelay(130L).setDuration(460L).setInterpolator(easing).start()
-            wordmark.animate().alpha(1f).translationX(0f)
-                .setStartDelay(460L).setDuration(410L).setInterpolator(easing).start()
-            subtitle.animate().alpha(1f)
-                .setStartDelay(960L).setDuration(260L).setInterpolator(easing).start()
-            animate().alpha(0f).setStartDelay(1480L).setDuration(240L)
+            postDelayed(timeout, 1950L)
+            emblem.animate().alpha(1f).scaleX(1f).scaleY(1f).setStartDelay(90L)
+                .setDuration(520L).setInterpolator(easing).start()
+            wordmark.animate().alpha(1f).translationY(0f).setStartDelay(390L)
+                .setDuration(470L).setInterpolator(easing).start()
+            hairline.animate().alpha(1f).setStartDelay(720L).setDuration(240L).start()
+            subtitle.animate().alpha(1f).setStartDelay(920L).setDuration(260L).start()
+            footer.animate().alpha(1f).setStartDelay(1000L).setDuration(260L).start()
+            animate().alpha(0f).setStartDelay(1510L).setDuration(250L)
                 .setInterpolator(easing).withEndAction { finish() }.start()
         }
     }
-
-    /** Freeze all three authored assets for screenshot QA; never called in production UI. */
     internal fun showVerificationFrame() {
-        circuit.pauseAnimation()
-        circuit.progress = .45f
-        emblem.alpha = 1f
-        emblem.scaleX = 1f
-        emblem.scaleY = 1f
-        wordmark.alpha = 1f
-        wordmark.translationX = 0f
-        subtitle.alpha = 1f
-        alpha = 1f
+        emblem.alpha = 1f; emblem.scaleX = 1f; emblem.scaleY = 1f
+        wordmark.alpha = 1f; wordmark.translationY = 0f
+        subtitle.alpha = 1f; hairline.alpha = 1f; footer.alpha = 1f; alpha = 1f
     }
-
     private fun finish() {
         if (completed) return
         completed = true
         removeCallbacks(timeout)
-        circuit.cancelAnimation()
         val callback = onComplete
         onComplete = null
         callback?.invoke()
     }
-
     override fun onWindowFocusChanged(hasWindowFocus: Boolean) {
         super.onWindowFocusChanged(hasWindowFocus)
         if (!hasWindowFocus && onComplete != null) finish()
     }
-
     override fun onDetachedFromWindow() {
         removeCallbacks(timeout)
         animate().cancel()
         emblem.animate().cancel()
         wordmark.animate().cancel()
         subtitle.animate().cancel()
-        circuit.cancelAnimation()
+        footer.animate().cancel()
+        hairline.animate().cancel()
         onComplete = null
         completed = true
         super.onDetachedFromWindow()
     }
-
-    private fun dp(value: Float): Float = value * resources.displayMetrics.density
+    private fun dp(value: Float) = value * resources.displayMetrics.density
 }
