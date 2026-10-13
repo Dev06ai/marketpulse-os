@@ -49,7 +49,8 @@ class SignalService : Service() {
         CONNECTING,
         LIVE,
         DEGRADED,
-        RECONNECTING
+        RECONNECTING,
+        AUTH_REQUIRED
     }
 
     private data class ServiceNotificationModel(
@@ -87,6 +88,7 @@ class SignalService : Service() {
     }
     private var socket: WebSocket? = null
     private var reconnectAttempt = 0
+    @Volatile private var authRetryAfterMs = 0L
     private var stopped = false
     private var lastMessageMs = 0L
     private var reconnectScheduled = false
@@ -207,7 +209,9 @@ class SignalService : Service() {
 
     private fun connect(force: Boolean = false) {
         if (stopped) return
+        if (!force && System.currentTimeMillis() < authRetryAfterMs) return
         if (force) {
+            authRetryAfterMs = 0L
             reconnectScheduled = false
             runCatching { socket?.cancel() }
             socket = null
@@ -227,6 +231,7 @@ class SignalService : Service() {
                     }
                     reconnectAttempt = 0
                     reconnectScheduled = false
+                    authRetryAfterMs = 0L
                     socket = ws
                     lastMessageMs = System.currentTimeMillis()
                     staleChecks = 0
@@ -238,7 +243,8 @@ class SignalService : Service() {
                             }.toString()
                         )
                     }
-                    updateServiceNotification(ServiceUiState.LIVE)
+                    // A successful handshake is not evidence of valid market data.
+                    updateServiceNotification(ServiceUiState.CONNECTING)
                 }
 
                 override fun onMessage(ws: WebSocket, text: String) {
@@ -250,12 +256,24 @@ class SignalService : Service() {
                                 KyvoriqWidgetProvider.updateFromMarketTick(this@SignalService, root)
                                 val health = root.optString("data_health", "UNKNOWN")
                                 updateServiceNotification(
-                                    if (health == "DEGRADED") ServiceUiState.DEGRADED
-                                    else ServiceUiState.LIVE
+                                    when (health) {
+                                        "HEALTHY" -> ServiceUiState.LIVE
+                                        "DEGRADED" -> ServiceUiState.DEGRADED
+                                        else -> ServiceUiState.CONNECTING
+                                    }
                                 )
                                 return
                             }
-                            "state" -> KyvoriqWidgetProvider.updateFromState(this@SignalService, root)
+                            "state" -> {
+                                KyvoriqWidgetProvider.updateFromState(this@SignalService, root)
+                                updateServiceNotification(
+                                    when (root.optString("data_health", "UNKNOWN")) {
+                                        "HEALTHY" -> ServiceUiState.LIVE
+                                        "DEGRADED" -> ServiceUiState.DEGRADED
+                                        else -> ServiceUiState.CONNECTING
+                                    }
+                                )
+                            }
                             else -> return
                         }
                         val prefs = getSharedPreferences(PREFS, MODE_PRIVATE)
@@ -290,20 +308,28 @@ class SignalService : Service() {
                 override fun onClosed(ws: WebSocket, code: Int, reason: String) {
                     val owned = socket === ws
                     if (owned) socket = null
-                    if (owned) scheduleReconnect()
+                    if (owned) {
+                        if (code == 1008) {
+                            authRetryAfterMs = System.currentTimeMillis() + 60_000L
+                            updateServiceNotification(ServiceUiState.AUTH_REQUIRED)
+                        } else scheduleReconnect()
+                    }
                 }
 
                 override fun onFailure(ws: WebSocket, t: Throwable, response: Response?) {
                     val owned = socket === ws
                     if (owned) socket = null
                     if (owned) {
-                        // Keep the persistent service quiet during a single transient
-                        // socket failure; the reconnect loop is automatic. Surface the
-                        // reconnect state only after repeated failures.
-                        if (reconnectAttempt >= 2) {
-                            updateServiceNotification(ServiceUiState.RECONNECTING)
+                        if (response?.code == 401 || response?.code == 403) {
+                            authRetryAfterMs = System.currentTimeMillis() + 60_000L
+                            updateServiceNotification(ServiceUiState.AUTH_REQUIRED)
+                        } else {
+                            // Do not notify on the first transient disconnect.
+                            if (reconnectAttempt >= 2) {
+                                updateServiceNotification(ServiceUiState.RECONNECTING)
+                            }
+                            scheduleReconnect()
                         }
-                        scheduleReconnect()
                     }
                 }
             }
@@ -402,7 +428,8 @@ class SignalService : Service() {
                 Request.Builder().url(BackendEndpoint.base + "/heartbeat").get().build()
             ).enqueue(object : okhttp3.Callback {
                 override fun onFailure(call: okhttp3.Call, e: java.io.IOException) {
-                    if (!stopped && staleChecks >= 3) {
+                    if (!stopped && staleChecks >= 3 &&
+                        System.currentTimeMillis() >= authRetryAfterMs) {
                         updateServiceNotification(ServiceUiState.RECONNECTING)
                         connect(force = true)
                     }
@@ -411,7 +438,8 @@ class SignalService : Service() {
                 override fun onResponse(call: okhttp3.Call, response: Response) {
                     response.use {
                         if (!it.isSuccessful || it.body == null) {
-                            if (!stopped && staleChecks >= 3) {
+                            if (!stopped && staleChecks >= 3 &&
+                                System.currentTimeMillis() >= authRetryAfterMs) {
                                 updateServiceNotification(ServiceUiState.RECONNECTING)
                                 connect(force = true)
                             }
@@ -436,9 +464,18 @@ class SignalService : Service() {
                             if (backendHealthy) {
                                 if (!stopped) {
                                     staleChecks = 0
+                                    // Public backend health cannot prove the device
+                                    // has authenticated its private WS session.
+                                    val channelActive = socket != null &&
+                                        System.currentTimeMillis() - lastMessageMs < 30_000L
                                     updateServiceNotification(
-                                        if (dataHealth == "DEGRADED") ServiceUiState.DEGRADED
-                                        else ServiceUiState.LIVE
+                                        if (System.currentTimeMillis() < authRetryAfterMs) {
+                                            ServiceUiState.AUTH_REQUIRED
+                                        } else if (!channelActive) {
+                                            ServiceUiState.RECONNECTING
+                                        } else if (dataHealth == "DEGRADED") {
+                                            ServiceUiState.DEGRADED
+                                        } else ServiceUiState.LIVE
                                     )
                                     socket?.send(
                                         JSONObject().apply {
@@ -447,7 +484,8 @@ class SignalService : Service() {
                                         }.toString()
                                     )
                                 }
-                            } else if (!stopped && staleChecks >= 3) {
+                            } else if (!stopped && staleChecks >= 3 &&
+                                System.currentTimeMillis() >= authRetryAfterMs) {
                                 updateServiceNotification(ServiceUiState.RECONNECTING)
                                 connect(force = true)
                             }
@@ -472,6 +510,14 @@ class SignalService : Service() {
                 chip = "DEGRADED",
                 subtitle = "Market feed needs attention",
                 body = "Monitoring continues • fresh data required for entries",
+                chipBackground = R.drawable.notification_chip_degraded,
+                chipTextColor = getColor(R.color.kyvoriq_charcoal),
+                animate = false
+            )
+            ServiceUiState.AUTH_REQUIRED -> ServiceNotificationModel(
+                chip = "PAIRING",
+                subtitle = "Secure session expired",
+                body = "Open KYVORIQ to pair this device securely",
                 chipBackground = R.drawable.notification_chip_degraded,
                 chipTextColor = getColor(R.color.kyvoriq_charcoal),
                 animate = false
