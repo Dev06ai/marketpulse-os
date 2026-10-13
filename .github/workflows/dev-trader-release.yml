@@ -229,6 +229,9 @@ jobs:
           grep -Fq 'AudioFocusRequest.Builder' dev-trader/android/app/src/main/java/com/devtrader/app/KyvoriqMusicIsland.kt
           ! grep -Fq 'SYSTEM_ALERT_WINDOW' dev-trader/android/app/src/main/AndroidManifest.xml
           ! grep -Fq 'READ_MEDIA_AUDIO' dev-trader/android/app/src/main/AndroidManifest.xml
+          grep -Fq 'private val importZip: () -> Unit' dev-trader/android/app/src/main/java/com/devtrader/app/KyvoriqMusicIsland.kt
+          grep -Fq 'MAX_TOTAL_BYTES' dev-trader/android/app/src/main/java/com/devtrader/app/KyvoriqPrivateMusic.kt
+          ! find dev-trader/android/app/src/main/assets/ -type f -name '*.mp3' 2>/dev/null | grep -q .
       - name: Verify reconnect failure diagnostics
         shell: bash
         run: |
@@ -269,7 +272,7 @@ jobs:
           CURRENT="dev-trader/android/app/build/outputs/apk/release/app-release.apk"
           test -s "$CURRENT"
           mkdir -p /tmp/kyvoriq-prior
-          gh release download dev-trader-v0.21.29-154 --pattern app-release.apk --dir /tmp/kyvoriq-prior
+          gh release download dev-trader-v0.21.30-155 --pattern app-release.apk --dir /tmp/kyvoriq-prior
           PREVIOUS="/tmp/kyvoriq-prior/app-release.apk"
           test -s "$PREVIOUS"
           SDKROOT="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
@@ -287,9 +290,9 @@ jobs:
           test -n "$CURRENT_CERT" || { echo "New certificate fingerprint unavailable"; exit 1; }
           test "$PREVIOUS_CERT" = "$CURRENT_CERT" || { echo "Different APK signing identity: release refused"; exit 1; }
           "$AAPT" dump badging "$CURRENT" > /tmp/kyvoriq-new-package.txt
-          grep -Fq "package: name='com.devtrader.app' versionCode='155' versionName='0.21.30'" /tmp/kyvoriq-new-package.txt || { echo "Package identifier or version mismatch"; exit 1; }
+          grep -Fq "package: name='com.devtrader.app' versionCode='156' versionName='0.21.31'" /tmp/kyvoriq-new-package.txt || { echo "Package identifier or version mismatch"; exit 1; }
           ! unzip -l "$CURRENT" | grep -Ei 'ui_preview.json|signing.jks|\.env'
-          echo "Build 155 package, version, signature and preview exclusion verified."
+          echo "Build 156 package, version, signature and preview exclusion verified."
 
       - name: Prepare release metadata
         shell: bash
@@ -339,7 +342,7 @@ jobs:
             echo "Existing signed APK must not be replaced."
             exit 1
           fi
-          gh release create "$TAG" --target "$GITHUB_SHA" "$APK" "dev-trader-update.json#dev-trader-update.json" --title "KYVORIQ ${{ steps.meta.outputs.version_name }}" --notes "Signed KYVORIQ Build 155: native in-app music island, five themed local playlist entries, smooth playback fades, automatic next track, playlist selector, music audio focus and Android document-based file import. No bundled copyrighted recordings, no background/system overlay permission, owner pairing and trading engine unchanged."
+          gh release create "$TAG" --target "$GITHUB_SHA" "$APK" "dev-trader-update.json#dev-trader-update.json" --title "KYVORIQ ${{ steps.meta.outputs.version_name }}" --notes "Signed KYVORIQ Build 156: import all five privately owned audio files in one step from a ZIP, preserve offline playback, track-specific aura, next/previous, and fades. No copyrighted music bundled in public APK. Unchanged owner pairing and trading engine."
 
       - name: Publish update manifest
         env:
