@@ -145,6 +145,7 @@ class SafeActivity : FragmentActivity() {
     private lateinit var positionSummary: TextView
     private lateinit var ledgerView: TextView
     private lateinit var decisionView: TextView
+    private var entryChecksFullText = "Awaiting verified entry checks."
     private lateinit var insightContext: TextView
     private lateinit var alertIntelligenceView: TextView
     private lateinit var riskHeatText: TextView
@@ -778,12 +779,12 @@ class SafeActivity : FragmentActivity() {
                 intArrayOf(kyCharcoal, KyvoriqTheme.slate, kyCharcoal),
                 GradientDrawable.Orientation.TOP_BOTTOM
             )
-            setPadding(dp(10), dp(8), dp(10), dp(8))
+            setPadding(dp(12), dp(8), dp(12), dp(8))
         }
         rootSurface = root
         ViewCompat.setOnApplyWindowInsetsListener(root) { view, insets ->
             val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
-            view.setPadding(dp(10), bars.top + dp(8), dp(10), bars.bottom + dp(8))
+            view.setPadding(dp(12), bars.top + dp(8), dp(12), bars.bottom + dp(8))
             insets
         }
         setContentView(root)
@@ -797,23 +798,22 @@ class SafeActivity : FragmentActivity() {
         val actions = LinearLayout(this).apply { gravity = Gravity.START or Gravity.CENTER_VERTICAL }
         // Original emblem and custom outlines retain their aspect ratio at every width.
         val brandMark = KyvoriqEmblemMotionView(this)
-        identityRow.addView(brandMark, LinearLayout.LayoutParams(dp(layout.emblemDp), dp(layout.emblemDp)).apply { rightMargin = dp(10) })
+        identityRow.addView(brandMark, LinearLayout.LayoutParams(dp(layout.emblemDp), dp(layout.emblemDp)).apply { rightMargin = dp(8) })
         val brand = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER_VERTICAL
+            gravity = Gravity.START or Gravity.CENTER_VERTICAL
         }
         brand.addView(KyvoriqRazorWordmarkView(this),
-            LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(layout.wordmarkHeightDp)))
+            LinearLayout.LayoutParams(dp(layout.wordmarkWidthDp), dp(layout.wordmarkHeightDp)))
         brand.addView(ImageView(this).apply {
             setImageResource(R.drawable.kyvoriq_trade_the_plot)
             scaleType = ImageView.ScaleType.FIT_CENTER
             contentDescription = "Trade the Plot"
             importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
-        }, LinearLayout.LayoutParams(dp(layout.taglineWidthDp), dp(17)).apply {
-            gravity = Gravity.END
-            rightMargin = dp(3)
+        }, LinearLayout.LayoutParams(dp(layout.taglineWidthDp), dp(14)).apply {
+            leftMargin = dp((layout.wordmarkWidthDp - layout.taglineWidthDp - 8).coerceAtLeast(0))
         })
-        identityRow.addView(brand, LinearLayout.LayoutParams(0, dp(58), 1f).apply { rightMargin = dp(6) })
+        identityRow.addView(brand, LinearLayout.LayoutParams(0, dp(54), 1f))
         alertsButton = compactPillButton(compactHeaderLabel("ALERTS")).apply {
             contentDescription = "Enable trade alerts"
             textSize = if (layout.compactActions) 11f else 12f
@@ -824,7 +824,10 @@ class SafeActivity : FragmentActivity() {
             haptic(it, KyvoriqHaptics.Cue.ACTION)
             safe { requestAlertPermission() }
         }
-        actions.addView(alertsButton, LinearLayout.LayoutParams(dp(layout.alertsDp), dp(44)).apply { rightMargin = dp(8) })
+        actions.addView(alertsButton,
+            LinearLayout.LayoutParams(if (narrowHeader) 0 else dp(layout.alertsDp), dp(40), if (narrowHeader) 1f else 0f).apply {
+                rightMargin = dp(5)
+            })
         retryButton = compactPillButton(compactHeaderLabel("RETRY", retry = true)).apply {
             contentDescription = "Reconnect market data"
             isSingleLine = true
@@ -834,11 +837,14 @@ class SafeActivity : FragmentActivity() {
             haptic(it, KyvoriqHaptics.Cue.ACTION)
             safe { forceReconnectFromUser() }
         }
-        actions.addView(retryButton, LinearLayout.LayoutParams(dp(layout.retryDp), dp(44)))
+        actions.addView(retryButton,
+            LinearLayout.LayoutParams(if (narrowHeader) 0 else dp(layout.retryDp), dp(40), if (narrowHeader) 1f else 0f).apply {
+                leftMargin = dp(5)
+            })
         if (!narrowHeader) identityRow.addView(actions, LinearLayout.LayoutParams(-2, -2))
         header.addView(identityRow, LinearLayout.LayoutParams(-1, -2))
-        if (narrowHeader) header.addView(actions, LinearLayout.LayoutParams(-1, dp(48)).apply { topMargin = dp(5) })
-        root.addView(header, margins(bottom = 7))
+        if (narrowHeader) header.addView(actions, LinearLayout.LayoutParams(-1, dp(40)).apply { topMargin = dp(8) })
+        root.addView(header, margins(bottom = 10))
 
         workspaceHost = FrameLayout(this)
         root.addView(workspaceHost, LinearLayout.LayoutParams(-1, 0, 1f))
@@ -860,7 +866,7 @@ class SafeActivity : FragmentActivity() {
         val tradePage = page(scrollable = true)
         val hero = heroCard()
         price = hero.price; oiView = hero.oi; status = hero.status
-        tradePage.addView(hero.container, margins(bottom = 6))
+        tradePage.addView(hero.container, margins(bottom = 10))
         publicMarketMessage = label(
             "PUBLIC BTC CHART • VIEW ONLY\nPrivate signals and account tools require owner-approved pairing.",
             11f, kyGold, 0f
@@ -882,12 +888,12 @@ class SafeActivity : FragmentActivity() {
                 refreshTimeframeButtons(tfRow)
                 requestChartIfNeeded(force = true)
             }
-            tfRow.addView(button, LinearLayout.LayoutParams(0, dp(38), 1f).apply { leftMargin = dp(2); rightMargin = dp(2) })
+            tfRow.addView(button, LinearLayout.LayoutParams(0, dp(40), 1f).apply { leftMargin = dp(2); rightMargin = dp(2) })
         }
         timeframeButtonRow = tfRow
-        tradePage.addView(tfRow, margins(bottom = 4))
+        tradePage.addView(tfRow, margins(bottom = 8))
         chart = MarketChartView(this).apply {
-            minimumHeight = dp(if (compactViewport) 325 else 430)
+            minimumHeight = dp(layout.chartHeightDp)
             contentDescription = "Interactive price chart"
             onFullscreenRequested = { toggleChartFullscreen() }
         }
@@ -896,7 +902,7 @@ class SafeActivity : FragmentActivity() {
             LinearLayout.LayoutParams(-1, dp(layout.chartHeightDp)).apply {
                 leftMargin = 0
                 rightMargin = 0
-                bottomMargin = dp(10)
+                bottomMargin = dp(12)
             }
         )
         chart.setCustomPriceAlerts(BtcPriceAlerts.armedLevels(this))
@@ -986,8 +992,8 @@ class SafeActivity : FragmentActivity() {
         }
         insightsScroll.addView(insightsContent, FrameLayout.LayoutParams(-1, -2))
         insightsPage.addView(insightsScroll, LinearLayout.LayoutParams(-1, 0, 1f))
-        insightsContent.addView(label("INSIGHTS", 20f, kyWhite, 0.01f), margins(top = 6, bottom = 5))
-        insightsContent.addView(label("Live market intelligence  /  verified engine context", 10f, kyGray, 0.01f), margins(bottom = 12))
+        insightsContent.addView(label("INSIGHTS", 19f, kyWhite, 0.01f), margins(top = 6, bottom = 6))
+        insightsContent.addView(label("Verified market intelligence", 11f, kyGray, 0.01f), margins(bottom = 14))
 
         // Filter only existing, truthful live telemetry. No invented holder, heatmap or flow data.
         var selectedInsightTab = 0
@@ -1015,20 +1021,34 @@ class SafeActivity : FragmentActivity() {
                 }
             }
             insightTabs.add(button)
-            insightTabsRow.addView(button, LinearLayout.LayoutParams(0, dp(40), 1f).apply {
+            insightTabsRow.addView(button, LinearLayout.LayoutParams(0, dp(38), 1f).apply {
                 leftMargin = dp(2); rightMargin = dp(2)
             })
         }
         insightsContent.addView(insightTabsRow, margins(bottom = 12))
 
-        val story = premiumCard("MARKET CONTEXT", "Reading the market…", 13f)
+        val story = premiumCard("MARKET CONTEXT", "Reading the market…", 12.5f)
         features = story.second
-        features.maxLines = 8
-        insightsContent.addView(story.first, margins(bottom = 10))
+        features.maxLines = 7
+        features.ellipsize = android.text.TextUtils.TruncateAt.END
+        story.first.setOnClickListener {
+            haptic(it, KyvoriqHaptics.Cue.TAP)
+            showInfoDialog("Market context", features.text.toString())
+        }
+        insightsContent.addView(story.first, margins(bottom = 12))
 
-        val decisions = scrollableCard("ENTRY CHECKS", "Waiting for a qualified setup…", 12.5f, dp(if (compactViewport) 142 else 158))
+        // The page itself scrolls: a fixed-height nested report clipped critical text.
+        // Keep a concise preview here and expose the entire verified policy on tap.
+        val decisions = compactCard("ENTRY CHECKS", "Checking entry eligibility…", 12.5f)
         decisionView = decisions.value
-        insightsContent.addView(decisions.container, margins(bottom = 10))
+        decisionView.maxLines = 5
+        decisionView.ellipsize = android.text.TextUtils.TruncateAt.END
+        decisions.container.addView(label("VIEW COMPLETE CHECKS  ↗", 9f, kyGold, 0.02f), margins(top = 9))
+        decisions.container.setOnClickListener {
+            haptic(it, KyvoriqHaptics.Cue.TAP)
+            showInfoDialog("Entry checks", entryChecksFullText)
+        }
+        insightsContent.addView(decisions.container, margins(bottom = 12))
 
         val alertCard = compactCard("ALERT INTELLIGENCE", "Info • No spam, just the real updates.", 12.5f)
         alertIntelligenceView = alertCard.value
@@ -1142,9 +1162,9 @@ class SafeActivity : FragmentActivity() {
                 selectWorkspace(index)
             }
             navigationButtons.add(button)
-            navigation.addView(button, LinearLayout.LayoutParams(0, dp(48), 1f).apply { leftMargin = dp(3); rightMargin = dp(3) })
+            navigation.addView(button, LinearLayout.LayoutParams(0, dp(44), 1f).apply { leftMargin = dp(3); rightMargin = dp(3) })
         }
-        root.addView(navigation, margins(top = 10))
+        root.addView(navigation, margins(top = 8))
         update = TextView(this); risk = TextView(this); journal = TextView(this); replay = TextView(this)
         selectWorkspace(0)
     }
@@ -1289,7 +1309,7 @@ class SafeActivity : FragmentActivity() {
         val compactViewport = resources.configuration.screenHeightDp < 760
         val box = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(14), dp(if (compactViewport) 8 else 10), dp(14), dp(if (compactViewport) 8 else 10))
+            setPadding(dp(14), dp(if (compactViewport) 11 else 13), dp(14), dp(if (compactViewport) 11 else 13))
             background = KyvoriqTheme.surface(this@SafeActivity, prominent = true)
         }
 
@@ -1329,17 +1349,17 @@ class SafeActivity : FragmentActivity() {
         box.addView(row)
 
         val oi = label("OI  —", 9f, kyGray, 0.02f)
-        box.addView(oi, margins(top = 1))
+        box.addView(oi, margins(top = 4))
         return HeroRefs(priceView, oi, statusView, box)
     }
 
     private fun compactCard(title: String, initial: String, valueSize: Float): CardRefs {
         val box = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(12), dp(9), dp(12), dp(8))
+            setPadding(dp(14), dp(12), dp(14), dp(12))
             background = KyvoriqTheme.surface(this@SafeActivity, prominent = false)
         }
-        val heading = label(humanHeading(title), 11.5f, kyWhite, 0.012f)
+        val heading = label(humanHeading(title), 12f, kyWhite, 0.012f)
         val value = TextView(this).apply {
             text = initial
             textSize = valueSize
@@ -1350,14 +1370,14 @@ class SafeActivity : FragmentActivity() {
             setHorizontallyScrolling(false)
         }
         box.addView(heading)
-        box.addView(value, margins(top = 5))
+        box.addView(value, margins(top = 8))
         return CardRefs(box, value)
     }
 
     private fun premiumCard(title: String, initial: String, valueSize: Float): Pair<LinearLayout, TextView> {
         val box = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(14), dp(11), dp(14), dp(10))
+            setPadding(dp(14), dp(13), dp(14), dp(13))
             background = KyvoriqTheme.surface(this@SafeActivity, prominent = true)
         }
         val header = LinearLayout(this).apply {
@@ -1377,7 +1397,7 @@ class SafeActivity : FragmentActivity() {
             includeFontPadding = false
             setLineSpacing(0f, 1.13f)
         }
-        box.addView(value, margins(top = 5))
+        box.addView(value, margins(top = 8))
         return Pair(box, value)
     }
 
@@ -2292,7 +2312,17 @@ class SafeActivity : FragmentActivity() {
             .append("EXECUTION POLICY\n").append(executionPolicy)
             .append("Fee-adjusted reward / risk ≥ ${summary.optDouble("min_net_rr", 1.5)}\nPause after 2 consecutive daily losses\nObserved daily equity loss limit 1%\n\n")
             .append("EVIDENCE\nScores rank setups; they are not win probabilities.\n")
-        decisionView.text = details.toString()
+        entryChecksFullText = details.toString()
+        val entryStatus = when {
+            !sourceHealthy -> "DATA NOT FRESH"
+            unknown > 0 || unresolved > 0 -> "BLOCKED • RECONCILE"
+            openCount > 0 -> "POSITION OPEN"
+            else -> "CHECKING"
+        }
+        decisionView.text =
+            "STATUS  •  $entryStatus\n" +
+            reason.replace("\n", " ").trim() +
+            "\n15m ${f.optString("trend_15", "—")}  •  1h ${f.optString("trend_60", "—")}  •  4h ${f.optString("trend_240", "—")}"
         val reactionMap = e.optJSONObject("level_reactions")
         val reactionTrigger = reactionMap?.optJSONObject("trigger")
         val armedLevels = reactionMap?.optJSONArray("armed")
