@@ -25,7 +25,7 @@ class BrandVisualTest {
     private fun save(v: View, name: String) {
         val bitmap = Bitmap.createBitmap(v.width, v.height, Bitmap.Config.ARGB_8888)
         v.draw(Canvas(bitmap))
-        val dir = File(inst.targetContext.getExternalFilesDir(null), "build154").apply { mkdirs() }
+        val dir = File(inst.targetContext.getExternalFilesDir(null), "build157").apply { mkdirs() }
         File(dir, "$name.png").outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
         bitmap.recycle()
     }
@@ -76,14 +76,15 @@ class BrandVisualTest {
             SystemClock.sleep(450)
             inst.runOnMainSync {
                 val root = activity.window.decorView
-                val entryHeading = children(root).filterIsInstance<TextView>().first {
-                    it.text.toString() == "Entry checks"
+                val accountSummary = children(root).filterIsInstance<TextView>().first {
+                    it.text.toString().contains("Explore the BTC chart for free.")
                 }
-                assertTrue("Insights must actually be visible after switching", entryHeading.isShown)
-                val card = entryHeading.parent as ViewGroup
-                assertFalse("Entry report must not be in a nested fixed-height scroll",
-                    children(card).any { it is android.widget.ScrollView })
-                save(root, "insights")
+                assertTrue("Basic account summary must render", accountSummary.isShown)
+                assertFalse("Owner entry checks must stay hidden in consumer view",
+                    children(root).filterIsInstance<TextView>().any {
+                        it.text.toString() == "Entry checks" && it.isShown
+                    })
+                save(root, "consumer-insights")
             }
         } finally { inst.runOnMainSync { activity.finish() } }
     }
