@@ -178,7 +178,9 @@ class KyvoriqWidgetProvider : AppWidgetProvider() {
             val options = manager.getAppWidgetOptions(appWidgetId)
             val minWidth = options.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH, 180)
             val minHeight = options.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT, 100)
-            val expanded = minWidth >= 250 || minHeight >= 150
+            // Only vertical resizing expands details; width alone should not
+            // turn a slim 4x1 price card back into a bulky two-row widget.
+            val expanded = minHeight >= 142
             val layout = if (expanded) R.layout.widget_kyvoriq_expanded else R.layout.widget_kyvoriq_compact
             val views = RemoteViews(context.packageName, layout)
 
@@ -211,8 +213,18 @@ class KyvoriqWidgetProvider : AppWidgetProvider() {
                 "SHORT", "BEARISH" -> KyvoriqTheme.white
                 else -> KyvoriqTheme.gold
             }
-            val healthLabel = if (health == "HEALTHY") "LIVE" else health
-            val healthColor = if (health == "HEALTHY") KyvoriqTheme.gold else KyvoriqTheme.gold
+            // Cached prices are not live after a service stop or expired pairing.
+            val updated = prefs.getLong(KEY_UPDATED, 0L)
+            val quoteFresh = updated > 0L && System.currentTimeMillis() - updated in 0L..20_000L
+            val paired = KyvoriqSecureSession.isPaired(context)
+            val healthLabel = when {
+                !paired -> "PAIR"
+                !quoteFresh -> "STALE"
+                health == "HEALTHY" -> "LIVE"
+                else -> "WAIT"
+            }
+            val healthColor = if (paired && quoteFresh && health == "HEALTHY")
+                KyvoriqTheme.gold else KyvoriqTheme.muted
 
             if (slot == 0) {
                 views.setTextViewText(R.id.widget_price_0, price)
@@ -224,16 +236,16 @@ class KyvoriqWidgetProvider : AppWidgetProvider() {
             views.setTextColor(R.id.widget_price_0, currentColor)
             views.setTextColor(R.id.widget_price_1, currentColor)
             views.setDisplayedChild(R.id.widget_price_flipper, slot)
-            views.setTextViewText(R.id.widget_delta, delta)
+            views.setTextViewText(R.id.widget_delta, if (paired && quoteFresh) delta else "•")
             views.setTextColor(R.id.widget_delta, deltaColor)
 
-            views.setTextViewText(R.id.widget_state, state)
-            views.setTextViewText(R.id.widget_bias, bias)
+            if (expanded) views.setTextViewText(R.id.widget_state, if (paired) state else "PAIR DEVICE")
+            views.setTextViewText(R.id.widget_bias, if (paired) bias else "WAIT")
             views.setTextColor(R.id.widget_bias, biasColor)
             views.setTextViewText(R.id.widget_health, healthLabel)
             views.setTextColor(R.id.widget_health, healthColor)
             if (expanded) {
-                views.setTextViewText(R.id.widget_pnl, "P&L  $pnl")
+                views.setTextViewText(R.id.widget_pnl, if (paired) "P&L  $pnl" else "P&L  PRIVATE")
                 val pnlColor = when {
                     pnl.startsWith("+") || pnl.startsWith("≈+") -> KyvoriqTheme.gold
                     pnl.startsWith("-") || pnl.startsWith("≈-") -> KyvoriqTheme.white
