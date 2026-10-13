@@ -70,12 +70,12 @@ jobs:
             adb shell wm density 320
             adb shell am instrument -e class com.devtrader.app.BrandVisualTest,com.devtrader.app.KyvoriqResponsiveLayoutTest,com.devtrader.app.ConsumerFoundationVisualTest -w com.devtrader.app.debug.test/androidx.test.runner.AndroidJUnitRunner > ui-check/compact.txt
             grep -q 'OK (' ui-check/compact.txt
-            adb pull /sdcard/Android/data/com.devtrader.app.debug/files/build154 ui-check/compact-motion
+            adb pull /sdcard/Android/data/com.devtrader.app.debug/files/build157 ui-check/compact-visual
             adb shell wm size 1080x2400
             adb shell wm density 420
             adb shell am instrument -e class com.devtrader.app.BrandVisualTest,com.devtrader.app.KyvoriqResponsiveLayoutTest,com.devtrader.app.ConsumerFoundationVisualTest -w com.devtrader.app.debug.test/androidx.test.runner.AndroidJUnitRunner > ui-check/normal.txt
             grep -q 'OK (' ui-check/normal.txt
-            adb pull /sdcard/Android/data/com.devtrader.app.debug/files/build154 ui-check/normal-motion
+            adb pull /sdcard/Android/data/com.devtrader.app.debug/files/build157 ui-check/normal-visual
       - uses: actions/upload-artifact@v4
         if: always()
         with:
