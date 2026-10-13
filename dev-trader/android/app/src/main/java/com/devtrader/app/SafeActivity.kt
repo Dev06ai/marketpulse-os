@@ -829,7 +829,7 @@ class SafeActivity : FragmentActivity() {
             pendingMusicSlot = slot
             pickMusicFile.launch(arrayOf("audio/*"))
         }, importZip = {
-            pickMusicBundle.launch(arrayOf("application/zip", "application/octet-stream"))
+            pickMusicBundle.launch(arrayOf("application/zip", "application/x-zip-compressed", "application/x-zip", "application/octet-stream"))
         })
         val musicToggle = TextView(this).apply {
             text = "♫"
