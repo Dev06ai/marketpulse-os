@@ -145,6 +145,9 @@ class SafeActivity : FragmentActivity() {
     private val pickMusicFile = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) musicIsland?.importFile(pendingMusicSlot, uri)
     }
+    private val pickMusicBundle = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) musicIsland?.importPrivateBundle(uri)
+    }
     private lateinit var workspaceHost: FrameLayout
     private val workspacePages = mutableListOf<View>()
     private val navigationButtons = mutableListOf<Button>()
@@ -822,10 +825,12 @@ class SafeActivity : FragmentActivity() {
         identityRow.addView(brand, LinearLayout.LayoutParams(0, dp(54), 1f))
         // In-app Dynamic Island: a real layout row below the status bar, never
         // SYSTEM_ALERT_WINDOW and never an overlay over price/chart gestures.
-        musicIsland = KyvoriqMusicIsland(this) { slot ->
+        musicIsland = KyvoriqMusicIsland(this, importAudio = { slot ->
             pendingMusicSlot = slot
             pickMusicFile.launch(arrayOf("audio/*"))
-        }
+        }, importZip = {
+            pickMusicBundle.launch(arrayOf("application/zip", "application/octet-stream"))
+        })
         val musicToggle = TextView(this).apply {
             text = "♫"
             textSize = 23f
