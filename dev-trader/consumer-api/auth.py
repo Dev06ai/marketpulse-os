@@ -57,6 +57,10 @@ def verify_access_token(token: str) -> Principal:
     methods = claims.get("amr")
     if not isinstance(methods, list):
         methods = []
-    mfa = any(method in {"mfa", "otp", "totp", "webauthn", "hwk"} for method in methods)
+    # A single SMS or email OTP is NOT sufficient to claim multi-factor auth.
+    # Accept only an explicit IdP MFA assertion or a proven combination of
+    # independent factors (not supplied by Android or decoded without a signature).
+    mfa = ("mfa" in methods) or ("pwd" in methods and
+            any(method in methods for method in {"totp", "webauthn", "hwk"}))
     verified = claims.get("email_verified") is True
     return Principal(sub, verified, sub in admins and mfa)
