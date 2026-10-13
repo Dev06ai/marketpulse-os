@@ -10,6 +10,7 @@ android {
         applicationId = "com.devtrader.app"
         minSdk = 26
         targetSdk = 37
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         versionCode = (providers.gradleProperty("devTraderVersionCode").orNull ?: "152").toInt()
         versionName = providers.gradleProperty("devTraderVersionName").orNull ?: "0.21.27"
         val backendUrl = providers.gradleProperty("devTraderBackendUrl").orNull
@@ -41,6 +42,8 @@ android {
     buildFeatures { buildConfig = true }
 }
 dependencies {
+    androidTestImplementation("androidx.test:runner:1.7.0")
+    androidTestImplementation("androidx.test.ext:junit:1.3.0")
     implementation("androidx.core:core-ktx:1.17.0")
     implementation("com.airbnb.android:lottie:6.7.1")
     implementation("androidx.biometric:biometric:1.1.0")
