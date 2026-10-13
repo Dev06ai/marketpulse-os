@@ -99,6 +99,31 @@ jobs:
           assert root[0].attrib[tag+'fillType']=='evenOdd'
           print('Owner reference wordmark vector valid, same component used by header and intro.')
           PY
+      - name: Verify gold alert manager and owner-reference tagline in both views
+        shell: bash
+        run: |
+          set -euo pipefail
+          UI=dev-trader/android/app/src/main/java/com/devtrader/app/SafeActivity.kt
+          INTRO=dev-trader/android/app/src/main/java/com/devtrader/app/KyvoriqLaunchOverlay.kt
+          TAG=dev-trader/android/app/src/main/res/drawable/kyvoriq_trade_the_plot.xml
+          test -s "$TAG"
+          grep -Fq 'kyvoriq_trade_the_plot' "$UI"
+          grep -Fq 'kyvoriq_trade_the_plot' "$INTRO"
+          grep -Fq 'setBackgroundDrawable(android.graphics.drawable.ColorDrawable(Color.TRANSPARENT))' "$UI"
+          grep -Fq 'BtcPriceAlerts.add(this, requested, livePrice)' "$UI"
+          ! grep -Fq 'AI POWERED TRADING' "$UI"
+          ! grep -Fq 'AI POWERED TRADING' "$INTRO"
+          python - <<'PY'
+          import xml.etree.ElementTree as ET
+          tag='{http://schemas.android.com/apk/res/android}'
+          root=ET.parse('dev-trader/android/app/src/main/res/drawable/kyvoriq_trade_the_plot.xml').getroot()
+          assert root.tag=='vector'
+          assert root.attrib[tag+'viewportWidth']=='281'
+          assert root.attrib[tag+'viewportHeight']=='42'
+          assert len(root)==1 and len(root[0].attrib[tag+'pathData'])>2000
+          assert root[0].attrib[tag+'fillType']=='evenOdd'
+          print('User-referenced handwritten vector and full-native alert card verified.')
+          PY
       - name: Build signed release APK
         working-directory: dev-trader/android
         run: |
@@ -147,7 +172,7 @@ jobs:
           grep -Fq 'Bitget execution readiness  •  UNVERIFIED' "$CLIENT"
           grep -Fq 'if (!bootstrapFresh && lastHardHttpStatus == null)' "$CLIENT"
           ! grep -Fq 'Backend diagnostics failed.' "$CLIENT"
-      - name: Verify matching Build 147 signing certificate
+      - name: Verify matching Build 148 signing certificate
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -156,7 +181,7 @@ jobs:
           CURRENT="dev-trader/android/app/build/outputs/apk/release/app-release.apk"
           test -s "$CURRENT"
           mkdir -p /tmp/kyvoriq-prior
-          gh release download dev-trader-v0.21.22-147 --pattern app-release.apk --dir /tmp/kyvoriq-prior
+          gh release download dev-trader-v0.21.23-148 --pattern app-release.apk --dir /tmp/kyvoriq-prior
           PREVIOUS="/tmp/kyvoriq-prior/app-release.apk"
           test -s "$PREVIOUS"
           SDKROOT="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
@@ -174,9 +199,9 @@ jobs:
           test -n "$CURRENT_CERT" || { echo "New certificate fingerprint unavailable"; exit 1; }
           test "$PREVIOUS_CERT" = "$CURRENT_CERT" || { echo "Different APK signing identity: release refused"; exit 1; }
           "$AAPT" dump badging "$CURRENT" > /tmp/kyvoriq-new-package.txt
-          grep -Fq "package: name='com.devtrader.app' versionCode='148' versionName='0.21.23'" /tmp/kyvoriq-new-package.txt || { echo "Package identifier or version mismatch"; exit 1; }
+          grep -Fq "package: name='com.devtrader.app' versionCode='149' versionName='0.21.24'" /tmp/kyvoriq-new-package.txt || { echo "Package identifier or version mismatch"; exit 1; }
           ! unzip -l "$CURRENT" | grep -Ei 'ui_preview.json|signing.jks|\.env'
-          echo "Build 148 package, version, signature and preview exclusion verified."
+          echo "Build 149 package, version, signature and preview exclusion verified."
 
       - name: Prepare release metadata
         shell: bash
@@ -226,7 +251,7 @@ jobs:
             echo "Existing signed APK must not be replaced."
             exit 1
           fi
-          gh release create "$TAG" --target "$GITHUB_SHA" "$APK" "dev-trader-update.json#dev-trader-update.json" --title "KYVORIQ ${{ steps.meta.outputs.version_name }}" --notes "Signed KYVORIQ Build 148: replaces serif brand heading with owner-reference geometric KYVORIQ wordmark and concentric-ring O, shared by dashboard and animated intro. Preserves Build 147 price alerts and trading/reconnect/security behavior."
+          gh release create "$TAG" --target "$GITHUB_SHA" "$APK" "dev-trader-update.json#dev-trader-update.json" --title "KYVORIQ ${{ steps.meta.outputs.version_name }}" --notes "Signed KYVORIQ Build 149: premium black/charcoal/deep-gold BTC price alerts dialog, owner-reference handwritten TRADE THE PLOT. tagline in app header and animated intro. Preserves one-shot alert logic, signing identity and Bitget demo trading behavior."
 
       - name: Publish update manifest
         env:
