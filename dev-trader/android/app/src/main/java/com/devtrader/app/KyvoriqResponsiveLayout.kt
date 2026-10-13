@@ -19,20 +19,20 @@ internal object KyvoriqResponsiveLayout {
     fun forViewport(widthDp: Int, heightDp: Int, fontScale: Float): Header {
         val safeWidth = widthDp.coerceAtLeast(240)
         val scale = fontScale.coerceIn(0.8f, 2.5f)
-        val stacked = safeWidth < 340 || (scale > 1.35f && safeWidth < 460)
+        val stacked = safeWidth < 600 || scale > 1.15f
         val compact = safeWidth < 520 || scale > 1.15f
         val emblem = when {
-            safeWidth < 335 -> 34
-            compact -> 39
-            else -> 48
+            safeWidth < 335 -> 48
+            compact -> 56
+            else -> 60
         }
         return Header(
             stackedActions = stacked,
             compactActions = compact && !stacked,
             emblemDp = emblem,
-            alertsDp = if (stacked) 91 else if (compact) 42 else 69,
-            retryDp = if (stacked) 70 else if (compact) 42 else 56,
-            wordmarkHeightDp = if (safeWidth < 335) 26 else 30,
+            alertsDp = 112,
+            retryDp = 96,
+            wordmarkHeightDp = if (safeWidth < 335) 32 else 36,
             taglineWidthDp = if (safeWidth < 335) 100 else if (compact) 112 else 109,
             chartHeightDp = when {
                 heightDp < 640 -> 300
@@ -43,3 +43,4 @@ internal object KyvoriqResponsiveLayout {
         )
     }
 }
+
