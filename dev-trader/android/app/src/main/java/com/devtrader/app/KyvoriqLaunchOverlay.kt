@@ -7,6 +7,7 @@ import android.view.Gravity
 import android.view.View
 import android.view.animation.PathInterpolator
 import android.widget.FrameLayout
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 
@@ -22,14 +23,11 @@ class KyvoriqLaunchOverlay(context: Context) : FrameLayout(context) {
     private val wordmark = KyvoriqRazorWordmarkView(context).apply {
         alpha = 0f; translationY = dp(12f)
     }
-    private val subtitle = TextView(context).apply {
-        text = "AI POWERED TRADING"
-        setTextColor(KyvoriqTheme.gray)
-        typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
-        textSize = 10f
-        letterSpacing = .24f
-        gravity = Gravity.CENTER
-        includeFontPadding = false
+    // Same owner-provided handwritten tagline as the dashboard header.
+    private val subtitle = ImageView(context).apply {
+        setImageResource(R.drawable.kyvoriq_trade_the_plot)
+        scaleType = ImageView.ScaleType.FIT_CENTER
+        contentDescription = "Trade the Plot"
         alpha = 0f
     }
     private val hairline = View(context).apply { setBackgroundColor(KyvoriqTheme.deepGold); alpha = 0f }
@@ -67,11 +65,11 @@ class KyvoriqLaunchOverlay(context: Context) : FrameLayout(context) {
         lockup.addView(wordmark, LinearLayout.LayoutParams(dp(308f).toInt(), dp(68f).toInt()).apply {
             gravity = Gravity.CENTER_HORIZONTAL; topMargin = dp(16f).toInt()
         })
-        lockup.addView(hairline, LinearLayout.LayoutParams(dp(206f).toInt(), dp(1f).toInt().coerceAtLeast(1)).apply {
-            gravity = Gravity.CENTER_HORIZONTAL; topMargin = dp(6f).toInt()
+        lockup.addView(subtitle, LinearLayout.LayoutParams(dp(186f).toInt(), dp(29f).toInt()).apply {
+            gravity = Gravity.END; rightMargin = dp(15f).toInt(); topMargin = dp(1f).toInt()
         })
-        lockup.addView(subtitle, LinearLayout.LayoutParams(-1, dp(36f).toInt()).apply {
-            topMargin = dp(12f).toInt()
+        lockup.addView(hairline, LinearLayout.LayoutParams(dp(206f).toInt(), dp(1f).toInt().coerceAtLeast(1)).apply {
+            gravity = Gravity.CENTER_HORIZONTAL; topMargin = dp(11f).toInt()
         })
         addView(lockup, LayoutParams(-1, -1, Gravity.CENTER))
         addView(footer, LayoutParams(-1, dp(48f).toInt(), Gravity.BOTTOM).apply {
