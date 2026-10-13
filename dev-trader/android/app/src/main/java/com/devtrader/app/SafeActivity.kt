@@ -845,7 +845,11 @@ class SafeActivity : FragmentActivity() {
         }
         alertsButton.setOnClickListener {
             haptic(it, KyvoriqHaptics.Cue.ACTION)
-            safe { requestAlertPermission() }
+            if (KyvoriqSecureSession.isPaired(this)) {
+                safe { requestAlertPermission() }
+            } else {
+                showConsumerPlans()
+            }
         }
         actions.addView(alertsButton,
             LinearLayout.LayoutParams(if (narrowHeader) 0 else dp(layout.alertsDp), dp(40), if (narrowHeader) 1f else 0f).apply {
@@ -891,7 +895,7 @@ class SafeActivity : FragmentActivity() {
         price = hero.price; oiView = hero.oi; status = hero.status
         tradePage.addView(hero.container, margins(bottom = 10))
         publicMarketMessage = label(
-            "PUBLIC BTC CHART • VIEW ONLY\nPrivate signals and account tools require owner-approved pairing.",
+            "BASIC ACCESS • BTC LIVE MARKET\nConsumer upgrades are pending verification; private trading stays owner-only.",
             11f, kyGold, 0f
         ).apply {
             setPadding(dp(12), dp(11), dp(12), dp(11))
@@ -1694,11 +1698,11 @@ class SafeActivity : FragmentActivity() {
 
     private fun showPublicAccessInfo() {
         showInfoDialog(
-            "Public BTC chart • View only",
-            "This phone can read public BTC market candles without an account. " +
-                "Private KYVORIQ signals, order execution, position history, notifications " +
-                "and owner settings stay locked. To enable private features, the owner must " +
-                "explicitly authorize device pairing in Insights. Do not share the owner token casually."
+            "Basic market access",
+            "You can explore public BTC candles without creating an account. " +
+                "Pro and Elite market features will require verified subscriptions when available. " +
+                "Private KYVORIQ exchange execution, owner diagnostics and management " +
+                "are never exposed to consumer accounts."
         )
     }
 
@@ -1731,7 +1735,7 @@ class SafeActivity : FragmentActivity() {
         if (::integrity.isInitialized) integrity.text = "PUBLIC MARKET • VIEW ONLY • NO PRIVATE TRADES"
         publicMarketMessage?.visibility = View.VISIBLE
         if (::alertsButton.isInitialized) {
-            alertsButton.text = compactHeaderLabel("PRIVATE")
+            alertsButton.text = "EXPLORE PRO"
             alertsButton.isEnabled = true
         }
     }
@@ -3381,7 +3385,7 @@ class SafeActivity : FragmentActivity() {
                         oiView.text = "OI  —  •  PRIVATE"
                         status.text = "VIEW ONLY"
                         integrity.text = "PUBLIC BTC CANDLES • VIEW ONLY • NO PRIVATE TRADING"
-                        publicMarketMessage?.text = "PUBLIC BTC CHART • VIEW ONLY\nPrivate signals and account tools require owner-approved pairing."
+                        publicMarketMessage?.text = "BASIC ACCESS • BTC LIVE MARKET\nConsumer upgrades are pending verification; private trading stays owner-only."
                         publicMarketMessage?.visibility = View.VISIBLE
                         chart.setFeedHealthy(false)
                         chart.setSignal(null)
@@ -3447,7 +3451,7 @@ class SafeActivity : FragmentActivity() {
 
     private fun startBackgroundAlerts() {
         if (publicMarketOnly || !KyvoriqSecureSession.isPaired(this)) {
-            alertsButton.text = compactHeaderLabel("PRIVATE")
+            alertsButton.text = "EXPLORE PRO"
             alertsButton.isEnabled = true
             return
         }
