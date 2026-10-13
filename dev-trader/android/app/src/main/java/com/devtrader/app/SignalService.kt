@@ -35,6 +35,7 @@ class SignalService : Service() {
         private const val ALERT_PRIORITY_CHANNEL = "kyvoriq_alert_priority_v1"
         private const val ALERT_EXECUTION_CHANNEL = "kyvoriq_alert_execution_v1"
         private const val ALERT_CRITICAL_CHANNEL = "kyvoriq_alert_critical_v1"
+        private const val BTC_PRICE_CHANNEL = "kyvoriq_btc_price_alerts_v1"
         private const val ALERT_PREFS = "kyvoriq_alert_intelligence"
         private const val SERVICE_NOTIFICATION_ID = 3100
         private const val SIGNAL_NOTIFICATION_ID = 3101
@@ -128,6 +129,17 @@ class SignalService : Service() {
 
     private fun ensureChannels() {
         val manager = getSystemService(NotificationManager::class.java)
+        manager.createNotificationChannel(
+            NotificationChannel(
+                BTC_PRICE_CHANNEL, "KYVORIQ • Custom BTC Price Alerts",
+                NotificationManager.IMPORTANCE_HIGH
+            ).apply {
+                description = "One-time notifications when your chosen BTC prices are reached."
+                enableVibration(true)
+                vibrationPattern = longArrayOf(0, 70, 55, 105)
+                lockscreenVisibility = Notification.VISIBILITY_PRIVATE
+            }
+        )
         manager.createNotificationChannel(
             NotificationChannel(
                 SERVICE_CHANNEL,
@@ -253,6 +265,7 @@ class SignalService : Service() {
                         val root = JSONObject(text)
                         when (root.optString("type")) {
                             "market_tick" -> {
+                                runCatching { checkCustomPriceAlerts(root) }
                                 KyvoriqWidgetProvider.updateFromMarketTick(this@SignalService, root)
                                 val health = root.optString("data_health", "UNKNOWN")
                                 updateServiceNotification(
@@ -265,6 +278,7 @@ class SignalService : Service() {
                                 return
                             }
                             "state" -> {
+                                runCatching { checkCustomPriceAlerts(root) }
                                 KyvoriqWidgetProvider.updateFromState(this@SignalService, root)
                                 updateServiceNotification(
                                     when (root.optString("data_health", "UNKNOWN")) {
@@ -686,6 +700,38 @@ class SignalService : Service() {
         recordAlertTier(tier, title)
         getSystemService(NotificationManager::class.java)
             .notify(SIGNAL_NOTIFICATION_ID, notification)
+    }
+
+    private fun checkCustomPriceAlerts(tick: JSONObject) {
+        // Local foreground service keeps monitoring when the chart activity
+        // is backgrounded. Only fresh, authenticated Bitget WS ticks trigger.
+        val allowed = Build.VERSION.SDK_INT < 33 ||
+            checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) ==
+                android.content.pm.PackageManager.PERMISSION_GRANTED
+        val reached = BtcPriceAlerts.onMarketTick(this, tick, allowed)
+        for (item in reached) {
+            val title = "BTC PRICE ALERT • LEVEL REACHED"
+            val direction = if (item.direction == "ABOVE") "rose to" else "fell to"
+            val body = "BTC $direction your alert at " + format(item.level) +
+                " USDT. Current price " + format(item.observed) + " USDT."
+            val launch = PendingIntent.getActivity(
+                this, 6500, Intent(this, SafeActivity::class.java),
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+            val notification = NotificationCompat.Builder(this, BTC_PRICE_CHANNEL)
+                .setSmallIcon(R.drawable.ic_stat_kyvoriq)
+                .setColor(getColor(R.color.kyvoriq_gold))
+                .setContentTitle(title)
+                .setContentText(body)
+                .setStyle(NotificationCompat.BigTextStyle().bigText(body))
+                .setContentIntent(launch)
+                .setAutoCancel(true)
+                .setPriority(NotificationCompat.PRIORITY_HIGH)
+                .setCategory(Notification.CATEGORY_REMINDER)
+                .build()
+            getSystemService(NotificationManager::class.java)
+                .notify(70000 + (item.id.hashCode() and 0x7fffffff) % 100000, notification)
+        }
     }
 
     private fun notifyTradeEvent(event: JSONObject) {
