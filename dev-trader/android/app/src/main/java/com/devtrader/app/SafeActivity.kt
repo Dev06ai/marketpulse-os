@@ -2467,17 +2467,15 @@ class SafeActivity : FragmentActivity() {
         val prefs = getSharedPreferences("kyvoriq_alert_intelligence", Context.MODE_PRIVATE)
         val lastTier = prefs.getString("last_tier", "—") ?: "—"
         val lastTitle = prefs.getString("last_title", "").orEmpty()
-        alertIntelligenceView.text =
-            "Alert priority • $tier\n$explanation" +
-                if (lastTitle.isBlank()) "" else "\nLast delivered  •  $lastTier  •  " + lastTitle.take(42)
-        alertIntelligenceView.setTextColor(
-            when (tier) {
-                "CRITICAL" -> Color.rgb(255, 82, 105)
-                "EXECUTION" -> Color.rgb(54, 211, 153)
-                "PRIORITY" -> kyGold
-                else -> kyGray
-            }
-        )
+        val alertCopy = "Alert priority  •  $tier\n$explanation" +
+            (if (lastTitle.isBlank()) "" else "\nLast delivered  •  $lastTier  •  " + lastTitle.take(42))
+        val styledAlert = SpannableString(alertCopy)
+        val tierAt = alertCopy.indexOf(tier)
+        if (tierAt >= 0) styledAlert.setSpan(ForegroundColorSpan(
+            if (tier == "CRITICAL") Color.rgb(255, 82, 105) else kyGold
+        ), tierAt, tierAt + tier.length, 0)
+        alertIntelligenceView.setTextColor(kyWhite)
+        alertIntelligenceView.text = styledAlert
     }
 
     private fun renderRiskHeat(root: JSONObject) {
