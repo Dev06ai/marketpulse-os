@@ -48,6 +48,7 @@ import android.widget.SeekBar
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricPrompt
 import androidx.core.app.NotificationCompat
@@ -139,6 +140,11 @@ class SafeActivity : FragmentActivity() {
     private lateinit var journal: TextView
     private lateinit var tradeHistory: TextView
     private lateinit var replay: TextView
+    private var musicIsland: KyvoriqMusicIsland? = null
+    private var pendingMusicSlot = 0
+    private val pickMusicFile = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) musicIsland?.importFile(pendingMusicSlot, uri)
+    }
     private lateinit var workspaceHost: FrameLayout
     private val workspacePages = mutableListOf<View>()
     private val navigationButtons = mutableListOf<Button>()
@@ -814,6 +820,31 @@ class SafeActivity : FragmentActivity() {
             leftMargin = dp((layout.wordmarkWidthDp - layout.taglineWidthDp - 8).coerceAtLeast(0))
         })
         identityRow.addView(brand, LinearLayout.LayoutParams(0, dp(54), 1f))
+        // In-app Dynamic Island: a real layout row below the status bar, never
+        // SYSTEM_ALERT_WINDOW and never an overlay over price/chart gestures.
+        musicIsland = KyvoriqMusicIsland(this) { slot ->
+            pendingMusicSlot = slot
+            pickMusicFile.launch(arrayOf("audio/*"))
+        }
+        val musicToggle = TextView(this).apply {
+            text = "♫"
+            textSize = 23f
+            gravity = Gravity.CENTER
+            setTextColor(kyGold)
+            contentDescription = "Open KYVORIQ music island"
+            background = GradientDrawable().apply {
+                setColor(kySlate)
+                cornerRadius = dp(16).toFloat()
+                setStroke(dp(1), kyLine)
+            }
+            setOnClickListener {
+                haptic(it, KyvoriqHaptics.Cue.ACTION)
+                musicIsland?.toggleIsland()
+            }
+        }
+        identityRow.addView(musicToggle, LinearLayout.LayoutParams(dp(40), dp(40)).apply {
+            rightMargin = dp(if (narrowHeader) 0 else 8)
+        })
         alertsButton = compactPillButton(compactHeaderLabel("ALERTS")).apply {
             contentDescription = "Enable trade alerts"
             textSize = if (layout.compactActions) 11f else 12f
@@ -843,6 +874,9 @@ class SafeActivity : FragmentActivity() {
             })
         if (!narrowHeader) identityRow.addView(actions, LinearLayout.LayoutParams(-2, -2))
         header.addView(identityRow, LinearLayout.LayoutParams(-1, -2))
+        musicIsland?.island?.let { panel ->
+            header.addView(panel, LinearLayout.LayoutParams(-1, dp(76)).apply { topMargin = dp(7) })
+        }
         if (narrowHeader) header.addView(actions, LinearLayout.LayoutParams(-1, dp(40)).apply { topMargin = dp(8) })
         root.addView(header, margins(bottom = 10))
 
@@ -4295,6 +4329,9 @@ class SafeActivity : FragmentActivity() {
     }
 
     override fun onStop() {
+        // No media foreground service: avoid silently playing after the owner
+        // leaves KYVORIQ or privacy shield hides the app.
+        musicIsland?.pause()
         if (!debugPreview && !biometricPromptActive && privacyPrefs().getBoolean("biometric_enabled", false)) {
             backgroundedAtMs = System.currentTimeMillis()
         }
@@ -4312,6 +4349,8 @@ class SafeActivity : FragmentActivity() {
     }
 
     override fun onDestroy() {
+        musicIsland?.release()
+        musicIsland = null
         ambientAnimator?.cancel()
         ambientAnimator = null
         stopped = true
