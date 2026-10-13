@@ -69,7 +69,7 @@ class BrandVisualTest {
             inst.runOnMainSync {
                 val root = activity.window.decorView
                 children(root).filterIsInstance<Button>().first {
-                    it.contentDescription == "Workspace INSIGHTS"
+                    it.contentDescription == "Workspace PLANS"
                 }.performClick()
             }
             // A visibility/layout switch is committed on the next UI traversal.
