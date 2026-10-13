@@ -228,11 +228,12 @@ internal class KyvoriqMusicIsland(
     private fun linked(trackIndex: Int): Uri? = prefs.getString("uri_" + trackIndex, null)
         ?.takeIf { it.isNotBlank() }?.let { Uri.parse(it) }
 
-    // Playlist positions are zero-based; the missing third song deliberately
-    // remains unbundled and can still be supplied through the document picker.
+    // Each of five offline tracks maps to one distinct bundled asset.
+    // The document picker remains available if the private bundle is absent.
     private fun bundledName(trackIndex: Int): String? = when (trackIndex) {
         0 -> "track_01_bipolar.mp3"
         1 -> "track_02_iris.mp3"
+        2 -> "track_03_dark_beach.mp3"
         3 -> "track_04_akai.mp3"
         4 -> "track_05_written.mp3"
         else -> null
