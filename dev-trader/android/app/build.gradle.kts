@@ -10,8 +10,8 @@ android {
         applicationId = "com.devtrader.app"
         minSdk = 26
         targetSdk = 37
-        versionCode = (providers.gradleProperty("devTraderVersionCode").orNull ?: "148").toInt()
-        versionName = providers.gradleProperty("devTraderVersionName").orNull ?: "0.21.23"
+        versionCode = (providers.gradleProperty("devTraderVersionCode").orNull ?: "149").toInt()
+        versionName = providers.gradleProperty("devTraderVersionName").orNull ?: "0.21.24"
         val backendUrl = providers.gradleProperty("devTraderBackendUrl").orNull
             ?: "https://kyvoriq-staging.getvoroa.com"
         require(Regex("https://[A-Za-z0-9.-]+(?::[0-9]+)?/?").matches(backendUrl)) {
