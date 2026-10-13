@@ -143,6 +143,8 @@ class SafeActivity : FragmentActivity() {
     private val adminOnlyViews = mutableListOf<View>()
     private var consumerPositionTab: Button? = null
     private var consumerWelcomeCard: View? = null
+    private var consumerPageHeading: TextView? = null
+    private var consumerPageSubtitle: TextView? = null
     private lateinit var workspaceHost: FrameLayout
     private val workspacePages = mutableListOf<View>()
     private val navigationButtons = mutableListOf<Button>()
@@ -1023,8 +1025,10 @@ class SafeActivity : FragmentActivity() {
         }
         insightsScroll.addView(insightsContent, FrameLayout.LayoutParams(-1, -2))
         insightsPage.addView(insightsScroll, LinearLayout.LayoutParams(-1, 0, 1f))
-        insightsContent.addView(label("INSIGHTS", 19f, kyWhite, 0.01f), margins(top = 6, bottom = 6))
-        insightsContent.addView(label("Verified market intelligence", 11f, kyGray, 0.01f), margins(bottom = 14))
+        consumerPageHeading = label("INSIGHTS", 19f, kyWhite, 0.01f)
+        insightsContent.addView(consumerPageHeading, margins(top = 6, bottom = 6))
+        consumerPageSubtitle = label("Verified market intelligence", 11f, kyGray, 0.01f)
+        insightsContent.addView(consumerPageSubtitle, margins(bottom = 14))
 
         // Filter only existing, truthful live telemetry. No invented holder, heatmap or flow data.
         var selectedInsightTab = 0
@@ -1235,6 +1239,8 @@ class SafeActivity : FragmentActivity() {
         adminOnlyViews.forEach { it.visibility = if (owner) View.VISIBLE else View.GONE }
         consumerPositionTab?.visibility = if (owner) View.VISIBLE else View.GONE
         consumerWelcomeCard?.visibility = if (owner) View.GONE else View.VISIBLE
+        consumerPageHeading?.text = if (owner) "INSIGHTS" else "MEMBERSHIP"
+        consumerPageSubtitle?.text = if (owner) "Verified market intelligence" else "Explore KYVORIQ access plans"
         // No wasted or misleading navigation: the consumer sees Market + Plans,
         // while the verified owner gets Trade + Positions + Insights.
         navigationButtons.getOrNull(0)?.text = if (owner) "Trade" else "Market"
