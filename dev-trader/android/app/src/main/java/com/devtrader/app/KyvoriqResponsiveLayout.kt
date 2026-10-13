@@ -19,8 +19,8 @@ internal object KyvoriqResponsiveLayout {
     fun forViewport(widthDp: Int, heightDp: Int, fontScale: Float): Header {
         val safeWidth = widthDp.coerceAtLeast(240)
         val scale = fontScale.coerceIn(0.8f, 2.5f)
-        val stacked = safeWidth < 320 || (scale > 1.35f && safeWidth < 450)
-        val compact = safeWidth < 425 || scale > 1.15f
+        val stacked = safeWidth < 340 || (scale > 1.35f && safeWidth < 460)
+        val compact = safeWidth < 520 || scale > 1.15f
         val emblem = when {
             safeWidth < 335 -> 34
             compact -> 39
