@@ -137,7 +137,7 @@ jobs:
           grep -Fq 'enterPublicMarketMode()' "$UI"
           grep -Fq 'if (publicMarketOnly) JSONArray() else chartOverlays(latestRoot)' "$UI"
           grep -Fq 'chart.setFeedHealthy(false)' "$UI"
-          grep -Fq 'Private signals and account tools require owner-approved pairing.' "$UI"
+          grep -Fq 'Consumer upgrades are pending verification; private trading stays owner-only.' "$UI"
           grep -Fq 'if (publicMarketOnly || !KyvoriqSecureSession.isPaired(this))' "$UI"
           grep -Fq 'kyvoriq_trade_the_plot' "$UI"
           ! grep -Fq 'leftMargin = -dp(10)' "$UI"
