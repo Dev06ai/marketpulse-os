@@ -1,8 +1,8 @@
 {
   "enabled": true,
-  "versionCode": 153,
-  "versionName": "0.21.28",
-  "apkUrl": "https://github.com/Dev06ai/marketpulse-os/releases/download/dev-trader-v0.21.28-153/app-release.apk",
-  "sha256": "fde8539755e19be8f0748626bf62c4f5d5665fa531c7cbb231dddccc23dfb95e",
-  "notes": "Signed KYVORIQ release 0.21.28"
+  "versionCode": 154,
+  "versionName": "0.21.29",
+  "apkUrl": "https://github.com/Dev06ai/marketpulse-os/releases/download/dev-trader-v0.21.29-154/app-release.apk",
+  "sha256": "f66f92e9811b4b3bb1967781afc84731810cb2339fad2bcb73a9475c20d1695e",
+  "notes": "Signed KYVORIQ release 0.21.29"
 }
