@@ -58,6 +58,9 @@ jobs:
           script: |
             set -e
             mkdir -p ui-check
+            adb start-server || true
+            adb wait-for-device
+            sleep 4
             adb install -r dev-trader/android/app/build/outputs/apk/debug/app-debug.apk
             adb install -r dev-trader/android/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
             adb shell wm size 720x1280
