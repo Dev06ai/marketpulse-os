@@ -372,7 +372,10 @@ internal class KyvoriqMusicIsland(
         island.translationY = -dp(9).toFloat()
         island.animate().alpha(1f).translationY(0f).setDuration(280L)
             .setInterpolator(DecelerateInterpolator()).start()
-        if (hasAudio(index) && !playing && media == null) startTrack(index)
+        if (!playing && media == null) {
+            if (hasAudio(index)) startTrack(index)
+            else tracks.indices.firstOrNull { hasAudio(it) }?.let { select(it, true) }
+        }
     }
 
     private fun ensureShown() {
