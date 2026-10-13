@@ -91,7 +91,7 @@ class MusicIslandVisualTest {
             .putExtra("visual_preview", true))
         try {
             inst.runOnMainSync {
-                val player = KyvoriqMusicIsland(activity as androidx.fragment.app.FragmentActivity) {}
+                val player = KyvoriqMusicIsland(activity as androidx.fragment.app.FragmentActivity, importAudio = {})
                 assertEquals(5, player.tracks.size)
                 assertEquals("Iris", player.tracks[1].title)
                 assertEquals("Dark Beach (Slowed)", player.tracks[2].title)
