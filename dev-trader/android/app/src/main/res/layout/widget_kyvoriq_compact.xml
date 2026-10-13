@@ -5,58 +5,58 @@
     android:layout_height="match_parent"
     android:orientation="vertical"
     android:gravity="center_vertical"
-    android:padding="12dp"
+    android:paddingStart="11dp"
+    android:paddingEnd="11dp"
+    android:paddingTop="7dp"
+    android:paddingBottom="7dp"
     android:background="@drawable/widget_kyvoriq_surface">
 
     <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:gravity="center_vertical">
-
+        android:layout_height="22dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
         <ImageView
             android:layout_width="22dp"
             android:layout_height="22dp"
-            android:src="@drawable/kyvoriq_mark"
-            android:contentDescription="KYVORIQ"/>
-
-        <TextView
+            android:scaleType="fitCenter"
+            android:src="@drawable/kyvoriq_emblem_static"
+            android:contentDescription="KYVORIQ emblem"/>
+        <ImageView
             android:layout_width="0dp"
-            android:layout_height="wrap_content"
+            android:layout_height="21dp"
             android:layout_weight="1"
-            android:layout_marginStart="8dp"
-            android:text="KYVORIQ"
-            android:letterSpacing="0.035"
-            android:fontFamily="serif"
-            android:textColor="#B68C4B"
-            android:textStyle="bold"
-            android:textSize="12sp"/>
-
+            android:layout_marginStart="7dp"
+            android:layout_marginEnd="6dp"
+            android:scaleType="fitStart"
+            android:src="@drawable/kyvoriq_concentric_wordmark"
+            android:contentDescription="KYVORIQ"
+            android:adjustViewBounds="false"/>
         <TextView
             android:id="@+id/widget_health"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="LIVE"
-            android:textColor="#B68C4B"
-            android:textStyle="bold"
+            android:maxLines="1"
+            android:text="WAIT"
+            android:textColor="#C0A171"
+            android:fontFamily="sans-serif-medium"
             android:textSize="9sp"/>
     </LinearLayout>
 
     <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="40dp"
-        android:layout_marginTop="7dp"
-        android:orientation="horizontal"
-        android:gravity="center_vertical">
-
+        android:layout_height="28dp"
+        android:layout_marginTop="3dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
         <TextView
             android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
+            android:layout_height="match_parent"
+            android:gravity="center_vertical"
             android:text="BTC"
             android:textColor="#F4F5F7"
-            android:textStyle="bold"
-            android:textSize="18sp"/>
-
+            android:fontFamily="sans-serif-medium"
+            android:textSize="14sp"/>
         <ViewFlipper
             android:id="@+id/widget_price_flipper"
             android:layout_width="0dp"
@@ -66,61 +66,66 @@
             android:inAnimation="@anim/widget_price_in"
             android:outAnimation="@anim/widget_price_out"
             android:animateFirstView="false">
-
             <TextView
                 android:id="@+id/widget_price_0"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
                 android:gravity="center_vertical"
-                android:text="—"
+                android:singleLine="true"
+                android:ellipsize="end"
+                android:fontFamily="sans-serif-medium"
+                android:textSize="20sp"
                 android:textColor="#F4F5F7"
-                android:textStyle="bold"
-                android:textSize="19sp"/>
-
+                android:text="—"/>
             <TextView
                 android:id="@+id/widget_price_1"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
                 android:gravity="center_vertical"
-                android:text="—"
+                android:singleLine="true"
+                android:ellipsize="end"
+                android:fontFamily="sans-serif-medium"
+                android:textSize="20sp"
                 android:textColor="#F4F5F7"
-                android:textStyle="bold"
-                android:textSize="19sp"/>
+                android:text="—"/>
         </ViewFlipper>
-
         <TextView
             android:id="@+id/widget_delta"
-            android:layout_width="24dp"
+            android:layout_width="18dp"
             android:layout_height="match_parent"
             android:gravity="center"
             android:text="•"
-            android:textColor="#A1A4AB"
-            android:textStyle="bold"
-            android:textSize="11sp"/>
+            android:textColor="#C0A171"
+            android:textSize="11sp"
+            android:fontFamily="sans-serif-medium"/>
     </LinearLayout>
 
     <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="3dp"
+        android:layout_height="17dp"
+        android:layout_marginTop="2dp"
+        android:gravity="center_vertical"
         android:orientation="horizontal">
-
         <TextView
             android:id="@+id/widget_bias"
             android:layout_width="0dp"
-            android:layout_height="wrap_content"
+            android:layout_height="match_parent"
             android:layout_weight="1"
+            android:gravity="center_vertical"
             android:text="WAIT"
-            android:textColor="#B68C4B"
-            android:textStyle="bold"
-            android:textSize="10sp"/>
-
+            android:textColor="#C0A171"
+            android:fontFamily="sans-serif-medium"
+            android:textSize="9sp"
+            android:singleLine="true"/>
         <TextView
             android:id="@+id/widget_state"
             android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
+            android:layout_height="match_parent"
+            android:gravity="center_vertical"
+            android:singleLine="true"
             android:text="SCANNING"
             android:textColor="#A1A4AB"
+            android:fontFamily="sans-serif"
             android:textSize="9sp"/>
     </LinearLayout>
 </LinearLayout>
