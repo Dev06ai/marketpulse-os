@@ -224,6 +224,7 @@ class MarketChartView @JvmOverloads constructor(
     private var timeframe = "1h"
     private var livePrice = Double.NaN
     private var feedHealthy = false
+    private var customAlertLevels: List<Double> = emptyList()
     private var showBollinger = false
     private var showEma = true
     private var showVolume = true
@@ -281,6 +282,14 @@ class MarketChartView @JvmOverloads constructor(
     private var tradeHitStartedAt = 0L
 
     fun setFeedHealthy(value: Boolean) { feedHealthy = value; invalidate() }
+
+    fun setCustomPriceAlerts(levels: List<Double>) {
+        val checked = levels.filter { it.isFinite() && it > 0.0 }.take(20)
+        if (customAlertLevels != checked) {
+            customAlertLevels = checked
+            invalidate()
+        }
+    }
 
     private fun overlayKey(row: JSONObject): String {
         val price = row.optDouble("price", Double.NaN)
@@ -628,6 +637,17 @@ class MarketChartView @JvmOverloads constructor(
             drawTradeHitEffect(canvas, signal, left, right, top, priceBottom, low, high)
         }
 
+        // User-defined one-shot BTC alerts are independent of strategy levels
+        // and remain visible even with SFP/NPOC/OB level layers disabled.
+        customAlertLevels.forEach { level ->
+            if (level in low..high) {
+                drawTradeLevel(
+                    canvas, left, right,
+                    mapY(level, low, high, top, priceBottom),
+                    "ALERT", level, KyvoriqTheme.gold
+                )
+            }
+        }
         drawAxisLevelLabels(canvas, right, top, priceBottom, low, high)
 
         if (!livePrice.isNaN() && visibleLive) {
