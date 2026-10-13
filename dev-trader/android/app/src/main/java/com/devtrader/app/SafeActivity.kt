@@ -142,6 +142,7 @@ class SafeActivity : FragmentActivity() {
     private var accountButton: Button? = null
     private val adminOnlyViews = mutableListOf<View>()
     private var consumerPositionTab: Button? = null
+    private var consumerWelcomeCard: View? = null
     private lateinit var workspaceHost: FrameLayout
     private val workspacePages = mutableListOf<View>()
     private val navigationButtons = mutableListOf<Button>()
@@ -1052,6 +1053,19 @@ class SafeActivity : FragmentActivity() {
             })
         }
         insightsContent.addView(insightTabsRow, margins(bottom = 12))
+        adminOnlyViews.add(insightTabsRow)
+        consumerWelcomeCard = premiumCard(
+            "YOUR KYVORIQ ACCOUNT",
+            "Explore the BTC chart for free.\n" +
+            "BASIC  •  Market chart and public context\n" +
+            "PRO  •  Enhanced signals and alerts (coming soon)\n" +
+            "ELITE  •  Advanced verified insights (coming soon)\n\n" +
+            "Subscription access will activate only after secure accounts and payment verification are ready.",
+            12f
+        ).first.apply {
+            setOnClickListener { showConsumerAccountPanel() }
+        }
+        insightsContent.addView(consumerWelcomeCard, margins(bottom = 12))
 
         val story = premiumCard("MARKET CONTEXT", "Reading the market…", 12.5f)
         features = story.second
@@ -1205,6 +1219,80 @@ class SafeActivity : FragmentActivity() {
         update = TextView(this); risk = TextView(this); journal = TextView(this); replay = TextView(this)
         selectWorkspace(0)
         refreshConsumerPresentation()
+    }
+
+    /**
+     * APK visibility is a presentation rule only. The backend remains the sole
+     * enforcement point for paid capabilities, account ownership and payment.
+     * Existing owner pairing is the only recognized admin credential during migration.
+     */
+    private fun refreshConsumerPresentation() {
+        val owner = KyvoriqSecureSession.isPaired(this)
+        adminOnlyViews.forEach { it.visibility = if (owner) View.VISIBLE else View.GONE }
+        consumerPositionTab?.visibility = if (owner) View.VISIBLE else View.GONE
+        consumerWelcomeCard?.visibility = if (owner) View.GONE else View.VISIBLE
+        accountButton?.text = if (owner) "ADMIN" else "SIGN IN"
+        accountButton?.contentDescription =
+            if (owner) "Admin account and management" else "Sign in or create a KYVORIQ account"
+        if (!owner && selectedWorkspace == 1) selectWorkspace(0)
+    }
+
+    private fun showConsumerAccountPanel() {
+        val owner = KyvoriqSecureSession.isPaired(this)
+        val choices = if (owner) arrayOf(
+            "Owner access • Active",
+            "Review access plans",
+            "Security and device pairing"
+        ) else arrayOf(
+            "Sign in",
+            "Create account",
+            "Compare Basic / Pro / Elite",
+            "Admin access • Secure pairing"
+        )
+        android.app.AlertDialog.Builder(this)
+            .setTitle("KYVORIQ  •  ACCOUNT")
+            .setItems(choices) { _, which ->
+                if (owner) when (which) {
+                    0 -> showInfoDialog("Owner session", "Authenticated through KYVORIQ's existing private owner pairing. Full management remains restricted to the owner.")
+                    1 -> showConsumerPlans()
+                    2 -> pairingButton?.let { showPairingDialog(it) }
+                } else when (which) {
+                    0 -> openConsumerPortal("login")
+                    1 -> openConsumerPortal("signup")
+                    2 -> showConsumerPlans()
+                    3 -> pairingButton?.let { showPairingDialog(it) }
+                }
+            }
+            .setNegativeButton("CLOSE", null)
+            .show()
+    }
+
+    private fun showConsumerPlans() {
+        showInfoDialog("KYVORIQ access levels",
+            "BASIC • Public BTC chart and market snapshot.\n\n" +
+            "PRO • More qualified signals, real-time alerts, and extra chart tools.\n\n" +
+            "ELITE • Everything in Pro plus advanced verified market intelligence.\n\n" +
+            "ADMIN • Private owner controls only.\n\n" +
+            "Pro and Elite purchases are unavailable until server-verified authentication, payments and entitlements are deployed. No trading result is guaranteed.")
+    }
+
+    private fun openConsumerPortal(destination: String) {
+        val base = BuildConfig.CONSUMER_PORTAL_URL.trimEnd('/')
+        if (base.isBlank()) {
+            showInfoDialog("Accounts being prepared",
+                "Secure consumer account registration is not live yet. For now the Basic market chart is available without an account. No payments are being collected.")
+            return
+        }
+        val uri = android.net.Uri.parse("$base/$destination")
+        if (uri.scheme != "https" || !setOf("login", "signup").contains(destination)) {
+            showInfoDialog("Account unavailable", "Untrusted sign-in destination blocked.")
+            return
+        }
+        runCatching {
+            startActivity(Intent(Intent.ACTION_VIEW, uri).addCategory(Intent.CATEGORY_BROWSABLE))
+        }.onFailure {
+            showInfoDialog("Account unavailable", "No safe browser is available for account sign-in.")
+        }
     }
 
     private fun selectWorkspace(index: Int) {
@@ -4245,6 +4333,7 @@ class SafeActivity : FragmentActivity() {
                                 publicMarketOnly = false
                                 publicMarketMessage?.visibility = View.GONE
                                 showInfoDialog("Secure pairing active", "Your private trading session is encrypted on this device for up to 7 days. Renew it from this button when it expires.")
+                                refreshConsumerPresentation()
                                 connect(force = true)
                                 bootstrap(true)
                                 ContextCompat.startForegroundService(
