@@ -414,6 +414,11 @@ internal class KyvoriqMusicIsland(
             main.post {
                 if (destroyed) return@post
                 outcome.onSuccess { count ->
+                    // Remove stale document URIs from prior releases. Files in our
+                    // sandbox now contain the user's five requested recordings.
+                    prefs.edit().apply {
+                        tracks.indices.forEach { remove("uri_$it") }
+                    }.apply()
                     Toast.makeText(activity, "All $count tracks installed for offline playback", Toast.LENGTH_LONG).show()
                     select(index, true)
                 }.onFailure { error ->
