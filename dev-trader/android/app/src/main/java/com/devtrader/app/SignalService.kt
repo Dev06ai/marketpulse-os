@@ -559,8 +559,8 @@ class SignalService : Service() {
         model: ServiceNotificationModel,
         expanded: Boolean
     ) {
-        views.setImageViewResource(R.id.notif_logo, R.drawable.kyvoriq_mark)
-        views.setTextViewText(R.id.notif_title, "KYVORIQ")
+        views.setImageViewResource(R.id.notif_logo, R.drawable.kyvoriq_emblem_static)
+        views.setImageViewResource(R.id.notif_title, R.drawable.kyvoriq_concentric_wordmark)
         views.setTextViewText(R.id.notif_subtitle, model.subtitle)
         views.setTextViewText(R.id.notif_chip, model.chip)
         views.setInt(R.id.notif_chip, "setBackgroundResource", model.chipBackground)
