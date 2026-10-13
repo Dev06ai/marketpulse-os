@@ -238,12 +238,13 @@ internal class KyvoriqMusicIsland(
         else -> null
     }
 
-    private val packagedNames: Set<String> by lazy {
+    // Called during the player's init block as well as later playback, so
+    // this must NOT be a late-declared lazy property (that crashes on first UI draw).
+    private fun packagedNames(): Set<String> =
         activity.assets.list("music")?.toSet().orEmpty()
-    }
 
     private fun bundledPath(trackIndex: Int): String? = bundledName(trackIndex)
-        ?.takeIf { it in packagedNames }?.let { "music/$it" }
+        ?.takeIf { it in packagedNames() }?.let { "music/$it" }
 
     private fun hasAudio(trackIndex: Int): Boolean =
         linked(trackIndex) != null || bundledPath(trackIndex) != null
