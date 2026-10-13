@@ -28,7 +28,8 @@ class KyvoriqRazorWordmarkView(context: Context) : FrameLayout(context) {
         contentDescription = "KYVORIQ geometric concentric-ring wordmark"
         addView(ImageView(context).apply {
             setImageResource(R.drawable.kyvoriq_concentric_wordmark)
-            scaleType = ImageView.ScaleType.FIT_CENTER
+            // Text hugs the mark; centering a wide vector view created a fake gap.
+            scaleType = ImageView.ScaleType.FIT_START
             importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
         }, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
     }
