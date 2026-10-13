@@ -790,8 +790,9 @@ class SafeActivity : FragmentActivity() {
             rightMargin = dp(3)
         })
         identityRow.addView(brand, LinearLayout.LayoutParams(0, dp(50), 1f).apply { rightMargin = dp(6) })
-        alertsButton = compactPillButton(if (layout.compactActions) "♧" else "ALERTS").apply {
+        alertsButton = compactPillButton(if (layout.compactActions) "✦" else "ALERTS").apply {
             contentDescription = "Enable trade alerts"
+            if (layout.compactActions) textSize = 17f
             isSingleLine = true
             setAutoSizeTextTypeUniformWithConfiguration(7, 10, 1, android.util.TypedValue.COMPLEX_UNIT_SP)
         }
