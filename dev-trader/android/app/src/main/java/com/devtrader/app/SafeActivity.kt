@@ -645,12 +645,16 @@ class SafeActivity : FragmentActivity() {
         }
         brand.addView(KyvoriqRazorWordmarkView(this),
             LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(30)))
-        brand.addView(label("AI POWERED TRADING", 8f, kyGray, 0.035f).apply {
-            gravity = Gravity.CENTER
-            isSingleLine = true
-        },
-            LinearLayout.LayoutParams(-1, dp(10)))
-        identityRow.addView(brand, LinearLayout.LayoutParams(0, dp(44), 1f).apply { rightMargin = dp(6) })
+        brand.addView(ImageView(this).apply {
+            setImageResource(R.drawable.kyvoriq_trade_the_plot)
+            scaleType = ImageView.ScaleType.FIT_CENTER
+            contentDescription = "Trade the Plot"
+            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+        }, LinearLayout.LayoutParams(dp(if (narrowHeader) 124 else 109), dp(17)).apply {
+            gravity = Gravity.END
+            rightMargin = dp(3)
+        })
+        identityRow.addView(brand, LinearLayout.LayoutParams(0, dp(50), 1f).apply { rightMargin = dp(6) })
         alertsButton = compactPillButton("ALERTS").apply {
             contentDescription = "Enable trade alerts"
             isSingleLine = true
