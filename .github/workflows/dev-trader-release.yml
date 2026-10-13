@@ -203,7 +203,7 @@ jobs:
                        'layout/widget_kyvoriq_compact.xml']:
               ET.parse(base/path)
           assert 'android:layout_height="25dp"' in (base/'layout/widget_kyvoriq_compact.xml').read_text()
-           assert 'android:id="@+id/widget_alerts"' in (base/'layout/widget_kyvoriq_compact.xml').read_text()
+          assert 'android:id="@+id/widget_alerts"' in (base/'layout/widget_kyvoriq_compact.xml').read_text()
           print('Source gate: intro, vector bounds, compact widget and secure transient route recovery present.')
           PY
       - name: Build signed release APK
@@ -254,7 +254,7 @@ jobs:
           grep -Fq 'Bitget execution readiness  •  UNVERIFIED' "$CLIENT"
           grep -Fq 'if (!bootstrapFresh && lastHardHttpStatus == null)' "$CLIENT"
           ! grep -Fq 'Backend diagnostics failed.' "$CLIENT"
-      - name: Verify matching Build 153 signing certificate
+      - name: Verify matching Build 152 signing certificate
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
