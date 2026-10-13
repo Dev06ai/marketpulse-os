@@ -1,6 +1,10 @@
 package com.devtrader.app
 
 import android.content.Intent
+import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import java.io.File
 import android.graphics.Rect
 import android.os.SystemClock
 import android.view.View
@@ -23,6 +27,8 @@ class MusicIslandVisualTest {
             (0 until root.childCount).flatMap { descendants(root.getChildAt(it)) } else emptyList()
 
     @Test fun islandOpensWithFiveTracksAndDoesNotCoverTradeControls() {
+        inst.targetContext.getSharedPreferences("kyvoriq_music_island_v1", Context.MODE_PRIVATE)
+            .edit().putInt("selected", 0).commit()
         val activity = inst.startActivitySync(Intent(inst.targetContext, SafeActivity::class.java)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             .putExtra("visual_preview", true))
@@ -43,6 +49,11 @@ class MusicIslandVisualTest {
                     it.contentDescription == "KYVORIQ music island"
                 }
                 assertTrue("Island must be visible when music is selected", island.isShown)
+                val bitmap = Bitmap.createBitmap(root.width, root.height, Bitmap.Config.ARGB_8888)
+                root.draw(Canvas(bitmap))
+                val out = File(inst.targetContext.getExternalFilesDir(null), "build155").apply { mkdirs() }
+                File(out, "island-trade.png").outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
+                bitmap.recycle()
                 val alert = descendants(root).filterIsInstance<Button>().first {
                     it.contentDescription == "Enable trade alerts"
                 }
