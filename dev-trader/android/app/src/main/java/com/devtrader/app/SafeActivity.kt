@@ -1507,8 +1507,52 @@ class SafeActivity : FragmentActivity() {
         runCatching { block() }
     }
 
+    private fun showPublicAccessInfo() {
+        showInfoDialog(
+            "Public BTC chart • View only",
+            "This phone can read public BTC market candles without an account. " +
+                "Private KYVORIQ signals, order execution, position history, notifications " +
+                "and owner settings stay locked. To enable private features, the owner must " +
+                "explicitly authorize device pairing in Insights. Do not share the owner token casually."
+        )
+    }
+
+    private fun enterPublicMarketMode() {
+        if (debugPreview) return
+        if (!publicMarketOnly) {
+            publicMarketOnly = true
+            runCatching { socket?.cancel() }
+            socket = null
+            reconnectRunnable?.let { handler.removeCallbacks(it) }
+            reconnectRunnable = null
+            reconnectScheduled.set(false)
+            latestRoot = null
+            overlayFeatures = null
+            overlayStrategy = null
+            if (::chart.isInitialized) {
+                chart.setSignal(null)
+                chart.setTradeEvent(null)
+                chart.setOverlays(JSONArray())
+                chart.setFeedHealthy(false)
+            }
+            if (::signal.isInitialized) signal.text = "PRIVATE SIGNALS LOCKED • PAIR DEVICE TO UNLOCK"
+            if (::tradeHistory.isInitialized) tradeHistory.text = "Private exchange history is unavailable in public view."
+            if (::positionSummary.isInitialized) positionSummary.text = "PRIVATE • PAIRING REQUIRED"
+        }
+        if (::status.isInitialized) {
+            status.text = "VIEW ONLY"
+            status.setTextColor(kyGray)
+        }
+        if (::integrity.isInitialized) integrity.text = "PUBLIC MARKET • VIEW ONLY • NO PRIVATE TRADES"
+        publicMarketMessage?.visibility = View.VISIBLE
+        if (::alertsButton.isInitialized) {
+            alertsButton.text = "PRIVATE"
+            alertsButton.isEnabled = true
+        }
+    }
+
     private fun connect(force: Boolean = false) {
-        if (stopped) return
+        if (stopped || publicMarketOnly || !KyvoriqSecureSession.isPaired(this)) return
         if (force) {
             reconnectRunnable?.let { handler.removeCallbacks(it) }
             reconnectRunnable = null
@@ -1657,6 +1701,11 @@ class SafeActivity : FragmentActivity() {
     }
 
     private fun forceReconnectFromUser() {
+        if (publicMarketOnly || !KyvoriqSecureSession.isPaired(this)) {
+            enterPublicMarketMode()
+            requestChartIfNeeded(force = true)
+            return
+        }
         val now = System.currentTimeMillis()
         if (now - lastRetryRequestMs < 1500L) return
         lastRetryRequestMs = now
@@ -1699,6 +1748,11 @@ class SafeActivity : FragmentActivity() {
     }
 
     private fun forceReconnectFromNetwork() {
+        if (publicMarketOnly || !KyvoriqSecureSession.isPaired(this)) {
+            enterPublicMarketMode()
+            requestChartIfNeeded(force = true)
+            return
+        }
         val now = System.currentTimeMillis()
         if (now - lastRetryRequestMs < 1500L) return
         lastRetryRequestMs = now
@@ -1710,6 +1764,11 @@ class SafeActivity : FragmentActivity() {
 
     private fun bootstrap(force: Boolean = false) {
         if (stopped || bootstrapInFlight) return
+        if (publicMarketOnly || !KyvoriqSecureSession.isPaired(this)) {
+            enterPublicMarketMode()
+            requestChartIfNeeded(force)
+            return
+        }
         val now = System.currentTimeMillis()
         if (!force && now - lastBootstrapMs < 4000L) return
         lastBootstrapMs = now
@@ -1737,7 +1796,10 @@ class SafeActivity : FragmentActivity() {
                     lastHardHttpStatus = if (body in setOf("HTTP 401", "HTTP 403", "HTTP 404")) fault else null
                     if (body == "HTTP 401") {
                         pairingButton?.text = "SESSION EXPIRED  •  TAP TO RE-PAIR"
-                        check.text = "Device pairing rejected (401). Re-pair securely, then retry."
+                        check.text = "This device needs owner-approved pairing. Public BTC market chart remains available."
+                        enterPublicMarketMode()
+                        requestChartIfNeeded(force = true)
+                        return@post
                     }
                     if (lastBootstrapSuccessMs == 0L || nowFail - lastBootstrapSuccessMs > 10_000L) {
                         status.text = fault
@@ -1755,6 +1817,8 @@ class SafeActivity : FragmentActivity() {
                     }
                     val receivedAt = System.currentTimeMillis()
                     lastHardHttpStatus = null
+                    publicMarketOnly = false
+                    publicMarketMessage?.visibility = View.GONE
                     lastBootstrapSuccessMs = receivedAt
                     if (latestRoot == null || root.optLong("server_ts") >= latestRoot!!.optLong("server_ts")) {
                         latestRoot = root
@@ -3020,6 +3084,8 @@ class SafeActivity : FragmentActivity() {
     }
 
     private fun requestChartOverlays(force: Boolean = false) {
+        // Structural overlays, owner levels and strategy context are private.
+        if (publicMarketOnly || !KyvoriqSecureSession.isPaired(this)) return
         val now = System.currentTimeMillis()
         if (!force && now - lastOverlayRequestMs < 15_000L) return
         lastOverlayRequestMs = now
@@ -3068,7 +3134,8 @@ class SafeActivity : FragmentActivity() {
                 safe {
                     val j = JSONObject(body)
                     val candles = j.optJSONArray("candles") ?: JSONArray()
-                    val live = latestRoot?.optDouble("last_price", Double.NaN) ?: Double.NaN
+                    val live = if (publicMarketOnly) Double.NaN
+                        else latestRoot?.optDouble("last_price", Double.NaN) ?: Double.NaN
                     val lastPrice = if (!live.isNaN()) live else j.optDouble("last_price", Double.NaN)
 
                     // Never let an older timeframe response overwrite the
@@ -3076,16 +3143,31 @@ class SafeActivity : FragmentActivity() {
                     if (selectedTf != requestTf) return@safe
 
                     chart.setTimeframe(requestTf)
+                    if (publicMarketOnly && (candles.length() == 0 || !lastPrice.isFinite() || lastPrice <= 0.0)) {
+                        status.text = "NO PUBLIC DATA"
+                        publicMarketMessage?.text = "PUBLIC BTC DATA UNAVAILABLE • Tap RETRY to fetch fresh candles. No private access has been granted."
+                        return@safe
+                    }
                     latestChartCandles = candles
                     chart.setData(
                         candles,
                         latestRoot?.optJSONObject("signal"),
                         calculateEma(candles, 50),
                         lastPrice,
-                        chartOverlays(latestRoot)
+                        if (publicMarketOnly) JSONArray() else chartOverlays(latestRoot)
                     )
+                    if (publicMarketOnly) {
+                        price.setPrice(lastPrice, animate = false)
+                        oiView.text = "OI  —  •  PRIVATE"
+                        status.text = "VIEW ONLY"
+                        integrity.text = "PUBLIC BTC CANDLES • VIEW ONLY • NO PRIVATE TRADING"
+                        publicMarketMessage?.text = "PUBLIC BTC CHART • VIEW ONLY\nPrivate signals and account tools require owner-approved pairing."
+                        publicMarketMessage?.visibility = View.VISIBLE
+                        chart.setFeedHealthy(false)
+                        chart.setSignal(null)
+                    }
                     refreshTimeframeButtonsForCurrentSelection()
-                    requestChartOverlays(force)
+                    if (!publicMarketOnly) requestChartOverlays(force)
                 }
             }
         }
@@ -3144,6 +3226,11 @@ class SafeActivity : FragmentActivity() {
     }
 
     private fun startBackgroundAlerts() {
+        if (publicMarketOnly || !KyvoriqSecureSession.isPaired(this)) {
+            alertsButton.text = "PRIVATE"
+            alertsButton.isEnabled = true
+            return
+        }
         if (Build.VERSION.SDK_INT >= 33 &&
             checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
         ) {
@@ -3163,6 +3250,10 @@ class SafeActivity : FragmentActivity() {
     }
 
     private fun requestAlertPermission() {
+        if (publicMarketOnly || !KyvoriqSecureSession.isPaired(this)) {
+            showPublicAccessInfo()
+            return
+        }
         startBackgroundAlerts()
     }
 
@@ -3205,6 +3296,11 @@ class SafeActivity : FragmentActivity() {
 
     private fun watchdog() {
         if (stopped) return
+        if (publicMarketOnly || !KyvoriqSecureSession.isPaired(this)) {
+            enterPublicMarketMode()
+            requestChartIfNeeded()
+            return
+        }
         val now = System.currentTimeMillis()
         val stateAge = if (lastStateReceivedMs == 0L) Long.MAX_VALUE
             else now - lastStateReceivedMs
@@ -4009,6 +4105,8 @@ class SafeActivity : FragmentActivity() {
                             button.isEnabled = true
                             if (saved) {
                                 button.text = "DEVICE PAIRED  •  SECURE"
+                                publicMarketOnly = false
+                                publicMarketMessage?.visibility = View.GONE
                                 showInfoDialog("Secure pairing active", "Your private trading session is encrypted on this device for up to 7 days. Renew it from this button when it expires.")
                                 connect(force = true)
                                 bootstrap(true)
