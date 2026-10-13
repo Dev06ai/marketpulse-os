@@ -1,0 +1,38 @@
+name: KYVORIQ Build 153 public Android preflight
+on:
+  push:
+    branches: ['prep/build153-ui-parity']
+permissions:
+  contents: read
+jobs:
+  compile-and-privacy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.6.0'
+      - name: Verify public-only source and Build 153 widget integration
+        run: |
+          set -euo pipefail
+          UI=dev-trader/android/app/src/main/java/com/devtrader/app/SafeActivity.kt
+          PROVIDER=dev-trader/android/app/src/main/java/com/devtrader/app/KyvoriqWidgetProvider.kt
+          ! grep -Fq 'dewald_levels_2026_10_12' "$UI"
+          ! grep -Fq 'fallbackLine("NPOC"' "$UI"
+          grep -Fq 'consumeWidgetDestination()' "$UI"
+          grep -Fq 'minHeight >= 170' "$PROVIDER"
+          grep -Fq 'setOnClickPendingIntent(R.id.widget_alerts' "$PROVIDER"
+          grep -Fq 'ServiceUiState.AUTH_REQUIRED' dev-trader/android/app/src/main/java/com/devtrader/app/SignalService.kt
+      - name: Build unsigned debug candidate without signing secrets
+        working-directory: dev-trader/android
+        run: gradle assembleDebug -PdevTraderVersionCode=153 -PdevTraderVersionName=0.21.28 --stacktrace
+      - name: Check debug APK and excluded secrets
+        run: |
+          set -euo pipefail
+          test -s dev-trader/android/app/build/outputs/apk/debug/app-debug.apk
+          ! unzip -l dev-trader/android/app/build/outputs/apk/debug/app-debug.apk | grep -Ei 'signing\\.jks|\\.env$|ui_preview\\.json'
