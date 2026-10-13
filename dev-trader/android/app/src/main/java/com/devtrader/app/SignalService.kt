@@ -514,14 +514,14 @@ class SignalService : Service() {
         when (state) {
             ServiceUiState.LIVE -> ServiceNotificationModel(
                 chip = "LIVE",
-                subtitle = "Connected • we’re locked in",
-                body = "Watching BTCUSDT • patience is the flex",
+                subtitle = "Secure monitoring active",
+                body = "BTC / USDT · Alerts enabled",
                 chipBackground = R.drawable.notification_chip_live,
                 chipTextColor = getColor(R.color.kyvoriq_charcoal),
                 animate = true
             )
             ServiceUiState.DEGRADED -> ServiceNotificationModel(
-                chip = "DEGRADED",
+                chip = "DELAYED",
                 subtitle = "Market feed needs attention",
                 body = "Monitoring continues • fresh data required for entries",
                 chipBackground = R.drawable.notification_chip_degraded,
@@ -537,9 +537,9 @@ class SignalService : Service() {
                 animate = false
             )
             ServiceUiState.RECONNECTING -> ServiceNotificationModel(
-                chip = "RECONNECTING",
+                chip = "SYNCING",
                 subtitle = "Restoring live monitoring",
-                body = "KYVORIQ is retrying the secure signal channel",
+                body = "Secure connection interrupted. Retrying automatically.",
                 chipBackground = R.drawable.notification_chip_reconnecting,
                 chipTextColor = getColor(R.color.kyvoriq_gold),
                 animate = true
@@ -559,7 +559,7 @@ class SignalService : Service() {
         model: ServiceNotificationModel,
         expanded: Boolean
     ) {
-        views.setImageViewResource(R.id.notif_logo, R.drawable.kyvoriq_emblem_static)
+        views.setImageViewResource(R.id.notif_logo, R.drawable.kyvoriq_emblem_intro_tight)
         views.setImageViewResource(R.id.notif_title, R.drawable.kyvoriq_concentric_wordmark)
         views.setTextViewText(R.id.notif_subtitle, model.subtitle)
         views.setTextViewText(R.id.notif_chip, model.chip)
