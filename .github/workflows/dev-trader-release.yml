@@ -194,7 +194,7 @@ jobs:
           grep -Fq 'now - lastPrivateRouteProbeMs >= 12_000L' "$UI"
           grep -Fq 'if (restoredPrivateRoute)' "$UI"
           grep -Fq 'compactHeaderLabel("ALERTS ON")' "$UI"
-          grep -Fq 'val narrow = width < 600' "$LAYOUT"
+          grep -Fq 'val narrow = width < 620' "$LAYOUT"
           grep -Fq 'wordmarkWidthDp' "$LAYOUT"
           grep -Fq 'entryChecksFullText' "$UI"
           python - <<'PY'
