@@ -184,6 +184,8 @@ class SafeActivity : FragmentActivity() {
     private var overlayStrategy: JSONObject? = null
     private var lastBootstrapMs = 0L
     private var lastBootstrapSuccessMs = 0L
+    // Persistent HTTP routing/auth errors must not be hidden by the WS retry UI.
+    private var lastHardHttpStatus: String? = null
     private var bootstrapInFlight = false
     private val healthWatchdogRunnable = Runnable { safe { watchdog() } }
     private val snapshotPollRunnable = object : Runnable {
@@ -1245,8 +1247,12 @@ class SafeActivity : FragmentActivity() {
         }
         if (socket != null) return
 
-        status.text = "CONNECTING…"
-        integrity.text = "WebSocket  •  CONNECTING •  SECURE RETRY LOOP"
+        if (lastHardHttpStatus == null &&
+            (lastBootstrapSuccessMs == 0L || System.currentTimeMillis() - lastBootstrapSuccessMs > 10_000L)
+        ) {
+            status.text = "CONNECTING…"
+            integrity.text = "WebSocket  •  CONNECTING •  SECURE RETRY LOOP"
+        }
         socket = client.newWebSocket(
             KyvoriqSecureSession.authenticate(
                 this, Request.Builder().url(BackendEndpoint.socket("dashboard")),
@@ -1268,7 +1274,9 @@ class SafeActivity : FragmentActivity() {
                                 put("client_ts", System.currentTimeMillis())
                             }.toString())
                         }
-                        status.text = "SYNCING…"
+                        if (lastHardHttpStatus == null &&
+                            System.currentTimeMillis() - lastBootstrapSuccessMs > 10_000L
+                        ) status.text = "SYNCING…"
                         integrity.text = "WebSocket  •  CONNECTED  •  LIVE FEED SUPERVISOR"
                         if (latestRoot == null) bootstrap(false)
                     }
@@ -1295,6 +1303,7 @@ class SafeActivity : FragmentActivity() {
                                 }
                             } else root
                             latestRoot = merged
+                            lastHardHttpStatus = null
                             lastStateReceivedMs = System.currentTimeMillis()
                             val now = System.currentTimeMillis()
                             if (now - lastUiRenderMs >= 350L && !pendingUiUpdate) {
@@ -1315,8 +1324,13 @@ class SafeActivity : FragmentActivity() {
                     if (owned) socket = null
                     if (!owned || stopped) return
                     handler.post {
-                        status.text = "RECONNECTING…"
-                        integrity.text = "WebSocket  •  DISCONNECTED  •  RETRY SCHEDULED"
+                        if (!stopped && socket == null) {
+                            val httpFresh = lastBootstrapSuccessMs > 0L &&
+                                System.currentTimeMillis() - lastBootstrapSuccessMs <= 10_000L
+                            status.text = lastHardHttpStatus ?: if (httpFresh) "HTTP FALLBACK" else "RECONNECTING…"
+                            integrity.text = if (httpFresh) "WebSocket OFFLINE  •  HTTP SNAPSHOT ACTIVE"
+                                else "WebSocket  •  DISCONNECTED  •  RETRY SCHEDULED"
+                        }
                     }
                     reconnect(false)
                 }
@@ -1326,8 +1340,13 @@ class SafeActivity : FragmentActivity() {
                     if (owned) socket = null
                     if (!owned || stopped) return
                     handler.post {
-                        status.text = "RECONNECTING…"
-                        integrity.text = "WebSocket  •  CLOSED •  RETRY SCHEDULED"
+                        if (!stopped && socket == null) {
+                            val httpFresh = lastBootstrapSuccessMs > 0L &&
+                                System.currentTimeMillis() - lastBootstrapSuccessMs <= 10_000L
+                            status.text = lastHardHttpStatus ?: if (httpFresh) "HTTP FALLBACK" else "RECONNECTING…"
+                            integrity.text = if (httpFresh) "WebSocket CLOSED  •  HTTP SNAPSHOT ACTIVE"
+                                else "WebSocket  •  CLOSED  •  RETRY SCHEDULED"
+                        }
                     }
                     reconnect(false)
                 }
@@ -1432,15 +1451,33 @@ class SafeActivity : FragmentActivity() {
                 if (stopped) return@post
                 if (!ok) {
                     val nowFail = System.currentTimeMillis()
+                    val fault = when (body) {
+                        "HTTP 401" -> "PAIRING REQUIRED"
+                        "HTTP 403" -> "ACCESS DENIED (403)"
+                        "HTTP 404" -> "BACKEND ROUTE 404"
+                        "HTTP 429" -> "RATE LIMITED (429)"
+                        "HTTP 502", "HTTP 503", "HTTP 504" -> "HOST UNAVAILABLE"
+                        "NETWORK TIMEOUT" -> "NETWORK TIMEOUT"
+                        "NETWORK UNAVAILABLE" -> "NETWORK UNAVAILABLE"
+                        else -> if (body.startsWith("HTTP ")) "BACKEND " + body else "RECONNECTING…"
+                    }
+                    lastHardHttpStatus = if (body in setOf("HTTP 401", "HTTP 403", "HTTP 404")) fault else null
                     if (lastBootstrapSuccessMs == 0L || nowFail - lastBootstrapSuccessMs > 10_000L) {
-                        status.text = if (socket == null) "RECONNECTING…" else "SYNCING…"
-                        integrity.text = "HTTP  •  SNAPSHOT FAILED  •  RETRYING"
+                        status.text = fault
+                        integrity.text = "HTTP  •  " + body.ifEmpty { "SNAPSHOT FAILED" } + "  •  RETRY SCHEDULED"
                     }
                     return@post
                 }
                 safe {
                     val root = JSONObject(body)
+                    // A proxy may send 200 with an error JSON; never treat it as a live market snapshot.
+                    if (!root.has("data_health") || !root.optDouble("last_price", Double.NaN).isFinite()) {
+                        status.text = "INVALID SNAPSHOT"
+                        integrity.text = "HTTP  •  INVALID MARKET RESPONSE"
+                        return@safe
+                    }
                     val receivedAt = System.currentTimeMillis()
+                    lastHardHttpStatus = null
                     lastBootstrapSuccessMs = receivedAt
                     if (latestRoot == null || root.optLong("server_ts") >= latestRoot!!.optLong("server_ts")) {
                         latestRoot = root
@@ -1487,10 +1524,13 @@ class SafeActivity : FragmentActivity() {
         val upstream = root.optJSONObject("upstream")
         val source = upstream?.optString("source", "").orEmpty()
         val authoritativeFeedHealthy = health == "HEALTHY" && ws && source == "BITGET_WS" && freshMarket
+        val verifiedRestSnapshot = freshMarket && source.contains("REST", ignoreCase = true) &&
+            health in setOf("HEALTHY", "DEGRADED")
         chart.setFeedHealthy(authoritativeFeedHealthy)
         chart.setSignal(signalObj)
         val statusLabel = when {
             authoritativeFeedHealthy -> "LIVE"
+            verifiedRestSnapshot -> "REST FALLBACK"
             health == "DEGRADED" -> "DATA DEGRADED"
             health == "CONNECTING" -> "CONNECTING…"
             health == "RECONNECTING" -> "RECONNECTING…"
@@ -1506,6 +1546,7 @@ class SafeActivity : FragmentActivity() {
             else String.format(Locale.US, "%,.2f", oi)
         integrity.text = when {
             authoritativeFeedHealthy -> "BITGET WS  •  LIVE"
+            verifiedRestSnapshot -> "BITGET REST  •  FRESH SNAPSHOT"
             health == "DEGRADED" && source.contains("REST", ignoreCase = true) -> "BITGET REST  •  DEGRADED"
             health == "DEGRADED" -> "BITGET FEED  •  DEGRADED"
             health == "CONNECTING" || health == "RECONNECTING" -> "BITGET WS  •  CONNECTING"
@@ -2914,7 +2955,7 @@ class SafeActivity : FragmentActivity() {
         ) {
             lastSocketRebuildMs = now
             integrity.text = "Feed  •  STALE •  REBUILDING WEBSOCKET"
-            status.text = "RECONNECTING…"
+            if (lastHardHttpStatus == null) status.text = "RECONNECTING…"
             reconnect(immediate = true)
         }
 
@@ -3675,20 +3716,25 @@ class SafeActivity : FragmentActivity() {
             ).build()
             restClient.newCall(request).enqueue(object : okhttp3.Callback {
                 override fun onFailure(call: okhttp3.Call, e: java.io.IOException) {
-                    handler.post { callback(false, "") }
+                    val detail = if (e is java.net.SocketTimeoutException) "NETWORK TIMEOUT"
+                        else "NETWORK UNAVAILABLE"
+                    handler.post { callback(false, detail) }
                 }
 
                 override fun onResponse(call: okhttp3.Call, response: Response) {
                     val result = runCatching {
-                        response.use { Pair(it.isSuccessful, it.body?.string().orEmpty()) }
-                    }.getOrElse { Pair(false, "") }
+                        response.use {
+                            if (it.isSuccessful) Pair(true, it.body?.string().orEmpty())
+                            else Pair(false, "HTTP " + it.code) // Never display an untrusted error body.
+                        }
+                    }.getOrElse { Pair(false, "NETWORK UNAVAILABLE") }
                     handler.post {
                         if (!isFinishing && !isDestroyed) callback(result.first, result.second)
                     }
                 }
             })
         }.onFailure {
-            handler.post { callback(false, "") }
+            handler.post { callback(false, "NETWORK UNAVAILABLE") }
         }
     }
 
