@@ -11,14 +11,21 @@ android {
         minSdk = 26
         targetSdk = 37
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        versionCode = (providers.gradleProperty("devTraderVersionCode").orNull ?: "152").toInt()
-        versionName = providers.gradleProperty("devTraderVersionName").orNull ?: "0.21.27"
+        versionCode = (providers.gradleProperty("devTraderVersionCode").orNull ?: "157").toInt()
+        versionName = providers.gradleProperty("devTraderVersionName").orNull ?: "0.21.32"
         val backendUrl = providers.gradleProperty("devTraderBackendUrl").orNull
             ?: "https://kyvoriq-staging.getvoroa.com"
         require(Regex("https://[A-Za-z0-9.-]+(?::[0-9]+)?/?").matches(backendUrl)) {
             "devTraderBackendUrl must be an HTTPS origin without credentials or a path"
         }
         buildConfigField("String", "BACKEND_BASE_URL", "\"${backendUrl.trimEnd('/')}\"")
+        // Separate hosted consumer identity portal; blank until deployment.
+        val consumerPortal = providers.gradleProperty("kyvoriqConsumerPortalUrl").orNull ?: ""
+        require(consumerPortal.isBlank() ||
+            Regex("https://[A-Za-z0-9.-]+(?::[0-9]+)?/?").matches(consumerPortal)) {
+            "kyvoriqConsumerPortalUrl must be an HTTPS origin without path or credentials"
+        }
+        buildConfigField("String", "CONSUMER_PORTAL_URL", "\"${consumerPortal.trimEnd('/')}\"")
     }
     signingConfigs {
         create("devTraderRelease") {
@@ -38,9 +45,6 @@ android {
         }
         debug { applicationIdSuffix = ".debug" }
     }
-    // MediaPlayer uses AssetFileDescriptor; the MP3s must remain uncompressed
-    // inside the APK or openFd() cannot provide their file descriptor.
-    androidResources { noCompress += "mp3" }
     packaging { resources.excludes += "/META-INF/{AL2.0,LGPL2.1}" }
     buildFeatures { buildConfig = true }
 }
