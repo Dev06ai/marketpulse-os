@@ -29,7 +29,7 @@ internal object KyvoriqResponsiveLayout {
             width < 345 -> 165
             width < 390 -> 191
             else -> 205
-        }).coerceAtMost(width - emblem - 36)
+        }).coerceAtMost((width - emblem - 80).coerceAtLeast(106))
         return Header(
             stackedActions = narrow,
             compactActions = width < 520 || font > 1.15f,
