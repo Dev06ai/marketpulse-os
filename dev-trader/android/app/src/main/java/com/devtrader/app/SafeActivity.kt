@@ -1235,6 +1235,13 @@ class SafeActivity : FragmentActivity() {
         adminOnlyViews.forEach { it.visibility = if (owner) View.VISIBLE else View.GONE }
         consumerPositionTab?.visibility = if (owner) View.VISIBLE else View.GONE
         consumerWelcomeCard?.visibility = if (owner) View.GONE else View.VISIBLE
+        // No wasted or misleading navigation: the consumer sees Market + Plans,
+        // while the verified owner gets Trade + Positions + Insights.
+        navigationButtons.getOrNull(0)?.text = if (owner) "Trade" else "Market"
+        navigationButtons.getOrNull(2)?.apply {
+            text = if (owner) "Insights" else "Plans"
+            contentDescription = if (owner) "Workspace INSIGHTS" else "Workspace PLANS"
+        }
         accountButton?.text = if (owner) "ADMIN" else "SIGN IN"
         accountButton?.contentDescription =
             if (owner) "Admin account and management" else "Sign in or create a KYVORIQ account"
