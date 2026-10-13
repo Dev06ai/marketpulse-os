@@ -813,9 +813,21 @@ class MarketChartView @JvmOverloads constructor(
         canvas.drawLine(right, top, right, bottom, axisPaint)
         val ticks = ((priceBottom - top) / dp(28f)).toInt().coerceIn(2, 5)
         val liveY = if (livePrice.isFinite() && livePrice in low..high) mapY(livePrice, low, high, top, priceBottom) else Float.NaN
+        // Don't print gray axis ticks underneath the level badges. On smaller
+        // phones the previous draw order made prices appear broken/overlapped.
+        val levelY = if (hasVisibleLevelLayers()) (0 until overlays.length()).mapNotNull { i ->
+            val row = overlays.optJSONObject(i) ?: return@mapNotNull null
+            if (!isOverlayVisible(row)) return@mapNotNull null
+            val value = row.optDouble("price", Double.NaN)
+            if (!value.isFinite() || value !in low..high) null
+            else mapY(value, low, high, top, priceBottom)
+        } else emptyList()
+        val alertY = customAlertLevels.filter { it in low..high }
+            .map { mapY(it, low, high, top, priceBottom) }
         for (i in 0..ticks) {
             val y = top + (priceBottom - top) * i / ticks
             if (liveY.isFinite() && abs(y - liveY) < dp(14f)) continue
+            if ((levelY + alertY).any { abs(y - it) < dp(12f) }) continue
             val value = high - (high - low) * i / ticks
             val label = compactPrice(value)
             canvas.drawText(label, right + dp(5f), y + dp(3.5f), axisLabelPaint)
@@ -1373,9 +1385,9 @@ class MarketChartView @JvmOverloads constructor(
 
         // Keep tags aligned with the same right-side strip as BTC axis values.
         // A sparse lane prevents stacked level pills from concealing the plot.
-        val minGap = dp(16f)
+        val minGap = dp(22f)
         val occupied = mutableListOf<Pair<Float, Float>>()
-        if (liveY.isFinite()) occupied.add(liveY - dp(11f) to liveY + dp(11f))
+        if (liveY.isFinite()) occupied.add(liveY - dp(14f) to liveY + dp(14f))
         if (crosshairVisible) {
             val crossY = crosshairY.coerceIn(top, bottom)
             occupied.add(crossY - dp(11f) to crossY + dp(11f))
@@ -1390,7 +1402,7 @@ class MarketChartView @JvmOverloads constructor(
                     occupied.none { center + dp(8f) > it.first && center - dp(8f) < it.second }
             }.minByOrNull { abs(it - ideal) } ?: continue
             occupied.add(tagY - dp(8f) to tagY + dp(8f))
-            val rect = RectF(axisLeft, tagY - dp(7f), axisRight, tagY + dp(7f))
+            val rect = RectF(axisLeft, tagY - dp(9f), axisRight, tagY + dp(9f))
             axisLevelBgPaint.color = KyvoriqTheme.slate
             canvas.drawRoundRect(rect, dp(3f), dp(3f), axisLevelBgPaint)
             axisLevelGuidePaint.color = mark.color
