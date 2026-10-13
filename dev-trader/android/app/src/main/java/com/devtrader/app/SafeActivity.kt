@@ -186,6 +186,10 @@ class SafeActivity : FragmentActivity() {
     private var lastBootstrapSuccessMs = 0L
     // Persistent HTTP routing/auth errors must not be hidden by the WS retry UI.
     private var lastHardHttpStatus: String? = null
+    // Recover transient ingress-level 404 without exposing private data or
+    // permanently trapping a paired owner in view-only mode.
+    private var privateRouteFallback = false
+    private var lastPrivateRouteProbeMs = 0L
     // Public BTC chart only on unpaired devices; no private account or signals.
     private var publicMarketOnly = false
     private var publicMarketMessage: TextView? = null
@@ -198,6 +202,14 @@ class SafeActivity : FragmentActivity() {
             if (publicMarketOnly || !KyvoriqSecureSession.isPaired(this@SafeActivity)) {
                 enterPublicMarketMode()
                 requestChartIfNeeded()
+                // Secure owner token remains mandatory; only request a private
+                // snapshot once the paired device can authenticate again.
+                if (privateRouteFallback &&
+                    KyvoriqSecureSession.isPaired(this@SafeActivity) &&
+                    now - lastPrivateRouteProbeMs >= 12_000L) {
+                    lastPrivateRouteProbeMs = now
+                    bootstrap(force = true)
+                }
             } else if (socket == null || now - lastStateReceivedMs > 5000L) bootstrap(false)
             else requestChartIfNeeded()
             handler.postDelayed(this, 3000L)
@@ -790,7 +802,7 @@ class SafeActivity : FragmentActivity() {
             rightMargin = dp(3)
         })
         identityRow.addView(brand, LinearLayout.LayoutParams(0, dp(50), 1f).apply { rightMargin = dp(6) })
-        alertsButton = compactPillButton(if (layout.compactActions) "✦" else "ALERTS").apply {
+        alertsButton = compactPillButton(compactHeaderLabel("ALERTS")).apply {
             contentDescription = "Enable trade alerts"
             if (layout.compactActions) textSize = 17f
             isSingleLine = true
@@ -801,7 +813,7 @@ class SafeActivity : FragmentActivity() {
             safe { requestAlertPermission() }
         }
         actions.addView(alertsButton, LinearLayout.LayoutParams(dp(layout.alertsDp), dp(44)).apply { rightMargin = dp(4) })
-        retryButton = compactPillButton(if (layout.compactActions) "↻" else "RETRY").apply {
+        retryButton = compactPillButton(compactHeaderLabel("RETRY", retry = true)).apply {
             contentDescription = "Reconnect market data"
             isSingleLine = true
             setAutoSizeTextTypeUniformWithConfiguration(7, 10, 1, android.util.TypedValue.COMPLEX_UNIT_SP)
@@ -1508,6 +1520,15 @@ class SafeActivity : FragmentActivity() {
         runCatching { block() }
     }
 
+    private fun compactHeaderLabel(original: String, retry: Boolean = false): String {
+        val cfg = resources.configuration
+        val dpWidth = minOf(cfg.screenWidthDp,
+            (resources.displayMetrics.widthPixels / resources.displayMetrics.density).toInt())
+        val compact = KyvoriqResponsiveLayout.forViewport(dpWidth,
+            cfg.screenHeightDp, cfg.fontScale).compactActions
+        return if (compact) { if (retry) "↻" else "✦" } else original
+    }
+
     private fun showPublicAccessInfo() {
         showInfoDialog(
             "Public BTC chart • View only",
@@ -1547,7 +1568,7 @@ class SafeActivity : FragmentActivity() {
         if (::integrity.isInitialized) integrity.text = "PUBLIC MARKET • VIEW ONLY • NO PRIVATE TRADES"
         publicMarketMessage?.visibility = View.VISIBLE
         if (::alertsButton.isInitialized) {
-            alertsButton.text = "PRIVATE"
+            alertsButton.text = compactHeaderLabel("PRIVATE")
             alertsButton.isEnabled = true
         }
     }
@@ -1705,6 +1726,10 @@ class SafeActivity : FragmentActivity() {
         if (publicMarketOnly || !KyvoriqSecureSession.isPaired(this)) {
             enterPublicMarketMode()
             requestChartIfNeeded(force = true)
+            if (privateRouteFallback && KyvoriqSecureSession.isPaired(this)) {
+                lastPrivateRouteProbeMs = System.currentTimeMillis()
+                bootstrap(force = true)
+            }
             return
         }
         val now = System.currentTimeMillis()
@@ -1720,7 +1745,7 @@ class SafeActivity : FragmentActivity() {
         connect(force = true)
         handler.postDelayed({
             retryButton?.isEnabled = true
-            retryButton?.text = "↻ RETRY"
+            retryButton?.text = compactHeaderLabel("↻ RETRY", retry = true)
         }, 2000L)
     }
 
@@ -1765,7 +1790,7 @@ class SafeActivity : FragmentActivity() {
 
     private fun bootstrap(force: Boolean = false) {
         if (stopped || bootstrapInFlight) return
-        if (publicMarketOnly || !KyvoriqSecureSession.isPaired(this)) {
+        if ((publicMarketOnly && !privateRouteFallback) || !KyvoriqSecureSession.isPaired(this)) {
             enterPublicMarketMode()
             requestChartIfNeeded(force)
             return
@@ -1795,6 +1820,21 @@ class SafeActivity : FragmentActivity() {
                         else -> if (body.startsWith("HTTP ")) "BACKEND " + body else "RECONNECTING…"
                     }
                     lastHardHttpStatus = if (body in setOf("HTTP 401", "HTTP 403", "HTTP 404")) fault else null
+                    if (body == "HTTP 404") {
+                        // No credential bypass and no blind backend restart:
+                        // /bootstrap occasionally 404s at Voroa ingress even
+                        // though /health and /chart are routed correctly.
+                        privateRouteFallback = true
+                        lastHardHttpStatus = null
+                        lastPrivateRouteProbeMs = nowFail
+                        enterPublicMarketMode()
+                        status.text = "ROUTE RETRY"
+                        publicMarketMessage?.text =
+                            "SECURE BACKEND ROUTE TEMPORARILY UNAVAILABLE\n" +
+                            "Showing public BTC prices only. KYVORIQ is automatically retrying secure pairing."
+                        requestChartIfNeeded(force = true)
+                        return@post
+                    }
                     if (body == "HTTP 401") {
                         pairingButton?.text = "SESSION EXPIRED  •  TAP TO RE-PAIR"
                         check.text = "This device needs owner-approved pairing. Public BTC market chart remains available."
@@ -1818,8 +1858,15 @@ class SafeActivity : FragmentActivity() {
                     }
                     val receivedAt = System.currentTimeMillis()
                     lastHardHttpStatus = null
+                    val restoredPrivateRoute = privateRouteFallback
+                    privateRouteFallback = false
                     publicMarketOnly = false
                     publicMarketMessage?.visibility = View.GONE
+                    if (restoredPrivateRoute) {
+                        // Re-open private WS only AFTER authenticated bootstrap
+                        // succeeds. No order endpoint is called here.
+                        connect(force = true)
+                    }
                     lastBootstrapSuccessMs = receivedAt
                     if (latestRoot == null || root.optLong("server_ts") >= latestRoot!!.optLong("server_ts")) {
                         latestRoot = root
@@ -3228,24 +3275,24 @@ class SafeActivity : FragmentActivity() {
 
     private fun startBackgroundAlerts() {
         if (publicMarketOnly || !KyvoriqSecureSession.isPaired(this)) {
-            alertsButton.text = "PRIVATE"
+            alertsButton.text = compactHeaderLabel("PRIVATE")
             alertsButton.isEnabled = true
             return
         }
         if (Build.VERSION.SDK_INT >= 33 &&
             checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
         ) {
-            alertsButton.text = "ALLOW ALERTS"
+            alertsButton.text = compactHeaderLabel("ALLOW ALERTS")
             alertsButton.isEnabled = true
             requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 4101)
             return
         }
         runCatching {
             ContextCompat.startForegroundService(this, Intent(this, SignalService::class.java))
-            alertsButton.text = "ALERTS ON"
+            alertsButton.text = compactHeaderLabel("ALERTS ON")
             alertsButton.isEnabled = false
         }.onFailure {
-            alertsButton.text = "ALERTS RETRY"
+            alertsButton.text = compactHeaderLabel("ALERTS RETRY")
             alertsButton.isEnabled = true
         }
     }
@@ -3268,7 +3315,7 @@ class SafeActivity : FragmentActivity() {
             if (grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED || Build.VERSION.SDK_INT < 33) {
                 startBackgroundAlerts()
             } else {
-                alertsButton.text = "ALLOW ALERTS"
+                alertsButton.text = compactHeaderLabel("ALLOW ALERTS")
                 alertsButton.isEnabled = true
             }
         }
@@ -3300,6 +3347,11 @@ class SafeActivity : FragmentActivity() {
         if (publicMarketOnly || !KyvoriqSecureSession.isPaired(this)) {
             enterPublicMarketMode()
             requestChartIfNeeded()
+            if (privateRouteFallback && KyvoriqSecureSession.isPaired(this) &&
+                System.currentTimeMillis() - lastPrivateRouteProbeMs >= 12_000L) {
+                lastPrivateRouteProbeMs = System.currentTimeMillis()
+                bootstrap(force = true)
+            }
             return
         }
         val now = System.currentTimeMillis()
