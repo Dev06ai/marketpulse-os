@@ -3,11 +3,11 @@
     android:width="108dp" android:height="108dp"
     android:viewportWidth="280" android:viewportHeight="280">
     <!-- Pixel-traced geometry from the supplied gold KYVORIQ reference (without its guide grid). -->
-    <path android:fillColor="#FFFFCB49" android:pathData="M45,65 L47,99 L98,141 L103,179 L140,215 L160,193 L126,151 L125,130 Z"/>
-    <path android:fillColor="#FFFFDA71" android:pathData="M46,65 L125,130 L126,151 L47,99 Z"/>
-    <path android:fillColor="#FFE6A319" android:pathData="M234,65 L147,133 L146,157 L168,185 L177,143 L233,98 Z"/>
-    <path android:fillColor="#FFFFCF4A" android:pathData="M234,65 L147,133 L146,157 L233,98 Z"/>
-    <path android:fillColor="#FFFFE17E" android:pathData="M105,89 L140,116 L173,88 Z"/>
-    <path android:fillColor="#FFFFBD30" android:pathData="M56,117 L58,138 L92,167 L89,145 Z"/>
-    <path android:fillColor="#FFFFD660" android:pathData="M223,118 L186,148 L183,169 L220,139 Z"/>
+    <path android:fillColor="#FFB98E4D" android:pathData="M45,65 L47,99 L98,141 L103,179 L140,215 L160,193 L126,151 L125,130 Z"/>
+    <path android:fillColor="#FFD6B575" android:pathData="M46,65 L125,130 L126,151 L47,99 Z"/>
+    <path android:fillColor="#FF88612E" android:pathData="M234,65 L147,133 L146,157 L168,185 L177,143 L233,98 Z"/>
+    <path android:fillColor="#FFC09A58" android:pathData="M234,65 L147,133 L146,157 L233,98 Z"/>
+    <path android:fillColor="#FFD6B575" android:pathData="M105,89 L140,116 L173,88 Z"/>
+    <path android:fillColor="#FFAB7A32" android:pathData="M56,117 L58,138 L92,167 L89,145 Z"/>
+    <path android:fillColor="#FFCBA567" android:pathData="M223,118 L186,148 L183,169 L220,139 Z"/>
 </vector>
