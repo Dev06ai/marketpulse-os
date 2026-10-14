@@ -41,6 +41,16 @@ android {
         buildConfigField("String", "FIREBASE_APP_ID", "\"$firebaseAppId\"")
         buildConfigField("String", "FIREBASE_PROJECT_ID", "\"$firebaseProjectId\"")
         buildConfigField("String", "GOOGLE_WEB_CLIENT_ID", "\"$googleWebClientId\"")
+        val consumerApiOrigin = providers.gradleProperty("kyvoriqConsumerApiOrigin").orNull ?: ""
+        require(consumerApiOrigin.isBlank() ||
+            Regex("https://[A-Za-z0-9.-]+(?::[0-9]+)?/?").matches(consumerApiOrigin)) {
+            "Consumer API must be an HTTPS origin without paths or credentials"
+        }
+        require(consumerApiOrigin.isBlank() ||
+            consumerApiOrigin.trimEnd('/') != backendUrl.trimEnd('/')) {
+            "Consumer account API must not point to the private owner trading backend"
+        }
+        buildConfigField("String", "CONSUMER_API_ORIGIN", "\"${consumerApiOrigin.trimEnd('/')}\"")
 
     }
     signingConfigs {
