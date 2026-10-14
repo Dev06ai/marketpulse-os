@@ -327,8 +327,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          QA_RUN=38575636258
-          QA_HEAD=f858ca19997c750eeb0f97ec1f8a96b523c427a5
+          QA_RUN=38577108443
+          QA_HEAD=652a6ae709109d34807e55c2807fd0e7d1969d47
           for attempt in $(seq 1 54); do
             INFO="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${QA_RUN}" \
               --jq '[.head_sha,.status,(.conclusion // "")] | join(" ")')"
