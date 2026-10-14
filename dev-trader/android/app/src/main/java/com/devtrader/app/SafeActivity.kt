@@ -1200,12 +1200,12 @@ class SafeActivity : FragmentActivity() {
             importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
         }
         liquidNavIndicator = liquid
-        navigationFrame.addView(liquid, FrameLayout.LayoutParams(0, dp(54)).apply {
+        navigationFrame.addView(liquid, FrameLayout.LayoutParams(0, dp(44)).apply {
             gravity = Gravity.START or Gravity.CENTER_VERTICAL
             leftMargin = dp(5)
         })
         val navigation = LinearLayout(this).apply {
-            setPadding(dp(5), dp(5), dp(5), dp(5))
+            setPadding(dp(5), dp(3), dp(5), dp(3))
             gravity = Gravity.CENTER_VERTICAL
             isBaselineAligned = false
             clipToPadding = false
@@ -1233,7 +1233,7 @@ class SafeActivity : FragmentActivity() {
             }
             navigationButtons.add(button)
             if (index == 1) consumerPositionTab = button
-            navigation.addView(button, LinearLayout.LayoutParams(0, dp(54), 1f))
+            navigation.addView(button, LinearLayout.LayoutParams(0, dp(44), 1f))
         }
         navigationFrame.addView(navigation, FrameLayout.LayoutParams(-1, -2))
         root.addView(navigationFrame, margins(top = 4).apply {
