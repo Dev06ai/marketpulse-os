@@ -4266,41 +4266,154 @@ class SafeActivity : FragmentActivity() {
         }
     }
 
-    private fun showInfoDialog(title: String, body: String) {
-        val content = TextView(this).apply {
-            text = body
-            textSize = 12f
-            setTextColor(kyWhite)
-            setPadding(dp(18), dp(14), dp(18), dp(14))
-            setLineSpacing(0f, 1.12f)
+    // Shared polished overlay. Replaces the tall stock AlertDialog panels while
+    // keeping all auth decisions in their original Firebase/server callbacks.
+    private fun premiumDialogBackground(): GradientDrawable =
+        GradientDrawable(GradientDrawable.Orientation.TL_BR,
+            intArrayOf(Color.rgb(34, 32, 32), Color.rgb(16, 17, 21), Color.rgb(11, 12, 16))).apply {
+            cornerRadius = dp(24).toFloat()
+            setStroke(dp(1), Color.rgb(110, 84, 49))
         }
-        // Short account status messages should not cover 80% of the phone.
-        // Bound long diagnostic text while allowing font scaling and keyboard insets.
-        val boundedContent = object : ScrollView(this) {
-            override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
-                val limit = (resources.displayMetrics.heightPixels * 0.60f).toInt()
-                super.onMeasure(widthMeasureSpec,
-                    View.MeasureSpec.makeMeasureSpec(limit, View.MeasureSpec.AT_MOST))
-            }
-        }.apply { addView(content) }
-        val dialog = android.app.AlertDialog.Builder(this)
-            .setTitle(title)
-            .setView(boundedContent)
-            .setPositiveButton("CLOSE", null)
-            .create()
-        dialog.setOnShowListener {
-            dialog.window?.setBackgroundDrawable(
-                GradientDrawable().apply {
-                    setColor(kySlate)
-                    cornerRadius = dp(18).toFloat()
-                    setStroke(dp(1), kyLine)
-                }
+
+    private fun premiumDialogButton(title: String, primary: Boolean = true,
+                                    destructive: Boolean = false): Button =
+        Button(this).apply {
+            text = title
+            isAllCaps = false
+            textSize = 13.5f
+            typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
+            setTextColor(when {
+                destructive -> Color.rgb(255, 170, 177)
+                primary -> Color.rgb(22, 19, 15)
+                else -> kyWhite
+            })
+            minHeight = dp(48)
+            background = android.graphics.drawable.RippleDrawable(
+                android.content.res.ColorStateList.valueOf(Color.argb(48, 246, 215, 158)),
+                GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,
+                    if (primary && !destructive)
+                        intArrayOf(Color.rgb(214, 177, 113), Color.rgb(173, 132, 74))
+                    else intArrayOf(Color.rgb(37, 37, 43), Color.rgb(27, 28, 33))).apply {
+                    cornerRadius = dp(14).toFloat()
+                    if (!primary || destructive) setStroke(dp(1),
+                        if (destructive) Color.rgb(110, 54, 61) else Color.rgb(65, 63, 60))
+                }, null
             )
-            dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE)?.setTextColor(kyGold)
         }
+
+    private fun premiumDialogContainer(title: String, subtitle: String): LinearLayout {
+        val panel = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(22), dp(20), dp(22), dp(20))
+            background = premiumDialogBackground()
+        }
+        val headingRow = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
+        val emblem = ImageView(this).apply {
+            setImageResource(R.drawable.kyvoriq_mark)
+            scaleType = ImageView.ScaleType.CENTER_INSIDE
+            contentDescription = "KYVORIQ"
+            setPadding(dp(8), dp(8), dp(8), dp(8))
+            background = GradientDrawable().apply {
+                setColor(Color.rgb(43, 36, 27))
+                cornerRadius = dp(14).toFloat()
+                setStroke(dp(1), Color.rgb(99, 76, 46))
+            }
+        }
+        headingRow.addView(emblem, LinearLayout.LayoutParams(dp(45), dp(45)))
+        val words = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(12), 0, 0, 0)
+        }
+        words.addView(label("KYVORIQ  /  ACCOUNT", 9.5f, kyGold, 0.055f))
+        words.addView(label(title, 19f, kyWhite, 0f).apply {
+            typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
+            setLineSpacing(dp(1).toFloat(), 1.04f)
+        }, margins(top = 5))
+        headingRow.addView(words, LinearLayout.LayoutParams(0, -2, 1f))
+        panel.addView(headingRow, margins(bottom = 15))
+        val goldLine = View(this).apply {
+            background = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,
+                intArrayOf(kyGold, Color.rgb(91, 76, 50), Color.TRANSPARENT))
+        }
+        panel.addView(goldLine, LinearLayout.LayoutParams(-1, dp(1)))
+        if (subtitle.isNotBlank()) {
+            panel.addView(label(subtitle, 12.5f, Color.rgb(190, 189, 192), 0f).apply {
+                setLineSpacing(dp(2).toFloat(), 1.08f)
+            }, margins(top = 17, bottom = 16))
+        } else {
+            panel.addView(View(this), LinearLayout.LayoutParams(1, dp(12)))
+        }
+        return panel
+    }
+
+    private fun openPremiumDialog(dialog: android.app.Dialog, content: View,
+                                  sensitive: Boolean = false) {
+        val bounded = object : ScrollView(this) {
+            override fun onMeasure(w: Int, h: Int) {
+                val max = (resources.displayMetrics.heightPixels * 0.78f).toInt()
+                super.onMeasure(w,
+                    View.MeasureSpec.makeMeasureSpec(max, View.MeasureSpec.AT_MOST))
+            }
+        }.apply {
+            isFillViewport = false
+            overScrollMode = View.OVER_SCROLL_IF_CONTENT_SCROLLS
+            addView(content)
+        }
+        dialog.setContentView(bounded)
+        dialog.setCanceledOnTouchOutside(true)
         dialog.show()
-        dialog.window?.setLayout((resources.displayMetrics.widthPixels * 0.94).toInt(),
-            ViewGroup.LayoutParams.WRAP_CONTENT)
+        dialog.window?.apply {
+            setBackgroundDrawable(android.graphics.drawable.ColorDrawable(Color.TRANSPARENT))
+            addFlags(android.view.WindowManager.LayoutParams.FLAG_DIM_BEHIND)
+            if (sensitive) addFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)
+            attributes = attributes.apply {
+                dimAmount = 0.76f
+                gravity = Gravity.CENTER
+                windowAnimations = 0
+            }
+            val available = resources.displayMetrics.widthPixels
+            setLayout(minOf(dp(460), available - dp(24)), ViewGroup.LayoutParams.WRAP_CONTENT)
+            setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
+        }
+        if (KyvoriqTheme.motionEnabled(this)) {
+            content.alpha = 0f
+            content.translationY = dp(15).toFloat()
+            content.scaleX = 0.975f
+            content.scaleY = 0.975f
+            content.animate().alpha(1f).translationY(0f).scaleX(1f).scaleY(1f)
+                .setDuration(260L).setInterpolator(KyvoriqTheme.motion).start()
+        }
+    }
+
+    private fun showPremiumConfirm(title: String, body: String, destructive: Boolean,
+                                   confirm: () -> Unit) {
+        val dialog = android.app.Dialog(this)
+        val panel = premiumDialogContainer(title, body)
+        val actions = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
+        val cancel = premiumDialogButton("Cancel", primary = false)
+        val proceed = premiumDialogButton(if (destructive) "Sign out" else "Continue",
+            primary = !destructive, destructive = destructive)
+        actions.addView(cancel, LinearLayout.LayoutParams(0, dp(48), 1f).apply {
+            rightMargin = dp(8)
+        })
+        actions.addView(proceed, LinearLayout.LayoutParams(0, dp(48), 1f))
+        panel.addView(actions)
+        cancel.setOnClickListener { haptic(it); dialog.dismiss() }
+        proceed.setOnClickListener {
+            haptic(it)
+            dialog.dismiss()
+            confirm()
+        }
+        openPremiumDialog(dialog, panel)
+    }
+
+    private fun showInfoDialog(title: String, body: String) {
+        val dialog = android.app.Dialog(this)
+        val panel = premiumDialogContainer(title, body)
+        val close = premiumDialogButton("Got it")
+        panel.addView(close, LinearLayout.LayoutParams(-1, dp(48)))
+        close.setOnClickListener { haptic(it); dialog.dismiss() }
+        openPremiumDialog(dialog, panel)
     }
 
     private fun formatCompact(value: Double): String =
