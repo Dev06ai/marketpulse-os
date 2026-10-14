@@ -1196,7 +1196,8 @@ class SafeActivity : FragmentActivity() {
                 GradientDrawable.Orientation.TL_BR,
                 intArrayOf(Color.rgb(244, 241, 232), Color.rgb(207, 193, 167))
             ).apply { cornerRadius = dp(16).toFloat() }
-            elevation = dp(2).toFloat()
+            // Keep the animated selection pill behind every tab icon and label.
+            elevation = 0f
             importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
         }
         liquidNavIndicator = liquid
@@ -1205,6 +1206,8 @@ class SafeActivity : FragmentActivity() {
             leftMargin = dp(5)
         })
         val navigation = LinearLayout(this).apply {
+            // GPU-safe stacking, matching the newer Build 166 navigation fix.
+            elevation = dp(2).toFloat()
             setPadding(dp(5), dp(3), dp(5), dp(3))
             gravity = Gravity.CENTER_VERTICAL
             isBaselineAligned = false
