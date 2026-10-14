@@ -1,0 +1,94 @@
+name: Publish KYVORIQ 161 verified private-testing prerelease
+on:
+  push:
+    branches: [feature/build161-ob-insights-account]
+    paths: ['.github/workflows/publish-verified-161.yml']
+permissions:
+  contents: write
+  actions: read
+jobs:
+  publish:
+    if: github.repository == 'Dev06ai/marketpulse-os'
+    runs-on: ubuntu-latest
+    timeout-minutes: 14
+    steps:
+      - name: Require exact passing signed and emulator run
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          RUN=38505899629
+          BASE=7f12a95394c489992d7e852b341baed89d3e5f4b
+          test "$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN" --jq '.conclusion')" = success
+          test "$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN" --jq '.head_sha')" = "$BASE"
+          mkdir -p release proof
+          gh run download "$RUN" --repo "$GITHUB_REPOSITORY" --name KYVORIQ-161-SIGNED-TESTING-ONLY --dir release
+          gh run download "$RUN" --repo "$GITHUB_REPOSITORY" --name KYVORIQ-161-OB-VISUAL-PROOF --dir proof
+          (cd release && sha256sum -c SHA256SUMS.txt)
+          echo '2dc4c0404233ca475d387c9699a94167ad84124f85c3526baad94fdcb87fa603  KYVORIQ-0.21.36-Build161.apk' | (cd release && sha256sum -c)
+          echo '2a3e1e89a34412cc9abd611a364f7aa9000ae6f22e0652a897482903938899fa  KYVORIQ-0.21.36-Build161.aab' | (cd release && sha256sum -c)
+          for mode in small normal tall large-font landscape; do
+            grep -Fq 'OK (1 test)' "proof/$mode/test.txt"
+            for view in trade ob-price-labels ob-next-page account-free account-owner; do
+              test -s "proof/$mode/$view.png"
+            done
+          done
+          cp release/KYVORIQ-0.21.36-Build161.apk release/app-release.apk
+          echo '2dc4c0404233ca475d387c9699a94167ad84124f85c3526baad94fdcb87fa603  app-release.apk' | (cd release && sha256sum -c)
+      - name: Verify exact update identity and no private assets
+        run: |
+          set -euo pipefail
+          curl --fail --location --silent --show-error --retry 3 --max-time 90 \
+            -o "$RUNNER_TEMP/160.apk" \
+            'https://github.com/Dev06ai/marketpulse-os/releases/download/dev-trader-v0.21.35-160/app-release.apk'
+          SIGNER="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -1)"
+          "$SIGNER" verify --print-certs "$RUNNER_TEMP/160.apk" > "$RUNNER_TEMP/160-cert"
+          "$SIGNER" verify --print-certs release/app-release.apk > "$RUNNER_TEMP/161-cert"
+          python3 - <<'PY'
+          import os,re
+          from pathlib import Path
+          base=Path(os.environ['RUNNER_TEMP'])
+          def signer(name):
+              match=re.findall(r'certificate SHA-256 digest:\s*([0-9a-fA-F]{64})', (base/name).read_text())
+              assert match, name
+              return match[0].lower()
+          assert signer('160-cert') == signer('161-cert') == '17e4c550aa235dae926058654f203ecae9d7b30b432bde9dc2c358e28360cbab'
+          print('BUILD160_TO_161_SIGNING_CONTINUITY_VERIFIED')
+          PY
+          AAPT="$(find "$ANDROID_HOME/build-tools" -type f -name aapt | sort -V | tail -1)"
+          "$AAPT" dump badging release/app-release.apk | head -1 | grep -E "^package: name='com.devtrader.app' versionCode='161' versionName='0.21.36'"
+          unzip -tq release/app-release.apk | grep -Fq 'No errors detected'
+          ! unzip -Z1 release/app-release.apk | grep -Eqi 'ui_preview\.json|\.env$|\.jks$|firebase-admin|service-account.*json'
+      - name: Publish opt-in TESTING prerelease without activating consumer login or Play Store
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG=dev-trader-v0.21.36-161
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo 'Release already exists; refusing overwrite'
+            exit 1
+          fi
+          cat > "$RUNNER_TEMP/notes.md" <<'NOTES'
+          # KYVORIQ 0.21.36 — Build 161 (private UI-testing prerelease)
+          **The app is NOT yet ready for public consumer signup, paid plans or Google Play.**
+          - Replaces congested overlapping OB captions with spaced, alert-aware captions and a tap-to-cycle OB pager, preserving exact source prices and true chart zone coordinates.
+          - Removes Alert Intelligence, Position Risk and Connection cards from consumer/owner Insights while maintaining private computational state.
+          - Adds a short accessible gold shimmer, email/Google/password-recovery UI flows, server-facing entitlement verification shell and red consumer/owner logout controls.
+          - Managed Firebase sign-in and email verification are **not configured in this APK**. Sign-up and Google sign-in cannot be completed until provider, callback URLs and verified email delivery are independently provisioned and tested.
+          - Separate consumer API has JWT signature/issuer/audience verification, MFA-based admin allowlist and distributed abuse-rate-limit code, but is NOT deployed as a live consumer service.
+          - Owner Bitget execution and Voroa backend are unchanged; no public Play billing/payments or premium alert entitlements are activated.
+          - Build 161 passed signed APK/AAB compilation, source/identity verification, 21 consumer API tests and five Android emulator form-factor UI tests.
+          - The existing public in-app updater remains pinned to 160 until owner chooses to make this private tester prerelease the default test channel.
+          NOTES
+          gh release create "$TAG" \
+            release/app-release.apk \
+            release/KYVORIQ-0.21.36-Build161.apk \
+            release/KYVORIQ-0.21.36-Build161.aab \
+            release/SHA256SUMS.txt \
+            --repo "$GITHUB_REPOSITORY" \
+            --target 7f12a95394c489992d7e852b341baed89d3e5f4b \
+            --title 'KYVORIQ 0.21.36 — Build 161 Private Tester' \
+            --notes-file "$RUNNER_TEMP/notes.md" \
+            --prerelease
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json url,isPrerelease,assets
