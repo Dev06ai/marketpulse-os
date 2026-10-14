@@ -1,0 +1,43 @@
+name: KYVORIQ 168 verified APK delivery
+on:
+  push:
+    branches: [ci/kyvoriq-168-verified-delivery-20261014]
+    paths:
+      - .github/workflows/kyvoriq-168-verified-delivery.yml
+permissions:
+  contents: read
+jobs:
+  retrieve:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ github.token }}
+      EXPECTED_SHA256: d349c922783e959f1bf12ffe9b5e969ea46cfddc35e24604173183c6f0b14bc9
+      EXPECTED_SIZE: '5676093'
+      TAG: dev-trader-v0.21.43-168
+    steps:
+      - name: Download the immutable signed published Build 168 APK
+        run: |
+          set -euo pipefail
+          mkdir -p verified
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" \
+            --pattern app-release.apk --dir verified
+          test -s verified/app-release.apk
+          test "$(stat -c%s verified/app-release.apk)" = "$EXPECTED_SIZE"
+          echo "$EXPECTED_SHA256  verified/app-release.apk" | sha256sum --check --status
+          python3 - <<'PY'
+          import zipfile
+          with zipfile.ZipFile('verified/app-release.apk') as z:
+              assert z.testzip() is None
+              assert 'AndroidManifest.xml' in z.namelist()
+              assert 'classes.dex' in z.namelist()
+              assert not any(n.endswith(('ui_preview.json','.jks','.keystore','.p12','.pfx','.env')) for n in z.namelist())
+          print('EXACT_PUBLISHED_BUILD_168_APK_VERIFIED')
+          PY
+          mv verified/app-release.apk verified/KYVORIQ-Build-168-Verified.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: KYVORIQ-168-VERIFIED-RELEASE-APK
+          path: verified/KYVORIQ-Build-168-Verified.apk
+          if-no-files-found: error
+          retention-days: 7
