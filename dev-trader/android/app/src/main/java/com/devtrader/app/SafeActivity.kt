@@ -993,7 +993,7 @@ class SafeActivity : FragmentActivity() {
         val insightTabs = mutableListOf<Button>()
         val insightSections = mutableListOf<Pair<Int, View>>()
         val insightTabsRow = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
-        listOf("All", "Structure", "Risk", "System").forEachIndexed { tab, title ->
+        listOf("All", "Structure", "System").forEachIndexed { tab, title ->
             val button = compactPillButton(title).apply {
                 textSize = 10f
                 isSelected = tab == 0
@@ -1046,33 +1046,22 @@ class SafeActivity : FragmentActivity() {
         // Private entry-check computation remains independent of consumer UI.
         decisionView = TextView(this)
 
-        val alertCard = compactCard("ALERT INTELLIGENCE", "Info • No spam, just the real updates.", 12.5f)
-        alertIntelligenceView = alertCard.value
-        insightsContent.addView(alertCard.container, margins(bottom = 10))
-        adminOnlyViews.add(alertCard.container)
-
-        val riskCard = compactCard("POSITION RISK HEAT", "Idle • No open demo position.", 12.5f)
-        riskHeatText = riskCard.value
+        // Internal alert-priority and demo risk calculations remain alive for
+        // the private engine but have NO consumer-facing Insights view.
+        // Deliberately do not attach these to a parent for ANY role.
+        alertIntelligenceView = TextView(this)
+        riskHeatText = TextView(this)
         riskHeatMeter = RiskHeatMeterView(this).apply {
-            contentDescription = "Position risk heat meter"
             setRisk(0f, "IDLE", animate = false)
         }
-        riskCard.container.addView(
-            riskHeatMeter,
-            1,
-            LinearLayout.LayoutParams(-1, dp(42)).apply { topMargin = dp(4); bottomMargin = dp(2) }
-        )
-        insightsContent.addView(riskCard.container, margins(bottom = 10))
-        adminOnlyViews.add(riskCard.container)
 
         val levels = compactCard("LEVELS & FLOW", "Loading confirmed context…", 12.5f)
         insightContext = levels.value
         insightsContent.addView(levels.container, margins(bottom = 10))
         adminOnlyViews.add(levels.container)
-        val feed = compactCard("CONNECTION", "Bitget • Connecting", 12.5f)
-        integrity = feed.value
-        insightsContent.addView(feed.container, margins(bottom = 10))
-        adminOnlyViews.add(feed.container)
+        // Maintain private diagnostic source state without displaying a
+        // consumer Connection card, including on the owner account.
+        integrity = TextView(this)
         val sys = compactCard("SYSTEM", "Build ${BuildConfig.VERSION_CODE} • Checking…", 12.5f)
         check = sys.value
         insightsContent.addView(sys.container, margins(bottom = 10))
@@ -1121,23 +1110,17 @@ class SafeActivity : FragmentActivity() {
         adminOnlyViews.add(pairButton)
         insightSections.addAll(listOf(
             1 to story.first,
-            2 to alertCard.container,
-            2 to riskCard.container,
             1 to levels.container,
-            3 to feed.container,
-            3 to sys.container,
-            3 to tools,
-            3 to deviceTools,
-            3 to pairButton
+            2 to sys.container,
+            2 to tools,
+            2 to deviceTools,
+            2 to pairButton
         ))
         insightsMotionViews.clear()
         insightsMotionViews.addAll(
             listOf(
                 story.first,
-                alertCard.container,
-                riskCard.container,
                 levels.container,
-                feed.container,
                 sys.container,
                 tools,
                 deviceTools,
