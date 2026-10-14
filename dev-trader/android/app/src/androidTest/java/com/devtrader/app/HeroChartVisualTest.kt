@@ -123,6 +123,27 @@ class HeroChartVisualTest {
             SystemClock.sleep(120)
             screenshot("ob-price-labels")
             inst.runOnMainSync {
+                val chart = children(activity.window.decorView)
+                    .filterIsInstance<MarketChartView>().first()
+                val badges = chart.visibleObBadgesForTest()
+                assertTrue("No more than three crowded OB labels", badges.size <= 3)
+                for (i in badges.indices) for (j in i+1 until badges.size) {
+                    assertFalse("OB badges must not overlap",
+                        android.graphics.RectF.intersects(badges[i], badges[j]))
+                    assertTrue("OB badges need 8dp vertical air",
+                        kotlin.math.abs(badges[i].centerY() - badges[j].centerY()) >=
+                            (badges[i].height()+badges[j].height())/2 +
+                            7f*activity.resources.displayMetrics.density)
+                }
+                val pager = chart.obPageControlForTest()
+                assertNotNull("Crowded OB sets must remain browsable", pager)
+                if (pager != null) {
+                    tap(chart, pager.centerX(), pager.centerY())
+                }
+            }
+            SystemClock.sleep(110)
+            screenshot("ob-next-page")
+            inst.runOnMainSync {
                 children(activity.window.decorView).filterIsInstance<Button>()
                     .first { it.contentDescription == "Sign in or create a KYVORIQ account" }.performClick()
             }
