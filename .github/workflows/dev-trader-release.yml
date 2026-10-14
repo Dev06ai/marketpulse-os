@@ -262,12 +262,17 @@ jobs:
         working-directory: dev-trader/android
         run: gradle assembleDebug assembleDebugAndroidTest --stacktrace -PdevTraderVersionCode=176 -PdevTraderVersionName=0.21.51
 
+      - name: Enable emulator hardware acceleration
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
       - name: Require timeout, offline cache, network reset and chart regression tests
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35
           arch: x86_64
-          target: google_apis
+          target: default
           profile: pixel_6
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
           script: |
