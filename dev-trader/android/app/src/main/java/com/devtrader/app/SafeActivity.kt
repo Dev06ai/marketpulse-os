@@ -1016,7 +1016,22 @@ class SafeActivity : FragmentActivity() {
                     chip.background = KyvoriqTheme.button(this@SafeActivity, selected, 10f)
                 }
                 insightSections.forEach { (category, card) ->
-                    card.visibility = if (tab == 0 || tab == category) View.VISIBLE else View.GONE
+                    val showing = tab == 0 || tab == category
+                    card.animate().cancel()
+                    if (showing) {
+                        card.visibility = View.VISIBLE
+                        if (KyvoriqTheme.motionEnabled(this@SafeActivity)) {
+                            card.alpha = 0f
+                            card.translationY = dp(7).toFloat()
+                            card.animate().alpha(1f).translationY(0f)
+                                .setDuration(240L).setInterpolator(KyvoriqTheme.motion).start()
+                        } else {
+                            card.alpha = 1f
+                            card.translationY = 0f
+                        }
+                    } else {
+                        card.visibility = View.GONE
+                    }
                 }
             }
             insightTabs.add(button)
@@ -1068,12 +1083,12 @@ class SafeActivity : FragmentActivity() {
         // Maintain private diagnostic source state without displaying a
         // consumer Connection card, including on the owner account.
         integrity = TextView(this)
-        val sys = compactCard("SYSTEM", "Build ${BuildConfig.VERSION_CODE} • Checking…", 12.5f)
+        val sys = compactCard("SYSTEM STATUS", "Build ${BuildConfig.VERSION_CODE} • Checking…", 12.5f)
         check = sys.value
         insightsContent.addView(sys.container, margins(bottom = 10))
         adminOnlyViews.add(sys.container)
 
-        val tools = LinearLayout(this)
+        val tools = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
         checkButton = compactPillButton("SYSTEM CHECK")
         checkButton.setOnClickListener {
             haptic(it, KyvoriqHaptics.Cue.ACTION)
@@ -1089,7 +1104,7 @@ class SafeActivity : FragmentActivity() {
         insightsContent.addView(tools, margins(bottom = 8))
         adminOnlyViews.add(tools)
 
-        val deviceTools = LinearLayout(this)
+        val deviceTools = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
         privacyButton = compactPillButton("PRIVACY")
         privacyButton.setOnClickListener {
             haptic(it, KyvoriqHaptics.Cue.ACTION)
@@ -1213,11 +1228,13 @@ class SafeActivity : FragmentActivity() {
         val dialog = android.app.Dialog(this)
         val surface = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(16), dp(14), dp(16), dp(14))
-            background = GradientDrawable().apply {
-                setColor(Color.rgb(16, 17, 20))
-                cornerRadius = dp(25).toFloat()
-                setStroke(dp(1), Color.rgb(83, 68, 41))
+            setPadding(dp(20), dp(18), dp(20), dp(16))
+            background = GradientDrawable(
+                GradientDrawable.Orientation.TL_BR,
+                intArrayOf(Color.rgb(29, 28, 29), Color.rgb(12, 13, 17), Color.rgb(9, 10, 13))
+            ).apply {
+                cornerRadius = dp(26).toFloat()
+                setStroke(dp(1), Color.rgb(111, 85, 48))
             }
         }
         val header = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
@@ -1225,13 +1242,13 @@ class SafeActivity : FragmentActivity() {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(2), 0, 0, 0)
         }
-        identity.addView(label("KYVORIQ  /  ACCOUNT", 10f, kyGold, 0.095f))
+        identity.addView(label("KYVORIQ  /  IDENTITY & SECURITY", 10f, kyGold, 0.045f))
         identity.addView(label(
             if (ownerDevice) "Private device access"
             else if (consumerEmail != null) "Verified consumer account"
             else "Your KYVORIQ",
-            20f, kyWhite, 0f
-        ), margins(top = 5))
+            22f, kyWhite, 0f
+        ).apply { typeface = Typeface.create("sans-serif-medium", Typeface.BOLD) }, margins(top = 7))
         header.addView(identity, LinearLayout.LayoutParams(0, -2, 1f))
         val close = compactPillButton("✕").apply {
             contentDescription = "Close KYVORIQ account panel"
@@ -1239,28 +1256,44 @@ class SafeActivity : FragmentActivity() {
             setOnClickListener { dialog.dismiss() }
         }
         header.addView(close, LinearLayout.LayoutParams(dp(48), dp(48)))
-        surface.addView(header, margins(bottom = 10))
+        surface.addView(header, margins(bottom = 14))
+        val accentRule = View(this).apply {
+            background = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,
+                intArrayOf(kyDeepGold, Color.rgb(115, 88, 52), Color.TRANSPARENT))
+        }
+        surface.addView(accentRule, LinearLayout.LayoutParams(-1, dp(1)).apply { bottomMargin = dp(15) })
         val statusLine = label(
             if (ownerDevice) "Device paired to private owner API • server authorization required"
             else if (consumerEmail != null) "EMAIL VERIFIED  •  Paid access requires server-checked entitlements"
             else "FREE  •  Market chart access without a subscription",
             10.5f, kyGray, 0f
-        ).apply { setPadding(dp(12), dp(9), dp(12), dp(9))
-            background = KyvoriqTheme.surface(this@SafeActivity, radius = 12f)
+        ).apply {
+            setTextColor(Color.rgb(206, 193, 169))
+            setPadding(dp(14), dp(13), dp(14), dp(13))
+            background = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,
+                intArrayOf(Color.rgb(42, 35, 26), Color.rgb(24, 24, 27))).apply {
+                cornerRadius = dp(14).toFloat()
+                setStroke(dp(1), Color.rgb(86, 70, 45))
+            }
         }
-        surface.addView(statusLine, margins(bottom = 10))
+        surface.addView(statusLine, margins(bottom = 15))
         fun actionRow(iconRes: Int, heading: String, subtitle: String,
                       destructive: Boolean = false, destination: () -> Unit) {
             val row = LinearLayout(this).apply {
                 gravity = Gravity.CENTER_VERTICAL
-                setPadding(dp(10), dp(9), dp(12), dp(9))
+                setPadding(dp(13), dp(12), dp(14), dp(12))
                 background = android.graphics.drawable.RippleDrawable(
                     android.content.res.ColorStateList.valueOf(
-                        if (destructive) Color.argb(40, 220, 82, 89) else Color.argb(34, 182, 140, 75)),
-                    KyvoriqTheme.surface(this@SafeActivity, radius = 14f), null)
+                        if (destructive) Color.argb(48, 220, 82, 89) else Color.argb(46, 194, 155, 87)),
+                    GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,
+                        intArrayOf(Color.rgb(31, 31, 35), Color.rgb(18, 19, 23))).apply {
+                        cornerRadius = dp(17).toFloat()
+                        setStroke(dp(1), if (destructive)
+                            Color.rgb(80, 44, 49) else Color.rgb(57, 55, 57))
+                    }, null)
                 isClickable = true
                 isFocusable = true
-                minimumHeight = dp(62)
+                minimumHeight = dp(68)
                 contentDescription = "$heading. $subtitle"
                 setOnClickListener {
                     haptic(it, KyvoriqHaptics.Cue.ACTION)
@@ -1273,22 +1306,24 @@ class SafeActivity : FragmentActivity() {
                 scaleType = ImageView.ScaleType.FIT_CENTER
                 setPadding(dp(7), dp(7), dp(7), dp(7))
                 background = GradientDrawable().apply {
-                    setColor(Color.rgb(36, 30, 22))
-                    cornerRadius = dp(10).toFloat()
-                    setStroke(dp(1), Color.rgb(76, 58, 32))
+                    setColor(Color.rgb(48, 38, 26))
+                    cornerRadius = dp(12).toFloat()
+                    setStroke(dp(1), Color.rgb(98, 77, 44))
                 }
                 importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
             }
-            row.addView(badge, LinearLayout.LayoutParams(dp(38), dp(38)).apply {
-                rightMargin = dp(12)
+            row.addView(badge, LinearLayout.LayoutParams(dp(42), dp(42)).apply {
+                rightMargin = dp(13)
             })
             val copy = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-            copy.addView(label(heading, 13f,
+            copy.addView(label(heading, 14f,
                 if (destructive) Color.rgb(240, 87, 96) else kyWhite, 0f))
-            copy.addView(label(subtitle, 10f, kyGray, 0f), margins(top = 4))
+            copy.addView(label(subtitle, 10.5f, Color.rgb(170, 170, 176), 0f).apply {
+                setLineSpacing(dp(1).toFloat(), 1.06f)
+            }, margins(top = 5))
             row.addView(copy, LinearLayout.LayoutParams(0, -2, 1f))
             row.addView(label("›", 22f, if (destructive) Color.rgb(240, 87, 96) else kyGold, 0f))
-            surface.addView(row, margins(bottom = 6))
+            surface.addView(row, margins(bottom = 9))
         }
         if (ownerDevice) {
             actionRow(R.drawable.ic_account_owner, "Owner access", "Paired device • verified on each protected request") {
@@ -1389,6 +1424,7 @@ class SafeActivity : FragmentActivity() {
 
         val scroll = ScrollView(this).apply {
             clipToOutline = true
+            isFillViewport = false
             overScrollMode = View.OVER_SCROLL_IF_CONTENT_SCROLLS
             addView(surface, ViewGroup.LayoutParams(-1, -2))
         }
@@ -1410,6 +1446,12 @@ class SafeActivity : FragmentActivity() {
                 fullWidth - dp(12) else minOf(dp(460), fullWidth - dp(40))
             setLayout(sheetWidth, ViewGroup.LayoutParams.WRAP_CONTENT)
             setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
+        }
+        if (KyvoriqTheme.motionEnabled(this)) {
+            surface.alpha = 0f
+            surface.translationY = dp(22).toFloat()
+            surface.animate().alpha(1f).translationY(0f)
+                .setDuration(320L).setInterpolator(KyvoriqTheme.motion).start()
         }
     }
 
