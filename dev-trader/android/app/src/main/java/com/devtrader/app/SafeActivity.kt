@@ -812,9 +812,15 @@ class SafeActivity : FragmentActivity() {
         identityRow.addView(brand, LinearLayout.LayoutParams(0, dp(48), 1f))
         // Consumer-facing entry point. No role, entitlement, or payment is
         // ever inferred from this button or mutable local Android preferences.
-        val account = compactPillButton(
-            if (KyvoriqSecureSession.isPaired(this)) "ACCOUNT" else "SIGN IN"
-        ).apply {
+        val account = KyvoriqGoldAccountButton(this).apply {
+            text = if (KyvoriqSecureSession.isPaired(this@SafeActivity)) "ACCOUNT" else "SIGN IN"
+            isAllCaps = false
+            typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+            minHeight = 0
+            minWidth = 0
+            stateListAnimator = null
+            setPadding(dp(5), 0, dp(5), 0)
+            background = KyvoriqTheme.button(this@SafeActivity)
             textSize = 10f
             contentDescription = "Account: sign in or create account"
             setTextColor(kyGold)
@@ -1239,12 +1245,14 @@ class SafeActivity : FragmentActivity() {
             background = KyvoriqTheme.surface(this@SafeActivity, radius = 12f)
         }
         surface.addView(statusLine, margins(bottom = 10))
-        fun actionRow(iconRes: Int, heading: String, subtitle: String, destination: () -> Unit) {
+        fun actionRow(iconRes: Int, heading: String, subtitle: String,
+                      destructive: Boolean = false, destination: () -> Unit) {
             val row = LinearLayout(this).apply {
                 gravity = Gravity.CENTER_VERTICAL
                 setPadding(dp(10), dp(9), dp(12), dp(9))
                 background = android.graphics.drawable.RippleDrawable(
-                    android.content.res.ColorStateList.valueOf(Color.argb(34, 182, 140, 75)),
+                    android.content.res.ColorStateList.valueOf(
+                        if (destructive) Color.argb(40, 220, 82, 89) else Color.argb(34, 182, 140, 75)),
                     KyvoriqTheme.surface(this@SafeActivity, radius = 14f), null)
                 isClickable = true
                 isFocusable = true
@@ -1271,10 +1279,11 @@ class SafeActivity : FragmentActivity() {
                 rightMargin = dp(12)
             })
             val copy = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-            copy.addView(label(heading, 13f, kyWhite, 0f))
+            copy.addView(label(heading, 13f,
+                if (destructive) Color.rgb(240, 87, 96) else kyWhite, 0f))
             copy.addView(label(subtitle, 10f, kyGray, 0f), margins(top = 4))
             row.addView(copy, LinearLayout.LayoutParams(0, -2, 1f))
-            row.addView(label("›", 22f, kyGold, 0f))
+            row.addView(label("›", 22f, if (destructive) Color.rgb(240, 87, 96) else kyGold, 0f))
             surface.addView(row, margins(bottom = 6))
         }
         if (ownerDevice) {
@@ -1290,12 +1299,22 @@ class SafeActivity : FragmentActivity() {
             actionRow(R.drawable.ic_account_privacy, "Privacy controls", "Protect access on this device") {
                 showPrivacyControls()
             }
+            actionRow(R.drawable.ic_account_access, "Sign out", "End owner access on this device",
+                destructive = true) {
+                confirmOwnerLogout()
+            }
         } else {
-            actionRow(R.drawable.ic_account_access, "Log in", "Secure consumer account sign-in") {
+            actionRow(R.drawable.ic_account_access, "Log in", "Email and password • verification required") {
                 openConsumerPortal("login")
             }
-            actionRow(R.drawable.ic_account_portfolio, "Sign up", "Create a KYVORIQ account") {
+            actionRow(R.drawable.ic_account_portfolio, "Sign up", "Email verification before first login") {
                 openConsumerPortal("signup")
+            }
+            actionRow(R.drawable.ic_account_access, "Continue with Google", "Google OAuth • verified account") {
+                openConsumerPortal("google")
+            }
+            actionRow(R.drawable.ic_account_pairing, "Forgot password?", "Secure email reset • expiring link") {
+                openConsumerPortal("forgot-password")
             }
             actionRow(R.drawable.ic_account_pairing, "Owner device pairing", "Requires private server authorization") {
                 pairingButton?.let { showPairingDialog(it) }
@@ -1335,6 +1354,24 @@ class SafeActivity : FragmentActivity() {
         }
     }
 
+    private fun confirmOwnerLogout() {
+        // Logout clears the locally-encrypted, expiring device bearer. Backend
+        // still enforces access expiry and revocation on every protected call.
+        android.app.AlertDialog.Builder(this)
+            .setTitle("Sign out of this device?")
+            .setMessage("This clears your private owner token and hides private charts and execution data on this device. Remote sessions remain subject to server expiry or explicit revocation.")
+            .setNegativeButton("Cancel", null)
+            .setPositiveButton("Sign out") { _, _ ->
+                KyvoriqSecureSession.clear(this)
+                if (::chart.isInitialized) chart.setCustomPriceAlerts(emptyList())
+                runCatching { stopService(Intent(this, SignalService::class.java)) }
+                enterPublicMarketMode()
+                refreshConsumerPresentation()
+                showInfoDialog("Signed out", "Private owner access was cleared from this device.")
+            }.show().getButton(android.app.AlertDialog.BUTTON_POSITIVE)
+            ?.setTextColor(Color.rgb(240, 87, 96))
+    }
+
     private fun showConsumerPlans() {
         showInfoDialog("KYVORIQ access levels",
             "FREE • Bollinger Bands, 50 EMA, SFP watch references. No market alerts.\n\n" +
@@ -1353,7 +1390,10 @@ class SafeActivity : FragmentActivity() {
             return
         }
         val uri = android.net.Uri.parse("$base/$destination")
-        if (uri.scheme != "https" || !setOf("login", "signup").contains(destination)) {
+        val baseUri = android.net.Uri.parse(base)
+        if (uri.scheme != "https" || uri.host.isNullOrBlank() ||
+            !uri.host.equals(baseUri.host, ignoreCase = true) ||
+            !setOf("login", "signup", "google", "forgot-password", "logout").contains(destination)) {
             showInfoDialog("Account unavailable", "Untrusted sign-in destination blocked.")
             return
         }
