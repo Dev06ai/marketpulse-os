@@ -82,8 +82,8 @@ jobs:
           grep -Ei 'signer.*certificate.*SHA-256' "$RUNNER_TEMP/old-certs" || true
           echo "Candidate APK signer details:"
           grep -Ei 'signer.*certificate.*SHA-256' "$RUNNER_TEMP/new-certs" || true
-          OLD="$(sed -n -E 's/^Signer #1 certificate SHA-256 digest:[[:space:]]*([0-9A-Fa-f:]+).*/\\1/p' "$RUNNER_TEMP/old-certs" | head -1 | tr -d ':[:space:]' | tr '[:upper:]' '[:lower:]')"
-          NEW="$(sed -n -E 's/^Signer #1 certificate SHA-256 digest:[[:space:]]*([0-9A-Fa-f:]+).*/\\1/p' "$RUNNER_TEMP/new-certs" | head -1 | tr -d ':[:space:]' | tr '[:upper:]' '[:lower:]')"
+          OLD="$(sed -n -E 's/^.*[Ss]igner[^:]*: certificate SHA-256 digest:[[:space:]]*([0-9A-Fa-f]{64}).*/\\1/p' "$RUNNER_TEMP/old-certs" | head -1 | tr '[:upper:]' '[:lower:]')"
+          NEW="$(sed -n -E 's/^.*[Ss]igner[^:]*: certificate SHA-256 digest:[[:space:]]*([0-9A-Fa-f]{64}).*/\\1/p' "$RUNNER_TEMP/new-certs" | head -1 | tr '[:upper:]' '[:lower:]')"
           if [[ -z "$OLD" || -z "$NEW" ]]; then
             echo "Unable to parse certificate digests; refuse release."
             exit 1
