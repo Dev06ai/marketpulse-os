@@ -20,6 +20,19 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class HeroChartVisualTest {
     private val inst get() = InstrumentationRegistry.getInstrumentation()
+    private fun activeWindowLabels(): List<String> {
+        // Account sheet is an Android Dialog with its OWN window. Never look
+        // for dialog rows under activity.window.decorView (false negatives).
+        val labels = mutableListOf<String>()
+        fun visit(node: android.view.accessibility.AccessibilityNodeInfo?) {
+            if (node == null) return
+            node.text?.toString()?.let { labels.add(it) }
+            node.contentDescription?.toString()?.let { labels.add(it) }
+            for (i in 0 until node.childCount) visit(node.getChild(i))
+        }
+        visit(inst.uiAutomation.rootInActiveWindow)
+        return labels
+    }
     private fun children(v: View): List<View> = listOf(v) +
         if (v is ViewGroup) (0 until v.childCount).flatMap { children(v.getChildAt(it)) } else emptyList()
     private fun screenshot(name: String) {
@@ -166,13 +179,10 @@ class HeroChartVisualTest {
             }
             SystemClock.sleep(250)
             screenshot("account-free")
-            inst.runOnMainSync {
-                val rows = children(activity.window.decorView)
-                    .filterIsInstance<android.widget.TextView>()
-                    .filter { it.isShown }.map { it.text.toString() }
-                for (name in listOf("Log in", "Sign up", "Continue with Google", "Forgot password?")) {
-                    assertTrue("Missing consumer auth entry: $name", name in rows)
-                }
+            val consumerRows = activeWindowLabels()
+            for (name in listOf("Log in", "Sign up", "Continue with Google", "Forgot password?")) {
+                assertTrue("Missing consumer auth entry: $name in $consumerRows",
+                    consumerRows.any { it == name || it.startsWith("$name.") })
             }
             assertFalse("Opening sheet must not grant owner access", KyvoriqSecureSession.isPaired(activity))
             inst.sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_BACK) // close account sheet
@@ -185,12 +195,9 @@ class HeroChartVisualTest {
             }
             SystemClock.sleep(250)
             screenshot("account-owner")
-            inst.runOnMainSync {
-                val names = children(activity.window.decorView)
-                    .filterIsInstance<android.widget.TextView>()
-                    .filter { it.isShown }.map { it.text.toString() }
-                assertTrue("Owner account needs explicit red Sign out action", names.contains("Sign out"))
-            }
+            val ownerRows = activeWindowLabels()
+            assertTrue("Owner account needs explicit Sign out action",
+                ownerRows.any { it == "Sign out" || it.startsWith("Sign out.") })
         } catch (failure: Throwable) {
             screenshot("failure")
             throw failure
