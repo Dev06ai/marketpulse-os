@@ -1205,14 +1205,16 @@ class MarketChartView @JvmOverloads constructor(
         if (!value.isFinite() || value <= 0.0) return "—"
         // Preserve source decimal precision. Do not use compact "83.5k" labels
         // on the OB boundaries: rounding to 0.1k misstates the actual zone.
-        val decimal = java.math.BigDecimal.valueOf(value).stripTrailingZeros()
-        val fractionDigits = maxOf(2, decimal.scale()).coerceAtMost(12)
-        val formatter = java.text.DecimalFormat(
-            "#,##0." + "0".repeat(fractionDigits),
-            java.text.DecimalFormatSymbols(Locale.US)
-        )
-        formatter.roundingMode = java.math.RoundingMode.UNNECESSARY
-        return formatter.format(decimal)
+        // BigDecimal.toPlainString uses Double's canonical representation
+        // without converting it to rounded "k" notation. Group the integer
+        // digits manually instead of limiting fractional digits: an unusual
+        // venue price must never crash Canvas.draw() through a
+        // RoundingMode.UNNECESSARY exception.
+        val plain = java.math.BigDecimal.valueOf(value).stripTrailingZeros().toPlainString()
+        val digits = plain.split('.', limit = 2)
+        val grouped = digits[0].reversed().chunked(3).joinToString(",").reversed()
+        val fraction = digits.getOrNull(1).orEmpty().padEnd(2, '0')
+        return grouped + "." + fraction
     }
 
     private fun drawZoneOverlays(
