@@ -75,7 +75,14 @@ class HeroChartVisualTest {
                     assertTrue("Visible chart must exceed half the usable screen: ${visible.height()}/$usable",
                         visible.height().toFloat() / usable >= .51f)
                 }
-                assertTrue(all.filterIsInstance<Button>().first { it.contentDescription == "Workspace TRADE" }.isShown)
+                val tradeTab = all.filterIsInstance<Button>()
+                    .first { it.contentDescription == "Workspace TRADE" }
+                assertTrue(tradeTab.isShown)
+                assertEquals("Trade", tradeTab.text.toString())
+                val marker = SafeActivity::class.java.getDeclaredField("liquidNavIndicator")
+                    .apply { isAccessible = true }.get(activity) as View
+                assertTrue("Selected tab glyphs must render above the moving highlight",
+                    (tradeTab.parent as View).z > marker.z)
                 val tf = all.filterIsInstance<Button>().first { it.contentDescription == "Chart 4h" }
                 tf.performClick()
                 val field = MarketChartView::class.java.getDeclaredField("timeframe").apply { isAccessible = true }
