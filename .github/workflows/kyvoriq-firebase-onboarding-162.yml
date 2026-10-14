@@ -6,10 +6,12 @@ on:
         description: "Reviewed 40-character source commit from the consumer rollout branch"
         type: string
         required: true
+        default: 'af72150a90b5a415b425521d61d1f8f3119ea680'
       firebase_project_id:
         description: "Existing authorized Firebase project ID; no credential values"
         type: string
         required: true
+        default: 'kyvoriq'
       firebase_android_app_id:
         description: "Firebase Android app ID for com.devtrader.app"
         type: string
