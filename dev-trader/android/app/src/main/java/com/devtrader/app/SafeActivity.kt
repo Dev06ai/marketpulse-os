@@ -17,11 +17,13 @@ import android.Manifest
 import android.animation.ArgbEvaluator
 import android.animation.ValueAnimator
 import android.app.NotificationChannel
+import android.app.DownloadManager
 import android.appwidget.AppWidgetManager
 import android.app.NotificationManager
 import android.content.ComponentName
 import android.content.Context
 import android.net.ConnectivityManager
+import android.net.Uri
 import android.net.Network
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -68,6 +70,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 import java.io.FileOutputStream
+import java.io.FileInputStream
 import java.security.MessageDigest
 import java.util.Locale
 import java.util.concurrent.TimeUnit
@@ -179,6 +182,11 @@ class SafeActivity : FragmentActivity() {
     private var chartHomeLayoutParams: ViewGroup.LayoutParams? = null
     private var chartSystemUiFlags: Int = 0
     private lateinit var updateButton: Button
+    private var updatePoll: Runnable? = null
+    private val updateVerifying = AtomicBoolean(false)
+    private var updateRecoveryUrl: String? = null
+    private var awaitingUpdateInstallPermission = false
+    private val updatePrefs by lazy { getSharedPreferences("kyvoriq_updater_v2", Context.MODE_PRIVATE) }
     private lateinit var checkButton: Button
     private lateinit var alertsButton: Button
     private lateinit var privacyButton: Button
@@ -1136,7 +1144,10 @@ class SafeActivity : FragmentActivity() {
         updateButton = compactPillButton("UPDATE")
         updateButton.setOnClickListener {
             haptic(it, KyvoriqHaptics.Cue.ACTION)
-            safe { checkUpdate() }
+            safe {
+                if (updateRecoveryUrl != null) showUpdateRecoveryOptions()
+                else checkUpdate()
+            }
         }
         tools.addView(updateButton, LinearLayout.LayoutParams(0, dp(44), 1f))
         insightsContent.addView(tools, margins(bottom = 8))
@@ -5102,6 +5113,10 @@ class SafeActivity : FragmentActivity() {
             updateButton.text = when {
                 message.startsWith("Checking") -> "CHECKING…"
                 message.startsWith("DOWNLOADING") -> "DOWNLOADING…"
+                message.startsWith("VERIFYING") -> "VERIFYING…"
+                message.startsWith("INSTALLER OPEN") -> "INSTALLING…"
+                message.startsWith("ALLOW INSTALLS") -> "ALLOW INSTALLS"
+                message.startsWith("OPEN RELEASE") -> "OPEN RELEASE ↗"
                 message.startsWith("UPDATE VERIFIED") -> "INSTALLING…"
                 message.startsWith("UP TO DATE") -> "UP TO DATE"
                 message.contains("FAILED", ignoreCase = true) ||
@@ -5113,6 +5128,7 @@ class SafeActivity : FragmentActivity() {
     }
 
     private fun checkUpdate() {
+        updateRecoveryUrl = null
         updateButton.isEnabled = false
         setUpdateStatus("Checking release channel…")
 
@@ -5145,8 +5161,10 @@ class SafeActivity : FragmentActivity() {
                             setUpdateStatus("UPDATE METADATA INVALID")
                         } else {
                             setUpdateStatus("DOWNLOADING • v" + remoteName)
-                            val freshApkUrl = apkUrl + (if (apkUrl.contains("?")) "&" else "?") + "ts=" + System.currentTimeMillis()
-                            downloadAndInstallUpdate(freshApkUrl, expectedSha, remoteName)
+                            // Android DownloadManager follows release redirects more reliably than an
+                            // Activity-scoped OkHttp transfer. Do not append a cache-busting query
+                            // to a signed, version-pinned GitHub release asset URL.
+                            startSystemUpdateDownload(apkUrl, expectedSha, remoteName)
                         }
                     }
                 }
