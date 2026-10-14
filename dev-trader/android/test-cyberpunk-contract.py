@@ -11,7 +11,7 @@ motion = (src / "java/com/devtrader/app/KyvoriqMotionIdentity.kt").read_text()
 splash = (src / "java/com/devtrader/app/KyvoriqLaunchOverlay.kt").read_text()
 
 assert 'implementation("com.airbnb.android:lottie:6.7.1")' in gradle
-assert 'orNull ?: "140"' in gradle and 'orNull ?: "0.21.15"' in gradle
+assert 'orNull ?: "158"' in gradle and 'orNull ?: "0.21.33"' in gradle
 assert 'applicationId = "com.devtrader.app"' in gradle
 assert 'KyvoriqEmblemMotionView(this)' in activity
 assert 'KyvoriqRazorWordmarkView(this)' in activity
