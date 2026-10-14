@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="44dp" android:height="44dp"
+    android:viewportWidth="100" android:viewportHeight="100">
+    <!-- Circular funding flow around a single readable dollar coin. -->
+    <path android:fillColor="#00000000" android:strokeColor="#17191D" android:strokeWidth="5.4" android:strokeLineCap="round" android:pathData="M27,17 C45,4 75,10 86,29 M73,83 C52,99 24,89 13,70"/>
+    <path android:fillColor="#17191D" android:pathData="M78,17L94,36L70,32z M23,83L7,64L31,69z"/>
+    <path android:fillColor="#17191D" android:pathData="M50,24a26,26 0,1 0,0 52a26,26 0,1 0,0 -52"/>
+    <path android:fillColor="#00000000" android:strokeColor="#E8E0CF" android:strokeWidth="5.4" android:strokeLineCap="round" android:pathData="M60,37 C54,31 41,33 40,42 C38,51 61,48 60,58 C59,68 46,70 39,63 M50,30v40"/>
+</vector>

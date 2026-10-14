@@ -148,6 +148,11 @@ class SafeActivity : FragmentActivity() {
     private lateinit var workspaceHost: FrameLayout
     private val workspacePages = mutableListOf<View>()
     private val navigationButtons = mutableListOf<Button>()
+    // Render tab glyphs/labels in dedicated views above the moving selection
+    // pill. CompoundDrawables on material/OS Button widgets can vanish when a
+    // transparent button is composed over a moving colored FrameLayout child.
+    private val navigationIconViews = mutableListOf<ImageView>()
+    private val navigationLabelViews = mutableListOf<TextView>()
     private var liquidNavIndicator: View? = null
     private var liquidNavFrame: FrameLayout? = null
     private lateinit var positionSummary: TextView
@@ -975,7 +980,7 @@ class SafeActivity : FragmentActivity() {
         val signalArtwork = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
-            setPadding(dp(8), dp(13), dp(8), dp(10))
+            setPadding(dp(8), dp(12), dp(8), dp(13))
             background = GradientDrawable(GradientDrawable.Orientation.TL_BR,
                 intArrayOf(Color.rgb(28, 28, 31), Color.rgb(15, 16, 20))).apply {
                 cornerRadius = dp(20).toFloat()
@@ -986,7 +991,7 @@ class SafeActivity : FragmentActivity() {
             setImageResource(R.drawable.ky_nav_signals)
             contentDescription = "Signals market icon"
             scaleType = ImageView.ScaleType.FIT_CENTER
-        }, LinearLayout.LayoutParams(dp(70), dp(70)))
+        }, LinearLayout.LayoutParams(dp(94), dp(94)))
         val comingFrame = FrameLayout(this)
         comingFrame.addView(ImageView(this).apply {
             setImageResource(R.drawable.ky_signal_coming_soon)
@@ -994,13 +999,13 @@ class SafeActivity : FragmentActivity() {
             importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
             scaleType = ImageView.ScaleType.FIT_XY
         }, FrameLayout.LayoutParams(-1, -1))
-        comingFrame.addView(label("COMING SOON", 14f, kyWhite, 0.07f).apply {
+        comingFrame.addView(label("COMING SOON", 12f, kyWhite, 0.045f).apply {
             gravity = Gravity.CENTER
             typeface = Typeface.create("sans-serif-condensed", Typeface.BOLD)
         }, FrameLayout.LayoutParams(-1, -1))
         comingFrame.contentDescription = "Signals coming soon"
-        signalArtwork.addView(comingFrame, LinearLayout.LayoutParams(dp(185), dp(46)).apply {
-            topMargin = dp(1)
+        signalArtwork.addView(comingFrame, LinearLayout.LayoutParams(dp(152), dp(40)).apply {
+            topMargin = dp(4)
         })
         positionsPage.addView(signalArtwork, margins(top = 6, bottom = 12))
         positionsPage.addView(signalLock.first, margins(top = 2, bottom = 12))
@@ -1213,21 +1218,62 @@ class SafeActivity : FragmentActivity() {
             isBaselineAligned = false
             clipToPadding = false
         }
-        val icons = intArrayOf(R.drawable.ky_nav_candles,
-            R.drawable.ky_nav_signals, R.drawable.ky_nav_brain)
-        listOf("TRADE", "SIGNALS", "INSIGHTS").forEachIndexed { index, title ->
-            val button = compactPillButton(title.lowercase(Locale.US).replaceFirstChar {
-                it.titlecase(Locale.US)
-            }).apply {
-                contentDescription = "Workspace $title"
-                textSize = 11.5f
-                compoundDrawablePadding = dp(5)
-                gravity = Gravity.CENTER
-                val glyph = getDrawable(icons[index])!!.mutate()
-                glyph.setBounds(0, 0, dp(25), dp(25))
-                setCompoundDrawablesRelative(glyph, null, null, null)
-                setPadding(dp(5), 0, dp(5), 0)
+        val normalIcons = intArrayOf(
+            R.drawable.ky_nav_candles, R.drawable.ky_nav_signals, R.drawable.ky_nav_brain)
+        val selectedIcons = intArrayOf(
+            R.drawable.ky_nav_candles_selected,
+            R.drawable.ky_nav_signals_selected,
+            R.drawable.ky_nav_brain_selected)
+        listOf("Trade", "Signals", "Insights").forEachIndexed { index, title ->
+            val cell = FrameLayout(this).apply {
+                elevation = dp(3).toFloat()
+                clipChildren = false
+                clipToPadding = false
+            }
+            // Accessible hit target remains a native Button, with its visible
+            // contents drawn independently in a non-interactive foreground.
+            val button = compactPillButton(title).apply {
+                contentDescription = "Workspace ${title.uppercase(Locale.US)}"
+                isAllCaps = false
+                setTextColor(Color.TRANSPARENT)
+                setPadding(0, 0, 0, 0)
+                minimumHeight = 0
+                minHeight = 0
                 background = android.graphics.drawable.ColorDrawable(Color.TRANSPARENT)
+            }
+            cell.addView(button, FrameLayout.LayoutParams(-1, -1))
+            val content = LinearLayout(this).apply {
+                gravity = Gravity.CENTER
+                orientation = LinearLayout.HORIZONTAL
+                isClickable = false
+                isFocusable = false
+                importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
+            }
+            val image = ImageView(this).apply {
+                setImageResource(normalIcons[index])
+                scaleType = ImageView.ScaleType.FIT_CENTER
+                contentDescription = null
+                importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+            }
+            content.addView(image, LinearLayout.LayoutParams(dp(27), dp(27)).apply {
+                rightMargin = dp(8)
+            })
+            val name = TextView(this).apply {
+                text = title
+                textSize = 12f
+                typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
+                setTextColor(kyWhite)
+                includeFontPadding = false
+                gravity = Gravity.CENTER_VERTICAL
+                setSingleLine(true)
+                maxLines = 1
+            }
+            content.addView(name, LinearLayout.LayoutParams(-2, -2))
+            cell.addView(content, FrameLayout.LayoutParams(-1, -1))
+            // Keep artwork above the button and indicator and route all touch
+            // interactions back to the native, accessible target.
+            content.setOnTouchListener { _, event ->
+                button.dispatchTouchEvent(event)
             }
             button.setOnClickListener {
                 if (workspacePages.getOrNull(index)?.visibility != View.VISIBLE)
@@ -1235,8 +1281,10 @@ class SafeActivity : FragmentActivity() {
                 selectWorkspace(index)
             }
             navigationButtons.add(button)
+            navigationIconViews.add(image)
+            navigationLabelViews.add(name)
             if (index == 1) consumerPositionTab = button
-            navigation.addView(button, LinearLayout.LayoutParams(0, dp(44), 1f))
+            navigation.addView(cell, LinearLayout.LayoutParams(0, dp(44), 1f))
         }
         navigationFrame.addView(navigation, FrameLayout.LayoutParams(-1, -2))
         root.addView(navigationFrame, margins(top = 4).apply {
@@ -1884,17 +1932,27 @@ class SafeActivity : FragmentActivity() {
             page.animate().cancel(); page.alpha = 1f; page.translationX = 0f
             page.visibility = if (i == index) View.VISIBLE else View.GONE
         }
+        val normalIcons = intArrayOf(
+            R.drawable.ky_nav_candles, R.drawable.ky_nav_signals, R.drawable.ky_nav_brain)
+        val selectedIcons = intArrayOf(
+            R.drawable.ky_nav_candles_selected,
+            R.drawable.ky_nav_signals_selected,
+            R.drawable.ky_nav_brain_selected)
         navigationButtons.forEachIndexed { i, button ->
             val active = i == index
             button.isSelected = active
-            button.setTextColor(if (active) kyCharcoal else kyWhite)
-            // Preserve the signal's red circuitry rather than tinting every
-            // multicolor drawable a single color.
-            if (i != 2) {
-                button.compoundDrawablesRelative.filterNotNull().forEach {
-                    it.setTint(if (active) kyCharcoal else kyWhite)
-                }
+            // The actual foreground label and icon never inherit a Button's
+            // tint, disabled alpha or Material background tint from the theme.
+            navigationIconViews.getOrNull(i)?.apply {
+                setImageResource(if (active) selectedIcons[i] else normalIcons[i])
+                imageTintList = null
+                alpha = 1f
             }
+            navigationLabelViews.getOrNull(i)?.apply {
+                setTextColor(if (active) Color.rgb(25, 26, 30) else Color.rgb(245, 244, 242))
+                alpha = 1f
+            }
+            button.setTextColor(Color.TRANSPARENT)
             button.background = android.graphics.drawable.ColorDrawable(Color.TRANSPARENT)
         }
         positionLiquidIndicator(index, animated = previous != index)

@@ -1,8 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
-<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="44dp" android:height="44dp" android:viewportWidth="100" android:viewportHeight="100">
-    <path android:fillColor="#00000000" android:strokeColor="#F6F4F2" android:strokeWidth="4.5" android:strokeLineCap="round" android:pathData="M30,11 A41,41 0,0 1,86 32 M70,89 A41,41 0,0 1,14 68"/>
-    <path android:fillColor="#F6F4F2" android:pathData="M17,9l3,20l-8,-7l-8,9l3,-22l10,0z M83,91l-3,-20l8,7l8,-9l-3,22z"/>
-    <path android:fillColor="#F6F4F2" android:pathData="M50,21a29,29 0,1 0,0 58a29,29 0,1 0,0 -58"/>
-    <path android:fillColor="#101116" android:strokeColor="#101116" android:strokeWidth="3.4" android:strokeLineCap="round" android:pathData="M60,34C56,31 43,29 40,39C37,49 63,46 60,59C58,68 44,69 39,64 M50,28v44"/>
-    <path android:fillColor="#F6F4F2" android:pathData="M92,33v27h-5V33z M9,41v27H4V41z"/>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="44dp" android:height="44dp"
+    android:viewportWidth="100" android:viewportHeight="100">
+    <!-- Circular funding flow around a single readable dollar coin. -->
+    <path android:fillColor="#00000000" android:strokeColor="#F5F4F2" android:strokeWidth="5.4" android:strokeLineCap="round" android:pathData="M27,17 C45,4 75,10 86,29 M73,83 C52,99 24,89 13,70"/>
+    <path android:fillColor="#F5F4F2" android:pathData="M78,17L94,36L70,32z M23,83L7,64L31,69z"/>
+    <path android:fillColor="#F5F4F2" android:pathData="M50,24a26,26 0,1 0,0 52a26,26 0,1 0,0 -52"/>
+    <path android:fillColor="#14151A" android:strokeColor="#14151A" android:strokeWidth="5.4" android:strokeLineCap="round" android:pathData="M60,37 C54,31 41,33 40,42 C38,51 61,48 60,58 C59,68 46,70 39,63 M50,30v40"/>
 </vector>
