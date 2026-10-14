@@ -80,7 +80,13 @@ class PremiumPriceView(context: Context) : LinearLayout(context) {
 
     fun setTextSizeSp(size: Float) {
         instrument.textSize = size * .48f
-        valueViews.forEach { it.textSize = size }
+        valueViews.forEach {
+            it.maxLines = 1
+            it.setHorizontallyScrolling(false)
+            it.setAutoSizeTextTypeUniformWithConfiguration(
+                12, size.toInt().coerceAtLeast(12), 1,
+                android.util.TypedValue.COMPLEX_UNIT_SP)
+        }
     }
 
     fun setPrice(price: Double, animate: Boolean = true) {
@@ -220,3 +226,4 @@ class PremiumPriceView(context: Context) : LinearLayout(context) {
 
     private fun dp(value: Float): Float = value * resources.displayMetrics.density
 }
+

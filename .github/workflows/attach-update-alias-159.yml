@@ -1,0 +1,34 @@
+name: KYVORIQ 159 - Publish backward-compatible in-app updater APK
+on:
+  push:
+    branches: [ui/chart-hero-159]
+    paths: ['.github/workflows/attach-update-alias-159.yml']
+permissions:
+  contents: write
+jobs:
+  update-alias:
+    if: github.repository == 'Dev06ai/marketpulse-os'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Verify exact already-published release asset and create backward-compatible APK filename
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG=dev-trader-v0.21.34-159
+          mkdir -p release
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern 'KYVORIQ-0.21.34-Build159-signed.apk' --dir release
+          test -s release/KYVORIQ-0.21.34-Build159-signed.apk
+          echo '814550c1c2ea28fb01eee917fe764b2d3cd30a785b4658bd30984b861bce8638  KYVORIQ-0.21.34-Build159-signed.apk' | (cd release && sha256sum --check)
+          test "$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isPrerelease --jq '.isPrerelease')" = true
+          cp release/KYVORIQ-0.21.34-Build159-signed.apk release/app-release.apk
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' | grep -Fxq 'app-release.apk'; then
+            echo 'Backward-compatible alias already exists'
+          else
+            gh release upload "$TAG" release/app-release.apk --repo "$GITHUB_REPOSITORY"
+          fi
+          API='https://github.com/Dev06ai/marketpulse-os/releases/download/dev-trader-v0.21.34-159/app-release.apk'
+          curl --fail --silent --show-error --location --retry 4 --max-time 100 -o release/served-app.apk "$API"
+          echo '814550c1c2ea28fb01eee917fe764b2d3cd30a785b4658bd30984b861bce8638  served-app.apk' | (cd release && sha256sum --check)
+          echo 'Verified old app URL format, release download and update digest for Build 159.'

@@ -14,6 +14,10 @@ internal object KyvoriqResponsiveLayout {
         val chartHeightDp: Int
     )
 
+    fun chartHeightDp(widthDp: Int, heightDp: Int): Int =
+        if (heightDp >= widthDp) kotlin.math.round(heightDp * 0.56f).toInt()
+        else maxOf(210, kotlin.math.round(heightDp * 0.72f).toInt())
+
     fun forViewport(widthDp: Int, heightDp: Int, fontScale: Float): Header {
         val width = widthDp.coerceAtLeast(240)
         val font = fontScale.coerceIn(0.8f, 2.5f)
@@ -36,15 +40,11 @@ internal object KyvoriqResponsiveLayout {
             emblemDp = emblem,
             alertsDp = 112,
             retryDp = 96,
-            wordmarkHeightDp = if (width < 300) 32 else 38,
+            wordmarkHeightDp = if (width < 300) 32 else 34,
             wordmarkWidthDp = wordmark,
             taglineWidthDp = if (width < 300) 86 else 105,
-            chartHeightDp = when {
-                heightDp < 640 -> 405
-                heightDp < 760 -> 455
-                heightDp < 920 -> 510
-                else -> 570
-            }
+            chartHeightDp = chartHeightDp(width, heightDp)
         )
     }
 }
+
