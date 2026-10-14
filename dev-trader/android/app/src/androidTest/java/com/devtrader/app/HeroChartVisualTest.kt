@@ -211,8 +211,10 @@ class HeroChartVisualTest {
                 val signalsIcon = children(activity.window.decorView)
                     .filterIsInstance<android.widget.ImageView>()
                     .first { it.contentDescription == "Signals market icon" }
+                assertNotNull("Large Signals icon must have the new vector artwork",
+                    signalsIcon.drawable)
                 assertTrue("Large Signals icon should retain readable hero size",
-                    signalsIcon.height >= (88 * densityForTest(activity)))
+                    signalsIcon.layoutParams.height >= (88 * densityForTest(activity)))
                 children(activity.window.decorView).filterIsInstance<Button>()
                     .first { it.contentDescription == "Workspace TRADE" }.performClick()
                 assertTrue(children(activity.window.decorView)
