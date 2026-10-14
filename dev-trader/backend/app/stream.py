@@ -466,6 +466,8 @@ class BitgetMarketStream:
         self.last_trade_minute: int | None = None
         self.delta_base = 0.0
         self.recent_exec_ids: set[str] = set()
+        self._last_windows_trim_ms = 0
+        self._last_liquidation_count = 0
         self.last_ws_packet_ms = 0
         self.subscription_status: dict[str, dict] = {}
         self.channel_packets: dict[str, int] = {}
@@ -494,7 +496,7 @@ class BitgetMarketStream:
                     self.url,
                     ping_interval=None,
                     ping_timeout=None,
-                    max_queue=max(8, min(10000, int(os.getenv("BITGET_WS_MAX_QUEUE", "64")))),
+                    max_queue=max(8, min(10000, int(os.getenv("BITGET_WS_MAX_QUEUE", "32")))),
                     open_timeout=8,
                     close_timeout=3,
                 ) as ws:
@@ -785,6 +787,15 @@ class BitgetMarketStream:
         return True
 
     def _trim_windows(self, now: int):
+        # Process bursts without repeatedly rebuilding all history buffers for
+        # each ticker/trade/book packet. The full 15-minute and 5-minute data
+        # windows remain intact, and cleanup is forced for oversized bursts.
+        elapsed = now - self._last_windows_trim_ms
+        if (0 <= elapsed < 1000 and len(self.state.flow_history) <= 5500
+                and len(self.recent_exec_ids) <= 2500
+                and len(self.state.liquidation_window) == self._last_liquidation_count):
+            return
+        self._last_windows_trim_ms = now
         cutoff = now - 15 * 60_000
         self.state.oi_window = [(ts, v) for ts, v in self.state.oi_window if ts >= cutoff]
         self.state.cvd_history = [(ts, v) for ts, v in self.state.cvd_history if ts >= cutoff]
@@ -798,7 +809,10 @@ class BitgetMarketStream:
             v for ts, side, v in self.state.liquidation_window
             if side == "SHORT" and ts >= now - 5 * 60_000
         )
-        self.recent_exec_ids = set(list(self.recent_exec_ids)[-2000:])
+        # New liquidation evidence must never wait for the next batch.
+        self._last_liquidation_count = len(self.state.liquidation_window)
+        if len(self.recent_exec_ids) > 2000:
+            self.recent_exec_ids = set(list(self.recent_exec_ids)[-2000:])
 
     async def handle(self, raw):
         if isinstance(raw, bytes):
