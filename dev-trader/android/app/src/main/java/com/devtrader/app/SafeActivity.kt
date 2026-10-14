@@ -473,7 +473,7 @@ class SafeActivity : FragmentActivity() {
             background = GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
                 intArrayOf(Color.rgb(22, 23, 26), Color.rgb(9, 10, 12))).apply {
                 cornerRadius = dp(24).toFloat()
-                setStroke(dp(1).coerceAtLeast(1), Color.rgb(86, 69, 45))
+                setStroke(dp(1).coerceAtLeast(1), Color.rgb(86, 84, 77))
             }
         }
 
@@ -521,7 +521,7 @@ class SafeActivity : FragmentActivity() {
             textSize = 20f
             minHeight = dp(54)
             setSelectAllOnFocus(true)
-            background = roundedCard(Color.rgb(12, 13, 16), Color.rgb(100, 82, 53), 15)
+            background = roundedCard(Color.rgb(12, 13, 16), Color.rgb(105, 100, 90), 15)
         }
         panel.addView(editor, LinearLayout.LayoutParams(-1, dp(56)))
 
@@ -563,7 +563,7 @@ class SafeActivity : FragmentActivity() {
                 val row = LinearLayout(this).apply {
                     gravity = Gravity.CENTER_VERTICAL
                     setPadding(dp(12), dp(7), dp(8), dp(7))
-                    background = roundedCard(Color.rgb(20, 21, 23), Color.rgb(51, 48, 43), 14)
+                    background = roundedCard(Color.rgb(20, 21, 23), Color.rgb(52, 52, 51), 14)
                 }
                 val text = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
                 text.addView(label(direction, 10f, kyDeepGold, 0.06f))
@@ -624,7 +624,7 @@ class SafeActivity : FragmentActivity() {
         val scroll = ScrollView(this).apply {
             isFillViewport = false
             clipToOutline = true
-            background = roundedCard(Color.rgb(13, 14, 16), Color.rgb(86, 69, 45), 24)
+            background = roundedCard(Color.rgb(13, 14, 16), Color.rgb(86, 84, 77), 24)
             addView(panel, ViewGroup.LayoutParams(-1, -2))
         }
         val dialog = android.app.AlertDialog.Builder(this).setView(scroll).create()
@@ -1029,7 +1029,7 @@ class SafeActivity : FragmentActivity() {
             background = GradientDrawable(GradientDrawable.Orientation.TL_BR,
                 intArrayOf(Color.rgb(28, 28, 31), Color.rgb(15, 16, 20))).apply {
                 cornerRadius = dp(20).toFloat()
-                setStroke(dp(1), Color.rgb(70, 62, 55))
+                setStroke(dp(1), Color.rgb(74, 73, 70))
             }
         }
         signalArtwork.addView(ImageView(this).apply {
@@ -1255,7 +1255,7 @@ class SafeActivity : FragmentActivity() {
         val liquid = View(this).apply {
             background = GradientDrawable(
                 GradientDrawable.Orientation.TL_BR,
-                intArrayOf(Color.rgb(244, 241, 232), Color.rgb(207, 193, 167))
+                intArrayOf(Color.rgb(252, 250, 245), Color.rgb(235, 229, 213))
             ).apply { cornerRadius = dp(16).toFloat() }
             // Keep the animated selection pill behind every tab icon and label.
             elevation = 0f
@@ -1418,7 +1418,7 @@ class SafeActivity : FragmentActivity() {
                 intArrayOf(Color.rgb(29, 28, 29), Color.rgb(12, 13, 17), Color.rgb(9, 10, 13))
             ).apply {
                 cornerRadius = dp(26).toFloat()
-                setStroke(dp(1), Color.rgb(111, 85, 48))
+                setStroke(dp(1), Color.rgb(112, 105, 93))
             }
         }
         val header = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
@@ -1443,7 +1443,7 @@ class SafeActivity : FragmentActivity() {
         surface.addView(header, margins(bottom = 14))
         val accentRule = View(this).apply {
             background = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,
-                intArrayOf(kyDeepGold, Color.rgb(115, 88, 52), Color.TRANSPARENT))
+                intArrayOf(kyDeepGold, Color.rgb(212, 205, 186), Color.TRANSPARENT))
         }
         surface.addView(accentRule, LinearLayout.LayoutParams(-1, dp(1)).apply { bottomMargin = dp(15) })
         val statusLine = label(
@@ -1452,12 +1452,12 @@ class SafeActivity : FragmentActivity() {
             else "FREE  •  Market chart access without a subscription",
             10.5f, kyGray, 0f
         ).apply {
-            setTextColor(Color.rgb(206, 193, 169))
+            setTextColor(Color.rgb(236, 230, 214))
             setPadding(dp(14), dp(13), dp(14), dp(13))
             background = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,
-                intArrayOf(Color.rgb(42, 35, 26), Color.rgb(24, 24, 27))).apply {
+                intArrayOf(Color.rgb(41, 41, 39), Color.rgb(24, 24, 27))).apply {
                 cornerRadius = dp(14).toFloat()
-                setStroke(dp(1), Color.rgb(86, 70, 45))
+                setStroke(dp(1), Color.rgb(89, 86, 78))
             }
         }
         surface.addView(statusLine, margins(bottom = 15))
@@ -1490,9 +1490,9 @@ class SafeActivity : FragmentActivity() {
                 scaleType = ImageView.ScaleType.FIT_CENTER
                 setPadding(dp(7), dp(7), dp(7), dp(7))
                 background = GradientDrawable().apply {
-                    setColor(Color.rgb(48, 38, 26))
+                    setColor(Color.rgb(46, 46, 44))
                     cornerRadius = dp(12).toFloat()
-                    setStroke(dp(1), Color.rgb(98, 77, 44))
+                    setStroke(dp(1), Color.rgb(100, 96, 88))
                 }
                 importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
             }
@@ -1657,7 +1657,7 @@ class SafeActivity : FragmentActivity() {
                 intArrayOf(Color.rgb(30, 31, 34), Color.rgb(17, 18, 22), Color.rgb(13, 14, 18))
             ).apply {
                 cornerRadius = dp(26).toFloat()
-                setStroke(dp(1), Color.rgb(95, 85, 68))
+                setStroke(dp(1), Color.rgb(98, 97, 91))
             }
         }
         val brand = ImageView(this).apply {
@@ -2231,7 +2231,7 @@ class SafeActivity : FragmentActivity() {
             background = GradientDrawable(GradientDrawable.Orientation.TL_BR,
                 intArrayOf(Color.rgb(32, 31, 34), Color.rgb(17, 18, 22))).apply {
                 cornerRadius = dp(19).toFloat()
-                setStroke(dp(1), Color.rgb(68, 60, 51))
+                setStroke(dp(1), Color.rgb(72, 72, 70))
             }
             clipToPadding = false
         }
@@ -2271,7 +2271,7 @@ class SafeActivity : FragmentActivity() {
             background = GradientDrawable(GradientDrawable.Orientation.TL_BR,
                 intArrayOf(Color.rgb(34, 32, 32), Color.rgb(17, 18, 22))).apply {
                 cornerRadius = dp(21).toFloat()
-                setStroke(dp(1), Color.rgb(86, 70, 49))
+                setStroke(dp(1), Color.rgb(89, 86, 78))
             }
         }
         val header = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
@@ -2283,7 +2283,7 @@ class SafeActivity : FragmentActivity() {
         box.addView(header)
         box.addView(View(this).apply {
             background = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,
-                intArrayOf(Color.rgb(125, 98, 58), Color.rgb(30, 29, 31)))
+                intArrayOf(Color.rgb(192, 185, 172), Color.rgb(30, 29, 31)))
         }, LinearLayout.LayoutParams(-1, dp(1)).apply { topMargin = dp(11) })
         val value = TextView(this).apply {
             text = initial
@@ -4953,7 +4953,7 @@ class SafeActivity : FragmentActivity() {
         GradientDrawable(GradientDrawable.Orientation.TL_BR,
             intArrayOf(Color.rgb(34, 32, 32), Color.rgb(16, 17, 21), Color.rgb(11, 12, 16))).apply {
             cornerRadius = dp(24).toFloat()
-            setStroke(dp(1), Color.rgb(110, 84, 49))
+            setStroke(dp(1), Color.rgb(108, 102, 92))
         }
 
     private fun premiumDialogButton(title: String, primary: Boolean = true,
@@ -4965,7 +4965,7 @@ class SafeActivity : FragmentActivity() {
             typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
             setTextColor(when {
                 destructive -> Color.rgb(255, 170, 177)
-                primary -> Color.rgb(22, 19, 15)
+                primary -> Color.rgb(22, 23, 25)
                 else -> kyWhite
             })
             minHeight = dp(48)
@@ -4973,7 +4973,7 @@ class SafeActivity : FragmentActivity() {
                 android.content.res.ColorStateList.valueOf(Color.argb(48, 246, 215, 158)),
                 GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,
                     if (primary && !destructive)
-                        intArrayOf(Color.rgb(214, 177, 113), Color.rgb(173, 132, 74))
+                        intArrayOf(Color.rgb(252, 250, 245), Color.rgb(214, 205, 186))
                     else intArrayOf(Color.rgb(37, 37, 43), Color.rgb(27, 28, 33))).apply {
                     cornerRadius = dp(14).toFloat()
                     if (!primary || destructive) setStroke(dp(1),
@@ -4996,9 +4996,9 @@ class SafeActivity : FragmentActivity() {
             contentDescription = "KYVORIQ"
             setPadding(dp(8), dp(8), dp(8), dp(8))
             background = GradientDrawable().apply {
-                setColor(Color.rgb(43, 36, 27))
+                setColor(Color.rgb(41, 41, 39))
                 cornerRadius = dp(14).toFloat()
-                setStroke(dp(1), Color.rgb(99, 76, 46))
+                setStroke(dp(1), Color.rgb(101, 96, 88))
             }
         }
         headingRow.addView(emblem, LinearLayout.LayoutParams(dp(45), dp(45)))
@@ -5015,7 +5015,7 @@ class SafeActivity : FragmentActivity() {
         panel.addView(headingRow, margins(bottom = 15))
         val goldLine = View(this).apply {
             background = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,
-                intArrayOf(kyGold, Color.rgb(91, 76, 50), Color.TRANSPARENT))
+                intArrayOf(kyGold, Color.rgb(212, 205, 186), Color.TRANSPARENT))
         }
         panel.addView(goldLine, LinearLayout.LayoutParams(-1, dp(1)))
         if (subtitle.isNotBlank()) {
