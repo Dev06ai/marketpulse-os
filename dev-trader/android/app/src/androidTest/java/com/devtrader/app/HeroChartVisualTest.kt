@@ -33,6 +33,8 @@ class HeroChartVisualTest {
         visit(inst.uiAutomation.rootInActiveWindow)
         return labels
     }
+    private fun densityForTest(activity: SafeActivity): Float =
+        activity.resources.displayMetrics.density
     private fun children(v: View): List<View> = listOf(v) +
         if (v is ViewGroup) (0 until v.childCount).flatMap { children(v.getChildAt(it)) } else emptyList()
     private fun screenshot(name: String) {
@@ -83,6 +85,30 @@ class HeroChartVisualTest {
                     .apply { isAccessible = true }.get(activity) as View
                 assertTrue("Selected tab glyphs must render above the moving highlight",
                     (tradeTab.parent as View).z > marker.z)
+                // Build 168: catch the real-device regression where the active
+                // ivory tab rendered as a completely blank pill.
+                @Suppress("UNCHECKED_CAST")
+                val iconViews = SafeActivity::class.java
+                    .getDeclaredField("navigationIconViews").apply { isAccessible = true }
+                    .get(activity) as List<android.widget.ImageView>
+                @Suppress("UNCHECKED_CAST")
+                val labelViews = SafeActivity::class.java
+                    .getDeclaredField("navigationLabelViews").apply { isAccessible = true }
+                    .get(activity) as List<android.widget.TextView>
+                assertEquals(3, iconViews.size)
+                assertEquals(3, labelViews.size)
+                listOf("Trade", "Signals", "Insights").forEachIndexed { pos, word ->
+                    assertTrue("Navigation icon must be visible: $word", iconViews[pos].isShown)
+                    assertNotNull("Navigation icon must have drawable: $word", iconViews[pos].drawable)
+                    assertTrue("Navigation icon is too small: $word",
+                        iconViews[pos].width >= (24 * densityForTest(activity)))
+                    assertTrue("Navigation label must be visible: $word", labelViews[pos].isShown)
+                    assertEquals(word, labelViews[pos].text.toString())
+                    assertTrue("Navigation label must be legible and non-transparent: $word",
+                        android.graphics.Color.alpha(labelViews[pos].currentTextColor) == 255)
+                }
+                assertEquals("Active foreground label must contrast with the ivory pill",
+                    25, android.graphics.Color.red(labelViews[0].currentTextColor))
                 val tf = all.filterIsInstance<Button>().first { it.contentDescription == "Chart 4h" }
                 tf.performClick()
                 val field = MarketChartView::class.java.getDeclaredField("timeframe").apply { isAccessible = true }
@@ -180,6 +206,15 @@ class HeroChartVisualTest {
                     assertFalse("Retired Insights card leaked: $banned",
                         titles.any { it == banned })
                 }
+                screenshot("insights-nav-168")
+                children(activity.window.decorView).filterIsInstance<Button>()
+                    .first { it.contentDescription == "Workspace SIGNALS" }.performClick()
+                val signalsIcon = children(activity.window.decorView)
+                    .filterIsInstance<android.widget.ImageView>()
+                    .first { it.contentDescription == "Signals market icon" }
+                assertTrue("Large Signals icon should retain readable hero size",
+                    signalsIcon.height >= (88 * densityForTest(activity)))
+                screenshot("signals-hero-168")
                 children(activity.window.decorView).filterIsInstance<Button>()
                     .first { it.contentDescription == "Workspace TRADE" }.performClick()
                 assertTrue(children(activity.window.decorView)
