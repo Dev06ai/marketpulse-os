@@ -60,13 +60,24 @@ jobs:
           curl --fail --location --silent --show-error --retry 3 --max-time 90 \
             -o "$PREVIOUS" \
             'https://github.com/Dev06ai/marketpulse-os/releases/download/dev-trader-v0.21.32-157/app-release.apk'
-          test -s "$PREVIOUS"
+          test -s "$PREVIOUS" || { echo "OLD_BUILD_157_ASSET_EMPTY"; exit 1; }
+          echo "Build157 reference APK fetched, bytes=$(stat -c%s "$PREVIOUS")"
           APK=dev-trader/android/app/build/outputs/apk/release/app-release.apk
           SDK_ROOT="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
-          SIGNER="$(find "$SDK_ROOT/build-tools" -type f -name apksigner | sort -V | tail -n 1)"
-          test -x "$SIGNER"
-          "$SIGNER" verify --print-certs "$PREVIOUS" > "$RUNNER_TEMP/old-certs"
-          "$SIGNER" verify --print-certs "$APK" > "$RUNNER_TEMP/new-certs"
+          echo "SDK root found: $([ -d "$SDK_ROOT" ] && echo yes || echo no)"
+          SIGNER="$(find "$SDK_ROOT/build-tools" -type f -name apksigner 2>/dev/null | sort -V | tail -n 1)"
+          if [[ -z "$SIGNER" || ! -x "$SIGNER" ]]; then
+            echo "APKSIGNER_UNAVAILABLE — Android Build Tools missing on runner"
+            exit 1
+          fi
+          if ! "$SIGNER" verify --print-certs "$PREVIOUS" > "$RUNNER_TEMP/old-certs"; then
+            echo "PREVIOUS_157_APK_FAILED_APKSIGNER_VERIFY"
+            exit 1
+          fi
+          if ! "$SIGNER" verify --print-certs "$APK" > "$RUNNER_TEMP/new-certs"; then
+            echo "CANDIDATE_158_APK_FAILED_APKSIGNER_VERIFY"
+            exit 1
+          fi
           OLD="$(grep -m1 'Signer #1 certificate SHA-256 digest:' "$RUNNER_TEMP/old-certs" | cut -d: -f2- | tr -d '[:space:]')"
           NEW="$(grep -m1 'Signer #1 certificate SHA-256 digest:' "$RUNNER_TEMP/new-certs" | cut -d: -f2- | tr -d '[:space:]')"
           if [[ -z "$OLD" || "$OLD" != "$NEW" ]]; then
