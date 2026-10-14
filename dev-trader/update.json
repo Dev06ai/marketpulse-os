@@ -1,8 +1,8 @@
 {
   "enabled": true,
-  "versionCode": 165,
-  "versionName": "0.21.40",
-  "apkUrl": "https://github.com/Dev06ai/marketpulse-os/releases/download/dev-trader-v0.21.40-165/app-release.apk",
-  "sha256": "86c9fb48bfa75da658670673c27ac637a0fd442360a75dce7be66abe86430cfd",
-  "notes": "Build 165 verified fallback while corrected KYVORIQ 167 navigation visuals are being prepared. Firebase auth remains available; private trading and paid permissions remain server-controlled."
+  "versionCode": 167,
+  "versionName": "0.21.42",
+  "apkUrl": "https://github.com/Dev06ai/marketpulse-os/releases/download/dev-trader-v0.21.42-167/app-release.apk",
+  "sha256": "c8a3f8f68995e1d4bbc5490596b0900fea9ed552275d91993b2626a6c8c9b47c",
+  "notes": "Build 167 verified signed update: strong confirmed OB-only chart, capped/deduplicated zones, JWT/session freshness hardening, Build 166 unified login and visible fluid navigation. Consumer API, subscription billing and public entitlement activation remain inactive; private trading engine unaffected."
 }
