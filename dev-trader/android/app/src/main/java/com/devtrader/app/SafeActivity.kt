@@ -5172,6 +5172,180 @@ class SafeActivity : FragmentActivity() {
         }
     }
 
+
+    /** Persist signed release downloads outside the Activity lifecycle. */
+    private fun startSystemUpdateDownload(apkUrl: String, expectedSha: String, versionName: String) {
+        updateRecoveryUrl = null
+        runCatching {
+            require(Regex("https://github\\.com/Dev06ai/marketpulse-os/releases/download/dev-trader-v[0-9]+\\.[0-9]+\\.[0-9]+-[0-9]+/app-release\\.apk").matches(apkUrl))
+            require(Regex("[0-9a-fA-F]{64}").matches(expectedSha))
+            require(Regex("[0-9]+\\.[0-9]+\\.[0-9]+").matches(versionName))
+            val dm = getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+            val oldId = updatePrefs.getLong("download_id", -1L)
+            if (oldId > 0) dm.remove(oldId)
+            val parent = File(getExternalFilesDir(null), "kyvoriq-updates")
+            if (!parent.exists() && !parent.mkdirs()) throw java.io.IOException("Update directory unavailable")
+            val target = File(parent, "kyvoriq-" + versionName + ".apk")
+            if (target.exists() && !target.delete()) throw java.io.IOException("Cannot replace old update")
+            val request = DownloadManager.Request(Uri.parse(apkUrl))
+                .setTitle("KYVORIQ " + versionName)
+                .setDescription("Verified signed Android update")
+                .setMimeType("application/vnd.android.package-archive")
+                .setAllowedOverMetered(true)
+                .setAllowedOverRoaming(false)
+                .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+                .setDestinationInExternalFilesDir(this, null, "kyvoriq-updates/" + target.name)
+            val id = dm.enqueue(request)
+            updatePrefs.edit().putLong("download_id", id)
+                .putString("apk_url", apkUrl).putString("sha256", expectedSha)
+                .putString("version", versionName).apply()
+            updateButton.isEnabled = false
+            setUpdateStatus("DOWNLOADING • Android service")
+            pollSystemUpdate()
+        }.onFailure {
+            // Retain checksum-verified OkHttp on devices without DownloadManager.
+            setUpdateStatus("DOWNLOADING • direct fallback")
+            downloadAndInstallUpdate(apkUrl, expectedSha, versionName)
+        }
+    }
+
+    private fun clearPendingSystemUpdate() {
+        updatePoll?.let { handler.removeCallbacks(it) }
+        updatePoll = null
+        updatePrefs.edit().remove("download_id").remove("apk_url")
+            .remove("sha256").remove("version").apply()
+    }
+
+    private fun pollSystemUpdate() {
+        updatePoll?.let { handler.removeCallbacks(it) }
+        val id = updatePrefs.getLong("download_id", -1L)
+        if (id <= 0L || !::updateButton.isInitialized) return
+        val dm = getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+        val snapshot = runCatching {
+            dm.query(DownloadManager.Query().setFilterById(id))?.use { cursor ->
+                if (!cursor.moveToFirst()) return@use null
+                val status = cursor.getInt(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS))
+                val size = cursor.getLong(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_TOTAL_SIZE_BYTES))
+                val done = cursor.getLong(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_BYTES_DOWNLOADED_SO_FAR))
+                val reason = cursor.getInt(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_REASON))
+                intArrayOf(status, (if (size > 0L) (100L * done / size).coerceIn(0L, 99L) else 0L).toInt(), reason)
+            }
+        }.getOrNull()
+        if (snapshot == null) {
+            val url = updatePrefs.getString("apk_url", null)
+            clearPendingSystemUpdate()
+            updateRecoveryUrl = url
+            updateButton.isEnabled = true
+            setUpdateStatus("DOWNLOAD FAILED • TAP FOR OPTIONS")
+            return
+        }
+        when (snapshot[0]) {
+            DownloadManager.STATUS_SUCCESSFUL -> verifySystemUpdate(id)
+            DownloadManager.STATUS_FAILED -> {
+                val url = updatePrefs.getString("apk_url", null)
+                val reason = snapshot[2]
+                dm.remove(id)
+                clearPendingSystemUpdate()
+                updateRecoveryUrl = url
+                updateButton.isEnabled = true
+                setUpdateStatus("DOWNLOAD FAILED • CODE " + reason + " • TAP FOR OPTIONS")
+            }
+            else -> {
+                updateButton.isEnabled = false
+                setUpdateStatus(if (snapshot[0] == DownloadManager.STATUS_PAUSED)
+                    "DOWNLOADING • waiting for network"
+                    else "DOWNLOADING • " + snapshot[1] + "%")
+                val next = Runnable { pollSystemUpdate() }
+                updatePoll = next
+                handler.postDelayed(next, 1100L)
+            }
+        }
+    }
+
+    private fun verifySystemUpdate(id: Long) {
+        if (!updateVerifying.compareAndSet(false, true)) return
+        setUpdateStatus("VERIFYING • release checksum")
+        val expectedSha = updatePrefs.getString("sha256", "").orEmpty()
+        val versionName = updatePrefs.getString("version", "").orEmpty()
+        val sourceUrl = updatePrefs.getString("apk_url", null)
+        Thread {
+            val dm = getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+            val target = File(File(cacheDir, "updates"), "dev-trader-" + versionName + ".apk")
+            val success = runCatching {
+                require(Regex("[0-9a-fA-F]{64}").matches(expectedSha))
+                require(Regex("[0-9]+\\.[0-9]+\\.[0-9]+").matches(versionName))
+                if (target.parentFile?.mkdirs() != true && target.parentFile?.isDirectory != true)
+                    throw java.io.IOException("Update cache unavailable")
+                val digest = MessageDigest.getInstance("SHA-256")
+                var total = 0L
+                dm.openDownloadedFile(id).use { downloaded ->
+                    FileInputStream(downloaded.fileDescriptor).use { input ->
+                        FileOutputStream(target).use { output ->
+                            val buffer = ByteArray(32768)
+                            while (true) {
+                                val size = input.read(buffer)
+                                if (size < 0) break
+                                if (size == 0) continue
+                                total += size
+                                if (total > 64L * 1024 * 1024) throw java.io.IOException("APK too large")
+                                digest.update(buffer, 0, size)
+                                output.write(buffer, 0, size)
+                            }
+                            output.fd.sync()
+                        }
+                    }
+                }
+                if (total < 100_000L) throw java.io.IOException("Incomplete APK")
+                val sum = digest.digest().joinToString("") { "%02x".format(it) }
+                if (!sum.equals(expectedSha, ignoreCase = true)) throw java.io.IOException("APK checksum mismatch")
+                java.util.zip.ZipFile(target).use { zip ->
+                    if (zip.getEntry("AndroidManifest.xml") == null || zip.getEntry("classes.dex") == null)
+                        throw java.io.IOException("Not a valid APK archive")
+                }
+                true
+            }.getOrElse { target.delete(); false }
+            runCatching { dm.remove(id) }
+            handler.post {
+                updateVerifying.set(false)
+                clearPendingSystemUpdate()
+                if (isFinishing || isDestroyed) return@post
+                updateButton.isEnabled = true
+                if (success) {
+                    updateRecoveryUrl = null
+                    setUpdateStatus("UPDATE VERIFIED • INSTALLING v" + versionName)
+                    installApk(target)
+                } else {
+                    updateRecoveryUrl = sourceUrl
+                    setUpdateStatus("DOWNLOAD BLOCKED • INVALID APK • TAP FOR OPTIONS")
+                }
+            }
+        }.start()
+    }
+
+    private fun showUpdateRecoveryOptions() {
+        val url = updateRecoveryUrl ?: return checkUpdate()
+        if (!Regex("https://github\\.com/Dev06ai/marketpulse-os/releases/download/dev-trader-v[0-9]+\\.[0-9]+\\.[0-9]+-[0-9]+/app-release\\.apk").matches(url)) {
+            updateRecoveryUrl = null
+            return checkUpdate()
+        }
+        android.app.AlertDialog.Builder(this)
+            .setTitle("KYVORIQ update download")
+            .setMessage("Android could not finish the signed APK download. Retry through Android Downloads or open the official GitHub release in your browser.")
+            .setPositiveButton("Retry download") { _, _ ->
+                updateRecoveryUrl = null
+                checkUpdate()
+            }
+            .setNeutralButton("Open release") { _, _ ->
+                val page = url.replace("/releases/download/", "/releases/tag/").removeSuffix("/app-release.apk")
+                runCatching {
+                    startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(page))
+                        .addCategory(Intent.CATEGORY_BROWSABLE))
+                }.onFailure { setUpdateStatus("BROWSER UNAVAILABLE • RETRY UPDATE") }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
     private fun downloadAndInstallUpdate(apkUrl: String, expectedSha: String, versionName: String) {
         runCatching {
             val request = Request.Builder().url(apkUrl).get().build()
