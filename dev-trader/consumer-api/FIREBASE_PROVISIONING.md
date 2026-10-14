@@ -38,11 +38,20 @@ Do not substitute the local debug keystore fingerprints.
    Firebase Web API key isn't an administrator secret, do not paste it into
    chat or logs). Do not upload a service-account JSON or private signing key.
 5. Run the manual GitHub Actions workflow
-   `.github/workflows/build-firebase-connected-162.yml`
-   with the three public project IDs. It will build a **signed testing APK**
+   `.github/workflows/kyvoriq-firebase-onboarding-162.yml` on `main`
+   (the source branch copy is `build-firebase-connected-162.yml`).
+   The hardened workflow also requires a reviewed immutable `source_commit`
+   and accepts `consumer_api_origin` for the independent HTTPS account API.
+   Leaving the origin blank creates an identity-only candidate, which cannot
+   pass end-to-end server account verification. Use the three public project
+   IDs, never a credential value in workflow inputs. It builds a **signed testing APK**
    using the GitHub repository's existing established signing identity,
    versionCode 162, and upload it as a private testing artifact.
    **It does not publish to the app's update manifest.**
+   The candidate is uploaded only after consumer security and offline Android
+   emulator checks pass. `TEST-SCOPE.json` explicitly records live Firebase
+   end-to-end testing as unverified. Offline checks cannot prove Google OAuth,
+   verification/reset email delivery, revocation, or deployed server access.
 6. Deploy the consumer API independently of the private Bitget/Voroa engine
    with verified issuer/audience/JWKS, a separate consumer Postgres database,
    protected Redis abuse-limiting connection, HMAC key and safe network ingress.

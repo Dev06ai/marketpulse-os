@@ -5,6 +5,7 @@ Do not accept app-provided role/tier claims as payment proof.
 from __future__ import annotations
 
 import os
+import re
 import time
 from dataclasses import dataclass
 from urllib.parse import urlparse
@@ -14,6 +15,8 @@ from jwt import PyJWKClient
 
 class AuthUnavailable(RuntimeError): pass
 class AuthenticationRejected(RuntimeError): pass
+
+FIREBASE_JWKS = "https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com"
 
 @dataclass(frozen=True)
 class Principal:
@@ -34,25 +37,37 @@ def settings() -> tuple[str, str, str, frozenset[str]]:
         raise AuthUnavailable("OIDC signing keys URL must be an HTTPS endpoint")
     if urlparse(issuer).scheme != "https":
         raise AuthUnavailable("Issuer must use HTTPS")
+    if urlparse(issuer).hostname == "securetoken.google.com":
+        if (not re.fullmatch(r"[a-z][a-z0-9-]{4,28}[a-z0-9]", audience)
+                or issuer != f"https://securetoken.google.com/{audience}"
+                or jwks != FIREBASE_JWKS):
+            raise AuthUnavailable("Firebase issuer, project audience and signing keys must match")
     return issuer, audience, jwks, ids
 
 def verify_access_token(token: str) -> Principal:
     if not token or len(token) > 8192:
         raise AuthenticationRejected("Invalid access token")
     issuer, audience, jwks, admins = settings()
+    is_firebase = urlparse(issuer).hostname == "securetoken.google.com"
     try:
         signing_key = PyJWKClient(jwks, cache_keys=True, lifespan=180).get_signing_key_from_jwt(token)
         claims = jwt.decode(
             token, signing_key.key,
-            algorithms=["RS256", "ES256"], audience=audience,
-            issuer=issuer, options={"require": ["sub", "iat", "exp", "iss", "aud"]},
+            algorithms=["RS256"] if is_firebase else ["RS256", "ES256"], audience=audience,
+            issuer=issuer, options={
+                "require": ["sub", "iat", "exp", "iss", "aud"] + (["auth_time"] if is_firebase else []),
+                "strict_aud": is_firebase,
+            },
             leeway=20,
         )
     except (jwt.PyJWTError, ConnectionError, ValueError, OSError):
         raise AuthenticationRejected("Invalid access token") from None
     sub = claims.get("sub")
-    if not isinstance(sub, str) or not 1 <= len(sub) <= 256:
+    if not isinstance(sub, str) or not 1 <= len(sub) <= (128 if is_firebase else 256):
         raise AuthenticationRejected("Invalid subject")
+    if is_firebase and (type(claims.get("auth_time")) is not int
+                        or not 0 <= claims["auth_time"] <= time.time() + 20):
+        raise AuthenticationRejected("Invalid authentication time")
     # Being on an email whitelist is insufficient for admin. A protected
     # immutable identity AND recent identity-provider MFA are required.
     methods = claims.get("amr")

@@ -1,7 +1,7 @@
 name: KYVORIQ 161 OB, Insights and secure consumer auth candidate
 on:
   push:
-    branches: [feature/build161-ob-insights-account]
+    branches: [feature/build161-ob-insights-account, feature/consumer-auth-162-checks]
     paths:
       - 'dev-trader/android/**'
       - 'dev-trader/consumer-api/**'
