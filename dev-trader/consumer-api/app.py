@@ -16,6 +16,7 @@ from fastapi.responses import JSONResponse
 
 from auth import verify_access_token, Principal, AuthenticationRejected, AuthUnavailable
 from access_policy import Tier, FEATURE_MIN_TIER, OWNER_ONLY, entitled, grants, parse_tier
+from rate_limit import check_consumer_rate, LimiterUnavailable
 
 app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 
@@ -26,6 +27,17 @@ async def safety_headers(request: Request, call_next):
         return JSONResponse({"detail": "Invalid content length"}, status_code=400)
     if int(supplied_length) > 16_384:
         return JSONResponse({"detail": "Request too large"}, status_code=413)
+    if request.url.path.startswith("/v1/") and os.getenv("KYVORIQ_CONSUMER_OIDC_ISSUER", "").strip():
+        # Rate limiting is mandatory once identity goes live. No permissive
+        # "Redis down, try anyway" fallback for authenticated consumers.
+        try:
+            allowed, wait = await check_consumer_rate(request.client.host if request.client else "unknown")
+        except LimiterUnavailable:
+            return JSONResponse({"detail": "Consumer security service unavailable"},
+                                status_code=503, headers={"Cache-Control": "no-store"})
+        if not allowed:
+            return JSONResponse({"detail": "Too many requests"}, status_code=429,
+                                headers={"Retry-After": str(wait), "Cache-Control": "no-store"})
     response = await call_next(request)
     response.headers.update({
         "Cache-Control": "private, no-store",
