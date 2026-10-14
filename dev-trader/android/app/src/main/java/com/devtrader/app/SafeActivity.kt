@@ -885,7 +885,7 @@ class SafeActivity : FragmentActivity() {
         price = hero.price; oiView = hero.oi; status = hero.status
         tradePage.addView(hero.container, margins(bottom = 10))
         publicMarketMessage = label(
-            "BASIC ACCESS • BTC LIVE MARKET\nConsumer upgrades are pending verification; private trading stays owner-only.",
+            "FREE • BTC MARKET DATA\nPro and Elite subscriptions are not active yet. Private execution stays owner-only.",
             11f, kyGold, 0f
         ).apply {
             setPadding(dp(12), dp(11), dp(12), dp(11))
