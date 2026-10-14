@@ -32,7 +32,7 @@ assert(p63.evaluate({side:"LONG",entry:100,stop:98}).valid,"63 invalidation");
 assert(p64.build({side:"LONG",price:100,entryLow:99,entryHigh:100,atr:2}).valid,"64 levels");
 assert(p65.evaluate({probability:.7,rr:2,costBps:5}).pass,"65 expectancy");
 assert(p71.calibrate([{probability:.7,outcome:1},{probability:.6,outcome:0}]).sample===2,"71 calibration");
-assert(p72.combine([{probability:70,weight:1},{probability:80,weight:1}]).probability===75,"72 ensemble");
+assert(Math.abs(p72.combine([{probability:70,weight:1},{probability:80,weight:1}]).probability-0.75)<1e-12,"72 ensemble must retain normalized 0-1 probabilities");
 assert(p73.evaluate({coveragePct:90,calibrationSamples:300,disagreementPct:5}).uncertain===false,"73 uncertainty");
 assert(p74.evaluate({winProbability:.7,averageWinR:2,averageLossR:1,costR:.05}).expectancy>.7,"74 expectancy");
 assert(p80.evaluate({blockers:["DATA_QUALITY"],dataQuality:40,directionalEdge:5}).justified,"80 wait quality");
