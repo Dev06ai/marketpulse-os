@@ -152,11 +152,10 @@ class HeroChartVisualTest {
                             (badges[i].height()+badges[j].height())/2 +
                             7f*activity.resources.displayMetrics.density)
                 }
+                // Build 167 drops duplicate/weak zones, so the old four-zone
+                // fixture now fits without the previously necessary pager.
                 val pager = chart.obPageControlForTest()
-                assertNotNull("Crowded OB sets must remain browsable", pager)
-                if (pager != null) {
-                    tap(chart, pager.centerX(), pager.centerY())
-                }
+                assertNull("Filtered strong OB zones should not need extra pages", pager)
             }
             SystemClock.sleep(110)
             screenshot("ob-next-page")
