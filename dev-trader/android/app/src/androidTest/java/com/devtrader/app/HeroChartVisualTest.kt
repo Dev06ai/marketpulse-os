@@ -206,15 +206,29 @@ class HeroChartVisualTest {
                     assertFalse("Retired Insights card leaked: $banned",
                         titles.any { it == banned })
                 }
+            }
+            // Navigation is animated; asserting height within the same UI
+            // traversal as the tab click observes an unlaid-out page (0px)
+            // rather than the finished 94dp Signals artwork.
+            SystemClock.sleep(350)
+            inst.runOnMainSync {
                 children(activity.window.decorView).filterIsInstance<Button>()
                     .first { it.contentDescription == "Workspace SIGNALS" }.performClick()
+            }
+            SystemClock.sleep(350)
+            inst.runOnMainSync {
                 val signalsIcon = children(activity.window.decorView)
                     .filterIsInstance<android.widget.ImageView>()
                     .first { it.contentDescription == "Signals market icon" }
-                assertTrue("Large Signals icon should retain readable hero size",
+                assertTrue("Large Signals icon must actually be shown", signalsIcon.isShown)
+                assertNotNull("Large Signals icon requires its drawable", signalsIcon.drawable)
+                assertTrue("Large Signals icon should retain readable hero size: ${signalsIcon.height}px",
                     signalsIcon.height >= (88 * densityForTest(activity)))
                 children(activity.window.decorView).filterIsInstance<Button>()
                     .first { it.contentDescription == "Workspace TRADE" }.performClick()
+            }
+            SystemClock.sleep(350)
+            inst.runOnMainSync {
                 assertTrue(children(activity.window.decorView)
                     .any { it is KyvoriqGoldAccountButton })
                 children(activity.window.decorView).filterIsInstance<Button>()
