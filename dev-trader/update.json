@@ -1,8 +1,8 @@
 {
   "enabled": true,
-  "versionCode": 161,
-  "versionName": "0.21.36",
-  "apkUrl": "https://github.com/Dev06ai/marketpulse-os/releases/download/dev-trader-v0.21.36-161/app-release.apk",
-  "sha256": "2dc4c0404233ca475d387c9699a94167ad84124f85c3526baad94fdcb87fa603",
-  "notes": "KYVORIQ 0.21.36 • Build 161 private UI testing. OB zone labels have more spacing and paging. Removed Alert Intelligence, Position Risk, Connection from Insights. Gold sign-in shimmer and red logout added. Email signup/Google sign-in require separate Firebase/provider activation; paid subscriptions and alerts are not enabled."
-}
+  "versionCode": 164,
+  "versionName": "0.21.39",
+  "apkUrl": "https://github.com/Dev06ai/marketpulse-os/releases/download/dev-trader-v0.21.39-164/app-release.apk",
+  "sha256": "f28040c95b7a18c86313a2e42edde806a9958438cb60db2cfd54afa565ecfe8e",
+  "notes": "Build 164 owner testing prerelease. Signed Firebase identity, compact dialogs and clearly labeled public BTCUSDT spot fallback. Private trading server unavailable. No premium/admin/paid unlock."
+}\n
