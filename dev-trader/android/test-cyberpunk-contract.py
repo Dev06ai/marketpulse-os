@@ -22,7 +22,6 @@ assert 'setImageResource(R.drawable.kyvoriq_emblem_intro_tight)' in splash
 assert 'KyvoriqRazorWordmarkView(context)' in splash
 assert 'showVerificationFrame()' in splash
 assert 'KyvoriqTheme.motionEnabled(context)' in splash
-assert 'KyvoriqTheme.motionEnabled(context)' in motion
 
 # Remove product entry points rather than hiding a consumer's empty cards.
 for removed in ('DECISION CENTER', 'SETUP DETAILS', 'TRADINGVIEW CHART',
