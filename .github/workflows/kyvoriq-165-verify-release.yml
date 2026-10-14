@@ -1,0 +1,77 @@
+name: Publish verified signed KYVORIQ 165 prerelease asset
+on:
+  push:
+    branches:
+      - ci/kyvoriq-165-publish-signed-release-20261014
+    paths:
+      - .github/workflows/kyvoriq-165-verify-release.yml
+permissions:
+  actions: read
+  contents: write
+concurrency:
+  group: kyvoriq-165-signed-asset-publication
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TEST_RUN: "38541052810"
+      ARTIFACT_NAME: KYVORIQ-165-FIREBASE-TESTING-NOT-PUBLIC
+      RELEASE_TAG: dev-trader-v0.21.40-165
+      SOURCE_COMMIT: dd23efadb5af1df011f422758bf8e2c0a313d360
+      EXPECTED_SHA256: 86c9fb48bfa75da658670673c27ac637a0fd442360a75dce7be66abe86430cfd
+      EXPECTED_SIGNER: 17e4c550aa235dae926058654f203ecae9d7b30b432bde9dc2c358e28360cbab
+    steps:
+      - name: Verify CI source, prior release, completed tests and artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$TEST_RUN" --jq .conclusion)" = success
+          test "$(gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/11882599093" --jq .expired)" = false
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Refusing to replace an immutable release"
+            exit 1
+          fi
+          mkdir -p payload
+          gh run download "$TEST_RUN" --repo "$GITHUB_REPOSITORY" --name "$ARTIFACT_NAME" --dir payload
+      - name: Validate pinned source, version, signing certificate and checksum
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd payload
+          test -s KYVORIQ-0.21.40-165-FIREBASE-TEST.apk
+          sha256sum --check SHA256SUMS.txt
+          echo "$EXPECTED_SHA256  KYVORIQ-0.21.40-165-FIREBASE-TEST.apk" | sha256sum --check
+          python3 - <<'PY'
+          import json,os
+          scope=json.load(open("TEST-SCOPE.json"))
+          assert scope["source_commit"]==os.environ["SOURCE_COMMIT"]
+          assert scope["offline_security_tests"]=="passed"
+          assert scope["offline_emulator_tests"]=="passed"
+          assert scope["consumer_api_configured"] is False
+          assert scope["production_login_enabled"] is False
+          assert scope["payments_enabled"] is False
+          assert scope["update_manifest_modified"] is False
+          print("Owner testing candidate only; no private entitlement unlock.")
+          PY
+          APKSIGNER="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -1)"
+          AAPT="$(find "$ANDROID_HOME/build-tools" -type f -name aapt | sort -V | tail -1)"
+          "$APKSIGNER" verify --verbose KYVORIQ-0.21.40-165-FIREBASE-TEST.apk >/dev/null
+          "$APKSIGNER" verify --print-certs KYVORIQ-0.21.40-165-FIREBASE-TEST.apk | grep -Fq "$EXPECTED_SIGNER"
+          "$AAPT" dump badging KYVORIQ-0.21.40-165-FIREBASE-TEST.apk | head -1 | grep -Fq "package: name='com.devtrader.app' versionCode='165' versionName='0.21.40'"
+          ! unzip -Z1 KYVORIQ-0.21.40-165-FIREBASE-TEST.apk | grep -Ei '(^|/)(\.env|google-services\.json|signing\.jks)$'
+          cp KYVORIQ-0.21.40-165-FIREBASE-TEST.apk app-release.apk
+      - name: Publish immutable 165 owner testing release
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release create "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+            --target "$SOURCE_COMMIT" --prerelease \
+            --title "KYVORIQ 0.21.40 — Build 165 UI refresh" \
+            --notes "Signed owner testing build: refined account screens, responsive dialogs, email login and signup UI, dark-gold Insights/System cards and reduced-motion-aware transitions. Firebase identity providers preserved. Consumer authorization, premium plans and payments are not live. Android's system installer dialog remains OS-controlled. Private trading backend hosting is not restored." \
+            payload/app-release.apk payload/KYVORIQ-0.21.40-165-FIREBASE-TEST.aab
+          mkdir -p verify-release
+          gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --pattern app-release.apk --dir verify-release
+          echo "$EXPECTED_SHA256  verify-release/app-release.apk" | sha256sum --check
