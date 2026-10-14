@@ -1312,6 +1312,17 @@ class SafeActivity : FragmentActivity() {
                     "Separate verified account and MFA required") {
                     showConsumerEmailAuth("login")
                 }
+            } else {
+                actionRow(R.drawable.ic_account_owner, "Verify admin identity",
+                    "Server-verified subject + recent MFA required") {
+                    KyvoriqConsumerIdentity.fetchServerVerifiedAccount(this@SafeActivity) {
+                        showInfoDialog("Server account verification", it)
+                    }
+                }
+                actionRow(R.drawable.ic_account_access, "Sign out of account",
+                    "End consumer identity session", destructive = true) {
+                    confirmConsumerLogout()
+                }
             }
         } else if (consumerEmail != null) {
             actionRow(R.drawable.ic_account_owner, consumerEmail,
@@ -1319,6 +1330,12 @@ class SafeActivity : FragmentActivity() {
                 showInfoDialog("Verified identity",
                     "Consumer identity is managed separately from the private owner API. " +
                     "Account tier and administrative privileges must be verified by the consumer server.")
+            }
+            actionRow(R.drawable.ic_account_owner, "Verify subscription",
+                "Read-only server entitlement verification") {
+                KyvoriqConsumerIdentity.fetchServerVerifiedAccount(this@SafeActivity) {
+                    showInfoDialog("KYVORIQ account", it)
+                }
             }
             actionRow(R.drawable.ic_account_privacy, "Account security",
                 "Change password or review identity provider") {
