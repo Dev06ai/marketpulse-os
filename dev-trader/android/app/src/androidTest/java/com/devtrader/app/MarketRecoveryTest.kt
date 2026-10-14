@@ -54,6 +54,14 @@ class MarketRecoveryTest {
         assertNull(MarketRecovery.load(context, "1h", System.currentTimeMillis() + 49*60*60_000L))
     }
 
+    @Test fun alternativeSpotCacheRemainsPublicAndHasExplicitProvenance() {
+        MarketRecovery.save(context, "1h", rows(), MarketRecovery.KRAKEN_SPOT)
+        val saved = MarketRecovery.load(context, "1h")!!
+        assertEquals(MarketRecovery.KRAKEN_SPOT, saved.getString("source"))
+        assertFalse(saved.toString().contains("private_signal"))
+        assertFalse(saved.toString().contains("MUST_NOT_PERSIST"))
+    }
+
     @Test fun malformedNetworkCandlesCannotReplaceLastValidCache() {
         MarketRecovery.save(context, "1h", rows(), MarketRecovery.PERPETUAL)
         val bad = rows().apply { getJSONObject(39).put("low", 9999.0) }
