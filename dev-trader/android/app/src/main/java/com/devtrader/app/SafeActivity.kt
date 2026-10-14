@@ -1134,14 +1134,21 @@ class SafeActivity : FragmentActivity() {
         insightsContent.addView(sys.container, margins(bottom = 10))
         adminOnlyViews.add(sys.container)
 
+        // System diagnostics remain owner-only. Signed app updates are a
+        // normal consumer utility and must work even when not signed in.
         val tools = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
         checkButton = compactPillButton("SYSTEM CHECK")
         checkButton.setOnClickListener {
             haptic(it, KyvoriqHaptics.Cue.ACTION)
             safe { systemCheck() }
         }
-        tools.addView(checkButton, LinearLayout.LayoutParams(0, dp(44), 1f).apply { rightMargin = dp(6) })
-        updateButton = compactPillButton("UPDATE")
+        tools.addView(checkButton, LinearLayout.LayoutParams(-1, dp(44)))
+        insightsContent.addView(tools, margins(bottom = 8))
+        adminOnlyViews.add(tools)
+
+        updateButton = compactPillButton("CHECK FOR UPDATES").apply {
+            contentDescription = "Check for verified KYVORIQ app updates"
+        }
         updateButton.setOnClickListener {
             haptic(it, KyvoriqHaptics.Cue.ACTION)
             safe {
@@ -1149,9 +1156,7 @@ class SafeActivity : FragmentActivity() {
                 else checkUpdate()
             }
         }
-        tools.addView(updateButton, LinearLayout.LayoutParams(0, dp(44), 1f))
-        insightsContent.addView(tools, margins(bottom = 8))
-        adminOnlyViews.add(tools)
+        insightsContent.addView(updateButton, margins(bottom = 8))
 
         val deviceTools = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
         privacyButton = compactPillButton("PRIVACY")
@@ -5177,7 +5182,12 @@ class SafeActivity : FragmentActivity() {
                 }
 
                 safe {
-                    val j = JSONObject(body)
+                    val j = runCatching { JSONObject(body) }.getOrNull()
+                    if (j == null) {
+                        updateButton.isEnabled = true
+                        setUpdateStatus("UPDATE CHECK FAILED • INVALID RELEASE METADATA")
+                        return@safe
+                    }
                     val remoteCode = j.optLong("versionCode", 0L)
                     val currentCode = packageManager.getPackageInfo(packageName, 0).longVersionCode
                     val remoteName = j.optString("versionName", "new")
@@ -5190,7 +5200,8 @@ class SafeActivity : FragmentActivity() {
                         val expectedSha = j.optString("sha256", "")
                         if (!Regex("[0-9a-fA-F]{64}").matches(expectedSha) ||
                             !Regex("[0-9]+\\.[0-9]+\\.[0-9]+").matches(remoteName) ||
-                            !Regex("https://github\\.com/Dev06ai/marketpulse-os/releases/download/dev-trader-v[0-9]+\\.[0-9]+\\.[0-9]+-[0-9]+/app-release\\.apk").matches(apkUrl)) {
+                            !Regex("https://github\\.com/Dev06ai/marketpulse-os/releases/download/dev-trader-v[0-9]+\\.[0-9]+\\.[0-9]+-[0-9]+/app-release\\.apk").matches(apkUrl) ||
+                            !apkUrl.contains("/dev-trader-v" + remoteName + "-" + remoteCode + "/")) {
                             updateButton.isEnabled = true
                             setUpdateStatus("UPDATE METADATA INVALID")
                         } else {
