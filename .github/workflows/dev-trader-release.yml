@@ -209,13 +209,49 @@ jobs:
           assert 'android:id="@+id/widget_alerts"' in (base/'layout/widget_kyvoriq_compact.xml').read_text()
           print('Source gate: intro, vector bounds, compact widget and secure transient route recovery present.')
           PY
-      - name: Build signed release APK
-        working-directory: dev-trader/android
+      - name: Test consumer identity and authorization boundaries before signing
+        shell: bash
         run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check -q -r dev-trader/consumer-api/requirements.txt
+          python -m unittest discover -s dev-trader/consumer-api -p 'test_*.py' -q
+
+      - name: Build signed release APK with VERIFIED Firebase identity
+        working-directory: dev-trader/android
+        shell: bash
+        env:
+          ORG_GRADLE_PROJECT_kyvoriqFirebaseApiKey: ${{ secrets.KYVORIQ_FIREBASE_WEB_API_KEY }}
+          ORG_GRADLE_PROJECT_kyvoriqFirebaseProjectId: kyvoriq
+          ORG_GRADLE_PROJECT_kyvoriqFirebaseAppId: "1:320009995893:android:1ffee780b5cc138a1d5a3c"
+          ORG_GRADLE_PROJECT_kyvoriqGoogleWebClientId: "320009995893-oksbnnjkjv7a0m871e70kd3fembdtf58.apps.googleusercontent.com"
+          ORG_GRADLE_PROJECT_kyvoriqConsumerApiOrigin: ""
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import os, re
+          prop = lambda name: os.environ.get("ORG_GRADLE_PROJECT_" + name, "")
+          assert re.fullmatch(r"AIza[A-Za-z0-9_-]{30,}", prop("kyvoriqFirebaseApiKey")), "Firebase Web API key missing/invalid; refusing release"
+          assert prop("kyvoriqFirebaseProjectId") == "kyvoriq", "Incorrect Firebase project"
+          assert re.fullmatch(r"1:[0-9]+:android:[a-fA-F0-9]+", prop("kyvoriqFirebaseAppId")), "Firebase Android registration missing"
+          assert re.fullmatch(r"[0-9]+-[A-Za-z0-9_-]+[.]apps[.]googleusercontent[.]com", prop("kyvoriqGoogleWebClientId")), "Google OAuth Web client missing"
+          assert prop("kyvoriqConsumerApiOrigin") == "", "Public consumer API deployment was not separately approved"
+          print("Firebase credentials verified for this release; no credential values logged.")
+          PY
           gradle assembleRelease \
             -PdevTraderVersionName="${{ steps.meta.outputs.version_name }}" \
             -PdevTraderVersionCode="${{ steps.meta.outputs.version_code }}" \
             --stacktrace
+          python3 - <<'PY'
+          import os, zipfile
+          with zipfile.ZipFile("app/build/outputs/apk/release/app-release.apk") as apk:
+              dex = b"".join(apk.read(n) for n in apk.namelist()
+                             if n.startswith("classes") and n.endswith(".dex"))
+          assert dex, "No bytecode in release APK"
+          for name in ("kyvoriqFirebaseApiKey", "kyvoriqFirebaseProjectId",
+                       "kyvoriqFirebaseAppId", "kyvoriqGoogleWebClientId"):
+              assert os.environ["ORG_GRADLE_PROJECT_" + name].encode() in dex, "Missing compiled Firebase property: " + name
+          print("APK includes registered Firebase/Google identity config; values redacted.")
+          PY
 
       - name: Verify public Android client only contains generic level rendering
         shell: bash
