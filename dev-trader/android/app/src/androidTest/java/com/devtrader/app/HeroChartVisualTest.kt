@@ -11,6 +11,8 @@ import android.widget.Button
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import java.io.File
+import org.json.JSONArray
+import org.json.JSONObject
 import org.junit.Assert.*
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -89,6 +91,33 @@ class HeroChartVisualTest {
             }
             SystemClock.sleep(250)
             screenshot("trade")
+            // Build 160: deliberately overlap 1H/4H/12H and supply/demand
+            // zones. Labels use real fixture boundaries, never inferred ticks.
+            // Every viewport captures the actual rendered result for review.
+            inst.runOnMainSync {
+                val chart = children(activity.window.decorView)
+                    .filterIsInstance<MarketChartView>().first()
+                val formatter = MarketChartView::class.java
+                    .getDeclaredMethod("exactZonePrice", java.lang.Double.TYPE)
+                    .apply { isAccessible = true }
+                assertEquals("83,409.25", formatter.invoke(chart, 83409.25))
+                assertEquals("83,409.125", formatter.invoke(chart, 83409.125))
+                val ob = JSONArray()
+                fun zone(name: String, lo: Double, hi: Double, direction: String) {
+                    ob.put(JSONObject().put("kind", "OB_ZONE").put("label", name)
+                        .put("price", (lo + hi) / 2.0)
+                        .put("zone_low", lo).put("zone_high", hi)
+                        .put("direction", direction))
+                }
+                zone("1H OB", 83340.25, 83520.50, "LONG")
+                zone("4H OB", 83392.75, 83580.125, "LONG")
+                zone("12H OB", 83800.50, 84040.25, "SHORT")
+                zone("DAILY OB", 81050.125, 81590.25, "LONG")
+                chart.setOverlays(ob)
+                assertTrue(chart.plotGeometry().price.height() > 0)
+            }
+            SystemClock.sleep(120)
+            screenshot("ob-price-labels")
             inst.runOnMainSync {
                 children(activity.window.decorView).filterIsInstance<Button>()
                     .first { it.contentDescription == "Sign in or create a KYVORIQ account" }.performClick()
