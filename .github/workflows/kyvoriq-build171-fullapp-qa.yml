@@ -54,6 +54,16 @@ jobs:
       - name: Compile Build 171 debug and instrumentation tests
         working-directory: dev-trader/android
         run: gradle assembleDebug assembleDebugAndroidTest --stacktrace -PdevTraderVersionCode=171 -PdevTraderVersionName=0.21.46
+      - name: Enable Android emulator hardware acceleration
+        run: |
+          set -euo pipefail
+          test -e /dev/kvm || { echo 'KVM is unavailable on this runner'; exit 1; }
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          sudo chmod 666 /dev/kvm
+          test -r /dev/kvm && test -w /dev/kvm
+          echo 'Android x86_64 emulator KVM access confirmed.'
       - name: Emulator 35 interaction and chart visual instrumentation
         uses: reactivecircus/android-emulator-runner@v2
         with:
