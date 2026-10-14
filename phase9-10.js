@@ -60,7 +60,7 @@ function strictSignalChecks(a,side,higher,lower,flowScore,dataScore,levels,deriv
   if(side==="SHORT"&&l==="UPTREND"&&!sfpLowerConfirmed&&!sweepOverride)reasons.push("15M trend conflicts");
   if(String(d.cvdState||"").toUpperCase().includes("DIVERGENCE"))warnings.push("CVD divergence");
   if(Number.isFinite(Number(levels?.rr))&&Number(levels.rr)<1.5)reasons.push("R:R below 1.5");
-  if(setupKind==="D_LINE_BREAKOUT"&&(!Number.isFinite(Number(levels?.rr))||Number(levels.rr)<2))warnings.push("D-Line checklist prefers 2:1+ R:R");
+  if(setupKind==="D_LINE_BREAKOUT"&&(!Number.isFinite(Number(levels?.rr))||Number(levels.rr)<2))reasons.push("D-Line requires 2:1+ R:R");
   const advancedExecutionSetup=["SFP","ORDER_BLOCK","BREAKOUT_RETEST"].includes(setupKind);
   if(advancedExecutionSetup&&(!Number.isFinite(Number(levels?.rr))||Number(levels.rr)<3)&&!(confirmedSweepReclaim&&Number(levels?.rr)>=1.8))warnings.push("Advanced price-action framework prefers 3:1+ R:R");
   if(d.available===false)reasons.push("derivatives unavailable");

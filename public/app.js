@@ -316,7 +316,12 @@ function decisionParts(d){
   return {d,apex,p,m,lv,g,action};
 }
 function renderDecision(){
-  const x=decisionParts(state.decision||{}),d=x.d,p=x.p||{},m=x.m||{},lv=x.lv||{},g=x.g||{},action=["LONG","SHORT"].includes(x.action)?x.action:"WAIT";
+  const x=decisionParts(state.decision||{}),d=x.d,p=x.p||{},m=x.m||{},lv=x.lv||{},g=x.g||{};
+  // A market-side lean is only a watch candidate. Only a fresh, explicitly
+  // server-approved final decision may be shown as LONG/SHORT or execution-ready.
+  const finalApproved=d?.state==="READY"&&d?.liveSignalEligible===true&&d?.stale!==true&&
+    String(d?.action||"").toUpperCase()===x.action&&["LONG","SHORT"].includes(x.action);
+  const action=finalApproved?x.action:"WAIT";
   const analysis=d?.analysis||{};
   const candidateSide=String(
     d?.signalCandidate?.side||
@@ -444,9 +449,18 @@ function renderDecision(){
   const score=safeNum(d?.data?.score??d?.phase301to400?.dataQuality?.score??rawScore??x.apex.quality);
   $("quality").textContent=score===null?"—":Math.round(score*(score<=1?100:1))+"/100";
   $("syncState").textContent=x.apex?.synchronization?.ok||d?.synchronization?.ok?"LOCKED":(d?.stale?"STALE":"PENDING");
-  $("execution").textContent=x.apex?.executionGate?.automaticExecutionReady
-    ?"AUTO READY"
-    :(d?.liveSignalEligible===true&&action!=="WAIT"?"MANUAL READY":"GATED");
+  // UI readiness must not be inferred from a stale/bare signal or a missing
+  // invalidation level. Only a final directional decision with geometrically
+  // valid entry, stop and target may appear ready; backend execution gates
+  // remain authoritative and unchanged.
+  const validRiskGeometry=action==="LONG"
+    ?entry!==null&&stop!==null&&tp1!==null&&stop<entry&&tp1>entry
+    :action==="SHORT"
+      ?entry!==null&&stop!==null&&tp1!==null&&stop>entry&&tp1<entry
+      :false;
+  const autoReady=validRiskGeometry&&x.apex?.executionGate?.automaticExecutionReady===true;
+  const manualReady=validRiskGeometry&&d?.liveSignalEligible===true;
+  $("execution").textContent=autoReady?"AUTO READY":(manualReady?"MANUAL READY":"GATED");
 
   const flow=extractFlow(d);
   $("oi").textContent=fmt(flow.oi,0);$("cvd").textContent=fmt(flow.cvd,3);$("book").textContent=flow.book===null?"—":(flow.book*100).toFixed(1)+"%";$("funding").textContent=flow.funding===null?"—":(flow.funding*100).toFixed(4)+"%";$("liquidations").textContent=fmt(flow.liq,0);
