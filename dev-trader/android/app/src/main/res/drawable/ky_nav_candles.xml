@@ -1,5 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
-<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="44dp" android:height="44dp" android:viewportWidth="100" android:viewportHeight="100">
-    <path android:fillColor="#F5F4F2" android:pathData="M21,18c0,-3 2.5,-5.5 5.5,-5.5s5.5,2.5 5.5,5.5v8h5c3.4,0 6,2.6 6,6v36c0,3.4 -2.6,6 -6,6h-5v8c0,3 -2.5,5.5 -5.5,5.5S21,85 21,82v-8h-5c-3.4,0 -6,-2.6 -6,-6V32c0,-3.4 2.6,-6 6,-6h5z M67,18c0,-3 2.5,-5.5 5.5,-5.5S78,15 78,18v8h5c3.4,0 6,2.6 6,6v36c0,3.4 -2.6,6 -6,6h-5v8c0,3 -2.5,5.5 -5.5,5.5S67,85 67,82v-8h-5c-3.4,0 -6,-2.6 -6,-6V32c0,-3.4 2.6,-6 6,-6h5z M46,29c0,-3 2.5,-5.5 5.5,-5.5S57,26 57,29v7h2c3.4,0 6,2.6 6,6v31c0,3.4 -2.6,6 -6,6h-2v10c0,3 -2.5,5.5 -5.5,5.5S46,92 46,89V79h-2c-3.4,0 -6,-2.6 -6,-6V42c0,-3.4 2.6,-6 6,-6h2z"/>
-    <path android:fillColor="#090A0D" android:pathData="M48,45h7v24h-7z"/>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="44dp" android:height="44dp"
+    android:viewportWidth="100" android:viewportHeight="100">
+    <!-- Three clean, bold candlesticks based on the supplied Trade symbol. -->
+    <path android:fillColor="#F5F4F2" android:pathData="M22,8h6v84h-6z M75,8h6v84h-6z M48,14h6v72h-6z"/>
+    <path android:fillColor="#F5F4F2" android:pathData="M16,25h18c3,0 5,2 5,5v39c0,3 -2,5 -5,5H16c-3,0 -5,-2 -5,-5V30c0,-3 2,-5 5,-5z M69,25h18c3,0 5,2 5,5v39c0,3 -2,5 -5,5H69c-3,0 -5,-2 -5,-5V30c0,-3 2,-5 5,-5z"/>
+    <path android:fillColor="#00000000" android:strokeColor="#F5F4F2" android:strokeWidth="6" android:strokeLineJoin="round" android:pathData="M43,36h16v40H43z"/>
 </vector>
