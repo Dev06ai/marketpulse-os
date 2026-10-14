@@ -1,0 +1,37 @@
+name: Flag superseded Build 170 after source-parity review
+on:
+  push:
+    branches: [ci/hold-build170-after-source-audit-20261014]
+    paths: [.github/workflows/hold-kyvoriq170.yml]
+permissions:
+  contents: write
+jobs:
+  flag:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: dev-trader-v0.21.45-170
+      EXPECTED_SHA: 57fbab336a1a0393c4adf80a4e7d7acd74e14cf9d962b2773e062f19ae1dd55f
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify Build 169 remains the OTA target and Build 170 checksum is unchanged
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api "repos/$GITHUB_REPOSITORY/contents/dev-trader/update.json?ref=dev-trader-v1" --jq .content |
+            base64 --decode > /tmp/channel.json
+          jq -e '.versionCode == 169 and .versionName == "0.21.44" and
+                 (.apkUrl | contains("dev-trader-v0.21.44-169"))' /tmp/channel.json
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null
+          mkdir -p /tmp/release170
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern app-release.apk --dir /tmp/release170
+          echo "$EXPECTED_SHA  /tmp/release170/app-release.apk" | sha256sum -c -
+      - name: Mark Build 170 as superseded; retain immutable asset for audit
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --prerelease \
+            --title "KYVORIQ 0.21.45 (Build 170) - HOLD / NOT FOR INSTALL" \
+            --notes "DO NOT INSTALL THIS BUILD. Source parity review found this candidate was based on an older Android source branch and could remove Build 169 account, UI, security or updater features. The verified OTA channel has been restored to signed Build 169. Retained for checksum/audit only; waiting for a complete Build 171 from the exact Build 169 release source."
+          echo "Build 170 clearly marked; update manifest remains on Build 169."
