@@ -1,0 +1,63 @@
+name: KYVORIQ consumer UI candidate (non-publishing)
+on:
+  pull_request:
+    branches: [dev-trader-v1]
+    paths:
+      - 'dev-trader/android/**'
+      - '.github/workflows/verify-consumer-ui-candidate.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  compile-and-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.6.0'
+      - name: Verify exact consumer layout source contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          SOURCE=dev-trader/android/app/src/main/java/com/devtrader/app/SafeActivity.kt
+          grep -q 'P&L CALCULATOR' "$SOURCE"
+          grep -q 'listOf("TRADE", "SIGNALS", "INSIGHTS")' "$SOURCE"
+          grep -q '"COMING SOON"' "$SOURCE"
+          grep -q 'showConsumerAccountPanel' "$SOURCE"
+          ! grep -Eiq 'DECISION CENTER|SETUP DETAILS|TRADINGVIEW CHART' "$SOURCE"
+          ! grep -Fq 'showTradingViewPreview' "$SOURCE"
+          ! test -e dev-trader/android/app/src/main/java/com/devtrader/app/TradingViewPreview.kt
+          python - <<'PY'
+          import re
+          from pathlib import Path
+          p=Path('dev-trader/android/app/src/main/java/com/devtrader/app/SafeActivity.kt').read_text()
+          block=p[p.index('val pnl = compactPillButton'):p.index('refreshTimeframeButtons(tfRow)',p.index('val pnl = compactPillButton'))]
+          assert 'LinearLayout.LayoutParams(-1, dp(44))' in block
+          assert 'adminOnlyViews.add(pnl)' not in p
+          assert 'signal = TextView(this)' in p
+          assert 'decisionView = TextView(this)' in p
+          assert 'private fun showConsumerAccountPanel()' in p
+          assert 'android.app.Dialog(this)' in p[p.index('private fun showConsumerAccountPanel()'):]
+          assert '0.21.33' in Path('dev-trader/android/app/build.gradle.kts').read_text()
+          print('CONSUMER_UI_SOURCE_CONTRACT_OK')
+          PY
+      - name: Build candidate debug APK (not a consumer signed update)
+        working-directory: dev-trader/android
+        run: gradle assembleDebug --stacktrace -PdevTraderVersionCode=158 -PdevTraderVersionName=0.21.33
+      - name: Verify candidate package and exclude embedded secrets
+        run: |
+          set -euo pipefail
+          APK=dev-trader/android/app/build/outputs/apk/debug/app-debug.apk
+          test -s "$APK"
+          ! unzip -l "$APK" | grep -Ei 'keystore|signing\.jks|\.env$'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: kyvoriq-consumer-158-debug-candidate
+          path: dev-trader/android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error

@@ -53,7 +53,7 @@ class KyvoriqWidgetProvider : AppWidgetProvider() {
             val bias = when {
                 direction == "LONG" || direction == "SHORT" -> direction
                 engineBias.isNotBlank() -> engineBias
-                else -> "WAIT"
+                else -> "SCANNING"
             }
 
             var openDirection = ""
@@ -178,41 +178,71 @@ class KyvoriqWidgetProvider : AppWidgetProvider() {
             val options = manager.getAppWidgetOptions(appWidgetId)
             val minWidth = options.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH, 180)
             val minHeight = options.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT, 100)
-            val expanded = minWidth >= 250 || minHeight >= 150
+            // Only vertical resizing expands details; width alone should not
+            // turn a slim 4x1 price card back into a bulky two-row widget.
+            val expanded = minHeight >= 170
             val layout = if (expanded) R.layout.widget_kyvoriq_expanded else R.layout.widget_kyvoriq_compact
             val views = RemoteViews(context.packageName, layout)
+
+            views.setViewVisibility(R.id.widget_alerts, if (expanded || minWidth >= 230) android.view.View.VISIBLE else android.view.View.GONE)
 
             val price = prefs.getString(KEY_PRICE, "—") ?: "—"
             val previous = prefs.getString(KEY_PREVIOUS_PRICE, "—") ?: "—"
             val slot = prefs.getInt(KEY_PRICE_SLOT, 0)
             val motion = prefs.getInt(KEY_PRICE_DIRECTION, 0)
             val state = prefs.getString(KEY_STATE, "SCANNING") ?: "SCANNING"
-            val bias = prefs.getString(KEY_BIAS, "WAIT") ?: "WAIT"
+            val bias = prefs.getString(KEY_BIAS, "SCANNING") ?: "SCANNING"
             val health = prefs.getString(KEY_HEALTH, "UNKNOWN") ?: "UNKNOWN"
             val pnl = if (hideAmounts) "••••" else (prefs.getString(KEY_PNL, "—") ?: "—")
 
-            val currentColor = when {
-                motion > 0 -> Color.rgb(54, 211, 153)
-                motion < 0 -> Color.rgb(255, 82, 105)
-                else -> KyvoriqTheme.white
-            }
+            // Brand system: the price is consistently deep gold, regardless of the
+            // previous tick. Direction remains legible in the adjacent arrow.
+            val currentColor = KyvoriqTheme.gold
             val delta = when {
                 motion > 0 -> "▲"
                 motion < 0 -> "▼"
                 else -> "•"
             }
             val deltaColor = when {
-                motion > 0 -> Color.rgb(54, 211, 153)
-                motion < 0 -> Color.rgb(255, 82, 105)
+                motion > 0 -> KyvoriqTheme.gold
+                motion < 0 -> KyvoriqTheme.white
                 else -> KyvoriqTheme.muted
             }
             val biasColor = when (bias) {
-                "LONG", "BULLISH" -> Color.rgb(54, 211, 153)
-                "SHORT", "BEARISH" -> Color.rgb(255, 82, 105)
+                "LONG", "BULLISH" -> KyvoriqTheme.gold
+                "SHORT", "BEARISH" -> KyvoriqTheme.white
                 else -> KyvoriqTheme.gold
             }
-            val healthLabel = if (health == "HEALTHY") "LIVE" else health
-            val healthColor = if (health == "HEALTHY") Color.rgb(54, 211, 153) else KyvoriqTheme.gold
+            // Cached prices are not live after a service stop or expired pairing.
+            val updated = prefs.getLong(KEY_UPDATED, 0L)
+            val quoteFresh = updated > 0L && System.currentTimeMillis() - updated in 0L..20_000L
+            val paired = KyvoriqSecureSession.isPaired(context)
+            // No consumer widget entitlement provider is live yet. Never
+            // expose cached owner market/execution state after local expiry,
+            // logout or device unpairing. Server-verified Pro/Elite projection
+            // must replace this guard before consumer widget launch.
+            if (!paired) {
+                views.setTextViewText(R.id.widget_price_0, "—")
+                views.setTextViewText(R.id.widget_price_1, "—")
+                views.setDisplayedChild(R.id.widget_price_flipper, 0)
+                views.setTextViewText(R.id.widget_delta, "•")
+                views.setTextViewText(R.id.widget_bias, "LOCKED")
+                views.setTextViewText(R.id.widget_health, "SIGN IN")
+                if (expanded) {
+                    views.setTextViewText(R.id.widget_state, "MARKET WIDGET LOCKED")
+                    views.setTextViewText(R.id.widget_pnl, "P&L  PRIVATE")
+                }
+                manager.updateAppWidget(appWidgetId, views)
+                return
+            }
+            val healthLabel = when {
+                !paired -> "PAIR"
+                !quoteFresh -> "STALE"
+                health in setOf("HEALTHY", "LIVE") -> "LIVE"
+                else -> "SYNCING"
+            }
+            val healthColor = if (paired && quoteFresh && health == "HEALTHY")
+                KyvoriqTheme.gold else KyvoriqTheme.muted
 
             if (slot == 0) {
                 views.setTextViewText(R.id.widget_price_0, price)
@@ -224,24 +254,41 @@ class KyvoriqWidgetProvider : AppWidgetProvider() {
             views.setTextColor(R.id.widget_price_0, currentColor)
             views.setTextColor(R.id.widget_price_1, currentColor)
             views.setDisplayedChild(R.id.widget_price_flipper, slot)
-            views.setTextViewText(R.id.widget_delta, delta)
+            views.setTextViewText(R.id.widget_delta, if (paired && quoteFresh) delta else "•")
             views.setTextColor(R.id.widget_delta, deltaColor)
 
-            views.setTextViewText(R.id.widget_state, state)
-            views.setTextViewText(R.id.widget_bias, bias)
+            if (expanded) views.setTextViewText(R.id.widget_state, if (paired) state else "PAIR DEVICE")
+            views.setTextViewText(R.id.widget_bias, if (!paired) "Private" else if (bias == "WAIT") "Scanning" else bias.lowercase().replaceFirstChar { it.uppercase() })
             views.setTextColor(R.id.widget_bias, biasColor)
+            if (!expanded) views.setViewVisibility(R.id.widget_bias, android.view.View.GONE)
             views.setTextViewText(R.id.widget_health, healthLabel)
             views.setTextColor(R.id.widget_health, healthColor)
             if (expanded) {
-                views.setTextViewText(R.id.widget_pnl, "P&L  $pnl")
+                views.setTextViewText(R.id.widget_pnl, if (paired) "P&L  $pnl" else "P&L  PRIVATE")
                 val pnlColor = when {
-                    pnl.startsWith("+") || pnl.startsWith("≈+") -> Color.rgb(54, 211, 153)
-                    pnl.startsWith("-") || pnl.startsWith("≈-") -> Color.rgb(255, 82, 105)
+                    pnl.startsWith("+") || pnl.startsWith("≈+") -> KyvoriqTheme.gold
+                    pnl.startsWith("-") || pnl.startsWith("≈-") -> KyvoriqTheme.white
                     else -> KyvoriqTheme.white
                 }
                 views.setTextColor(R.id.widget_pnl, pnlColor)
             }
 
+            fun destination(name: String, index: Int): PendingIntent {
+                val route = Intent(context, SafeActivity::class.java).apply {
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                    data = android.net.Uri.parse("kyvoriq://widget/$appWidgetId/$name")
+                    putExtra("widget_destination", name)
+                }
+                return PendingIntent.getActivity(context, appWidgetId * 10 + index, route,
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+            }
+            views.setOnClickPendingIntent(R.id.widget_price_flipper, destination("chart", 1))
+            views.setOnClickPendingIntent(R.id.widget_health, destination("insights", 2))
+            views.setOnClickPendingIntent(R.id.widget_alerts, destination("alerts", 3))
+            if (expanded) {
+                views.setOnClickPendingIntent(R.id.widget_chart, destination("chart", 4))
+                views.setOnClickPendingIntent(R.id.widget_positions, destination("positions", 5))
+            }
             val open = Intent(context, SafeActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
             }

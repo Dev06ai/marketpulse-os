@@ -2,77 +2,64 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:orientation="horizontal"
+    android:orientation="vertical"
     android:gravity="center_vertical"
-    android:minHeight="48dp"
     android:background="@drawable/notification_surface"
-    android:paddingLeft="10dp"
-    android:paddingTop="6dp"
-    android:paddingRight="10dp"
-    android:paddingBottom="6dp">
-
-    <FrameLayout
-        android:layout_width="32dp"
-        android:layout_height="32dp"
-        android:background="@drawable/notification_logo_bg"
-        android:padding="6dp">
-
+    android:paddingHorizontal="12dp"
+    android:paddingVertical="8dp">
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="40dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
         <ImageView
             android:id="@+id/notif_logo"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
+            android:layout_width="28dp"
+            android:layout_height="28dp"
+            android:src="@drawable/kyvoriq_emblem_intro_tight"
             android:scaleType="fitCenter"
-            android:contentDescription="KYVORIQ"/>
-    </FrameLayout>
-
-    <LinearLayout
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:layout_weight="1"
-        android:layout_marginStart="9dp"
-        android:layout_marginEnd="8dp"
-        android:orientation="vertical"
-        android:gravity="center_vertical">
-
-        <TextView
-            android:id="@+id/notif_title"
-            android:layout_width="wrap_content"
+            android:contentDescription="KYVORIQ emblem"/>
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_weight="1"
             android:layout_height="wrap_content"
-            android:text="KYVORIQ"
-            android:textColor="#FFCC4E"
-            android:textSize="13sp"
+            android:orientation="vertical"
+            android:layout_marginStart="10dp"
+            android:layout_marginEnd="8dp">
+            <ImageView
+                android:id="@+id/notif_title"
+                android:layout_width="match_parent"
+                android:layout_height="23dp"
+                android:scaleType="fitStart"
+                android:src="@drawable/kyvoriq_concentric_wordmark"
+                android:contentDescription="KYVORIQ"/>
+            <TextView
+                android:id="@+id/notif_subtitle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Secure monitoring active"
+                android:textSize="10sp"
+                android:textColor="#B7B7BA"
+                android:fontFamily="sans-serif-medium"
+                android:includeFontPadding="false"
+                android:maxLines="1"
+                android:ellipsize="end"/>
+        </LinearLayout>
+        <TextView
+            android:id="@+id/notif_chip"
+            android:layout_width="66dp"
+            android:layout_height="26dp"
+            android:text="LIVE"
+            android:textSize="10sp"
+            android:textColor="#111215"
+            android:fontFamily="sans-serif-medium"
+            android:gravity="center"
             android:textStyle="bold"
-            android:fontFamily="sans-serif-condensed"
             android:includeFontPadding="false"
-            android:letterSpacing="0.12"/>
-
-        <TextView
-            android:id="@+id/notif_subtitle"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="1dp"
             android:maxLines="1"
-            android:ellipsize="end"
-            android:text="Signal engine online"
-            android:textColor="#D8F3FA"
-            android:textSize="11sp"
-            android:fontFamily="sans-serif"
-            android:includeFontPadding="false"/>
+            android:autoSizeTextType="uniform"
+            android:autoSizeMinTextSize="8sp"
+            android:autoSizeMaxTextSize="10sp"
+            android:autoSizeStepGranularity="1sp"/>
     </LinearLayout>
-
-    <TextView
-        android:id="@+id/notif_chip"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:minWidth="44dp"
-        android:gravity="center"
-        android:paddingLeft="7dp"
-        android:paddingTop="3dp"
-        android:paddingRight="7dp"
-        android:paddingBottom="3dp"
-        android:text="LIVE"
-        android:textSize="8sp"
-        android:textStyle="bold"
-        android:fontFamily="sans-serif-medium"
-        android:includeFontPadding="false"/>
 </LinearLayout>

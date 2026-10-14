@@ -1,6 +1,5 @@
-"""Fail-closed KYVORIQ Build 140 Android visual and release contract."""
+"""Build 158 non-live Android source contract; intentionally no external trades."""
 from pathlib import Path
-import json
 
 root = Path(__file__).resolve().parent
 src = root / "app/src/main"
@@ -10,46 +9,49 @@ chart = (src / "java/com/devtrader/app/MarketChartView.kt").read_text()
 motion = (src / "java/com/devtrader/app/KyvoriqMotionIdentity.kt").read_text()
 splash = (src / "java/com/devtrader/app/KyvoriqLaunchOverlay.kt").read_text()
 
-assert 'implementation("com.airbnb.android:lottie:6.7.1")' in gradle
-assert 'orNull ?: "140"' in gradle and 'orNull ?: "0.21.15"' in gradle
 assert 'applicationId = "com.devtrader.app"' in gradle
+assert 'orNull ?: "158"' in gradle
+assert 'orNull ?: "0.21.33"' in gradle
+assert 'CONSUMER_PORTAL_URL' in gradle
+assert 'implementation("com.airbnb.android:lottie:6.7.1")' in gradle
+
+# Preserve signed release's emblem, wordmark, visual identity and reduced motion.
 assert 'KyvoriqEmblemMotionView(this)' in activity
 assert 'KyvoriqRazorWordmarkView(this)' in activity
-assert 'CyberpunkHeaderRail(this)' not in activity
-assert 'CyberpunkMarkView(this)' not in activity
-assert 'narrowHeader' in activity and 'identityRow' in activity
-assert 'KyvoriqEmblemMotionView(context)' in splash
+assert 'setImageResource(R.drawable.kyvoriq_emblem_intro_tight)' in splash
 assert 'KyvoriqRazorWordmarkView(context)' in splash
 assert 'showVerificationFrame()' in splash
-assert 'postDelayed(timeout, 1900L)' in splash
-assert 'setAnimation(filename)' in motion
-assert 'LottieDrawable.INFINITE' in motion
-assert 'pauseAnimation()' in motion and 'resumeAnimation()' in motion
-assert 'KyvoriqTheme.motionEnabled(context)' in motion
-assert 'still.visibility' in motion  # static fallback under reduced motion or slow Lottie parse
+assert 'KyvoriqTheme.motionEnabled(context)' in splash
 
-flames = json.loads((src / "assets/kyvoriq_gold_flames.json").read_text())
-wordmark = json.loads((src / "assets/kyvoriq_razor_wordmark.json").read_text())
-intro = json.loads((src / "assets/kyvoriq_ignition_intro.json").read_text())
-assert (flames["w"], flames["h"]) == (280, 280)
-assert (wordmark["w"], wordmark["h"]) == (740, 160)
-assert len(flames["layers"]) >= 12 and len(wordmark["layers"]) >= 10
-assert all(l["ty"] == 4 for l in flames["layers"] + wordmark["layers"])
-names = {l["nm"] for l in wordmark["layers"]}
-assert {f"Letter {c}" for c in "KYVORIQ"} <= names
-assert any("gold emblem" in l.get("nm", "").lower() for l in flames["layers"])
-# Intro is now purely circuit art; foreground emblem and wordmark are separate.
-assert not any(l.get("ty") == 0 for l in intro["layers"])
-assert intro.get("assets", []) == []
-
-# Candle positions, touches, and axis labels must share the same width calculation.
-assert "private fun axisWidth()" in chart
-assert "private fun plotRight(): Float = width - axisWidth()" in chart
-assert "val right = plotRight()" in chart
-assert "touchDownX >= plotRight()" in chart
-assert "right + dp(1f)" in chart
+# Remove product entry points rather than hiding a consumer's empty cards.
+for removed in ('DECISION CENTER', 'SETUP DETAILS', 'TRADINGVIEW CHART',
+                'showTradingViewPreview', 'showTradeDetails'):
+    assert removed not in activity, removed
+assert not (src / "java/com/devtrader/app/TradingViewPreview.kt").exists()
+assert 'listOf("TRADE", "SIGNALS", "INSIGHTS")' in activity
+assert '"COMING SOON"' in activity
+assert 'P&L CALCULATOR' in activity
+assert 'LinearLayout.LayoutParams(-1, dp(44))' in activity
+assert 'accountButton' in activity
+assert 'private fun showConsumerAccountPanel()' in activity
+assert 'android.app.Dialog(this)' in activity
+assert 'private fun showPnlCalculator()' in activity
+assert 'Estimated fee rate per side (%)' in activity
+assert 'Risk budget (USDT)' in activity
+assert 'val pnl = qty * priceMove' not in activity  # gross/net/fees now explicit
+assert 'val gross = qty * priceMove' in activity
+assert 'val net = gross - estimatedFees' in activity
+# Preserve native chart, candle axis geometry and pan/zoom.
+assert 'private fun axisWidth()' in chart
+assert 'private fun plotRight(): Float = width - axisWidth()' in chart
+assert 'val right = plotRight()' in chart
+assert 'touchDownX >= plotRight()' in chart
+assert 'right + dp(1f)' in chart
+assert 'pinchStartZoomX' in chart
 
 for code in (motion, splash):
-    for forbidden in ("WebSocket", "Bitget", "DEMO_EXECUTION_PAUSED", "Runtime.getRuntime", "java.net."):
+    for forbidden in ('WebSocket', 'Bitget', 'DEMO_EXECUTION_PAUSED',
+                      'Runtime.getRuntime', 'java.net.'):
         assert forbidden not in code, forbidden
-print("KYVORIQ_BUILD140_MOTION_AND_CHART_CONTRACT_OK")
+
+print("KYVORIQ_BUILD158_CONSUMER_CHART_AND_BRANDING_CONTRACT_OK")

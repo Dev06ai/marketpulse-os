@@ -10,14 +10,22 @@ android {
         applicationId = "com.devtrader.app"
         minSdk = 26
         targetSdk = 37
-        versionCode = (providers.gradleProperty("devTraderVersionCode").orNull ?: "140").toInt()
-        versionName = providers.gradleProperty("devTraderVersionName").orNull ?: "0.21.15"
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        versionCode = (providers.gradleProperty("devTraderVersionCode").orNull ?: "158").toInt()
+        versionName = providers.gradleProperty("devTraderVersionName").orNull ?: "0.21.33"
         val backendUrl = providers.gradleProperty("devTraderBackendUrl").orNull
             ?: "https://kyvoriq-staging.getvoroa.com"
         require(Regex("https://[A-Za-z0-9.-]+(?::[0-9]+)?/?").matches(backendUrl)) {
             "devTraderBackendUrl must be an HTTPS origin without credentials or a path"
         }
         buildConfigField("String", "BACKEND_BASE_URL", "\"${backendUrl.trimEnd('/')}\"")
+        // Separate hosted consumer identity portal; blank until deployment.
+        val consumerPortal = providers.gradleProperty("kyvoriqConsumerPortalUrl").orNull ?: ""
+        require(consumerPortal.isBlank() ||
+            Regex("https://[A-Za-z0-9.-]+(?::[0-9]+)?/?").matches(consumerPortal)) {
+            "kyvoriqConsumerPortalUrl must be an HTTPS origin without path or credentials"
+        }
+        buildConfigField("String", "CONSUMER_PORTAL_URL", "\"${consumerPortal.trimEnd('/')}\"")
     }
     signingConfigs {
         create("devTraderRelease") {
@@ -41,6 +49,8 @@ android {
     buildFeatures { buildConfig = true }
 }
 dependencies {
+    androidTestImplementation("androidx.test:runner:1.7.0")
+    androidTestImplementation("androidx.test.ext:junit:1.3.0")
     implementation("androidx.core:core-ktx:1.17.0")
     implementation("com.airbnb.android:lottie:6.7.1")
     implementation("androidx.biometric:biometric:1.1.0")

@@ -1,0 +1,86 @@
+name: KYVORIQ Build 157 consumer foundation security + responsive UI
+on:
+  push:
+    branches: ['prep/build157-consumer-foundation']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  visual-and-privacy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.6.0'
+      - name: Verify source privacy, security controls and widget binding
+        run: |
+          set -euo pipefail
+          UI=dev-trader/android/app/src/main/java/com/devtrader/app/SafeActivity.kt
+          WIDGET=dev-trader/android/app/src/main/java/com/devtrader/app/KyvoriqWidgetProvider.kt
+          ! grep -Fq 'dewald_levels_2026_10_12' "$UI"
+          ! grep -Fq 'fallbackLine("NPOC"' "$UI"
+          grep -Fq 'consumeWidgetDestination()' "$UI"
+          grep -Fq 'setOnClickPendingIntent(R.id.widget_alerts' "$WIDGET"
+          grep -Fq 'ServiceUiState.AUTH_REQUIRED' dev-trader/android/app/src/main/java/com/devtrader/app/SignalService.kt
+          grep -Fq 'entryChecksFullText' "$UI"
+          grep -Fq 'showConsumerAccountPanel()' "$UI"
+          grep -Fq 'refreshConsumerPresentation()' "$UI"
+          ! grep -Fq 'musicIsland' "$UI"
+          test ! -f dev-trader/android/app/src/main/java/com/devtrader/app/KyvoriqMusicIsland.kt
+          test ! -f dev-trader/android/app/src/main/java/com/devtrader/app/KyvoriqPrivateMusic.kt
+          grep -Fq 'CONSUMER_PORTAL_URL' dev-trader/android/app/build.gradle.kts
+          ! grep -Fq 'READ_MEDIA_AUDIO' dev-trader/android/app/src/main/AndroidManifest.xml
+          ! find dev-trader/android/app/src/main/assets/ -type f -name '*.mp3' 2>/dev/null | grep -q .
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Run consumer entitlement and identity contract tests
+        run: |
+          python -m pip install -r dev-trader/consumer-api/requirements.txt
+          python -m unittest discover -s dev-trader/consumer-api -p 'test_*.py' -v
+      - name: Compile music-free Build 157 app and instrumentation
+        working-directory: dev-trader/android
+        run: gradle assembleDebug assembleDebugAndroidTest -PdevTraderVersionCode=157 -PdevTraderVersionName=0.21.32 --stacktrace
+      - name: Enable emulator acceleration
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Test small and normal Android viewports
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          profile: pixel_2
+          disable-animations: false
+          script: |
+            set -e
+            mkdir -p ui-check
+            adb start-server || true
+            adb wait-for-device
+            adb install -r dev-trader/android/app/build/outputs/apk/debug/app-debug.apk
+            adb install -r dev-trader/android/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
+            adb shell wm size 720x1280
+            adb shell wm density 320
+            adb shell am instrument -e class com.devtrader.app.BrandVisualTest,com.devtrader.app.KyvoriqResponsiveLayoutTest,com.devtrader.app.ConsumerFoundationVisualTest -w com.devtrader.app.debug.test/androidx.test.runner.AndroidJUnitRunner > ui-check/compact.txt
+            grep -q 'OK (' ui-check/compact.txt
+            adb pull /sdcard/Android/data/com.devtrader.app.debug/files/build157 ui-check/compact-visual
+            adb shell wm size 1080x2400
+            adb shell wm density 420
+            adb shell am instrument -e class com.devtrader.app.BrandVisualTest,com.devtrader.app.KyvoriqResponsiveLayoutTest,com.devtrader.app.ConsumerFoundationVisualTest -w com.devtrader.app.debug.test/androidx.test.runner.AndroidJUnitRunner > ui-check/normal.txt
+            grep -q 'OK (' ui-check/normal.txt
+            adb pull /sdcard/Android/data/com.devtrader.app.debug/files/build157 ui-check/normal-visual
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: build157-consumer-evidence
+          path: |
+            ui-check/
+            dev-trader/android/app/build/outputs/apk/debug/
+          retention-days: 14

@@ -35,6 +35,7 @@ class SignalService : Service() {
         private const val ALERT_PRIORITY_CHANNEL = "kyvoriq_alert_priority_v1"
         private const val ALERT_EXECUTION_CHANNEL = "kyvoriq_alert_execution_v1"
         private const val ALERT_CRITICAL_CHANNEL = "kyvoriq_alert_critical_v1"
+        private const val BTC_PRICE_CHANNEL = "kyvoriq_btc_price_alerts_v1"
         private const val ALERT_PREFS = "kyvoriq_alert_intelligence"
         private const val SERVICE_NOTIFICATION_ID = 3100
         private const val SIGNAL_NOTIFICATION_ID = 3101
@@ -49,7 +50,8 @@ class SignalService : Service() {
         CONNECTING,
         LIVE,
         DEGRADED,
-        RECONNECTING
+        RECONNECTING,
+        AUTH_REQUIRED
     }
 
     private data class ServiceNotificationModel(
@@ -87,6 +89,7 @@ class SignalService : Service() {
     }
     private var socket: WebSocket? = null
     private var reconnectAttempt = 0
+    @Volatile private var authRetryAfterMs = 0L
     private var stopped = false
     private var lastMessageMs = 0L
     private var reconnectScheduled = false
@@ -126,6 +129,17 @@ class SignalService : Service() {
 
     private fun ensureChannels() {
         val manager = getSystemService(NotificationManager::class.java)
+        manager.createNotificationChannel(
+            NotificationChannel(
+                BTC_PRICE_CHANNEL, "KYVORIQ • Custom BTC Price Alerts",
+                NotificationManager.IMPORTANCE_HIGH
+            ).apply {
+                description = "One-time notifications when your chosen BTC prices are reached."
+                enableVibration(true)
+                vibrationPattern = longArrayOf(0, 70, 55, 105)
+                lockscreenVisibility = Notification.VISIBILITY_PRIVATE
+            }
+        )
         manager.createNotificationChannel(
             NotificationChannel(
                 SERVICE_CHANNEL,
@@ -207,7 +221,9 @@ class SignalService : Service() {
 
     private fun connect(force: Boolean = false) {
         if (stopped) return
+        if (!force && System.currentTimeMillis() < authRetryAfterMs) return
         if (force) {
+            authRetryAfterMs = 0L
             reconnectScheduled = false
             runCatching { socket?.cancel() }
             socket = null
@@ -227,6 +243,7 @@ class SignalService : Service() {
                     }
                     reconnectAttempt = 0
                     reconnectScheduled = false
+                    authRetryAfterMs = 0L
                     socket = ws
                     lastMessageMs = System.currentTimeMillis()
                     staleChecks = 0
@@ -238,7 +255,8 @@ class SignalService : Service() {
                             }.toString()
                         )
                     }
-                    updateServiceNotification(ServiceUiState.LIVE)
+                    // A successful handshake is not evidence of valid market data.
+                    updateServiceNotification(ServiceUiState.CONNECTING)
                 }
 
                 override fun onMessage(ws: WebSocket, text: String) {
@@ -247,15 +265,29 @@ class SignalService : Service() {
                         val root = JSONObject(text)
                         when (root.optString("type")) {
                             "market_tick" -> {
+                                runCatching { checkCustomPriceAlerts(root) }
                                 KyvoriqWidgetProvider.updateFromMarketTick(this@SignalService, root)
                                 val health = root.optString("data_health", "UNKNOWN")
                                 updateServiceNotification(
-                                    if (health == "DEGRADED") ServiceUiState.DEGRADED
-                                    else ServiceUiState.LIVE
+                                    when (health) {
+                                        "HEALTHY" -> ServiceUiState.LIVE
+                                        "DEGRADED" -> ServiceUiState.DEGRADED
+                                        else -> ServiceUiState.CONNECTING
+                                    }
                                 )
                                 return
                             }
-                            "state" -> KyvoriqWidgetProvider.updateFromState(this@SignalService, root)
+                            "state" -> {
+                                runCatching { checkCustomPriceAlerts(root) }
+                                KyvoriqWidgetProvider.updateFromState(this@SignalService, root)
+                                updateServiceNotification(
+                                    when (root.optString("data_health", "UNKNOWN")) {
+                                        "HEALTHY" -> ServiceUiState.LIVE
+                                        "DEGRADED" -> ServiceUiState.DEGRADED
+                                        else -> ServiceUiState.CONNECTING
+                                    }
+                                )
+                            }
                             else -> return
                         }
                         val prefs = getSharedPreferences(PREFS, MODE_PRIVATE)
@@ -290,20 +322,28 @@ class SignalService : Service() {
                 override fun onClosed(ws: WebSocket, code: Int, reason: String) {
                     val owned = socket === ws
                     if (owned) socket = null
-                    if (owned) scheduleReconnect()
+                    if (owned) {
+                        if (code == 1008) {
+                            authRetryAfterMs = System.currentTimeMillis() + 60_000L
+                            updateServiceNotification(ServiceUiState.AUTH_REQUIRED)
+                        } else scheduleReconnect()
+                    }
                 }
 
                 override fun onFailure(ws: WebSocket, t: Throwable, response: Response?) {
                     val owned = socket === ws
                     if (owned) socket = null
                     if (owned) {
-                        // Keep the persistent service quiet during a single transient
-                        // socket failure; the reconnect loop is automatic. Surface the
-                        // reconnect state only after repeated failures.
-                        if (reconnectAttempt >= 2) {
-                            updateServiceNotification(ServiceUiState.RECONNECTING)
+                        if (response?.code == 401 || response?.code == 403) {
+                            authRetryAfterMs = System.currentTimeMillis() + 60_000L
+                            updateServiceNotification(ServiceUiState.AUTH_REQUIRED)
+                        } else {
+                            // Do not notify on the first transient disconnect.
+                            if (reconnectAttempt >= 2) {
+                                updateServiceNotification(ServiceUiState.RECONNECTING)
+                            }
+                            scheduleReconnect()
                         }
-                        scheduleReconnect()
                     }
                 }
             }
@@ -402,7 +442,8 @@ class SignalService : Service() {
                 Request.Builder().url(BackendEndpoint.base + "/heartbeat").get().build()
             ).enqueue(object : okhttp3.Callback {
                 override fun onFailure(call: okhttp3.Call, e: java.io.IOException) {
-                    if (!stopped && staleChecks >= 3) {
+                    if (!stopped && staleChecks >= 3 &&
+                        System.currentTimeMillis() >= authRetryAfterMs) {
                         updateServiceNotification(ServiceUiState.RECONNECTING)
                         connect(force = true)
                     }
@@ -411,7 +452,8 @@ class SignalService : Service() {
                 override fun onResponse(call: okhttp3.Call, response: Response) {
                     response.use {
                         if (!it.isSuccessful || it.body == null) {
-                            if (!stopped && staleChecks >= 3) {
+                            if (!stopped && staleChecks >= 3 &&
+                                System.currentTimeMillis() >= authRetryAfterMs) {
                                 updateServiceNotification(ServiceUiState.RECONNECTING)
                                 connect(force = true)
                             }
@@ -436,9 +478,18 @@ class SignalService : Service() {
                             if (backendHealthy) {
                                 if (!stopped) {
                                     staleChecks = 0
+                                    // Public backend health cannot prove the device
+                                    // has authenticated its private WS session.
+                                    val channelActive = socket != null &&
+                                        System.currentTimeMillis() - lastMessageMs < 30_000L
                                     updateServiceNotification(
-                                        if (dataHealth == "DEGRADED") ServiceUiState.DEGRADED
-                                        else ServiceUiState.LIVE
+                                        if (System.currentTimeMillis() < authRetryAfterMs) {
+                                            ServiceUiState.AUTH_REQUIRED
+                                        } else if (!channelActive) {
+                                            ServiceUiState.RECONNECTING
+                                        } else if (dataHealth == "DEGRADED") {
+                                            ServiceUiState.DEGRADED
+                                        } else ServiceUiState.LIVE
                                     )
                                     socket?.send(
                                         JSONObject().apply {
@@ -447,7 +498,8 @@ class SignalService : Service() {
                                         }.toString()
                                     )
                                 }
-                            } else if (!stopped && staleChecks >= 3) {
+                            } else if (!stopped && staleChecks >= 3 &&
+                                System.currentTimeMillis() >= authRetryAfterMs) {
                                 updateServiceNotification(ServiceUiState.RECONNECTING)
                                 connect(force = true)
                             }
@@ -462,24 +514,32 @@ class SignalService : Service() {
         when (state) {
             ServiceUiState.LIVE -> ServiceNotificationModel(
                 chip = "LIVE",
-                subtitle = "Connected • we’re locked in",
-                body = "Watching BTCUSDT • patience is the flex",
+                subtitle = "Secure monitoring active",
+                body = "BTC / USDT · Alerts enabled",
                 chipBackground = R.drawable.notification_chip_live,
                 chipTextColor = getColor(R.color.kyvoriq_charcoal),
                 animate = true
             )
             ServiceUiState.DEGRADED -> ServiceNotificationModel(
-                chip = "DEGRADED",
+                chip = "DELAYED",
                 subtitle = "Market feed needs attention",
                 body = "Monitoring continues • fresh data required for entries",
                 chipBackground = R.drawable.notification_chip_degraded,
                 chipTextColor = getColor(R.color.kyvoriq_charcoal),
                 animate = false
             )
+            ServiceUiState.AUTH_REQUIRED -> ServiceNotificationModel(
+                chip = "PAIRING",
+                subtitle = "Secure session expired",
+                body = "Open KYVORIQ to pair this device securely",
+                chipBackground = R.drawable.notification_chip_degraded,
+                chipTextColor = getColor(R.color.kyvoriq_charcoal),
+                animate = false
+            )
             ServiceUiState.RECONNECTING -> ServiceNotificationModel(
-                chip = "RECONNECTING",
+                chip = "SYNCING",
                 subtitle = "Restoring live monitoring",
-                body = "KYVORIQ is retrying the secure signal channel",
+                body = "Secure connection interrupted. Retrying automatically.",
                 chipBackground = R.drawable.notification_chip_reconnecting,
                 chipTextColor = getColor(R.color.kyvoriq_gold),
                 animate = true
@@ -499,8 +559,8 @@ class SignalService : Service() {
         model: ServiceNotificationModel,
         expanded: Boolean
     ) {
-        views.setImageViewResource(R.id.notif_logo, R.drawable.kyvoriq_mark)
-        views.setTextViewText(R.id.notif_title, "KYVORIQ")
+        views.setImageViewResource(R.id.notif_logo, R.drawable.kyvoriq_emblem_intro_tight)
+        views.setImageViewResource(R.id.notif_title, R.drawable.kyvoriq_concentric_wordmark)
         views.setTextViewText(R.id.notif_subtitle, model.subtitle)
         views.setTextViewText(R.id.notif_chip, model.chip)
         views.setInt(R.id.notif_chip, "setBackgroundResource", model.chipBackground)
@@ -640,6 +700,38 @@ class SignalService : Service() {
         recordAlertTier(tier, title)
         getSystemService(NotificationManager::class.java)
             .notify(SIGNAL_NOTIFICATION_ID, notification)
+    }
+
+    private fun checkCustomPriceAlerts(tick: JSONObject) {
+        // Local foreground service keeps monitoring when the chart activity
+        // is backgrounded. Only fresh, authenticated Bitget WS ticks trigger.
+        val allowed = Build.VERSION.SDK_INT < 33 ||
+            checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) ==
+                android.content.pm.PackageManager.PERMISSION_GRANTED
+        val reached = BtcPriceAlerts.onMarketTick(this, tick, allowed)
+        for (item in reached) {
+            val title = "BTC PRICE ALERT • LEVEL REACHED"
+            val direction = if (item.direction == "ABOVE") "rose to" else "fell to"
+            val body = "BTC $direction your alert at " + format(item.level) +
+                " USDT. Current price " + format(item.observed) + " USDT."
+            val launch = PendingIntent.getActivity(
+                this, 6500, Intent(this, SafeActivity::class.java),
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+            val notification = NotificationCompat.Builder(this, BTC_PRICE_CHANNEL)
+                .setSmallIcon(R.drawable.ic_stat_kyvoriq)
+                .setColor(getColor(R.color.kyvoriq_gold))
+                .setContentTitle(title)
+                .setContentText(body)
+                .setStyle(NotificationCompat.BigTextStyle().bigText(body))
+                .setContentIntent(launch)
+                .setAutoCancel(true)
+                .setPriority(NotificationCompat.PRIORITY_HIGH)
+                .setCategory(Notification.CATEGORY_REMINDER)
+                .build()
+            getSystemService(NotificationManager::class.java)
+                .notify(70000 + (item.id.hashCode() and 0x7fffffff) % 100000, notification)
+        }
     }
 
     private fun notifyTradeEvent(event: JSONObject) {

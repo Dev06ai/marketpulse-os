@@ -139,12 +139,19 @@ class SafeActivity : FragmentActivity() {
     private lateinit var journal: TextView
     private lateinit var tradeHistory: TextView
     private lateinit var replay: TextView
+    private var accountButton: Button? = null
+    private val adminOnlyViews = mutableListOf<View>()
+    private var consumerPositionTab: Button? = null
+    private var consumerWelcomeCard: View? = null
+    private var consumerPageHeading: TextView? = null
+    private var consumerPageSubtitle: TextView? = null
     private lateinit var workspaceHost: FrameLayout
     private val workspacePages = mutableListOf<View>()
     private val navigationButtons = mutableListOf<Button>()
     private lateinit var positionSummary: TextView
     private lateinit var ledgerView: TextView
     private lateinit var decisionView: TextView
+    private var entryChecksFullText = "Awaiting verified entry checks."
     private lateinit var insightContext: TextView
     private lateinit var alertIntelligenceView: TextView
     private lateinit var riskHeatText: TextView
@@ -184,19 +191,40 @@ class SafeActivity : FragmentActivity() {
     private var overlayStrategy: JSONObject? = null
     private var lastBootstrapMs = 0L
     private var lastBootstrapSuccessMs = 0L
+    // Persistent HTTP routing/auth errors must not be hidden by the WS retry UI.
+    private var lastHardHttpStatus: String? = null
+    // Recover transient ingress-level 404 without exposing private data or
+    // permanently trapping a paired owner in view-only mode.
+    private var privateRouteFallback = false
+    private var lastPrivateRouteProbeMs = 0L
+    // Public BTC chart only on unpaired devices; no private account or signals.
+    private var publicMarketOnly = false
+    private var publicMarketMessage: TextView? = null
     private var bootstrapInFlight = false
     private val healthWatchdogRunnable = Runnable { safe { watchdog() } }
     private val snapshotPollRunnable = object : Runnable {
         override fun run() {
             if (stopped) return
             val now = System.currentTimeMillis()
-            if (socket == null || now - lastStateReceivedMs > 5000L) bootstrap(false)
+            if (publicMarketOnly || !KyvoriqSecureSession.isPaired(this@SafeActivity)) {
+                enterPublicMarketMode()
+                requestChartIfNeeded()
+                // Secure owner token remains mandatory; only request a private
+                // snapshot once the paired device can authenticate again.
+                if (privateRouteFallback &&
+                    KyvoriqSecureSession.isPaired(this@SafeActivity) &&
+                    now - lastPrivateRouteProbeMs >= 12_000L) {
+                    lastPrivateRouteProbeMs = now
+                    bootstrap(force = true)
+                }
+            } else if (socket == null || now - lastStateReceivedMs > 5000L) bootstrap(false)
             else requestChartIfNeeded()
             handler.postDelayed(this, 3000L)
         }
     }
 
     private var retryButton: Button? = null
+    private var pairingButton: Button? = null
     private var networkCallback: ConnectivityManager.NetworkCallback? = null
     private var lastSocketActivityMs = 0L
     private var lastRetryRequestMs = 0L
@@ -275,8 +303,26 @@ class SafeActivity : FragmentActivity() {
         ViewCompat.requestApplyInsets(rootSurface)
     }
 
+    // Build 157 removes the retired music feature, including files imported
+    // by old builds. Do not delete user-owned files outside this app sandbox.
+    private fun removeRetiredMusicState() {
+        val oldPrefs = getSharedPreferences("kyvoriq_music_island_v1", Context.MODE_PRIVATE)
+        oldPrefs.all.filterKeys { it.startsWith("uri_") }.values
+            .filterIsInstance<String>().forEach { prior ->
+                runCatching {
+                    contentResolver.releasePersistableUriPermission(
+                        android.net.Uri.parse(prior), Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                }
+            }
+        oldPrefs.edit().clear().commit()
+        runCatching {
+            File(filesDir, "kyvoriq_private_music").deleteRecursively()
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        removeRetiredMusicState()
         WindowCompat.setDecorFitsSystemWindows(window, false)
         window.statusBarColor = kyCharcoal
         window.navigationBarColor = kyCharcoal
@@ -315,17 +361,21 @@ class SafeActivity : FragmentActivity() {
         }
         val privacyLockEnabled = privacyPrefs().getBoolean("biometric_enabled", false)
         enforceInitialPrivacyGate()
-        if (!privacyLockEnabled) showLaunchSequence()
+        if (!privacyLockEnabled) { showLaunchSequence(); consumeWidgetDestination() }
         registerNetworkCallback()
         ensureChannel()
-        startBackgroundAlerts()
-        loadJournal()
-        loadTradeHistory()
+        if (KyvoriqSecureSession.isPaired(this)) {
+            startBackgroundAlerts()
+            loadJournal()
+            loadTradeHistory()
+        } else {
+            enterPublicMarketMode()
+        }
 
         handler.postDelayed({
             safe {
                 bootstrap(true)
-                loadTradeHistory()
+                if (KyvoriqSecureSession.isPaired(this)) loadTradeHistory()
             }
         }, 150L)
         handler.postDelayed({
@@ -335,6 +385,18 @@ class SafeActivity : FragmentActivity() {
             safe { watchdog() }
         }, 3000L)
         handler.postDelayed(keepaliveRunnable, KEEPALIVE_INTERVAL_MS)
+    }
+
+    private fun consumeWidgetDestination() {
+        val destination = intent.getStringExtra("widget_destination") ?: return
+        if (!privacyAuthenticated) return
+        intent.removeExtra("widget_destination")
+        when (destination) {
+            "alerts" -> handler.post { if (!isFinishing && privacyAuthenticated) showBtcPriceAlerts() }
+            "positions" -> selectWorkspace(1)
+            "insights" -> selectWorkspace(2)
+            else -> selectWorkspace(0)
+        }
     }
 
     private fun showLaunchSequence() {
@@ -356,35 +418,235 @@ class SafeActivity : FragmentActivity() {
         if (chartFullscreenHost == null) showChartFullscreen() else closeChartFullscreen()
     }
 
-    private fun showTradingViewPreview() {
-        if (latestChartCandles.length() == 0) {
-            Toast.makeText(this, "Waiting for confirmed market candles. Refresh chart first.", Toast.LENGTH_SHORT).show()
-            requestChartIfNeeded(force = true)
-            return
-        }
-        // Optional, network-dependent WebView with PUBLIC candles/levels only.
-        // Never send Bitget credentials or position/account state to this view.
-        val dialog = android.app.Dialog(this)
-        val surface = LinearLayout(this).apply {
+    private fun showBtcPriceAlerts() {
+        // True native KYVORIQ card: no Android-default gray title/footer bars.
+        // Presentation-only redesign; alert storage, gating and delivery unchanged.
+        fun roundedCard(fill: Int, border: Int, radius: Int = 17) =
+            GradientDrawable().apply {
+                setColor(fill)
+                cornerRadius = dp(radius).toFloat()
+                setStroke(dp(1).coerceAtLeast(1), border)
+            }
+
+        val panel = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(kyCharcoal)
+            setPadding(dp(20), dp(22), dp(20), dp(18))
+            background = GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
+                intArrayOf(Color.rgb(22, 23, 26), Color.rgb(9, 10, 12))).apply {
+                cornerRadius = dp(24).toFloat()
+                setStroke(dp(1).coerceAtLeast(1), Color.rgb(86, 69, 45))
+            }
         }
-        val close = compactPillButton("CLOSE PREVIEW  ×").apply {
-            contentDescription = "Close optional TradingView preview and return to KYVORIQ chart"
-            setOnClickListener { dialog.dismiss() }
+
+        val eyebrow = label("KYVORIQ    /    BTC  •  USDT", 10f, kyDeepGold, 0.10f)
+        panel.addView(eyebrow, margins(bottom = 7))
+        val heading = label("PRICE ALERTS", 23f, kyWhite, 0.025f).apply {
+            typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
+            contentDescription = "BTC PRICE ALERTS"
         }
-        surface.addView(close, LinearLayout.LayoutParams(-1, dp(43)))
-        surface.addView(
-            TradingViewPreview(this, latestChartCandles, chartOverlays(latestRoot)),
-            LinearLayout.LayoutParams(-1, 0, 1f)
-        )
-        dialog.setContentView(surface)
+        panel.addView(heading, margins(bottom = 5))
+        panel.addView(label(
+            "Your level. Your timing. No unnecessary noise.",
+            12f, kyGray, 0f
+        ), margins(bottom = 17))
+
+        val live = latestRoot
+        val quote = live?.optDouble("last_price", Double.NaN) ?: Double.NaN
+        val age = System.currentTimeMillis() - (live?.optLong("last_market_update_ts", 0L) ?: 0L)
+        val fresh = live != null && quote.isFinite() && quote > 0.0 &&
+            live.optString("data_health") == "HEALTHY" &&
+            live.optBoolean("ws_connected") &&
+            live.optJSONObject("upstream")?.optString("source") == "BITGET_WS" &&
+            age in -2_000L..8_000L
+        val liveCard = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(13), dp(11), dp(13), dp(11))
+            background = roundedCard(Color.rgb(29, 30, 33), Color.rgb(53, 52, 50), 15)
+        }
+        val liveLabels = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        liveLabels.addView(label("CURRENT BTC PRICE", 9f, kyGray, 0.065f))
+        liveLabels.addView(label(
+            if (fresh) String.format(Locale.US, "%,.2f  USDT", quote) else "WAITING FOR LIVE DATA",
+            if (fresh) 18f else 12f, kyWhite, 0f
+        ).apply { typeface = Typeface.create("sans-serif-medium", Typeface.BOLD) })
+        liveCard.addView(liveLabels, LinearLayout.LayoutParams(0, -2, 1f))
+        liveCard.addView(label(if (fresh) "● LIVE" else "● OFFLINE", 10f,
+            if (fresh) Color.rgb(68, 215, 179) else kyGray, 0.025f))
+        panel.addView(liveCard, margins(bottom = 18))
+
+        panel.addView(label("TARGET PRICE  /  USDT", 10.5f, kyGold, 0.055f),
+            margins(bottom = 8))
+        val editor = numberField("e.g. 85,000.00", "").apply {
+            contentDescription = "Enter custom BTC price alert target in USDT"
+            textSize = 20f
+            minHeight = dp(54)
+            setSelectAllOnFocus(true)
+            background = roundedCard(Color.rgb(12, 13, 16), Color.rgb(100, 82, 53), 15)
+        }
+        panel.addView(editor, LinearLayout.LayoutParams(-1, dp(56)))
+
+        panel.addView(label(
+            "We'll ping you once when the live Bitget price crosses this level. " +
+                "This alert never places a trade.",
+            11f, kyGray, 0f
+        ), margins(top = 11, bottom = 17))
+
+        val records = BtcPriceAlerts.all(this)
+        val active = (0 until records.length()).mapNotNull { records.optJSONObject(it) }
+            .filter { it.optString("status") == "ARMED" }.asReversed()
+        val activeRow = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
+        activeRow.addView(label("ARMED LEVELS", 11f, kyWhite, 0.08f),
+            LinearLayout.LayoutParams(0, -2, 1f))
+        activeRow.addView(label("${active.size} / 20", 11f, kyGold, 0f))
+        panel.addView(activeRow, margins(bottom = 10))
+
+        val removeActions = mutableListOf<Pair<Button, String>>()
+        if (active.isEmpty()) {
+            val empty = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                gravity = Gravity.CENTER
+                setPadding(dp(10), dp(19), dp(10), dp(19))
+                background = roundedCard(Color.rgb(17, 18, 21), Color.rgb(45, 45, 48))
+            }
+            empty.addView(label("◇   NOTHING ARMED YET", 11.5f, kyWhite, 0.045f).apply {
+                gravity = Gravity.CENTER
+            })
+            empty.addView(label("Add a price above or below BTC.", 10.5f, kyGray, 0f).apply {
+                gravity = Gravity.CENTER
+            }, margins(top = 7))
+            panel.addView(empty, margins(bottom = 15))
+        } else {
+            active.forEach { alert ->
+                val id = alert.optString("id")
+                val target = alert.optDouble("level", Double.NaN)
+                val direction = if (alert.optString("direction") == "ABOVE") "↑ ABOVE" else "↓ BELOW"
+                val row = LinearLayout(this).apply {
+                    gravity = Gravity.CENTER_VERTICAL
+                    setPadding(dp(12), dp(7), dp(8), dp(7))
+                    background = roundedCard(Color.rgb(20, 21, 23), Color.rgb(51, 48, 43), 14)
+                }
+                val text = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+                text.addView(label(direction, 10f, kyDeepGold, 0.06f))
+                text.addView(label(
+                    String.format(Locale.US, "%,.2f  USDT", target),
+                    15f, kyWhite, 0.01f
+                ).apply { typeface = Typeface.create("sans-serif-medium", Typeface.BOLD) })
+                row.addView(text, LinearLayout.LayoutParams(0, -2, 1f))
+                val remove = compactPillButton("✕").apply {
+                    contentDescription = "Remove BTC price alert at " +
+                        String.format(Locale.US, "%.2f", target)
+                }
+                row.addView(remove, LinearLayout.LayoutParams(dp(45), dp(40)))
+                removeActions.add(remove to id)
+                panel.addView(row, margins(bottom = 8))
+            }
+        }
+
+        val triggered = (0 until records.length()).mapNotNull { records.optJSONObject(it) }
+            .filter { it.optString("status") == "TRIGGERED" }.takeLast(3).asReversed()
+        if (triggered.isNotEmpty()) {
+            panel.addView(label("RECENTLY REACHED", 10f, kyGray, 0.07f),
+                margins(top = 8, bottom = 7))
+            triggered.forEach { alert ->
+                panel.addView(label(
+                    "✓  BTC " + String.format(Locale.US, "%,.2f", alert.optDouble("level")) +
+                        " USDT", 11f, kyWhite, 0f
+                ), margins(bottom = 6))
+            }
+        }
+
+        val controls = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
+        val close = compactPillButton("CLOSE").apply {
+            contentDescription = "Close BTC price alerts"
+        }
+        controls.addView(close, LinearLayout.LayoutParams(0, dp(49), 0.37f).apply {
+            rightMargin = dp(9)
+        })
+        val arm = Button(this).apply {
+            text = "SET ALERT  →"
+            isAllCaps = false
+            textSize = 13f
+            typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
+            setTextColor(Color.rgb(11, 10, 9))
+            contentDescription = "Set custom BTC price alert"
+            background = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,
+                intArrayOf(kyGold, kyDeepGold)).apply { cornerRadius = dp(14).toFloat() }
+            minHeight = dp(49)
+            stateListAnimator = null
+        }
+        controls.addView(arm, LinearLayout.LayoutParams(0, dp(49), 0.63f))
+        panel.addView(controls, margins(top = 7))
+        panel.addView(label(
+            "ON-DEVICE MONITORING  •  KEEP ALERTS ENABLED",
+            9f, kyGray, 0.025f
+        ).apply { gravity = Gravity.CENTER }, margins(top = 14))
+
+        val scroll = ScrollView(this).apply {
+            isFillViewport = false
+            clipToOutline = true
+            background = roundedCard(Color.rgb(13, 14, 16), Color.rgb(86, 69, 45), 24)
+            addView(panel, ViewGroup.LayoutParams(-1, -2))
+        }
+        val dialog = android.app.AlertDialog.Builder(this).setView(scroll).create()
+        close.setOnClickListener { haptic(it); dialog.dismiss() }
+        arm.setOnClickListener {
+            val requested = editor.text.toString().trim().replace(",", "").toDoubleOrNull()
+            if (requested == null) {
+                editor.error = "Enter a valid BTC price"
+                return@setOnClickListener
+            }
+            // Preserve strict real-time/Bitget-only admission; no cached quote
+            // can determine the above/below direction when arming.
+            val snapshot = latestRoot
+            val now = System.currentTimeMillis()
+            val quoteTs = snapshot?.optLong("last_market_update_ts", 0L) ?: 0L
+            val livePrice = snapshot?.optDouble("last_price", Double.NaN) ?: Double.NaN
+            val healthy = snapshot != null && snapshot.optString("data_health") == "HEALTHY" &&
+                snapshot.optBoolean("ws_connected") &&
+                snapshot.optJSONObject("upstream")?.optString("source") == "BITGET_WS" &&
+                livePrice.isFinite() && livePrice > 0.0 &&
+                quoteTs > 0 && now - quoteTs in -2_000L..8_000L
+            if (!healthy) {
+                Toast.makeText(this, "Wait for a fresh Bitget BTC price before arming.", Toast.LENGTH_LONG).show()
+                return@setOnClickListener
+            }
+            runCatching { BtcPriceAlerts.add(this, requested, livePrice) }
+                .onSuccess {
+                    chart.setCustomPriceAlerts(BtcPriceAlerts.armedLevels(this))
+                    haptic(chart, KyvoriqHaptics.Cue.CONFIRM)
+                    dialog.dismiss()
+                    Toast.makeText(this, "BTC price alert armed ✦", Toast.LENGTH_SHORT).show()
+                    if (Build.VERSION.SDK_INT >= 33 &&
+                        checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+                    ) startBackgroundAlerts()
+                }.onFailure { error ->
+                    editor.error = error.message ?: "Unable to save price alert"
+                    Toast.makeText(this, error.message ?: "Unable to save alert.", Toast.LENGTH_LONG).show()
+                }
+        }
+        removeActions.forEach { (button, id) ->
+            button.setOnClickListener {
+                if (BtcPriceAlerts.remove(this, id)) {
+                    chart.setCustomPriceAlerts(BtcPriceAlerts.armedLevels(this))
+                    dialog.dismiss()
+                    showBtcPriceAlerts()
+                } else {
+                    Toast.makeText(this, "Unable to remove this alert.", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
         dialog.show()
-        dialog.window?.setLayout(
-            ViewGroup.LayoutParams.MATCH_PARENT,
-            ViewGroup.LayoutParams.MATCH_PARENT
-        )
+        dialog.window?.apply {
+            setBackgroundDrawable(android.graphics.drawable.ColorDrawable(Color.TRANSPARENT))
+            addFlags(android.view.WindowManager.LayoutParams.FLAG_DIM_BEHIND)
+            attributes = attributes.apply { dimAmount = 0.70f }
+            setLayout((resources.displayMetrics.widthPixels * 0.91).toInt(),
+                android.view.WindowManager.LayoutParams.WRAP_CONTENT)
+            setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
+        }
     }
+
 
     private fun showChartFullscreen() {
         if (!::chart.isInitialized || chartFullscreenHost != null) return
@@ -498,13 +760,13 @@ class SafeActivity : FragmentActivity() {
         }
         colorAll("LONG", Color.rgb(54, 211, 153))
         colorAll("SHORT", Color.rgb(255, 82, 105))
-        colorAll("NO TRADE", kyGold)
         signal.text = styled
     }
 
     private fun buildUi() {
         workspacePages.clear()
         navigationButtons.clear()
+        adminOnlyViews.clear()
         val compactViewport = resources.configuration.screenHeightDp < 760
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -512,58 +774,94 @@ class SafeActivity : FragmentActivity() {
                 intArrayOf(kyCharcoal, KyvoriqTheme.slate, kyCharcoal),
                 GradientDrawable.Orientation.TOP_BOTTOM
             )
-            setPadding(dp(10), dp(8), dp(10), dp(8))
+            setPadding(dp(8), dp(8), dp(8), dp(8))
         }
         rootSurface = root
         ViewCompat.setOnApplyWindowInsetsListener(root) { view, insets ->
             val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
-            view.setPadding(dp(10), bars.top + dp(8), dp(10), bars.bottom + dp(8))
+            view.setPadding(dp(8), bars.top + dp(8), dp(8), bars.bottom + dp(8))
             insets
         }
         setContentView(root)
-        val narrowHeader = resources.configuration.screenWidthDp < 400 || resources.configuration.fontScale > 1.2f
+        val config = resources.configuration
+        val availableDp = minOf(config.screenWidthDp,
+            (resources.displayMetrics.widthPixels / resources.displayMetrics.density).toInt())
+        val layout = KyvoriqResponsiveLayout.forViewport(availableDp, config.screenHeightDp, config.fontScale)
+        val narrowHeader = layout.stackedActions
         val header = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         val identityRow = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
-        val actions = LinearLayout(this).apply { gravity = Gravity.END or Gravity.CENTER_VERTICAL }
+        val actions = LinearLayout(this).apply { gravity = Gravity.START or Gravity.CENTER_VERTICAL }
         // Original emblem and custom outlines retain their aspect ratio at every width.
         val brandMark = KyvoriqEmblemMotionView(this)
-        identityRow.addView(brandMark, LinearLayout.LayoutParams(dp(48), dp(48)).apply { rightMargin = dp(5) })
+        identityRow.addView(brandMark, LinearLayout.LayoutParams(dp(layout.emblemDp), dp(layout.emblemDp)).apply { rightMargin = dp(8) })
         val brand = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER_VERTICAL
+            gravity = Gravity.START or Gravity.CENTER_VERTICAL
         }
         brand.addView(KyvoriqRazorWordmarkView(this),
-            LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(30)))
-        brand.addView(label("AI POWERED TRADING", 8f, kyGray, 0.035f).apply {
-            gravity = Gravity.CENTER
-            isSingleLine = true
-        },
-            LinearLayout.LayoutParams(-1, dp(10)))
-        identityRow.addView(brand, LinearLayout.LayoutParams(0, dp(44), 1f).apply { rightMargin = dp(6) })
-        alertsButton = compactPillButton("ALERTS").apply {
+            LinearLayout.LayoutParams(dp(layout.wordmarkWidthDp), dp(layout.wordmarkHeightDp)))
+        brand.addView(ImageView(this).apply {
+            setImageResource(R.drawable.kyvoriq_trade_the_plot)
+            scaleType = ImageView.ScaleType.FIT_CENTER
+            contentDescription = "Trade the Plot"
+            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+        }, LinearLayout.LayoutParams(dp(layout.taglineWidthDp), dp(14)).apply {
+            leftMargin = dp((layout.wordmarkWidthDp - layout.taglineWidthDp - 8).coerceAtLeast(0))
+        })
+        identityRow.addView(brand, LinearLayout.LayoutParams(0, dp(54), 1f))
+        // Consumer-facing entry point. No role, entitlement, or payment is
+        // ever inferred from this button or mutable local Android preferences.
+        val account = compactPillButton(
+            if (KyvoriqSecureSession.isPaired(this)) "ACCOUNT" else "SIGN IN"
+        ).apply {
+            textSize = 10f
+            contentDescription = "Account: sign in or create account"
+            setTextColor(kyGold)
+            setAutoSizeTextTypeUniformWithConfiguration(9, 12, 1, android.util.TypedValue.COMPLEX_UNIT_SP)
+            setOnClickListener {
+                haptic(it, KyvoriqHaptics.Cue.ACTION)
+                showConsumerAccountPanel()
+            }
+        }
+        accountButton = account
+        identityRow.addView(account, LinearLayout.LayoutParams(dp(76), dp(40)).apply {
+            rightMargin = dp(if (narrowHeader) 0 else 6)
+        })
+        alertsButton = compactPillButton(compactHeaderLabel("ALERTS")).apply {
             contentDescription = "Enable trade alerts"
+            textSize = if (layout.compactActions) 11f else 12f
             isSingleLine = true
-            setAutoSizeTextTypeUniformWithConfiguration(7, 10, 1, android.util.TypedValue.COMPLEX_UNIT_SP)
+            setAutoSizeTextTypeUniformWithConfiguration(10, 13, 1, android.util.TypedValue.COMPLEX_UNIT_SP)
         }
         alertsButton.setOnClickListener {
             haptic(it, KyvoriqHaptics.Cue.ACTION)
-            safe { requestAlertPermission() }
+            if (KyvoriqSecureSession.isPaired(this)) {
+                safe { requestAlertPermission() }
+            } else {
+                showConsumerPlans()
+            }
         }
-        actions.addView(alertsButton, LinearLayout.LayoutParams(dp(69), dp(42)).apply { rightMargin = dp(4) })
-        retryButton = compactPillButton("RETRY").apply {
+        actions.addView(alertsButton,
+            LinearLayout.LayoutParams(if (narrowHeader) 0 else dp(layout.alertsDp), dp(40), if (narrowHeader) 1f else 0f).apply {
+                rightMargin = dp(5)
+            })
+        retryButton = compactPillButton(compactHeaderLabel("RETRY", retry = true)).apply {
             contentDescription = "Reconnect market data"
             isSingleLine = true
-            setAutoSizeTextTypeUniformWithConfiguration(7, 10, 1, android.util.TypedValue.COMPLEX_UNIT_SP)
+            setAutoSizeTextTypeUniformWithConfiguration(10, 13, 1, android.util.TypedValue.COMPLEX_UNIT_SP)
         }
         retryButton?.setOnClickListener {
             haptic(it, KyvoriqHaptics.Cue.ACTION)
             safe { forceReconnectFromUser() }
         }
-        actions.addView(retryButton, LinearLayout.LayoutParams(dp(56), dp(42)))
+        actions.addView(retryButton,
+            LinearLayout.LayoutParams(if (narrowHeader) 0 else dp(layout.retryDp), dp(40), if (narrowHeader) 1f else 0f).apply {
+                leftMargin = dp(5)
+            })
         if (!narrowHeader) identityRow.addView(actions, LinearLayout.LayoutParams(-2, -2))
         header.addView(identityRow, LinearLayout.LayoutParams(-1, -2))
-        if (narrowHeader) header.addView(actions, LinearLayout.LayoutParams(-1, dp(44)))
-        root.addView(header, margins(bottom = 7))
+        if (narrowHeader) header.addView(actions, LinearLayout.LayoutParams(-1, dp(40)).apply { topMargin = dp(8) })
+        root.addView(header, margins(bottom = 10))
 
         workspaceHost = FrameLayout(this)
         root.addView(workspaceHost, LinearLayout.LayoutParams(-1, 0, 1f))
@@ -585,7 +883,18 @@ class SafeActivity : FragmentActivity() {
         val tradePage = page(scrollable = true)
         val hero = heroCard()
         price = hero.price; oiView = hero.oi; status = hero.status
-        tradePage.addView(hero.container, margins(bottom = 6))
+        tradePage.addView(hero.container, margins(bottom = 10))
+        publicMarketMessage = label(
+            "FREE • BTC MARKET DATA\nPro and Elite subscriptions are not active yet. Private execution stays owner-only.",
+            11f, kyGold, 0f
+        ).apply {
+            setPadding(dp(12), dp(11), dp(12), dp(11))
+            background = KyvoriqTheme.surface(this@SafeActivity, radius = 12f)
+            visibility = View.GONE
+            contentDescription = "Public read-only chart. Owner pairing required for private tools."
+            setOnClickListener { showPublicAccessInfo() }
+        }
+        tradePage.addView(publicMarketMessage!!, margins(bottom = 8))
         val tfRow = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
         listOf("5m", "15m", "1h", "4h").forEach { tf ->
             val button = compactPillButton(tf).apply { contentDescription = "Chart $tf" }
@@ -596,87 +905,64 @@ class SafeActivity : FragmentActivity() {
                 refreshTimeframeButtons(tfRow)
                 requestChartIfNeeded(force = true)
             }
-            tfRow.addView(button, LinearLayout.LayoutParams(0, dp(38), 1f).apply { leftMargin = dp(2); rightMargin = dp(2) })
+            tfRow.addView(button, LinearLayout.LayoutParams(0, dp(40), 1f).apply { leftMargin = dp(2); rightMargin = dp(2) })
         }
         timeframeButtonRow = tfRow
-        tradePage.addView(tfRow, margins(bottom = 4))
+        tradePage.addView(tfRow, margins(bottom = 8))
         chart = MarketChartView(this).apply {
-            minimumHeight = dp(if (compactViewport) 325 else 430)
+            minimumHeight = dp(if (compactViewport) 240 else 275)
             contentDescription = "Interactive price chart"
             onFullscreenRequested = { toggleChartFullscreen() }
         }
         tradePage.addView(
             chart,
-            LinearLayout.LayoutParams(-1, dp(if (compactViewport) 355 else 470)).apply {
-                leftMargin = -dp(10)
-                rightMargin = -dp(10)
-                bottomMargin = dp(10)
+            LinearLayout.LayoutParams(-1, dp(if (compactViewport) 240 else 275)).apply {
+                leftMargin = 0
+                rightMargin = 0
+                bottomMargin = dp(12)
             }
         )
-        // Native chart remains default; v5 lightweight renderer is a
-        // manually opened beta preview with no order-placement capability.
-        val tvPreviewButton = compactPillButton("TRADINGVIEW CHART  ↗").apply {
-            contentDescription = "Open optional TradingView Lightweight Charts preview"
-            setOnClickListener { showTradingViewPreview() }
+        chart.setCustomPriceAlerts(BtcPriceAlerts.armedLevels(this))
+        val priceAlertsButton = compactPillButton("＋  BTC PRICE ALERTS").apply {
+            contentDescription = "Create or remove custom BTC price alerts"
+            setOnClickListener {
+                haptic(it, KyvoriqHaptics.Cue.ACTION)
+                showBtcPriceAlerts()
+            }
         }
-        tradePage.addView(tvPreviewButton, LinearLayout.LayoutParams(-1, dp(37)).apply {
-            bottomMargin = dp(8)
+        tradePage.addView(priceAlertsButton, LinearLayout.LayoutParams(-1, dp(42)).apply {
+            bottomMargin = dp(7)
         })
-        val setup = premiumCard("DECISION CENTER", "NO TRADE  •  SCANNING\nWaiting for verified market data.", if (compactViewport) 11.5f else 13f)
-        decisionContainer = setup.first
-        signal = setup.second
-        signal.maxLines = if (compactViewport) 4 else 5
-        signal.setLineSpacing(0f, 1.12f)
-        signal.ellipsize = android.text.TextUtils.TruncateAt.END
-        setup.first.setOnClickListener {
-            haptic(it, KyvoriqHaptics.Cue.TAP)
-            showTradeDetails()
+        adminOnlyViews.add(priceAlertsButton)
+        // A full-width entry card, without a calculator form on the resting chart.
+        val pnl = compactPillButton("P&L CALCULATOR   ↗").apply {
+            contentDescription = "Open manual profit and loss and risk calculator"
+            setOnClickListener {
+                haptic(it, KyvoriqHaptics.Cue.ACTION)
+                safe { showPnlCalculator() }
+            }
         }
-        setup.first.contentDescription = "Open complete trade setup"
-        val decisionHost = FrameLayout(this).apply {
-            clipChildren = false
-            clipToPadding = false
-        }
-        decisionHost.addView(setup.first, FrameLayout.LayoutParams(-1, -1))
-        decisionMotionView = DecisionMotionView(this)
-        decisionHost.addView(decisionMotionView, FrameLayout.LayoutParams(-1, -1))
-        tradePage.addView(decisionHost, LinearLayout.LayoutParams(-1, dp(if (compactViewport) 96 else 118)).apply { bottomMargin = dp(6) })
-        val tradeTools = LinearLayout(this)
-        val details = compactPillButton("SETUP DETAILS")
-        details.setOnClickListener {
-            haptic(it, KyvoriqHaptics.Cue.TAP)
-            showTradeDetails()
-        }
-        tradeTools.addView(details, LinearLayout.LayoutParams(0, dp(42), 1f).apply { rightMargin = dp(6) })
-        val pnl = compactPillButton("P&L CALCULATOR")
-        pnl.setOnClickListener {
-            haptic(it, KyvoriqHaptics.Cue.ACTION)
-            safe { showPnlCalculator() }
-        }
-        tradeTools.addView(pnl, LinearLayout.LayoutParams(0, dp(42), 1f))
-        tradePage.addView(tradeTools)
+        tradePage.addView(pnl, LinearLayout.LayoutParams(-1, dp(44)).apply {
+            bottomMargin = dp(3)
+        })
         refreshTimeframeButtons(tfRow)
 
+        // Signals are locked for all plans, including Elite.
         val positionsPage = page(scrollable = true)
-        positionsPage.addView(label("POSITIONS", 20f, kyWhite, 0.01f), margins(top = 6, bottom = 5))
-        positionsPage.addView(label("Demo account  /  position monitoring", 10f, kyGray, 0.015f), margins(bottom = 12))
-        val overview = premiumCard("DEMO PERFORMANCE", "Waiting for exchange accounting…", 18f)
-        positionSummary = overview.second
-        positionsPage.addView(overview.first, margins(bottom = 10))
+        positionsPage.addView(label("SIGNALS", 20f, kyWhite, 0.01f),
+            margins(top = 14, bottom = 8))
+        val signalLock = premiumCard("COMING SOON",
+            "Signals are under private forward testing.\n\n" +
+            "Free, Pro and Elite currently unlock no trade recommendations, " +
+            "exchange connections or automated orders.\n\n" +
+            "Market levels and chart analysis are independent of future signals.", 13f)
+        positionsPage.addView(signalLock.first, margins(top = 6, bottom = 12))
+        // Nonvisual buffers maintain private engine compatibility only.
+        signal = TextView(this)
+        positionSummary = TextView(this)
         curve = PerformanceCurveView(this)
-        positionsPage.addView(curve, LinearLayout.LayoutParams(-1, dp(if (compactViewport) 90 else 130)).apply { bottomMargin = dp(10) })
-        val ledgerCard = compactCard("ACCOUNTING & RISK", "Checking fills and exposure…", 12f)
-        ledgerView = ledgerCard.value
-        positionsPage.addView(ledgerCard.container, margins(bottom = 10))
-        val exposureCard = scrollableCard("EXCHANGE POSITIONS", "No verified position data yet.", 13f, dp(182), expandToFill = false)
-        tradeHistory = exposureCard.value
-        positionsPage.addView(exposureCard.container, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(10) })
-        val historyButton = compactPillButton("OPEN EXECUTION HISTORY")
-        historyButton.setOnClickListener {
-            haptic(it, KyvoriqHaptics.Cue.ACTION)
-            safe { loadTradeHistory(); showInfoDialog("Execution history", fullTradeHistoryText) }
-        }
-        positionsPage.addView(historyButton, LinearLayout.LayoutParams(-1, dp(44)))
+        ledgerView = TextView(this)
+        tradeHistory = TextView(this)
 
         val insightsPage = page()
         val insightsScroll = ScrollView(this).apply {
@@ -689,8 +975,10 @@ class SafeActivity : FragmentActivity() {
         }
         insightsScroll.addView(insightsContent, FrameLayout.LayoutParams(-1, -2))
         insightsPage.addView(insightsScroll, LinearLayout.LayoutParams(-1, 0, 1f))
-        insightsContent.addView(label("INSIGHTS", 20f, kyWhite, 0.01f), margins(top = 6, bottom = 5))
-        insightsContent.addView(label("Live market intelligence  /  verified engine context", 10f, kyGray, 0.01f), margins(bottom = 12))
+        consumerPageHeading = label("INSIGHTS", 19f, kyWhite, 0.01f)
+        insightsContent.addView(consumerPageHeading, margins(top = 6, bottom = 6))
+        consumerPageSubtitle = label("Verified market intelligence", 11f, kyGray, 0.01f)
+        insightsContent.addView(consumerPageSubtitle, margins(bottom = 14))
 
         // Filter only existing, truthful live telemetry. No invented holder, heatmap or flow data.
         var selectedInsightTab = 0
@@ -718,24 +1006,42 @@ class SafeActivity : FragmentActivity() {
                 }
             }
             insightTabs.add(button)
-            insightTabsRow.addView(button, LinearLayout.LayoutParams(0, dp(40), 1f).apply {
+            insightTabsRow.addView(button, LinearLayout.LayoutParams(0, dp(38), 1f).apply {
                 leftMargin = dp(2); rightMargin = dp(2)
             })
         }
         insightsContent.addView(insightTabsRow, margins(bottom = 12))
+        adminOnlyViews.add(insightTabsRow)
+        consumerWelcomeCard = premiumCard(
+            "YOUR KYVORIQ ACCOUNT",
+            "FREE  •  Bollinger Bands, 50 EMA, SFP watch references.\n" +
+            "PRO  •  Daily, weekly and NPOC levels and eligible alerts.\n" +
+            "ELITE  •  Order blocks, D-line, VAH and VAL.\n\n" +
+            "Signals remain locked for every tier. Purchases are not active until " +
+            "server-verified accounts and billing are ready.", 12f
+        ).first.apply {
+            setOnClickListener { showConsumerAccountPanel() }
+        }
+        insightsContent.addView(consumerWelcomeCard, margins(bottom = 12))
 
-        val story = premiumCard("MARKET CONTEXT", "Reading the market…", 13f)
+        val story = premiumCard("MARKET CONTEXT", "Reading the market…", 12.5f)
         features = story.second
-        features.maxLines = 8
-        insightsContent.addView(story.first, margins(bottom = 10))
+        features.maxLines = 7
+        features.ellipsize = android.text.TextUtils.TruncateAt.END
+        story.first.setOnClickListener {
+            haptic(it, KyvoriqHaptics.Cue.TAP)
+            showInfoDialog("Market context", features.text.toString())
+        }
+        insightsContent.addView(story.first, margins(bottom = 12))
+        adminOnlyViews.add(story.first)
 
-        val decisions = scrollableCard("ENTRY CHECKS", "Waiting for a qualified setup…", 12.5f, dp(if (compactViewport) 142 else 158))
-        decisionView = decisions.value
-        insightsContent.addView(decisions.container, margins(bottom = 10))
+        // Private entry-check computation remains independent of consumer UI.
+        decisionView = TextView(this)
 
         val alertCard = compactCard("ALERT INTELLIGENCE", "Info • No spam, just the real updates.", 12.5f)
         alertIntelligenceView = alertCard.value
         insightsContent.addView(alertCard.container, margins(bottom = 10))
+        adminOnlyViews.add(alertCard.container)
 
         val riskCard = compactCard("POSITION RISK HEAT", "Idle • No open demo position.", 12.5f)
         riskHeatText = riskCard.value
@@ -749,16 +1055,20 @@ class SafeActivity : FragmentActivity() {
             LinearLayout.LayoutParams(-1, dp(42)).apply { topMargin = dp(4); bottomMargin = dp(2) }
         )
         insightsContent.addView(riskCard.container, margins(bottom = 10))
+        adminOnlyViews.add(riskCard.container)
 
         val levels = compactCard("LEVELS & FLOW", "Loading confirmed context…", 12.5f)
         insightContext = levels.value
         insightsContent.addView(levels.container, margins(bottom = 10))
+        adminOnlyViews.add(levels.container)
         val feed = compactCard("CONNECTION", "Bitget • Connecting", 12.5f)
         integrity = feed.value
         insightsContent.addView(feed.container, margins(bottom = 10))
+        adminOnlyViews.add(feed.container)
         val sys = compactCard("SYSTEM", "Build ${BuildConfig.VERSION_CODE} • Checking…", 12.5f)
         check = sys.value
         insightsContent.addView(sys.container, margins(bottom = 10))
+        adminOnlyViews.add(sys.container)
 
         val tools = LinearLayout(this)
         checkButton = compactPillButton("SYSTEM CHECK")
@@ -774,6 +1084,7 @@ class SafeActivity : FragmentActivity() {
         }
         tools.addView(updateButton, LinearLayout.LayoutParams(0, dp(44), 1f))
         insightsContent.addView(tools, margins(bottom = 8))
+        adminOnlyViews.add(tools)
 
         val deviceTools = LinearLayout(this)
         privacyButton = compactPillButton("PRIVACY")
@@ -789,17 +1100,19 @@ class SafeActivity : FragmentActivity() {
         }
         deviceTools.addView(widgetButton, LinearLayout.LayoutParams(0, dp(44), 1f))
         insightsContent.addView(deviceTools)
+        adminOnlyViews.add(deviceTools)
         val pairButton = compactPillButton(
             if (KyvoriqSecureSession.isPaired(this)) "DEVICE PAIRED  •  SECURE" else "PAIR DEVICE  •  PRIVATE API"
         )
+        pairingButton = pairButton
         pairButton.setOnClickListener {
             haptic(it, KyvoriqHaptics.Cue.ACTION)
             showPairingDialog(pairButton)
         }
         insightsContent.addView(pairButton, margins(top = 7, bottom = 8))
+        adminOnlyViews.add(pairButton)
         insightSections.addAll(listOf(
             1 to story.first,
-            1 to decisions.container,
             2 to alertCard.container,
             2 to riskCard.container,
             1 to levels.container,
@@ -813,7 +1126,6 @@ class SafeActivity : FragmentActivity() {
         insightsMotionViews.addAll(
             listOf(
                 story.first,
-                decisions.container,
                 alertCard.container,
                 riskCard.container,
                 levels.container,
@@ -830,7 +1142,7 @@ class SafeActivity : FragmentActivity() {
             setPadding(dp(3), dp(4), dp(3), dp(4))
             background = KyvoriqTheme.surface(this@SafeActivity, radius = 18f)
         }
-        listOf("TRADE", "POSITIONS", "INSIGHTS").forEachIndexed { index, title ->
+        listOf("TRADE", "SIGNALS", "INSIGHTS").forEachIndexed { index, title ->
             val button = compactPillButton(title.lowercase(Locale.US).replaceFirstChar { it.titlecase(Locale.US) }).apply { contentDescription = "Workspace $title"; textSize = 11f
                 compoundDrawablePadding = dp(5)
                 val icon = getDrawable(listOf(R.drawable.ic_nav_trade, R.drawable.ic_nav_positions, R.drawable.ic_nav_insights)[index])!!.mutate()
@@ -844,11 +1156,209 @@ class SafeActivity : FragmentActivity() {
                 selectWorkspace(index)
             }
             navigationButtons.add(button)
-            navigation.addView(button, LinearLayout.LayoutParams(0, dp(48), 1f).apply { leftMargin = dp(3); rightMargin = dp(3) })
+            if (index == 1) consumerPositionTab = button
+            navigation.addView(button, LinearLayout.LayoutParams(0, dp(44), 1f).apply { leftMargin = dp(3); rightMargin = dp(3) })
         }
-        root.addView(navigation, margins(top = 10))
+        root.addView(navigation, margins(top = 8))
+        // Allocate actual remaining workspace height to candles after layout
+        // and system insets. Small and landscape screens can scroll naturally.
+        workspaceHost.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
+            if (!::chart.isInitialized || chartFullscreenHost != null) return@addOnLayoutChangeListener
+            val viewportHeight = workspaceHost.height
+            if (viewportHeight <= 0) return@addOnLayoutChangeListener
+            var fixedContent = 0
+            for (i in 0 until tradePage.childCount) {
+                val child = tradePage.getChildAt(i)
+                if (child === chart || child.visibility == View.GONE) continue
+                val lp = child.layoutParams as? ViewGroup.MarginLayoutParams
+                fixedContent += child.measuredHeight + (lp?.topMargin ?: 0) + (lp?.bottomMargin ?: 0)
+            }
+            val minPlot = dp(if (resources.configuration.orientation ==
+                android.content.res.Configuration.ORIENTATION_LANDSCAPE) 210 else 265)
+            val proposed = maxOf(minPlot, viewportHeight - fixedContent - dp(8))
+            if (kotlin.math.abs(chart.layoutParams.height - proposed) > dp(1)) {
+                chart.layoutParams = chart.layoutParams.apply { height = proposed }
+                chart.requestLayout()
+            }
+        }
         update = TextView(this); risk = TextView(this); journal = TextView(this); replay = TextView(this)
         selectWorkspace(0)
+        refreshConsumerPresentation()
+    }
+
+    /**
+     * APK visibility is a presentation rule only. The backend remains the sole
+     * enforcement point for paid capabilities, account ownership and payment.
+     * Existing owner pairing is the only recognized admin credential during migration.
+     */
+    private fun refreshConsumerPresentation() {
+        val owner = KyvoriqSecureSession.isPaired(this)
+        adminOnlyViews.forEach { it.visibility = if (owner) View.VISIBLE else View.GONE }
+        consumerPositionTab?.visibility = View.VISIBLE
+        consumerWelcomeCard?.visibility = if (owner) View.GONE else View.VISIBLE
+        consumerPageHeading?.text = "INSIGHTS"
+        consumerPageSubtitle?.text = if (owner) "Private market intelligence" else "Market levels and account access"
+        // Consistent consumer navigation; Signals remains locked for all tiers.
+        navigationButtons.getOrNull(0)?.text = "Trade"
+        navigationButtons.getOrNull(1)?.text = "Signals"
+        navigationButtons.getOrNull(2)?.apply {
+            text = "Insights"
+            contentDescription = "Workspace INSIGHTS"
+        }
+        accountButton?.text = if (owner) "ACCOUNT" else "SIGN IN"
+        accountButton?.contentDescription =
+            if (owner) "Admin account and management" else "Sign in or create a KYVORIQ account"
+    }
+
+    private fun showConsumerAccountPanel() {
+        // This is a custom adaptive panel, not a stock platform AlertDialog.
+        // It never changes chart scroll, zoom, timeframe or selected workspace.
+        val ownerDevice = KyvoriqSecureSession.isPaired(this)
+        val dialog = android.app.Dialog(this)
+        val surface = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(20), dp(18), dp(20), dp(18))
+            background = GradientDrawable().apply {
+                setColor(Color.rgb(16, 17, 20))
+                cornerRadius = dp(25).toFloat()
+                setStroke(dp(1), Color.rgb(83, 68, 41))
+            }
+        }
+        val header = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
+        val identity = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(2), 0, 0, 0)
+        }
+        identity.addView(label("KYVORIQ  /  ACCOUNT", 10f, kyGold, 0.095f))
+        identity.addView(label(
+            if (ownerDevice) "Private device access" else "Your KYVORIQ",
+            20f, kyWhite, 0f
+        ), margins(top = 5))
+        header.addView(identity, LinearLayout.LayoutParams(0, -2, 1f))
+        val close = compactPillButton("✕").apply {
+            contentDescription = "Close KYVORIQ account panel"
+            textSize = 16f
+            setOnClickListener { dialog.dismiss() }
+        }
+        header.addView(close, LinearLayout.LayoutParams(dp(48), dp(48)))
+        surface.addView(header, margins(bottom = 14))
+        val statusLine = label(
+            if (ownerDevice) "Device paired to private owner API • server authorization required"
+            else "FREE  •  Market chart access without a subscription",
+            10.5f, kyGray, 0f
+        ).apply { setPadding(dp(12), dp(12), dp(12), dp(12))
+            background = KyvoriqTheme.surface(this@SafeActivity, radius = 12f)
+        }
+        surface.addView(statusLine, margins(bottom = 14))
+        fun actionRow(glyph: String, heading: String, subtitle: String, destination: () -> Unit) {
+            val row = LinearLayout(this).apply {
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(dp(14), dp(8), dp(12), dp(8))
+                background = KyvoriqTheme.surface(this@SafeActivity, radius = 14f)
+                isClickable = true
+                isFocusable = true
+                minimumHeight = dp(58)
+                contentDescription = "$heading. $subtitle"
+                setOnClickListener {
+                    haptic(it, KyvoriqHaptics.Cue.ACTION)
+                    dialog.dismiss()
+                    destination()
+                }
+            }
+            row.addView(label(glyph, 19f, kyGold, 0f),
+                LinearLayout.LayoutParams(dp(36), -2))
+            val copy = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+            copy.addView(label(heading, 13f, kyWhite, 0f))
+            copy.addView(label(subtitle, 10f, kyGray, 0f), margins(top = 3))
+            row.addView(copy, LinearLayout.LayoutParams(0, -2, 1f))
+            row.addView(label("›", 22f, kyGold, 0f))
+            surface.addView(row, margins(bottom = 8))
+        }
+        if (ownerDevice) {
+            actionRow("◆", "Owner access", "Paired device • verified on each protected request") {
+                showInfoDialog("Private access",
+                    "This device holds an encrypted, expiring owner API token. " +
+                    "Administrative requests are verified by the server. " +
+                    "Full account and subscription administration is not yet configured.")
+            }
+            actionRow("◈", "Security and device pairing", "Review or renew private access") {
+                pairingButton?.let { showPairingDialog(it) }
+            }
+            actionRow("◉", "Privacy controls", "Protect access on this device") {
+                showPrivacyControls()
+            }
+        } else {
+            actionRow("→", "Log in", "Secure consumer account sign-in") {
+                openConsumerPortal("login")
+            }
+            actionRow("+", "Sign up", "Create a KYVORIQ account") {
+                openConsumerPortal("signup")
+            }
+            actionRow("◇", "Owner device pairing", "Requires private server authorization") {
+                pairingButton?.let { showPairingDialog(it) }
+            }
+        }
+        actionRow("✦", "Compare Free / Pro / Elite", "Chart levels and notification eligibility") {
+            showConsumerPlans()
+        }
+        surface.addView(label(
+            "Signals are coming soon for all plans. Paid checkout is not active.",
+            10f, kyGray, 0f
+        ).apply { gravity = Gravity.CENTER }, margins(top = 8, bottom = 2))
+
+        val scroll = ScrollView(this).apply {
+            clipToOutline = true
+            overScrollMode = View.OVER_SCROLL_IF_CONTENT_SCROLLS
+            addView(surface, ViewGroup.LayoutParams(-1, -2))
+        }
+        dialog.setContentView(scroll)
+        dialog.setCancelable(true)
+        dialog.show()
+        dialog.window?.apply {
+            setBackgroundDrawable(android.graphics.drawable.ColorDrawable(Color.TRANSPARENT))
+            addFlags(android.view.WindowManager.LayoutParams.FLAG_DIM_BEHIND)
+            attributes = attributes.apply {
+                dimAmount = 0.72f
+                gravity = if (resources.configuration.screenWidthDp < 600)
+                    Gravity.BOTTOM else Gravity.CENTER
+                windowAnimations = if (KyvoriqTheme.motionEnabled(this@SafeActivity))
+                    android.R.style.Animation_Dialog else 0
+            }
+            val fullWidth = resources.displayMetrics.widthPixels
+            val sheetWidth = if (resources.configuration.screenWidthDp < 600)
+                fullWidth - dp(12) else minOf(dp(460), fullWidth - dp(40))
+            setLayout(sheetWidth, ViewGroup.LayoutParams.WRAP_CONTENT)
+            setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
+        }
+    }
+
+    private fun showConsumerPlans() {
+        showInfoDialog("KYVORIQ access levels",
+            "FREE • Bollinger Bands, 50 EMA, SFP watch references. No market alerts.\n\n" +
+            "PRO • Adds daily, weekly and NPOC levels and eligible alerts.\n\n" +
+            "ELITE • Adds order blocks, D-line, VAH and VAL and eligible alerts.\n\n" +
+            "OWNER • Private management and testing.\n\n" +
+            "Signals remain Coming soon for every plan. Checkout is unavailable " +
+            "until server-verified accounts and subscriptions are operational.")
+    }
+
+    private fun openConsumerPortal(destination: String) {
+        val base = BuildConfig.CONSUMER_PORTAL_URL.trimEnd('/')
+        if (base.isBlank()) {
+            showInfoDialog("Accounts being prepared",
+                "Secure consumer account registration is not live yet. For now the Free market chart is available without an account. No payments are being collected.")
+            return
+        }
+        val uri = android.net.Uri.parse("$base/$destination")
+        if (uri.scheme != "https" || !setOf("login", "signup").contains(destination)) {
+            showInfoDialog("Account unavailable", "Untrusted sign-in destination blocked.")
+            return
+        }
+        runCatching {
+            startActivity(Intent(Intent.ACTION_VIEW, uri).addCategory(Intent.CATEGORY_BROWSABLE))
+        }.onFailure {
+            showInfoDialog("Account unavailable", "No safe browser is available for account sign-in.")
+        }
     }
 
     private fun selectWorkspace(index: Int) {
@@ -898,26 +1408,6 @@ class SafeActivity : FragmentActivity() {
         }
     }
 
-    private fun showTradeDetails() {
-        val s = latestRoot?.optJSONObject("signal")
-        if (s == null) {
-            showInfoDialog("Decision center", decisionView.text.toString())
-            return
-        }
-        val thesis = s.optJSONArray("thesis") ?: JSONArray()
-        val explanation = (0 until thesis.length()).joinToString("\n") { "• " + thesis.optString(it) }
-        val entries = latestRoot?.optJSONObject("execution")?.optJSONArray("recent_trades") ?: JSONArray()
-        val actual = (0 until entries.length()).mapNotNull { entries.optJSONObject(it) }
-            .firstOrNull { it.optString("signal_id") == s.optString("id") }
-        val fillDetails = if (actual != null && actual.optBoolean("actual_fill_confirmed"))
-            "\nExchange fill  ${formatCompact(actual.optDouble("entry_price"))}\nQuantity  ${actual.optDouble("filled_qty")} BTC\n" else ""
-        showInfoDialog("Trade plan", "${s.optString("direction")}  •  ${s.optString("trade_style")}\n${s.optString("setup")}\n\n" +
-            "Planned entry  ${formatCompact(s.optDouble("entry"))}\nStop  ${formatCompact(s.optDouble("stop"))}\n" +
-            "Target 1  ${formatCompact(s.optDouble("target1"))}\nTarget 2  ${formatCompact(s.optDouble("target2"))}\n" +
-            "Evidence score  ${String.format(Locale.US, "%.0f", s.optDouble("confidence") * 100)}/100 (heuristic)\n$fillDetails\n" +
-            "Execution  ${s.optString("execution_status", "PENDING CHECK")}\n${s.optString("execution_reason")}\n\n" +
-            "Invalidation\n${s.optString("invalidation")}\n\n$explanation")
-    }
 
     private fun LinearLayout.isFillViewportCompat() {
         // Kept as a no-op marker so the main root remains a normal fixed viewport.
@@ -932,7 +1422,6 @@ class SafeActivity : FragmentActivity() {
         "LEVELS & FLOW" -> "Levels & flow"
         "CONNECTION" -> "Connection"
         "SYSTEM" -> "System"
-        "DECISION CENTER" -> "Decision center"
         "DEMO PERFORMANCE" -> "Demo performance"
         "ACCOUNTING & RISK" -> "Accounting & risk"
         "EXCHANGE POSITIONS" -> "Exchange positions"
@@ -991,7 +1480,7 @@ class SafeActivity : FragmentActivity() {
         val compactViewport = resources.configuration.screenHeightDp < 760
         val box = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(14), dp(if (compactViewport) 8 else 10), dp(14), dp(if (compactViewport) 8 else 10))
+            setPadding(dp(14), dp(if (compactViewport) 11 else 13), dp(14), dp(if (compactViewport) 11 else 13))
             background = KyvoriqTheme.surface(this@SafeActivity, prominent = true)
         }
 
@@ -1031,17 +1520,17 @@ class SafeActivity : FragmentActivity() {
         box.addView(row)
 
         val oi = label("OI  —", 9f, kyGray, 0.02f)
-        box.addView(oi, margins(top = 1))
+        box.addView(oi, margins(top = 4))
         return HeroRefs(priceView, oi, statusView, box)
     }
 
     private fun compactCard(title: String, initial: String, valueSize: Float): CardRefs {
         val box = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(12), dp(9), dp(12), dp(8))
+            setPadding(dp(14), dp(12), dp(14), dp(12))
             background = KyvoriqTheme.surface(this@SafeActivity, prominent = false)
         }
-        val heading = label(humanHeading(title), 11.5f, kyWhite, 0.012f)
+        val heading = label(humanHeading(title), 12f, kyWhite, 0.012f)
         val value = TextView(this).apply {
             text = initial
             textSize = valueSize
@@ -1052,14 +1541,14 @@ class SafeActivity : FragmentActivity() {
             setHorizontallyScrolling(false)
         }
         box.addView(heading)
-        box.addView(value, margins(top = 5))
+        box.addView(value, margins(top = 8))
         return CardRefs(box, value)
     }
 
     private fun premiumCard(title: String, initial: String, valueSize: Float): Pair<LinearLayout, TextView> {
         val box = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(14), dp(11), dp(14), dp(10))
+            setPadding(dp(14), dp(13), dp(14), dp(13))
             background = KyvoriqTheme.surface(this@SafeActivity, prominent = true)
         }
         val header = LinearLayout(this).apply {
@@ -1068,7 +1557,7 @@ class SafeActivity : FragmentActivity() {
         }
         header.addView(label(humanHeading(title), 11.5f, kyWhite, 0.012f),
             LinearLayout.LayoutParams(0, dp(18), 1f))
-        header.addView(label(if (title == "DECISION CENTER") "DETAILS  ›" else if (title == "DEMO PERFORMANCE") "DEMO" else "MARKET", 8.5f, kyGray, 0.08f))
+        header.addView(label(if (title == "DEMO PERFORMANCE") "DEMO" else "MARKET", 8.5f, kyGray, 0.08f))
         box.addView(header)
 
         val value = TextView(this).apply {
@@ -1079,7 +1568,7 @@ class SafeActivity : FragmentActivity() {
             includeFontPadding = false
             setLineSpacing(0f, 1.13f)
         }
-        box.addView(value, margins(top = 5))
+        box.addView(value, margins(top = 8))
         return Pair(box, value)
     }
 
@@ -1234,8 +1723,62 @@ class SafeActivity : FragmentActivity() {
         runCatching { block() }
     }
 
+    private fun compactHeaderLabel(original: String, retry: Boolean = false): String {
+        return if (retry) "Refresh" else when (original) {
+            "ALERTS ON" -> "Alerts on"
+            "ALLOW ALERTS" -> "Enable alerts"
+            "ALERTS RETRY" -> "Retry alerts"
+            "PRIVATE" -> "Pair device"
+            else -> "Alerts"
+        }
+    }
+
+    private fun showPublicAccessInfo() {
+        showInfoDialog(
+            "Free market access",
+            "You can explore public BTC candles without creating an account. " +
+                "Pro and Elite market features will require verified subscriptions when available. " +
+                "Private KYVORIQ exchange execution, owner diagnostics and management " +
+                "are never exposed to consumer accounts."
+        )
+    }
+
+    private fun enterPublicMarketMode() {
+        if (debugPreview) return
+        if (!publicMarketOnly) {
+            publicMarketOnly = true
+            runCatching { socket?.cancel() }
+            socket = null
+            reconnectRunnable?.let { handler.removeCallbacks(it) }
+            reconnectRunnable = null
+            reconnectScheduled.set(false)
+            latestRoot = null
+            overlayFeatures = null
+            overlayStrategy = null
+            if (::chart.isInitialized) {
+                chart.setSignal(null)
+                chart.setTradeEvent(null)
+                chart.setOverlays(JSONArray())
+                chart.setFeedHealthy(false)
+            }
+            if (::signal.isInitialized) signal.text = "PRIVATE SIGNALS LOCKED • PAIR DEVICE TO UNLOCK"
+            if (::tradeHistory.isInitialized) tradeHistory.text = "Private exchange history is unavailable in public view."
+            if (::positionSummary.isInitialized) positionSummary.text = "PRIVATE • PAIRING REQUIRED"
+        }
+        if (::status.isInitialized) {
+            status.text = "VIEW ONLY"
+            status.setTextColor(kyGray)
+        }
+        if (::integrity.isInitialized) integrity.text = "PUBLIC MARKET • VIEW ONLY • NO PRIVATE TRADES"
+        publicMarketMessage?.visibility = View.VISIBLE
+        if (::alertsButton.isInitialized) {
+            alertsButton.text = "EXPLORE PRO"
+            alertsButton.isEnabled = true
+        }
+    }
+
     private fun connect(force: Boolean = false) {
-        if (stopped) return
+        if (stopped || publicMarketOnly || !KyvoriqSecureSession.isPaired(this)) return
         if (force) {
             reconnectRunnable?.let { handler.removeCallbacks(it) }
             reconnectRunnable = null
@@ -1245,8 +1788,12 @@ class SafeActivity : FragmentActivity() {
         }
         if (socket != null) return
 
-        status.text = "CONNECTING…"
-        integrity.text = "WebSocket  •  CONNECTING •  SECURE RETRY LOOP"
+        if (lastHardHttpStatus == null &&
+            (lastBootstrapSuccessMs == 0L || System.currentTimeMillis() - lastBootstrapSuccessMs > 10_000L)
+        ) {
+            status.text = "CONNECTING…"
+            integrity.text = "WebSocket  •  CONNECTING •  SECURE RETRY LOOP"
+        }
         socket = client.newWebSocket(
             KyvoriqSecureSession.authenticate(
                 this, Request.Builder().url(BackendEndpoint.socket("dashboard")),
@@ -1268,7 +1815,9 @@ class SafeActivity : FragmentActivity() {
                                 put("client_ts", System.currentTimeMillis())
                             }.toString())
                         }
-                        status.text = "SYNCING…"
+                        if (lastHardHttpStatus == null &&
+                            System.currentTimeMillis() - lastBootstrapSuccessMs > 10_000L
+                        ) status.text = "SYNCING…"
                         integrity.text = "WebSocket  •  CONNECTED  •  LIVE FEED SUPERVISOR"
                         if (latestRoot == null) bootstrap(false)
                     }
@@ -1295,6 +1844,7 @@ class SafeActivity : FragmentActivity() {
                                 }
                             } else root
                             latestRoot = merged
+                            lastHardHttpStatus = null
                             lastStateReceivedMs = System.currentTimeMillis()
                             val now = System.currentTimeMillis()
                             if (now - lastUiRenderMs >= 350L && !pendingUiUpdate) {
@@ -1315,8 +1865,13 @@ class SafeActivity : FragmentActivity() {
                     if (owned) socket = null
                     if (!owned || stopped) return
                     handler.post {
-                        status.text = "RECONNECTING…"
-                        integrity.text = "WebSocket  •  DISCONNECTED  •  RETRY SCHEDULED"
+                        if (!stopped && socket == null) {
+                            val httpFresh = lastBootstrapSuccessMs > 0L &&
+                                System.currentTimeMillis() - lastBootstrapSuccessMs <= 10_000L
+                            status.text = lastHardHttpStatus ?: if (httpFresh) "HTTP FALLBACK" else "RECONNECTING…"
+                            integrity.text = if (httpFresh) "WebSocket OFFLINE  •  HTTP SNAPSHOT ACTIVE"
+                                else "WebSocket  •  DISCONNECTED  •  RETRY SCHEDULED"
+                        }
                     }
                     reconnect(false)
                 }
@@ -1326,8 +1881,13 @@ class SafeActivity : FragmentActivity() {
                     if (owned) socket = null
                     if (!owned || stopped) return
                     handler.post {
-                        status.text = "RECONNECTING…"
-                        integrity.text = "WebSocket  •  CLOSED •  RETRY SCHEDULED"
+                        if (!stopped && socket == null) {
+                            val httpFresh = lastBootstrapSuccessMs > 0L &&
+                                System.currentTimeMillis() - lastBootstrapSuccessMs <= 10_000L
+                            status.text = lastHardHttpStatus ?: if (httpFresh) "HTTP FALLBACK" else "RECONNECTING…"
+                            integrity.text = if (httpFresh) "WebSocket CLOSED  •  HTTP SNAPSHOT ACTIVE"
+                                else "WebSocket  •  CLOSED  •  RETRY SCHEDULED"
+                        }
                     }
                     reconnect(false)
                 }
@@ -1367,6 +1927,15 @@ class SafeActivity : FragmentActivity() {
     }
 
     private fun forceReconnectFromUser() {
+        if (publicMarketOnly || !KyvoriqSecureSession.isPaired(this)) {
+            enterPublicMarketMode()
+            requestChartIfNeeded(force = true)
+            if (privateRouteFallback && KyvoriqSecureSession.isPaired(this)) {
+                lastPrivateRouteProbeMs = System.currentTimeMillis()
+                bootstrap(force = true)
+            }
+            return
+        }
         val now = System.currentTimeMillis()
         if (now - lastRetryRequestMs < 1500L) return
         lastRetryRequestMs = now
@@ -1380,7 +1949,7 @@ class SafeActivity : FragmentActivity() {
         connect(force = true)
         handler.postDelayed({
             retryButton?.isEnabled = true
-            retryButton?.text = "↻ RETRY"
+            retryButton?.text = compactHeaderLabel("↻ RETRY", retry = true)
         }, 2000L)
     }
 
@@ -1409,6 +1978,11 @@ class SafeActivity : FragmentActivity() {
     }
 
     private fun forceReconnectFromNetwork() {
+        if (publicMarketOnly || !KyvoriqSecureSession.isPaired(this)) {
+            enterPublicMarketMode()
+            requestChartIfNeeded(force = true)
+            return
+        }
         val now = System.currentTimeMillis()
         if (now - lastRetryRequestMs < 1500L) return
         lastRetryRequestMs = now
@@ -1420,11 +1994,18 @@ class SafeActivity : FragmentActivity() {
 
     private fun bootstrap(force: Boolean = false) {
         if (stopped || bootstrapInFlight) return
+        if ((publicMarketOnly && !privateRouteFallback) || !KyvoriqSecureSession.isPaired(this)) {
+            enterPublicMarketMode()
+            requestChartIfNeeded(force)
+            return
+        }
         val now = System.currentTimeMillis()
         if (!force && now - lastBootstrapMs < 4000L) return
         lastBootstrapMs = now
         bootstrapInFlight = true
-        integrity.text = "HTTP  •  SYNCING MARKET SNAPSHOT"
+        if (lastHardHttpStatus == null) {
+            integrity.text = "HTTP  •  SYNCING MARKET SNAPSHOT"
+        }
         val requestTf = selectedTf
         getJson(backendBase + "/bootstrap?profile=dashboard&interval=" + requestTf) { ok, body ->
             handler.post {
@@ -1432,15 +2013,64 @@ class SafeActivity : FragmentActivity() {
                 if (stopped) return@post
                 if (!ok) {
                     val nowFail = System.currentTimeMillis()
+                    val fault = when (body) {
+                        "HTTP 401" -> "PAIRING REQUIRED"
+                        "HTTP 403" -> "ACCESS DENIED (403)"
+                        "HTTP 404" -> "BACKEND ROUTE 404"
+                        "HTTP 429" -> "RATE LIMITED (429)"
+                        "HTTP 502", "HTTP 503", "HTTP 504" -> "HOST UNAVAILABLE"
+                        "NETWORK TIMEOUT" -> "NETWORK TIMEOUT"
+                        "NETWORK UNAVAILABLE" -> "NETWORK UNAVAILABLE"
+                        else -> if (body.startsWith("HTTP ")) "BACKEND " + body else "RECONNECTING…"
+                    }
+                    lastHardHttpStatus = if (body in setOf("HTTP 401", "HTTP 403", "HTTP 404")) fault else null
+                    if (body == "HTTP 404") {
+                        // No credential bypass and no blind backend restart:
+                        // /bootstrap occasionally 404s at Voroa ingress even
+                        // though /health and /chart are routed correctly.
+                        privateRouteFallback = true
+                        lastHardHttpStatus = null
+                        lastPrivateRouteProbeMs = nowFail
+                        enterPublicMarketMode()
+                        status.text = "ROUTE RETRY"
+                        publicMarketMessage?.text =
+                            "SECURE BACKEND ROUTE TEMPORARILY UNAVAILABLE\n" +
+                            "Showing public BTC prices only. KYVORIQ is automatically retrying secure pairing."
+                        requestChartIfNeeded(force = true)
+                        return@post
+                    }
+                    if (body == "HTTP 401") {
+                        pairingButton?.text = "SESSION EXPIRED  •  TAP TO RE-PAIR"
+                        check.text = "This device needs owner-approved pairing. Public BTC market chart remains available."
+                        enterPublicMarketMode()
+                        requestChartIfNeeded(force = true)
+                        return@post
+                    }
                     if (lastBootstrapSuccessMs == 0L || nowFail - lastBootstrapSuccessMs > 10_000L) {
-                        status.text = if (socket == null) "RECONNECTING…" else "SYNCING…"
-                        integrity.text = "HTTP  •  SNAPSHOT FAILED  •  RETRYING"
+                        status.text = fault
+                        integrity.text = "HTTP  •  " + body.ifEmpty { "SNAPSHOT FAILED" } + "  •  RETRY SCHEDULED"
                     }
                     return@post
                 }
                 safe {
                     val root = JSONObject(body)
+                    // A proxy may send 200 with an error JSON; never treat it as a live market snapshot.
+                    if (!root.has("data_health") || !root.optDouble("last_price", Double.NaN).isFinite()) {
+                        status.text = "INVALID SNAPSHOT"
+                        integrity.text = "HTTP  •  INVALID MARKET RESPONSE"
+                        return@safe
+                    }
                     val receivedAt = System.currentTimeMillis()
+                    lastHardHttpStatus = null
+                    val restoredPrivateRoute = privateRouteFallback
+                    privateRouteFallback = false
+                    publicMarketOnly = false
+                    publicMarketMessage?.visibility = View.GONE
+                    if (restoredPrivateRoute) {
+                        // Re-open private WS only AFTER authenticated bootstrap
+                        // succeeds. No order endpoint is called here.
+                        connect(force = true)
+                    }
                     lastBootstrapSuccessMs = receivedAt
                     if (latestRoot == null || root.optLong("server_ts") >= latestRoot!!.optLong("server_ts")) {
                         latestRoot = root
@@ -1487,10 +2117,14 @@ class SafeActivity : FragmentActivity() {
         val upstream = root.optJSONObject("upstream")
         val source = upstream?.optString("source", "").orEmpty()
         val authoritativeFeedHealthy = health == "HEALTHY" && ws && source == "BITGET_WS" && freshMarket
+        val verifiedRestSnapshot = freshMarket && source.contains("REST", ignoreCase = true) &&
+            health in setOf("HEALTHY", "DEGRADED")
         chart.setFeedHealthy(authoritativeFeedHealthy)
+        chart.setCustomPriceAlerts(BtcPriceAlerts.armedLevels(this))
         chart.setSignal(signalObj)
         val statusLabel = when {
             authoritativeFeedHealthy -> "LIVE"
+            verifiedRestSnapshot -> "REST FALLBACK"
             health == "DEGRADED" -> "DATA DEGRADED"
             health == "CONNECTING" -> "CONNECTING…"
             health == "RECONNECTING" -> "RECONNECTING…"
@@ -1506,6 +2140,7 @@ class SafeActivity : FragmentActivity() {
             else String.format(Locale.US, "%,.2f", oi)
         integrity.text = when {
             authoritativeFeedHealthy -> "BITGET WS  •  LIVE"
+            verifiedRestSnapshot -> "BITGET REST  •  FRESH SNAPSHOT"
             health == "DEGRADED" && source.contains("REST", ignoreCase = true) -> "BITGET REST  •  DEGRADED"
             health == "DEGRADED" -> "BITGET FEED  •  DEGRADED"
             health == "CONNECTING" || health == "RECONNECTING" -> "BITGET WS  •  CONNECTING"
@@ -1848,7 +2483,17 @@ class SafeActivity : FragmentActivity() {
             .append("EXECUTION POLICY\n").append(executionPolicy)
             .append("Fee-adjusted reward / risk ≥ ${summary.optDouble("min_net_rr", 1.5)}\nPause after 2 consecutive daily losses\nObserved daily equity loss limit 1%\n\n")
             .append("EVIDENCE\nScores rank setups; they are not win probabilities.\n")
-        decisionView.text = details.toString()
+        entryChecksFullText = details.toString()
+        val entryStatus = when {
+            !sourceHealthy -> "DATA NOT FRESH"
+            unknown > 0 || unresolved > 0 -> "BLOCKED • RECONCILE"
+            openCount > 0 -> "POSITION OPEN"
+            else -> "CHECKING"
+        }
+        decisionView.text =
+            "STATUS  •  $entryStatus\n" +
+            reason.replace("\n", " ").trim() +
+            "\n15m ${f.optString("trend_15", "—")}  •  1h ${f.optString("trend_60", "—")}  •  4h ${f.optString("trend_240", "—")}"
         val reactionMap = e.optJSONObject("level_reactions")
         val reactionTrigger = reactionMap?.optJSONObject("trigger")
         val armedLevels = reactionMap?.optJSONArray("armed")
@@ -1993,17 +2638,15 @@ class SafeActivity : FragmentActivity() {
         val prefs = getSharedPreferences("kyvoriq_alert_intelligence", Context.MODE_PRIVATE)
         val lastTier = prefs.getString("last_tier", "—") ?: "—"
         val lastTitle = prefs.getString("last_title", "").orEmpty()
-        alertIntelligenceView.text =
-            "Alert priority • $tier\n$explanation" +
-                if (lastTitle.isBlank()) "" else "\nLast delivered  •  $lastTier  •  " + lastTitle.take(42)
-        alertIntelligenceView.setTextColor(
-            when (tier) {
-                "CRITICAL" -> Color.rgb(255, 82, 105)
-                "EXECUTION" -> Color.rgb(54, 211, 153)
-                "PRIORITY" -> kyGold
-                else -> kyGray
-            }
-        )
+        val alertCopy = "Alert priority  •  $tier\n$explanation" +
+            (if (lastTitle.isBlank()) "" else "\nLast delivered  •  $lastTier  •  " + lastTitle.take(42))
+        val styledAlert = SpannableString(alertCopy)
+        val tierAt = alertCopy.indexOf(tier)
+        if (tierAt >= 0) styledAlert.setSpan(ForegroundColorSpan(
+            if (tier == "CRITICAL") Color.rgb(255, 82, 105) else kyGold
+        ), tierAt, tierAt + tier.length, 0)
+        alertIntelligenceView.setTextColor(kyWhite)
+        alertIntelligenceView.text = styledAlert
     }
 
     private fun renderRiskHeat(root: JSONObject) {
@@ -2183,6 +2826,7 @@ class SafeActivity : FragmentActivity() {
                 rootSurface.alpha = 0f
                 rootSurface.animate().alpha(1f).setDuration(220L).start()
                 showLaunchSequence()
+                consumeWidgetDestination()
             },
             onFailure = { finishAndRemoveTask() }
         )
@@ -2701,6 +3345,8 @@ class SafeActivity : FragmentActivity() {
     }
 
     private fun requestChartOverlays(force: Boolean = false) {
+        // Structural overlays, owner levels and strategy context are private.
+        if (publicMarketOnly || !KyvoriqSecureSession.isPaired(this)) return
         val now = System.currentTimeMillis()
         if (!force && now - lastOverlayRequestMs < 15_000L) return
         lastOverlayRequestMs = now
@@ -2749,7 +3395,8 @@ class SafeActivity : FragmentActivity() {
                 safe {
                     val j = JSONObject(body)
                     val candles = j.optJSONArray("candles") ?: JSONArray()
-                    val live = latestRoot?.optDouble("last_price", Double.NaN) ?: Double.NaN
+                    val live = if (publicMarketOnly) Double.NaN
+                        else latestRoot?.optDouble("last_price", Double.NaN) ?: Double.NaN
                     val lastPrice = if (!live.isNaN()) live else j.optDouble("last_price", Double.NaN)
 
                     // Never let an older timeframe response overwrite the
@@ -2757,16 +3404,31 @@ class SafeActivity : FragmentActivity() {
                     if (selectedTf != requestTf) return@safe
 
                     chart.setTimeframe(requestTf)
+                    if (publicMarketOnly && (candles.length() == 0 || !lastPrice.isFinite() || lastPrice <= 0.0)) {
+                        status.text = "NO PUBLIC DATA"
+                        publicMarketMessage?.text = "PUBLIC BTC DATA UNAVAILABLE • Tap RETRY to fetch fresh candles. No private access has been granted."
+                        return@safe
+                    }
                     latestChartCandles = candles
                     chart.setData(
                         candles,
                         latestRoot?.optJSONObject("signal"),
                         calculateEma(candles, 50),
                         lastPrice,
-                        chartOverlays(latestRoot)
+                        if (publicMarketOnly) JSONArray() else chartOverlays(latestRoot)
                     )
+                    if (publicMarketOnly) {
+                        price.setPrice(lastPrice, animate = false)
+                        oiView.text = "OI  —  •  PRIVATE"
+                        status.text = "VIEW ONLY"
+                        integrity.text = "PUBLIC BTC CANDLES • VIEW ONLY • NO PRIVATE TRADING"
+                        publicMarketMessage?.text = "BASIC ACCESS • BTC LIVE MARKET\nConsumer upgrades are pending verification; private trading stays owner-only."
+                        publicMarketMessage?.visibility = View.VISIBLE
+                        chart.setFeedHealthy(false)
+                        chart.setSignal(null)
+                    }
                     refreshTimeframeButtonsForCurrentSelection()
-                    requestChartOverlays(force)
+                    if (!publicMarketOnly) requestChartOverlays(force)
                 }
             }
         }
@@ -2825,25 +3487,34 @@ class SafeActivity : FragmentActivity() {
     }
 
     private fun startBackgroundAlerts() {
+        if (publicMarketOnly || !KyvoriqSecureSession.isPaired(this)) {
+            alertsButton.text = "EXPLORE PRO"
+            alertsButton.isEnabled = true
+            return
+        }
         if (Build.VERSION.SDK_INT >= 33 &&
             checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
         ) {
-            alertsButton.text = "ALLOW ALERTS"
+            alertsButton.text = compactHeaderLabel("ALLOW ALERTS")
             alertsButton.isEnabled = true
             requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 4101)
             return
         }
         runCatching {
             ContextCompat.startForegroundService(this, Intent(this, SignalService::class.java))
-            alertsButton.text = "ALERTS ON"
+            alertsButton.text = compactHeaderLabel("ALERTS ON")
             alertsButton.isEnabled = false
         }.onFailure {
-            alertsButton.text = "ALERTS RETRY"
+            alertsButton.text = compactHeaderLabel("ALERTS RETRY")
             alertsButton.isEnabled = true
         }
     }
 
     private fun requestAlertPermission() {
+        if (publicMarketOnly || !KyvoriqSecureSession.isPaired(this)) {
+            showPublicAccessInfo()
+            return
+        }
         startBackgroundAlerts()
     }
 
@@ -2857,7 +3528,7 @@ class SafeActivity : FragmentActivity() {
             if (grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED || Build.VERSION.SDK_INT < 33) {
                 startBackgroundAlerts()
             } else {
-                alertsButton.text = "ALLOW ALERTS"
+                alertsButton.text = compactHeaderLabel("ALLOW ALERTS")
                 alertsButton.isEnabled = true
             }
         }
@@ -2886,6 +3557,16 @@ class SafeActivity : FragmentActivity() {
 
     private fun watchdog() {
         if (stopped) return
+        if (publicMarketOnly || !KyvoriqSecureSession.isPaired(this)) {
+            enterPublicMarketMode()
+            requestChartIfNeeded()
+            if (privateRouteFallback && KyvoriqSecureSession.isPaired(this) &&
+                System.currentTimeMillis() - lastPrivateRouteProbeMs >= 12_000L) {
+                lastPrivateRouteProbeMs = System.currentTimeMillis()
+                bootstrap(force = true)
+            }
+            return
+        }
         val now = System.currentTimeMillis()
         val stateAge = if (lastStateReceivedMs == 0L) Long.MAX_VALUE
             else now - lastStateReceivedMs
@@ -2897,7 +3578,7 @@ class SafeActivity : FragmentActivity() {
         // HTTP snapshot is a valid live market state.
         if (stateAge > 5000L) {
             val bootstrapFresh = lastBootstrapSuccessMs > 0L && now - lastBootstrapSuccessMs <= 10_000L
-            if (!bootstrapFresh) {
+            if (!bootstrapFresh && lastHardHttpStatus == null) {
                 integrity.text = "Feed  •  REFRESHING •  HTTP SNAPSHOT"
             }
             bootstrap(false)
@@ -2914,7 +3595,7 @@ class SafeActivity : FragmentActivity() {
         ) {
             lastSocketRebuildMs = now
             integrity.text = "Feed  •  STALE •  REBUILDING WEBSOCKET"
-            status.text = "RECONNECTING…"
+            if (lastHardHttpStatus == null) status.text = "RECONNECTING…"
             reconnect(immediate = true)
         }
 
@@ -3041,6 +3722,17 @@ class SafeActivity : FragmentActivity() {
         root.addView(label("Closing Price (USDT)", 12f, kyGray, 0f), margins(bottom = 5))
         root.addView(closeEdit, margins(bottom = 14))
 
+        // Manual risk sizing is a separate estimate, never a trading action.
+        val stopEdit = numberField("Stop Price (optional)", "")
+        root.addView(label("Stop price (USDT)  •  optional risk sizing", 12f, kyGray, 0f), margins(bottom = 5))
+        root.addView(stopEdit, margins(bottom = 12))
+        val riskBudgetEdit = numberField("Risk budget USDT (optional)", "")
+        root.addView(label("Risk budget (USDT)  •  optional", 12f, kyGray, 0f), margins(bottom = 5))
+        root.addView(riskBudgetEdit, margins(bottom = 12))
+        val feeEdit = numberField("Fee rate per side (%)", "0")
+        root.addView(label("Estimated fee rate per side (%)", 12f, kyGray, 0f), margins(bottom = 5))
+        root.addView(feeEdit, margins(bottom = 14))
+
         val leverageLabel = label("Leverage  •  20x", 12f, kyGray, 0f)
         root.addView(leverageLabel, margins(bottom = 4))
         val leverageBar = SeekBar(this).apply { max = 149; progress = 19; splitTrack = false }
@@ -3076,33 +3768,65 @@ class SafeActivity : FragmentActivity() {
                 val amount = amountEdit.text.toString().toDoubleOrNull()
                 val entry = openEdit.text.toString().toDoubleOrNull()
                 val exit = closeEdit.text.toString().toDoubleOrNull()
-                if (amount == null || amount <= 0 || entry == null || entry <= 0 || exit == null || exit <= 0 || leverage <= 0) {
+                val stopRaw = stopEdit.text.toString().trim()
+                val riskRaw = riskBudgetEdit.text.toString().trim()
+                val feePct = feeEdit.text.toString().trim().toDoubleOrNull()
+                val stop = if (stopRaw.isBlank()) null else stopRaw.toDoubleOrNull()
+                val riskBudget = if (riskRaw.isBlank()) null else riskRaw.toDoubleOrNull()
+                if (amount == null || !amount.isFinite() || amount <= 0 ||
+                    entry == null || !entry.isFinite() || entry <= 0 ||
+                    exit == null || !exit.isFinite() || exit <= 0 ||
+                    feePct == null || !feePct.isFinite() || feePct < 0 || feePct > 10 ||
+                    (stopRaw.isNotBlank() && (stop == null || !stop.isFinite() || stop <= 0)) ||
+                    (riskRaw.isNotBlank() && (riskBudget == null || !riskBudget.isFinite() || riskBudget <= 0)) ||
+                    (riskBudget != null && stop == null)) {
                     haptic(calcButton, KyvoriqHaptics.Cue.REJECT)
-                    results.text = "Enter a valid position size/cost and both prices."
+                    results.text = "Enter valid positive amounts/prices; fees 0–10%. Risk sizing needs a stop price."
                     return@safe
                 }
+                if (stop != null && ((direction == "LONG" && stop >= entry) ||
+                                     (direction == "SHORT" && stop <= entry))) {
+                    results.text = "Long stop must be below entry; short stop above entry."
+                    return@safe
+                }
+                val margin = if (unitMode == "COST") amount else amount * entry / leverage.toDouble()
+                val notional = if (unitMode == "COST") amount * leverage.toDouble() else amount * entry
+                val qty = notional / entry
                 val priceMove = if (direction == "LONG") exit - entry else entry - exit
-                val margin = if (unitMode == "COST") amount / 1.0015 else (amount * entry) / leverage.toDouble()
-                val notional = if (unitMode == "COST") margin * leverage.toDouble() else amount * entry
-                val qty = if (unitMode == "COST") notional / entry else amount
-                val pnl = qty * priceMove
-                val roi = if (margin > 0) pnl / margin * 100.0 else 0.0
-                val pnlSign = if (pnl > 0) "+" else ""
-                val movePct = priceMove / entry * 100.0
+                val gross = qty * priceMove
+                // Leverage determines quantity only in margin/cost mode. P&L
+                // is quantity × price difference, never multiplied again.
+                val estimatedFees = qty * (entry + exit) * feePct / 100.0
+                val net = gross - estimatedFees
+                val roi = if (margin > 0) net / margin * 100.0 else 0.0
+                val priceMovePct = priceMove / entry * 100.0
+                val stopLoss = if (stop != null) qty * kotlin.math.abs(entry - stop) else null
+                val suggestedQty = if (stop != null && riskBudget != null)
+                    riskBudget / kotlin.math.abs(entry - stop) else null
+                val riskDetails = when {
+                    stopLoss == null -> "\nStop risk  — (enter a stop)"
+                    suggestedQty == null -> "\nStop risk  " + String.format(Locale.US, "%.2f USDT before fees", stopLoss)
+                    else -> "\nStop risk  " + String.format(Locale.US, "%.2f USDT before fees", stopLoss) +
+                        "\nRisk-sized quantity  " + String.format(Locale.US, "%.6f BTC", suggestedQty) +
+                        "\nRisk-sized margin  " + String.format(Locale.US, "%.2f USDT", suggestedQty * entry / leverage)
+                }
                 results.text =
                     "Margin  " + String.format(Locale.US, "%.2f USDT", margin) +
-                    "\nP&L  " + pnlSign + String.format(Locale.US, "%.2f USDT", pnl) +
-                    "\nROI  " + pnlSign + String.format(Locale.US, "%.2f%%", roi) +
-                    "\nPrice Move  " + pnlSign + String.format(Locale.US, "%.2f%%", movePct) +
+                    "\nGross P&L  " + String.format(Locale.US, "%+.2f USDT", gross) +
+                    "\nEst. fees  " + String.format(Locale.US, "%.2f USDT", estimatedFees) +
+                    "\nNet P&L  " + String.format(Locale.US, "%+.2f USDT", net) +
+                    "\nNet ROI on margin  " + String.format(Locale.US, "%+.2f%%", roi) +
+                    "\nPrice move  " + String.format(Locale.US, "%+.2f%%", priceMovePct) +
                     "\nQuantity  " + String.format(Locale.US, "%.6f BTC", qty) +
-                    "\nNotional  " + String.format(Locale.US, "%.2f USDT", notional)
+                    "\nNotional  " + String.format(Locale.US, "%.2f USDT", notional) +
+                    riskDetails
                 haptic(calcButton, KyvoriqHaptics.Cue.CONFIRM)
             }
         }
         root.addView(calcButton, margins(bottom = 14))
 
         root.addView(label(
-            "Note  •  Cost mode treats the entered amount as position margin and scales notional by leverage. A 0.15% reserve is applied. Actual fees, funding and slippage can differ.",
+            "Manual estimate only. Cost is margin; leverage changes notional, not P&L again. Fee rate applies to entry and exit notional. Stop risk excludes fees, slippage, liquidation and funding. No orders are sent.",
             12f, kyGray, 0f
         ), margins(bottom = 10))
     }
@@ -3360,8 +4084,49 @@ class SafeActivity : FragmentActivity() {
         getJson(backendBase + "/system-check") { ok, body ->
             handler.post {
                 if (!ok) {
-                    check.text = "Backend diagnostics failed."
-                    checkButton.isEnabled = true
+                    val fault = when (body) {
+                        "HTTP 401" -> "PAIRING EXPIRED (401)"
+                        "HTTP 403" -> "ACCESS DENIED (403)"
+                        "HTTP 404" -> "BACKEND ROUTE UNAVAILABLE (404)"
+                        "HTTP 429" -> "RATE LIMITED (429)"
+                        "HTTP 502", "HTTP 503", "HTTP 504" -> "HOST UNAVAILABLE (" + body + ")"
+                        "NETWORK TIMEOUT" -> "REQUEST TIMED OUT"
+                        "NETWORK UNAVAILABLE" -> "NETWORK UNAVAILABLE"
+                        else -> if (body.startsWith("HTTP ")) "SERVER ERROR " + body else "DIAGNOSTICS UNAVAILABLE"
+                    }
+                    if (body == "HTTP 401") pairingButton?.text = "SESSION EXPIRED  •  TAP TO RE-PAIR"
+                    check.text = "PRIVATE DIAGNOSTICS  •  " + fault + "\nChecking public backend health…"
+                    // A public health response verifies the server only; it must
+                    // never be presented as authenticated Bitget order readiness.
+                    getJson(backendBase + "/health") { publicOk, publicBody ->
+                        handler.post {
+                            if (stopped) {
+                                checkButton.isEnabled = true
+                                return@post
+                            }
+                            val publicReport = if (publicOk) {
+                                runCatching {
+                                    val health = JSONObject(publicBody)
+                                    val state = health.optString("data_health", "UNKNOWN")
+                                    if (health.optBoolean("ok", false)) {
+                                        "PUBLIC BACKEND  •  REACHABLE\nMarket feed  •  " + state
+                                    } else "PUBLIC BACKEND  •  RESPONDING (NOT READY)"
+                                }.getOrDefault("PUBLIC BACKEND  •  INVALID RESPONSE")
+                            } else {
+                                "PUBLIC BACKEND  •  " + when (publicBody) {
+                                    "HTTP 404" -> "ROUTING OFFLINE (404)"
+                                    "NETWORK TIMEOUT" -> "TIMEOUT"
+                                    "NETWORK UNAVAILABLE" -> "UNREACHABLE"
+                                    else -> publicBody.take(32)
+                                }
+                            }
+                            check.text = "PRIVATE DIAGNOSTICS  •  " + fault +
+                                "\n" + publicReport +
+                                "\nBitget execution readiness  •  UNVERIFIED" +
+                                if (body == "HTTP 401") "\nACTION  •  TAP RE-PAIR DEVICE" else "\nACTION  •  RETRY AFTER RESTORING CONNECTION"
+                            checkButton.isEnabled = true
+                        }
+                    }
                     return@post
                 }
                 safe {
@@ -3649,7 +4414,10 @@ class SafeActivity : FragmentActivity() {
                             button.isEnabled = true
                             if (saved) {
                                 button.text = "DEVICE PAIRED  •  SECURE"
+                                publicMarketOnly = false
+                                publicMarketMessage?.visibility = View.GONE
                                 showInfoDialog("Secure pairing active", "Your private trading session is encrypted on this device for up to 7 days. Renew it from this button when it expires.")
+                                refreshConsumerPresentation()
                                 connect(force = true)
                                 bootstrap(true)
                                 ContextCompat.startForegroundService(
@@ -3675,20 +4443,25 @@ class SafeActivity : FragmentActivity() {
             ).build()
             restClient.newCall(request).enqueue(object : okhttp3.Callback {
                 override fun onFailure(call: okhttp3.Call, e: java.io.IOException) {
-                    handler.post { callback(false, "") }
+                    val detail = if (e is java.net.SocketTimeoutException) "NETWORK TIMEOUT"
+                        else "NETWORK UNAVAILABLE"
+                    handler.post { callback(false, detail) }
                 }
 
                 override fun onResponse(call: okhttp3.Call, response: Response) {
                     val result = runCatching {
-                        response.use { Pair(it.isSuccessful, it.body?.string().orEmpty()) }
-                    }.getOrElse { Pair(false, "") }
+                        response.use {
+                            if (it.isSuccessful) Pair(true, it.body?.string().orEmpty())
+                            else Pair(false, "HTTP " + it.code) // Never display an untrusted error body.
+                        }
+                    }.getOrElse { Pair(false, "NETWORK UNAVAILABLE") }
                     handler.post {
                         if (!isFinishing && !isDestroyed) callback(result.first, result.second)
                     }
                 }
             })
         }.onFailure {
-            handler.post { callback(false, "") }
+            handler.post { callback(false, "NETWORK UNAVAILABLE") }
         }
     }
 
@@ -3773,3 +4546,4 @@ class SafeActivity : FragmentActivity() {
         super.onDestroy()
     }
 }
+

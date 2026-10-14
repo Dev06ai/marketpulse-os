@@ -73,6 +73,141 @@ jobs:
           echo "version_name=${VERSION_NAME}" >> "$GITHUB_OUTPUT"
           echo "version_code=${VERSION_CODE}" >> "$GITHUB_OUTPUT"
           echo "release_tag=${RELEASE_TAG}" >> "$GITHUB_OUTPUT"
+      - name: Validate owner-reference wordmark in BOTH header and animated intro
+        shell: bash
+        run: |
+          set -euo pipefail
+          FILE=dev-trader/android/app/src/main/java/com/devtrader/app/KyvoriqMotionIdentity.kt
+          INTRO=dev-trader/android/app/src/main/java/com/devtrader/app/KyvoriqLaunchOverlay.kt
+          HEADER=dev-trader/android/app/src/main/java/com/devtrader/app/SafeActivity.kt
+          VECTOR=dev-trader/android/app/src/main/res/drawable/kyvoriq_concentric_wordmark.xml
+          test -s "$VECTOR"
+          grep -Fq 'android:fillType="evenOdd"' "$VECTOR"
+          grep -Fq 'kyvoriq_concentric_wordmark' "$FILE"
+          grep -Fq 'KyvoriqRazorWordmarkView(context)' "$INTRO"
+          grep -Fq 'KyvoriqRazorWordmarkView(this)' "$HEADER"
+          ! grep -Fq 'Typeface.create("serif"' "$FILE"
+          python - <<'PY'
+          import xml.etree.ElementTree as ET
+          path='dev-trader/android/app/src/main/res/drawable/kyvoriq_concentric_wordmark.xml'
+          root=ET.parse(path).getroot()
+          tag='{http://schemas.android.com/apk/res/android}'
+          assert root.tag=='vector'
+          assert root.attrib[tag+'viewportWidth']=='699'
+          assert root.attrib[tag+'viewportHeight']=='166'
+          assert len(root)==1 and len(root[0].attrib[tag+'pathData'])>4000
+          assert root[0].attrib[tag+'fillType']=='evenOdd'
+          print('Owner reference wordmark vector valid, same component used by header and intro.')
+          PY
+      - name: Verify gold alert manager and owner-reference tagline in both views
+        shell: bash
+        run: |
+          set -euo pipefail
+          UI=dev-trader/android/app/src/main/java/com/devtrader/app/SafeActivity.kt
+          INTRO=dev-trader/android/app/src/main/java/com/devtrader/app/KyvoriqLaunchOverlay.kt
+          TAG=dev-trader/android/app/src/main/res/drawable/kyvoriq_trade_the_plot.xml
+          test -s "$TAG"
+          grep -Fq 'kyvoriq_trade_the_plot' "$UI"
+          grep -Fq 'kyvoriq_trade_the_plot' "$INTRO"
+          grep -Fq 'setBackgroundDrawable(android.graphics.drawable.ColorDrawable(Color.TRANSPARENT))' "$UI"
+          grep -Fq 'BtcPriceAlerts.add(this, requested, livePrice)' "$UI"
+          ! grep -Fq 'AI POWERED TRADING' "$UI"
+          ! grep -Fq 'AI POWERED TRADING' "$INTRO"
+          python - <<'PY'
+          import xml.etree.ElementTree as ET
+          tag='{http://schemas.android.com/apk/res/android}'
+          root=ET.parse('dev-trader/android/app/src/main/res/drawable/kyvoriq_trade_the_plot.xml').getroot()
+          assert root.tag=='vector'
+          assert root.attrib[tag+'viewportWidth']=='281'
+          assert root.attrib[tag+'viewportHeight']=='42'
+          assert len(root)==1 and len(root[0].attrib[tag+'pathData'])>2000
+          assert root[0].attrib[tag+'fillType']=='evenOdd'
+          print('User-referenced handwritten vector and full-native alert card verified.')
+          PY
+      - name: Verify adaptive viewport and safe public read-only fallback
+        shell: bash
+        run: |
+          set -euo pipefail
+          UI=dev-trader/android/app/src/main/java/com/devtrader/app/SafeActivity.kt
+          LAYOUT=dev-trader/android/app/src/main/java/com/devtrader/app/KyvoriqResponsiveLayout.kt
+          test -s "$LAYOUT"
+          test -s dev-trader/android/app/src/androidTest/java/com/devtrader/app/KyvoriqResponsiveLayoutTest.kt
+          grep -Fq 'layout.compactActions' "$UI"
+          grep -Fq 'layout.stackedActions' "$UI"
+          grep -Fq 'enterPublicMarketMode()' "$UI"
+          grep -Fq 'if (publicMarketOnly) JSONArray() else chartOverlays(latestRoot)' "$UI"
+          grep -Fq 'chart.setFeedHealthy(false)' "$UI"
+          grep -Fq 'Consumer upgrades are pending verification; private trading stays owner-only.' "$UI"
+          grep -Fq 'if (publicMarketOnly || !KyvoriqSecureSession.isPaired(this))' "$UI"
+          grep -Fq 'kyvoriq_trade_the_plot' "$UI"
+          ! grep -Fq 'leftMargin = -dp(10)' "$UI"
+          echo 'Public chart has no private signals, trading or fake LIVE badge.'
+      - name: Verify slim 4x1 widget and reference-brand notifications
+        shell: bash
+        run: |
+          set -euo pipefail
+          INFO=dev-trader/android/app/src/main/res/xml/kyvoriq_widget_info.xml
+          WIDGET=dev-trader/android/app/src/main/res/layout/widget_kyvoriq_compact.xml
+          EXPANDED=dev-trader/android/app/src/main/res/layout/widget_kyvoriq_expanded.xml
+          NOTIF=dev-trader/android/app/src/main/res/layout/notification_kyvoriq_collapsed.xml
+          NOTIF_BIG=dev-trader/android/app/src/main/res/layout/notification_kyvoriq_expanded.xml
+          SERVICE=dev-trader/android/app/src/main/java/com/devtrader/app/SignalService.kt
+          PROVIDER=dev-trader/android/app/src/main/java/com/devtrader/app/KyvoriqWidgetProvider.kt
+          python - <<'PY'
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+          base=Path('dev-trader/android/app/src/main/res')
+          ns='{http://schemas.android.com/apk/res/android}'
+          info=ET.parse(base/'xml/kyvoriq_widget_info.xml').getroot()
+          assert info.attrib[ns+'targetCellWidth']=='4'
+          assert info.attrib[ns+'targetCellHeight']=='1'
+          assert int(info.attrib[ns+'minHeight'].replace('dp',''))<=80
+          for rel in ('layout/widget_kyvoriq_compact.xml',
+                      'layout/widget_kyvoriq_expanded.xml',
+                      'layout/notification_kyvoriq_collapsed.xml',
+                      'layout/notification_kyvoriq_expanded.xml'):
+              txt=(base/rel).read_text()
+              ET.fromstring(txt)
+              assert 'kyvoriq_concentric_wordmark' in txt
+              assert 'fontFamily="serif"' not in txt
+              assert 'AI POWERED TRADING' not in txt
+          for rel in ('layout/widget_kyvoriq_expanded.xml',
+                      'layout/notification_kyvoriq_expanded.xml'):
+              assert 'kyvoriq_trade_the_plot' in (base/rel).read_text()
+          service=Path('dev-trader/android/app/src/main/java/com/devtrader/app/SignalService.kt').read_text()
+          provider=Path('dev-trader/android/app/src/main/java/com/devtrader/app/KyvoriqWidgetProvider.kt').read_text()
+          assert 'views.setImageViewResource(R.id.notif_title, R.drawable.kyvoriq_concentric_wordmark)' in service
+          assert 'val expanded = minHeight >= 170' in provider
+          assert 'if (expanded) views.setTextViewText(R.id.widget_state' in provider
+          print('Compact 4x1 widget, both notification variants and dynamic view bindings verified.')
+          PY
+      - name: Verify compact wordmark safety and non-invasive 404 route fallback
+        run: |
+          set -euo pipefail
+          INTRO=dev-trader/android/app/src/main/java/com/devtrader/app/KyvoriqLaunchOverlay.kt
+          UI=dev-trader/android/app/src/main/java/com/devtrader/app/SafeActivity.kt
+          WIDGET=dev-trader/android/app/src/main/res/layout/widget_kyvoriq_compact.xml
+          LAYOUT=dev-trader/android/app/src/main/java/com/devtrader/app/KyvoriqResponsiveLayout.kt
+          ! grep -Fq 'K / /   01' "$INTRO"
+          grep -Fq 'kyvoriq_emblem_intro_tight' "$INTRO"
+          grep -Fq 'privateRouteFallback = true' "$UI"
+          grep -Fq 'now - lastPrivateRouteProbeMs >= 12_000L' "$UI"
+          grep -Fq 'if (restoredPrivateRoute)' "$UI"
+          grep -Fq 'compactHeaderLabel("ALERTS ON")' "$UI"
+          grep -Fq 'val narrow = width < 620' "$LAYOUT"
+          grep -Fq 'wordmarkWidthDp' "$LAYOUT"
+          grep -Fq 'entryChecksFullText' "$UI"
+          python - <<'PY'
+          import xml.etree.ElementTree as ET
+          from pathlib import Path
+          base=Path('dev-trader/android/app/src/main/res')
+          for path in ['drawable/kyvoriq_emblem_intro_tight.xml',
+                       'layout/widget_kyvoriq_compact.xml']:
+              ET.parse(base/path)
+          assert 'android:layout_height="25dp"' in (base/'layout/widget_kyvoriq_compact.xml').read_text()
+          assert 'android:id="@+id/widget_alerts"' in (base/'layout/widget_kyvoriq_compact.xml').read_text()
+          print('Source gate: intro, vector bounds, compact widget and secure transient route recovery present.')
+          PY
       - name: Build signed release APK
         working-directory: dev-trader/android
         run: |
@@ -90,7 +225,47 @@ jobs:
           grep -Fq 'tapped_at_ms' dev-trader/android/app/src/main/java/com/devtrader/app/SafeActivity.kt
           ! grep -Fq 'fallbackLine("NPOC"' dev-trader/android/app/src/main/java/com/devtrader/app/SafeActivity.kt
           ! grep -Fq 'dewald_levels_2026_10_12' dev-trader/android/app/src/main/java/com/devtrader/app/SafeActivity.kt
-      - name: Verify matching Build 141 signing certificate
+          ! grep -Fq 'musicIsland' dev-trader/android/app/src/main/java/com/devtrader/app/SafeActivity.kt
+          test ! -f dev-trader/android/app/src/main/java/com/devtrader/app/KyvoriqMusicIsland.kt
+          test ! -f dev-trader/android/app/src/main/java/com/devtrader/app/KyvoriqPrivateMusic.kt
+          ! find dev-trader/android/app/src/main/assets/ -type f -name '*.mp3' 2>/dev/null | grep -q .
+          grep -Fq 'showConsumerAccountPanel()' dev-trader/android/app/src/main/java/com/devtrader/app/SafeActivity.kt
+          grep -Fq 'CONSUMER_PORTAL_URL' dev-trader/android/app/build.gradle.kts
+          grep -Fq 'refreshConsumerPresentation()' dev-trader/android/app/src/main/java/com/devtrader/app/SafeActivity.kt
+          ! grep -Fq 'SYSTEM_ALERT_WINDOW' dev-trader/android/app/src/main/AndroidManifest.xml
+          ! grep -Fq 'READ_MEDIA_AUDIO' dev-trader/android/app/src/main/AndroidManifest.xml
+      - name: Verify reconnect failure diagnostics
+        shell: bash
+        run: |
+          set -euo pipefail
+          CLIENT=dev-trader/android/app/src/main/java/com/devtrader/app/SafeActivity.kt
+          grep -Fq '"BACKEND ROUTE 404"' "$CLIENT"
+          grep -Fq '"PAIRING REQUIRED"' "$CLIENT"
+          grep -Fq '"HTTP FALLBACK"' "$CLIENT"
+          grep -Fq '"INVALID SNAPSHOT"' "$CLIENT"
+          grep -Fq 'verifiedRestSnapshot' "$CLIENT"
+      - name: Verify authenticated signal-service health semantics
+        shell: bash
+        run: |
+          set -euo pipefail
+          SERVICE=dev-trader/android/app/src/main/java/com/devtrader/app/SignalService.kt
+          grep -Fq 'AUTH_REQUIRED' "$SERVICE"
+          grep -Fq 'authRetryAfterMs' "$SERVICE"
+          grep -Fq 'A successful handshake is not evidence of valid market data' "$SERVICE"
+          grep -Fq 'channelActive' "$SERVICE"
+          ! grep -Fq 'updateServiceNotification(ServiceUiState.LIVE)' "$SERVICE"
+      - name: Verify diagnostics error visibility
+        shell: bash
+        run: |
+          set -euo pipefail
+          CLIENT=dev-trader/android/app/src/main/java/com/devtrader/app/SafeActivity.kt
+          grep -Fq 'PAIRING EXPIRED (401)' "$CLIENT"
+          grep -Fq 'BACKEND ROUTE UNAVAILABLE (404)' "$CLIENT"
+          grep -Fq 'PUBLIC BACKEND  •  REACHABLE' "$CLIENT"
+          grep -Fq 'Bitget execution readiness  •  UNVERIFIED' "$CLIENT"
+          grep -Fq 'if (!bootstrapFresh && lastHardHttpStatus == null)' "$CLIENT"
+          ! grep -Fq 'Backend diagnostics failed.' "$CLIENT"
+      - name: Verify matching Build 156 signing certificate
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -99,7 +274,7 @@ jobs:
           CURRENT="dev-trader/android/app/build/outputs/apk/release/app-release.apk"
           test -s "$CURRENT"
           mkdir -p /tmp/kyvoriq-prior
-          gh release download dev-trader-v0.21.16-141 --pattern app-release.apk --dir /tmp/kyvoriq-prior
+          gh release download dev-trader-v0.21.31-156 --pattern app-release.apk --dir /tmp/kyvoriq-prior
           PREVIOUS="/tmp/kyvoriq-prior/app-release.apk"
           test -s "$PREVIOUS"
           SDKROOT="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
@@ -117,9 +292,9 @@ jobs:
           test -n "$CURRENT_CERT" || { echo "New certificate fingerprint unavailable"; exit 1; }
           test "$PREVIOUS_CERT" = "$CURRENT_CERT" || { echo "Different APK signing identity: release refused"; exit 1; }
           "$AAPT" dump badging "$CURRENT" > /tmp/kyvoriq-new-package.txt
-          grep -Fq "package: name='com.devtrader.app' versionCode='142' versionName='0.21.17'" /tmp/kyvoriq-new-package.txt || { echo "Package identifier or version mismatch"; exit 1; }
+          grep -Fq "package: name='com.devtrader.app' versionCode='157' versionName='0.21.32'" /tmp/kyvoriq-new-package.txt || { echo "Package identifier or version mismatch"; exit 1; }
           ! unzip -l "$CURRENT" | grep -Ei 'ui_preview.json|signing.jks|\.env'
-          echo "Build 142 package, version, signature and preview exclusion verified."
+          echo "Build 157 package, version, signature and preview exclusion verified."
 
       - name: Prepare release metadata
         shell: bash
@@ -169,7 +344,7 @@ jobs:
             echo "Existing signed APK must not be replaced."
             exit 1
           fi
-          gh release create "$TAG" --target "$GITHUB_SHA" "$APK" "dev-trader-update.json#dev-trader-update.json" --title "KYVORIQ ${{ steps.meta.outputs.version_name }}" --notes "Signed KYVORIQ Build 142: premium monochrome Trade, Positions and Insights interface, preserved chart overlays, white/gray candles, deep gold KYVORIQ icon and silver-white branding. No trading-engine changes."
+          gh release create "$TAG" --target "$GITHUB_SHA" "$APK" "dev-trader-update.json#dev-trader-update.json" --title "KYVORIQ ${{ steps.meta.outputs.version_name }}" --notes "Signed KYVORIQ Build 157 consumer foundation: removes all music features, expands responsive BTC chart, introduces guarded account entry, and hides owner-only trading/diagnostics on unpaired devices. Paid registration and subscriptions remain disabled until independently deployed and verified."
 
       - name: Publish update manifest
         env:
