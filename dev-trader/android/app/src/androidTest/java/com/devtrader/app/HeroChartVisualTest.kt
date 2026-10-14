@@ -143,12 +143,37 @@ class HeroChartVisualTest {
             }
             SystemClock.sleep(110)
             screenshot("ob-next-page")
+            // Build 161 consumer Insights must not expose retired debug cards
+            // to anyone, including a locally paired owner.
             inst.runOnMainSync {
+                val all = children(activity.window.decorView)
+                all.filterIsInstance<Button>().first {
+                    it.contentDescription == "Workspace INSIGHTS"
+                }.performClick()
+                val titles = children(activity.window.decorView)
+                    .filterIsInstance<android.widget.TextView>()
+                    .filter { it.isShown }.map { it.text.toString().uppercase() }
+                for (banned in listOf("ALERT INTELLIGENCE", "POSITION RISK HEAT", "CONNECTION")) {
+                    assertFalse("Retired Insights card leaked: $banned",
+                        titles.any { it == banned })
+                }
+                children(activity.window.decorView).filterIsInstance<Button>()
+                    .first { it.contentDescription == "Workspace TRADE" }.performClick()
+                assertTrue(children(activity.window.decorView)
+                    .any { it is KyvoriqGoldAccountButton })
                 children(activity.window.decorView).filterIsInstance<Button>()
                     .first { it.contentDescription == "Sign in or create a KYVORIQ account" }.performClick()
             }
             SystemClock.sleep(250)
             screenshot("account-free")
+            inst.runOnMainSync {
+                val rows = children(activity.window.decorView)
+                    .filterIsInstance<android.widget.TextView>()
+                    .filter { it.isShown }.map { it.text.toString() }
+                for (name in listOf("Log in", "Sign up", "Continue with Google", "Forgot password?")) {
+                    assertTrue("Missing consumer auth entry: $name", name in rows)
+                }
+            }
             assertFalse("Opening sheet must not grant owner access", KyvoriqSecureSession.isPaired(activity))
             inst.sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_BACK) // close account sheet
             SystemClock.sleep(200)
@@ -160,6 +185,12 @@ class HeroChartVisualTest {
             }
             SystemClock.sleep(250)
             screenshot("account-owner")
+            inst.runOnMainSync {
+                val names = children(activity.window.decorView)
+                    .filterIsInstance<android.widget.TextView>()
+                    .filter { it.isShown }.map { it.text.toString() }
+                assertTrue("Owner account needs explicit red Sign out action", names.contains("Sign out"))
+            }
         } catch (failure: Throwable) {
             screenshot("failure")
             throw failure
