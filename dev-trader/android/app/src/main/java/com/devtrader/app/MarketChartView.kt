@@ -1616,7 +1616,7 @@ class MarketChartView @JvmOverloads constructor(
         val edge = dp(11f)
         if (bottom - top < edge * 2f) return List(ideals.size) { null }
         val placed = mutableListOf<Float>()
-        val protected = reserved.filter { it.isFinite() }
+        val protectedCenters = reserved.filter { it.isFinite() }
         return ideals.map { source ->
             if (!source.isFinite()) return@map null
             val ideal = source.coerceIn(top + edge, bottom - edge)
@@ -1627,7 +1627,7 @@ class MarketChartView @JvmOverloads constructor(
             val selected = candidates.firstOrNull { y ->
                 y in (top + edge)..(bottom - edge) &&
                     placed.all { abs(it - y) >= dp(22f) } &&
-                    protected.all { abs(it - y) >= dp(25f) }
+                    protectedCenters.all { abs(it - y) >= dp(25f) }
             }
             if (selected != null) placed.add(selected)
             selected
