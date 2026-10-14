@@ -217,6 +217,24 @@ class KyvoriqWidgetProvider : AppWidgetProvider() {
             val updated = prefs.getLong(KEY_UPDATED, 0L)
             val quoteFresh = updated > 0L && System.currentTimeMillis() - updated in 0L..20_000L
             val paired = KyvoriqSecureSession.isPaired(context)
+            // No consumer widget entitlement provider is live yet. Never
+            // expose cached owner market/execution state after local expiry,
+            // logout or device unpairing. Server-verified Pro/Elite projection
+            // must replace this guard before consumer widget launch.
+            if (!paired) {
+                views.setTextViewText(R.id.widget_price_0, "—")
+                views.setTextViewText(R.id.widget_price_1, "—")
+                views.setDisplayedChild(R.id.widget_price_flipper, 0)
+                views.setTextViewText(R.id.widget_delta, "•")
+                views.setTextViewText(R.id.widget_bias, "LOCKED")
+                views.setTextViewText(R.id.widget_health, "SIGN IN")
+                if (expanded) {
+                    views.setTextViewText(R.id.widget_state, "MARKET WIDGET LOCKED")
+                    views.setTextViewText(R.id.widget_pnl, "P&L  PRIVATE")
+                }
+                manager.updateAppWidget(appWidgetId, views)
+                return
+            }
             val healthLabel = when {
                 !paired -> "PAIR"
                 !quoteFresh -> "STALE"
