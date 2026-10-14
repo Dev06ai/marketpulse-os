@@ -196,6 +196,7 @@ class SafeActivity : FragmentActivity() {
     private lateinit var privacyButton: Button
     private lateinit var widgetButton: Button
     private var selectedTf = "1h"
+    private var timeframeStrip: IvoryPillStrip? = null
     private var lastStateReceivedMs = 0L
     private var latestRoot: JSONObject? = null
     private var lastSignalId: String? = null
@@ -946,7 +947,9 @@ class SafeActivity : FragmentActivity() {
             setOnClickListener { showPublicAccessInfo() }
         }
         tradePage.addView(publicMarketMessage!!, margins(bottom = 8))
-        val tfRow = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
+        val tfStrip = IvoryPillStrip(this)
+        timeframeStrip = tfStrip
+        val tfRow = tfStrip.buttons
         listOf("5m", "15m", "1h", "4h").forEach { tf ->
             val button = compactPillButton(tf).apply { contentDescription = "Chart $tf" }
             button.setOnClickListener {
@@ -959,12 +962,18 @@ class SafeActivity : FragmentActivity() {
                 restoreCachedChart()
                 chart.setTimeframe(tf)
                 refreshTimeframeButtons(tfRow)
+                if (KyvoriqTheme.motionEnabled(this@SafeActivity)) {
+                    chart.animate().cancel()
+                    chart.alpha = 0.82f
+                    chart.animate().alpha(1f).setDuration(260L)
+                        .setInterpolator(KyvoriqTheme.motion).start()
+                }
                 requestChartIfNeeded(force = true)
             }
             tfRow.addView(button, LinearLayout.LayoutParams(0, dp(34), 1f).apply { leftMargin = dp(2); rightMargin = dp(2) })
         }
         timeframeButtonRow = tfRow
-        tradePage.addView(tfRow, margins(bottom = 3))
+        tradePage.addView(tfStrip, margins(bottom = 3))
         chart = MarketChartView(this).apply {
             minimumHeight = 0
             contentDescription = "Interactive price chart"
@@ -1072,7 +1081,8 @@ class SafeActivity : FragmentActivity() {
         var selectedInsightTab = 0
         val insightTabs = mutableListOf<Button>()
         val insightSections = mutableListOf<Pair<Int, View>>()
-        val insightTabsRow = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
+        val insightStrip = IvoryPillStrip(this)
+        val insightTabsRow = insightStrip.buttons
         listOf("All", "Structure", "System").forEachIndexed { tab, title ->
             val button = compactPillButton(title).apply {
                 textSize = 10f
@@ -1089,6 +1099,7 @@ class SafeActivity : FragmentActivity() {
                     chip.setTextColor(if (selected) kyCharcoal else kyWhite)
                     chip.background = KyvoriqTheme.button(this@SafeActivity, selected, 10f)
                 }
+                insightStrip.select(tab, animated = !debugPreview)
                 insightSections.forEach { (category, card) ->
                     val showing = tab == 0 || tab == category
                     card.animate().cancel()
@@ -1113,8 +1124,9 @@ class SafeActivity : FragmentActivity() {
                 leftMargin = dp(2); rightMargin = dp(2)
             })
         }
-        insightsContent.addView(insightTabsRow, margins(bottom = 12))
-        adminOnlyViews.add(insightTabsRow)
+        insightsContent.addView(insightStrip, margins(bottom = 12))
+        insightStrip.select(0, animated = false)
+        adminOnlyViews.add(insightStrip)
         consumerWelcomeCard = premiumCard(
             "YOUR KYVORIQ ACCOUNT",
             "FREE  •  Bollinger Bands, 50 EMA, SFP watch references.\n" +
@@ -2118,13 +2130,20 @@ class SafeActivity : FragmentActivity() {
         }
 
     private fun refreshTimeframeButtons(row: LinearLayout) {
-        for (i in 0 until row.childCount) {
-            val child = row.getChildAt(i) as? Button ?: continue
-            val tf = child.text.toString()
-            val selected = tf == selectedTf
-            child.isSelected = selected
-            child.setTextColor(if (selected) kyCharcoal else kyWhite)
-            child.background = KyvoriqTheme.button(this, selected, 11f)
+        val index = (0 until row.childCount).firstOrNull {
+            (row.getChildAt(it) as? Button)?.text?.toString() == selectedTf
+        } ?: 0
+        val strip = timeframeStrip
+        if (strip != null) {
+            strip.select(index, animated = !debugPreview)
+        } else {
+            for (i in 0 until row.childCount) {
+                val child = row.getChildAt(i) as? Button ?: continue
+                val selected = i == index
+                child.isSelected = selected
+                child.setTextColor(if (selected) kyCharcoal else kyWhite)
+                child.background = KyvoriqTheme.button(this, selected, 22f)
+            }
         }
     }
 
