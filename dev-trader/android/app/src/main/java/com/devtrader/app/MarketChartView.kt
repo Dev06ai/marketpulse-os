@@ -139,6 +139,11 @@ class MarketChartView @JvmOverloads constructor(
     }
     private val volumeUpPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(206, 207, 210); alpha = 175 }
     private val volumeDownPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(109, 112, 119); alpha = 175 }
+    // Estimated volume at price, not exact tick-trade distribution.
+    private val profileUpPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(187, 145, 65); alpha = 110 }
+    private val profileDownPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(84, 122, 174); alpha = 110 }
+    private val profileLinePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { strokeWidth = dp(.85f); alpha = 165 }
+    private val profileCaptionPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = KyvoriqTheme.muted; textSize = dp(7.1f) }
     private val liveChipPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = KyvoriqTheme.graphite }
     private val liveDotPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(198, 201, 205) }
     private val controlActivePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(216, 218, 221) }
@@ -221,6 +226,8 @@ class MarketChartView @JvmOverloads constructor(
     private var signal: JSONObject? = null
     private var ema50: Double? = null
     private var overlays = JSONArray()
+    private var sessionProfiles = JSONArray()
+    private var screenshotReferences = JSONArray()
     private var timeframe = "1h"
     private var livePrice = Double.NaN
     private var feedHealthy = false
@@ -236,6 +243,7 @@ class MarketChartView @JvmOverloads constructor(
     private var showDailyLevels = layerPrefs.getBoolean("daily", true)
     private var showWeeklyLevels = layerPrefs.getBoolean("weekly", true)
     private var showOtherLevels = layerPrefs.getBoolean("other", false)
+    private var showSessionProfiles = layerPrefs.getBoolean("session_profile", true)
     private var levelMenuOpen = false
     private var fullscreenMode = false
     var onFullscreenRequested: (() -> Unit)? = null
@@ -250,6 +258,7 @@ class MarketChartView @JvmOverloads constructor(
         showSfpLevels || showNpocLevels || showObLevels || showDailyLevels || showWeeklyLevels || showOtherLevels
 
     private fun isOverlayVisible(row: JSONObject): Boolean {
+        if (row.optString("source", "").startsWith("MINDPILLAR_SCREENSHOT_")) return showSessionProfiles
         val kind = row.optString("kind", "LEVEL").uppercase(Locale.US)
         val label = row.optString("label", kind).uppercase(Locale.US)
         return when {
@@ -270,6 +279,7 @@ class MarketChartView @JvmOverloads constructor(
             .putBoolean("daily", showDailyLevels)
             .putBoolean("weekly", showWeeklyLevels)
             .putBoolean("other", showOtherLevels)
+            .putBoolean("session_profile", showSessionProfiles)
             .apply()
     }
 
@@ -289,6 +299,23 @@ class MarketChartView @JvmOverloads constructor(
             customAlertLevels = checked
             invalidate()
         }
+    }
+
+    fun setSessionProfiles(value: JSONArray?) {
+        sessionProfiles = value ?: JSONArray()
+        invalidate()
+    }
+
+    fun setReferenceLevels(value: JSONArray?) {
+        screenshotReferences = value ?: JSONArray()
+        invalidate()
+    }
+
+    private fun displayLevelRows(): List<JSONObject> {
+        val now = System.currentTimeMillis()
+        return (0 until overlays.length()).mapNotNull { overlays.optJSONObject(it) } +
+            (0 until screenshotReferences.length()).mapNotNull { screenshotReferences.optJSONObject(it) }
+                .filter { it.optLong("reference_expires_ms", 0L) > now }
     }
 
     private fun overlayKey(row: JSONObject): String {
@@ -572,6 +599,7 @@ class MarketChartView @JvmOverloads constructor(
         if (hasVisibleLevelLayers()) drawZoneOverlays(canvas, left, right, top, priceBottom, low, high)
 
         val step = (right - left) / actualVisible
+        if (showSessionProfiles) drawSessionVolumeProfiles(canvas, start, left, right, top, priceBottom, low, high, step)
         val candleWidth = max(dp(2.4f), min(dp(9.2f), step * 0.62f))
 
         for (j in 0 until actualVisible) {
@@ -614,8 +642,8 @@ class MarketChartView @JvmOverloads constructor(
 
         if (showBollinger) drawBollinger(canvas, start, actualVisible, left, top, priceBottom, low, high, step)
         if (showEma) drawEma50(canvas, start, actualVisible, left, top, priceBottom, low, high, step)
+        if (hasVisibleLevelLayers() || showSessionProfiles) drawStructureOverlays(canvas, left, right, top, priceBottom, low, high)
         if (hasVisibleLevelLayers()) {
-            drawStructureOverlays(canvas, left, right, top, priceBottom, low, high)
             signal?.let { s ->
                 val revealBase = if (tradeRevealStartedAt > 0L && KyvoriqTheme.motionEnabled(context)) {
                     ((SystemClock.elapsedRealtime() - tradeRevealStartedAt) / 820f).coerceIn(0f, 1f)
@@ -660,7 +688,7 @@ class MarketChartView @JvmOverloads constructor(
         }
         // OB labels must be painted last so candles/EMA cannot cover prices.
         if (hasVisibleLevelLayers()) drawZonePriceBadges(canvas, left, right, top, priceBottom, low, high)
-        drawAxisLevelLabels(canvas, right, top, priceBottom, low, high)
+        drawAxisLevelLabels(canvas, right, top, priceBottom, low, high, start, endExclusive)
 
         if (!livePrice.isNaN() && visibleLive) {
             val y = mapY(livePrice, low, high, top, priceBottom)
@@ -681,6 +709,7 @@ class MarketChartView @JvmOverloads constructor(
                     "EMA" -> showEma
                     "LVL" -> hasVisibleLevelLayers()
                     "VOL" -> showVolume
+                    "VP" -> showSessionProfiles
                     "FULL" -> fullscreenMode
                     else -> false
                 }
@@ -719,7 +748,7 @@ class MarketChartView @JvmOverloads constructor(
         val top = dp(21f)
         val height = dp(16f)
         val gap = dp(4f)
-        val specs = listOf("BB" to 26f, "EMA" to 34f, "LVL" to 32f, "VOL" to 32f, "FULL" to 38f)
+        val specs = listOf("BB" to 26f, "EMA" to 34f, "LVL" to 32f, "VOL" to 32f, "VP" to 28f, "FULL" to 38f)
         var x = left
         return specs.map { (key, widthDp) ->
             val rect = RectF(x, top, x + dp(widthDp), top + height)
@@ -794,6 +823,7 @@ class MarketChartView @JvmOverloads constructor(
             "EMA" -> showEma = !showEma
             "LVL" -> levelMenuOpen = !levelMenuOpen
             "VOL" -> showVolume = !showVolume
+            "VP" -> { showSessionProfiles = !showSessionProfiles; persistLayerPrefs() }
             "FULL" -> onFullscreenRequested?.invoke()
         }
         crosshairVisible = false
@@ -1386,8 +1416,8 @@ class MarketChartView @JvmOverloads constructor(
         low: Double,
         high: Double
     ) {
-        if (overlays.length() == 0) return
-        val rows = (0 until overlays.length()).mapNotNull { overlays.optJSONObject(it) }
+        if (overlays.length() == 0 && screenshotReferences.length() == 0) return
+        val rows = displayLevelRows()
             .mapNotNull { row ->
                 if (!isOverlayVisible(row)) return@mapNotNull null
                 val zoneLow = row.optDouble("zone_low", Double.NaN)
@@ -1407,7 +1437,9 @@ class MarketChartView @JvmOverloads constructor(
                 "SFP", "WEEKLY", "WEEKLY_OPEN", "WEEKLY_NPOC" -> KyvoriqTheme.gold
                 "DLINE" -> KyvoriqTheme.ember
                 "OB", "OB_ZONE" -> KyvoriqTheme.white
-                "NPOC", "RANGE_POC", "SUPPLY_ZONE" -> Color.rgb(255, 82, 105)
+                "NPOC", "RANGE_POC", "IPOC", "SUPPLY_ZONE" -> Color.rgb(255, 82, 105)
+                "RANGE_VAH", "RANGE_VAL" -> Color.rgb(85, 139, 218)
+                "SFP_GAP" -> KyvoriqTheme.white
                 "DAILY" -> Color.rgb(54, 211, 153)
                 else -> KyvoriqTheme.muted
             }
@@ -1494,6 +1526,83 @@ class MarketChartView @JvmOverloads constructor(
         }
     }
 
+
+    // Uses the chart's actual candle-time and price transforms, including pan,
+    // zoom and portrait/fullscreen changes. The estimate does not drive trades.
+    private fun drawSessionVolumeProfiles(
+        canvas: Canvas, startIndex: Int, left: Float, right: Float,
+        top: Float, bottom: Float, low: Double, high: Double, candleStep: Float
+    ) {
+        val firstTs = candles.optJSONObject(startIndex)?.optLong("start", 0L) ?: return
+        if (firstTs <= 0L) return
+        val durationMs = when (timeframe) {
+            "5m" -> 300_000L
+            "15m" -> 900_000L
+            "1h" -> 3_600_000L
+            "4h" -> 14_400_000L
+            else -> return
+        }
+        fun timeX(ts: Long): Float =
+            left + (((ts - firstTs).toDouble() / durationMs) * candleStep).toFloat()
+        var drawnProfile = false
+        canvas.save()
+        canvas.clipRect(left, top, right, bottom)
+        for (idx in 0 until sessionProfiles.length()) {
+            val session = sessionProfiles.optJSONObject(idx) ?: continue
+            if (session.optString("source") != "OHLCV_15M_ESTIMATE") continue
+            val begin = session.optLong("start_ms", 0L)
+            val finish = session.optLong("end_ms", 0L)
+            if (begin <= 0L || finish <= begin) continue
+            val visibleLeft = max(left + dp(2f), timeX(begin) + dp(2f))
+            val visibleRight = min(right - dp(2f), timeX(finish) - dp(2f))
+            if (visibleRight - visibleLeft < dp(16f)) continue
+            val bins = session.optJSONArray("bins") ?: continue
+            val histogramWidth = min(dp(64f), (visibleRight - visibleLeft) * .53f)
+            val maxVolume = (0 until bins.length()).mapNotNull { bins.optJSONObject(it) }
+                .maxOfOrNull { it.optDouble("volume", 0.0) } ?: 0.0
+            if (maxVolume <= 0.0) continue
+            val first = bins.optJSONObject(0)?.optDouble("price", Double.NaN) ?: Double.NaN
+            val second = bins.optJSONObject(1)?.optDouble("price", Double.NaN) ?: Double.NaN
+            val pixelHeight = if (first.isFinite() && second.isFinite()) {
+                abs(mapY(first, low, high, top, bottom) - mapY(second, low, high, top, bottom))
+                    .coerceAtLeast(dp(1f))
+            } else dp(1f)
+            drawnProfile = true
+            for (i in 0 until bins.length()) {
+                val bin = bins.optJSONObject(i) ?: continue
+                val p = bin.optDouble("price", Double.NaN)
+                val volume = bin.optDouble("volume", 0.0)
+                if (!p.isFinite() || volume <= 0.0 || p !in low..high) continue
+                val y = mapY(p, low, high, top, bottom)
+                val w = (histogramWidth * (volume / maxVolume)).toFloat()
+                val downFraction = (bin.optDouble("down", 0.0) / volume).coerceIn(0.0, 1.0).toFloat()
+                val downWidth = w * downFraction
+                val binTop = (y - pixelHeight * .47f).coerceAtLeast(top)
+                val binBottom = (y + pixelHeight * .47f).coerceAtMost(bottom)
+                if (binBottom <= binTop) continue
+                canvas.drawRect(visibleLeft, binTop, visibleLeft + downWidth, binBottom, profileDownPaint)
+                canvas.drawRect(visibleLeft + downWidth, binTop, visibleLeft + w, binBottom, profileUpPaint)
+            }
+            for ((field, color) in listOf(
+                "poc" to Color.rgb(218, 113, 143),
+                "vah" to Color.rgb(85, 139, 218),
+                "val" to Color.rgb(85, 139, 218)
+            )) {
+                val price = session.optDouble(field, Double.NaN)
+                if (!price.isFinite() || price !in low..high) continue
+                profileLinePaint.color = color
+                canvas.drawLine(visibleLeft, mapY(price, low, high, top, bottom),
+                    visibleRight, mapY(price, low, high, top, bottom), profileLinePaint)
+            }
+        }
+        if (drawnProfile) {
+            val caption = "VP 15m • EST"
+            canvas.drawText(caption, right - profileCaptionPaint.measureText(caption) - dp(6f),
+                top + dp(10f), profileCaptionPaint)
+        }
+        canvas.restore()
+    }
+
     private data class AxisLevelMark(val originalY: Float, val value: Double, val text: String, val color: Int)
 
     private fun drawAxisLevelLabels(
@@ -1502,13 +1611,15 @@ class MarketChartView @JvmOverloads constructor(
         top: Float,
         bottom: Float,
         low: Double,
-        high: Double
+        high: Double,
+        start: Int,
+        endExclusive: Int
     ) {
-        if (overlays.length() == 0 || !hasVisibleLevelLayers()) return
+        if (!hasVisibleLevelLayers() && !showSessionProfiles) return
         val wallNow = System.currentTimeMillis()
         val liveY = if (livePrice.isFinite() && livePrice in low..high) mapY(livePrice, low, high, top, bottom)
                     else Float.NaN
-        val markers = (0 until overlays.length()).mapNotNull { overlays.optJSONObject(it) }.mapNotNull { row ->
+        val manualMarkers = displayLevelRows().mapNotNull { row ->
             if (!isOverlayVisible(row)) return@mapNotNull null
             val zLow = row.optDouble("zone_low", Double.NaN)
             val zHigh = row.optDouble("zone_high", Double.NaN)
@@ -1522,21 +1633,48 @@ class MarketChartView @JvmOverloads constructor(
                 "NPOC" -> "N"
                 "WEEKLY", "WEEKLY_NPOC", "WEEKLY_OPEN" -> "W"
                 "RANGE_POC" -> "P"
+                "RANGE_VAH" -> "H"
+                "RANGE_VAL" -> "L"
+                "IPOC" -> "iP"
+                "SFP_GAP" -> "G"
                 "SFP" -> "S"
                 "OB", "OB_ZONE" -> "OB"
                 else -> "L"
             }
             val color = when(kind) {
                 "DAILY" -> Color.rgb(54, 211, 153)
-                "NPOC", "RANGE_POC" -> Color.rgb(255, 82, 105)
+                "NPOC", "RANGE_POC", "IPOC" -> Color.rgb(255, 82, 105)
+                "RANGE_VAH", "RANGE_VAL" -> Color.rgb(85, 139, 218)
+                "SFP_GAP" -> KyvoriqTheme.white
                 "SFP", "WEEKLY", "WEEKLY_OPEN", "WEEKLY_NPOC" -> KyvoriqTheme.gold
                 "OB", "OB_ZONE" -> KyvoriqTheme.white
                 else -> KyvoriqTheme.muted
             }
             AxisLevelMark(mapY(value, low, high, top, bottom), value,
                 type + " " + compactPrice(value), color)
-        }.distinctBy { (it.value * 10).roundToInt() }
-         .sortedBy { it.originalY }
+        }
+        val earliest = candles.optJSONObject(start)?.optLong("start", 0L) ?: 0L
+        val latest = candles.optJSONObject(endExclusive - 1)?.optLong("end", 0L) ?: 0L
+        val profileMarkers = if (!showSessionProfiles) emptyList() else {
+            val active = (0 until sessionProfiles.length()).mapNotNull { sessionProfiles.optJSONObject(it) }
+                .lastOrNull { it.optLong("start_ms", Long.MAX_VALUE) <= latest &&
+                    it.optLong("end_ms", 0L) >= earliest }
+            if (active == null) emptyList() else {
+                listOf(
+                    Triple("poc", Color.rgb(218, 113, 143), "P"),
+                    Triple("vah", Color.rgb(85, 139, 218), "H"),
+                    Triple("val", Color.rgb(85, 139, 218), "L")
+                ).mapNotNull { (field, color, tag) ->
+                    val value = active.optDouble(field, Double.NaN)
+                    if (value.isFinite() && value in low..high)
+                        AxisLevelMark(mapY(value, low, high, top, bottom), value, tag + " " + compactPrice(value), color)
+                    else null
+                }
+            }
+        }
+        val markers = (manualMarkers + profileMarkers)
+            .distinctBy { (it.value * 10).roundToInt() }
+            .sortedBy { it.originalY }
 
         // Keep tags aligned with the same right-side strip as BTC axis values.
         // A sparse lane prevents stacked level pills from concealing the plot.
@@ -1573,7 +1711,7 @@ class MarketChartView @JvmOverloads constructor(
     private fun axisWidth(): Float {
         val sample = compactPrice(if (livePrice.isFinite()) livePrice else 99999.0)
         return max(dp(40f), max(livePriceTextPaint.measureText(sample) + dp(8f),
-            axisLevelTextPaint.measureText("OB $sample") + dp(5f)))
+            axisLevelTextPaint.measureText("VAH $sample") + dp(5f)))
     }
 
     private fun plotRight(): Float = width - axisWidth()
