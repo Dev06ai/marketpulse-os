@@ -38,7 +38,9 @@ jobs:
         with:
           api-level: 35
           arch: x86_64
-          target: google_apis
+          # AOSP system image avoids the Google Pixel Launcher ANR triggered
+          # by changing virtual screen dimensions five times in one run.
+          target: default
           profile: pixel_6
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
           script: |
