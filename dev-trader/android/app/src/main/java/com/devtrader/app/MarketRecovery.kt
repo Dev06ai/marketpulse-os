@@ -8,6 +8,7 @@ import org.json.JSONObject
 object MarketRecovery {
     const val PERPETUAL = "BITGET_PERPETUAL"
     const val SPOT = "BINANCE_SPOT"
+    const val KRAKEN_SPOT = "KRAKEN_SPOT"
     private const val PREFS = "kyvoriq_public_candles_v1"
     private const val MAX_CACHE_AGE = 48 * 60 * 60_000L
     fun intervalMs(tf: String): Long = when (tf) {
@@ -50,7 +51,7 @@ object MarketRecovery {
 
     fun save(context: Context, tf: String, rows: JSONArray, source: String) {
         runCatching {
-            require(source in setOf(PERPETUAL, SPOT))
+            require(source in setOf(PERPETUAL, SPOT, KRAKEN_SPOT))
             val now = System.currentTimeMillis()
             val clean = sanitize(rows, tf, now)
             require(now - clean.getJSONObject(clean.length() - 1).getLong("start") < MAX_CACHE_AGE)
@@ -63,7 +64,7 @@ object MarketRecovery {
         val raw = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(tf, null) ?: return null
         val payload = JSONObject(raw)
         require(now - payload.getLong("saved_at") in 0..MAX_CACHE_AGE)
-        require(payload.getString("source") in setOf(PERPETUAL, SPOT))
+        require(payload.getString("source") in setOf(PERPETUAL, SPOT, KRAKEN_SPOT))
         val clean = sanitize(payload.getJSONArray("candles"), tf, now)
         require(now - clean.getJSONObject(clean.length() - 1).getLong("start") < MAX_CACHE_AGE)
         JSONObject().put("candles", clean).put("source", payload.getString("source"))
