@@ -147,7 +147,7 @@ for(const check of [
   'id="stop">—',
   'id="tp1">—'
 ])assert(htmlSource.includes(check),"Apex dashboard safety placeholder missing: "+check);
-assert(/<script\\b[^>]*src=["']\/app\\.js(?:\\?[^"']*)?["'][^>]*><\\/script>/i.test(htmlSource),
+assert(/<script\b[^>]*src=["']\/app\.js(?:\?[^"']*)?["'][^>]*><\/script>/i.test(htmlSource),
   "Apex external dashboard script not linked");
 for(const check of [
   'const action=["LONG","SHORT"].includes(x.action)?x.action:"WAIT";',
