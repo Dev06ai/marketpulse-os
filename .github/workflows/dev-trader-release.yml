@@ -7,6 +7,7 @@ on:
   workflow_dispatch:
 
 permissions:
+  actions: read
   contents: write
 
 jobs:
@@ -318,6 +319,35 @@ jobs:
           EOF
           echo "version_name=${VERSION_NAME}" >> "$GITHUB_OUTPUT"
           echo "version_code=${VERSION_CODE}" >> "$GITHUB_OUTPUT"
+
+      - name: Require exact Build 171 device QA pass before publishing
+        if: steps.meta.outputs.version_code == '171'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          QA_RUN=38571774831
+          QA_HEAD=e0da3749f2e880ddfd7cb59baf9b1a08e26ca34e
+          for attempt in $(seq 1 54); do
+            INFO="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${QA_RUN}" \
+              --jq '[.head_sha,.status,(.conclusion // "")] | join(" ")')"
+            read -r SHA STATE CONCLUSION <<< "$INFO"
+            test "$SHA" = "$QA_HEAD" || { echo "QA source identity mismatch"; exit 1; }
+            if [[ "$CONCLUSION" = success ]]; then
+              echo "Full Build 171 device QA passed on exact chart/source revision."
+              break
+            fi
+            if [[ "$STATE" = completed ]]; then
+              echo "Full Build 171 QA failed: $CONCLUSION"; exit 1
+            fi
+            if [[ "$attempt" = 54 ]]; then
+              echo "Full Build 171 QA still pending; refusing public update release"; exit 1
+            fi
+            sleep 10
+          done
+          git diff --quiet dev-trader/android/app/src/main/java/com/devtrader/app/MarketChartView.kt
+          git diff --quiet dev-trader/android/app/src/main/java/com/devtrader/app/SafeActivity.kt
 
       - name: Create release tag
         env:
