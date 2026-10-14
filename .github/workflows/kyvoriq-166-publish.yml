@@ -1,0 +1,78 @@
+name: Publish verified signed KYVORIQ 166 beta APK
+on:
+  push:
+    branches:
+      - ci/kyvoriq-166-publish-signed-20261014
+    paths:
+      - .github/workflows/kyvoriq-166-publish.yml
+permissions:
+  actions: read
+  contents: write
+concurrency:
+  group: signed-kyvoriq-166-publication
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TEST_RUN: "38549748371"
+      ARTIFACT_NAME: KYVORIQ-166-FIREBASE-TESTING-NOT-PUBLIC
+      RELEASE_TAG: dev-trader-v0.21.41-166
+      SOURCE_COMMIT: d4047304ffffbf5b0fcce7b4e3169abc697a2620
+      EXPECTED_SHA256: 1e3776c0c6e039ec9b62b17bd0713849a2fc818312414c8c64b9ecef15d669d1
+      EXPECTED_SIGNER: 17e4c550aa235dae926058654f203ecae9d7b30b432bde9dc2c358e28360cbab
+    steps:
+      - name: Confirm passing release build and prevent overwritten artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$TEST_RUN" --jq .conclusion)" = success
+          test "$(gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/11885993832" --jq .expired)" = false
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Refusing replacement of existing immutable release"
+            exit 1
+          fi
+          mkdir -p payload
+          gh run download "$TEST_RUN" --repo "$GITHUB_REPOSITORY" --name "$ARTIFACT_NAME" --dir payload
+      - name: Verify release identity, protected scope and APK signature
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd payload
+          test -s KYVORIQ-0.21.41-166-FIREBASE-TEST.apk
+          test -s KYVORIQ-0.21.41-166-FIREBASE-TEST.aab
+          sha256sum --check SHA256SUMS.txt
+          echo "$EXPECTED_SHA256  KYVORIQ-0.21.41-166-FIREBASE-TEST.apk" | sha256sum --check
+          python3 - <<'PY'
+          import json,os
+          scope=json.load(open("TEST-SCOPE.json"))
+          assert scope["source_commit"]==os.environ["SOURCE_COMMIT"]
+          assert scope["offline_security_tests"]=="passed"
+          assert scope["offline_emulator_tests"]=="passed"
+          assert scope["consumer_api_configured"] is False
+          assert scope["production_login_enabled"] is False
+          assert scope["payments_enabled"] is False
+          assert scope["update_manifest_modified"] is False
+          print("Signed owner beta; private authorization remains server-controlled.")
+          PY
+          APKSIGNER="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -1)"
+          AAPT="$(find "$ANDROID_HOME/build-tools" -type f -name aapt | sort -V | tail -1)"
+          "$APKSIGNER" verify --verbose KYVORIQ-0.21.41-166-FIREBASE-TEST.apk >/dev/null
+          "$APKSIGNER" verify --print-certs KYVORIQ-0.21.41-166-FIREBASE-TEST.apk | grep -Fq "$EXPECTED_SIGNER"
+          "$AAPT" dump badging KYVORIQ-0.21.41-166-FIREBASE-TEST.apk | head -1 | grep -Fq "package: name='com.devtrader.app' versionCode='166' versionName='0.21.41'"
+          ! unzip -Z1 KYVORIQ-0.21.41-166-FIREBASE-TEST.apk | grep -Ei '(^|/)(\.env|google-services\.json|signing\.jks)$'
+          cp KYVORIQ-0.21.41-166-FIREBASE-TEST.apk app-release.apk
+      - name: Publish immutable owner beta APK and recheck download digest
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release create "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+            --target "$SOURCE_COMMIT" --prerelease \
+            --title "KYVORIQ 0.21.41 — Build 166 unified login and fluid UI" \
+            --notes "Signed UI testing build with simplified email/password + Google auth, in-form signup/reset, three branded Trade/Signals/Insights icons, torn Coming Soon artwork, and elastic navigation micro-interactions. Auth does NOT unlock admin/paid/private trading. Consumer server remains unconfigured; Render trading hosting remains suspended. Visual animations are native Android and reduce-motion aware." \
+            payload/app-release.apk payload/KYVORIQ-0.21.41-166-FIREBASE-TEST.aab
+          mkdir -p verify-release
+          gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --pattern app-release.apk --dir verify-release
+          echo "$EXPECTED_SHA256  verify-release/app-release.apk" | sha256sum --check
