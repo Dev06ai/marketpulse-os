@@ -2780,9 +2780,9 @@ class SafeActivity : FragmentActivity() {
                     return@post
                 }
                 safe {
-                    val root = JSONObject(body)
-                    // A proxy may send 200 with an error JSON; never treat it as a live market snapshot.
-                    if (!root.has("data_health") || !root.optDouble("last_price", Double.NaN).isFinite()) {
+                    val root = runCatching { JSONObject(body) }.getOrNull()
+                    // A proxy may send 200 with HTML/error JSON; recover instead of trapping the chart.
+                    if (root == null || !root.has("data_health") || !root.optDouble("last_price", Double.NaN).isFinite()) {
                         status.text = "INVALID SNAPSHOT"
                         integrity.text = "HTTP  •  INVALID MARKET RESPONSE"
                         privateRouteFallback = true
@@ -2849,6 +2849,17 @@ class SafeActivity : FragmentActivity() {
 
     private fun renderState(root: JSONObject, requestChart: Boolean = true) {
         if (!debugPreview && (publicMarketOnly || !KyvoriqSecureSession.isPaired(this))) return
+        if (chartSource != MarketRecovery.PERPETUAL) {
+            // A private WS state can arrive before HTTP bootstrap on a cold start.
+            // Never apply perpetual prices/levels to cached spot candles.
+            latestChartCandles = JSONArray()
+            chart.setSessionProfiles(JSONArray())
+            chart.setReferenceLevels(JSONArray())
+            chart.setData(JSONArray(), null, null, Double.NaN, JSONArray())
+            chartSource = MarketRecovery.PERPETUAL
+            marketInstrument?.text = "PERPETUAL"
+            lastChartRequestMs = 0L
+        }
         val priceValue = root.optDouble("last_price", Double.NaN)
         val health = root.optString("data_health", "UNKNOWN")
         val ws = root.optBoolean("ws_connected", false)
