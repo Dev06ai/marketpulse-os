@@ -206,7 +206,6 @@ class HeroChartVisualTest {
                     assertFalse("Retired Insights card leaked: $banned",
                         titles.any { it == banned })
                 }
-                screenshot("insights-nav-168")
                 children(activity.window.decorView).filterIsInstance<Button>()
                     .first { it.contentDescription == "Workspace SIGNALS" }.performClick()
                 val signalsIcon = children(activity.window.decorView)
@@ -214,7 +213,6 @@ class HeroChartVisualTest {
                     .first { it.contentDescription == "Signals market icon" }
                 assertTrue("Large Signals icon should retain readable hero size",
                     signalsIcon.height >= (88 * densityForTest(activity)))
-                screenshot("signals-hero-168")
                 children(activity.window.decorView).filterIsInstance<Button>()
                     .first { it.contentDescription == "Workspace TRADE" }.performClick()
                 assertTrue(children(activity.window.decorView)
