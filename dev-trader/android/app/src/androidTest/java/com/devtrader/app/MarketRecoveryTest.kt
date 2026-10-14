@@ -71,12 +71,14 @@ class MarketRecoveryTest {
         server.enqueue(MockResponse().setHeader("Content-Type", "application/json").setBody(
             JSONObject().put("interval", "1h").put("candles", rows()).put("last_price", 105.0).toString()))
         server.start()
+        // MockWebServer.url() may resolve a hostname; keep it off Android's main thread.
+        val mockBase = server.url("/").toString().trimEnd('/')
         val activity = inst.startActivitySync(Intent(context, SafeActivity::class.java)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK).putExtra("visual_preview", true)) as SafeActivity
         try {
             KyvoriqSecureSession.save(context, "kvq.v1.test-only-no-server-access", System.currentTimeMillis()/1000 + 3600)
             inst.runOnMainSync {
-                field("backendBase").set(activity, server.url("/").toString().trimEnd('/'))
+                field("backendBase").set(activity, mockBase)
                 field("restClient\$delegate").set(activity, lazy { OkHttpClient.Builder()
                     .readTimeout(250, TimeUnit.MILLISECONDS).callTimeout(400, TimeUnit.MILLISECONDS).build() })
                 field("debugPreview").setBoolean(activity, false)
