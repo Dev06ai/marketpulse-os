@@ -1,9 +1,10 @@
-name: KYVORIQ 161 OB readable levels candidate
+name: KYVORIQ 161 OB, Insights and secure consumer auth candidate
 on:
   push:
     branches: [feature/build161-ob-insights-account]
     paths:
       - 'dev-trader/android/**'
+      - 'dev-trader/consumer-api/**'
       - '.github/workflows/verify-build161.yml'
 permissions:
   contents: read
@@ -46,7 +47,7 @@ jobs:
         run: |
           set -euo pipefail
           gradle assembleRelease bundleRelease assembleDebug assembleDebugAndroidTest --stacktrace
-      - name: Confirm 160 package ID, signature identity, hashes and no secret assets
+      - name: Confirm 161 package ID, signature identity, hashes and no secret assets
         run: |
           set -euo pipefail
           mkdir -p release preview
