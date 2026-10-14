@@ -59,66 +59,59 @@ def shot(name):
     OUT.joinpath(name + '.png').write_bytes(adb('exec-out', 'screencap', '-p'))
     OUT.joinpath(name + '.xml').write_bytes(adb('shell', 'cat', '/sdcard/interaction.xml'))
 
-# Native default 1h chart, scroll-safe inverse panning, navigation and calculator.
+# Native Build 158 Trade > Signals > Insights and responsive account surface.
 
 adb('shell', 'am', 'start', '-S', '-W', '-n', f'{PKG}/com.devtrader.app.SafeActivity',
     '--ez', 'visual_preview', 'true', '--ei', 'visual_workspace', '0')
-# Launch default must be the same 1h chart as the supplied reference.
 assert find(desc='Chart 1h').get('selected') == 'true'
-tap(desc='Chart 1h')
+
+# User-facing account is an accessible custom panel, not the old gray list dialog.
+tap(desc='Account: sign in or create account')
+find(text='KYVORIQ  /  ACCOUNT')
+find(text='Log in')
+find(text='Sign up')
+shot('account-logged-out')
+adb('shell', 'input', 'keyevent', 'KEYCODE_BACK')
 assert find(desc='Chart 1h').get('selected') == 'true'
-# Isolated TradingView preview must open and close without replacing the native
-# chart, even if the optional public chart bundle cannot load in the emulator.
-scroll_trade_to('TRADINGVIEW CHART  ↗')
-tap(desc='Open optional TradingView Lightweight Charts preview')
-find(text='TRADINGVIEW LIGHTWEIGHT CHARTS · PREVIEW')
-tap(desc='Close optional TradingView preview and return to KYVORIQ chart')
-assert find(desc='Chart 1h').get('selected') == 'true'
-tap(desc='Workspace POSITIONS')
-find(text='Demo performance')
+
+# All tiers, including Elite, are locked out of signals.
+tap(desc='Workspace SIGNALS')
+find(text='COMING SOON')
+shot('signals-locked')
 tap(desc='Workspace TRADE')
 assert find(desc='Chart 1h').get('selected') == 'true'
-scroll_trade_to('P&L CALCULATOR')
-tap(text='P&L CALCULATOR')
+
+# The full-width calculator launches without changing the chart or timeframe.
+calculator_desc = 'Open manual profit and loss and risk calculator'
+for attempt in range(9):
+    if any(n.get('content-desc') == calculator_desc for n in nodes()):
+        break
+    adb('shell', 'input', 'swipe', '1015', '1750', '1015', '570', '300')
+    time.sleep(.3)
+else:
+    raise AssertionError('Full-width P&L card missing or unreachable')
+tap(desc=calculator_desc)
 find(text='P&L calculator')
+find(text='Stop price (USDT)  •  optional risk sizing')
+find(text='Estimated fee rate per side (%)')
 shot('calculator')
 tap(text='SHORT')
 assert find(text='SHORT').get('selected') == 'true'
-adb('shell', 'input', 'keyevent', 'KEYCODE_BACK')
-scroll_trade_to('Decision center')
-find(text='Decision center')
-adb('shell', 'input', 'swipe', '540', '540', '540', '1720', '300')
-assert find(desc='Chart 1h').get('selected') == 'true'
-assert len([n for n in nodes() if n.get('content-desc', '').startswith('Workspace ')]) == 3
-# Repeat the former duplicate-page path with the on-screen back button.
-scroll_trade_to('P&L CALCULATOR')
-tap(text='P&L CALCULATOR')
 tap(desc='Back to trading workspace')
-assert len([n for n in nodes() if n.get('content-desc', '').startswith('Workspace ')]) == 3
+assert find(desc='Chart 1h').get('selected') == 'true'
 
-# Privacy sheet remains accessible after scrolling, without changing preferences.
 tap(desc='Workspace INSIGHTS')
-for _ in range(7):
-    if any(n.get('text', '').startswith('PRIVACY') for n in nodes()):
-        break
-    adb('shell', 'input', 'swipe', '500', '1750', '500', '550', '300')
-privacy = next(n.get('text') for n in nodes() if n.get('text', '').startswith('PRIVACY'))
-tap(text=privacy)
-find(text='PRIVACY SHIELD')
-shot('privacy')
-adb('shell', 'input', 'keyevent', 'KEYCODE_BACK')
+find(text='INSIGHTS')
+shot('insights-free')
+tap(desc='Workspace TRADE')
 
-# Android reduced-motion setting: content and navigation must remain visible.
+# Reduced motion must not hide the chart, calculator, or navigation.
 adb('shell', 'settings', 'put', 'global', 'animator_duration_scale', '0')
 adb('shell', 'am', 'start', '-S', '-W', '-n', f'{PKG}/com.devtrader.app.SafeActivity',
     '--ez', 'visual_preview', 'true', '--ei', 'visual_workspace', '0')
-scroll_trade_to('Decision center')
-find(text='Decision center')
-tap(desc='Workspace INSIGHTS')
-find(text='Entry checks')
-tap(desc='Workspace TRADE')
-scroll_trade_to('Decision center')
-find(text='Decision center')
-shot('reduced-motion')
+find(desc='Interactive price chart')
+tap(desc='Workspace SIGNALS')
+find(text='COMING SOON')
+shot('reduced-motion-signals')
 adb('shell', 'settings', 'put', 'global', 'animator_duration_scale', '1')
-print('Native navigation, selections, calculator return, privacy sheet and reduced motion verified.')
+print('Build158 native Trade, Signals, account panel, calculator and reduced motion verified.')
