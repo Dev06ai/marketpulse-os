@@ -1540,10 +1540,8 @@ class SafeActivity : FragmentActivity() {
      */
     private fun showConsumerEmailAuth(mode: String) {
         if (mode !in setOf("login", "signup", "forgot-password")) return
-        if (!KyvoriqConsumerIdentity.configured()) {
-            openConsumerPortal(mode)
-            return
-        }
+        // Render the same login UI in offline preview/emulator mode; the
+        // Firebase SDK still fails closed if live configuration is missing.
         val dialog = android.app.Dialog(this)
         val surface = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -1764,6 +1762,12 @@ class SafeActivity : FragmentActivity() {
         }
         primary.setOnClickListener {
             haptic(it, KyvoriqHaptics.Cue.ACTION)
+            if (!KyvoriqConsumerIdentity.configured()) {
+                dialog.dismiss()
+                showInfoDialog("Sign-in unavailable",
+                    "Firebase identity is unavailable in this offline preview. No access was granted.")
+                return@setOnClickListener
+            }
             val e = email.text.toString().trim()
             val p = password.text.toString()
             if (!android.util.Patterns.EMAIL_ADDRESS.matcher(e).matches()) {
