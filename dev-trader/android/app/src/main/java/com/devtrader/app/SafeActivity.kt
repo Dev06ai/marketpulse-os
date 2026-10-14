@@ -148,6 +148,8 @@ class SafeActivity : FragmentActivity() {
     private lateinit var workspaceHost: FrameLayout
     private val workspacePages = mutableListOf<View>()
     private val navigationButtons = mutableListOf<Button>()
+    private var liquidNavIndicator: View? = null
+    private var liquidNavFrame: FrameLayout? = null
     private lateinit var positionSummary: TextView
     private lateinit var ledgerView: TextView
     private lateinit var decisionView: TextView
@@ -970,7 +972,38 @@ class SafeActivity : FragmentActivity() {
             "Free, Pro and Elite currently unlock no trade recommendations, " +
             "exchange connections or automated orders.\n\n" +
             "Market levels and chart analysis are independent of future signals.", 13f)
-        positionsPage.addView(signalLock.first, margins(top = 6, bottom = 12))
+        val signalArtwork = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            setPadding(dp(8), dp(13), dp(8), dp(10))
+            background = GradientDrawable(GradientDrawable.Orientation.TL_BR,
+                intArrayOf(Color.rgb(28, 28, 31), Color.rgb(15, 16, 20))).apply {
+                cornerRadius = dp(20).toFloat()
+                setStroke(dp(1), Color.rgb(70, 62, 55))
+            }
+        }
+        signalArtwork.addView(ImageView(this).apply {
+            setImageResource(R.drawable.ky_nav_signals)
+            contentDescription = "Signals market icon"
+            scaleType = ImageView.ScaleType.FIT_CENTER
+        }, LinearLayout.LayoutParams(dp(70), dp(70)))
+        val comingFrame = FrameLayout(this)
+        comingFrame.addView(ImageView(this).apply {
+            setImageResource(R.drawable.ky_signal_coming_soon)
+            contentDescription = null
+            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+            scaleType = ImageView.ScaleType.FIT_XY
+        }, FrameLayout.LayoutParams(-1, -1))
+        comingFrame.addView(label("COMING SOON", 14f, kyWhite, 0.07f).apply {
+            gravity = Gravity.CENTER
+            typeface = Typeface.create("sans-serif-condensed", Typeface.BOLD)
+        }, FrameLayout.LayoutParams(-1, -1))
+        comingFrame.contentDescription = "Signals coming soon"
+        signalArtwork.addView(comingFrame, LinearLayout.LayoutParams(dp(185), dp(46)).apply {
+            topMargin = dp(1)
+        })
+        positionsPage.addView(signalArtwork, margins(top = 6, bottom = 12))
+        positionsPage.addView(signalLock.first, margins(top = 2, bottom = 12))
         // Nonvisual buffers maintain private engine compatibility only.
         signal = TextView(this)
         positionSummary = TextView(this)
@@ -1150,28 +1183,66 @@ class SafeActivity : FragmentActivity() {
         )
         refreshPrivacyButton()
 
-        val navigation = LinearLayout(this).apply {
-            setPadding(dp(3), dp(4), dp(3), dp(4))
-            background = KyvoriqTheme.surface(this@SafeActivity, radius = 18f)
+        // Animated, constraint-safe tab highlight inspired by the shared
+        // micro-interaction reference. Drawable icons remain crisp at any density.
+        val navigationFrame = FrameLayout(this).apply {
+            clipChildren = false
+            clipToPadding = false
+            background = KyvoriqTheme.surface(this@SafeActivity, radius = 19f)
         }
+        liquidNavFrame = navigationFrame
+        val liquid = View(this).apply {
+            background = GradientDrawable(
+                GradientDrawable.Orientation.TL_BR,
+                intArrayOf(Color.rgb(244, 241, 232), Color.rgb(207, 193, 167))
+            ).apply { cornerRadius = dp(16).toFloat() }
+            elevation = dp(2).toFloat()
+            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+        }
+        liquidNavIndicator = liquid
+        navigationFrame.addView(liquid, FrameLayout.LayoutParams(0, dp(54)).apply {
+            gravity = Gravity.START or Gravity.CENTER_VERTICAL
+            leftMargin = dp(5)
+        })
+        val navigation = LinearLayout(this).apply {
+            setPadding(dp(5), dp(5), dp(5), dp(5))
+            gravity = Gravity.CENTER_VERTICAL
+            isBaselineAligned = false
+            clipToPadding = false
+        }
+        val icons = intArrayOf(R.drawable.ky_nav_candles,
+            R.drawable.ky_nav_signals, R.drawable.ky_nav_brain)
         listOf("TRADE", "SIGNALS", "INSIGHTS").forEachIndexed { index, title ->
-            val button = compactPillButton(title.lowercase(Locale.US).replaceFirstChar { it.titlecase(Locale.US) }).apply { contentDescription = "Workspace $title"; textSize = 11f
+            val button = compactPillButton(title.lowercase(Locale.US).replaceFirstChar {
+                it.titlecase(Locale.US)
+            }).apply {
+                contentDescription = "Workspace $title"
+                textSize = 11.5f
                 compoundDrawablePadding = dp(5)
-                val icon = getDrawable(listOf(R.drawable.ic_nav_trade, R.drawable.ic_nav_positions, R.drawable.ic_nav_insights)[index])!!.mutate()
-                icon.setBounds(0, 0, dp(16), dp(16))
-                setCompoundDrawablesRelative(icon, null, null, null)
-                setPadding(dp(10), 0, dp(6), 0) }
+                gravity = Gravity.CENTER
+                val glyph = getDrawable(icons[index])!!.mutate()
+                glyph.setBounds(0, 0, dp(25), dp(25))
+                setCompoundDrawablesRelative(glyph, null, null, null)
+                setPadding(dp(5), 0, dp(5), 0)
+                background = android.graphics.drawable.ColorDrawable(Color.TRANSPARENT)
+            }
             button.setOnClickListener {
-                if (workspacePages.getOrNull(index)?.visibility != View.VISIBLE) {
+                if (workspacePages.getOrNull(index)?.visibility != View.VISIBLE)
                     haptic(it, KyvoriqHaptics.Cue.SELECT)
-                }
                 selectWorkspace(index)
             }
             navigationButtons.add(button)
             if (index == 1) consumerPositionTab = button
-            navigation.addView(button, LinearLayout.LayoutParams(0, dp(44), 1f).apply { leftMargin = dp(3); rightMargin = dp(3) })
+            navigation.addView(button, LinearLayout.LayoutParams(0, dp(54), 1f))
         }
-        root.addView(navigation, margins(top = 4).apply { leftMargin = dp(8); rightMargin = dp(8) })
+        navigationFrame.addView(navigation, FrameLayout.LayoutParams(-1, -2))
+        root.addView(navigationFrame, margins(top = 4).apply {
+            leftMargin = dp(8)
+            rightMargin = dp(8)
+        })
+        navigationFrame.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
+            positionLiquidIndicator(selectedWorkspace, animated = false)
+        }
         // The chart owns 56% of the usable window, independently of card heights.
         // Read measured bounds after system/cutout insets, including multi-window.
         // Small screens and large fonts scroll the cards rather than compressing candles.
@@ -1652,9 +1723,16 @@ class SafeActivity : FragmentActivity() {
             val active = i == index
             button.isSelected = active
             button.setTextColor(if (active) kyCharcoal else kyWhite)
-            button.compoundDrawablesRelative.filterNotNull().forEach { it.setTint(if (active) kyCharcoal else kyGold) }
-            button.background = KyvoriqTheme.button(this, active, 13f)
+            // Preserve the signal's red circuitry rather than tinting every
+            // multicolor drawable a single color.
+            if (i != 2) {
+                button.compoundDrawablesRelative.filterNotNull().forEach {
+                    it.setTint(if (active) kyCharcoal else kyWhite)
+                }
+            }
+            button.background = android.graphics.drawable.ColorDrawable(Color.TRANSPARENT)
         }
+        positionLiquidIndicator(index, animated = previous != index)
         if (previous != index && !debugPreview && KyvoriqTheme.motionEnabled(this)) {
             workspacePages[index].apply {
                 animate().cancel()
@@ -1666,6 +1744,61 @@ class SafeActivity : FragmentActivity() {
         }
         latestRoot?.let { renderWorkspace(it) }
         if (index == 2 && previous != 2 && !debugPreview && KyvoriqTheme.motionEnabled(this)) animateInsightsEntrance()
+    }
+
+    private fun positionLiquidIndicator(index: Int, animated: Boolean) {
+        val container = liquidNavFrame ?: return
+        val indicator = liquidNavIndicator ?: return
+        if (container.width <= 0 || navigationButtons.size != 3) return
+        val horizontalInset = dp(5)
+        val cellWidth = (container.width - horizontalInset * 2) / 3
+        if (cellWidth <= 0) return
+        val lp = indicator.layoutParams as FrameLayout.LayoutParams
+        if (lp.width != cellWidth) {
+            lp.width = cellWidth
+            indicator.layoutParams = lp
+        }
+        val destination = (cellWidth * index).toFloat()
+        indicator.animate().cancel()
+        if (!animated || !KyvoriqTheme.motionEnabled(this)) {
+            indicator.translationX = destination
+            indicator.scaleX = 1f
+            indicator.scaleY = 1f
+            return
+        }
+        indicator.animate().translationX(destination).scaleX(1f).scaleY(1f)
+            .setDuration(430L)
+            .setInterpolator(android.view.animation.PathInterpolator(
+                0.16f, 0.85f, 0.22f, 1f))
+            .start()
+        indicator.scaleX = 0.94f
+        indicator.scaleY = 0.92f
+    }
+
+    // Press scale and release motion are shared by the native action factories.
+    // A non-consuming listener preserves click, long-press and accessibility.
+    private fun microMotion(view: View): View {
+        view.setOnTouchListener { v, event ->
+            if (!v.isEnabled || !KyvoriqTheme.motionEnabled(this@SafeActivity)) {
+                return@setOnTouchListener false
+            }
+            when (event.actionMasked) {
+                android.view.MotionEvent.ACTION_DOWN -> {
+                    v.animate().cancel()
+                    v.animate().scaleX(0.967f).scaleY(0.955f).setDuration(115L)
+                        .setInterpolator(android.view.animation.DecelerateInterpolator()).start()
+                }
+                android.view.MotionEvent.ACTION_UP,
+                android.view.MotionEvent.ACTION_CANCEL -> {
+                    v.animate().cancel()
+                    v.animate().scaleX(1f).scaleY(1f).setDuration(320L)
+                        .setInterpolator(android.view.animation.OvershootInterpolator(0.55f))
+                        .start()
+                }
+            }
+            false
+        }
+        return view
     }
 
     private fun animateInsightsEntrance() {
@@ -1747,6 +1880,7 @@ class SafeActivity : FragmentActivity() {
             elevation = 0f
             setPadding(dp(5), 0, dp(5), 0)
             background = KyvoriqTheme.button(this@SafeActivity)
+            microMotion(this)
         }
 
     private data class HeroRefs(
@@ -2003,7 +2137,7 @@ class SafeActivity : FragmentActivity() {
             elevation = 0f
             background = KyvoriqTheme.button(this@SafeActivity)
             setPadding(dp(8), 0, dp(8), 0)
-
+            microMotion(this)
         }
     }
 
@@ -4375,6 +4509,7 @@ class SafeActivity : FragmentActivity() {
                         if (destructive) Color.rgb(110, 54, 61) else Color.rgb(65, 63, 60))
                 }, null
             )
+            microMotion(this)
         }
 
     private fun premiumDialogContainer(title: String, subtitle: String): LinearLayout {
