@@ -134,17 +134,29 @@ assert(tradeLevelResult.short.stop>tradeLevelResult.short.entry&&tradeLevelResul
 const serverSource=fs.readFileSync("./server.js","utf8");
 new Function(serverSource);
 const htmlSource=fs.readFileSync("./public/index.html","utf8");
-const waitVisualChecks=[
-  'var cls=side==="LONG"?"signal-long":side==="SHORT"?"signal-short":"signal-wait";',
-  'if(!executionReady)return {',
-  'reason:"FINAL_DECISION_NOT_EXECUTABLE"',
-  'No active invalidation level — final trade gate is blocked.',
-  'decisionSection.signal-wait .mpdc-execution-panel'
-];
-for(const x of waitVisualChecks)assert(htmlSource.includes(x),"WAIT/execution-map regression missing: "+x);
-const inlineScripts=[...htmlSource.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi)].map(m=>m[1]).filter(Boolean);
-for(const script of inlineScripts)new Function(script);
-assert(inlineScripts.length>0,"Dashboard inline JavaScript was not found for syntax validation.");
+// The MarketPulse Apex dashboard moved from inline scripts to /app.js.
+// Guard the current fail-closed decision rendering instead of asserting stale
+// selectors/inline markup from the removed execution-map layout.
+const dashboardSource=fs.readFileSync("./public/app.js","utf8");
+new Function(dashboardSource);
+for(const check of [
+  'id="decision">WAIT',
+  'id="gate" class="status-pill wait">WAIT',
+  'id="execution">GATED',
+  'id="entry">—',
+  'id="stop">—',
+  'id="tp1">—'
+])assert(htmlSource.includes(check),"Apex dashboard safety placeholder missing: "+check);
+assert(/<script\\b[^>]*src=["']\/app\\.js(?:\\?[^"']*)?["'][^>]*><\\/script>/i.test(htmlSource),
+  "Apex external dashboard script not linked");
+for(const check of [
+  'const action=["LONG","SHORT"].includes(x.action)?x.action:"WAIT";',
+  'const validRiskGeometry=',
+  'const autoReady=validRiskGeometry&&x.apex?.executionGate?.automaticExecutionReady===true;',
+  'const manualReady=validRiskGeometry&&d?.liveSignalEligible===true;',
+  '"GATED"',
+  'FINAL GATE NOT PASSED'
+])assert(dashboardSource.includes(check),"Apex WAIT/execution safety gate missing: "+check);
 
 console.log(JSON.stringify({
   ok:true,
