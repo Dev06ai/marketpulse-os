@@ -1484,7 +1484,11 @@ class SafeActivity : FragmentActivity() {
             setHintTextColor(Color.rgb(130, 131, 139))
             setPadding(dp(16), 0, dp(16), 0)
             minHeight = dp(52)
-            background = roundedCard(Color.rgb(24, 25, 30), Color.rgb(69, 65, 59), 14)
+            background = GradientDrawable().apply {
+                setColor(Color.rgb(24, 25, 30))
+                cornerRadius = dp(14).toFloat()
+                setStroke(dp(1), Color.rgb(69, 65, 59))
+            }
             contentDescription = "Consumer account email"
         }
         panel.addView(label("EMAIL ADDRESS", 10f, kyGold, 0.055f), margins(bottom = 8))
@@ -1500,7 +1504,11 @@ class SafeActivity : FragmentActivity() {
             setHintTextColor(Color.rgb(130, 131, 139))
             setPadding(dp(16), 0, dp(16), 0)
             minHeight = dp(52)
-            background = roundedCard(Color.rgb(24, 25, 30), Color.rgb(69, 65, 59), 14)
+            background = GradientDrawable().apply {
+                setColor(Color.rgb(24, 25, 30))
+                cornerRadius = dp(14).toFloat()
+                setStroke(dp(1), Color.rgb(69, 65, 59))
+            }
             contentDescription = "Consumer account password"
         }
         if (mode != "forgot-password") {
