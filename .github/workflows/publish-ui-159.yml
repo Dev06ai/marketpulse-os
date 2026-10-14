@@ -1,0 +1,88 @@
+name: Publish verified KYVORIQ 159 UI prerelease
+on:
+  push:
+    branches: [ui/chart-hero-159]
+    paths: ['.github/workflows/publish-ui-159.yml']
+permissions:
+  contents: write
+  actions: read
+jobs:
+  publish:
+    if: github.repository == 'Dev06ai/marketpulse-os' && github.ref == 'refs/heads/ui/chart-hero-159'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch exactly the already-passing signed 159 artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p release
+          gh run download 38494377394 --repo "$GITHUB_REPOSITORY" --name KYVORIQ-159-signed --dir release
+          test -s release/KYVORIQ-0.21.34-Build159-signed.apk
+          test -s release/KYVORIQ-0.21.34-Build159-signed.aab
+          # Archive had a relative workflow workspace prefix; normalize without
+          # replacing the original trusted SHA-256 digest.
+          sed 's#  release/#  #' release/SHA256SUMS.txt > release/SHA256SUMS.normalized.txt
+          ( cd release && sha256sum --check SHA256SUMS.normalized.txt )
+          echo '814550c1c2ea28fb01eee917fe764b2d3cd30a785b4658bd30984b861bce8638  KYVORIQ-0.21.34-Build159-signed.apk' | ( cd release && sha256sum --check )
+          echo '879cf1fb827d14b8d38c31074c388ea616a0f0220db75ac40dd3902d62b2d33d  KYVORIQ-0.21.34-Build159-signed.aab' | ( cd release && sha256sum --check )
+          unzip -tq release/KYVORIQ-0.21.34-Build159-signed.apk | grep -q 'No errors detected'
+          unzip -tq release/KYVORIQ-0.21.34-Build159-signed.aab | grep -q 'No errors detected'
+          mv release/SHA256SUMS.normalized.txt release/SHA256SUMS.txt
+      - name: Verify release certificate and version against official Build 157
+        run: |
+          set -euo pipefail
+          curl --fail --location --silent --show-error --retry 3 --max-time 90 \
+            -o "$RUNNER_TEMP/previous-157.apk" \
+            'https://github.com/Dev06ai/marketpulse-os/releases/download/dev-trader-v0.21.32-157/app-release.apk'
+          SIGNER="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -1)"
+          test -x "$SIGNER"
+          "$SIGNER" verify --print-certs "$RUNNER_TEMP/previous-157.apk" > "$RUNNER_TEMP/old-cert"
+          "$SIGNER" verify --print-certs release/KYVORIQ-0.21.34-Build159-signed.apk > "$RUNNER_TEMP/new-cert"
+          python - <<'PY'
+          from pathlib import Path
+          import os, re
+          temp=Path(os.environ['RUNNER_TEMP'])
+          def digest(name):
+              match=re.findall(r'certificate SHA-256 digest:\s*([0-9a-fA-F]{64})', (temp/name).read_text())
+              assert match, 'Signing identity unavailable'
+              return match[0].lower()
+          assert digest('old-cert') == digest('new-cert'), 'Signing certificate changed'
+          assert digest('new-cert') == '17e4c550aa235dae926058654f203ecae9d7b30b432bde9dc2c358e28360cbab'
+          print('Build 157 to 159 signing identity verified')
+          PY
+          AAPT="$(find "$ANDROID_HOME/build-tools" -type f -name aapt | sort -V | tail -1)"
+          "$AAPT" dump badging release/KYVORIQ-0.21.34-Build159-signed.apk | head -n 1 | grep -E "^package: name='com.devtrader.app' versionCode='159' versionName='0.21.34'"
+          ! unzip -Z1 release/KYVORIQ-0.21.34-Build159-signed.apk | grep -Eqi 'ui_preview\.json|\.env$|\.jks$'
+      - name: Publish signed UI-testing prerelease only (do not mutate stable update channel)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG=dev-trader-v0.21.34-159
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Build 159 release already exists; refusing overwrite"
+            exit 1
+          fi
+          cat > "$RUNNER_TEMP/notes.md" <<'NOTES'
+          ## KYVORIQ 0.21.34 • Build 159 (Android UI testing prerelease)
+          - Much larger 56%-target hero candlestick chart, near-full-width usable plot, 20% volume pane, compact top controls.
+          - Updated BTC price readability and new deep-gold trading/finance icon designs in the Account sheet.
+          - Signed APK matches the same application ID and signing certificate as Build 157; installs as an update.
+          - Android 35 emulator UI test passed in small, normal, tall, large-font, and landscape configurations.
+          - Includes signed APK, signed AAB, and SHA256SUMS.
+          - This is an owner/tester UI prerelease. Consumer paid checkout/authentication, automatic paid alerts and live level-delivery backend are not implemented or deployed. Trading execution was not changed.
+          - Existing public/stable update manifest is intentionally untouched.
+          NOTES
+          gh release create "$TAG" \
+            release/KYVORIQ-0.21.34-Build159-signed.apk \
+            release/KYVORIQ-0.21.34-Build159-signed.aab \
+            release/SHA256SUMS.txt \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title 'KYVORIQ 0.21.34 — Build 159 UI Testing' \
+            --notes-file "$RUNNER_TEMP/notes.md" \
+            --prerelease
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json url,isPrerelease,assets
