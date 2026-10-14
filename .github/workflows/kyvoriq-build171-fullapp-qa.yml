@@ -1,0 +1,86 @@
+name: KYVORIQ 171 exact-169-source Android QA (no publishing)
+on:
+  push:
+    branches: [feature/kyvoriq-vp-171-fullapp-20261014]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  preserve-and-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 24
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Guard full Build 169 source and unchanged account/security baseline
+        run: |
+          set -euo pipefail
+          git cat-file -e dev-trader-v0.21.44-169^{commit}
+          # Restrict this branch to chart presentation, offline fixture and
+          # versioned release verification; changes to account/backend are refused.
+          python - <<'PY'
+          import subprocess
+          changed=subprocess.check_output(['git','diff','--name-only','dev-trader-v0.21.44-169..HEAD'],text=True).splitlines()
+          permitted={
+            'dev-trader/android/app/src/main/java/com/devtrader/app/MarketChartView.kt',
+            'dev-trader/android/app/src/main/java/com/devtrader/app/SafeActivity.kt',
+            'dev-trader/android/app/src/debug/assets/ui_preview.json',
+            '.github/workflows/dev-trader-release.yml',
+            '.github/workflows/kyvoriq-build171-fullapp-qa.yml',
+          }
+          unexpected=set(changed)-permitted
+          assert not unexpected, unexpected
+          main='dev-trader/android/app/src/main/java/com/devtrader/app/'
+          for name in ('KyvoriqConsumerIdentity.kt','KyvoriqGoldAccountButton.kt',
+                       'OrderBlockPolicy.kt','BtcPriceAlerts.kt'):
+              assert subprocess.run(['test','-s',main+name]).returncode==0,name
+          client=open(main+'SafeActivity.kt').read()
+          for marker in ('startSystemUpdateDownload(', 'showConsumerAccountPanel()',
+                         'enterPublicMarketMode()', 'KyvoriqSecureSession.accessToken(this)',
+                         'chart.setSessionProfiles(', 'chart.setReferenceLevels('):
+              assert marker in client, marker
+          chart=open(main+'MarketChartView.kt').read()
+          for marker in ('OrderBlockPolicy.filter(', 'drawSessionVolumeProfiles(',
+                         'setSessionProfiles(', 'setReferenceLevels(', '"VP" -> showSessionProfiles'):
+              assert marker in chart, marker
+          assert 'dev-trader/update.json' not in changed
+          print('Build 169 account/update/security source intact; chart-only diff verified')
+          PY
+      - uses: actions/setup-java@v4
+        with: {distribution: temurin, java-version: '21'}
+      - uses: gradle/actions/setup-gradle@v4
+        with: {gradle-version: '9.6.0'}
+      - name: Compile Build 171 debug and instrumentation tests
+        working-directory: dev-trader/android
+        run: gradle assembleDebug assembleDebugAndroidTest --stacktrace -PdevTraderVersionCode=171 -PdevTraderVersionName=0.21.46
+      - name: Emulator 35 interaction and chart visual instrumentation
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          profile: pixel_6
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+          script: |
+            mkdir -p qa
+            adb install -r dev-trader/android/app/build/outputs/apk/debug/app-debug.apk
+            adb install -r dev-trader/android/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
+            adb shell settings put global hide_error_dialogs 1 || true
+            adb shell am instrument -w com.devtrader.app.debug.test/androidx.test.runner.AndroidJUnitRunner | tee qa/instrument.txt
+            grep -q 'OK (' qa/instrument.txt
+            adb shell am start -S -W -n com.devtrader.app.debug/com.devtrader.app.SafeActivity --ez visual_preview true --ei visual_workspace 0
+            sleep 3
+            adb exec-out screencap -p > qa/trade-volume-profile.png
+            test -s qa/trade-volume-profile.png
+            adb logcat -d > qa/logcat.txt
+            ! grep -A 8 'FATAL EXCEPTION' qa/logcat.txt | grep -q 'Process: com.devtrader.app.debug'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: kyvoriq-171-fullapp-debug-evidence
+          path: |
+            qa/
+            dev-trader/android/app/build/outputs/apk/debug/
+            dev-trader/android/app/build/reports/
+          retention-days: 14
