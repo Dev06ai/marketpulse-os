@@ -1,0 +1,28 @@
+name: Verify alternate KYVORIQ 169 CDN APK
+on:
+  push:
+    branches: [ci/kyvoriq-169-cdn-check-20261014]
+    paths: [.github/workflows/kyvoriq-169-cdn-check.yml]
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - name: Download exact public mirror via alternate CDN and verify SHA256
+        run: |
+          set -euo pipefail
+          URL="https://cdn.jsdelivr.net/gh/Dev06ai/marketpulse-os@kyvoriq-apk-delivery/downloads/KYVORIQ-169.apk"
+          for attempt in 1 2 3 4; do
+            if curl -fLSs --retry 1 --connect-timeout 10 --max-time 60 \
+              "$URL" -o /tmp/kyvoriq169-cdn.apk; then
+              break
+            fi
+            sleep 8
+          done
+          test -s /tmp/kyvoriq169-cdn.apk
+          test "$(stat -c%s /tmp/kyvoriq169-cdn.apk)" = 5683325
+          echo "a3206d936e99189ab63c57aafa4a0d327a00d9d5518edeb04a3459b3a956a7b3  /tmp/kyvoriq169-cdn.apk" | sha256sum --check
+          file /tmp/kyvoriq169-cdn.apk
+          echo KYVORIQ_169_ALTERNATE_CDN_VERIFIED
