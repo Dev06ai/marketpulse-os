@@ -316,7 +316,11 @@ class SafeActivity : FragmentActivity() {
     // Independent queue/pool: stalled private requests cannot starve public candles.
     private val publicRestClient by lazy {
         restClient.newBuilder().dispatcher(okhttp3.Dispatcher())
-            .connectionPool(okhttp3.ConnectionPool()).build()
+            .connectionPool(okhttp3.ConnectionPool())
+            .connectTimeout(6, TimeUnit.SECONDS)
+            .readTimeout(8, TimeUnit.SECONDS)
+            .callTimeout(10, TimeUnit.SECONDS)
+            .build()
     }
 
     private var debugPreview = false
@@ -2461,6 +2465,8 @@ class SafeActivity : FragmentActivity() {
                 chart.setSignal(null)
                 chart.setTradeEvent(null)
                 chart.setOverlays(JSONArray())
+                chart.setSessionProfiles(JSONArray())
+                chart.setReferenceLevels(JSONArray())
                 chart.setFeedHealthy(false)
             }
             if (::signal.isInitialized) signal.text = if (privateRouteFallback)
@@ -2758,11 +2764,16 @@ class SafeActivity : FragmentActivity() {
                         lastHardHttpStatus = null
                         lastPrivateRouteProbeMs = nowFail
                         enterPublicMarketMode()
-                        status.text = "RECONNECTING"
+                        restoreCachedChart()
+                        status.text = if (latestChartCandles.length() > 0) "SAVED • RECOVERING" else "RECONNECTING"
                         publicMarketMessage?.text =
                             "PRIVATE FEED RECONNECTING\n" +
-                            "Market chart recovery is automatic. Private signals resume only after authentication."
-                        requestChartIfNeeded()
+                            "Public candles are view-only. Private signals remain paused until authenticated."
+                        // The previously stalled private chart request must not hold the chart queue.
+                        chartRequestToken++
+                        chartRequestInFlight = false
+                        lastChartRequestMs = 0L
+                        requestChartIfNeeded(force = true)
                         return@post
                     }
                     if (body == "HTTP 401" || body == "HTTP 403") {
@@ -2788,7 +2799,11 @@ class SafeActivity : FragmentActivity() {
                         privateRouteFallback = true
                         lastPrivateRouteProbeMs = System.currentTimeMillis()
                         enterPublicMarketMode()
-                        requestChartIfNeeded()
+                        restoreCachedChart()
+                        chartRequestToken++
+                        chartRequestInFlight = false
+                        lastChartRequestMs = 0L
+                        requestChartIfNeeded(force = true)
                         return@safe
                     }
                     val receivedAt = System.currentTimeMillis()
@@ -4177,6 +4192,15 @@ class SafeActivity : FragmentActivity() {
                 if (token != chartRequestToken || stopped) return@post
                 if (!ok) {
                     lastChartRequestMs = 0L
+                    if (!publicMarketOnly && MarketRecovery.transientFailure(body) &&
+                        requestSession == KyvoriqSecureSession.accessToken(this)) {
+                        privateRouteFallback = true
+                        lastPrivateRouteProbeMs = System.currentTimeMillis()
+                        enterPublicMarketMode()
+                        restoreCachedChart()
+                        // The only automatic fallback is view-only public OHLCV; never trade.
+                        requestChartIfNeeded(force = true)
+                    }
                     return@post
                 }
                 if (publicMarketOnly || requestSession != KyvoriqSecureSession.accessToken(this)) return@post
@@ -4241,7 +4265,7 @@ class SafeActivity : FragmentActivity() {
         latestChartCandles = candles
         showingSavedChart = cached
         chartSource = source
-        marketInstrument?.text = if (source == MarketRecovery.SPOT) "SPOT" else "PERPETUAL"
+        marketInstrument?.text = if (source == MarketRecovery.PERPETUAL) "PERPETUAL" else "SPOT"
         chart.setTimeframe(tf)
         chart.setSessionProfiles(JSONArray())
         chart.setReferenceLevels(JSONArray())
@@ -4252,7 +4276,11 @@ class SafeActivity : FragmentActivity() {
         price.setPrice(lastPrice, animate = false)
         status.text = if (cached) "SAVED • OFFLINE" else "VIEW ONLY"
         oiView.text = "OI  —"
-        val market = if (source == MarketRecovery.SPOT) "BTCUSDT SPOT" else "BTCUSDT PERPETUAL"
+        val market = when (source) {
+            MarketRecovery.KRAKEN_SPOT -> "BTC/USD KRAKEN SPOT"
+            MarketRecovery.SPOT -> "BTCUSDT BINANCE SPOT"
+            else -> "BTCUSDT PERPETUAL"
+        }
         integrity.text = if (cached) "$market • SAVED CANDLES • NOT LIVE" else "$market • PUBLIC CHART • PRIVATE FEED RECOVERING"
         // Staleness/source remain visible even when consumer-only views are hidden.
         chart.contentDescription = integrity.text
@@ -4337,13 +4365,7 @@ class SafeActivity : FragmentActivity() {
                 if (!backup) {
                     requestPublicSpotCandles(tf, token, backup = true)
                 } else {
-                    chartRequestInFlight = false
-                    showingSavedChart = latestChartCandles.length() > 0
-                    status.text = if (showingSavedChart) "SAVED • OFFLINE" else "OFFLINE • RETRYING"
-                    chart.setFeedHealthy(false)
-                    publicMarketMessage?.text =
-                        "Connection unavailable. Retrying automatically; saved candles are not live."
-                    publicMarketMessage?.visibility = View.VISIBLE
+                    requestKrakenSpotCandles(tf, token)
                 }
                 return@getJson
             }
@@ -4351,6 +4373,56 @@ class SafeActivity : FragmentActivity() {
             if (selectedTf != tf) return@getJson
             safe {
                 applyPublicCandles(parsed.first, tf, MarketRecovery.SPOT)
+            }
+        }
+    }
+
+    /** Last independent view-only source when backend and Binance endpoints fail.
+     * Kraken BTC/USD differs from BTC/USDT perpetual; never authorize private actions.
+     */
+    private fun requestKrakenSpotCandles(tf: String, token: Long) {
+        val minutes = when (tf) {
+            "5m" -> 5
+            "15m" -> 15
+            "1h" -> 60
+            "4h" -> 240
+            else -> { chartRequestInFlight = false; return }
+        }
+        val url = "https://api.kraken.com/0/public/OHLC?pair=XBTUSD&interval=" + minutes
+        getJson(url, authenticated = false) { ok, body ->
+            if (stopped || token != chartRequestToken || !publicMarketOnly) return@getJson
+            val candles = if (ok) runCatching {
+                val root = JSONObject(body)
+                require(root.optJSONArray("error")?.length() == 0)
+                val result = root.getJSONObject("result")
+                val key = result.keys().asSequence().first { it != "last" }
+                val rows = result.getJSONArray(key)
+                val converted = JSONArray()
+                for (index in maxOf(0, rows.length() - 120) until rows.length()) {
+                    val row = rows.getJSONArray(index)
+                    converted.put(JSONObject()
+                        .put("start", row.getLong(0) * 1000L)
+                        .put("open", row.getDouble(1)).put("high", row.getDouble(2))
+                        .put("low", row.getDouble(3)).put("close", row.getDouble(4))
+                        .put("volume", row.getDouble(6)))
+                }
+                val clean = MarketRecovery.sanitize(converted, tf)
+                val last = clean.getJSONObject(clean.length() - 1).getLong("start")
+                require(clean.length() >= 30 && System.currentTimeMillis() - last <= MarketRecovery.intervalMs(tf) * 2)
+                clean
+            }.getOrNull() else null
+            chartRequestInFlight = false
+            if (selectedTf != tf) return@getJson
+            if (candles != null) {
+                safe { applyPublicCandles(candles, tf, MarketRecovery.KRAKEN_SPOT) }
+            } else {
+                restoreCachedChart()
+                showingSavedChart = latestChartCandles.length() > 0
+                status.text = if (showingSavedChart) "SAVED • OFFLINE" else "OFFLINE • RETRYING"
+                chart.setFeedHealthy(false)
+                publicMarketMessage?.text = "All public feeds unavailable • retrying automatically. Saved candles are not live."
+                publicMarketMessage?.visibility = View.VISIBLE
+                lastChartRequestMs = 0L
             }
         }
     }
@@ -5369,7 +5441,10 @@ class SafeActivity : FragmentActivity() {
             val id = dm.enqueue(request)
             updatePrefs.edit().putLong("download_id", id)
                 .putString("apk_url", apkUrl).putString("sha256", expectedSha)
-                .putString("version", versionName).apply()
+                .putString("version", versionName)
+                .putLong("download_started_ms", System.currentTimeMillis())
+                .putLong("last_download_progress_ms", System.currentTimeMillis())
+                .putLong("last_download_bytes", 0L).apply()
             updateButton.isEnabled = false
             setUpdateStatus("DOWNLOADING • Android service")
             pollSystemUpdate()
@@ -5384,7 +5459,9 @@ class SafeActivity : FragmentActivity() {
         updatePoll?.let { handler.removeCallbacks(it) }
         updatePoll = null
         updatePrefs.edit().remove("download_id").remove("apk_url")
-            .remove("sha256").remove("version").apply()
+            .remove("sha256").remove("version")
+            .remove("download_started_ms").remove("last_download_progress_ms")
+            .remove("last_download_bytes").apply()
     }
 
     private fun pollSystemUpdate() {
@@ -5399,7 +5476,7 @@ class SafeActivity : FragmentActivity() {
                 val size = cursor.getLong(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_TOTAL_SIZE_BYTES))
                 val done = cursor.getLong(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_BYTES_DOWNLOADED_SO_FAR))
                 val reason = cursor.getInt(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_REASON))
-                intArrayOf(status, (if (size > 0L) (100L * done / size).coerceIn(0L, 99L) else 0L).toInt(), reason)
+                longArrayOf(status.toLong(), (if (size > 0L) (100L * done / size).coerceIn(0L, 99L) else 0L), reason.toLong(), done)
             }
         }.getOrNull()
         if (snapshot == null) {
@@ -5422,8 +5499,33 @@ class SafeActivity : FragmentActivity() {
                 setUpdateStatus("DOWNLOAD FAILED • CODE " + reason + " • TAP FOR OPTIONS")
             }
             else -> {
+                val now = System.currentTimeMillis()
+                val bytes = snapshot[3]
+                val previousBytes = updatePrefs.getLong("last_download_bytes", 0L)
+                var lastProgressAt = updatePrefs.getLong("last_download_progress_ms", 0L)
+                val startedAt = updatePrefs.getLong("download_started_ms", 0L)
+                if (lastProgressAt <= 0L) {
+                    lastProgressAt = now
+                    updatePrefs.edit().putLong("last_download_progress_ms", now)
+                        .putLong("download_started_ms", now).apply()
+                }
+                if (bytes > previousBytes) {
+                    lastProgressAt = now
+                    updatePrefs.edit().putLong("last_download_bytes", bytes)
+                        .putLong("last_download_progress_ms", now).apply()
+                }
+                val effectiveStart = if (startedAt > 0L) startedAt else now
+                if (UpdateDownloadPolicy.isStalled(lastProgressAt, effectiveStart, now)) {
+                    val url = updatePrefs.getString("apk_url", null)
+                    runCatching { dm.remove(id) }
+                    clearPendingSystemUpdate()
+                    updateRecoveryUrl = url
+                    updateButton.isEnabled = true
+                    setUpdateStatus("DOWNLOAD FAILED • STALLED • TAP FOR OPTIONS")
+                    return
+                }
                 updateButton.isEnabled = false
-                setUpdateStatus(if (snapshot[0] == DownloadManager.STATUS_PAUSED)
+                setUpdateStatus(if (snapshot[0] == DownloadManager.STATUS_PAUSED.toLong())
                     "DOWNLOADING • waiting for network"
                     else "DOWNLOADING • " + snapshot[1] + "%")
                 val next = Runnable { pollSystemUpdate() }
