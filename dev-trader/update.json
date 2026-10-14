@@ -1,8 +1,8 @@
 {
   "enabled": true,
-  "versionCode": 165,
-  "versionName": "0.21.40",
-  "apkUrl": "https://github.com/Dev06ai/marketpulse-os/releases/download/dev-trader-v0.21.40-165/app-release.apk",
-  "sha256": "86c9fb48bfa75da658670673c27ac637a0fd442360a75dce7be66abe86430cfd",
-  "notes": "Build 165 signed UI testing update • refined KYVORIQ account, login/signup/reset dialogs, adaptive Insights/System cards and smoother transitions. Firebase auth preserved. Consumer backend, payments, admin roles and private trading remain server-controlled and are not unlocked."
+  "versionCode": 166,
+  "versionName": "0.21.41",
+  "apkUrl": "https://github.com/Dev06ai/marketpulse-os/releases/download/dev-trader-v0.21.41-166/app-release.apk",
+  "sha256": "7dbbb86c86e2ddf4c3e904784a32ae265bfeace4c87c2978fa84d9909a6b51e5",
+  "notes": "Build 166 verified testing update: unified email/Google login with in-place signup/reset, new Trade/Signals/Insights icons, Signals Coming Soon artwork and reduced-motion-aware fluid navigation. Firebase authentication preserved. Private market execution, paid access and consumer server remain controlled and not activated by this update."
 }
