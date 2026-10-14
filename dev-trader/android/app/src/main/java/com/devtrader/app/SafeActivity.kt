@@ -774,12 +774,13 @@ class SafeActivity : FragmentActivity() {
                 intArrayOf(kyCharcoal, KyvoriqTheme.slate, kyCharcoal),
                 GradientDrawable.Orientation.TOP_BOTTOM
             )
-            setPadding(dp(8), dp(8), dp(8), dp(8))
+            setPadding(dp(4), dp(4), dp(4), dp(4))
         }
         rootSurface = root
         ViewCompat.setOnApplyWindowInsetsListener(root) { view, insets ->
             val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
-            view.setPadding(dp(8), bars.top + dp(8), dp(8), bars.bottom + dp(8))
+            view.setPadding(bars.left + dp(4), bars.top + dp(4),
+                bars.right + dp(4), bars.bottom + dp(4))
             insets
         }
         setContentView(root)
@@ -808,7 +809,7 @@ class SafeActivity : FragmentActivity() {
         }, LinearLayout.LayoutParams(dp(layout.taglineWidthDp), dp(14)).apply {
             leftMargin = dp((layout.wordmarkWidthDp - layout.taglineWidthDp - 8).coerceAtLeast(0))
         })
-        identityRow.addView(brand, LinearLayout.LayoutParams(0, dp(54), 1f))
+        identityRow.addView(brand, LinearLayout.LayoutParams(0, dp(48), 1f))
         // Consumer-facing entry point. No role, entitlement, or payment is
         // ever inferred from this button or mutable local Android preferences.
         val account = compactPillButton(
@@ -842,7 +843,7 @@ class SafeActivity : FragmentActivity() {
             }
         }
         actions.addView(alertsButton,
-            LinearLayout.LayoutParams(if (narrowHeader) 0 else dp(layout.alertsDp), dp(40), if (narrowHeader) 1f else 0f).apply {
+            LinearLayout.LayoutParams(if (narrowHeader) 0 else dp(layout.alertsDp), dp(34), if (narrowHeader) 1f else 0f).apply {
                 rightMargin = dp(5)
             })
         retryButton = compactPillButton(compactHeaderLabel("RETRY", retry = true)).apply {
@@ -855,21 +856,27 @@ class SafeActivity : FragmentActivity() {
             safe { forceReconnectFromUser() }
         }
         actions.addView(retryButton,
-            LinearLayout.LayoutParams(if (narrowHeader) 0 else dp(layout.retryDp), dp(40), if (narrowHeader) 1f else 0f).apply {
+            LinearLayout.LayoutParams(if (narrowHeader) 0 else dp(layout.retryDp), dp(34), if (narrowHeader) 1f else 0f).apply {
                 leftMargin = dp(5)
             })
         if (!narrowHeader) identityRow.addView(actions, LinearLayout.LayoutParams(-2, -2))
         header.addView(identityRow, LinearLayout.LayoutParams(-1, -2))
-        if (narrowHeader) header.addView(actions, LinearLayout.LayoutParams(-1, dp(40)).apply { topMargin = dp(8) })
-        root.addView(header, margins(bottom = 10))
+        if (narrowHeader) header.addView(actions, LinearLayout.LayoutParams(-1, dp(34)).apply { topMargin = dp(4) })
+        root.addView(header, margins(bottom = 5).apply { leftMargin = dp(8); rightMargin = dp(8) })
 
         workspaceHost = FrameLayout(this)
         root.addView(workspaceHost, LinearLayout.LayoutParams(-1, 0, 1f))
         fun page(scrollable: Boolean = false): LinearLayout {
-            val content = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+            val content = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(dp(8), 0, dp(8), 0)
+                clipChildren = false
+                clipToPadding = false
+            }
             val viewport: View = if (scrollable) {
                 ScrollView(this).apply {
                     isFillViewport = false
+                    clipChildren = true
                     clipToPadding = false
                     overScrollMode = View.OVER_SCROLL_IF_CONTENT_SCROLLS
                     addView(content, FrameLayout.LayoutParams(-1, -2))
@@ -883,7 +890,7 @@ class SafeActivity : FragmentActivity() {
         val tradePage = page(scrollable = true)
         val hero = heroCard()
         price = hero.price; oiView = hero.oi; status = hero.status
-        tradePage.addView(hero.container, margins(bottom = 10))
+        tradePage.addView(hero.container, margins(bottom = 5))
         publicMarketMessage = label(
             "FREE • BTC MARKET DATA\nPro and Elite subscriptions are not active yet. Private execution stays owner-only.",
             11f, kyGold, 0f
@@ -905,21 +912,22 @@ class SafeActivity : FragmentActivity() {
                 refreshTimeframeButtons(tfRow)
                 requestChartIfNeeded(force = true)
             }
-            tfRow.addView(button, LinearLayout.LayoutParams(0, dp(40), 1f).apply { leftMargin = dp(2); rightMargin = dp(2) })
+            tfRow.addView(button, LinearLayout.LayoutParams(0, dp(34), 1f).apply { leftMargin = dp(2); rightMargin = dp(2) })
         }
         timeframeButtonRow = tfRow
-        tradePage.addView(tfRow, margins(bottom = 8))
+        tradePage.addView(tfRow, margins(bottom = 3))
         chart = MarketChartView(this).apply {
-            minimumHeight = dp(if (compactViewport) 240 else 275)
+            minimumHeight = 0
             contentDescription = "Interactive price chart"
             onFullscreenRequested = { toggleChartFullscreen() }
         }
         tradePage.addView(
             chart,
-            LinearLayout.LayoutParams(-1, dp(if (compactViewport) 240 else 275)).apply {
-                leftMargin = 0
-                rightMargin = 0
-                bottomMargin = dp(12)
+            LinearLayout.LayoutParams(-1, dp(layout.chartHeightDp)).apply {
+                // Controls keep 12dp margins; the chart reaches the safe 4dp edge.
+                leftMargin = -dp(8)
+                rightMargin = -dp(8)
+                bottomMargin = dp(6)
             }
         )
         chart.setCustomPriceAlerts(BtcPriceAlerts.armedLevels(this))
@@ -930,8 +938,8 @@ class SafeActivity : FragmentActivity() {
                 showBtcPriceAlerts()
             }
         }
-        tradePage.addView(priceAlertsButton, LinearLayout.LayoutParams(-1, dp(42)).apply {
-            bottomMargin = dp(7)
+        tradePage.addView(priceAlertsButton, LinearLayout.LayoutParams(-1, dp(40)).apply {
+            bottomMargin = dp(4)
         })
         adminOnlyViews.add(priceAlertsButton)
         // A full-width entry card, without a calculator form on the resting chart.
@@ -1159,28 +1167,26 @@ class SafeActivity : FragmentActivity() {
             if (index == 1) consumerPositionTab = button
             navigation.addView(button, LinearLayout.LayoutParams(0, dp(44), 1f).apply { leftMargin = dp(3); rightMargin = dp(3) })
         }
-        root.addView(navigation, margins(top = 8))
-        // Allocate actual remaining workspace height to candles after layout
-        // and system insets. Small and landscape screens can scroll naturally.
-        workspaceHost.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
-            if (!::chart.isInitialized || chartFullscreenHost != null) return@addOnLayoutChangeListener
-            val viewportHeight = workspaceHost.height
-            if (viewportHeight <= 0) return@addOnLayoutChangeListener
-            var fixedContent = 0
-            for (i in 0 until tradePage.childCount) {
-                val child = tradePage.getChildAt(i)
-                if (child === chart || child.visibility == View.GONE) continue
-                val lp = child.layoutParams as? ViewGroup.MarginLayoutParams
-                fixedContent += child.measuredHeight + (lp?.topMargin ?: 0) + (lp?.bottomMargin ?: 0)
-            }
-            val minPlot = dp(if (resources.configuration.orientation ==
-                android.content.res.Configuration.ORIENTATION_LANDSCAPE) 210 else 265)
-            val proposed = maxOf(minPlot, viewportHeight - fixedContent - dp(8))
+        root.addView(navigation, margins(top = 4).apply { leftMargin = dp(8); rightMargin = dp(8) })
+        // The chart owns 56% of the usable window, independently of card heights.
+        // Read measured bounds after system/cutout insets, including multi-window.
+        // Small screens and large fonts scroll the cards rather than compressing candles.
+        fun sizeHeroChart() {
+            if (!::chart.isInitialized || chartFullscreenHost != null) return
+            val viewportPx = root.height - root.paddingTop - root.paddingBottom
+            if (viewportPx <= 0) return
+            val viewportWidth = root.width - root.paddingLeft - root.paddingRight
+            val density = resources.displayMetrics.density
+            val heightDp = KyvoriqResponsiveLayout.chartHeightDp(
+                (viewportWidth / density).toInt(), (viewportPx / density).toInt())
+            val proposed = dp(heightDp)
             if (kotlin.math.abs(chart.layoutParams.height - proposed) > dp(1)) {
                 chart.layoutParams = chart.layoutParams.apply { height = proposed }
-                chart.requestLayout()
             }
         }
+        root.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> sizeHeroChart() }
+        workspaceHost.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> sizeHeroChart() }
+        root.post { sizeHeroChart() }
         update = TextView(this); risk = TextView(this); journal = TextView(this); replay = TextView(this)
         selectWorkspace(0)
         refreshConsumerPresentation()
@@ -1217,7 +1223,7 @@ class SafeActivity : FragmentActivity() {
         val dialog = android.app.Dialog(this)
         val surface = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(20), dp(18), dp(20), dp(18))
+            setPadding(dp(16), dp(14), dp(16), dp(14))
             background = GradientDrawable().apply {
                 setColor(Color.rgb(16, 17, 20))
                 cornerRadius = dp(25).toFloat()
@@ -1241,23 +1247,25 @@ class SafeActivity : FragmentActivity() {
             setOnClickListener { dialog.dismiss() }
         }
         header.addView(close, LinearLayout.LayoutParams(dp(48), dp(48)))
-        surface.addView(header, margins(bottom = 14))
+        surface.addView(header, margins(bottom = 10))
         val statusLine = label(
             if (ownerDevice) "Device paired to private owner API • server authorization required"
             else "FREE  •  Market chart access without a subscription",
             10.5f, kyGray, 0f
-        ).apply { setPadding(dp(12), dp(12), dp(12), dp(12))
+        ).apply { setPadding(dp(12), dp(9), dp(12), dp(9))
             background = KyvoriqTheme.surface(this@SafeActivity, radius = 12f)
         }
-        surface.addView(statusLine, margins(bottom = 14))
-        fun actionRow(glyph: String, heading: String, subtitle: String, destination: () -> Unit) {
+        surface.addView(statusLine, margins(bottom = 10))
+        fun actionRow(iconRes: Int, heading: String, subtitle: String, destination: () -> Unit) {
             val row = LinearLayout(this).apply {
                 gravity = Gravity.CENTER_VERTICAL
-                setPadding(dp(14), dp(8), dp(12), dp(8))
-                background = KyvoriqTheme.surface(this@SafeActivity, radius = 14f)
+                setPadding(dp(10), dp(9), dp(12), dp(9))
+                background = android.graphics.drawable.RippleDrawable(
+                    android.content.res.ColorStateList.valueOf(Color.argb(34, 182, 140, 75)),
+                    KyvoriqTheme.surface(this@SafeActivity, radius = 14f), null)
                 isClickable = true
                 isFocusable = true
-                minimumHeight = dp(58)
+                minimumHeight = dp(62)
                 contentDescription = "$heading. $subtitle"
                 setOnClickListener {
                     haptic(it, KyvoriqHaptics.Cue.ACTION)
@@ -1265,46 +1273,58 @@ class SafeActivity : FragmentActivity() {
                     destination()
                 }
             }
-            row.addView(label(glyph, 19f, kyGold, 0f),
-                LinearLayout.LayoutParams(dp(36), -2))
+            val badge = ImageView(this).apply {
+                setImageResource(iconRes)
+                scaleType = ImageView.ScaleType.FIT_CENTER
+                setPadding(dp(7), dp(7), dp(7), dp(7))
+                background = GradientDrawable().apply {
+                    setColor(Color.rgb(36, 30, 22))
+                    cornerRadius = dp(10).toFloat()
+                    setStroke(dp(1), Color.rgb(76, 58, 32))
+                }
+                importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+            }
+            row.addView(badge, LinearLayout.LayoutParams(dp(38), dp(38)).apply {
+                rightMargin = dp(12)
+            })
             val copy = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
             copy.addView(label(heading, 13f, kyWhite, 0f))
-            copy.addView(label(subtitle, 10f, kyGray, 0f), margins(top = 3))
+            copy.addView(label(subtitle, 10f, kyGray, 0f), margins(top = 4))
             row.addView(copy, LinearLayout.LayoutParams(0, -2, 1f))
             row.addView(label("›", 22f, kyGold, 0f))
-            surface.addView(row, margins(bottom = 8))
+            surface.addView(row, margins(bottom = 6))
         }
         if (ownerDevice) {
-            actionRow("◆", "Owner access", "Paired device • verified on each protected request") {
+            actionRow(R.drawable.ic_account_owner, "Owner access", "Paired device • verified on each protected request") {
                 showInfoDialog("Private access",
                     "This device holds an encrypted, expiring owner API token. " +
                     "Administrative requests are verified by the server. " +
                     "Full account and subscription administration is not yet configured.")
             }
-            actionRow("◈", "Security and device pairing", "Review or renew private access") {
+            actionRow(R.drawable.ic_account_pairing, "Security and device pairing", "Review or renew private access") {
                 pairingButton?.let { showPairingDialog(it) }
             }
-            actionRow("◉", "Privacy controls", "Protect access on this device") {
+            actionRow(R.drawable.ic_account_privacy, "Privacy controls", "Protect access on this device") {
                 showPrivacyControls()
             }
         } else {
-            actionRow("→", "Log in", "Secure consumer account sign-in") {
+            actionRow(R.drawable.ic_account_access, "Log in", "Secure consumer account sign-in") {
                 openConsumerPortal("login")
             }
-            actionRow("+", "Sign up", "Create a KYVORIQ account") {
+            actionRow(R.drawable.ic_account_portfolio, "Sign up", "Create a KYVORIQ account") {
                 openConsumerPortal("signup")
             }
-            actionRow("◇", "Owner device pairing", "Requires private server authorization") {
+            actionRow(R.drawable.ic_account_pairing, "Owner device pairing", "Requires private server authorization") {
                 pairingButton?.let { showPairingDialog(it) }
             }
         }
-        actionRow("✦", "Compare Free / Pro / Elite", "Chart levels and notification eligibility") {
+        actionRow(R.drawable.ic_account_tiers, "Compare Free / Pro / Elite", "Chart levels and notification eligibility") {
             showConsumerPlans()
         }
         surface.addView(label(
             "Signals are coming soon for all plans. Paid checkout is not active.",
             10f, kyGray, 0f
-        ).apply { gravity = Gravity.CENTER }, margins(top = 8, bottom = 2))
+        ).apply { gravity = Gravity.CENTER }, margins(top = 6, bottom = 2))
 
         val scroll = ScrollView(this).apply {
             clipToOutline = true
@@ -1480,7 +1500,7 @@ class SafeActivity : FragmentActivity() {
         val compactViewport = resources.configuration.screenHeightDp < 760
         val box = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(14), dp(if (compactViewport) 11 else 13), dp(14), dp(if (compactViewport) 11 else 13))
+            setPadding(dp(12), dp(7), dp(12), dp(7))
             background = KyvoriqTheme.surface(this@SafeActivity, prominent = true)
         }
 
@@ -1489,9 +1509,9 @@ class SafeActivity : FragmentActivity() {
             gravity = Gravity.CENTER_VERTICAL
         }
         top.addView(label("BTC  /  USDT", 10.5f, kyWhite, 0.04f),
-            LinearLayout.LayoutParams(0, dp(if (compactViewport) 18 else 22), 1f))
+            LinearLayout.LayoutParams(0, dp(16), 1f))
         val livePill = label("PERPETUAL", 8f, kyGray, 0.035f)
-        top.addView(livePill, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(if (compactViewport) 18 else 22)))
+        top.addView(livePill, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(16)))
         box.addView(top)
 
         val row = LinearLayout(this).apply {
@@ -1499,10 +1519,10 @@ class SafeActivity : FragmentActivity() {
             gravity = Gravity.CENTER_VERTICAL
         }
         val priceView = PremiumPriceView(this).apply {
-            setTextSizeSp(if (compactViewport) 26f else 32f)
+            setTextSizeSp(if (resources.configuration.screenWidthDp < 360) 25f else 28f)
             setPrice(Double.NaN, animate = false)
         }
-        row.addView(priceView, LinearLayout.LayoutParams(0, dp(if (compactViewport) 40 else 49), 1f))
+        row.addView(priceView, LinearLayout.LayoutParams(0, dp(34), 1f))
 
         val statusView = TextView(this).apply {
             text = "DATA CONNECTING"
@@ -1516,11 +1536,11 @@ class SafeActivity : FragmentActivity() {
                 setStroke(dp(1), kyLine)
             }
         }
-        row.addView(statusView, LinearLayout.LayoutParams(dp(92), dp(30)))
+        row.addView(statusView, LinearLayout.LayoutParams(dp(92), dp(26)))
         box.addView(row)
 
         val oi = label("OI  —", 9f, kyGray, 0.02f)
-        box.addView(oi, margins(top = 4))
+        box.addView(oi, margins(top = 2))
         return HeroRefs(priceView, oi, statusView, box)
     }
 
@@ -4546,4 +4566,5 @@ class SafeActivity : FragmentActivity() {
         super.onDestroy()
     }
 }
+
 

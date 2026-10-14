@@ -455,9 +455,23 @@ class MarketChartView @JvmOverloads constructor(
 
     private fun visibleCount(): Int {
         // Preserve the familiar candle count while reclaiming plot space from the price rail.
-        val widthPx = max(1f, plotRight() - dp(6f))
+        val widthPx = max(1f, plotRight() - dp(4f))
         val base = max(55f, widthPx / dp(4.15f))
         return max(24, min(180, (base / zoomX).roundToInt()))
+    }
+
+    internal data class PlotGeometry(val price: RectF, val volume: RectF)
+
+    // Shared by drawing, gesture scale and instrumentation: enlarging the View
+    // must enlarge the real candle region, not a wrapper around a fixed plot.
+    internal fun plotGeometry(): PlotGeometry {
+        val top = dp(if (height < dp(190f)) 32f else if (levelMenuOpen) 66f else 42f)
+        val bottom = height - dp(22f)
+        val volumeHeight = if (showVolume) height * 0.20f else 0f
+        val volumeTop = bottom - volumeHeight
+        val priceBottom = if (showVolume) volumeTop - dp(4f) else bottom
+        return PlotGeometry(RectF(dp(4f), top, plotRight(), priceBottom),
+            RectF(dp(4f), volumeTop, plotRight(), bottom))
     }
 
     override fun onDraw(canvas: Canvas) {
@@ -471,18 +485,13 @@ class MarketChartView @JvmOverloads constructor(
         canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), bgPaint)
         bgPaint.shader = null
 
-        val left = dp(6f)
-        // One compact rail is shared by drawing, bar count and gesture coordinates.
-        // Exact live price remains in the hero; crosshair shows full precision.
-        val right = plotRight()
-        val top = dp(
-            if (height < dp(190f)) 32f
-            else if (levelMenuOpen) 70f
-            else 44f
-        )
-        val bottom = height - dp(24f)
-        val priceBottom = if (showVolume) top + (bottom - top) * .76f else bottom
-        val volumeTop = if (showVolume) priceBottom + dp(4f) else bottom
+        val geometry = plotGeometry()
+        val left = geometry.price.left
+        val right = geometry.price.right
+        val top = geometry.price.top
+        val bottom = geometry.volume.bottom
+        val priceBottom = geometry.price.bottom
+        val volumeTop = geometry.volume.top
 
         drawHeader(canvas, left, top)
 
@@ -704,7 +713,7 @@ class MarketChartView @JvmOverloads constructor(
     }
 
     private fun indicatorChipRects(left: Float): List<Pair<String, RectF>> {
-        val top = dp(23f)
+        val top = dp(21f)
         val height = dp(16f)
         val gap = dp(4f)
         val specs = listOf("BB" to 26f, "EMA" to 34f, "LVL" to 32f, "VOL" to 32f, "FULL" to 38f)
@@ -759,7 +768,7 @@ class MarketChartView @JvmOverloads constructor(
 
     private fun toggleLevelFilterAt(x: Float, y: Float): Boolean {
         if (!levelMenuOpen || height < dp(190f)) return false
-        val key = levelFilterChipRects(dp(6f)).firstOrNull { it.second.contains(x, y) }?.first ?: return false
+        val key = levelFilterChipRects(dp(4f)).firstOrNull { it.second.contains(x, y) }?.first ?: return false
         when (key) {
             "SFP" -> showSfpLevels = !showSfpLevels
             "NPOC" -> showNpocLevels = !showNpocLevels
@@ -775,7 +784,7 @@ class MarketChartView @JvmOverloads constructor(
 
     private fun toggleIndicatorAt(x: Float, y: Float): Boolean {
         if (height < dp(190f)) return false
-        val left = dp(6f)
+        val left = dp(4f)
         val hit = indicatorChipRects(left).firstOrNull { it.second.contains(x, y) }?.first ?: return false
         when (hit) {
             "BB" -> showBollinger = !showBollinger
@@ -1417,8 +1426,8 @@ class MarketChartView @JvmOverloads constructor(
 
     private fun axisWidth(): Float {
         val sample = compactPrice(if (livePrice.isFinite()) livePrice else 99999.0)
-        return max(dp(42f), max(livePriceTextPaint.measureText(sample) + dp(10f),
-            axisLevelTextPaint.measureText("OB $sample") + dp(7f)))
+        return max(dp(40f), max(livePriceTextPaint.measureText(sample) + dp(8f),
+            axisLevelTextPaint.measureText("OB $sample") + dp(5f)))
     }
 
     private fun plotRight(): Float = width - axisWidth()
@@ -1536,14 +1545,14 @@ class MarketChartView @JvmOverloads constructor(
                     dragging = true
                     followLive = false
                     crosshairVisible = false
-                    val bar = max(1f, (plotRight() - dp(6f)) / visibleCount())
+                    val bar = max(1f, (plotRight() - dp(4f)) / visibleCount())
                     // Opposite-to-finger pan with bounded blank future region.
                     candleShift = (candleShift - dx / bar).coerceIn(
                         -maxFutureShift(),
                         max(0f, candles.length() - visibleCount().toFloat())
                     )
                     val visiblePriceRange = estimateVisibleRange()
-                    verticalOffset += (-dy / max(1f, height * 0.65f)) * visiblePriceRange
+                    verticalOffset += (-dy / max(1f, plotGeometry().price.height())) * visiblePriceRange
                     invalidate()
                 }
                 lastTouchX = event.x
@@ -1640,3 +1649,4 @@ class MarketChartView @JvmOverloads constructor(
 
     private fun dp(v: Float): Float = v * resources.displayMetrics.density
 }
+
