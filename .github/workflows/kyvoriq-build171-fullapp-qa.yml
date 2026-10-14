@@ -28,6 +28,9 @@ jobs:
             'dev-trader/android/app/src/debug/assets/ui_preview.json',
             '.github/workflows/dev-trader-release.yml',
             '.github/workflows/kyvoriq-build171-fullapp-qa.yml',
+            'dev-trader/android/app/src/androidTest/java/com/devtrader/app/BrandVisualTest.kt',
+            'dev-trader/android/app/src/androidTest/java/com/devtrader/app/ConsumerFoundationVisualTest.kt',
+            'dev-trader/android/app/src/androidTest/java/com/devtrader/app/HeroChartVisualTest.kt',
           }
           unexpected=set(changed)-permitted
           assert not unexpected, unexpected

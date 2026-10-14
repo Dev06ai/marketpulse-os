@@ -69,7 +69,7 @@ class BrandVisualTest {
             inst.runOnMainSync {
                 val root = activity.window.decorView
                 children(root).filterIsInstance<Button>().first {
-                    it.contentDescription == "Workspace PLANS"
+                    it.contentDescription == "Workspace INSIGHTS"
                 }.performClick()
             }
             // A visibility/layout switch is committed on the next UI traversal.
@@ -77,7 +77,7 @@ class BrandVisualTest {
             inst.runOnMainSync {
                 val root = activity.window.decorView
                 val accountSummary = children(root).filterIsInstance<TextView>().first {
-                    it.text.toString().contains("Explore the BTC chart for free.")
+                    it.text.toString().contains("Signals remain locked for every tier")
                 }
                 assertTrue("Basic account summary must render", accountSummary.isShown)
                 assertFalse("Owner entry checks must stay hidden in consumer view",

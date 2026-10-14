@@ -59,8 +59,10 @@ class ConsumerFoundationVisualTest {
                     chart.height / scale >= 398f)
                 assertTrue("Chart should use almost all the viewport width",
                     chart.width >= activity.resources.displayMetrics.widthPixels - (38 * scale))
-                val positions = all.filterIsInstance<Button>().first { it.contentDescription == "Workspace POSITIONS" }
-                assertFalse("Private positions navigation must be hidden from guests", positions.isShown)
+                val signals = all.filterIsInstance<Button>().first { it.contentDescription == "Workspace SIGNALS" }
+                assertTrue("Signals navigation stays visible as Coming Soon", signals.isShown)
+                assertFalse("Old private positions navigation must not return",
+                    all.any { it.contentDescription == "Workspace POSITIONS" })
                 assertFalse("Admin system checks should be hidden", all.filterIsInstance<Button>().any {
                     it.text.toString() == "SYSTEM CHECK" && it.isShown
                 })

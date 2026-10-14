@@ -131,9 +131,17 @@ class HeroChartVisualTest {
                 assertEquals("Pan must leave live-follow mode", false, follow.get(chart))
                 tap(chart, chart.width - 25f * density, 15f * density) // live reset
                 assertEquals(true, follow.get(chart))
-                tap(chart, 162f * density, 29f * density) // fullscreen
+                // Build 171 adds a dedicated VP control before fullscreen.
+                val vp = MarketChartView::class.java.getDeclaredField("showSessionProfiles")
+                    .apply { isAccessible = true }
+                val wasVisible = vp.getBoolean(chart)
+                tap(chart, 158f * density, 29f * density) // VP
+                assertEquals("VP layer must toggle without affecting EMA or volume", !wasVisible, vp.getBoolean(chart))
+                tap(chart, 158f * density, 29f * density) // VP back on
+                assertEquals(wasVisible, vp.getBoolean(chart))
+                tap(chart, 195f * density, 29f * density) // FULL moved after VP
                 assertTrue(children(activity.window.decorView).any { it.contentDescription == "Fullscreen KYVORIQ chart" })
-                tap(chart, 162f * density, 29f * density) // restore same chart and sizing
+                tap(chart, 195f * density, 29f * density) // restore same chart and sizing
             }
             SystemClock.sleep(250)
             screenshot("trade")
