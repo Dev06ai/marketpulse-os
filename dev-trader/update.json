@@ -1,8 +1,8 @@
 {
   "enabled": true,
-  "versionCode": 167,
-  "versionName": "0.21.42",
-  "apkUrl": "https://github.com/Dev06ai/marketpulse-os/releases/download/dev-trader-v0.21.42-167/app-release.apk",
-  "sha256": "c8a3f8f68995e1d4bbc5490596b0900fea9ed552275d91993b2626a6c8c9b47c",
-  "notes": "Build 167 verified signed update: strong confirmed OB-only chart, capped/deduplicated zones, JWT/session freshness hardening, Build 166 unified login and visible fluid navigation. Consumer API, subscription billing and public entitlement activation remain inactive; private trading engine unaffected."
+  "versionCode": 168,
+  "versionName": "0.21.43",
+  "apkUrl": "https://github.com/Dev06ai/marketpulse-os/releases/download/dev-trader-v0.21.43-168/app-release.apk",
+  "sha256": "d349c922783e959f1bf12ffe9b5e969ea46cfddc35e24604173183c6f0b14bc9",
+  "notes": "Build 168 signed icon visibility update: high-contrast Trade/Signals/Insights vector icons with always-visible labels above fluid selection highlight; cleaner large Signals emblem and compact Coming Soon sticker. Login and Build 167 strong OB/chart/security fixes preserved. Production consumer backend, paid subscriptions and private trading execution remain separate and unavailable."
 }
