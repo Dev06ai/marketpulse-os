@@ -106,6 +106,9 @@ class HeroChartVisualTest {
             }
             SystemClock.sleep(250)
             screenshot("account-owner")
+        } catch (failure: Throwable) {
+            screenshot("failure")
+            throw failure
         } finally {
             KyvoriqSecureSession.clear(inst.targetContext)
             inst.runOnMainSync { activity.finish() }
