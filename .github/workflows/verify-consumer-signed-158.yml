@@ -78,10 +78,18 @@ jobs:
             echo "CANDIDATE_158_APK_FAILED_APKSIGNER_VERIFY"
             exit 1
           fi
-          OLD="$(grep -m1 'Signer #1 certificate SHA-256 digest:' "$RUNNER_TEMP/old-certs" | cut -d: -f2- | tr -d '[:space:]')"
-          NEW="$(grep -m1 'Signer #1 certificate SHA-256 digest:' "$RUNNER_TEMP/new-certs" | cut -d: -f2- | tr -d '[:space:]')"
-          if [[ -z "$OLD" || "$OLD" != "$NEW" ]]; then
-            echo "Signing certificate mismatch or unknown. Refusing to distribute as an update."
+          echo "Published APK signer details:"
+          grep -Ei 'signer.*certificate.*SHA-256' "$RUNNER_TEMP/old-certs" || true
+          echo "Candidate APK signer details:"
+          grep -Ei 'signer.*certificate.*SHA-256' "$RUNNER_TEMP/new-certs" || true
+          OLD="$(sed -n -E 's/^Signer #1 certificate SHA-256 digest:[[:space:]]*([0-9A-Fa-f:]+).*/\\1/p' "$RUNNER_TEMP/old-certs" | head -1 | tr -d ':[:space:]' | tr '[:upper:]' '[:lower:]')"
+          NEW="$(sed -n -E 's/^Signer #1 certificate SHA-256 digest:[[:space:]]*([0-9A-Fa-f:]+).*/\\1/p' "$RUNNER_TEMP/new-certs" | head -1 | tr -d ':[:space:]' | tr '[:upper:]' '[:lower:]')"
+          if [[ -z "$OLD" || -z "$NEW" ]]; then
+            echo "Unable to parse certificate digests; refuse release."
+            exit 1
+          fi
+          if [[ "$OLD" != "$NEW" ]]; then
+            echo "Signing certificate mismatch. Refusing to distribute as an update."
             exit 1
           fi
           echo "SIGNED_CERTIFICATE_CONTINUITY_VERIFIED"
