@@ -1,8 +1,8 @@
 {
   "enabled": true,
-  "versionCode": 159,
-  "versionName": "0.21.34",
-  "apkUrl": "https://github.com/Dev06ai/marketpulse-os/releases/download/dev-trader-v0.21.34-159/app-release.apk",
-  "sha256": "814550c1c2ea28fb01eee917fe764b2d3cd30a785b4658bd30984b861bce8638",
-  "notes": "KYVORIQ 0.21.34 • Build 159. Larger 56%-target full-width chart, compact controls and premium gold account icons. Android 35 small/normal/tall/large-text/landscape checks passed. Owner/testing UI release; consumer subscriptions and paid alerts not enabled."
+  "versionCode": 160,
+  "versionName": "0.21.35",
+  "apkUrl": "https://github.com/Dev06ai/marketpulse-os/releases/download/dev-trader-v0.21.35-160/app-release.apk",
+  "sha256": "ff1cb00ccf2aae3f0d12089cdcfc597775c48235dcb357cd275ee01a57c4df24",
+  "notes": "KYVORIQ 0.21.35 • Build 160. Accurate displayed OB high/low price boundaries, clean overlapping 1H/4H/12H/Daily OB zones, non-overlapping badges rendered over candles and EMA. Private/UI prerelease; premium billing and live paid alerts remain inactive."
 }
