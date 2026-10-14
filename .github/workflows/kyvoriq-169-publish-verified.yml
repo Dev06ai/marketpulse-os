@@ -1,0 +1,80 @@
+name: Publish verified signed KYVORIQ Build 169
+on:
+  push:
+    branches: [ci/kyvoriq-169-publish-verified-20261014]
+    paths: [.github/workflows/kyvoriq-169-publish-verified.yml]
+permissions:
+  actions: read
+  contents: write
+concurrency:
+  group: kyvoriq-169-publication
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RELEASE_TAG: dev-trader-v0.21.44-169
+      TEST_RUN: "38560029283"
+      ARTIFACT_ID: "11890844748"
+      ARTIFACT_NAME: KYVORIQ-169-VERIFIED-SIGNED-APK-AAB
+      SOURCE_COMMIT: 5c949f30b59cd6f7a961fcdd5f9b41b287c2d7d1
+      EXPECTED_SIGNER: 17e4c550aa235dae926058654f203ecae9d7b30b432bde9dc2c358e28360cbab
+    steps:
+      - name: Verify successful signed Android, security and emulator tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$TEST_RUN" --jq .conclusion)" = success
+          test "$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$TEST_RUN" --jq .head_sha)" = "2040415a70f1cea791c425aaaefbf153b609e269"
+          test "$(gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$ARTIFACT_ID" --jq .expired)" = false
+          test "$(gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$ARTIFACT_ID" --jq .name)" = "$ARTIFACT_NAME"
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Existing release cannot be overwritten"
+            exit 1
+          fi
+          mkdir -p payload
+          gh run download "$TEST_RUN" --repo "$GITHUB_REPOSITORY" \
+            --name "$ARTIFACT_NAME" --dir payload
+      - name: Verify release SHA256, package, original signer and safe test scope
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd payload
+          test -s app-release.apk
+          test -s KYVORIQ-0.21.44-169-FIREBASE-TEST.aab
+          sha256sum --check SHA256SUMS.txt
+          python3 - <<'PY'
+          import json,os
+          with open('TEST-SCOPE.json') as f: s=json.load(f)
+          assert s['source_commit']==os.environ['SOURCE_COMMIT']
+          assert s['version_code']==169 and s['version_name']=='0.21.44'
+          assert s['guest_update_button']=='PASS' and s['multi_device_ui']=='PASS'
+          assert s['subscriptions']=='DISABLED'
+          assert s['firebase_live']=='NOT_VERIFIED'
+          assert s['trading_engine_changes'] is False
+          print('BUILD_169_SIGNED_OFFLINE_TEST_SCOPE_VERIFIED')
+          PY
+          APK=app-release.apk
+          APKSIGNER="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -1)"
+          AAPT="$(find "$ANDROID_HOME/build-tools" -type f -name aapt | sort -V | tail -1)"
+          "$APKSIGNER" verify --verbose "$APK" >/dev/null
+          "$APKSIGNER" verify --print-certs "$APK" | grep -Fqi "$EXPECTED_SIGNER"
+          "$AAPT" dump badging "$APK" | head -1 | grep -Fq "package: name='com.devtrader.app' versionCode='169' versionName='0.21.44'"
+          ! unzip -Z1 "$APK" | grep -Ei '(^|/)(ui_preview\.json|signing\.jks|\.env|google-services\.json)$'
+          echo "RELEASE_SHA256=$(sha256sum app-release.apk | cut -d' ' -f1)" >> "$GITHUB_ENV"
+      - name: Publish immutable signed Build 169 and verify released checksum
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release create "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+            --target "$SOURCE_COMMIT" --prerelease \
+            --title "KYVORIQ 0.21.44 — Build 169 reliable in-app update repair" \
+            --notes "Owner-testing signed Build 169. Fixes Check for Updates: public/guest-accessible button, Android background DownloadManager with progress and restart continuity, two fixed CDN manifest sources, APK SHA-256 verification before install, unknown-source permission resume and error recovery. Preserves the Build 168 UI, Build 167 strong-OB chart filtering and Voroa trading controls. Offline Android emulator/device-layout and security regressions passed. Production subscriptions/payments and live consumer deployment remain off. Real-phone network and installer testing pending." \
+            payload/app-release.apk payload/KYVORIQ-0.21.44-169-FIREBASE-TEST.aab
+          mkdir -p downloaded
+          gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+            --pattern app-release.apk --dir downloaded
+          echo "$RELEASE_SHA256  downloaded/app-release.apk" | sha256sum --check
+          echo "PUBLISHED_KYVORIQ_169_SIGNED_SHA256=$RELEASE_SHA256"
