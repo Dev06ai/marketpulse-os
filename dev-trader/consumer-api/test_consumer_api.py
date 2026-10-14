@@ -25,10 +25,20 @@ class ConsumerApiSecurityContract(unittest.TestCase):
             self.assertIn("no-store", r.headers["cache-control"])
 
     def test_anonymous_cannot_read_role_or_admin_data(self):
-        with TestClient(app) as client:
-            self.assertEqual(client.get("/v1/me").status_code, 401)
-            self.assertEqual(client.get("/v1/admin/overview").status_code, 401)
-            self.assertEqual(client.get("/v1/access/advanced_insight_reports").status_code, 401)
+        with patch.dict(os.environ, {"KYVORIQ_CONSUMER_AUTH_ENABLED": "true"}):
+            with TestClient(app) as client:
+                self.assertEqual(client.get("/v1/me").status_code, 401)
+                self.assertEqual(client.get("/v1/admin/overview").status_code, 401)
+                self.assertEqual(client.get("/v1/access/advanced_insight_reports").status_code, 401)
+
+    def test_auth_cannot_accidentally_activate_before_operator_enables(self):
+        with patch.dict(os.environ, {"KYVORIQ_CONSUMER_AUTH_ENABLED": "false"}):
+            with TestClient(app) as client:
+                self.assertEqual(client.get("/v1/me").status_code, 503)
+                self.assertEqual(client.get("/readyz").status_code, 503)
+                self.assertFalse(client.get("/readyz").json()["consumer_login_live"])
+                self.assertEqual(client.get("/livez").status_code, 200)
+                self.assertEqual(client.get("/v1/catalog").status_code, 200)
 
     def test_modified_client_cannot_request_owner_features(self):
         app.dependency_overrides[require_identity] = lambda: Principal("consumer-1", True, False)
