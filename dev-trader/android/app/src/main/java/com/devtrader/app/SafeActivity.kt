@@ -3718,6 +3718,17 @@ class SafeActivity : FragmentActivity() {
         root.addView(label("Closing Price (USDT)", 12f, kyGray, 0f), margins(bottom = 5))
         root.addView(closeEdit, margins(bottom = 14))
 
+        // Manual risk sizing is a separate estimate, never a trading action.
+        val stopEdit = numberField("Stop Price (optional)", "")
+        root.addView(label("Stop price (USDT)  •  optional risk sizing", 12f, kyGray, 0f), margins(bottom = 5))
+        root.addView(stopEdit, margins(bottom = 12))
+        val riskBudgetEdit = numberField("Risk budget USDT (optional)", "")
+        root.addView(label("Risk budget (USDT)  •  optional", 12f, kyGray, 0f), margins(bottom = 5))
+        root.addView(riskBudgetEdit, margins(bottom = 12))
+        val feeEdit = numberField("Fee rate per side (%)", "0")
+        root.addView(label("Estimated fee rate per side (%)", 12f, kyGray, 0f), margins(bottom = 5))
+        root.addView(feeEdit, margins(bottom = 14))
+
         val leverageLabel = label("Leverage  •  20x", 12f, kyGray, 0f)
         root.addView(leverageLabel, margins(bottom = 4))
         val leverageBar = SeekBar(this).apply { max = 149; progress = 19; splitTrack = false }
@@ -3753,33 +3764,65 @@ class SafeActivity : FragmentActivity() {
                 val amount = amountEdit.text.toString().toDoubleOrNull()
                 val entry = openEdit.text.toString().toDoubleOrNull()
                 val exit = closeEdit.text.toString().toDoubleOrNull()
-                if (amount == null || amount <= 0 || entry == null || entry <= 0 || exit == null || exit <= 0 || leverage <= 0) {
+                val stopRaw = stopEdit.text.toString().trim()
+                val riskRaw = riskBudgetEdit.text.toString().trim()
+                val feePct = feeEdit.text.toString().trim().toDoubleOrNull()
+                val stop = if (stopRaw.isBlank()) null else stopRaw.toDoubleOrNull()
+                val riskBudget = if (riskRaw.isBlank()) null else riskRaw.toDoubleOrNull()
+                if (amount == null || !amount.isFinite() || amount <= 0 ||
+                    entry == null || !entry.isFinite() || entry <= 0 ||
+                    exit == null || !exit.isFinite() || exit <= 0 ||
+                    feePct == null || !feePct.isFinite() || feePct < 0 || feePct > 10 ||
+                    (stopRaw.isNotBlank() && (stop == null || !stop.isFinite() || stop <= 0)) ||
+                    (riskRaw.isNotBlank() && (riskBudget == null || !riskBudget.isFinite() || riskBudget <= 0)) ||
+                    (riskBudget != null && stop == null)) {
                     haptic(calcButton, KyvoriqHaptics.Cue.REJECT)
-                    results.text = "Enter a valid position size/cost and both prices."
+                    results.text = "Enter valid positive amounts/prices; fees 0–10%. Risk sizing needs a stop price."
                     return@safe
                 }
+                if (stop != null && ((direction == "LONG" && stop >= entry) ||
+                                     (direction == "SHORT" && stop <= entry))) {
+                    results.text = "Long stop must be below entry; short stop above entry."
+                    return@safe
+                }
+                val margin = if (unitMode == "COST") amount else amount * entry / leverage.toDouble()
+                val notional = if (unitMode == "COST") amount * leverage.toDouble() else amount * entry
+                val qty = notional / entry
                 val priceMove = if (direction == "LONG") exit - entry else entry - exit
-                val margin = if (unitMode == "COST") amount / 1.0015 else (amount * entry) / leverage.toDouble()
-                val notional = if (unitMode == "COST") margin * leverage.toDouble() else amount * entry
-                val qty = if (unitMode == "COST") notional / entry else amount
-                val pnl = qty * priceMove
-                val roi = if (margin > 0) pnl / margin * 100.0 else 0.0
-                val pnlSign = if (pnl > 0) "+" else ""
-                val movePct = priceMove / entry * 100.0
+                val gross = qty * priceMove
+                // Leverage determines quantity only in margin/cost mode. P&L
+                // is quantity × price difference, never multiplied again.
+                val estimatedFees = qty * (entry + exit) * feePct / 100.0
+                val net = gross - estimatedFees
+                val roi = if (margin > 0) net / margin * 100.0 else 0.0
+                val priceMovePct = priceMove / entry * 100.0
+                val stopLoss = if (stop != null) qty * kotlin.math.abs(entry - stop) else null
+                val suggestedQty = if (stop != null && riskBudget != null)
+                    riskBudget / kotlin.math.abs(entry - stop) else null
+                val riskDetails = when {
+                    stopLoss == null -> "\nStop risk  — (enter a stop)"
+                    suggestedQty == null -> "\nStop risk  " + String.format(Locale.US, "%.2f USDT before fees", stopLoss)
+                    else -> "\nStop risk  " + String.format(Locale.US, "%.2f USDT before fees", stopLoss) +
+                        "\nRisk-sized quantity  " + String.format(Locale.US, "%.6f BTC", suggestedQty) +
+                        "\nRisk-sized margin  " + String.format(Locale.US, "%.2f USDT", suggestedQty * entry / leverage)
+                }
                 results.text =
                     "Margin  " + String.format(Locale.US, "%.2f USDT", margin) +
-                    "\nP&L  " + pnlSign + String.format(Locale.US, "%.2f USDT", pnl) +
-                    "\nROI  " + pnlSign + String.format(Locale.US, "%.2f%%", roi) +
-                    "\nPrice Move  " + pnlSign + String.format(Locale.US, "%.2f%%", movePct) +
+                    "\nGross P&L  " + String.format(Locale.US, "%+.2f USDT", gross) +
+                    "\nEst. fees  " + String.format(Locale.US, "%.2f USDT", estimatedFees) +
+                    "\nNet P&L  " + String.format(Locale.US, "%+.2f USDT", net) +
+                    "\nNet ROI on margin  " + String.format(Locale.US, "%+.2f%%", roi) +
+                    "\nPrice move  " + String.format(Locale.US, "%+.2f%%", priceMovePct) +
                     "\nQuantity  " + String.format(Locale.US, "%.6f BTC", qty) +
-                    "\nNotional  " + String.format(Locale.US, "%.2f USDT", notional)
+                    "\nNotional  " + String.format(Locale.US, "%.2f USDT", notional) +
+                    riskDetails
                 haptic(calcButton, KyvoriqHaptics.Cue.CONFIRM)
             }
         }
         root.addView(calcButton, margins(bottom = 14))
 
         root.addView(label(
-            "Note  •  Cost mode treats the entered amount as position margin and scales notional by leverage. A 0.15% reserve is applied. Actual fees, funding and slippage can differ.",
+            "Manual estimate only. Cost is margin; leverage changes notional, not P&L again. Fee rate applies to entry and exit notional. Stop risk excludes fees, slippage, liquidation and funding. No orders are sent.",
             12f, kyGray, 0f
         ), margins(bottom = 10))
     }
