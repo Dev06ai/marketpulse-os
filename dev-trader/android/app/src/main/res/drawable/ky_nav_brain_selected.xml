@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="44dp" android:height="44dp"
+    android:viewportWidth="100" android:viewportHeight="100">
+    <!-- High-contrast half brain / half circuitry, optically centered. -->
+    <path android:fillColor="#00000000" android:strokeColor="#17191D" android:strokeWidth="4.8" android:strokeLineCap="round" android:strokeLineJoin="round"
+        android:pathData="M49,9 C42,4 34,8 32,16 C23,13 17,21 19,30 C11,33 10,43 15,51 C9,60 12,70 21,74 C19,85 29,91 38,87 C43,95 50,90 49,83 M49,9v74"/>
+    <path android:fillColor="#00000000" android:strokeColor="#17191D" android:strokeWidth="3.6" android:strokeLineCap="round"
+        android:pathData="M31,17 C39,15 43,21 40,28 M19,31 C28,29 34,35 30,42 M16,51 C26,45 34,52 29,61 M21,73 C30,66 39,74 35,82 M39,26 C48,28 45,37 41,42 M29,43 C40,37 47,46 42,53 M29,61 C38,57 46,63 41,71 M35,82 C41,77 46,79 49,83"/>
+    <path android:fillColor="#00000000" android:strokeColor="#E34950" android:strokeWidth="4.5" android:strokeLineCap="round" android:strokeLineJoin="round"
+        android:pathData="M54,11h15l8,8v11l10,11 M54,25h10v13l15,13v10 M54,40h8v17l22,18 M54,55h9v17l10,10v8 M54,69h8v13l8,8 M76,31h12 M79,51h9v-11 M84,75h8 M69,18h7"/>
+    <path android:fillColor="#E34950" android:pathData="M84,38a4,4 0,1 0,8 0a4,4 0,1 0,-8 0 M85,57a4,4 0,1 0,8 0a4,4 0,1 0,-8 0 M88,71a4,4 0,1 0,8 0a4,4 0,1 0,-8 0 M70,86a4,4 0,1 0,8 0a4,4 0,1 0,-8 0 M68,14a4,4 0,1 0,8 0a4,4 0,1 0,-8 0"/>
+</vector>
