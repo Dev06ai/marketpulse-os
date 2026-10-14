@@ -66,7 +66,7 @@ adb('shell', 'am', 'start', '-S', '-W', '-n', f'{PKG}/com.devtrader.app.SafeActi
 assert find(desc='Chart 1h').get('selected') == 'true'
 
 # User-facing account is an accessible custom panel, not the old gray list dialog.
-tap(desc='Account: sign in or create account')
+tap(desc='Sign in or create a KYVORIQ account')
 find(text='KYVORIQ  /  ACCOUNT')
 find(text='Log in')
 find(text='Sign up')
