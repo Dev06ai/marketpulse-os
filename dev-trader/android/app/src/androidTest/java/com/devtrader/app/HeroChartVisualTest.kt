@@ -11,6 +11,8 @@ import android.widget.Button
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import java.io.File
+import org.json.JSONArray
+import org.json.JSONObject
 import org.junit.Assert.*
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -89,6 +91,37 @@ class HeroChartVisualTest {
             }
             SystemClock.sleep(250)
             screenshot("trade")
+            // Build 160: deliberately overlap 1H/4H/12H and supply/demand
+            // zones. Labels use real fixture boundaries, never inferred ticks.
+            // Every viewport captures the actual rendered result for review.
+            inst.runOnMainSync {
+                val chart = children(activity.window.decorView)
+                    .filterIsInstance<MarketChartView>().first()
+                val formatter = MarketChartView::class.java
+                    .getDeclaredMethod("exactZonePrice", java.lang.Double.TYPE)
+                    .apply { isAccessible = true }
+                assertEquals("83,409.25", formatter.invoke(chart, 83409.25))
+                assertEquals("83,409.125", formatter.invoke(chart, 83409.125))
+                assertEquals("83,409.12500000001", formatter.invoke(chart, 83409.12500000001))
+                val ob = JSONArray()
+                fun zone(name: String, lo: Double, hi: Double, direction: String) {
+                    ob.put(JSONObject().put("kind", "OB_ZONE").put("label", name)
+                        .put("price", (lo + hi) / 2.0)
+                        .put("zone_low", lo).put("zone_high", hi)
+                        .put("direction", direction))
+                }
+                // Keep both intraday zones inside the preview's 84.1k–84.5k
+                // visible market range, so this actually tests overlapping
+                // price capsules instead of testing only an off-screen zone.
+                zone("1H OB", 84345.25, 84405.50, "LONG")
+                zone("4H OB", 84370.75, 84435.125, "LONG")
+                zone("12H OB", 84180.50, 84300.25, "SHORT")
+                zone("DAILY OB", 84020.125, 84190.25, "LONG")
+                chart.setOverlays(ob)
+                assertTrue(chart.plotGeometry().price.height() > 0)
+            }
+            SystemClock.sleep(120)
+            screenshot("ob-price-labels")
             inst.runOnMainSync {
                 children(activity.window.decorView).filterIsInstance<Button>()
                     .first { it.contentDescription == "Sign in or create a KYVORIQ account" }.performClick()

@@ -1,0 +1,85 @@
+name: KYVORIQ 160 final clean visual proof
+on:
+  push:
+    branches: [feature/build160-ob-zone-readability]
+    paths: ['.github/workflows/verify-ob-visual-final.yml']
+permissions:
+  contents: read
+  actions: read
+jobs:
+  clean-visual:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Restore the exact Build160 preview from prior successful signed CI
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          sha="$(gh api repos/"$GITHUB_REPOSITORY"/actions/runs/38499111583 --jq '.head_sha')"
+          test "$sha" = '8861477adf868f2561881e813228b4f232ac8178'
+          status="$(gh run view 38499111583 --repo "$GITHUB_REPOSITORY" --json conclusion --jq '.conclusion')"
+          test "$status" = success
+          mkdir -p preview
+          gh run download 38499111583 --repo "$GITHUB_REPOSITORY" --name KYVORIQ-160-EMULATOR-PREVIEW --dir preview
+          test -s preview/app-debug.apk
+          test -s preview/app-debug-androidTest.apk
+      - name: Permit emulator KVM acceleration
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          # AOSP system image avoids the Google Pixel Launcher ANR triggered
+          # by changing virtual screen dimensions five times in one run.
+          target: default
+          profile: pixel_6
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+          script: |
+            adb shell settings put global hide_error_dialogs 1
+            adb shell settings put global anr_show_background 0
+            bash dev-trader/android/verify-hero-159.sh
+      - name: Reject system ANR overlays over any supposed KYVORIQ UI screenshot
+        run: |
+          set -euo pipefail
+          python3 -m pip install --disable-pip-version-check -q 'Pillow>=11,<13'
+          python3 - <<'PY'
+          from PIL import Image
+          from pathlib import Path
+          modes = ('small','normal','tall','large-font','landscape')
+          for mode in modes:
+              folder=Path('ui-159')/mode
+              assert (folder/'test.txt').read_text().count('OK (1 test)') == 1, mode
+              for name in ('trade','ob-price-labels','account-free','account-owner'):
+                  path=folder/(name+'.png')
+                  assert path.is_file(), path
+                  with Image.open(path) as im:
+                      pic=im.convert('RGB')
+                      w,h=pic.size
+                      crop=pic.crop((int(w*.18),int(h*.30),int(w*.82),int(h*.70)))
+                      bright=0
+                      total=0
+                      for y in range(0,crop.height,9):
+                          for x in range(0,crop.width,9):
+                              rgb=crop.getpixel((x,y))
+                              if min(rgb)>192: bright += 1
+                              total += 1
+                      white_ratio=bright/max(total,1)
+                      assert white_ratio < .15, f'System overlay obstructs {path}: {white_ratio:.1%} white'
+                      print(f'Clean {path} bright_ratio={white_ratio:.3%}')
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: KYVORIQ-160-CLEAN-OB-PROOF
+          path: ui-159/
+          retention-days: 14
+          if-no-files-found: error

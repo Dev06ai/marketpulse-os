@@ -3263,6 +3263,7 @@ class SafeActivity : FragmentActivity() {
     private fun chartOverlays(root: JSONObject?): JSONArray {
         val out = JSONArray()
         val prices = mutableListOf<Double>()
+        val zoneNames = mutableSetOf<String>()
 
         fun add(
             kind: String,
@@ -3284,9 +3285,20 @@ class SafeActivity : FragmentActivity() {
             tappedAtMs: Long = 0L
         ) {
             if (!price.isFinite() || price <= 0.0) return
-            if (prices.any { kotlin.math.abs(it - price) / kotlin.math.max(price, 1.0) < 0.00010 }) return
+            val isZone = zoneLow.isFinite() && zoneHigh.isFinite() &&
+                zoneLow > 0.0 && zoneHigh > 0.0 && zoneHigh != zoneLow
+            if (isZone) {
+                // The old price-only deduper silently erased overlapping
+                // OB zones from different timeframes (e.g. 1H + 4H).
+                // Keep each genuine named zone; prefer the server's earlier
+                // authoritative row over a later derived row for the same name.
+                val zoneKey = kind.uppercase(Locale.US) + "|" + label.uppercase(Locale.US)
+                if (!zoneNames.add(zoneKey)) return
+            } else {
+                if (prices.any { kotlin.math.abs(it - price) / kotlin.math.max(price, 1.0) < 0.00010 }) return
+                prices.add(price)
+            }
             if (out.length() >= 48) return
-            prices.add(price)
             val item = JSONObject()
                 .put("kind", kind).put("label", label).put("price", price)
                 .put("status", status).put("direction", direction)
