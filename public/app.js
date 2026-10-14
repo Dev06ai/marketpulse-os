@@ -316,7 +316,12 @@ function decisionParts(d){
   return {d,apex,p,m,lv,g,action};
 }
 function renderDecision(){
-  const x=decisionParts(state.decision||{}),d=x.d,p=x.p||{},m=x.m||{},lv=x.lv||{},g=x.g||{},action=["LONG","SHORT"].includes(x.action)?x.action:"WAIT";
+  const x=decisionParts(state.decision||{}),d=x.d,p=x.p||{},m=x.m||{},lv=x.lv||{},g=x.g||{};
+  // A market-side lean is only a watch candidate. Only a fresh, explicitly
+  // server-approved final decision may be shown as LONG/SHORT or execution-ready.
+  const finalApproved=d?.state==="READY"&&d?.liveSignalEligible===true&&d?.stale!==true&&
+    String(d?.action||"").toUpperCase()===x.action&&["LONG","SHORT"].includes(x.action);
+  const action=finalApproved?x.action:"WAIT";
   const analysis=d?.analysis||{};
   const candidateSide=String(
     d?.signalCandidate?.side||
