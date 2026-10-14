@@ -1308,12 +1308,19 @@ class SafeActivity : FragmentActivity() {
                 confirmOwnerLogout()
             }
             if (consumerEmail == null) {
-                actionRow(R.drawable.ic_account_access, "Admin identity login",
-                    "Separate verified account and MFA required") {
+                // Consumer account creation must remain accessible on an owner-paired
+                // phone without clearing the separate protected device token.
+                // Email/Google identity never grants owner or admin privileges.
+                actionRow(R.drawable.ic_account_access, "Email login",
+                    "Verified email and password • consumer identity") {
                     showConsumerEmailAuth("login")
                 }
-                actionRow(R.drawable.ic_account_access, "Admin Google sign-in",
-                    "Verified Google account • extra MFA for admin") {
+                actionRow(R.drawable.ic_account_portfolio, "Create account",
+                    "Use your email • verification required") {
+                    showConsumerEmailAuth("signup")
+                }
+                actionRow(R.drawable.ic_account_access, "Google sign-in",
+                    "Google account • no automatic admin privileges") {
                     KyvoriqConsumerIdentity.startGoogle(this@SafeActivity) {
                         showInfoDialog("Admin identity", it)
                     }
