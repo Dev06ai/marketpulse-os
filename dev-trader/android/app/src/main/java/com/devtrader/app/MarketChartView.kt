@@ -659,7 +659,7 @@ class MarketChartView @JvmOverloads constructor(
             }
         }
         // OB labels must be painted last so candles/EMA cannot cover prices.
-        if (hasVisibleLevelLayers()) drawZonePriceBadges(canvas, left, right, top, priceBottom)
+        if (hasVisibleLevelLayers()) drawZonePriceBadges(canvas, left, right, top, priceBottom, low, high)
         drawAxisLevelLabels(canvas, right, top, priceBottom, low, high)
 
         if (!livePrice.isNaN() && visibleLive) {
