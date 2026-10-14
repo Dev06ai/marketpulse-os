@@ -12,11 +12,11 @@ import android.provider.Settings
 import android.view.animation.PathInterpolator
 import android.widget.Button
 
-/** Monochrome KYVORIQ trading surfaces with a restrained deep-gold identity. */
+/** Monochrome KYVORIQ trading surfaces with warm ivory accents. */
 object KyvoriqTheme {
-    val gold = Color.rgb(182, 140, 75)
-    val ember = Color.rgb(199, 165, 103)
-    val deepGold = Color.rgb(137, 98, 44)
+    val gold = Color.rgb(245, 241, 230) // warm ivory
+    val ember = Color.rgb(236, 229, 211)
+    val deepGold = Color.rgb(214, 205, 186)
     val charcoal = Color.rgb(8, 9, 11)
     val slate = Color.rgb(16, 17, 20)
     val graphite = Color.rgb(28, 29, 33)
@@ -38,14 +38,14 @@ object KyvoriqTheme {
         val density = context.resources.displayMetrics.density
         val shape = GradientDrawable(
             GradientDrawable.Orientation.TOP_BOTTOM,
-            if (selected) intArrayOf(Color.rgb(246, 246, 247), Color.rgb(212, 213, 216))
+            if (selected) intArrayOf(Color.rgb(252, 250, 245), gold)
             else intArrayOf(Color.rgb(27, 28, 31), Color.rgb(15, 16, 19))
         ).apply {
-            cornerRadius = radius * density
+            cornerRadius = maxOf(radius, 21f) * density
             setStroke((density * .8f).toInt().coerceAtLeast(1),
-                if (selected) Color.rgb(236, 237, 240) else border)
+                if (selected) deepGold else border)
         }
-        return RippleDrawable(ColorStateList.valueOf(Color.argb(43, 221, 224, 228)), shape, null)
+        return RippleDrawable(ColorStateList.valueOf(Color.argb(55, 245, 241, 230)), shape, null)
     }
 
     fun surface(context: Context, prominent: Boolean = false, radius: Float = 18f): Drawable {
