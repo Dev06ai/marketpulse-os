@@ -18,7 +18,7 @@ class OtaIntegrityTest(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.apk = Path(self.temp.name) / "app-release.apk"
-        with zipfile.ZipFile(self.apk, "w", compression=zipfile.ZIP_DEFLATED) as z:
+        with zipfile.ZipFile(self.apk, "w", compression=zipfile.ZIP_STORED) as z:
             z.writestr("classes.dex", b"x" * 102_400)
             z.writestr("AndroidManifest.xml", b"not_real_test_fixture")
         sha = hashlib.sha256(self.apk.read_bytes()).hexdigest()
