@@ -307,6 +307,8 @@ class SafeActivity : FragmentActivity() {
             renderState(preview, requestChart = false)
             val candles = preview.getJSONObject("chart").getJSONArray("candles")
             latestChartCandles = candles
+            chart.setSessionProfiles(preview.optJSONObject("chart")?.optJSONArray("session_profiles"))
+            chart.setReferenceLevels(preview.optJSONObject("chart")?.optJSONArray("reference_levels"))
             chart.setData(candles, preview.optJSONObject("signal"), calculateEma(candles, 50), preview.getDouble("last_price"), chartOverlays(preview))
             check.text = "Build ${BuildConfig.VERSION_CODE}  •  Visual verification"
             selectWorkspace(intent.getIntExtra("visual_workspace", 0).coerceIn(0, 2))
@@ -1456,6 +1458,8 @@ class SafeActivity : FragmentActivity() {
                         chart.setTimeframe(requestTf)
                         chart.setLivePrice(lastPrice)
                         latestChartCandles = candles
+                        chart.setSessionProfiles(chartObj?.optJSONArray("session_profiles"))
+                        chart.setReferenceLevels(chartObj?.optJSONArray("reference_levels"))
                         chart.setData(
                             candles,
                             latestRoot?.optJSONObject("signal"),
@@ -2758,6 +2762,8 @@ class SafeActivity : FragmentActivity() {
 
                     chart.setTimeframe(requestTf)
                     latestChartCandles = candles
+                    chart.setSessionProfiles(j.optJSONArray("session_profiles"))
+                    chart.setReferenceLevels(j.optJSONArray("reference_levels"))
                     chart.setData(
                         candles,
                         latestRoot?.optJSONObject("signal"),
