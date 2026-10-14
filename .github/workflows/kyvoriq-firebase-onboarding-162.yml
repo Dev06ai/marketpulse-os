@@ -40,6 +40,9 @@ jobs:
         run: |
           set -euo pipefail
           [[ "$SOURCE_COMMIT" =~ ^[0-9a-f]{40}$ ]]
+          # Never run signing secrets against an arbitrary checkout.
+          # This is the reviewed consumer-auth commit with 30 tests and five emulator layouts.
+          [[ "$SOURCE_COMMIT" == "af72150a90b5a415b425521d61d1f8f3119ea680" ]]
       - uses: actions/checkout@v4
         with:
           ref: ${{ inputs.source_commit }}
