@@ -102,6 +102,7 @@ class HeroChartVisualTest {
                     .apply { isAccessible = true }
                 assertEquals("83,409.25", formatter.invoke(chart, 83409.25))
                 assertEquals("83,409.125", formatter.invoke(chart, 83409.125))
+                assertEquals("83,409.12500000001", formatter.invoke(chart, 83409.12500000001))
                 val ob = JSONArray()
                 fun zone(name: String, lo: Double, hi: Double, direction: String) {
                     ob.put(JSONObject().put("kind", "OB_ZONE").put("label", name)
