@@ -140,8 +140,8 @@ class MarketChartView @JvmOverloads constructor(
     private val volumeUpPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(206, 207, 210); alpha = 175 }
     private val volumeDownPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(109, 112, 119); alpha = 175 }
     // Estimated volume at price, not exact tick-trade distribution.
-    private val profileUpPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(187, 145, 65); alpha = 110 }
-    private val profileDownPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(84, 122, 174); alpha = 110 }
+    private val profileUpPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(187, 145, 65); alpha = 84 }
+    private val profileDownPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(84, 122, 174); alpha = 84 }
     private val profileLinePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { strokeWidth = dp(.85f); alpha = 165 }
     private val profileCaptionPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = KyvoriqTheme.muted; textSize = dp(7.1f) }
     private val liveChipPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = KyvoriqTheme.graphite }
@@ -595,10 +595,12 @@ class MarketChartView @JvmOverloads constructor(
         drawGrid(canvas, left, top, right, priceBottom)
         canvas.drawRoundRect(RectF(left, top, right, bottom), dp(3f), dp(3f), plotBorderPaint)
         if (showVolume) canvas.drawLine(left, volumeTop, right, volumeTop, volumeDividerPaint)
-        drawAxes(canvas, right, priceBottom, top, bottom, low, high)
+        drawAxes(canvas, right, top, bottom)
         if (hasVisibleLevelLayers()) drawZoneOverlays(canvas, left, right, top, priceBottom, low, high)
 
-        val step = (right - left) / actualVisible
+        // Reserve two blank bar slots by the axis so the latest wick never crowds the price labels.
+        // This changes visual spacing only; candle timestamps, prices and indicator values are untouched.
+        val step = (right - left) / (actualVisible + 2f)
         if (showSessionProfiles) drawSessionVolumeProfiles(canvas, start, left, right, top, priceBottom, low, high, step)
         val candleWidth = max(dp(2.4f), min(dp(9.2f), step * 0.62f))
 
@@ -688,7 +690,7 @@ class MarketChartView @JvmOverloads constructor(
         }
         // OB labels must be painted last so candles/EMA cannot cover prices.
         if (hasVisibleLevelLayers()) drawZonePriceBadges(canvas, left, right, top, priceBottom, low, high)
-        drawAxisLevelLabels(canvas, right, top, priceBottom, low, high, start, endExclusive)
+        val occupiedAxisTags = drawAxisLevelLabels(canvas, right, top, priceBottom, low, high, start, endExclusive)
 
         if (!livePrice.isNaN() && visibleLive) {
             val y = mapY(livePrice, low, high, top, priceBottom)
@@ -698,6 +700,9 @@ class MarketChartView @JvmOverloads constructor(
 
         drawTimeAxis(canvas, start, actualVisible, left, right, bottom, step)
         drawCrosshair(canvas, start, actualVisible, left, right, top, priceBottom, bottom, low, high, step)
+        // Ticks are LAST and only use space left by the ACTUAL (possibly shifted) level badges,
+        // live tag and crosshair. Never overwrite a high-priority price annotation.
+        drawAxisTicks(canvas, right, top, priceBottom, low, high, occupiedAxisTags)
     }
 
     private fun drawHeader(canvas: Canvas, left: Float, top: Float) {
@@ -842,36 +847,29 @@ class MarketChartView @JvmOverloads constructor(
         }
     }
 
-    private fun drawAxes(
-        canvas: Canvas,
-        right: Float,
-        priceBottom: Float,
-        top: Float,
-        bottom: Float,
-        low: Double,
-        high: Double
-    ) {
+    private fun drawAxes(canvas: Canvas, right: Float, top: Float, bottom: Float) {
         canvas.drawRect(right, top, width.toFloat(), bottom + dp(22f), axisPanelPaint)
         canvas.drawLine(right, top, right, bottom, axisPaint)
+    }
+
+    private fun drawAxisTicks(
+        canvas: Canvas, right: Float, top: Float, priceBottom: Float,
+        low: Double, high: Double, occupiedTagCenters: List<Float>
+    ) {
         val ticks = ((priceBottom - top) / dp(28f)).toInt().coerceIn(2, 5)
-        val liveY = if (livePrice.isFinite() && livePrice in low..high) mapY(livePrice, low, high, top, priceBottom) else Float.NaN
-        // Don't print gray axis ticks underneath the level badges. On smaller
-        // phones the previous draw order made prices appear broken/overlapped.
-        val levelY = if (hasVisibleLevelLayers()) (0 until overlays.length()).mapNotNull { i ->
-            val row = overlays.optJSONObject(i) ?: return@mapNotNull null
-            if (!isOverlayVisible(row)) return@mapNotNull null
-            val value = row.optDouble("price", Double.NaN)
-            if (!value.isFinite() || value !in low..high) null
-            else mapY(value, low, high, top, priceBottom)
-        } else emptyList()
-        val alertY = customAlertLevels.filter { it in low..high }
-            .map { mapY(it, low, high, top, priceBottom) }
+        val liveY = if (livePrice.isFinite() && livePrice in low..high)
+            mapY(livePrice, low, high, top, priceBottom) else Float.NaN
+        val crossY = if (crosshairVisible) crosshairY.coerceIn(top, priceBottom) else Float.NaN
+        // Never estimate this from raw price levels: badge collision avoidance MOVES the badges.
         for (i in 0..ticks) {
             val y = top + (priceBottom - top) * i / ticks
-            if (liveY.isFinite() && abs(y - liveY) < dp(14f)) continue
-            if ((levelY + alertY).any { abs(y - it) < dp(12f) }) continue
-            val value = high - (high - low) * i / ticks
-            val label = compactPrice(value)
+            if (liveY.isFinite() && abs(y - liveY) < dp(23f)) continue
+            if (crossY.isFinite() && abs(y - crossY) < dp(22f)) continue
+            if (occupiedTagCenters.any { abs(y - it) < dp(20f) }) continue
+            val price = high - (high - low) * i / ticks
+            val label = compactPrice(price)
+            // A small font-scale or phone width must not clip ordinary price values.
+            if (axisLabelPaint.measureText(label) > width - right - dp(8f)) continue
             canvas.drawText(label, right + dp(5f), y + dp(3.5f), axisLabelPaint)
         }
     }
@@ -1557,7 +1555,7 @@ class MarketChartView @JvmOverloads constructor(
             val visibleRight = min(right - dp(2f), timeX(finish) - dp(2f))
             if (visibleRight - visibleLeft < dp(16f)) continue
             val bins = session.optJSONArray("bins") ?: continue
-            val histogramWidth = min(dp(64f), (visibleRight - visibleLeft) * .53f)
+            val histogramWidth = min(dp(48f), (visibleRight - visibleLeft) * .42f)
             val maxVolume = (0 until bins.length()).mapNotNull { bins.optJSONObject(it) }
                 .maxOfOrNull { it.optDouble("volume", 0.0) } ?: 0.0
             if (maxVolume <= 0.0) continue
@@ -1603,7 +1601,38 @@ class MarketChartView @JvmOverloads constructor(
         canvas.restore()
     }
 
-    private data class AxisLevelMark(val originalY: Float, val value: Double, val text: String, val color: Int)
+    private data class AxisLevelMark(
+        val originalY: Float, val value: Double, val text: String, val color: Int,
+        val priority: Int = 1
+    )
+    private var frameAxisLabelRects: List<RectF> = emptyList()
+    internal fun visibleAxisLabelRectsForTest(): List<RectF> = frameAxisLabelRects.map { RectF(it) }
+
+    // Layout never changes the price or mapped line coordinate, only the badge's
+    // screen-space center. Reserved centers protect live price/crosshair labels.
+    internal fun layoutAxisTagCenters(
+        ideals: List<Float>, top: Float, bottom: Float, reserved: List<Float>
+    ): List<Float?> {
+        val edge = dp(11f)
+        if (bottom - top < edge * 2f) return List(ideals.size) { null }
+        val placed = mutableListOf<Float>()
+        val protected = reserved.filter { it.isFinite() }
+        return ideals.map { source ->
+            if (!source.isFinite()) return@map null
+            val ideal = source.coerceIn(top + edge, bottom - edge)
+            val step = dp(22f)
+            val candidates = listOf(ideal) + (1..3).flatMap { n ->
+                listOf(ideal - n * step, ideal + n * step)
+            }
+            val selected = candidates.firstOrNull { y ->
+                y in (top + edge)..(bottom - edge) &&
+                    placed.all { abs(it - y) >= dp(22f) } &&
+                    protected.all { abs(it - y) >= dp(25f) }
+            }
+            if (selected != null) placed.add(selected)
+            selected
+        }
+    }
 
     private fun drawAxisLevelLabels(
         canvas: Canvas,
@@ -1614,8 +1643,9 @@ class MarketChartView @JvmOverloads constructor(
         high: Double,
         start: Int,
         endExclusive: Int
-    ) {
-        if (!hasVisibleLevelLayers() && !showSessionProfiles) return
+    ): List<Float> {
+        frameAxisLabelRects = emptyList()
+        if (!hasVisibleLevelLayers() && !showSessionProfiles) return emptyList()
         val wallNow = System.currentTimeMillis()
         val liveY = if (livePrice.isFinite() && livePrice in low..high) mapY(livePrice, low, high, top, bottom)
                     else Float.NaN
@@ -1651,7 +1681,12 @@ class MarketChartView @JvmOverloads constructor(
                 else -> KyvoriqTheme.muted
             }
             AxisLevelMark(mapY(value, low, high, top, bottom), value,
-                type + " " + compactPrice(value), color)
+                type + " " + compactPrice(value), color,
+                when (kind) {
+                    "IPOC", "RANGE_POC", "NPOC", "SFP" -> 4
+                    "RANGE_VAH", "RANGE_VAL", "DAILY", "WEEKLY", "WEEKLY_NPOC" -> 3
+                    else -> 2
+                })
         }
         val earliest = candles.optJSONObject(start)?.optLong("start", 0L) ?: 0L
         val latest = candles.optJSONObject(endExclusive - 1)?.optLong("end", 0L) ?: 0L
@@ -1672,40 +1707,38 @@ class MarketChartView @JvmOverloads constructor(
                 }
             }
         }
+        // Keep one badge per true cent, prefer user/important manual levels.
+        // The underlying plotted lines are NEVER re-priced or visually snapped.
         val markers = (manualMarkers + profileMarkers)
-            .distinctBy { (it.value * 10).roundToInt() }
-            .sortedBy { it.originalY }
+            .distinctBy { String.format(Locale.US, "%.2f", it.value) }
+            .sortedWith(compareByDescending<AxisLevelMark> { it.priority }
+                .thenBy { abs(it.originalY - if (liveY.isFinite()) liveY else (top + bottom) / 2f) })
 
-        // Keep tags aligned with the same right-side strip as BTC axis values.
-        // A sparse lane prevents stacked level pills from concealing the plot.
-        val minGap = dp(22f)
-        val occupied = mutableListOf<Pair<Float, Float>>()
-        if (liveY.isFinite()) occupied.add(liveY - dp(14f) to liveY + dp(14f))
-        if (crosshairVisible) {
-            val crossY = crosshairY.coerceIn(top, bottom)
-            occupied.add(crossY - dp(11f) to crossY + dp(11f))
+        val reserved = buildList {
+            if (liveY.isFinite()) add(liveY)
+            if (crosshairVisible) add(crosshairY.coerceIn(top, bottom))
         }
+        val centers = layoutAxisTagCenters(markers.map { it.originalY }, top, bottom, reserved)
         val axisLeft = right + dp(1f)
         val axisRight = width - dp(2f)
-        for (mark in markers) {
-            val ideal = mark.originalY.coerceIn(top + dp(8f), bottom - dp(8f))
-            val candidates = listOf(ideal) + (-3..3).map { ideal + it * minGap }
-            val tagY = candidates.filter { center ->
-                center >= top + dp(8f) && center <= bottom - dp(8f) &&
-                    occupied.none { center + dp(8f) > it.first && center - dp(8f) < it.second }
-            }.minByOrNull { abs(it - ideal) } ?: continue
-            occupied.add(tagY - dp(8f) to tagY + dp(8f))
+        val rendered = mutableListOf<RectF>()
+        val occupied = mutableListOf<Float>()
+        markers.zip(centers).forEach { (mark, tagY) ->
+            if (tagY == null) return@forEach
             val rect = RectF(axisLeft, tagY - dp(9f), axisRight, tagY + dp(9f))
+            // Skip rather than truncate misleading price text on unusually narrow screens.
+            if (axisLevelTextPaint.measureText(mark.text) > rect.width() - dp(4f)) return@forEach
             axisLevelBgPaint.color = KyvoriqTheme.slate
             canvas.drawRoundRect(rect, dp(3f), dp(3f), axisLevelBgPaint)
             axisLevelGuidePaint.color = mark.color
             canvas.drawLine(right, mark.originalY, axisLeft + dp(2f), tagY, axisLevelGuidePaint)
             axisLevelTextPaint.color = mark.color
-            canvas.save()
-            canvas.clipRect(rect)
             canvas.drawText(mark.text, axisLeft + dp(2f), tagY + dp(2.8f), axisLevelTextPaint)
-            canvas.restore()
+            rendered.add(rect)
+            occupied.add(tagY)
         }
+        frameAxisLabelRects = rendered
+        return occupied
     }
 
     private fun axisWidth(): Float {
