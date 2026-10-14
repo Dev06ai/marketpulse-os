@@ -1218,7 +1218,11 @@ class SafeActivity : FragmentActivity() {
         val surface = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(20), dp(18), dp(20), dp(18))
-            background = roundedCard(Color.rgb(16, 17, 20), Color.rgb(83, 68, 41), 25)
+            background = GradientDrawable().apply {
+                setColor(Color.rgb(16, 17, 20))
+                cornerRadius = dp(25).toFloat()
+                setStroke(dp(1), Color.rgb(83, 68, 41))
+            }
         }
         val header = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
         val identity = LinearLayout(this).apply {
