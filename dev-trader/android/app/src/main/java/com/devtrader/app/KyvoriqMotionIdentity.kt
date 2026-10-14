@@ -13,7 +13,7 @@ open class KyvoriqIdentityMotionView(context: Context, description: String) : Fr
     init { contentDescription = description }
 }
 class KyvoriqEmblemMotionView(context: Context) :
-    KyvoriqIdentityMotionView(context, "KYVORIQ angular deep-gold emblem") {
+    KyvoriqIdentityMotionView(context, "KYVORIQ angular ivory emblem") {
     init {
         addView(ImageView(context).apply {
             setImageResource(R.drawable.kyvoriq_mark)
