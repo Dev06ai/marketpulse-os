@@ -1312,6 +1312,16 @@ class SafeActivity : FragmentActivity() {
                     "Separate verified account and MFA required") {
                     showConsumerEmailAuth("login")
                 }
+                actionRow(R.drawable.ic_account_access, "Admin Google sign-in",
+                    "Verified Google account • extra MFA for admin") {
+                    KyvoriqConsumerIdentity.startGoogle(this@SafeActivity) {
+                        showInfoDialog("Admin identity", it)
+                    }
+                }
+                actionRow(R.drawable.ic_account_pairing, "Recover account password",
+                    "Verified email reset • no admin privilege changes") {
+                    showConsumerEmailAuth("forgot-password")
+                }
             } else {
                 actionRow(R.drawable.ic_account_owner, "Verify admin identity",
                     "Server-verified subject + recent MFA required") {
