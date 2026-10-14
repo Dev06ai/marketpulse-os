@@ -812,7 +812,7 @@ class SafeActivity : FragmentActivity() {
         // Consumer-facing entry point. No role, entitlement, or payment is
         // ever inferred from this button or mutable local Android preferences.
         val account = compactPillButton(
-            if (KyvoriqSecureSession.isPaired(this)) "ADMIN" else "SIGN IN"
+            if (KyvoriqSecureSession.isPaired(this)) "ACCOUNT" else "SIGN IN"
         ).apply {
             textSize = 10f
             contentDescription = "Account: sign in or create account"
@@ -1035,11 +1035,10 @@ class SafeActivity : FragmentActivity() {
         insightsContent.addView(story.first, margins(bottom = 12))
         adminOnlyViews.add(story.first)
 
-        // Private signal-entry checks remain in engine memory only;
-        // Decision Center and trade Setup Details have no current UI.
+        // Private entry-check computation remains independent of consumer UI.
         decisionView = TextView(this)
 
-        val alertCard = compactCard("ALERT INTELLIGENCE"        val alertCard = compactCard("ALERT INTELLIGENCE", "Info • No spam, just the real updates.", 12.5f)
+        val alertCard = compactCard("ALERT INTELLIGENCE", "Info • No spam, just the real updates.", 12.5f)
         alertIntelligenceView = alertCard.value
         insightsContent.addView(alertCard.container, margins(bottom = 10))
         adminOnlyViews.add(alertCard.container)
@@ -1206,7 +1205,7 @@ class SafeActivity : FragmentActivity() {
             text = "Insights"
             contentDescription = "Workspace INSIGHTS"
         }
-        accountButton?.text = if (owner) "ADMIN" else "SIGN IN"
+        accountButton?.text = if (owner) "ACCOUNT" else "SIGN IN"
         accountButton?.contentDescription =
             if (owner) "Admin account and management" else "Sign in or create a KYVORIQ account"
     }
