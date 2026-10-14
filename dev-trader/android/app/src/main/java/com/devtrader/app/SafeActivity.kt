@@ -1458,75 +1458,118 @@ class SafeActivity : FragmentActivity() {
     private fun showConsumerEmailAuth(mode: String) {
         if (mode !in setOf("login", "signup", "forgot-password")) return
         if (!KyvoriqConsumerIdentity.configured()) {
-            openConsumerPortal(mode) // Only a configured HTTPS origin is permitted.
+            openConsumerPortal(mode)
             return
         }
         val title = when (mode) {
-            "signup" -> "Create a KYVORIQ account"
-            "forgot-password" -> "Reset your password"
-            else -> "Log in to KYVORIQ"
+            "signup" -> "Create your account"
+            "forgot-password" -> "Password recovery"
+            else -> "Welcome back"
         }
-        val layout = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(20), dp(12), dp(20), dp(6))
+        val subtitle = when (mode) {
+            "signup" -> "A verification email protects your account before your first sign-in."
+            "forgot-password" -> "Enter your registered email to receive an expiring reset link."
+            else -> "Sign in securely with your verified KYVORIQ email."
         }
+        val dialog = android.app.Dialog(this)
+        val panel = premiumDialogContainer(title, subtitle)
         val email = android.widget.EditText(this).apply {
-            hint = "Email address"
+            hint = "name@example.com"
             inputType = android.text.InputType.TYPE_CLASS_TEXT or
                 android.text.InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS
             filters = arrayOf(android.text.InputFilter.LengthFilter(254))
             setSingleLine(true)
+            textSize = 14f
+            setTextColor(kyWhite)
+            setHintTextColor(Color.rgb(130, 131, 139))
+            setPadding(dp(16), 0, dp(16), 0)
+            minHeight = dp(52)
+            background = roundedCard(Color.rgb(24, 25, 30), Color.rgb(69, 65, 59), 14)
             contentDescription = "Consumer account email"
         }
-        layout.addView(email)
+        panel.addView(label("EMAIL ADDRESS", 10f, kyGold, 0.055f), margins(bottom = 8))
+        panel.addView(email, LinearLayout.LayoutParams(-1, dp(52)))
         val password = android.widget.EditText(this).apply {
-            hint = if (mode == "signup") "Password • 12+ characters" else "Password"
+            hint = if (mode == "signup") "12 or more characters" else "Password"
             inputType = android.text.InputType.TYPE_CLASS_TEXT or
                 android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
             filters = arrayOf(android.text.InputFilter.LengthFilter(128))
             setSingleLine(true)
+            textSize = 14f
+            setTextColor(kyWhite)
+            setHintTextColor(Color.rgb(130, 131, 139))
+            setPadding(dp(16), 0, dp(16), 0)
+            minHeight = dp(52)
+            background = roundedCard(Color.rgb(24, 25, 30), Color.rgb(69, 65, 59), 14)
             contentDescription = "Consumer account password"
         }
-        if (mode != "forgot-password") layout.addView(password)
-        val dialog = android.app.AlertDialog.Builder(this)
-            .setTitle(title)
-            .setView(layout)
-            .setNegativeButton("Cancel", null)
-            .setPositiveButton(if (mode == "signup") "Verify email"
-                else if (mode == "forgot-password") "Send reset email" else "Sign in", null)
-            .create()
-        dialog.setOnShowListener {
-            dialog.window?.addFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)
-            dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener {
-                val enteredEmail = email.text.toString().trim()
-                val enteredPassword = password.text.toString()
-                dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE).isEnabled = false
-                val onResult: (String) -> Unit = { message ->
+        if (mode != "forgot-password") {
+            panel.addView(label("PASSWORD", 10f, kyGold, 0.055f), margins(top = 15, bottom = 8))
+            panel.addView(password, LinearLayout.LayoutParams(-1, dp(52)))
+        }
+        panel.addView(label(
+            if (mode == "signup") "Your password must contain 12–128 characters."
+            else if (mode == "login") "Admin and premium permissions require separate server authorization."
+            else "For privacy, we won't confirm whether this email has an account.",
+            10.5f, kyGray, 0f
+        ), margins(top = 12, bottom = 17))
+
+        val actions = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
+        val cancel = premiumDialogButton("Cancel", primary = false)
+        val proceed = premiumDialogButton(when (mode) {
+            "signup" -> "Verify email"
+            "forgot-password" -> "Send reset link"
+            else -> "Sign in"
+        })
+        actions.addView(cancel, LinearLayout.LayoutParams(0, dp(48), 1f).apply { rightMargin = dp(8) })
+        actions.addView(proceed, LinearLayout.LayoutParams(0, dp(48), 1f))
+        panel.addView(actions)
+        cancel.setOnClickListener { haptic(it); dialog.dismiss() }
+        proceed.setOnClickListener {
+            haptic(it, KyvoriqHaptics.Cue.ACTION)
+            val enteredEmail = email.text.toString().trim()
+            val enteredPassword = password.text.toString()
+            if (!android.util.Patterns.EMAIL_ADDRESS.matcher(enteredEmail).matches()) {
+                email.error = "Enter a valid email address"
+                return@setOnClickListener
+            }
+            if (mode == "signup" && enteredPassword.length !in 12..128) {
+                password.error = "Use a password of 12–128 characters"
+                return@setOnClickListener
+            }
+            if (mode == "login" && enteredPassword.isEmpty()) {
+                password.error = "Enter your password"
+                return@setOnClickListener
+            }
+            proceed.isEnabled = false
+            cancel.isEnabled = false
+            proceed.text = "Please wait…"
+            val onResult: (String) -> Unit = { message ->
+                if (!isFinishing && !isDestroyed) {
                     dialog.dismiss()
                     refreshConsumerPresentation()
                     showInfoDialog("KYVORIQ account", message)
                 }
-                when (mode) {
-                    "signup" -> KyvoriqConsumerIdentity.signUp(this, enteredEmail, enteredPassword, onResult)
-                    "login" -> KyvoriqConsumerIdentity.signIn(this, enteredEmail, enteredPassword, onResult)
-                    else -> KyvoriqConsumerIdentity.passwordReset(this, enteredEmail, onResult)
-                }
+            }
+            when (mode) {
+                "signup" -> KyvoriqConsumerIdentity.signUp(this, enteredEmail, enteredPassword, onResult)
+                "login" -> KyvoriqConsumerIdentity.signIn(this, enteredEmail, enteredPassword, onResult)
+                else -> KyvoriqConsumerIdentity.passwordReset(this, enteredEmail, onResult)
             }
         }
-        dialog.show()
+        openPremiumDialog(dialog, panel, sensitive = true)
     }
 
     private fun confirmConsumerLogout() {
-        android.app.AlertDialog.Builder(this)
-            .setTitle("Sign out of KYVORIQ?")
-            .setMessage("This signs out your consumer account on this device. Server-side premium features remain locked unless a valid signed-in session and subscription are verified.")
-            .setNegativeButton("Cancel", null)
-            .setPositiveButton("Sign out") { _, _ ->
-                KyvoriqConsumerIdentity.signOut(this)
-                refreshConsumerPresentation()
-                showInfoDialog("Signed out", "Your consumer session was cleared on this device.")
-            }.show().getButton(android.app.AlertDialog.BUTTON_POSITIVE)
-            ?.setTextColor(Color.rgb(240, 87, 96))
+        showPremiumConfirm(
+            "Sign out of your account?",
+            "Your consumer identity session will end on this phone. Your private owner device pairing is not affected.",
+            destructive = true
+        ) {
+            KyvoriqConsumerIdentity.signOut(this)
+            refreshConsumerPresentation()
+            showInfoDialog("Signed out", "Your consumer session was cleared on this device.")
+        }
     }
 
     @Deprecated("Android activity result is required by Google Sign-In legacy bridge")
@@ -1541,21 +1584,21 @@ class SafeActivity : FragmentActivity() {
     }
 
     private fun confirmOwnerLogout() {
-        // Logout clears the locally-encrypted, expiring device bearer. Backend
-        // still enforces access expiry and revocation on every protected call.
-        android.app.AlertDialog.Builder(this)
-            .setTitle("Sign out of this device?")
-            .setMessage("This clears your private owner token and hides private charts and execution data on this device. Remote sessions remain subject to server expiry or explicit revocation.")
-            .setNegativeButton("Cancel", null)
-            .setPositiveButton("Sign out") { _, _ ->
-                KyvoriqSecureSession.clear(this)
-                if (::chart.isInitialized) chart.setCustomPriceAlerts(emptyList())
-                runCatching { stopService(Intent(this, SignalService::class.java)) }
-                enterPublicMarketMode()
-                refreshConsumerPresentation()
-                showInfoDialog("Signed out", "Private owner access was cleared from this device.")
-            }.show().getButton(android.app.AlertDialog.BUTTON_POSITIVE)
-            ?.setTextColor(Color.rgb(240, 87, 96))
+        // Explicit separate confirmation for the encrypted owner device token.
+        // Firebase consumer logout never invokes this callback.
+        showPremiumConfirm(
+            "End private owner access?",
+            "This removes the encrypted private owner token from this device. Remote authorization continues to follow server expiry and revocation.",
+            destructive = true
+        ) {
+            KyvoriqSecureSession.clear(this)
+            if (::chart.isInitialized) chart.setCustomPriceAlerts(emptyList())
+            runCatching { stopService(Intent(this, SignalService::class.java)) }
+            enterPublicMarketMode()
+            refreshConsumerPresentation()
+            showInfoDialog("Private access ended",
+                "This device no longer holds an owner access token.")
+        }
     }
 
     private fun showConsumerPlans() {
