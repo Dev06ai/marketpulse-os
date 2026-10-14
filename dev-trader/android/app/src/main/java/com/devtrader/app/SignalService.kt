@@ -7,6 +7,8 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Intent
 import android.content.pm.ServiceInfo
+import android.net.ConnectivityManager
+import android.net.Network
 import android.os.Build
 import android.os.Handler
 import android.os.IBinder
@@ -95,6 +97,9 @@ class SignalService : Service() {
     private var reconnectScheduled = false
     private var staleChecks = 0
     private var lastTradeFallbackMs = 0L
+    private var lastSocketConnectMs = 0L
+    private var lastHeartbeatProbeMs = 0L
+    private var networkCallback: ConnectivityManager.NetworkCallback? = null
     private val client by lazy {
         OkHttpClient.Builder()
             .connectTimeout(8, TimeUnit.SECONDS)
@@ -105,8 +110,11 @@ class SignalService : Service() {
             .build()
     }
     private val restClient by lazy {
-        client.newBuilder().readTimeout(8, TimeUnit.SECONDS)
-            .callTimeout(12, TimeUnit.SECONDS).build()
+        client.newBuilder().dispatcher(okhttp3.Dispatcher())
+            .connectionPool(okhttp3.ConnectionPool())
+            .connectTimeout(12, TimeUnit.SECONDS).readTimeout(12, TimeUnit.SECONDS)
+            .callTimeout(20, TimeUnit.SECONDS)
+            .followRedirects(false).followSslRedirects(false).build()
     }
 
     override fun onCreate() {
@@ -114,6 +122,7 @@ class SignalService : Service() {
         stopped = false
         ensureChannels()
         startForegroundNotification()
+        registerNetworkRecovery()
         connect()
         handler.postDelayed(keepaliveRunnable, KEEPALIVE_INTERVAL_MS)
         scheduleHealthWatchdog()
@@ -219,6 +228,33 @@ class SignalService : Service() {
         }
     }
 
+    private fun registerNetworkRecovery() {
+        val manager = getSystemService(ConnectivityManager::class.java)
+        val callback = object : ConnectivityManager.NetworkCallback() {
+            override fun onAvailable(network: Network) {
+                handler.post {
+                    if (stopped) return@post
+                    restClient.dispatcher.cancelAll()
+                    restClient.connectionPool.evictAll()
+                    client.connectionPool.evictAll()
+                    val old = socket
+                    socket = null
+                    old?.cancel()
+                    reconnectAttempt = 0
+                    reconnectScheduled = false
+                    lastHeartbeatProbeMs = 0L
+                    lastTradeFallbackMs = 0L
+                    // Network changes must never bypass a rejected device session.
+                    connect()
+                }
+            }
+            override fun onLost(network: Network) {
+                handler.post { if (!stopped) updateServiceNotification(ServiceUiState.RECONNECTING) }
+            }
+        }
+        runCatching { manager.registerDefaultNetworkCallback(callback); networkCallback = callback }
+    }
+
     private fun connect(force: Boolean = false) {
         if (stopped) return
         if (!force && System.currentTimeMillis() < authRetryAfterMs) return
@@ -229,7 +265,8 @@ class SignalService : Service() {
             socket = null
         }
         if (socket != null) return
-        lastMessageMs = System.currentTimeMillis()
+        lastSocketConnectMs = System.currentTimeMillis()
+        lastMessageMs = lastSocketConnectMs
         socket = client.newWebSocket(
             KyvoriqSecureSession.authenticate(
                 this, Request.Builder().url(BackendEndpoint.socket("dashboard")),
@@ -260,6 +297,7 @@ class SignalService : Service() {
                 }
 
                 override fun onMessage(ws: WebSocket, text: String) {
+                    if (stopped || socket !== ws) return
                     lastMessageMs = System.currentTimeMillis()
                     runCatching {
                         val root = JSONObject(text)
@@ -437,6 +475,9 @@ class SignalService : Service() {
 
     private fun checkHeartbeatAndRecover() {
         if (stopped) return
+        val now = System.currentTimeMillis()
+        if (now - lastHeartbeatProbeMs < 20_000L) return
+        lastHeartbeatProbeMs = now
         runCatching {
             restClient.newCall(
                 Request.Builder().url(BackendEndpoint.base + "/heartbeat").get().build()
@@ -491,6 +532,20 @@ class SignalService : Service() {
                                             ServiceUiState.DEGRADED
                                         } else ServiceUiState.LIVE
                                     )
+                                    // Healthy server + stale phone channel requires a new
+                                    // socket. Previously this branch reset staleChecks forever.
+                                    if (!channelActive && System.currentTimeMillis() >= authRetryAfterMs &&
+                                        System.currentTimeMillis() - lastSocketConnectMs >= 30_000L) {
+                                        handler.post {
+                                            if (!stopped && System.currentTimeMillis() >= authRetryAfterMs &&
+                                                System.currentTimeMillis() - lastMessageMs >= 30_000L) {
+                                                val stale = socket
+                                                socket = null
+                                                stale?.cancel()
+                                                connect()
+                                            }
+                                        }
+                                    }
                                     socket?.send(
                                         JSONObject().apply {
                                             put("type", "keepalive")
@@ -883,6 +938,11 @@ class SignalService : Service() {
 
     override fun onDestroy() {
         stopped = true
+        runCatching { networkCallback?.let {
+            getSystemService(ConnectivityManager::class.java).unregisterNetworkCallback(it)
+        } }
+        networkCallback = null
+        restClient.dispatcher.cancelAll()
         handler.removeCallbacks(keepaliveRunnable)
         handler.removeCallbacksAndMessages(null)
         reconnectScheduled = false

@@ -176,6 +176,10 @@ class SafeActivity : FragmentActivity() {
     private var fullTradeHistoryText = "No executed demo trades yet."
     private lateinit var chart: MarketChartView
     private var latestChartCandles = JSONArray()
+    private var chartSource = MarketRecovery.PERPETUAL
+    private var showingSavedChart = false
+    private var marketInstrument: TextView? = null
+    private var bootstrapGeneration = 0L
     private var chartFullscreenHost: FrameLayout? = null
     private var chartHomeParent: ViewGroup? = null
     private var chartHomeIndex: Int = -1
@@ -221,6 +225,8 @@ class SafeActivity : FragmentActivity() {
         override fun run() {
             if (stopped) return
             val now = System.currentTimeMillis()
+            // Chart acquisition is independent of private diagnostics/bootstrap.
+            requestChartIfNeeded()
             if (publicMarketOnly || !KyvoriqSecureSession.isPaired(this@SafeActivity)) {
                 enterPublicMarketMode()
                 requestChartIfNeeded()
@@ -298,9 +304,19 @@ class SafeActivity : FragmentActivity() {
     // leave the UI parked on DATA RECOVERY after returning to the app.
     private val restClient by lazy {
         client.newBuilder()
-            .readTimeout(8, TimeUnit.SECONDS)
-            .callTimeout(12, TimeUnit.SECONDS)
+            .dispatcher(okhttp3.Dispatcher())
+            .connectionPool(okhttp3.ConnectionPool())
+            .connectTimeout(12, TimeUnit.SECONDS)
+            .readTimeout(12, TimeUnit.SECONDS)
+            .callTimeout(20, TimeUnit.SECONDS)
+            .followRedirects(false)
+            .followSslRedirects(false)
             .build()
+    }
+    // Independent queue/pool: stalled private requests cannot starve public candles.
+    private val publicRestClient by lazy {
+        restClient.newBuilder().dispatcher(okhttp3.Dispatcher())
+            .connectionPool(okhttp3.ConnectionPool()).build()
     }
 
     private var debugPreview = false
@@ -379,6 +395,7 @@ class SafeActivity : FragmentActivity() {
         val privacyLockEnabled = privacyPrefs().getBoolean("biometric_enabled", false)
         enforceInitialPrivacyGate()
         if (!privacyLockEnabled) { showLaunchSequence(); consumeWidgetDestination() }
+        restoreCachedChart()
         registerNetworkCallback()
         ensureChannel()
         if (KyvoriqSecureSession.isPaired(this)) {
@@ -930,7 +947,12 @@ class SafeActivity : FragmentActivity() {
             val button = compactPillButton(tf).apply { contentDescription = "Chart $tf" }
             button.setOnClickListener {
                 if (selectedTf != tf) haptic(it, KyvoriqHaptics.Cue.SELECT)
+                if (selectedTf != tf) {
+                    latestChartCandles = JSONArray()
+                    chart.setData(JSONArray(), null, null, Double.NaN, JSONArray())
+                }
                 selectedTf = tf
+                restoreCachedChart()
                 chart.setTimeframe(tf)
                 refreshTimeframeButtons(tfRow)
                 requestChartIfNeeded(force = true)
@@ -2145,7 +2167,7 @@ class SafeActivity : FragmentActivity() {
         }
         top.addView(label("BTC  /  USDT", 10.5f, kyWhite, 0.04f),
             LinearLayout.LayoutParams(0, dp(16), 1f))
-        val livePill = label("PERPETUAL", 8f, kyGray, 0.035f)
+        val livePill = label("PERPETUAL", 8f, kyGray, 0.035f).also { marketInstrument = it }
         top.addView(livePill, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(16)))
         box.addView(top)
 
@@ -2441,12 +2463,14 @@ class SafeActivity : FragmentActivity() {
                 chart.setOverlays(JSONArray())
                 chart.setFeedHealthy(false)
             }
-            if (::signal.isInitialized) signal.text = "PRIVATE SIGNALS LOCKED • PAIR DEVICE TO UNLOCK"
+            if (::signal.isInitialized) signal.text = if (privateRouteFallback)
+                "PRIVATE FEED RECONNECTING • SIGNALS PAUSED" else "PRIVATE SIGNALS LOCKED • PAIR DEVICE TO UNLOCK"
             if (::tradeHistory.isInitialized) tradeHistory.text = "Private exchange history is unavailable in public view."
-            if (::positionSummary.isInitialized) positionSummary.text = "PRIVATE • PAIRING REQUIRED"
+            if (::positionSummary.isInitialized) positionSummary.text = if (privateRouteFallback)
+                "PRIVATE FEED RECONNECTING" else "PRIVATE • PAIRING REQUIRED"
         }
         if (::status.isInitialized) {
-            status.text = "VIEW ONLY"
+            status.text = if (showingSavedChart) "SAVED • OFFLINE" else "VIEW ONLY"
             status.setTextColor(kyGray)
         }
         if (::integrity.isInitialized) integrity.text = "PUBLIC MARKET • VIEW ONLY • NO PRIVATE TRADES"
@@ -2657,10 +2681,25 @@ class SafeActivity : FragmentActivity() {
         }
     }
 
+    private fun resetMarketRequests() {
+        bootstrapGeneration++
+        chartRequestToken++
+        bootstrapInFlight = false
+        chartRequestInFlight = false
+        lastChartRequestMs = 0L
+        restClient.dispatcher.cancelAll()
+        publicRestClient.dispatcher.cancelAll()
+        restClient.connectionPool.evictAll()
+        publicRestClient.connectionPool.evictAll()
+        client.connectionPool.evictAll()
+    }
+
     private fun forceReconnectFromNetwork() {
+        resetMarketRequests()
         if (publicMarketOnly || !KyvoriqSecureSession.isPaired(this)) {
             enterPublicMarketMode()
             requestChartIfNeeded(force = true)
+            if (privateRouteFallback && KyvoriqSecureSession.isPaired(this)) bootstrap(true)
             return
         }
         val now = System.currentTimeMillis()
@@ -2668,6 +2707,7 @@ class SafeActivity : FragmentActivity() {
         lastRetryRequestMs = now
         reconnectAttempt = 0
         lastSocketRebuildMs = now
+        requestChartIfNeeded(force = true)
         bootstrap(true)
         connect(force = true)
     }
@@ -2691,8 +2731,10 @@ class SafeActivity : FragmentActivity() {
             bootstrapInFlight = false
             return
         }
+        val generation = bootstrapGeneration
         getJson(backendBase + "/bootstrap?profile=dashboard&interval=" + requestTf) { ok, body ->
             handler.post {
+                if (generation != bootstrapGeneration) return@post
                 bootstrapInFlight = false
                 if (stopped || bootstrapSession != KyvoriqSecureSession.accessToken(this)) return@post
                 if (!ok) {
@@ -2708,7 +2750,7 @@ class SafeActivity : FragmentActivity() {
                         else -> if (body.startsWith("HTTP ")) "BACKEND " + body else "RECONNECTING…"
                     }
                     lastHardHttpStatus = if (body in setOf("HTTP 401", "HTTP 403", "HTTP 404")) fault else null
-                    if (body == "HTTP 404") {
+                    if (MarketRecovery.transientFailure(body)) {
                         // No credential bypass and no blind backend restart:
                         // /bootstrap occasionally 404s at Voroa ingress even
                         // though /health and /chart are routed correctly.
@@ -2716,14 +2758,15 @@ class SafeActivity : FragmentActivity() {
                         lastHardHttpStatus = null
                         lastPrivateRouteProbeMs = nowFail
                         enterPublicMarketMode()
-                        status.text = "ROUTE RETRY"
+                        status.text = "RECONNECTING"
                         publicMarketMessage?.text =
-                            "SECURE BACKEND ROUTE TEMPORARILY UNAVAILABLE\n" +
-                            "Showing public BTC prices only. KYVORIQ is automatically retrying secure pairing."
-                        requestChartIfNeeded(force = true)
+                            "PRIVATE FEED RECONNECTING\n" +
+                            "Market chart recovery is automatic. Private signals resume only after authentication."
+                        requestChartIfNeeded()
                         return@post
                     }
-                    if (body == "HTTP 401") {
+                    if (body == "HTTP 401" || body == "HTTP 403") {
+                        privateRouteFallback = false
                         pairingButton?.text = "SESSION EXPIRED  •  TAP TO RE-PAIR"
                         check.text = "This device needs owner-approved pairing. Public BTC market chart remains available."
                         enterPublicMarketMode()
@@ -2742,14 +2785,29 @@ class SafeActivity : FragmentActivity() {
                     if (!root.has("data_health") || !root.optDouble("last_price", Double.NaN).isFinite()) {
                         status.text = "INVALID SNAPSHOT"
                         integrity.text = "HTTP  •  INVALID MARKET RESPONSE"
+                        privateRouteFallback = true
+                        lastPrivateRouteProbeMs = System.currentTimeMillis()
+                        enterPublicMarketMode()
+                        requestChartIfNeeded()
                         return@safe
                     }
                     val receivedAt = System.currentTimeMillis()
                     lastHardHttpStatus = null
                     val restoredPrivateRoute = privateRouteFallback
+                    showingSavedChart = false
+                    if (restoredPrivateRoute) {
+                        chartRequestToken++
+                        chartRequestInFlight = false
+                    }
                     privateRouteFallback = false
                     publicMarketOnly = false
                     publicMarketMessage?.visibility = View.GONE
+                    if (chartSource != MarketRecovery.PERPETUAL) {
+                        latestChartCandles = JSONArray()
+                        chart.setData(JSONArray(), null, null, Double.NaN, JSONArray())
+                    }
+                    chartSource = MarketRecovery.PERPETUAL
+                    marketInstrument?.text = "PERPETUAL"
                     if (restoredPrivateRoute) {
                         // Re-open private WS only AFTER authenticated bootstrap
                         // succeeds. No order endpoint is called here.
@@ -2770,6 +2828,9 @@ class SafeActivity : FragmentActivity() {
                         chart.setTimeframe(requestTf)
                         chart.setLivePrice(lastPrice)
                         latestChartCandles = candles
+                        showingSavedChart = false
+                        MarketRecovery.save(this, requestTf, candles, MarketRecovery.PERPETUAL)
+                        chart.contentDescription = "Interactive price chart"
                         chart.setSessionProfiles(chartObj?.optJSONArray("session_profiles"))
                         chart.setReferenceLevels(chartObj?.optJSONArray("reference_levels"))
                         chart.setData(
@@ -4079,7 +4140,7 @@ class SafeActivity : FragmentActivity() {
     private fun requestChartIfNeeded(force: Boolean = false) {
         val now = System.currentTimeMillis()
         if (!force && chartRequestInFlight) return
-        if (!force && now - lastChartRequestMs < 30_000L) return
+        if (!force && now - lastChartRequestMs < MarketRecovery.retryDelay(latestChartCandles.length() > 0)) return
 
         lastChartRequestMs = now
         chartRequestInFlight = true
@@ -4090,20 +4151,23 @@ class SafeActivity : FragmentActivity() {
         // BTCUSDT spot feed*. No owner token, strategy, trade or private overlays
         // are requested from the public provider.
         if (publicMarketOnly) {
-            requestPublicSpotCandles(requestTf, token)
+            requestPublicMarketCandles(requestTf, token)
             return
         }
         val requestSession = KyvoriqSecureSession.accessToken(this)
         if (requestSession == null) {
-            chartRequestInFlight = false
             enterPublicMarketMode()
-            requestPublicSpotCandles(requestTf, token)
+            requestPublicMarketCandles(requestTf, token)
             return
         }
         getJson(backendBase + "/chart?interval=" + requestTf) { ok, body ->
             handler.post {
                 if (token == chartRequestToken) chartRequestInFlight = false
-                if (!ok || token != chartRequestToken) return@post
+                if (token != chartRequestToken || stopped) return@post
+                if (!ok) {
+                    lastChartRequestMs = 0L
+                    return@post
+                }
                 if (publicMarketOnly || requestSession != KyvoriqSecureSession.accessToken(this)) return@post
 
                 safe {
@@ -4118,11 +4182,16 @@ class SafeActivity : FragmentActivity() {
 
                     chart.setTimeframe(requestTf)
                     if (publicMarketOnly && (candles.length() == 0 || !lastPrice.isFinite() || lastPrice <= 0.0)) {
-                        status.text = "NO PUBLIC DATA"
+                        status.text = if (latestChartCandles.length() > 0) "SAVED • OFFLINE" else "OFFLINE • RETRYING"
                         publicMarketMessage?.text = "PUBLIC BTC DATA UNAVAILABLE • Tap RETRY to fetch fresh candles. No private access has been granted."
                         return@safe
                     }
+                    if (candles.length() == 0) { lastChartRequestMs = 0L; return@safe }
                     latestChartCandles = candles
+                    showingSavedChart = false
+                    chartSource = MarketRecovery.PERPETUAL
+                    marketInstrument?.text = "PERPETUAL"
+                    MarketRecovery.save(this, requestTf, candles, chartSource)
                     chart.setSessionProfiles(j.optJSONArray("session_profiles"))
                     chart.setReferenceLevels(j.optJSONArray("reference_levels"))
                     chart.setData(
@@ -4149,6 +4218,57 @@ class SafeActivity : FragmentActivity() {
         }
     }
 
+    private fun restoreCachedChart() {
+        if (debugPreview || latestChartCandles.length() > 0) return
+        val cached = MarketRecovery.load(this, selectedTf) ?: return
+        applyPublicCandles(cached.getJSONArray("candles"), selectedTf, cached.getString("source"), cached = true)
+    }
+
+    private fun applyPublicCandles(candles: JSONArray, tf: String, source: String, cached: Boolean = false) {
+        if (selectedTf != tf) return
+        val lastPrice = candles.getJSONObject(candles.length() - 1).getDouble("close")
+        latestChartCandles = candles
+        showingSavedChart = cached
+        chartSource = source
+        marketInstrument?.text = if (source == MarketRecovery.SPOT) "SPOT" else "PERPETUAL"
+        chart.setTimeframe(tf)
+        chart.setSessionProfiles(JSONArray())
+        chart.setReferenceLevels(JSONArray())
+        chart.setData(candles, null, calculateEma(candles, 50), lastPrice, JSONArray())
+        chart.setSignal(null)
+        chart.setTradeEvent(null)
+        chart.setFeedHealthy(false)
+        price.setPrice(lastPrice, animate = false)
+        status.text = if (cached) "SAVED • OFFLINE" else "VIEW ONLY"
+        oiView.text = "OI  —"
+        val market = if (source == MarketRecovery.SPOT) "BTCUSDT SPOT" else "BTCUSDT PERPETUAL"
+        integrity.text = if (cached) "$market • SAVED CANDLES • NOT LIVE" else "$market • PUBLIC CHART • PRIVATE FEED RECOVERING"
+        // Staleness/source remain visible even when consumer-only views are hidden.
+        chart.contentDescription = integrity.text
+        if (!cached) MarketRecovery.save(this, tf, candles, source)
+        refreshTimeframeButtonsForCurrentSelection()
+    }
+
+    private fun requestPublicMarketCandles(tf: String, token: Long) {
+        getJson(backendBase + "/chart?interval=" + tf, authenticated = false) { ok, body ->
+            if (stopped || token != chartRequestToken || !publicMarketOnly) return@getJson
+            val candles = if (ok) runCatching {
+                val root = JSONObject(body)
+                require(root.optString("interval") == tf)
+                val rows = MarketRecovery.sanitize(root.getJSONArray("candles"), tf)
+                val latest = rows.getJSONObject(rows.length() - 1).getLong("start")
+                require(System.currentTimeMillis() - latest <= MarketRecovery.intervalMs(tf) * 2)
+                rows
+            }.getOrNull() else null
+            if (candles == null) {
+                requestPublicSpotCandles(tf, token)
+            } else {
+                chartRequestInFlight = false
+                applyPublicCandles(candles, tf, MarketRecovery.PERPETUAL)
+            }
+        }
+    }
+
     /**
      * Market-data-only contingency for an unavailable private owner backend.
      * Spot BTCUSDT is not the private perpetual futures feed and must NEVER
@@ -4163,7 +4283,7 @@ class SafeActivity : FragmentActivity() {
         }
         val host = if (backup) "api.binance.com" else "data-api.binance.vision"
         val url = "https://" + host + "/api/v3/klines?symbol=BTCUSDT&interval=" + tf + "&limit=120"
-        getJson(url) { ok, body ->
+        getJson(url, authenticated = false) { ok, body ->
             if (stopped || token != chartRequestToken || !publicMarketOnly) return@getJson
             val parsed = if (ok) runCatching {
                 val rows = JSONArray(body)
@@ -4207,9 +4327,11 @@ class SafeActivity : FragmentActivity() {
                     requestPublicSpotCandles(tf, token, backup = true)
                 } else {
                     chartRequestInFlight = false
-                    status.text = "NO PUBLIC DATA"
+                    showingSavedChart = latestChartCandles.length() > 0
+                    status.text = if (showingSavedChart) "SAVED • OFFLINE" else "OFFLINE • RETRYING"
+                    chart.setFeedHealthy(false)
                     publicMarketMessage?.text =
-                        "BTCUSDT SPOT market data unavailable. Private backend is offline. No trading access is granted."
+                        "Connection unavailable. Retrying automatically; saved candles are not live."
                     publicMarketMessage?.visibility = View.VISIBLE
                 }
                 return@getJson
@@ -4217,25 +4339,7 @@ class SafeActivity : FragmentActivity() {
             chartRequestInFlight = false
             if (selectedTf != tf) return@getJson
             safe {
-                val (candles, lastPrice) = parsed
-                latestChartCandles = candles
-                chart.setTimeframe(tf)
-                // This fallback is BTC spot from a separate provider: never
-                // paint Bitget perpetual session levels onto spot candles.
-                chart.setSessionProfiles(JSONArray())
-                chart.setReferenceLevels(JSONArray())
-                chart.setData(candles, null, calculateEma(candles, 50), lastPrice, JSONArray())
-                chart.setSignal(null)
-                chart.setTradeEvent(null)
-                chart.setFeedHealthy(false)
-                price.setPrice(lastPrice, animate = false)
-                oiView.text = "OI  —  •  PRIVATE"
-                status.text = "VIEW ONLY"
-                integrity.text = "BTCUSDT SPOT • PUBLIC DATA • NO PRIVATE SIGNALS"
-                publicMarketMessage?.text =
-                    "BTCUSDT SPOT • PUBLIC VIEW ONLY\nPrivate perpetual market, owner execution and premium features remain offline."
-                publicMarketMessage?.visibility = View.VISIBLE
-                refreshTimeframeButtonsForCurrentSelection()
+                applyPublicCandles(parsed.first, tf, MarketRecovery.SPOT)
             }
         }
     }
@@ -4363,6 +4467,8 @@ class SafeActivity : FragmentActivity() {
 
     private fun watchdog() {
         if (stopped) return
+        handler.removeCallbacks(healthWatchdogRunnable)
+        handler.postDelayed(healthWatchdogRunnable, 2000L)
         if (publicMarketOnly || !KyvoriqSecureSession.isPaired(this)) {
             enterPublicMarketMode()
             requestChartIfNeeded()
@@ -4405,7 +4511,6 @@ class SafeActivity : FragmentActivity() {
             reconnect(immediate = true)
         }
 
-        handler.postDelayed(healthWatchdogRunnable, 2000L)
     }
 
     private fun showPnlCalculator() {
@@ -5590,12 +5695,12 @@ class SafeActivity : FragmentActivity() {
             }.show()
     }
 
-    private fun getJson(url: String, callback: (Boolean, String) -> Unit) {
+    private fun getJson(url: String, authenticated: Boolean = true, callback: (Boolean, String) -> Unit) {
         runCatching {
-            val request = KyvoriqSecureSession.authenticate(
-                this, Request.Builder().url(url).get(), url
-            ).build()
-            restClient.newCall(request).enqueue(object : okhttp3.Callback {
+            val builder = Request.Builder().url(url).get()
+            val request = (if (authenticated) KyvoriqSecureSession.authenticate(this, builder, url) else builder).build()
+            val transport = if (authenticated) restClient else publicRestClient
+            transport.newCall(request).enqueue(object : okhttp3.Callback {
                 override fun onFailure(call: okhttp3.Call, e: java.io.IOException) {
                     val detail = if (e is java.net.SocketTimeoutException) "NETWORK TIMEOUT"
                         else "NETWORK UNAVAILABLE"
@@ -5668,7 +5773,7 @@ class SafeActivity : FragmentActivity() {
         // foreground. A previously-open socket can survive while its stream data
         // has gone stale, so connect() alone is not enough.
         handler.postDelayed({
-            safe { bootstrap(true) }
+            safe { restoreCachedChart(); requestChartIfNeeded(true); bootstrap(true) }
         }, 150L)
         handler.postDelayed({
             safe { connect() }
@@ -5683,6 +5788,7 @@ class SafeActivity : FragmentActivity() {
             backgroundedAtMs = System.currentTimeMillis()
         }
         stopped = true
+        resetMarketRequests()
         updatePoll?.let { handler.removeCallbacks(it) }
         updatePoll = null
         handler.removeCallbacks(snapshotPollRunnable)

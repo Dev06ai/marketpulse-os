@@ -11,8 +11,8 @@ android {
         minSdk = 26
         targetSdk = 37
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        versionCode = (providers.gradleProperty("devTraderVersionCode").orNull ?: "161").toInt()
-        versionName = providers.gradleProperty("devTraderVersionName").orNull ?: "0.21.36"
+        versionCode = (providers.gradleProperty("devTraderVersionCode").orNull ?: "176").toInt()
+        versionName = providers.gradleProperty("devTraderVersionName").orNull ?: "0.21.51"
         val backendUrl = providers.gradleProperty("devTraderBackendUrl").orNull
             ?: "https://kyvoriq-staging.getvoroa.com"
         require(Regex("https://[A-Za-z0-9.-]+(?::[0-9]+)?/?").matches(backendUrl)) {
@@ -75,6 +75,7 @@ android {
     buildFeatures { buildConfig = true }
 }
 dependencies {
+    androidTestImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
     androidTestImplementation("androidx.test:runner:1.7.0")
     androidTestImplementation("androidx.test.ext:junit:1.3.0")
     implementation("androidx.core:core-ktx:1.17.0")

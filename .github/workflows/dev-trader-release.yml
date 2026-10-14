@@ -6,6 +6,10 @@ on:
       - "dev-trader-release-*"
   workflow_dispatch:
 
+concurrency:
+  group: kyvoriq-release-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   actions: read
   contents: write
@@ -253,6 +257,34 @@ jobs:
           print("APK includes registered Firebase/Google identity config; values redacted.")
           PY
 
+      - name: Build connection recovery instrumentation
+        working-directory: dev-trader/android
+        run: gradle assembleDebug assembleDebugAndroidTest --stacktrace -PdevTraderVersionCode=176 -PdevTraderVersionName=0.21.51
+
+      - name: Require timeout, offline cache, network reset and chart regression tests
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          profile: pixel_6
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+          script: |
+            mkdir -p recovery-qa
+            adb install -r dev-trader/android/app/build/outputs/apk/debug/app-debug.apk
+            adb install -r dev-trader/android/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
+            adb shell am instrument -w -e class com.devtrader.app.MarketRecoveryTest,com.devtrader.app.ChartAxisRailTest,com.devtrader.app.OrderBlockPolicyTest,com.devtrader.app.KyvoriqUpdaterVisualTest com.devtrader.app.debug.test/androidx.test.runner.AndroidJUnitRunner | tee recovery-qa/instrumentation.txt
+            grep -q 'OK (' recovery-qa/instrumentation.txt
+            ! grep -E 'FAILURES!!!|INSTRUMENTATION_FAILED|Process crashed' recovery-qa/instrumentation.txt
+
+      - name: Preserve recovery test evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kyvoriq-176-recovery-evidence
+          path: recovery-qa/
+          retention-days: 14
+
       - name: Verify public Android client only contains generic level rendering
         shell: bash
         run: |
@@ -410,7 +442,7 @@ jobs:
             echo "Existing signed APK must not be replaced."
             exit 1
           fi
-          gh release create "$TAG" --target "$GITHUB_SHA" "$APK" "dev-trader-update.json#dev-trader-update.json" --title "KYVORIQ ${{ steps.meta.outputs.version_name }}" --notes "Signed KYVORIQ Build ${{ steps.meta.outputs.version_code }}: retained Build 169 account UI, signed updater and security; added BTC UTC session volume-by-price estimates, dynamic POC/VAH/VAL and source-labeled screenshot references with expiry. This indicator is for chart display only and does not change execution."
+          gh release create "$TAG" --target "$GITHUB_SHA" "$APK" "dev-trader-update.json#dev-trader-update.json" --title "KYVORIQ ${{ steps.meta.outputs.version_name }}" --notes "Signed KYVORIQ Build ${{ steps.meta.outputs.version_code }}: automatic recovery from timeouts and network changes; independent public chart fallback; validated offline candle cache with stale labels; repaired background stale-socket recovery. Preserves Build 175 chart labels, account UI, signing identity and execution safeguards. Device regression tests are required before publication."
 
       - name: Publish update manifest
         env:
