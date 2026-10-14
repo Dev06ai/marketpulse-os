@@ -35,6 +35,24 @@ class HeroChartVisualTest {
     }
     private fun densityForTest(activity: android.app.Activity): Float =
         activity.resources.displayMetrics.density
+    private fun authWindowLabels(): List<String> {
+        // Some Android 15 virtual devices occasionally show the launcher
+        // (Quickstep) ANR over our activity immediately after density changes.
+        // Dismiss only that unrelated system dialog, then still require the
+        // actual KYVORIQ authentication sheet and its controls to be present.
+        repeat(8) {
+            val labels = activeWindowLabels()
+            if (labels.any { it.contains("Welcome Back", ignoreCase = true) }) return labels
+            if (labels.any { it.contains("Quickstep isn't responding", ignoreCase = true) }) {
+                val waitButton = inst.uiAutomation.rootInActiveWindow
+                    ?.findAccessibilityNodeInfosByText("Wait")
+                    ?.firstOrNull { it.text?.toString() == "Wait" && it.isClickable }
+                waitButton?.performAction(android.view.accessibility.AccessibilityNodeInfo.ACTION_CLICK)
+            }
+            SystemClock.sleep(300)
+        }
+        return activeWindowLabels()
+    }
     private fun children(v: View): List<View> = listOf(v) +
         if (v is ViewGroup) (0 until v.childCount).flatMap { children(v.getChildAt(it)) } else emptyList()
     private fun screenshot(name: String) {
@@ -206,25 +224,36 @@ class HeroChartVisualTest {
                     assertFalse("Retired Insights card leaked: $banned",
                         titles.any { it == banned })
                 }
+            }
+            // Page animations and Android layout happen on later frames; do
+            // not chain three navigation clicks and capture an unlaid-out view.
+            SystemClock.sleep(350)
+            inst.runOnMainSync {
                 children(activity.window.decorView).filterIsInstance<Button>()
                     .first { it.contentDescription == "Workspace SIGNALS" }.performClick()
+            }
+            SystemClock.sleep(350)
+            inst.runOnMainSync {
                 val signalsIcon = children(activity.window.decorView)
                     .filterIsInstance<android.widget.ImageView>()
                     .first { it.contentDescription == "Signals market icon" }
-                assertNotNull("Large Signals icon must have the new vector artwork",
-                    signalsIcon.drawable)
+                assertTrue("Large Signals hero must actually be displayed", signalsIcon.isShown)
+                assertNotNull("Large Signals icon must have the new vector artwork", signalsIcon.drawable)
                 assertTrue("Large Signals icon should retain readable hero size",
-                    signalsIcon.layoutParams.height >= (88 * densityForTest(activity)))
+                    signalsIcon.height >= (88 * densityForTest(activity)))
                 children(activity.window.decorView).filterIsInstance<Button>()
                     .first { it.contentDescription == "Workspace TRADE" }.performClick()
+            }
+            SystemClock.sleep(350)
+            inst.runOnMainSync {
                 assertTrue(children(activity.window.decorView)
                     .any { it is KyvoriqGoldAccountButton })
                 children(activity.window.decorView).filterIsInstance<Button>()
                     .first { it.contentDescription == "Sign in or create a KYVORIQ account" }.performClick()
             }
-            SystemClock.sleep(250)
+            SystemClock.sleep(350)
             screenshot("account-free")
-            val consumerRows = activeWindowLabels()
+            val consumerRows = authWindowLabels()
             // Build 166: one unified login rather than a menu of auth choices.
             // Verify actual auth controls and no unconfigured OAuth providers.
             for (name in listOf("Welcome Back", "Email Address", "Password",
@@ -247,7 +276,7 @@ class HeroChartVisualTest {
             }
             SystemClock.sleep(250)
             screenshot("account-owner")
-            val ownerRows = activeWindowLabels()
+            val ownerRows = authWindowLabels()
             assertTrue("Owner pairing must expose a separate protected security entry",
                 ownerRows.any { it.contains("PRIVATE DEVICE SECURITY") })
             assertFalse("Consumer login must not be replaced by private owner pairing",
