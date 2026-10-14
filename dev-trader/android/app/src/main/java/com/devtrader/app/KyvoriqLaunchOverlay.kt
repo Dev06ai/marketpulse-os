@@ -11,7 +11,7 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 
-/** Build 143: native black/white/deep-gold intro, never the old flame animation. */
+/** Build 143: native black/white/ivory intro, never the old flame animation. */
 class KyvoriqLaunchOverlay(context: Context) : FrameLayout(context) {
     private val easing = PathInterpolator(.18f, .78f, .20f, 1f)
     private var completed = false
@@ -20,7 +20,7 @@ class KyvoriqLaunchOverlay(context: Context) : FrameLayout(context) {
     private val emblem = ImageView(context).apply {
         setImageResource(R.drawable.kyvoriq_emblem_intro_tight)
         scaleType = ImageView.ScaleType.FIT_CENTER
-        contentDescription = "KYVORIQ gold emblem"
+        contentDescription = "KYVORIQ ivory emblem"
         alpha = 0f; scaleX = .76f; scaleY = .76f
     }
     private val wordmark = KyvoriqRazorWordmarkView(context).apply {
