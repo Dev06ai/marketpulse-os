@@ -647,35 +647,6 @@ class SafeActivity : FragmentActivity() {
         }
     }
 
-    private fun showTradingViewPreview() {
-        if (latestChartCandles.length() == 0) {
-            Toast.makeText(this, "Waiting for confirmed market candles. Refresh chart first.", Toast.LENGTH_SHORT).show()
-            requestChartIfNeeded(force = true)
-            return
-        }
-        // Optional, network-dependent WebView with PUBLIC candles/levels only.
-        // Never send Bitget credentials or position/account state to this view.
-        val dialog = android.app.Dialog(this)
-        val surface = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setBackgroundColor(kyCharcoal)
-        }
-        val close = compactPillButton("CLOSE PREVIEW  ×").apply {
-            contentDescription = "Close optional TradingView preview and return to KYVORIQ chart"
-            setOnClickListener { dialog.dismiss() }
-        }
-        surface.addView(close, LinearLayout.LayoutParams(-1, dp(43)))
-        surface.addView(
-            TradingViewPreview(this, latestChartCandles, chartOverlays(latestRoot)),
-            LinearLayout.LayoutParams(-1, 0, 1f)
-        )
-        dialog.setContentView(surface)
-        dialog.show()
-        dialog.window?.setLayout(
-            ViewGroup.LayoutParams.MATCH_PARENT,
-            ViewGroup.LayoutParams.MATCH_PARENT
-        )
-    }
 
     private fun showChartFullscreen() {
         if (!::chart.isInitialized || chartFullscreenHost != null) return
@@ -789,7 +760,6 @@ class SafeActivity : FragmentActivity() {
         }
         colorAll("LONG", Color.rgb(54, 211, 153))
         colorAll("SHORT", Color.rgb(255, 82, 105))
-        colorAll("NO TRADE", kyGold)
         signal.text = styled
     }
 
@@ -940,13 +910,13 @@ class SafeActivity : FragmentActivity() {
         timeframeButtonRow = tfRow
         tradePage.addView(tfRow, margins(bottom = 8))
         chart = MarketChartView(this).apply {
-            minimumHeight = dp(layout.chartHeightDp)
+            minimumHeight = dp(if (compactViewport) 240 else 275)
             contentDescription = "Interactive price chart"
             onFullscreenRequested = { toggleChartFullscreen() }
         }
         tradePage.addView(
             chart,
-            LinearLayout.LayoutParams(-1, dp(layout.chartHeightDp)).apply {
+            LinearLayout.LayoutParams(-1, dp(if (compactViewport) 240 else 275)).apply {
                 leftMargin = 0
                 rightMargin = 0
                 bottomMargin = dp(12)
@@ -964,73 +934,34 @@ class SafeActivity : FragmentActivity() {
             bottomMargin = dp(7)
         })
         adminOnlyViews.add(priceAlertsButton)
-        // Native chart remains default; v5 lightweight renderer is a
-        // manually opened beta preview with no order-placement capability.
-        val tvPreviewButton = compactPillButton("TRADINGVIEW CHART  ↗").apply {
-            contentDescription = "Open optional TradingView Lightweight Charts preview"
-            setOnClickListener { showTradingViewPreview() }
+        // A full-width entry card, without a calculator form on the resting chart.
+        val pnl = compactPillButton("P&L CALCULATOR   ↗").apply {
+            contentDescription = "Open manual profit and loss and risk calculator"
+            setOnClickListener {
+                haptic(it, KyvoriqHaptics.Cue.ACTION)
+                safe { showPnlCalculator() }
+            }
         }
-        tradePage.addView(tvPreviewButton, LinearLayout.LayoutParams(-1, dp(37)).apply {
-            bottomMargin = dp(8)
+        tradePage.addView(pnl, LinearLayout.LayoutParams(-1, dp(44)).apply {
+            bottomMargin = dp(3)
         })
-        adminOnlyViews.add(tvPreviewButton)
-        val setup = premiumCard("DECISION CENTER", "NO TRADE  •  SCANNING\nWaiting for verified market data.", if (compactViewport) 11.5f else 13f)
-        decisionContainer = setup.first
-        signal = setup.second
-        signal.maxLines = if (compactViewport) 4 else 5
-        signal.setLineSpacing(0f, 1.12f)
-        signal.ellipsize = android.text.TextUtils.TruncateAt.END
-        setup.first.setOnClickListener {
-            haptic(it, KyvoriqHaptics.Cue.TAP)
-            showTradeDetails()
-        }
-        setup.first.contentDescription = "Open complete trade setup"
-        val decisionHost = FrameLayout(this).apply {
-            clipChildren = false
-            clipToPadding = false
-        }
-        decisionHost.addView(setup.first, FrameLayout.LayoutParams(-1, -1))
-        decisionMotionView = DecisionMotionView(this)
-        decisionHost.addView(decisionMotionView, FrameLayout.LayoutParams(-1, -1))
-        tradePage.addView(decisionHost, LinearLayout.LayoutParams(-1, dp(if (compactViewport) 96 else 118)).apply { bottomMargin = dp(6) })
-        adminOnlyViews.add(decisionHost)
-        val tradeTools = LinearLayout(this)
-        val details = compactPillButton("SETUP DETAILS")
-        details.setOnClickListener {
-            haptic(it, KyvoriqHaptics.Cue.TAP)
-            showTradeDetails()
-        }
-        tradeTools.addView(details, LinearLayout.LayoutParams(0, dp(42), 1f).apply { rightMargin = dp(6) })
-        val pnl = compactPillButton("P&L CALCULATOR")
-        pnl.setOnClickListener {
-            haptic(it, KyvoriqHaptics.Cue.ACTION)
-            safe { showPnlCalculator() }
-        }
-        tradeTools.addView(pnl, LinearLayout.LayoutParams(0, dp(42), 1f))
-        tradePage.addView(tradeTools)
-        adminOnlyViews.add(tradeTools)
         refreshTimeframeButtons(tfRow)
 
+        // Signals are locked for all plans, including Elite.
         val positionsPage = page(scrollable = true)
-        positionsPage.addView(label("POSITIONS", 20f, kyWhite, 0.01f), margins(top = 6, bottom = 5))
-        positionsPage.addView(label("Demo account  /  position monitoring", 10f, kyGray, 0.015f), margins(bottom = 12))
-        val overview = premiumCard("DEMO PERFORMANCE", "Waiting for exchange accounting…", 18f)
-        positionSummary = overview.second
-        positionsPage.addView(overview.first, margins(bottom = 10))
+        positionsPage.addView(label("SIGNALS", 20f, kyWhite, 0.01f),
+            margins(top = 14, bottom = 8))
+        val signalLock = premiumCard("COMING SOON",
+            "Signals are under private forward testing.\n\n" +
+            "Free, Pro and Elite currently unlock no trade recommendations, " +
+            "exchange connections or automated orders.\n\n" +
+            "Market levels and chart analysis are independent of future signals.", 13f)
+        positionsPage.addView(signalLock.first, margins(top = 6, bottom = 12))
+        // Nonvisual buffers maintain private engine compatibility only.
+        positionSummary = TextView(this)
         curve = PerformanceCurveView(this)
-        positionsPage.addView(curve, LinearLayout.LayoutParams(-1, dp(if (compactViewport) 90 else 130)).apply { bottomMargin = dp(10) })
-        val ledgerCard = compactCard("ACCOUNTING & RISK", "Checking fills and exposure…", 12f)
-        ledgerView = ledgerCard.value
-        positionsPage.addView(ledgerCard.container, margins(bottom = 10))
-        val exposureCard = scrollableCard("EXCHANGE POSITIONS", "No verified position data yet.", 13f, dp(182), expandToFill = false)
-        tradeHistory = exposureCard.value
-        positionsPage.addView(exposureCard.container, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(10) })
-        val historyButton = compactPillButton("OPEN EXECUTION HISTORY")
-        historyButton.setOnClickListener {
-            haptic(it, KyvoriqHaptics.Cue.ACTION)
-            safe { loadTradeHistory(); showInfoDialog("Execution history", fullTradeHistoryText) }
-        }
-        positionsPage.addView(historyButton, LinearLayout.LayoutParams(-1, dp(44)))
+        ledgerView = TextView(this)
+        tradeHistory = TextView(this)
 
         val insightsPage = page()
         val insightsScroll = ScrollView(this).apply {
@@ -1082,12 +1013,11 @@ class SafeActivity : FragmentActivity() {
         adminOnlyViews.add(insightTabsRow)
         consumerWelcomeCard = premiumCard(
             "YOUR KYVORIQ ACCOUNT",
-            "Explore the BTC chart for free.\n" +
-            "BASIC  •  Market chart and public context\n" +
-            "PRO  •  Enhanced signals and alerts (coming soon)\n" +
-            "ELITE  •  Advanced verified insights (coming soon)\n\n" +
-            "Subscription access will activate only after secure accounts and payment verification are ready.",
-            12f
+            "FREE  •  Bollinger Bands, 50 EMA, SFP watch references.\n" +
+            "PRO  •  Daily, weekly and NPOC levels and eligible alerts.\n" +
+            "ELITE  •  Order blocks, D-line, VAH and VAL.\n\n" +
+            "Signals remain locked for every tier. Purchases are not active until " +
+            "server-verified accounts and billing are ready.", 12f
         ).first.apply {
             setOnClickListener { showConsumerAccountPanel() }
         }
@@ -1224,7 +1154,7 @@ class SafeActivity : FragmentActivity() {
             setPadding(dp(3), dp(4), dp(3), dp(4))
             background = KyvoriqTheme.surface(this@SafeActivity, radius = 18f)
         }
-        listOf("TRADE", "POSITIONS", "INSIGHTS").forEachIndexed { index, title ->
+        listOf("TRADE", "SIGNALS", "INSIGHTS").forEachIndexed { index, title ->
             val button = compactPillButton(title.lowercase(Locale.US).replaceFirstChar { it.titlecase(Locale.US) }).apply { contentDescription = "Workspace $title"; textSize = 11f
                 compoundDrawablePadding = dp(5)
                 val icon = getDrawable(listOf(R.drawable.ic_nav_trade, R.drawable.ic_nav_positions, R.drawable.ic_nav_insights)[index])!!.mutate()
@@ -1242,6 +1172,27 @@ class SafeActivity : FragmentActivity() {
             navigation.addView(button, LinearLayout.LayoutParams(0, dp(44), 1f).apply { leftMargin = dp(3); rightMargin = dp(3) })
         }
         root.addView(navigation, margins(top = 8))
+        // Allocate actual remaining workspace height to candles after layout
+        // and system insets. Small and landscape screens can scroll naturally.
+        workspaceHost.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
+            if (!::chart.isInitialized || chartFullscreenHost != null) return@addOnLayoutChangeListener
+            val viewportHeight = workspaceHost.height
+            if (viewportHeight <= 0) return@addOnLayoutChangeListener
+            var fixedContent = 0
+            for (i in 0 until tradePage.childCount) {
+                val child = tradePage.getChildAt(i)
+                if (child === chart || child.visibility == View.GONE) continue
+                val lp = child.layoutParams as? ViewGroup.MarginLayoutParams
+                fixedContent += child.measuredHeight + (lp?.topMargin ?: 0) + (lp?.bottomMargin ?: 0)
+            }
+            val minPlot = dp(if (resources.configuration.orientation ==
+                android.content.res.Configuration.ORIENTATION_LANDSCAPE) 210 else 265)
+            val proposed = maxOf(minPlot, viewportHeight - fixedContent - dp(8))
+            if (kotlin.math.abs(chart.layoutParams.height - proposed) > dp(1)) {
+                chart.layoutParams = chart.layoutParams.apply { height = proposed }
+                chart.requestLayout()
+            }
+        }
         update = TextView(this); risk = TextView(this); journal = TextView(this); replay = TextView(this)
         selectWorkspace(0)
         refreshConsumerPresentation()
@@ -1255,21 +1206,20 @@ class SafeActivity : FragmentActivity() {
     private fun refreshConsumerPresentation() {
         val owner = KyvoriqSecureSession.isPaired(this)
         adminOnlyViews.forEach { it.visibility = if (owner) View.VISIBLE else View.GONE }
-        consumerPositionTab?.visibility = if (owner) View.VISIBLE else View.GONE
+        consumerPositionTab?.visibility = View.VISIBLE
         consumerWelcomeCard?.visibility = if (owner) View.GONE else View.VISIBLE
         consumerPageHeading?.text = if (owner) "INSIGHTS" else "MEMBERSHIP"
         consumerPageSubtitle?.text = if (owner) "Verified market intelligence" else "Explore KYVORIQ access plans"
-        // No wasted or misleading navigation: the consumer sees Market + Plans,
-        // while the verified owner gets Trade + Positions + Insights.
-        navigationButtons.getOrNull(0)?.text = if (owner) "Trade" else "Market"
+        // Consistent consumer navigation; Signals remains locked for all tiers.
+        navigationButtons.getOrNull(0)?.text = "Trade"
+        navigationButtons.getOrNull(1)?.text = "Signals"
         navigationButtons.getOrNull(2)?.apply {
-            text = if (owner) "Insights" else "Plans"
-            contentDescription = if (owner) "Workspace INSIGHTS" else "Workspace PLANS"
+            text = "Insights"
+            contentDescription = "Workspace INSIGHTS"
         }
         accountButton?.text = if (owner) "ADMIN" else "SIGN IN"
         accountButton?.contentDescription =
             if (owner) "Admin account and management" else "Sign in or create a KYVORIQ account"
-        if (!owner && selectedWorkspace == 1) selectWorkspace(0)
     }
 
     private fun showConsumerAccountPanel() {
@@ -1304,11 +1254,12 @@ class SafeActivity : FragmentActivity() {
 
     private fun showConsumerPlans() {
         showInfoDialog("KYVORIQ access levels",
-            "BASIC • Public BTC chart and market snapshot.\n\n" +
-            "PRO • More qualified signals, real-time alerts, and extra chart tools.\n\n" +
-            "ELITE • Everything in Pro plus advanced verified market intelligence.\n\n" +
-            "ADMIN • Private owner controls only.\n\n" +
-            "Pro and Elite purchases are unavailable until server-verified authentication, payments and entitlements are deployed. No trading result is guaranteed.")
+            "FREE • Bollinger Bands, 50 EMA, SFP watch references. No market alerts.\n\n" +
+            "PRO • Adds daily, weekly and NPOC levels and eligible alerts.\n\n" +
+            "ELITE • Adds order blocks, D-line, VAH and VAL and eligible alerts.\n\n" +
+            "OWNER • Private management and testing.\n\n" +
+            "Signals remain Coming soon for every plan. Checkout is unavailable " +
+            "until server-verified accounts and subscriptions are operational.")
     }
 
     private fun openConsumerPortal(destination: String) {
@@ -1331,10 +1282,6 @@ class SafeActivity : FragmentActivity() {
     }
 
     private fun selectWorkspace(index: Int) {
-        if (index == 1 && !KyvoriqSecureSession.isPaired(this)) {
-            showConsumerAccountPanel()
-            return
-        }
         val previous = selectedWorkspace
         selectedWorkspace = index
         workspacePages.forEachIndexed { i, page ->
@@ -1381,26 +1328,6 @@ class SafeActivity : FragmentActivity() {
         }
     }
 
-    private fun showTradeDetails() {
-        val s = latestRoot?.optJSONObject("signal")
-        if (s == null) {
-            showInfoDialog("Decision center", decisionView.text.toString())
-            return
-        }
-        val thesis = s.optJSONArray("thesis") ?: JSONArray()
-        val explanation = (0 until thesis.length()).joinToString("\n") { "• " + thesis.optString(it) }
-        val entries = latestRoot?.optJSONObject("execution")?.optJSONArray("recent_trades") ?: JSONArray()
-        val actual = (0 until entries.length()).mapNotNull { entries.optJSONObject(it) }
-            .firstOrNull { it.optString("signal_id") == s.optString("id") }
-        val fillDetails = if (actual != null && actual.optBoolean("actual_fill_confirmed"))
-            "\nExchange fill  ${formatCompact(actual.optDouble("entry_price"))}\nQuantity  ${actual.optDouble("filled_qty")} BTC\n" else ""
-        showInfoDialog("Trade plan", "${s.optString("direction")}  •  ${s.optString("trade_style")}\n${s.optString("setup")}\n\n" +
-            "Planned entry  ${formatCompact(s.optDouble("entry"))}\nStop  ${formatCompact(s.optDouble("stop"))}\n" +
-            "Target 1  ${formatCompact(s.optDouble("target1"))}\nTarget 2  ${formatCompact(s.optDouble("target2"))}\n" +
-            "Evidence score  ${String.format(Locale.US, "%.0f", s.optDouble("confidence") * 100)}/100 (heuristic)\n$fillDetails\n" +
-            "Execution  ${s.optString("execution_status", "PENDING CHECK")}\n${s.optString("execution_reason")}\n\n" +
-            "Invalidation\n${s.optString("invalidation")}\n\n$explanation")
-    }
 
     private fun LinearLayout.isFillViewportCompat() {
         // Kept as a no-op marker so the main root remains a normal fixed viewport.
@@ -1729,7 +1656,7 @@ class SafeActivity : FragmentActivity() {
 
     private fun showPublicAccessInfo() {
         showInfoDialog(
-            "Basic market access",
+            "Free market access",
             "You can explore public BTC candles without creating an account. " +
                 "Pro and Elite market features will require verified subscriptions when available. " +
                 "Private KYVORIQ exchange execution, owner diagnostics and management " +
