@@ -1606,27 +1606,29 @@ class MarketChartView @JvmOverloads constructor(
         val priority: Int = 1
     )
     private var frameAxisLabelRects: List<RectF> = emptyList()
+    private var frameAxisSourceCenters: List<Pair<Float, Float>> = emptyList()
     internal fun visibleAxisLabelRectsForTest(): List<RectF> = frameAxisLabelRects.map { RectF(it) }
+    internal fun visibleAxisPriceAnchorsForTest(): List<Pair<Float, Float>> =
+        frameAxisSourceCenters.toList()
 
-    // Layout never changes the price or mapped line coordinate, only the badge's
-    // screen-space center. Reserved centers protect live price/crosshair labels.
+    // Badge centers must remain at their TRUE transformed price coordinates.
+    // Never search for distant vacant slots: displaced tags used to invert price order,
+    // creating misleading vertical colored "wires" on the right hand price rail.
+    // In a dense cluster, hide the lower-priority BADGE only; level lines remain intact.
     internal fun layoutAxisTagCenters(
         ideals: List<Float>, top: Float, bottom: Float, reserved: List<Float>
     ): List<Float?> {
-        val edge = dp(11f)
-        if (bottom - top < edge * 2f) return List(ideals.size) { null }
+        val safeTop = top + dp(10f)
+        val safeBottom = bottom - dp(10f)
+        if (safeTop >= safeBottom) return List(ideals.size) { null }
         val placed = mutableListOf<Float>()
         val protectedCenters = reserved.filter { it.isFinite() }
+        val offsets = listOf(0f, -dp(3f), dp(3f), -dp(6f), dp(6f))
         return ideals.map { source ->
-            if (!source.isFinite()) return@map null
-            val ideal = source.coerceIn(top + edge, bottom - edge)
-            val step = dp(22f)
-            val candidates = listOf(ideal) + (1..3).flatMap { n ->
-                listOf(ideal - n * step, ideal + n * step)
-            }
-            val selected = candidates.firstOrNull { y ->
-                y in (top + edge)..(bottom - edge) &&
-                    placed.all { abs(it - y) >= dp(22f) } &&
+            if (!source.isFinite() || source !in safeTop..safeBottom) return@map null
+            val selected = offsets.asSequence().map { source + it }.firstOrNull { y ->
+                y in safeTop..safeBottom &&
+                    placed.all { abs(it - y) >= dp(21f) } &&
                     protectedCenters.all { abs(it - y) >= dp(25f) }
             }
             if (selected != null) placed.add(selected)
@@ -1645,6 +1647,7 @@ class MarketChartView @JvmOverloads constructor(
         endExclusive: Int
     ): List<Float> {
         frameAxisLabelRects = emptyList()
+        frameAxisSourceCenters = emptyList()
         if (!hasVisibleLevelLayers() && !showSessionProfiles) return emptyList()
         val wallNow = System.currentTimeMillis()
         val liveY = if (livePrice.isFinite() && livePrice in low..high) mapY(livePrice, low, high, top, bottom)
@@ -1707,12 +1710,12 @@ class MarketChartView @JvmOverloads constructor(
                 }
             }
         }
-        // Keep one badge per true cent, prefer user/important manual levels.
-        // The underlying plotted lines are NEVER re-priced or visually snapped.
+        // Preserve actual source prices; remove visually duplicate rounded captions.
+        // Prioritize important manual levels before estimated session-profile labels.
         val markers = (manualMarkers + profileMarkers)
-            .distinctBy { String.format(Locale.US, "%.2f", it.value) }
             .sortedWith(compareByDescending<AxisLevelMark> { it.priority }
                 .thenBy { abs(it.originalY - if (liveY.isFinite()) liveY else (top + bottom) / 2f) })
+            .distinctBy { it.text }
 
         val reserved = buildList {
             if (liveY.isFinite()) add(liveY)
@@ -1723,6 +1726,7 @@ class MarketChartView @JvmOverloads constructor(
         val axisRight = width - dp(2f)
         val rendered = mutableListOf<RectF>()
         val occupied = mutableListOf<Float>()
+        val anchors = mutableListOf<Pair<Float, Float>>()
         markers.zip(centers).forEach { (mark, tagY) ->
             if (tagY == null) return@forEach
             val rect = RectF(axisLeft, tagY - dp(9f), axisRight, tagY + dp(9f))
@@ -1731,13 +1735,16 @@ class MarketChartView @JvmOverloads constructor(
             axisLevelBgPaint.color = KyvoriqTheme.slate
             canvas.drawRoundRect(rect, dp(3f), dp(3f), axisLevelBgPaint)
             axisLevelGuidePaint.color = mark.color
-            canvas.drawLine(right, mark.originalY, axisLeft + dp(2f), tagY, axisLevelGuidePaint)
+            // Short horizontal tick at the ORIGINAL price: never a long diagonal.
+            canvas.drawLine(right, mark.originalY, axisLeft + dp(2f), mark.originalY, axisLevelGuidePaint)
             axisLevelTextPaint.color = mark.color
             canvas.drawText(mark.text, axisLeft + dp(2f), tagY + dp(2.8f), axisLevelTextPaint)
             rendered.add(rect)
             occupied.add(tagY)
+            anchors.add(mark.originalY to tagY)
         }
         frameAxisLabelRects = rendered
+        frameAxisSourceCenters = anchors
         return occupied
     }
 
