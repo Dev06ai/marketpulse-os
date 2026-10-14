@@ -262,5 +262,19 @@ const phase401FlowFixture={
 };
 const phase401Mismatch=phase401to500.buildState({...phase401FlowFixture,marketState:{...phase401FlowFixture.marketState,flow:{...phase401FlowFixture.marketState.flow,orderBookImbalance:.42}}});
 assert(phase401Mismatch.synchronization.badCount>0,"Phase 401–500 must block a material flow mismatch.");
-const phase401Prob=phase401to500.buildState(phase401FlowFixture).probabilities;
-assert(Math.abs(Number(phase401Prob.long)+Number(phase401Prob.short)+Number(phase401Prob.wait)-1)<1e-9,"Phase 401–500 displayed probabilities must sum to exactly 1.");
+// Missing probability data must stay unavailable; never fabricate trade odds.
+const phase401Unavailable=phase401to500.buildState(phase401FlowFixture).probabilities;
+assert(phase401Unavailable.available===false&&phase401Unavailable.source==="UNAVAILABLE"&&
+  phase401Unavailable.long===null&&phase401Unavailable.short===null&&phase401Unavailable.wait===null,
+  "Phase 401–500 must not display fabricated probabilities when calibration is absent.");
+const phase401WithProbabilities={...phase401FlowFixture,
+  decision:{...phase401FlowFixture.decision,probabilitySource:"TEST_CALIBRATED",
+    probabilities:{long:.55,short:.25,wait:.20}}};
+const phase401Prob=phase401to500.buildState(phase401WithProbabilities).probabilities;
+assert(phase401Prob.available===true,"Phase 401–500 must expose valid supplied probabilities.");
+assert(Math.abs(Number(phase401Prob.long)+Number(phase401Prob.short)+Number(phase401Prob.wait)-1)<1e-9,
+  "Phase 401–500 displayed probabilities must sum to exactly 1.");
+const phase401Invalid=phase401to500.buildState({...phase401WithProbabilities,
+  decision:{...phase401WithProbabilities.decision,probabilities:{long:.8,short:.6,wait:.3}}}).probabilities;
+assert(phase401Invalid.available===false&&phase401Invalid.source==="INVALID_SUM",
+  "Phase 401–500 must refuse incoherent probability distributions.");
