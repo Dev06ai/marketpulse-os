@@ -958,6 +958,7 @@ class SafeActivity : FragmentActivity() {
             "Market levels and chart analysis are independent of future signals.", 13f)
         positionsPage.addView(signalLock.first, margins(top = 6, bottom = 12))
         // Nonvisual buffers maintain private engine compatibility only.
+        signal = TextView(this)
         positionSummary = TextView(this)
         curve = PerformanceCurveView(this)
         ledgerView = TextView(this)
@@ -1034,21 +1035,11 @@ class SafeActivity : FragmentActivity() {
         insightsContent.addView(story.first, margins(bottom = 12))
         adminOnlyViews.add(story.first)
 
-        // The page itself scrolls: a fixed-height nested report clipped critical text.
-        // Keep a concise preview here and expose the entire verified policy on tap.
-        val decisions = compactCard("ENTRY CHECKS", "Checking entry eligibility…", 12.5f)
-        decisionView = decisions.value
-        decisionView.maxLines = 5
-        decisionView.ellipsize = android.text.TextUtils.TruncateAt.END
-        decisions.container.addView(label("VIEW COMPLETE CHECKS  ↗", 9f, kyGold, 0.02f), margins(top = 9))
-        decisions.container.setOnClickListener {
-            haptic(it, KyvoriqHaptics.Cue.TAP)
-            showInfoDialog("Entry checks", entryChecksFullText)
-        }
-        insightsContent.addView(decisions.container, margins(bottom = 12))
-        adminOnlyViews.add(decisions.container)
+        // Private signal-entry checks remain in engine memory only;
+        // Decision Center and trade Setup Details have no current UI.
+        decisionView = TextView(this)
 
-        val alertCard = compactCard("ALERT INTELLIGENCE", "Info • No spam, just the real updates.", 12.5f)
+        val alertCard = compactCard("ALERT INTELLIGENCE"        val alertCard = compactCard("ALERT INTELLIGENCE", "Info • No spam, just the real updates.", 12.5f)
         alertIntelligenceView = alertCard.value
         insightsContent.addView(alertCard.container, margins(bottom = 10))
         adminOnlyViews.add(alertCard.container)
@@ -1123,7 +1114,6 @@ class SafeActivity : FragmentActivity() {
         adminOnlyViews.add(pairButton)
         insightSections.addAll(listOf(
             1 to story.first,
-            1 to decisions.container,
             2 to alertCard.container,
             2 to riskCard.container,
             1 to levels.container,
@@ -1137,7 +1127,6 @@ class SafeActivity : FragmentActivity() {
         insightsMotionViews.addAll(
             listOf(
                 story.first,
-                decisions.container,
                 alertCard.container,
                 riskCard.container,
                 levels.container,
@@ -1223,33 +1212,121 @@ class SafeActivity : FragmentActivity() {
     }
 
     private fun showConsumerAccountPanel() {
-        val owner = KyvoriqSecureSession.isPaired(this)
-        val choices = if (owner) arrayOf(
-            "Owner access • Active",
-            "Review access plans",
-            "Security and device pairing"
-        ) else arrayOf(
-            "Sign in",
-            "Create account",
-            "Compare Basic / Pro / Elite",
-            "Admin access • Secure pairing"
-        )
-        android.app.AlertDialog.Builder(this)
-            .setTitle("KYVORIQ  •  ACCOUNT")
-            .setItems(choices) { _, which ->
-                if (owner) when (which) {
-                    0 -> showInfoDialog("Owner session", "Authenticated through KYVORIQ's existing private owner pairing. Full management remains restricted to the owner.")
-                    1 -> showConsumerPlans()
-                    2 -> pairingButton?.let { showPairingDialog(it) }
-                } else when (which) {
-                    0 -> openConsumerPortal("login")
-                    1 -> openConsumerPortal("signup")
-                    2 -> showConsumerPlans()
-                    3 -> pairingButton?.let { showPairingDialog(it) }
+        // This is a custom adaptive panel, not a stock platform AlertDialog.
+        // It never changes chart scroll, zoom, timeframe or selected workspace.
+        val ownerDevice = KyvoriqSecureSession.isPaired(this)
+        val dialog = android.app.Dialog(this)
+        val surface = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(20), dp(18), dp(20), dp(18))
+            background = roundedCard(Color.rgb(16, 17, 20), Color.rgb(83, 68, 41), 25)
+        }
+        val header = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
+        val identity = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(2), 0, 0, 0)
+        }
+        identity.addView(label("KYVORIQ  /  ACCOUNT", 10f, kyGold, 0.095f))
+        identity.addView(label(
+            if (ownerDevice) "Private device access" else "Your KYVORIQ",
+            20f, kyWhite, 0f
+        ), margins(top = 5))
+        header.addView(identity, LinearLayout.LayoutParams(0, -2, 1f))
+        val close = compactPillButton("✕").apply {
+            contentDescription = "Close KYVORIQ account panel"
+            textSize = 16f
+            setOnClickListener { dialog.dismiss() }
+        }
+        header.addView(close, LinearLayout.LayoutParams(dp(48), dp(48)))
+        surface.addView(header, margins(bottom = 14))
+        val statusLine = label(
+            if (ownerDevice) "Device paired to private owner API • server authorization required"
+            else "FREE  •  Market chart access without a subscription",
+            10.5f, kyGray, 0f
+        ).apply { setPadding(dp(12), dp(12), dp(12), dp(12))
+            background = KyvoriqTheme.surface(this@SafeActivity, radius = 12f)
+        }
+        surface.addView(statusLine, margins(bottom = 14))
+        fun actionRow(glyph: String, heading: String, subtitle: String, destination: () -> Unit) {
+            val row = LinearLayout(this).apply {
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(dp(14), dp(8), dp(12), dp(8))
+                background = KyvoriqTheme.surface(this@SafeActivity, radius = 14f)
+                isClickable = true
+                isFocusable = true
+                minimumHeight = dp(58)
+                contentDescription = "$heading. $subtitle"
+                setOnClickListener {
+                    haptic(it, KyvoriqHaptics.Cue.ACTION)
+                    dialog.dismiss()
+                    destination()
                 }
             }
-            .setNegativeButton("CLOSE", null)
-            .show()
+            row.addView(label(glyph, 19f, kyGold, 0f),
+                LinearLayout.LayoutParams(dp(36), -2))
+            val copy = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+            copy.addView(label(heading, 13f, kyWhite, 0f))
+            copy.addView(label(subtitle, 10f, kyGray, 0f), margins(top = 3))
+            row.addView(copy, LinearLayout.LayoutParams(0, -2, 1f))
+            row.addView(label("›", 22f, kyGold, 0f))
+            surface.addView(row, margins(bottom = 8))
+        }
+        if (ownerDevice) {
+            actionRow("◆", "Owner access", "Paired device • verified on each protected request") {
+                showInfoDialog("Private access",
+                    "This device holds an encrypted, expiring owner API token. " +
+                    "Administrative requests are verified by the server. " +
+                    "Full account and subscription administration is not yet configured.")
+            }
+            actionRow("◈", "Security and device pairing", "Review or renew private access") {
+                pairingButton?.let { showPairingDialog(it) }
+            }
+            actionRow("◉", "Privacy controls", "Protect access on this device") {
+                showPrivacyControls()
+            }
+        } else {
+            actionRow("→", "Log in", "Secure consumer account sign-in") {
+                openConsumerPortal("login")
+            }
+            actionRow("+", "Sign up", "Create a KYVORIQ account") {
+                openConsumerPortal("signup")
+            }
+            actionRow("◇", "Owner device pairing", "Requires private server authorization") {
+                pairingButton?.let { showPairingDialog(it) }
+            }
+        }
+        actionRow("✦", "Compare Free / Pro / Elite", "Chart levels and notification eligibility") {
+            showConsumerPlans()
+        }
+        surface.addView(label(
+            "Signals are coming soon for all plans. Paid checkout is not active.",
+            10f, kyGray, 0f
+        ).apply { gravity = Gravity.CENTER }, margins(top = 8, bottom = 2))
+
+        val scroll = ScrollView(this).apply {
+            clipToOutline = true
+            overScrollMode = View.OVER_SCROLL_IF_CONTENT_SCROLLS
+            addView(surface, ViewGroup.LayoutParams(-1, -2))
+        }
+        dialog.setContentView(scroll)
+        dialog.setCancelable(true)
+        dialog.show()
+        dialog.window?.apply {
+            setBackgroundDrawable(android.graphics.drawable.ColorDrawable(Color.TRANSPARENT))
+            addFlags(android.view.WindowManager.LayoutParams.FLAG_DIM_BEHIND)
+            attributes = attributes.apply {
+                dimAmount = 0.72f
+                gravity = if (resources.configuration.screenWidthDp < 600)
+                    Gravity.BOTTOM else Gravity.CENTER
+                windowAnimations = if (KyvoriqTheme.motionEnabled(this@SafeActivity))
+                    android.R.style.Animation_Dialog else 0
+            }
+            val fullWidth = resources.displayMetrics.widthPixels
+            val sheetWidth = if (resources.configuration.screenWidthDp < 600)
+                fullWidth - dp(12) else minOf(dp(460), fullWidth - dp(40))
+            setLayout(sheetWidth, ViewGroup.LayoutParams.WRAP_CONTENT)
+            setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
+        }
     }
 
     private fun showConsumerPlans() {
@@ -1266,7 +1343,7 @@ class SafeActivity : FragmentActivity() {
         val base = BuildConfig.CONSUMER_PORTAL_URL.trimEnd('/')
         if (base.isBlank()) {
             showInfoDialog("Accounts being prepared",
-                "Secure consumer account registration is not live yet. For now the Basic market chart is available without an account. No payments are being collected.")
+                "Secure consumer account registration is not live yet. For now the Free market chart is available without an account. No payments are being collected.")
             return
         }
         val uri = android.net.Uri.parse("$base/$destination")
@@ -1342,7 +1419,6 @@ class SafeActivity : FragmentActivity() {
         "LEVELS & FLOW" -> "Levels & flow"
         "CONNECTION" -> "Connection"
         "SYSTEM" -> "System"
-        "DECISION CENTER" -> "Decision center"
         "DEMO PERFORMANCE" -> "Demo performance"
         "ACCOUNTING & RISK" -> "Accounting & risk"
         "EXCHANGE POSITIONS" -> "Exchange positions"
@@ -1478,7 +1554,7 @@ class SafeActivity : FragmentActivity() {
         }
         header.addView(label(humanHeading(title), 11.5f, kyWhite, 0.012f),
             LinearLayout.LayoutParams(0, dp(18), 1f))
-        header.addView(label(if (title == "DECISION CENTER") "DETAILS  ›" else if (title == "DEMO PERFORMANCE") "DEMO" else "MARKET", 8.5f, kyGray, 0.08f))
+        header.addView(label(if (title == "DEMO PERFORMANCE") "DEMO" else "MARKET", 8.5f, kyGray, 0.08f))
         box.addView(header)
 
         val value = TextView(this).apply {
