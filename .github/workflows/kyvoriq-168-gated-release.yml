@@ -16,9 +16,9 @@ jobs:
     timeout-minutes: 40
     env:
       GH_TOKEN: ${{ github.token }}
-      TEST_RUN: "38552904878"
-      EXPECTED_TEST_SHA: 7566b111358a7613779af9b7d7464366bd6e4bde
-      SOURCE_SHA: c4efbca70eae66e53a8dfc0679dbe59a1a54e45e
+      TEST_RUN: "38553774786"
+      EXPECTED_TEST_SHA: 9721a5f570f41adc4c59c7ebe23794465ea76da7
+      SOURCE_SHA: 3d9fe2cde2eb8d62db766db1939508a6dc10faf1
       TAG: dev-trader-v0.21.43-168
     steps:
       - name: Require precise passing five-device visual and signed APK gates
