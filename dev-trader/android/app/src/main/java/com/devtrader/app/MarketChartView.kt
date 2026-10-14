@@ -448,6 +448,7 @@ class MarketChartView @JvmOverloads constructor(
     fun setTimeframe(value: String) {
         if (timeframe == value) return
         timeframe = value
+        obBadgePage = 0
         resetViewportToDefault()
     }
 
@@ -1200,6 +1201,9 @@ class MarketChartView @JvmOverloads constructor(
     )
     // Transient geometry from this exact draw frame. Never persist market prices.
     private var frameZoneOverlays: List<VisibleZone> = emptyList()
+    private var obBadgePage = 0
+    private var obPageControl: RectF? = null
+    private val displayedObBadgeBounds = mutableListOf<RectF>()
 
     private fun exactZonePrice(value: Double): String {
         if (!value.isFinite() || value <= 0.0) return "—"
@@ -1272,75 +1276,106 @@ class MarketChartView @JvmOverloads constructor(
     // A separate pass AFTER candles, EMA and other price primitives prevents
     // white candle wicks from painting over exact OB numbers (the root of
     // the missing-price-label issue in earlier builds).
+    // Group OB labels separately from user price-alert callouts. Price zones
+    // NEVER move away from their true y position: only their captions move.
+    // At most three unobstructed OBs are emphasized on one page; a compact
+    // pager reveals the remaining genuine levels without dense overlaps.
     private fun drawZonePriceBadges(canvas: Canvas, left: Float, right: Float,
-                                    top: Float, bottom: Float) {
-        val candidates = frameZoneOverlays
-        // Render readable, EXACT price ranges on non-overlapping charcoal
-        // capsules. Position labels as close as possible to the real zone;
-        // they must not sit at the center of the candle plot anymore.
-        val occupied = mutableListOf<RectF>()
-        val pad = dp(5f)
-        val tagHeight = dp(18f)
-        candidates.sortedWith(
-            compareBy<VisibleZone> { kotlin.math.abs((it.low + it.high) * .5 - livePrice) }
-                .thenBy { it.bounds.top }
-        ).forEach { zone ->
-            val badge = zone.label + "  " + exactZonePrice(zone.low) + " – " + exactZonePrice(zone.high)
-            val textWidth = zoneTextPaint.measureText(badge)
-            val maxWidth = right - left - dp(10f)
-            if (textWidth + pad * 2f > maxWidth) {
-                // Preserve the exact values by placing them on two lines
-                // rather than truncating either boundary.
-                val labelWidth = zoneTextPaint.measureText(zone.label)
-                val range = exactZonePrice(zone.low) + " – " + exactZonePrice(zone.high)
-                val priceWidth = zoneTextPaint.measureText(range)
-                val boxWidth = max(labelWidth, priceWidth) + pad * 2f
-                if (boxWidth > maxWidth) return@forEach
-                val boxHeight = dp(27f)
-                val target = zone.bounds.top + dp(2f)
-                val ys = listOf(target, zone.bounds.bottom - boxHeight,
-                    zone.bounds.centerY() - boxHeight / 2f) +
-                    (-7..7).map { target + it * dp(15f) }
-                val topY = ys.filter { it >= top + dp(1f) && it + boxHeight <= bottom - dp(1f) }
-                    .minByOrNull { y ->
-                        val rect = RectF(left + dp(4f), y, left + dp(4f) + boxWidth, y + boxHeight)
-                        if (occupied.any { RectF.intersects(it, rect) }) Float.POSITIVE_INFINITY
-                        else kotlin.math.abs(y - target)
-                    } ?: return@forEach
-                val rect = RectF(left + dp(4f), topY, left + dp(4f) + boxWidth, topY + boxHeight)
-                if (occupied.any { RectF.intersects(it, rect) }) return@forEach
-                occupied += rect
-                zoneFillPaint.color = KyvoriqTheme.charcoal; zoneFillPaint.alpha = 235
-                canvas.drawRoundRect(rect, dp(4f), dp(4f), zoneFillPaint)
-                zoneTextPaint.color = zone.color
-                canvas.drawText(zone.label, rect.left + pad, rect.top + dp(11f), zoneTextPaint)
-                zoneTextPaint.color = KyvoriqTheme.white
-                canvas.drawText(range, rect.left + pad, rect.top + dp(22f), zoneTextPaint)
-            } else {
-                val boxWidth = textWidth + pad * 2f
-                val target = zone.bounds.top + dp(2f)
-                val ys = listOf(target, zone.bounds.bottom - tagHeight,
-                    zone.bounds.centerY() - tagHeight / 2f) +
-                    (-7..7).map { target + it * dp(15f) }
-                val topY = ys.filter { it >= top + dp(1f) && it + tagHeight <= bottom - dp(1f) }
-                    .minByOrNull { y ->
-                        val rect = RectF(left + dp(4f), y, left + dp(4f) + boxWidth, y + tagHeight)
-                        if (occupied.any { RectF.intersects(it, rect) }) Float.POSITIVE_INFINITY
-                        else kotlin.math.abs(y - target)
-                    } ?: return@forEach
-                val rect = RectF(left + dp(4f), topY, left + dp(4f) + boxWidth, topY + tagHeight)
-                if (occupied.any { RectF.intersects(it, rect) }) return@forEach
-                occupied += rect
-                zoneFillPaint.color = KyvoriqTheme.charcoal; zoneFillPaint.alpha = 235
-                canvas.drawRoundRect(rect, dp(4f), dp(4f), zoneFillPaint)
-                zoneTextPaint.color = zone.color
-                canvas.drawText(badge, rect.left + pad, rect.centerY() + dp(3f), zoneTextPaint)
+                                    top: Float, bottom: Float, low: Double, high: Double) {
+        displayedObBadgeBounds.clear()
+        obPageControl = null
+        if (frameZoneOverlays.isEmpty()) return
+
+        val current = timeframe.uppercase(Locale.US)
+        val zones = frameZoneOverlays.sortedWith(
+            compareByDescending<VisibleZone> {
+                it.label.startsWith(current + " ") || (current == "1D" && it.label.startsWith("DAILY"))
+            }.thenBy {
+                if (livePrice.isFinite()) kotlin.math.abs((it.low + it.high) / 2.0 - livePrice) else it.bounds.top.toDouble()
+            }.thenBy { it.label }
+        )
+        val visibleCount = 3
+        val pages = (zones.size + visibleCount - 1) / visibleCount
+        obBadgePage = obBadgePage.coerceIn(0, pages - 1)
+        val selected = zones.drop(obBadgePage * visibleCount).take(visibleCount)
+        // Alerts own the LEFT label rows at their genuine prices. OB capsules
+        // take the inner-left lane and avoid every alert row, with 8dp air.
+        val forbidden = customAlertLevels.filter { it.isFinite() && it in low..high }
+            .map { y ->
+                val cy = mapY(y, low, high, top, bottom)
+                RectF(left, cy - dp(15f), right, cy + dp(15f))
+            }.toMutableList()
+        val minAir = dp(9f)
+        val labelHeight = dp(28f)
+        val leftX = left + dp(7f)
+        val rightPad = dp(5f)
+        val laneMaxWidth = right - leftX - rightPad
+        val labelColor = zoneTextPaint.color
+        val sorted = selected.sortedBy { it.bounds.centerY() }
+        for (zone in sorted) {
+            val title = zone.label
+            val range = exactZonePrice(zone.low) + " – " + exactZonePrice(zone.high)
+            val textMaxWidth = maxOf(zoneTextPaint.measureText(title), zoneTextPaint.measureText(range))
+            // The real venue price must not be abbreviated or clipped.
+            // On exceptionally small screens skip a caption, not its zone.
+            val capsuleWidth = textMaxWidth + dp(15f)
+            if (capsuleWidth > laneMaxWidth) continue
+            val desired = zone.bounds.centerY().coerceIn(top + labelHeight/2f, bottom - labelHeight/2f)
+            val locations = (0..24).flatMap { step ->
+                if (step == 0) listOf(desired)
+                else listOf(desired - step * dp(10f), desired + step * dp(10f))
+            }
+            val fit = locations.map { y -> RectF(leftX, y - labelHeight/2f, leftX + capsuleWidth, y + labelHeight/2f) }
+                .firstOrNull { rect ->
+                    rect.top >= top + dp(2f) && rect.bottom <= bottom - dp(2f) &&
+                        forbidden.none { it.top < rect.bottom + minAir && it.bottom > rect.top - minAir }
+                } ?: continue
+            forbidden += fit
+            displayedObBadgeBounds += fit
+            zoneFillPaint.color = KyvoriqTheme.charcoal
+            zoneFillPaint.alpha = 247
+            canvas.drawRoundRect(fit, dp(5f), dp(5f), zoneFillPaint)
+            zoneBorderPaint.color = zone.color
+            zoneBorderPaint.alpha = 165
+            // An accent bar communicates the true source zone direction.
+            canvas.drawLine(fit.left + dp(2f), fit.top + dp(4f),
+                fit.left + dp(2f), fit.bottom - dp(4f), zoneBorderPaint)
+            zoneTextPaint.color = zone.color
+            canvas.drawText(title, fit.left + dp(8f), fit.top + dp(11.5f), zoneTextPaint)
+            zoneTextPaint.color = KyvoriqTheme.white
+            canvas.drawText(range, fit.left + dp(8f), fit.top + dp(23f), zoneTextPaint)
+            // The caption may be spaced away from a crowded zone. An
+            // understated connector indicates the actual immutable location.
+            if (kotlin.math.abs(zone.bounds.centerY() - fit.centerY()) > dp(9f)) {
+                axisLevelGuidePaint.color = zone.color
+                axisLevelGuidePaint.alpha = 95
+                canvas.drawLine(fit.left + dp(1f), fit.centerY(),
+                    fit.left + dp(1f), zone.bounds.centerY(), axisLevelGuidePaint)
             }
         }
-        zoneTextPaint.color = KyvoriqTheme.white
+
+        if (pages > 1) {
+            val caption = "OB ${obBadgePage+1}/$pages  •  MORE"
+            val pw = zoneTextPaint.measureText(caption) + dp(16f)
+            val h = dp(20f)
+            val x = right - pw - dp(7f)
+            val y = top + dp(5f)
+            val box = RectF(x, y, right - dp(7f), y + h)
+            obPageControl = box
+            zoneFillPaint.color = KyvoriqTheme.charcoal
+            zoneFillPaint.alpha = 245
+            canvas.drawRoundRect(box, dp(5f), dp(5f), zoneFillPaint)
+            zoneTextPaint.color = KyvoriqTheme.gold
+            canvas.drawText(caption, x + dp(8f), y + dp(13f), zoneTextPaint)
+        }
+        zoneTextPaint.color = labelColor
         zoneFillPaint.alpha = 255
         zoneBorderPaint.alpha = 255
+        axisLevelGuidePaint.alpha = 155
     }
+
+    internal fun visibleObBadgesForTest(): List<RectF> = displayedObBadgeBounds.map { RectF(it) }
+    internal fun obPageControlForTest(): RectF? = obPageControl?.let { RectF(it) }
 
     private fun drawStructureOverlays(
         canvas: Canvas,
@@ -1689,6 +1724,13 @@ class MarketChartView @JvmOverloads constructor(
                     event.y < dp(42f)
 
                 if (!dragging && !pinchActive) {
+                    if (obPageControl?.contains(event.x, event.y) == true) {
+                        obBadgePage += 1
+                        KyvoriqHaptics.fire(this, KyvoriqHaptics.Cue.SELECT)
+                        performClick()
+                        invalidate()
+                        return true
+                    }
                     if (toggleLevelFilterAt(event.x, event.y)) {
                         KyvoriqHaptics.fire(this, KyvoriqHaptics.Cue.SELECT)
                         performClick()
