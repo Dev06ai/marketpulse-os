@@ -109,10 +109,13 @@ class HeroChartVisualTest {
                         .put("zone_low", lo).put("zone_high", hi)
                         .put("direction", direction))
                 }
-                zone("1H OB", 83340.25, 83520.50, "LONG")
-                zone("4H OB", 83392.75, 83580.125, "LONG")
-                zone("12H OB", 83800.50, 84040.25, "SHORT")
-                zone("DAILY OB", 81050.125, 81590.25, "LONG")
+                // Keep both intraday zones inside the preview's 84.1k–84.5k
+                // visible market range, so this actually tests overlapping
+                // price capsules instead of testing only an off-screen zone.
+                zone("1H OB", 84345.25, 84405.50, "LONG")
+                zone("4H OB", 84370.75, 84435.125, "LONG")
+                zone("12H OB", 84180.50, 84300.25, "SHORT")
+                zone("DAILY OB", 84020.125, 84190.25, "LONG")
                 chart.setOverlays(ob)
                 assertTrue(chart.plotGeometry().price.height() > 0)
             }
