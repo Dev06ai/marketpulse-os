@@ -657,6 +657,8 @@ class MarketChartView @JvmOverloads constructor(
                 )
             }
         }
+        // OB labels must be painted last so candles/EMA cannot cover prices.
+        if (hasVisibleLevelLayers()) drawZonePriceBadges(canvas, left, right, top, priceBottom)
         drawAxisLevelLabels(canvas, right, top, priceBottom, low, high)
 
         if (!livePrice.isNaN() && visibleLive) {
@@ -1196,6 +1198,8 @@ class MarketChartView @JvmOverloads constructor(
         val row: JSONObject, val low: Double, val high: Double,
         val bounds: RectF, val color: Int, val label: String
     )
+    // Transient geometry from this exact draw frame. Never persist market prices.
+    private var frameZoneOverlays: List<VisibleZone> = emptyList()
 
     private fun exactZonePrice(value: Double): String {
         if (!value.isFinite() || value <= 0.0) return "—"
@@ -1245,6 +1249,8 @@ class MarketChartView @JvmOverloads constructor(
             VisibleZone(row, lo, hi, RectF(left, min(yTop, yBottom), right, max(yTop, yBottom)), color, label)
         }.sortedWith(compareBy<VisibleZone> { it.bounds.top }.thenBy { it.low })
 
+        frameZoneOverlays = candidates
+
         // Draw ALL valid visible zones, including coincident zones from
         // different timeframes. Very light shading avoids opaque, stacked
         // rectangles hiding candles or EMA. Only horizontal boundaries are
@@ -1259,6 +1265,14 @@ class MarketChartView @JvmOverloads constructor(
             canvas.drawLine(left, zone.bounds.bottom, right, zone.bounds.bottom, zoneBorderPaint)
         }
 
+    }
+
+    // A separate pass AFTER candles, EMA and other price primitives prevents
+    // white candle wicks from painting over exact OB numbers (the root of
+    // the missing-price-label issue in earlier builds).
+    private fun drawZonePriceBadges(canvas: Canvas, left: Float, right: Float,
+                                    top: Float, bottom: Float) {
+        val candidates = frameZoneOverlays
         // Render readable, EXACT price ranges on non-overlapping charcoal
         // capsules. Position labels as close as possible to the real zone;
         // they must not sit at the center of the candle plot anymore.
