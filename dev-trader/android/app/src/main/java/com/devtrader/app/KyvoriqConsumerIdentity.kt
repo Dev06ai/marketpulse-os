@@ -10,6 +10,12 @@ import com.google.firebase.FirebaseApp
 import com.google.firebase.FirebaseOptions
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.GoogleAuthProvider
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.Response
+import java.io.IOException
+import java.util.concurrent.TimeUnit
+import org.json.JSONObject
 
 /**
  * Isolated Firebase consumer identity. Never grants private Bitget owner
@@ -142,6 +148,60 @@ object KyvoriqConsumerIdentity {
                 }
         } catch (_: ApiException) {
             done("Google sign-in was cancelled or could not be verified.")
+        }
+    }
+
+    fun fetchServerVerifiedAccount(activity: Activity, done: (String) -> Unit) {
+        // The Firebase SDK can establish *identity*, never a subscription or
+        // KYVORIQ admin role. These are projected by a separate HTTPS service
+        // validating the signed ID token, MFA, and database entitlements.
+        val origin = BuildConfig.CONSUMER_API_ORIGIN.trimEnd('/')
+        if (origin.isBlank()) return done("Consumer account server is not deployed yet. Premium access remains locked.")
+        val auth = client(activity) ?: return done("Account identity provider unavailable.")
+        val user = auth.currentUser?.takeIf { it.isEmailVerified }
+            ?: return done("A verified sign-in is required.")
+        user.getIdToken(false).addOnCompleteListener(activity) { task ->
+            val token = if (task.isSuccessful) task.result?.token else null
+            if (token.isNullOrBlank() || token.length > 8192) {
+                done("Could not securely verify this session.")
+                return@addOnCompleteListener
+            }
+            val http = OkHttpClient.Builder()
+                .followRedirects(false).followSslRedirects(false)
+                .connectTimeout(5, TimeUnit.SECONDS)
+                .readTimeout(10, TimeUnit.SECONDS)
+                .build()
+            val request = Request.Builder().url("$origin/v1/me")
+                .header("Authorization", "Bearer $token").get().build()
+            http.newCall(request).enqueue(object : okhttp3.Callback {
+                override fun onFailure(call: okhttp3.Call, e: IOException) {
+                    activity.runOnUiThread {
+                        done("Account server unreachable. All premium features remain locked.")
+                    }
+                }
+                override fun onResponse(call: okhttp3.Call, response: Response) {
+                    val summary = response.use {
+                        if (it.code != 200) {
+                            "Account verification pending (HTTP ${it.code}). Premium features are locked."
+                        } else {
+                            runCatching {
+                                val data = JSONObject(it.body?.string().orEmpty())
+                                require(data.optString("subject") == user.uid)
+                                val claimedTier = data.optString("tier", "BASIC")
+                                val tier = if (claimedTier in setOf("BASIC","PRO","ELITE")) claimedTier else "BASIC"
+                                val admin = data.optBoolean("admin", false)
+                                // Display-only: protected data endpoints STILL
+                                // re-verify JWT+subscription on every request.
+                                "Account verified by KYVORIQ • Tier: $tier" +
+                                    if (admin) " • Admin MFA verified" else ""
+                            }.getOrElse {
+                                "Invalid server account response. Premium features remain locked."
+                            }
+                        }
+                    }
+                    activity.runOnUiThread { done(summary) }
+                }
+            })
         }
     }
 
