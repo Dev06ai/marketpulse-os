@@ -140,7 +140,7 @@ class MarketChartView @JvmOverloads constructor(
     private val volumeUpPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(206, 207, 210); alpha = 175 }
     private val volumeDownPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(109, 112, 119); alpha = 175 }
     // Estimated volume at price, not exact tick-trade distribution.
-    private val profileUpPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(187, 145, 65); alpha = 84 }
+    private val profileUpPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(236, 229, 211); alpha = 84 }
     private val profileDownPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(84, 122, 174); alpha = 84 }
     private val profileLinePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { strokeWidth = dp(.85f); alpha = 165 }
     private val profileCaptionPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = KyvoriqTheme.muted; textSize = dp(7.1f) }
