@@ -5488,8 +5488,8 @@ class SafeActivity : FragmentActivity() {
             return
         }
         when (snapshot[0]) {
-            DownloadManager.STATUS_SUCCESSFUL -> verifySystemUpdate(id)
-            DownloadManager.STATUS_FAILED -> {
+            DownloadManager.STATUS_SUCCESSFUL.toLong() -> verifySystemUpdate(id)
+            DownloadManager.STATUS_FAILED.toLong() -> {
                 val url = updatePrefs.getString("apk_url", null)
                 val reason = snapshot[2]
                 dm.remove(id)
