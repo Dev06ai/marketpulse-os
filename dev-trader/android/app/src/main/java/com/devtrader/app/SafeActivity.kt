@@ -3584,18 +3584,22 @@ class SafeActivity : FragmentActivity() {
         val requestTf = selectedTf
         val token = ++chartRequestToken
 
+        // Once the private backend is unavailable, use a *separate public
+        // BTCUSDT spot feed*. No owner token, strategy, trade or private overlays
+        // are requested from the public provider.
+        if (publicMarketOnly) {
+            requestPublicSpotCandles(requestTf, token)
+            return
+        }
         getJson(backendBase + "/chart?interval=" + requestTf) { ok, body ->
             handler.post {
-                if (token == chartRequestToken) {
-                    chartRequestInFlight = false
-                }
+                if (token == chartRequestToken) chartRequestInFlight = false
                 if (!ok || token != chartRequestToken) return@post
 
                 safe {
                     val j = JSONObject(body)
                     val candles = j.optJSONArray("candles") ?: JSONArray()
-                    val live = if (publicMarketOnly) Double.NaN
-                        else latestRoot?.optDouble("last_price", Double.NaN) ?: Double.NaN
+                    val live = latestRoot?.optDouble("last_price", Double.NaN) ?: Double.NaN
                     val lastPrice = if (!live.isNaN()) live else j.optDouble("last_price", Double.NaN)
 
                     // Never let an older timeframe response overwrite the
@@ -3629,6 +3633,93 @@ class SafeActivity : FragmentActivity() {
                     refreshTimeframeButtonsForCurrentSelection()
                     if (!publicMarketOnly) requestChartOverlays(force)
                 }
+            }
+        }
+    }
+
+    /**
+     * Market-data-only contingency for an unavailable private owner backend.
+     * Spot BTCUSDT is not the private perpetual futures feed and must NEVER
+     * be used to authorize signals, alerts, execution, subscriptions or orders.
+     * Requests are made with the public REST client and no owner credentials.
+     */
+    private fun requestPublicSpotCandles(tf: String, token: Long, backup: Boolean = false) {
+        if (!publicMarketOnly || stopped || token != chartRequestToken) return
+        if (tf !in setOf("5m", "15m", "1h", "4h")) {
+            chartRequestInFlight = false
+            return
+        }
+        val host = if (backup) "api.binance.com" else "data-api.binance.vision"
+        val url = "https://" + host + "/api/v3/klines?symbol=BTCUSDT&interval=" + tf + "&limit=120"
+        getJson(url) { ok, body ->
+            if (stopped || token != chartRequestToken || !publicMarketOnly) return@getJson
+            val parsed = if (ok) runCatching {
+                val rows = JSONArray(body)
+                val candles = JSONArray()
+                var previous = 0L
+                for (index in 0 until rows.length()) {
+                    val values = rows.optJSONArray(index) ?: throw IllegalArgumentException("Malformed candle")
+                    val start = values.getLong(0)
+                    val open = values.getDouble(1)
+                    val high = values.getDouble(2)
+                    val low = values.getDouble(3)
+                    val close = values.getDouble(4)
+                    val volume = values.getDouble(5)
+                    require(start > previous && start < System.currentTimeMillis() + 120_000L)
+                    require(listOf(open, high, low, close, volume).all { it.isFinite() })
+                    require(low > 0.0 && open > 0.0 && close > 0.0 &&
+                        high >= maxOf(open, close) && low <= minOf(open, close) && volume >= 0.0)
+                    candles.put(JSONObject().apply {
+                        put("start", start)
+                        put("open", open)
+                        put("high", high)
+                        put("low", low)
+                        put("close", close)
+                        put("volume", volume)
+                    })
+                    previous = start
+                }
+                val maxAge = when (tf) {
+                    "5m" -> 15 * 60_000L
+                    "15m" -> 45 * 60_000L
+                    "1h" -> 3 * 60 * 60_000L
+                    else -> 10 * 60 * 60_000L
+                }
+                require(candles.length() >= 30 &&
+                    System.currentTimeMillis() - previous <= maxAge)
+                Pair(candles, candles.getJSONObject(candles.length() - 1).getDouble("close"))
+            }.getOrNull() else null
+
+            if (parsed == null) {
+                if (!backup) {
+                    requestPublicSpotCandles(tf, token, backup = true)
+                } else {
+                    chartRequestInFlight = false
+                    status.text = "NO PUBLIC DATA"
+                    publicMarketMessage?.text =
+                        "BTCUSDT SPOT market data unavailable. Private backend is offline. No trading access is granted."
+                    publicMarketMessage?.visibility = View.VISIBLE
+                }
+                return@getJson
+            }
+            chartRequestInFlight = false
+            if (selectedTf != tf) return@getJson
+            safe {
+                val (candles, lastPrice) = parsed
+                latestChartCandles = candles
+                chart.setTimeframe(tf)
+                chart.setData(candles, null, calculateEma(candles, 50), lastPrice, JSONArray())
+                chart.setSignal(null)
+                chart.setTradeEvent(null)
+                chart.setFeedHealthy(false)
+                price.setPrice(lastPrice, animate = false)
+                oiView.text = "OI  —  •  PRIVATE"
+                status.text = "VIEW ONLY"
+                integrity.text = "BTCUSDT SPOT • PUBLIC DATA • NO PRIVATE SIGNALS"
+                publicMarketMessage?.text =
+                    "BTCUSDT SPOT • PUBLIC VIEW ONLY\nPrivate perpetual market, owner execution and premium features remain offline."
+                publicMarketMessage?.visibility = View.VISIBLE
+                refreshTimeframeButtonsForCurrentSelection()
             }
         }
     }
@@ -4141,9 +4232,18 @@ class SafeActivity : FragmentActivity() {
             setPadding(dp(18), dp(14), dp(18), dp(14))
             setLineSpacing(0f, 1.12f)
         }
+        // Short account status messages should not cover 80% of the phone.
+        // Bound long diagnostic text while allowing font scaling and keyboard insets.
+        val boundedContent = object : ScrollView(this) {
+            override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+                val limit = (resources.displayMetrics.heightPixels * 0.60f).toInt()
+                super.onMeasure(widthMeasureSpec,
+                    View.MeasureSpec.makeMeasureSpec(limit, View.MeasureSpec.AT_MOST))
+            }
+        }.apply { addView(content) }
         val dialog = android.app.AlertDialog.Builder(this)
             .setTitle(title)
-            .setView(ScrollView(this).apply { addView(content) })
+            .setView(boundedContent)
             .setPositiveButton("CLOSE", null)
             .create()
         dialog.setOnShowListener {
@@ -4157,7 +4257,8 @@ class SafeActivity : FragmentActivity() {
             dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE)?.setTextColor(kyGold)
         }
         dialog.show()
-        dialog.window?.setLayout((resources.displayMetrics.widthPixels * 0.94).toInt(), (resources.displayMetrics.heightPixels * 0.80).toInt())
+        dialog.window?.setLayout((resources.displayMetrics.widthPixels * 0.94).toInt(),
+            ViewGroup.LayoutParams.WRAP_CONTENT)
     }
 
     private fun formatCompact(value: Double): String =
