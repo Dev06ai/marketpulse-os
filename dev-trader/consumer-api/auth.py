@@ -5,6 +5,7 @@ Do not accept app-provided role/tier claims as payment proof.
 from __future__ import annotations
 
 import os
+import time
 from dataclasses import dataclass
 from urllib.parse import urlparse
 
@@ -62,5 +63,14 @@ def verify_access_token(token: str) -> Principal:
     # independent factors (not supplied by Android or decoded without a signature).
     mfa = ("mfa" in methods) or ("pwd" in methods and
             any(method in methods for method in {"totp", "webauthn", "hwk"}))
+    firebase = claims.get("firebase")
+    # Firebase Identity Platform's signed ID token may represent its MFA
+    # second factor here rather than in "amr". A Google account sign-in
+    # alone is NOT an administrative second factor.
+    if isinstance(firebase, dict) and firebase.get("sign_in_second_factor") in {"totp", "phone"}:
+        mfa = True
+    auth_time = claims.get("auth_time")
+    recent = (type(auth_time) is int and
+              0 <= time.time() - auth_time <= 600)
     verified = claims.get("email_verified") is True
-    return Principal(sub, verified, sub in admins and mfa)
+    return Principal(sub, verified, sub in admins and mfa and recent)
