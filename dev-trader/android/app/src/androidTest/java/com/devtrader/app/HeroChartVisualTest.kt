@@ -75,7 +75,14 @@ class HeroChartVisualTest {
                     assertTrue("Visible chart must exceed half the usable screen: ${visible.height()}/$usable",
                         visible.height().toFloat() / usable >= .51f)
                 }
-                assertTrue(all.filterIsInstance<Button>().first { it.contentDescription == "Workspace TRADE" }.isShown)
+                val tradeTab = all.filterIsInstance<Button>()
+                    .first { it.contentDescription == "Workspace TRADE" }
+                assertTrue(tradeTab.isShown)
+                assertEquals("Trade", tradeTab.text.toString())
+                val marker = SafeActivity::class.java.getDeclaredField("liquidNavIndicator")
+                    .apply { isAccessible = true }.get(activity) as View
+                assertTrue("Selected tab glyphs must render above the moving highlight",
+                    (tradeTab.parent as View).z > marker.z)
                 val tf = all.filterIsInstance<Button>().first { it.contentDescription == "Chart 4h" }
                 tf.performClick()
                 val field = MarketChartView::class.java.getDeclaredField("timeframe").apply { isAccessible = true }
@@ -180,10 +187,17 @@ class HeroChartVisualTest {
             SystemClock.sleep(250)
             screenshot("account-free")
             val consumerRows = activeWindowLabels()
-            for (name in listOf("Log in", "Sign up", "Continue with Google", "Forgot password?")) {
-                assertTrue("Missing consumer auth entry: $name in $consumerRows",
-                    consumerRows.any { it == name || it.startsWith("$name.") })
+            // Build 166: one unified login rather than a menu of auth choices.
+            // Verify actual auth controls and no unconfigured OAuth providers.
+            for (name in listOf("Welcome Back", "Email Address", "Password",
+                "Forgot Password?", "Continue with Google")) {
+                assertTrue("Missing unified auth control: $name in $consumerRows",
+                    consumerRows.any { it == name || it.contains(name) })
             }
+            assertFalse("GitHub login must not be offered without a configured provider",
+                consumerRows.any { it.contains("Continue with GitHub") })
+            assertFalse("LinkedIn login must not be offered without a configured provider",
+                consumerRows.any { it.contains("Continue with LinkedIn") })
             assertFalse("Opening sheet must not grant owner access", KyvoriqSecureSession.isPaired(activity))
             inst.sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_BACK) // close account sheet
             SystemClock.sleep(200)
@@ -196,8 +210,10 @@ class HeroChartVisualTest {
             SystemClock.sleep(250)
             screenshot("account-owner")
             val ownerRows = activeWindowLabels()
-            assertTrue("Owner account needs explicit Sign out action",
-                ownerRows.any { it == "Sign out" || it.startsWith("Sign out.") })
+            assertTrue("Owner pairing must expose a separate protected security entry",
+                ownerRows.any { it.contains("PRIVATE DEVICE SECURITY") })
+            assertFalse("Consumer login must not be replaced by private owner pairing",
+                ownerRows.none { it.contains("Welcome Back") })
         } catch (failure: Throwable) {
             screenshot("failure")
             throw failure

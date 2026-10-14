@@ -148,6 +148,8 @@ class SafeActivity : FragmentActivity() {
     private lateinit var workspaceHost: FrameLayout
     private val workspacePages = mutableListOf<View>()
     private val navigationButtons = mutableListOf<Button>()
+    private var liquidNavIndicator: View? = null
+    private var liquidNavFrame: FrameLayout? = null
     private lateinit var positionSummary: TextView
     private lateinit var ledgerView: TextView
     private lateinit var decisionView: TextView
@@ -970,7 +972,38 @@ class SafeActivity : FragmentActivity() {
             "Free, Pro and Elite currently unlock no trade recommendations, " +
             "exchange connections or automated orders.\n\n" +
             "Market levels and chart analysis are independent of future signals.", 13f)
-        positionsPage.addView(signalLock.first, margins(top = 6, bottom = 12))
+        val signalArtwork = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            setPadding(dp(8), dp(13), dp(8), dp(10))
+            background = GradientDrawable(GradientDrawable.Orientation.TL_BR,
+                intArrayOf(Color.rgb(28, 28, 31), Color.rgb(15, 16, 20))).apply {
+                cornerRadius = dp(20).toFloat()
+                setStroke(dp(1), Color.rgb(70, 62, 55))
+            }
+        }
+        signalArtwork.addView(ImageView(this).apply {
+            setImageResource(R.drawable.ky_nav_signals)
+            contentDescription = "Signals market icon"
+            scaleType = ImageView.ScaleType.FIT_CENTER
+        }, LinearLayout.LayoutParams(dp(70), dp(70)))
+        val comingFrame = FrameLayout(this)
+        comingFrame.addView(ImageView(this).apply {
+            setImageResource(R.drawable.ky_signal_coming_soon)
+            contentDescription = null
+            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+            scaleType = ImageView.ScaleType.FIT_XY
+        }, FrameLayout.LayoutParams(-1, -1))
+        comingFrame.addView(label("COMING SOON", 14f, kyWhite, 0.07f).apply {
+            gravity = Gravity.CENTER
+            typeface = Typeface.create("sans-serif-condensed", Typeface.BOLD)
+        }, FrameLayout.LayoutParams(-1, -1))
+        comingFrame.contentDescription = "Signals coming soon"
+        signalArtwork.addView(comingFrame, LinearLayout.LayoutParams(dp(185), dp(46)).apply {
+            topMargin = dp(1)
+        })
+        positionsPage.addView(signalArtwork, margins(top = 6, bottom = 12))
+        positionsPage.addView(signalLock.first, margins(top = 2, bottom = 12))
         // Nonvisual buffers maintain private engine compatibility only.
         signal = TextView(this)
         positionSummary = TextView(this)
@@ -1150,28 +1183,69 @@ class SafeActivity : FragmentActivity() {
         )
         refreshPrivacyButton()
 
-        val navigation = LinearLayout(this).apply {
-            setPadding(dp(3), dp(4), dp(3), dp(4))
-            background = KyvoriqTheme.surface(this@SafeActivity, radius = 18f)
+        // Animated, constraint-safe tab highlight inspired by the shared
+        // micro-interaction reference. Drawable icons remain crisp at any density.
+        val navigationFrame = FrameLayout(this).apply {
+            clipChildren = false
+            clipToPadding = false
+            background = KyvoriqTheme.surface(this@SafeActivity, radius = 19f)
         }
+        liquidNavFrame = navigationFrame
+        val liquid = View(this).apply {
+            background = GradientDrawable(
+                GradientDrawable.Orientation.TL_BR,
+                intArrayOf(Color.rgb(244, 241, 232), Color.rgb(207, 193, 167))
+            ).apply { cornerRadius = dp(16).toFloat() }
+            // The highlight must stay BEHIND the three tab buttons.
+            elevation = 0f
+            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+        }
+        liquidNavIndicator = liquid
+        navigationFrame.addView(liquid, FrameLayout.LayoutParams(0, dp(44)).apply {
+            gravity = Gravity.START or Gravity.CENTER_VERTICAL
+            leftMargin = dp(5)
+        })
+        val navigation = LinearLayout(this).apply {
+            // Render glyphs/text above the moving light pill across GPU drivers.
+            elevation = dp(2).toFloat()
+            setPadding(dp(5), dp(3), dp(5), dp(3))
+            gravity = Gravity.CENTER_VERTICAL
+            isBaselineAligned = false
+            clipToPadding = false
+        }
+        val icons = intArrayOf(R.drawable.ky_nav_candles,
+            R.drawable.ky_nav_signals, R.drawable.ky_nav_brain)
         listOf("TRADE", "SIGNALS", "INSIGHTS").forEachIndexed { index, title ->
-            val button = compactPillButton(title.lowercase(Locale.US).replaceFirstChar { it.titlecase(Locale.US) }).apply { contentDescription = "Workspace $title"; textSize = 11f
+            val button = compactPillButton(title.lowercase(Locale.US).replaceFirstChar {
+                it.titlecase(Locale.US)
+            }).apply {
+                contentDescription = "Workspace $title"
+                textSize = 11.5f
                 compoundDrawablePadding = dp(5)
-                val icon = getDrawable(listOf(R.drawable.ic_nav_trade, R.drawable.ic_nav_positions, R.drawable.ic_nav_insights)[index])!!.mutate()
-                icon.setBounds(0, 0, dp(16), dp(16))
-                setCompoundDrawablesRelative(icon, null, null, null)
-                setPadding(dp(10), 0, dp(6), 0) }
+                gravity = Gravity.CENTER
+                val glyph = getDrawable(icons[index])!!.mutate()
+                glyph.setBounds(0, 0, dp(25), dp(25))
+                setCompoundDrawablesRelative(glyph, null, null, null)
+                setPadding(dp(5), 0, dp(5), 0)
+                background = android.graphics.drawable.ColorDrawable(Color.TRANSPARENT)
+            }
             button.setOnClickListener {
-                if (workspacePages.getOrNull(index)?.visibility != View.VISIBLE) {
+                if (workspacePages.getOrNull(index)?.visibility != View.VISIBLE)
                     haptic(it, KyvoriqHaptics.Cue.SELECT)
-                }
                 selectWorkspace(index)
             }
             navigationButtons.add(button)
             if (index == 1) consumerPositionTab = button
-            navigation.addView(button, LinearLayout.LayoutParams(0, dp(44), 1f).apply { leftMargin = dp(3); rightMargin = dp(3) })
+            navigation.addView(button, LinearLayout.LayoutParams(0, dp(44), 1f))
         }
-        root.addView(navigation, margins(top = 4).apply { leftMargin = dp(8); rightMargin = dp(8) })
+        navigationFrame.addView(navigation, FrameLayout.LayoutParams(-1, -2))
+        root.addView(navigationFrame, margins(top = 4).apply {
+            leftMargin = dp(8)
+            rightMargin = dp(8)
+        })
+        navigationFrame.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
+            positionLiquidIndicator(selectedWorkspace, animated = false)
+        }
         // The chart owns 56% of the usable window, independently of card heights.
         // Read measured bounds after system/cutout insets, including multi-window.
         // Small screens and large fonts scroll the cards rather than compressing candles.
@@ -1220,7 +1294,13 @@ class SafeActivity : FragmentActivity() {
             if (owner) "Admin account and management" else "Sign in or create a KYVORIQ account"
     }
 
-    private fun showConsumerAccountPanel() {
+    private fun showConsumerAccountPanel(showSecurity: Boolean = false) {
+        // One clean login surface for guests, including phones privately paired
+        // to the owner API. The security drawer is a separate, explicit option.
+        if (!showSecurity && !KyvoriqConsumerIdentity.hasVerifiedSession(this)) {
+            showConsumerEmailAuth("login")
+            return
+        }
         // This is a custom adaptive panel, not a stock platform AlertDialog.
         // It never changes chart scroll, zoom, timeframe or selected workspace.
         val ownerDevice = KyvoriqSecureSession.isPaired(this)
@@ -1455,117 +1535,273 @@ class SafeActivity : FragmentActivity() {
         }
     }
 
+    /**
+     * Single KYVORIQ identity entry, following the owner's dark-glass reference.
+     * Email + Google are the only enabled providers. Signup and reset switch
+     * modes in place instead of adding four competing account menu actions.
+     * Firebase grants identity ONLY; paid/admin access always needs the server.
+     */
     private fun showConsumerEmailAuth(mode: String) {
         if (mode !in setOf("login", "signup", "forgot-password")) return
-        if (!KyvoriqConsumerIdentity.configured()) {
-            openConsumerPortal(mode)
-            return
-        }
-        val title = when (mode) {
-            "signup" -> "Create your account"
-            "forgot-password" -> "Password recovery"
-            else -> "Welcome back"
-        }
-        val subtitle = when (mode) {
-            "signup" -> "A verification email protects your account before your first sign-in."
-            "forgot-password" -> "Enter your registered email to receive an expiring reset link."
-            else -> "Sign in securely with your verified KYVORIQ email."
-        }
+        // Render the same login UI in offline preview/emulator mode; the
+        // Firebase SDK still fails closed if live configuration is missing.
         val dialog = android.app.Dialog(this)
-        val panel = premiumDialogContainer(title, subtitle)
-        val email = android.widget.EditText(this).apply {
-            hint = "name@example.com"
-            inputType = android.text.InputType.TYPE_CLASS_TEXT or
-                android.text.InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS
-            filters = arrayOf(android.text.InputFilter.LengthFilter(254))
-            setSingleLine(true)
-            textSize = 14f
-            setTextColor(kyWhite)
-            setHintTextColor(Color.rgb(130, 131, 139))
-            setPadding(dp(16), 0, dp(16), 0)
-            minHeight = dp(52)
-            background = GradientDrawable().apply {
-                setColor(Color.rgb(24, 25, 30))
-                cornerRadius = dp(14).toFloat()
-                setStroke(dp(1), Color.rgb(69, 65, 59))
+        val surface = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(22), dp(24), dp(22), dp(22))
+            background = GradientDrawable(GradientDrawable.Orientation.TL_BR,
+                intArrayOf(Color.rgb(30, 31, 34), Color.rgb(17, 18, 22), Color.rgb(13, 14, 18))
+            ).apply {
+                cornerRadius = dp(26).toFloat()
+                setStroke(dp(1), Color.rgb(95, 85, 68))
             }
-            contentDescription = "Consumer account email"
         }
-        panel.addView(label("EMAIL ADDRESS", 10f, kyGold, 0.055f), margins(bottom = 8))
-        panel.addView(email, LinearLayout.LayoutParams(-1, dp(52)))
-        val password = android.widget.EditText(this).apply {
-            hint = if (mode == "signup") "12 or more characters" else "Password"
-            inputType = android.text.InputType.TYPE_CLASS_TEXT or
-                android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
-            filters = arrayOf(android.text.InputFilter.LengthFilter(128))
-            setSingleLine(true)
-            textSize = 14f
-            setTextColor(kyWhite)
-            setHintTextColor(Color.rgb(130, 131, 139))
-            setPadding(dp(16), 0, dp(16), 0)
-            minHeight = dp(52)
-            background = GradientDrawable().apply {
-                setColor(Color.rgb(24, 25, 30))
-                cornerRadius = dp(14).toFloat()
-                setStroke(dp(1), Color.rgb(69, 65, 59))
-            }
-            contentDescription = "Consumer account password"
+        val brand = ImageView(this).apply {
+            setImageResource(R.drawable.kyvoriq_mark)
+            scaleType = ImageView.ScaleType.FIT_CENTER
+            contentDescription = "KYVORIQ"
         }
-        if (mode != "forgot-password") {
-            panel.addView(label("PASSWORD", 10f, kyGold, 0.055f), margins(top = 15, bottom = 8))
-            panel.addView(password, LinearLayout.LayoutParams(-1, dp(52)))
-        }
-        panel.addView(label(
-            if (mode == "signup") "Your password must contain 12–128 characters."
-            else if (mode == "login") "Admin and premium permissions require separate server authorization."
-            else "For privacy, we won't confirm whether this email has an account.",
-            10.5f, kyGray, 0f
-        ), margins(top = 12, bottom = 17))
-
-        val actions = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
-        val cancel = premiumDialogButton("Cancel", primary = false)
-        val proceed = premiumDialogButton(when (mode) {
-            "signup" -> "Verify email"
-            "forgot-password" -> "Send reset link"
-            else -> "Sign in"
+        surface.addView(brand, LinearLayout.LayoutParams(dp(62), dp(62)).apply {
+            gravity = Gravity.CENTER_HORIZONTAL
+            bottomMargin = dp(16)
         })
-        actions.addView(cancel, LinearLayout.LayoutParams(0, dp(48), 1f).apply { rightMargin = dp(8) })
-        actions.addView(proceed, LinearLayout.LayoutParams(0, dp(48), 1f))
-        panel.addView(actions)
-        cancel.setOnClickListener { haptic(it); dialog.dismiss() }
-        proceed.setOnClickListener {
+        val heading = label("", 28f, kyWhite, 0f).apply {
+            gravity = Gravity.CENTER
+            typeface = Typeface.create("sans-serif-light", Typeface.NORMAL)
+        }
+        surface.addView(heading, margins(bottom = 7))
+        val tagline = label("", 12f, Color.rgb(164, 165, 171), 0f).apply {
+            gravity = Gravity.CENTER
+            setLineSpacing(dp(2).toFloat(), 1.08f)
+        }
+        surface.addView(tagline, margins(bottom = 24))
+
+        fun fieldDecoration(): GradientDrawable =
+            GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,
+                intArrayOf(Color.rgb(42, 43, 47), Color.rgb(30, 31, 36))).apply {
+                cornerRadius = dp(15).toFloat()
+                setStroke(dp(1), Color.rgb(58, 58, 64))
+            }
+
+        fun inputRow(iconRes: Int, fieldName: String, hintValue: String,
+                     inputTypeFlags: Int, maxLength: Int): Pair<LinearLayout, android.widget.EditText> {
+            val row = LinearLayout(this).apply {
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(dp(14), dp(9), dp(12), dp(9))
+                background = fieldDecoration()
+            }
+            val glyph = ImageView(this).apply {
+                setImageResource(iconRes)
+                setColorFilter(Color.rgb(181, 183, 190))
+                contentDescription = null
+                importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+                scaleType = ImageView.ScaleType.CENTER_INSIDE
+            }
+            row.addView(glyph, LinearLayout.LayoutParams(dp(24), dp(24)).apply { rightMargin = dp(12) })
+            val column = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+            column.addView(label(fieldName, 11f, Color.rgb(228, 229, 231), 0f))
+            val edit = android.widget.EditText(this).apply {
+                hint = hintValue
+                inputType = inputTypeFlags
+                filters = arrayOf(android.text.InputFilter.LengthFilter(maxLength))
+                textSize = 13f
+                setSingleLine(true)
+                setTextColor(kyWhite)
+                setHintTextColor(Color.rgb(128, 129, 137))
+                setPadding(0, 0, 0, 0)
+                minHeight = dp(27)
+                background = android.graphics.drawable.ColorDrawable(Color.TRANSPARENT)
+                contentDescription = fieldName
+            }
+            column.addView(edit, LinearLayout.LayoutParams(-1, dp(28)))
+            row.addView(column, LinearLayout.LayoutParams(0, -2, 1f))
+            return Pair(row, edit)
+        }
+
+        val (emailRow, email) = inputRow(R.drawable.ic_account_access,
+            "Email Address", "Enter your email",
+            android.text.InputType.TYPE_CLASS_TEXT or
+                android.text.InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS, 254)
+        surface.addView(emailRow, LinearLayout.LayoutParams(-1, dp(69)).apply {
+            bottomMargin = dp(15)
+        })
+        val (passwordRow, password) = inputRow(R.drawable.ic_account_privacy,
+            "Password", "Enter your password",
+            android.text.InputType.TYPE_CLASS_TEXT or
+                android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD, 128)
+        val reveal = TextView(this).apply {
+            text = "SHOW"
+            textSize = 10f
+            setTextColor(kyGold)
+            gravity = Gravity.CENTER
+            contentDescription = "Show password"
+            setPadding(dp(5), dp(6), dp(1), dp(6))
+            isClickable = true
+            isFocusable = true
+        }
+        passwordRow.addView(reveal, LinearLayout.LayoutParams(dp(50), -1))
+        reveal.setOnClickListener {
+            haptic(it)
+            val visible = password.inputType and
+                android.text.InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD != 0
+            password.inputType = android.text.InputType.TYPE_CLASS_TEXT or
+                if (visible) android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
+                else android.text.InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD
+            password.setSelection(password.text.length)
+            reveal.text = if (visible) "SHOW" else "HIDE"
+            reveal.contentDescription = if (visible) "Show password" else "Hide password"
+        }
+        surface.addView(passwordRow, LinearLayout.LayoutParams(-1, dp(69)))
+
+        val forgot = label("Forgot Password?", 11.5f, kyGold, 0f).apply {
+            gravity = Gravity.END
+            setPadding(0, dp(12), 0, dp(12))
+            contentDescription = "Reset your password"
+            isClickable = true
+            isFocusable = true
+        }
+        surface.addView(forgot)
+        val primary = premiumDialogButton("Sign In    ➜", primary = true).apply {
+            minHeight = dp(56)
+            textSize = 14f
+        }
+        surface.addView(primary, LinearLayout.LayoutParams(-1, dp(56)).apply {
+            topMargin = dp(12)
+        })
+
+        val divider = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
+        fun dividerLine(): View = View(this).apply {
+            background = android.graphics.drawable.ColorDrawable(Color.rgb(50, 51, 56))
+        }
+        divider.addView(dividerLine(), LinearLayout.LayoutParams(0, dp(1), 1f))
+        divider.addView(label("or continue with", 10.5f, Color.rgb(138, 138, 146), 0f)
+            .apply { gravity = Gravity.CENTER },
+            LinearLayout.LayoutParams(dp(140), -2))
+        divider.addView(dividerLine(), LinearLayout.LayoutParams(0, dp(1), 1f))
+        surface.addView(divider, LinearLayout.LayoutParams(-1, dp(46)).apply { topMargin = dp(4) })
+        val google = premiumDialogButton("G     Continue with Google", primary = false).apply {
+            minHeight = dp(52)
+            contentDescription = "Continue with Google"
+        }
+        surface.addView(google, LinearLayout.LayoutParams(-1, dp(52)))
+        val footer = label("", 12f, Color.rgb(185, 185, 190), 0f).apply {
+            gravity = Gravity.CENTER
+            setPadding(dp(8), dp(19), dp(8), dp(8))
+            isClickable = true
+            isFocusable = true
+        }
+        surface.addView(footer)
+        val ownerLink = label("PRIVATE DEVICE SECURITY  ↗", 10f, kyGold, 0.035f).apply {
+            gravity = Gravity.CENTER
+            setPadding(dp(8), dp(10), dp(8), dp(6))
+            visibility = if (KyvoriqSecureSession.isPaired(this@SafeActivity))
+                View.VISIBLE else View.GONE
+            isClickable = true
+            isFocusable = true
+        }
+        surface.addView(ownerLink)
+
+        var activeMode = mode
+        fun decorateHeading(word: String, accent: String) {
+            val textValue = "$word $accent"
+            val styled = SpannableString(textValue)
+            styled.setSpan(ForegroundColorSpan(kyGold), word.length + 1,
+                textValue.length, SpannableString.SPAN_EXCLUSIVE_EXCLUSIVE)
+            heading.text = styled
+        }
+        fun renderMode(next: String) {
+            if (next !in setOf("login", "signup", "forgot-password")) return
+            val animate = KyvoriqTheme.motionEnabled(this@SafeActivity)
+            if (animate) {
+                surface.animate().cancel()
+                surface.alpha = 0.8f
+                surface.translationY = dp(5).toFloat()
+            }
+            activeMode = next
+            when (next) {
+                "signup" -> {
+                    decorateHeading("Create", "Account")
+                    tagline.text = "Create your KYVORIQ identity securely"
+                    primary.text = "Create Account    ➜"
+                    footer.text = "Already have an account?   Sign In"
+                }
+                "forgot-password" -> {
+                    decorateHeading("Reset", "Password")
+                    tagline.text = "We'll email a secure recovery link"
+                    primary.text = "Send Reset Link    ➜"
+                    footer.text = "Back to Sign In"
+                }
+                else -> {
+                    decorateHeading("Welcome", "Back")
+                    tagline.text = "Sign in to continue your trading journey"
+                    primary.text = "Sign In    ➜"
+                    footer.text = "Don't have an account?   Sign Up"
+                }
+            }
+            passwordRow.visibility = if (next == "forgot-password") View.GONE else View.VISIBLE
+            forgot.visibility = if (next == "login") View.VISIBLE else View.GONE
+            divider.visibility = if (next == "forgot-password") View.GONE else View.VISIBLE
+            google.visibility = if (next == "forgot-password") View.GONE else View.VISIBLE
+            if (animate) surface.animate().alpha(1f).translationY(0f)
+                .setDuration(240L).setInterpolator(KyvoriqTheme.motion).start()
+        }
+        footer.setOnClickListener {
+            haptic(it)
+            renderMode(if (activeMode == "login") "signup" else "login")
+        }
+        forgot.setOnClickListener { haptic(it); renderMode("forgot-password") }
+        ownerLink.setOnClickListener {
+            haptic(it)
+            dialog.dismiss()
+            showConsumerAccountPanel(showSecurity = true)
+        }
+        google.setOnClickListener {
+            haptic(it)
+            dialog.dismiss()
+            KyvoriqConsumerIdentity.startGoogle(this@SafeActivity) {
+                refreshConsumerPresentation()
+                showInfoDialog("Google account", it)
+            }
+        }
+        primary.setOnClickListener {
             haptic(it, KyvoriqHaptics.Cue.ACTION)
-            val enteredEmail = email.text.toString().trim()
-            val enteredPassword = password.text.toString()
-            if (!android.util.Patterns.EMAIL_ADDRESS.matcher(enteredEmail).matches()) {
+            if (!KyvoriqConsumerIdentity.configured()) {
+                dialog.dismiss()
+                showInfoDialog("Sign-in unavailable",
+                    "Firebase identity is unavailable in this offline preview. No access was granted.")
+                return@setOnClickListener
+            }
+            val e = email.text.toString().trim()
+            val p = password.text.toString()
+            if (!android.util.Patterns.EMAIL_ADDRESS.matcher(e).matches()) {
                 email.error = "Enter a valid email address"
                 return@setOnClickListener
             }
-            if (mode == "signup" && enteredPassword.length !in 12..128) {
-                password.error = "Use a password of 12–128 characters"
+            if (activeMode == "signup" && p.length !in 12..128) {
+                password.error = "Use 12–128 characters"
                 return@setOnClickListener
             }
-            if (mode == "login" && enteredPassword.isEmpty()) {
+            if (activeMode == "login" && p.isBlank()) {
                 password.error = "Enter your password"
                 return@setOnClickListener
             }
-            proceed.isEnabled = false
-            cancel.isEnabled = false
-            proceed.text = "Please wait…"
-            val onResult: (String) -> Unit = { message ->
+            primary.isEnabled = false
+            primary.text = "Please wait…"
+            val result: (String) -> Unit = { message ->
                 if (!isFinishing && !isDestroyed) {
                     dialog.dismiss()
                     refreshConsumerPresentation()
                     showInfoDialog("KYVORIQ account", message)
                 }
             }
-            when (mode) {
-                "signup" -> KyvoriqConsumerIdentity.signUp(this, enteredEmail, enteredPassword, onResult)
-                "login" -> KyvoriqConsumerIdentity.signIn(this, enteredEmail, enteredPassword, onResult)
-                else -> KyvoriqConsumerIdentity.passwordReset(this, enteredEmail, onResult)
+            when (activeMode) {
+                "signup" -> KyvoriqConsumerIdentity.signUp(this, e, p, result)
+                "forgot-password" -> KyvoriqConsumerIdentity.passwordReset(this, e, result)
+                else -> KyvoriqConsumerIdentity.signIn(this, e, p, result)
             }
         }
-        openPremiumDialog(dialog, panel, sensitive = true)
+        renderMode(mode)
+        openPremiumDialog(dialog, surface, sensitive = true)
     }
 
     private fun confirmConsumerLogout() {
@@ -1652,9 +1888,16 @@ class SafeActivity : FragmentActivity() {
             val active = i == index
             button.isSelected = active
             button.setTextColor(if (active) kyCharcoal else kyWhite)
-            button.compoundDrawablesRelative.filterNotNull().forEach { it.setTint(if (active) kyCharcoal else kyGold) }
-            button.background = KyvoriqTheme.button(this, active, 13f)
+            // Preserve the signal's red circuitry rather than tinting every
+            // multicolor drawable a single color.
+            if (i != 2) {
+                button.compoundDrawablesRelative.filterNotNull().forEach {
+                    it.setTint(if (active) kyCharcoal else kyWhite)
+                }
+            }
+            button.background = android.graphics.drawable.ColorDrawable(Color.TRANSPARENT)
         }
+        positionLiquidIndicator(index, animated = previous != index)
         if (previous != index && !debugPreview && KyvoriqTheme.motionEnabled(this)) {
             workspacePages[index].apply {
                 animate().cancel()
@@ -1666,6 +1909,61 @@ class SafeActivity : FragmentActivity() {
         }
         latestRoot?.let { renderWorkspace(it) }
         if (index == 2 && previous != 2 && !debugPreview && KyvoriqTheme.motionEnabled(this)) animateInsightsEntrance()
+    }
+
+    private fun positionLiquidIndicator(index: Int, animated: Boolean) {
+        val container = liquidNavFrame ?: return
+        val indicator = liquidNavIndicator ?: return
+        if (container.width <= 0 || navigationButtons.size != 3) return
+        val horizontalInset = dp(5)
+        val cellWidth = (container.width - horizontalInset * 2) / 3
+        if (cellWidth <= 0) return
+        val lp = indicator.layoutParams as FrameLayout.LayoutParams
+        if (lp.width != cellWidth) {
+            lp.width = cellWidth
+            indicator.layoutParams = lp
+        }
+        val destination = (cellWidth * index).toFloat()
+        indicator.animate().cancel()
+        if (!animated || !KyvoriqTheme.motionEnabled(this)) {
+            indicator.translationX = destination
+            indicator.scaleX = 1f
+            indicator.scaleY = 1f
+            return
+        }
+        indicator.animate().translationX(destination).scaleX(1f).scaleY(1f)
+            .setDuration(430L)
+            .setInterpolator(android.view.animation.PathInterpolator(
+                0.16f, 0.85f, 0.22f, 1f))
+            .start()
+        indicator.scaleX = 0.94f
+        indicator.scaleY = 0.92f
+    }
+
+    // Press scale and release motion are shared by the native action factories.
+    // A non-consuming listener preserves click, long-press and accessibility.
+    private fun microMotion(view: View): View {
+        view.setOnTouchListener { v, event ->
+            if (!v.isEnabled || !KyvoriqTheme.motionEnabled(this@SafeActivity)) {
+                return@setOnTouchListener false
+            }
+            when (event.actionMasked) {
+                android.view.MotionEvent.ACTION_DOWN -> {
+                    v.animate().cancel()
+                    v.animate().scaleX(0.967f).scaleY(0.955f).setDuration(115L)
+                        .setInterpolator(android.view.animation.DecelerateInterpolator()).start()
+                }
+                android.view.MotionEvent.ACTION_UP,
+                android.view.MotionEvent.ACTION_CANCEL -> {
+                    v.animate().cancel()
+                    v.animate().scaleX(1f).scaleY(1f).setDuration(320L)
+                        .setInterpolator(android.view.animation.OvershootInterpolator(0.55f))
+                        .start()
+                }
+            }
+            false
+        }
+        return view
     }
 
     private fun animateInsightsEntrance() {
@@ -1747,6 +2045,7 @@ class SafeActivity : FragmentActivity() {
             elevation = 0f
             setPadding(dp(5), 0, dp(5), 0)
             background = KyvoriqTheme.button(this@SafeActivity)
+            microMotion(this)
         }
 
     private data class HeroRefs(
@@ -2003,7 +2302,7 @@ class SafeActivity : FragmentActivity() {
             elevation = 0f
             background = KyvoriqTheme.button(this@SafeActivity)
             setPadding(dp(8), 0, dp(8), 0)
-
+            microMotion(this)
         }
     }
 
@@ -4375,6 +4674,7 @@ class SafeActivity : FragmentActivity() {
                         if (destructive) Color.rgb(110, 54, 61) else Color.rgb(65, 63, 60))
                 }, null
             )
+            microMotion(this)
         }
 
     private fun premiumDialogContainer(title: String, subtitle: String): LinearLayout {
