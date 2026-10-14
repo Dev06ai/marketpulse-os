@@ -1,8 +1,8 @@
-name: KYVORIQ 174 axis rail Android regression
+name: KYVORIQ 175 true-price axis labels Android regression
 on:
   push:
     branches:
-      - fix/kyvoriq-174-axis-rail-20261014
+      - fix/kyvoriq-175-trueprice-labels-20261014
     paths:
       - .github/workflows/verify-chart-axis-174.yml
       - dev-trader/android/app/src/main/java/com/devtrader/app/MarketChartView.kt
@@ -50,7 +50,7 @@ jobs:
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: kyvoriq-axis-174-proof
+          name: kyvoriq-axis-175-proof
           path: axis-qa.log
           if-no-files-found: ignore
           retention-days: 7
