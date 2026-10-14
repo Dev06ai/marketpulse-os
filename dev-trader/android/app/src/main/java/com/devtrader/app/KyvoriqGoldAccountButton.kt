@@ -34,10 +34,11 @@ class KyvoriqGoldAccountButton(context: Context) : KyvoriqButton(context) {
         if (!KyvoriqTheme.motionEnabled(context)) return
         animator?.cancel()
         animator = ValueAnimator.ofFloat(-.65f, 1.65f).apply {
-            duration = 2600L
-            startDelay = 1800L
-            repeatCount = ValueAnimator.INFINITE
-            repeatMode = ValueAnimator.RESTART
+            // One glint after mounting rather than an infinite 60fps loop.
+            // Keeps older phones responsive and avoids idle CPU/GPU drain.
+            duration = 1800L
+            startDelay = 350L
+            repeatCount = 0
             addUpdateListener {
                 sweep = (it.animatedValue as Float)
                 invalidate()
