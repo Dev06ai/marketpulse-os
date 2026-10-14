@@ -1,8 +1,8 @@
 {
   "enabled": true,
-  "versionCode": 164,
-  "versionName": "0.21.39",
-  "apkUrl": "https://github.com/Dev06ai/marketpulse-os/releases/download/dev-trader-v0.21.39-164/app-release.apk",
-  "sha256": "f28040c95b7a18c86313a2e42edde806a9958438cb60db2cfd54afa565ecfe8e",
-  "notes": "Build 164 owner testing prerelease. Signed Firebase identity, compact dialogs and clearly labeled public BTCUSDT spot fallback. Private trading server unavailable. No premium/admin/paid unlock."
+  "versionCode": 165,
+  "versionName": "0.21.40",
+  "apkUrl": "https://github.com/Dev06ai/marketpulse-os/releases/download/dev-trader-v0.21.40-165/app-release.apk",
+  "sha256": "86c9fb48bfa75da658670673c27ac637a0fd442360a75dce7be66abe86430cfd",
+  "notes": "Build 165 signed UI testing update • refined KYVORIQ account, login/signup/reset dialogs, adaptive Insights/System cards and smoother transitions. Firebase auth preserved. Consumer backend, payments, admin roles and private trading remain server-controlled and are not unlocked."
 }
