@@ -5115,6 +5115,7 @@ class SafeActivity : FragmentActivity() {
                 message.startsWith("DOWNLOADING") -> "DOWNLOADING…"
                 message.startsWith("VERIFYING") -> "VERIFYING…"
                 message.startsWith("INSTALLER OPEN") -> "INSTALLING…"
+                message.startsWith("DOWNLOAD FAILED") -> "RETRY / BROWSER"
                 message.startsWith("ALLOW INSTALLS") -> "ALLOW INSTALLS"
                 message.startsWith("OPEN RELEASE") -> "OPEN RELEASE ↗"
                 message.startsWith("UPDATE VERIFIED") -> "INSTALLING…"
@@ -5127,13 +5128,46 @@ class SafeActivity : FragmentActivity() {
         }
     }
 
+    /** Use two fixed public CDNs, not the private trading backend, for OTA metadata. */
+    private fun fetchUpdateManifest(callback: (Boolean, String) -> Unit) {
+        val now = System.currentTimeMillis()
+        val origins = listOf(
+            "https://raw.githubusercontent.com/Dev06ai/marketpulse-os/dev-trader-v1/dev-trader/update.json?ts=" + now,
+            "https://cdn.jsdelivr.net/gh/Dev06ai/marketpulse-os@dev-trader-v1/dev-trader/update.json?ts=" + now
+        )
+        fun attempt(index: Int) {
+            if (index >= origins.size) {
+                handler.post { if (!isFinishing && !isDestroyed) callback(false, "CDN UNREACHABLE") }
+                return
+            }
+            val request = Request.Builder().url(origins[index]).get()
+                .header("Accept", "application/json").header("Cache-Control", "no-cache").build()
+            restClient.newCall(request).enqueue(object : okhttp3.Callback {
+                override fun onFailure(call: okhttp3.Call, e: java.io.IOException) {
+                    attempt(index + 1)
+                }
+                override fun onResponse(call: okhttp3.Call, response: Response) {
+                    val body = response.use {
+                        if (!it.isSuccessful) null else runCatching {
+                            it.body?.string()?.takeIf { json -> json.length in 25..8192 }
+                        }.getOrNull()
+                    }
+                    if (body == null) attempt(index + 1)
+                    else handler.post { if (!isFinishing && !isDestroyed) callback(true, body) }
+                }
+            })
+        }
+        runCatching { attempt(0) }.onFailure {
+            handler.post { if (!isFinishing && !isDestroyed) callback(false, "NETWORK UNAVAILABLE") }
+        }
+    }
+
     private fun checkUpdate() {
         updateRecoveryUrl = null
         updateButton.isEnabled = false
         setUpdateStatus("Checking release channel…")
 
-        val manifestUrl = "https://raw.githubusercontent.com/Dev06ai/marketpulse-os/dev-trader-v1/dev-trader/update.json?ts=" + System.currentTimeMillis()
-        getJson(manifestUrl) { ok, body ->
+        fetchUpdateManifest { ok, body ->
             handler.post {
                 if (isFinishing || isDestroyed) return@post
                 if (!ok) {
@@ -5433,6 +5467,8 @@ class SafeActivity : FragmentActivity() {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
                 !packageManager.canRequestPackageInstalls()
             ) {
+                updatePrefs.edit().putString("install_ready_path", apk.absolutePath).apply()
+                awaitingUpdateInstallPermission = true
                 val settings = Intent(
                     android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
                     android.net.Uri.parse("package:$packageName")
@@ -5445,6 +5481,7 @@ class SafeActivity : FragmentActivity() {
                 return
             }
 
+            updatePrefs.edit().remove("install_ready_path").apply()
             val uri = FileProvider.getUriForFile(this, packageName + ".fileprovider", apk)
             val intent = Intent(Intent.ACTION_INSTALL_PACKAGE).apply {
                 setDataAndType(uri, "application/vnd.android.package-archive")
@@ -5564,6 +5601,20 @@ class SafeActivity : FragmentActivity() {
     override fun onResume() {
         super.onResume()
         if (debugPreview || biometricPromptActive) return
+        // Resume permission handoff without redownloading the already verified
+        // release or repeatedly reopening the installer when the user cancels.
+        if (awaitingUpdateInstallPermission) {
+            awaitingUpdateInstallPermission = false
+            val ready = updatePrefs.getString("install_ready_path", null)
+            if (ready != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
+                packageManager.canRequestPackageInstalls()) {
+                val file = File(ready)
+                if (file.isFile && file.parentFile == File(cacheDir, "updates")) {
+                    updatePrefs.edit().remove("install_ready_path").apply()
+                    handler.post { installApk(file) }
+                }
+            }
+        }
         if (privacyPrefs().getBoolean("biometric_enabled", false)) {
             val elapsed = if (backgroundedAtMs > 0L) System.currentTimeMillis() - backgroundedAtMs else 0L
             if (!privacyAuthenticated || elapsed >= 60_000L) {
@@ -5587,6 +5638,7 @@ class SafeActivity : FragmentActivity() {
         super.onStart()
         if (debugPreview) return
         stopped = false
+        if (updatePrefs.getLong("download_id", -1L) > 0L) handler.post { pollSystemUpdate() }
         handler.removeCallbacks(keepaliveRunnable)
         handler.postDelayed(keepaliveRunnable, KEEPALIVE_INTERVAL_MS)
         handler.removeCallbacks(snapshotPollRunnable)
@@ -5610,6 +5662,8 @@ class SafeActivity : FragmentActivity() {
             backgroundedAtMs = System.currentTimeMillis()
         }
         stopped = true
+        updatePoll?.let { handler.removeCallbacks(it) }
+        updatePoll = null
         handler.removeCallbacks(snapshotPollRunnable)
         handler.removeCallbacks(keepaliveRunnable)
         handler.removeCallbacks(healthWatchdogRunnable)
