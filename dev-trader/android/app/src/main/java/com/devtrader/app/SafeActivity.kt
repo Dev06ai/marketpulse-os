@@ -1196,8 +1196,8 @@ class SafeActivity : FragmentActivity() {
         adminOnlyViews.forEach { it.visibility = if (owner) View.VISIBLE else View.GONE }
         consumerPositionTab?.visibility = View.VISIBLE
         consumerWelcomeCard?.visibility = if (owner) View.GONE else View.VISIBLE
-        consumerPageHeading?.text = if (owner) "INSIGHTS" else "MEMBERSHIP"
-        consumerPageSubtitle?.text = if (owner) "Verified market intelligence" else "Explore KYVORIQ access plans"
+        consumerPageHeading?.text = "INSIGHTS"
+        consumerPageSubtitle?.text = if (owner) "Private market intelligence" else "Market levels and account access"
         // Consistent consumer navigation; Signals remains locked for all tiers.
         navigationButtons.getOrNull(0)?.text = "Trade"
         navigationButtons.getOrNull(1)?.text = "Signals"
