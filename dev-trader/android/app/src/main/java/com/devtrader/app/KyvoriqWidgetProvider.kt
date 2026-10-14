@@ -195,7 +195,7 @@ class KyvoriqWidgetProvider : AppWidgetProvider() {
             val health = prefs.getString(KEY_HEALTH, "UNKNOWN") ?: "UNKNOWN"
             val pnl = if (hideAmounts) "••••" else (prefs.getString(KEY_PNL, "—") ?: "—")
 
-            // Brand system: the price is consistently deep gold, regardless of the
+            // Brand system: the price is consistently ivory, regardless of the
             // previous tick. Direction remains legible in the adjacent arrow.
             val currentColor = KyvoriqTheme.gold
             val delta = when {
