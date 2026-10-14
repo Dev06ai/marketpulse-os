@@ -1,0 +1,144 @@
+name: KYVORIQ 168 signed owner-testing publication
+on:
+  push:
+    branches: [ci/kyvoriq-168-release-gated-20261014]
+    paths: [.github/workflows/kyvoriq-168-gated-release.yml]
+permissions:
+  contents: write
+  actions: read
+concurrency:
+  group: kyvoriq-168-release
+  cancel-in-progress: false
+jobs:
+  release:
+    if: github.repository == 'Dev06ai/marketpulse-os'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TEST_RUN: "38552904878"
+      EXPECTED_TEST_SHA: 7566b111358a7613779af9b7d7464366bd6e4bde
+      SOURCE_SHA: c4efbca70eae66e53a8dfc0679dbe59a1a54e45e
+      TAG: dev-trader-v0.21.43-168
+    steps:
+      - name: Require precise passing five-device visual and signed APK gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 140); do
+            RESULT="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$TEST_RUN")"
+            test "$(jq -r .head_sha <<< "$RESULT")" = "$EXPECTED_TEST_SHA"
+            test "$(jq -r .head_branch <<< "$RESULT")" = ci/kyvoriq-168-icon-visibility-20261014
+            test "$(jq -r .name <<< "$RESULT")" = 'KYVORIQ 168 legible tab and Signals hero test'
+            STATUS="$(jq -r .status <<< "$RESULT")"
+            if [[ "$STATUS" == completed ]]; then
+              test "$(jq -r .conclusion <<< "$RESULT")" = success || { echo 'RELEASE_BLOCKED: verified Android run did not pass'; exit 1; }
+              echo 'SOURCE_ANDROID_SIGNED_DEVICE_GATE_PASSED'
+              exit 0
+            fi
+            sleep 12
+          done
+          echo 'RELEASE_BLOCKED: timed out waiting for exact Android verification'
+          exit 1
+      - name: Download, checksum and independently verify build and proof
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p release proof
+          gh run download "$TEST_RUN" --repo "$GITHUB_REPOSITORY" --name KYVORIQ-168-FIREBASE-TESTING-NOT-PUBLIC --dir release
+          gh run download "$TEST_RUN" --repo "$GITHUB_REPOSITORY" --name KYVORIQ-168-OFFLINE-EMULATOR-PROOF --dir proof
+          (cd release && sha256sum -c SHA256SUMS.txt)
+          python3 - <<'PY'
+          import os,json
+          from pathlib import Path
+          data=json.loads(Path('release/TEST-SCOPE.json').read_text())
+          assert data["source_commit"]==os.environ["SOURCE_SHA"]
+          assert data["offline_security_tests"]=="passed"
+          assert data["offline_emulator_tests"]=="passed"
+          assert data["live_firebase_end_to_end"]=="NOT_VERIFIED"
+          assert not data["consumer_api_configured"]
+          assert not data["production_login_enabled"]
+          assert not data["payments_enabled"]
+          assert not data["update_manifest_modified"]
+          PY
+          for mode in small normal tall large-font landscape; do
+            grep -Fq 'OK (1 test)' "proof/$mode/test.txt"
+            for snap in trade ob-price-labels ob-next-page account-free account-owner; do
+              test -s "proof/$mode/$snap.png"
+            done
+          done
+          cp release/KYVORIQ-0.21.43-168-FIREBASE-TEST.apk release/app-release.apk
+          AAPT="$(find "$ANDROID_HOME/build-tools" -name aapt -type f | sort -V | tail -1)"
+          SIGNER="$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -V | tail -1)"
+          "$AAPT" dump badging release/app-release.apk | head -1 | grep -E "^package: name='com.devtrader.app' versionCode='168' versionName='0.21.43'"
+          "$SIGNER" verify --print-certs release/app-release.apk > "$RUNNER_TEMP/cert-168"
+          grep -Fqi '17e4c550aa235dae926058654f203ecae9d7b30b432bde9dc2c358e28360cbab' "$RUNNER_TEMP/cert-168"
+          curl --fail --location --silent --show-error --retry 3 --max-time 90 \
+            'https://github.com/Dev06ai/marketpulse-os/releases/download/dev-trader-v0.21.42-167/app-release.apk' \
+            -o "$RUNNER_TEMP/167.apk"
+          "$SIGNER" verify --print-certs "$RUNNER_TEMP/167.apk" > "$RUNNER_TEMP/cert-167"
+          python3 - <<'PY'
+          import os,re
+          from pathlib import Path
+          base=Path(os.environ['RUNNER_TEMP'])
+          def cert(n):
+              m=re.findall(r'certificate SHA-256 digest:\s*([a-fA-F0-9]{64})',(base/n).read_text())
+              assert m
+              return m[0].lower()
+          assert cert('cert-167')==cert('cert-168')=='17e4c550aa235dae926058654f203ecae9d7b30b432bde9dc2c358e28360cbab'
+          PY
+          ! unzip -Z1 release/app-release.apk | grep -Eqi 'ui_preview\.json|\.env$|\.jks$|firebase-admin|service-account.*json'
+          sha256sum release/app-release.apk > release/APK-SHA256.txt
+      - name: Publish signed owner-testing release and preserve private services
+        shell: bash
+        run: |
+          set -euo pipefail
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo 'Build 168 already published; refusing duplicate'; exit 1
+          fi
+          cat > "$RUNNER_TEMP/release-notes.md" <<'NOTES'
+          # KYVORIQ Build 168 — clearer navigation and Signals hero
+          Signed owner-testing prerelease from the reviewed Build 167 base.
+          - Makes bottom Trade/Signals/Insights icon foregrounds more legible against the animated pill, including selected/unselected vector art.
+          - Improves sizing of the Signals hero and retains smooth transitions.
+          - Preserves strong OB-only policy, chart behavior, consumer login screens and session security from Build 167.
+          - Offline five-form-factor emulators, authentication tests and signing continuity passed.
+          - Public consumer subscriptions, payment gateway and server entitlements are NOT activated; live Firebase end-to-end flows are not verified.
+          - The private demo execution engine and Voroa services are untouched.
+          NOTES
+          gh release create "$TAG" \
+            release/app-release.apk \
+            release/KYVORIQ-0.21.43-168-FIREBASE-TEST.apk \
+            release/KYVORIQ-0.21.43-168-FIREBASE-TEST.aab \
+            release/SHA256SUMS.txt release/APK-SHA256.txt release/TEST-SCOPE.json \
+            --repo "$GITHUB_REPOSITORY" --target "$SOURCE_SHA" \
+            --title 'KYVORIQ 0.21.43 — Build 168 Owner Testing' \
+            --notes-file "$RUNNER_TEMP/release-notes.md" --prerelease
+      - name: Advance owner-testing update feed only from expected 167
+        shell: bash
+        run: |
+          set -euo pipefail
+          BLOB="$(gh api "repos/$GITHUB_REPOSITORY/contents/dev-trader/update.json?ref=dev-trader-v1")"
+          OLD_SHA="$(jq -r .sha <<< "$BLOB")"
+          jq -r .content <<< "$BLOB" | base64 --decode > "$RUNNER_TEMP/prior.json"
+          python3 - <<'PY'
+          from pathlib import Path
+          import os,json,hashlib
+          old=json.loads((Path(os.environ['RUNNER_TEMP'])/'prior.json').read_text())
+          assert old['versionCode']==167 and old['sha256']=='c8a3f8f68995e1d4bbc5490596b0900fea9ed552275d91993b2626a6c8c9b47c', 'Update channel moved; stop rather than overwrite'
+          apk=Path('release/app-release.apk')
+          new={
+            "enabled":True,"versionCode":168,"versionName":"0.21.43",
+            "apkUrl":"https://github.com/Dev06ai/marketpulse-os/releases/download/dev-trader-v0.21.43-168/app-release.apk",
+            "sha256":hashlib.sha256(apk.read_bytes()).hexdigest(),
+            "notes":"Build 168 signed tester update: clearer Trade/Signals/Insights icons, better Signals hero and smooth navigation; retains strong OB filtering, login and security fixes. No public billing or privileged execution changes."
+          }
+          Path('release/update.json').write_text(json.dumps(new,indent=2)+'\n')
+          PY
+          B64="$(base64 -w0 release/update.json)"
+          gh api -X PUT "repos/$GITHUB_REPOSITORY/contents/dev-trader/update.json" \
+            -f message='Offer signed KYVORIQ Build 168 testing update' \
+            -f branch=dev-trader-v1 -f sha="$OLD_SHA" -f content="$B64" >/dev/null
+          gh api "repos/$GITHUB_REPOSITORY/contents/dev-trader/update.json?ref=dev-trader-v1" \
+            --jq .content | base64 --decode | jq -e '.enabled == true and .versionCode == 168'
+          echo 'BUILD168_UPDATE_FEED_VERIFIED'
