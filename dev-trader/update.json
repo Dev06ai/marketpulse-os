@@ -5,4 +5,4 @@
   "apkUrl": "https://github.com/Dev06ai/marketpulse-os/releases/download/dev-trader-v0.21.39-164/app-release.apk",
   "sha256": "f28040c95b7a18c86313a2e42edde806a9958438cb60db2cfd54afa565ecfe8e",
   "notes": "Build 164 owner testing prerelease. Signed Firebase identity, compact dialogs and clearly labeled public BTCUSDT spot fallback. Private trading server unavailable. No premium/admin/paid unlock."
-}\n
+}
