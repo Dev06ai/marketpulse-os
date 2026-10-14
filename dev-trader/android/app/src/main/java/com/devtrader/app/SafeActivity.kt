@@ -1799,48 +1799,73 @@ class SafeActivity : FragmentActivity() {
     private fun compactCard(title: String, initial: String, valueSize: Float): CardRefs {
         val box = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(14), dp(12), dp(14), dp(12))
-            background = KyvoriqTheme.surface(this@SafeActivity, prominent = false)
+            setPadding(dp(17), dp(16), dp(17), dp(16))
+            background = GradientDrawable(GradientDrawable.Orientation.TL_BR,
+                intArrayOf(Color.rgb(32, 31, 34), Color.rgb(17, 18, 22))).apply {
+                cornerRadius = dp(19).toFloat()
+                setStroke(dp(1), Color.rgb(68, 60, 51))
+            }
+            clipToPadding = false
         }
-        val heading = label(humanHeading(title), 12f, kyWhite, 0.012f)
+        val line = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
+        val dot = View(this).apply {
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.OVAL
+                setColor(kyGold)
+            }
+        }
+        line.addView(dot, LinearLayout.LayoutParams(dp(5), dp(5)).apply {
+            rightMargin = dp(9)
+        })
+        line.addView(label(humanHeading(title), 12.5f, kyWhite, 0.018f).apply {
+            typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
+        }, LinearLayout.LayoutParams(0, -2, 1f))
+        line.addView(label(if (title.contains("SYSTEM")) "DEVICE" else "MARKET", 9f,
+            kyGold, 0.025f))
+        box.addView(line)
         val value = TextView(this).apply {
             text = initial
             textSize = valueSize
-            setTextColor(kyWhite)
+            setTextColor(Color.rgb(198, 199, 204))
             typeface = Typeface.create("sans-serif", Typeface.NORMAL)
             includeFontPadding = false
-            setLineSpacing(0f, 1.12f)
+            setLineSpacing(dp(1).toFloat(), 1.12f)
             setHorizontallyScrolling(false)
         }
-        box.addView(heading)
-        box.addView(value, margins(top = 8))
+        box.addView(value, margins(top = 12))
         return CardRefs(box, value)
     }
 
     private fun premiumCard(title: String, initial: String, valueSize: Float): Pair<LinearLayout, TextView> {
         val box = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(14), dp(13), dp(14), dp(13))
-            background = KyvoriqTheme.surface(this@SafeActivity, prominent = true)
+            setPadding(dp(17), dp(17), dp(17), dp(16))
+            background = GradientDrawable(GradientDrawable.Orientation.TL_BR,
+                intArrayOf(Color.rgb(34, 32, 32), Color.rgb(17, 18, 22))).apply {
+                cornerRadius = dp(21).toFloat()
+                setStroke(dp(1), Color.rgb(86, 70, 49))
+            }
         }
-        val header = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-        }
-        header.addView(label(humanHeading(title), 11.5f, kyWhite, 0.012f),
-            LinearLayout.LayoutParams(0, dp(18), 1f))
-        header.addView(label(if (title == "DEMO PERFORMANCE") "DEMO" else "MARKET", 8.5f, kyGray, 0.08f))
+        val header = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
+        header.addView(label(humanHeading(title), 12.5f, kyWhite, 0.015f).apply {
+            typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
+        }, LinearLayout.LayoutParams(0, -2, 1f))
+        header.addView(label(if (title == "DEMO PERFORMANCE") "DEMO" else "MARKET", 9f,
+            kyGold, 0.055f))
         box.addView(header)
-
+        box.addView(View(this).apply {
+            background = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,
+                intArrayOf(Color.rgb(125, 98, 58), Color.rgb(30, 29, 31)))
+        }, LinearLayout.LayoutParams(-1, dp(1)).apply { topMargin = dp(11) })
         val value = TextView(this).apply {
             text = initial
             textSize = valueSize
-            setTextColor(kyWhite)
+            setTextColor(Color.rgb(207, 207, 211))
             typeface = Typeface.create("sans-serif", Typeface.NORMAL)
             includeFontPadding = false
-            setLineSpacing(0f, 1.13f)
+            setLineSpacing(dp(1).toFloat(), 1.13f)
         }
-        box.addView(value, margins(top = 8))
+        box.addView(value, margins(top = 12))
         return Pair(box, value)
     }
 
