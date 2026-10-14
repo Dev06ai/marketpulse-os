@@ -33,7 +33,7 @@ class HeroChartVisualTest {
         visit(inst.uiAutomation.rootInActiveWindow)
         return labels
     }
-    private fun densityForTest(activity: SafeActivity): Float =
+    private fun densityForTest(activity: android.app.Activity): Float =
         activity.resources.displayMetrics.density
     private fun children(v: View): List<View> = listOf(v) +
         if (v is ViewGroup) (0 until v.childCount).flatMap { children(v.getChildAt(it)) } else emptyList()
