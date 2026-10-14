@@ -150,7 +150,7 @@ for(const check of [
 assert(/<script\b[^>]*src=["']\/app\.js(?:\?[^"']*)?["'][^>]*><\/script>/i.test(htmlSource),
   "Apex external dashboard script not linked");
 for(const check of [
-  'const action=["LONG","SHORT"].includes(x.action)?x.action:"WAIT";',
+  'action=["LONG","SHORT"].includes(x.action)?x.action:"WAIT";',
   'const validRiskGeometry=',
   'const autoReady=validRiskGeometry&&x.apex?.executionGate?.automaticExecutionReady===true;',
   'const manualReady=validRiskGeometry&&d?.liveSignalEligible===true;',
