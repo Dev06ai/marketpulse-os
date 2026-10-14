@@ -11,7 +11,7 @@ import android.graphics.RectF
 import android.graphics.Shader
 
 /**
- * Restrained gold sheen for the account entry point.
+ * Restrained ivory sheen for the account entry point.
  *
  * Only visual state is animated: never represent an unverified login,
  * payment or owner session as authenticated. Respects reduced motion and
