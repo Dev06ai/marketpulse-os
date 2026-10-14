@@ -1,0 +1,96 @@
+name: Publish verified KYVORIQ 160 OB UI prerelease
+on:
+  push:
+    branches: [feature/build160-ob-zone-readability]
+    paths:
+      - '.github/workflows/publish-ob-160.yml'
+permissions:
+  contents: write
+  actions: read
+jobs:
+  publish:
+    if: github.repository == 'Dev06ai/marketpulse-os'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Require successful signed candidate and AOSP no-popup screen proof
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          APP_RUN=38499111583
+          PROOF_RUN=38500396329
+          test "$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$APP_RUN" --jq .conclusion)" = success
+          test "$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$APP_RUN" --jq .head_sha)" = '8861477adf868f2561881e813228b4f232ac8178'
+          test "$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$PROOF_RUN" --jq .conclusion)" = success
+          test "$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$PROOF_RUN" --jq .head_sha)" = '08a900fa634a58db924d80cff7b49b51ed59eeac'
+          mkdir -p release proof
+          gh run download "$APP_RUN" --repo "$GITHUB_REPOSITORY" --name KYVORIQ-160-SIGNED-TESTING-ONLY --dir release
+          gh run download "$PROOF_RUN" --repo "$GITHUB_REPOSITORY" --name KYVORIQ-160-CLEAN-OB-PROOF --dir proof
+          for device in small normal tall large-font landscape; do
+            test -s "proof/$device/ob-price-labels.png"
+            grep -Fq 'OK (1 test)' "proof/$device/test.txt"
+          done
+          ( cd release && sha256sum --check SHA256SUMS.txt )
+          echo 'ff1cb00ccf2aae3f0d12089cdcfc597775c48235dcb357cd275ee01a57c4df24  KYVORIQ-0.21.35-Build160.apk' | (cd release && sha256sum --check)
+          echo '61950a696b824ebc3e0f7b331d22713c52d406694035eff013206a71cf73cdf4  KYVORIQ-0.21.35-Build160.aab' | (cd release && sha256sum --check)
+          cp release/KYVORIQ-0.21.35-Build160.apk release/app-release.apk
+          echo 'ff1cb00ccf2aae3f0d12089cdcfc597775c48235dcb357cd275ee01a57c4df24  app-release.apk' | (cd release && sha256sum --check)
+      - name: Verify current update certificate and package version
+        run: |
+          set -euo pipefail
+          curl --fail --location --silent --show-error --retry 3 --max-time 90 \
+            -o "$RUNNER_TEMP/build159.apk" \
+            https://github.com/Dev06ai/marketpulse-os/releases/download/dev-trader-v0.21.34-159/app-release.apk
+          SIGNER="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -1)"
+          test -x "$SIGNER"
+          "$SIGNER" verify --print-certs "$RUNNER_TEMP/build159.apk" > "$RUNNER_TEMP/prior-cert"
+          "$SIGNER" verify --print-certs release/app-release.apk > "$RUNNER_TEMP/candidate-cert"
+          python3 - <<'PY'
+          import os, re
+          from pathlib import Path
+          root=Path(os.environ['RUNNER_TEMP'])
+          def cert(name):
+              data=(root/name).read_text()
+              matches=re.findall(r'certificate SHA-256 digest:\s*([0-9a-fA-F]{64})',data)
+              assert matches, 'Missing release signing identity'
+              return matches[0].lower()
+          assert cert('prior-cert') == cert('candidate-cert') == '17e4c550aa235dae926058654f203ecae9d7b30b432bde9dc2c358e28360cbab'
+          print('Signing certificate identical to published Build 159')
+          PY
+          AAPT="$(find "$ANDROID_HOME/build-tools" -type f -name aapt | sort -V | tail -1)"
+          "$AAPT" dump badging release/app-release.apk | head -n 1 | grep -E "^package: name='com.devtrader.app' versionCode='160' versionName='0.21.35'"
+          unzip -tq release/app-release.apk | grep -Fq 'No errors detected'
+          ! unzip -Z1 release/app-release.apk | grep -Eqi 'ui_preview\\.json|\\.env$|\\.jks$'
+      - name: Publish UI prerelease without modifying private bot or paid entitlements
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG=dev-trader-v0.21.35-160
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Existing release tag; will not overwrite existing artifacts."
+            exit 1
+          fi
+          cat > "$RUNNER_TEMP/notes.md" <<'NOTES'
+          ## KYVORIQ 0.21.35 — Build 160 • Order block readability
+          - Accurate display precision of source-provided OB low/high prices; no abbreviated k-rounding on zone labels.
+          - De-cluttered overlapping 1H, 4H, 12H and Daily order block fills, horizontal boundaries and separate dark price badges that draw ABOVE candles/EMA.
+          - Fixed old OB dedup logic that could erase real overlapping different-timeframe levels.
+          - Preserved Build 159 hero chart, account redesign, private trading behavior, package ID and signing certificate.
+          - Signed APK/AAB verified; all five Android AOSP layouts tested without launcher-ANR overlays.
+          - This prerelease changes OB chart presentation only; its input levels remain backend-sourced and require separate source-accuracy validation. Public subscriptions, paid alert delivery, and Play billing are not yet enabled.
+          NOTES
+          gh release create "$TAG" \
+            release/app-release.apk \
+            release/KYVORIQ-0.21.35-Build160.apk \
+            release/KYVORIQ-0.21.35-Build160.aab \
+            release/SHA256SUMS.txt \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title 'KYVORIQ 0.21.35 • Build 160 OB Chart Improvements' \
+            --notes-file "$RUNNER_TEMP/notes.md" \
+            --prerelease
+          echo "RELEASE_PUBLISHED"
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json url,isPrerelease,assets
