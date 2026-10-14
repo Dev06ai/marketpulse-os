@@ -1200,7 +1200,7 @@ class SafeActivity : FragmentActivity() {
             text = "Insights"
             contentDescription = "Workspace INSIGHTS"
         }
-        accountButton?.text = if (owner) "ACCOUNT" else "SIGN IN"
+        accountButton?.text = if (owner || KyvoriqConsumerIdentity.hasVerifiedSession(this)) "ACCOUNT" else "SIGN IN"
         accountButton?.contentDescription =
             if (owner) "Admin account and management" else "Sign in or create a KYVORIQ account"
     }
@@ -1209,6 +1209,7 @@ class SafeActivity : FragmentActivity() {
         // This is a custom adaptive panel, not a stock platform AlertDialog.
         // It never changes chart scroll, zoom, timeframe or selected workspace.
         val ownerDevice = KyvoriqSecureSession.isPaired(this)
+        val consumerEmail = KyvoriqConsumerIdentity.signedInVerifiedEmail(this)
         val dialog = android.app.Dialog(this)
         val surface = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -1226,7 +1227,9 @@ class SafeActivity : FragmentActivity() {
         }
         identity.addView(label("KYVORIQ  /  ACCOUNT", 10f, kyGold, 0.095f))
         identity.addView(label(
-            if (ownerDevice) "Private device access" else "Your KYVORIQ",
+            if (ownerDevice) "Private device access"
+            else if (consumerEmail != null) "Verified consumer account"
+            else "Your KYVORIQ",
             20f, kyWhite, 0f
         ), margins(top = 5))
         header.addView(identity, LinearLayout.LayoutParams(0, -2, 1f))
@@ -1239,6 +1242,7 @@ class SafeActivity : FragmentActivity() {
         surface.addView(header, margins(bottom = 10))
         val statusLine = label(
             if (ownerDevice) "Device paired to private owner API • server authorization required"
+            else if (consumerEmail != null) "EMAIL VERIFIED  •  Paid access requires server-checked entitlements"
             else "FREE  •  Market chart access without a subscription",
             10.5f, kyGray, 0f
         ).apply { setPadding(dp(12), dp(9), dp(12), dp(9))
@@ -1303,18 +1307,39 @@ class SafeActivity : FragmentActivity() {
                 destructive = true) {
                 confirmOwnerLogout()
             }
+            if (consumerEmail == null) {
+                actionRow(R.drawable.ic_account_access, "Admin identity login",
+                    "Separate verified account and MFA required") {
+                    showConsumerEmailAuth("login")
+                }
+            }
+        } else if (consumerEmail != null) {
+            actionRow(R.drawable.ic_account_owner, consumerEmail,
+                "Email verified • Free until server confirms a paid entitlement") {
+                showInfoDialog("Verified identity",
+                    "Consumer identity is managed separately from the private owner API. " +
+                    "Account tier and administrative privileges must be verified by the consumer server.")
+            }
+            actionRow(R.drawable.ic_account_privacy, "Account security",
+                "Change password or review identity provider") {
+                openConsumerPortal("account")
+            }
+            actionRow(R.drawable.ic_account_access, "Sign out", "Clear consumer session on this device",
+                destructive = true) {
+                confirmConsumerLogout()
+            }
         } else {
             actionRow(R.drawable.ic_account_access, "Log in", "Email and password • verification required") {
-                openConsumerPortal("login")
+                showConsumerEmailAuth("login")
             }
-            actionRow(R.drawable.ic_account_portfolio, "Sign up", "Email verification before first login") {
-                openConsumerPortal("signup")
+            actionRow(R.drawable.ic_account_portfolio, "Sign up", "Verification email before first login") {
+                showConsumerEmailAuth("signup")
             }
             actionRow(R.drawable.ic_account_access, "Continue with Google", "Google OAuth • verified account") {
-                openConsumerPortal("google")
+                KyvoriqConsumerIdentity.startGoogle(this@SafeActivity) { showInfoDialog("Google sign-in", it) }
             }
-            actionRow(R.drawable.ic_account_pairing, "Forgot password?", "Secure email reset • expiring link") {
-                openConsumerPortal("forgot-password")
+            actionRow(R.drawable.ic_account_pairing, "Forgot password?", "Secure expiring reset email") {
+                showConsumerEmailAuth("forgot-password")
             }
             actionRow(R.drawable.ic_account_pairing, "Owner device pairing", "Requires private server authorization") {
                 pairingButton?.let { showPairingDialog(it) }
@@ -1351,6 +1376,91 @@ class SafeActivity : FragmentActivity() {
                 fullWidth - dp(12) else minOf(dp(460), fullWidth - dp(40))
             setLayout(sheetWidth, ViewGroup.LayoutParams.WRAP_CONTENT)
             setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
+        }
+    }
+
+    private fun showConsumerEmailAuth(mode: String) {
+        if (mode !in setOf("login", "signup", "forgot-password")) return
+        if (!KyvoriqConsumerIdentity.configured()) {
+            openConsumerPortal(mode) // Only a configured HTTPS origin is permitted.
+            return
+        }
+        val title = when (mode) {
+            "signup" -> "Create a KYVORIQ account"
+            "forgot-password" -> "Reset your password"
+            else -> "Log in to KYVORIQ"
+        }
+        val layout = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(20), dp(12), dp(20), dp(6))
+        }
+        val email = android.widget.EditText(this).apply {
+            hint = "Email address"
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or
+                android.text.InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS
+            filters = arrayOf(android.text.InputFilter.LengthFilter(254))
+            setSingleLine(true)
+            contentDescription = "Consumer account email"
+        }
+        layout.addView(email)
+        val password = android.widget.EditText(this).apply {
+            hint = if (mode == "signup") "Password • 12+ characters" else "Password"
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or
+                android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
+            filters = arrayOf(android.text.InputFilter.LengthFilter(128))
+            setSingleLine(true)
+            contentDescription = "Consumer account password"
+        }
+        if (mode != "forgot-password") layout.addView(password)
+        val dialog = android.app.AlertDialog.Builder(this)
+            .setTitle(title)
+            .setView(layout)
+            .setNegativeButton("Cancel", null)
+            .setPositiveButton(if (mode == "signup") "Verify email"
+                else if (mode == "forgot-password") "Send reset email" else "Sign in", null)
+            .create()
+        dialog.setOnShowListener {
+            dialog.window?.addFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)
+            dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val enteredEmail = email.text.toString().trim()
+                val enteredPassword = password.text.toString()
+                dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE).isEnabled = false
+                val onResult: (String) -> Unit = { message ->
+                    dialog.dismiss()
+                    refreshConsumerPresentation()
+                    showInfoDialog("KYVORIQ account", message)
+                }
+                when (mode) {
+                    "signup" -> KyvoriqConsumerIdentity.signUp(this, enteredEmail, enteredPassword, onResult)
+                    "login" -> KyvoriqConsumerIdentity.signIn(this, enteredEmail, enteredPassword, onResult)
+                    else -> KyvoriqConsumerIdentity.passwordReset(this, enteredEmail, onResult)
+                }
+            }
+        }
+        dialog.show()
+    }
+
+    private fun confirmConsumerLogout() {
+        android.app.AlertDialog.Builder(this)
+            .setTitle("Sign out of KYVORIQ?")
+            .setMessage("This signs out your consumer account on this device. Server-side premium features remain locked unless a valid signed-in session and subscription are verified.")
+            .setNegativeButton("Cancel", null)
+            .setPositiveButton("Sign out") { _, _ ->
+                KyvoriqConsumerIdentity.signOut(this)
+                refreshConsumerPresentation()
+                showInfoDialog("Signed out", "Your consumer session was cleared on this device.")
+            }.show().getButton(android.app.AlertDialog.BUTTON_POSITIVE)
+            ?.setTextColor(Color.rgb(240, 87, 96))
+    }
+
+    @Deprecated("Android activity result is required by Google Sign-In legacy bridge")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == KyvoriqConsumerIdentity.GOOGLE_REQUEST_CODE) {
+            KyvoriqConsumerIdentity.finishGoogle(this, data) { message ->
+                refreshConsumerPresentation()
+                showInfoDialog("Google account", message)
+            }
         }
     }
 
@@ -1393,7 +1503,7 @@ class SafeActivity : FragmentActivity() {
         val baseUri = android.net.Uri.parse(base)
         if (uri.scheme != "https" || uri.host.isNullOrBlank() ||
             !uri.host.equals(baseUri.host, ignoreCase = true) ||
-            !setOf("login", "signup", "google", "forgot-password", "logout").contains(destination)) {
+            !setOf("login", "signup", "google", "forgot-password", "logout", "account").contains(destination)) {
             showInfoDialog("Account unavailable", "Untrusted sign-in destination blocked.")
             return
         }
