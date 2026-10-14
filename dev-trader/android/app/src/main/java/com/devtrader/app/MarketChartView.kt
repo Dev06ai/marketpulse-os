@@ -299,7 +299,7 @@ class MarketChartView @JvmOverloads constructor(
     }
 
     private fun applyOverlays(value: JSONArray?) {
-        val next = value ?: JSONArray()
+        val next = OrderBlockPolicy.filter(value, livePrice)
         val now = SystemClock.elapsedRealtime()
         val activeKeys = mutableSetOf<String>()
         for (i in 0 until next.length()) {

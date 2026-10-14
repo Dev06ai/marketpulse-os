@@ -119,9 +119,13 @@ class HeroChartVisualTest {
                 val ob = JSONArray()
                 fun zone(name: String, lo: Double, hi: Double, direction: String) {
                     ob.put(JSONObject().put("kind", "OB_ZONE").put("label", name)
+                        .put("id", "fixture-$name").put("rule_version", "strong-ob-v1")
+                        .put("timeframe", if (name.startsWith("4H")) "4h" else if (name.startsWith("1H")) "1h" else "1D")
+                        .put("strength_score", 90).put("structure_break", true)
+                        .put("confirmed_at", 12345L).put("status", "ACTIVE")
                         .put("price", (lo + hi) / 2.0)
                         .put("zone_low", lo).put("zone_high", hi)
-                        .put("direction", direction))
+                        .put("direction", if (direction == "LONG") "BULLISH" else "BEARISH"))
                 }
                 // Keep both intraday zones inside the preview's 84.1k–84.5k
                 // visible market range, so this actually tests overlapping

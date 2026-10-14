@@ -12,7 +12,7 @@ import jwt
 from cryptography.hazmat.primitives.asymmetric import rsa
 
 from auth import (FIREBASE_JWKS, AuthenticationRejected, AuthUnavailable,
-                  settings, verify_access_token)
+                  settings, verify_access_token, signing_keys)
 
 
 class FirebaseTokenContracts(unittest.TestCase):
@@ -22,6 +22,8 @@ class FirebaseTokenContracts(unittest.TestCase):
         cls.other_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
 
     def setUp(self):
+        signing_keys.cache_clear()
+        self.addCleanup(signing_keys.cache_clear)
         self.env = patch.dict(os.environ, {
             "KYVORIQ_CONSUMER_OIDC_ISSUER": "https://securetoken.google.com/kyvoriq-test",
             "KYVORIQ_CONSUMER_OIDC_AUDIENCE": "kyvoriq-test",

@@ -2608,10 +2608,14 @@ class SafeActivity : FragmentActivity() {
             integrity.text = "HTTP  •  SYNCING MARKET SNAPSHOT"
         }
         val requestTf = selectedTf
+        val bootstrapSession = KyvoriqSecureSession.accessToken(this) ?: run {
+            bootstrapInFlight = false
+            return
+        }
         getJson(backendBase + "/bootstrap?profile=dashboard&interval=" + requestTf) { ok, body ->
             handler.post {
                 bootstrapInFlight = false
-                if (stopped) return@post
+                if (stopped || bootstrapSession != KyvoriqSecureSession.accessToken(this)) return@post
                 if (!ok) {
                     val nowFail = System.currentTimeMillis()
                     val fault = when (body) {
@@ -2702,6 +2706,7 @@ class SafeActivity : FragmentActivity() {
     }
 
     private fun renderState(root: JSONObject, requestChart: Boolean = true) {
+        if (!debugPreview && (publicMarketOnly || !KyvoriqSecureSession.isPaired(this))) return
         val priceValue = root.optDouble("last_price", Double.NaN)
         val health = root.optString("data_health", "UNKNOWN")
         val ws = root.optBoolean("ws_connected", false)
@@ -2714,7 +2719,8 @@ class SafeActivity : FragmentActivity() {
         val receivedTs = root.optLong("received_ts", 0L)
         val marketUpdateTs = root.optLong("last_market_update_ts", 0L)
         val freshestTs = maxOf(receivedTs, marketUpdateTs)
-        val freshMarket = priceValue.isFinite() && freshestTs > 0L && (nowMs - freshestTs) <= 8_000L
+        val freshMarket = priceValue.isFinite() && priceValue > 0.0 && freshestTs > 0L &&
+            (nowMs - freshestTs) in -1_000L..8_000L
         val upstream = root.optJSONObject("upstream")
         val source = upstream?.optString("source", "").orEmpty()
         val authoritativeFeedHealthy = health == "HEALTHY" && ws && source == "BITGET_WS" && freshMarket
@@ -3842,6 +3848,7 @@ class SafeActivity : FragmentActivity() {
     }
 
     private fun chartOverlays(root: JSONObject?): JSONArray {
+        if (!debugPreview && (publicMarketOnly || !KyvoriqSecureSession.isPaired(this))) return JSONArray()
         val out = JSONArray()
         val prices = mutableListOf<Double>()
         val zoneNames = mutableSetOf<String>()
@@ -3905,6 +3912,11 @@ class SafeActivity : FragmentActivity() {
                 val row = arr.optJSONObject(i) ?: continue
                 // Ignore stale server manual level map, never re-add retired Oct 7 levels.
                 if (row.optString("pack_id", "") == "dewald_levels_2026_10_07") continue
+                if (OrderBlockPolicy.isOrderBlock(row)) {
+                    // Preserve formation/strength metadata for the shared filter.
+                    out.put(row)
+                    continue
+                }
                 add(
                     row.optString("kind", "LEVEL"),
                     row.optString("label", row.optString("kind", "LEVEL")),
@@ -3939,27 +3951,20 @@ class SafeActivity : FragmentActivity() {
         add("DLINE","D-LINE",dline?.optDouble("projected_line",Double.NaN) ?: Double.NaN,
             dline?.optString("status","") ?: "",dline?.optString("direction","") ?: "")
 
-        val blocks = overlayFeatures?.optJSONObject("order_blocks")
-        val obLabels = linkedMapOf("15m" to "15M OB","1h" to "1H OB","4h" to "4H OB","1D" to "1D OB","2D" to "2D OB")
-        if (blocks != null) {
-            obLabels.forEach { (tf,label) ->
-                val detail = blocks.optJSONObject(tf) ?: return@forEach
-                val rawDirection = detail.optString("direction","NONE")
-                add("OB",label,detail.optDouble("mid",Double.NaN),"",rawDirection,
-                    zoneLow=detail.optDouble("zone_low",Double.NaN),zoneHigh=detail.optDouble("zone_high",Double.NaN))
-            }
-        }
+        // Never reconstruct legacy OBs or resurrect a retired zone from a
+        // separate /features response. /state owns the active chart map.
         val volume=overlayFeatures?.optJSONObject("volume_context")
         if (volume?.optBoolean("exact_npoc",false)==true) add("NPOC","NPOC",volume.optDouble("untouched_poc",Double.NaN),"UNTOUCHED")
         add("DAILY","D HIGH",overlayFeatures?.optDouble("previous_day_high",Double.NaN) ?: Double.NaN)
         add("DAILY","D LOW",overlayFeatures?.optDouble("previous_day_low",Double.NaN) ?: Double.NaN)
         add("WEEKLY_OPEN","W OPEN",overlayFeatures?.optDouble("weekly_open",Double.NaN) ?: Double.NaN)
-        return out
+        return OrderBlockPolicy.filter(out, root?.optDouble("last_price", Double.NaN) ?: Double.NaN)
     }
 
     private fun requestChartOverlays(force: Boolean = false) {
         // Structural overlays, owner levels and strategy context are private.
         if (publicMarketOnly || !KyvoriqSecureSession.isPaired(this)) return
+        val requestSession = KyvoriqSecureSession.accessToken(this) ?: return
         val now = System.currentTimeMillis()
         if (!force && now - lastOverlayRequestMs < 15_000L) return
         lastOverlayRequestMs = now
@@ -3972,6 +3977,7 @@ class SafeActivity : FragmentActivity() {
         // disappear within their 15m/30m lifecycle without disturbing price ticks.
         getJson(backendBase + "/features") { ok, body ->
             handler.post {
+                if (publicMarketOnly || requestSession != KyvoriqSecureSession.accessToken(this)) return@post
                 if (ok) safe {
                     overlayFeatures = JSONObject(body)
                     apply()
@@ -3980,6 +3986,7 @@ class SafeActivity : FragmentActivity() {
         }
         getJson(backendBase + "/strategy") { ok, body ->
             handler.post {
+                if (publicMarketOnly || requestSession != KyvoriqSecureSession.accessToken(this)) return@post
                 if (ok) safe {
                     overlayStrategy = JSONObject(body)
                     apply()
@@ -4005,10 +4012,18 @@ class SafeActivity : FragmentActivity() {
             requestPublicSpotCandles(requestTf, token)
             return
         }
+        val requestSession = KyvoriqSecureSession.accessToken(this)
+        if (requestSession == null) {
+            chartRequestInFlight = false
+            enterPublicMarketMode()
+            requestPublicSpotCandles(requestTf, token)
+            return
+        }
         getJson(backendBase + "/chart?interval=" + requestTf) { ok, body ->
             handler.post {
                 if (token == chartRequestToken) chartRequestInFlight = false
                 if (!ok || token != chartRequestToken) return@post
+                if (publicMarketOnly || requestSession != KyvoriqSecureSession.accessToken(this)) return@post
 
                 safe {
                     val j = JSONObject(body)
@@ -5374,5 +5389,6 @@ class SafeActivity : FragmentActivity() {
         super.onDestroy()
     }
 }
+
 
 

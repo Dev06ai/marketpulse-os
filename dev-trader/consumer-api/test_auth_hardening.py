@@ -6,11 +6,13 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from auth import verify_access_token, AuthenticationRejected, AuthUnavailable
+from auth import verify_access_token, AuthenticationRejected, AuthUnavailable, signing_keys
 
 
 class JwtAdminGates(unittest.TestCase):
     def _principal(self, claims):
+        signing_keys.cache_clear()
+        self.addCleanup(signing_keys.cache_clear)
         signer = MagicMock()
         signer.get_signing_key_from_jwt.return_value.key = "trusted_public_key"
         with patch("auth.settings", return_value=(

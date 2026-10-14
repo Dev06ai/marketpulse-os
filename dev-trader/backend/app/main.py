@@ -218,6 +218,8 @@ def chart_overlay_payload(f, diag):
     if reaction_levels:
         order = {"SFP": 0, "NPOC": 1, "DAILY": 2, "WEEKLY_OPEN": 3, "OB": 4}
         for row in sorted(reaction_levels, key=lambda x: order.get(str(x.get("kind") or "").upper(), 9)):
+            if str(row.get("kind", "")).upper() in {"OB", "OB_ZONE", "SUPPLY_ZONE", "DEMAND_ZONE"}:
+                continue  # Legacy reaction scores are not formation strength.
             add(
                 str(row.get("kind") or "LEVEL").upper(),
                 str(row.get("label") or row.get("kind") or "LEVEL"),
@@ -240,14 +242,6 @@ def chart_overlay_payload(f, diag):
         if bool(volume.get("exact_npoc")) and volume.get("untouched_poc") is not None:
             add("NPOC", "NPOC", volume.get("untouched_poc"), "UNTOUCHED", source="EXECUTED_TRADE_PROFILE")
 
-        labels = {"15m": "15M OB", "1h": "1H OB", "4h": "4H OB", "1D": "1D OB", "2D": "2D OB"}
-        blocks = getattr(f, "order_blocks", {}) or {}
-        for timeframe in ("15m", "1h", "4h", "1D", "2D"):
-            detail = blocks.get(timeframe) or {}
-            direction = str(detail.get("direction") or "NONE").upper()
-            if direction != "NONE":
-                add("OB", labels[timeframe], detail.get("mid"), direction=direction, source=f"{timeframe}_ORDER_BLOCK")
-
         sfp = (diag or {}).get("sfp_hunter") or {}
         add("SFP", "SFP", sfp.get("target_level"), sfp.get("status", ""), sfp.get("direction", ""), "SFP_HUNTER")
 
@@ -255,7 +249,9 @@ def chart_overlay_payload(f, diag):
     dline = ((diag or {}).get("setups") or {}).get("D-Line") or {}
     add("DLINE", "D-LINE", dline.get("projected_line"), dline.get("status", ""), dline.get("direction", ""), "DLINE")
 
-    return rows[:24]
+    # Chart-only admission leaves private strategy/reaction inputs unchanged.
+    strong = getattr(f, "chart_order_blocks", []) or []
+    return rows[:20] + [dict(row) for row in strong[:4]]
 
 
 def mobile_payload(include_research=True):

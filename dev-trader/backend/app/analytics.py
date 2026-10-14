@@ -8,6 +8,7 @@ from .models import Candle, MarketState, aggregate_candles
 from .elliott_wave import analyze_elliott
 from .volume_context import volume_context
 from .structure import structure_map
+from .chart_order_blocks import chart_order_blocks
 
 
 @dataclass
@@ -40,6 +41,7 @@ class MarketFeatures:
     order_block_direction: str = "NONE"
     order_block_mid: float | None = None
     order_blocks: dict = field(default_factory=dict)
+    chart_order_blocks: list = field(default_factory=list)
     golden_pocket: str = "NONE"
     elliott_phase: str = "UNKNOWN"
     elliott_direction: str = "NEUTRAL"
@@ -348,6 +350,7 @@ def _compute_features(state: MarketState) -> MarketFeatures:
     f.liquidity_low = min((c.low for c in recent), default=None)
     f.fvg_direction, f.fvg_mid = _fvg(state.candles_15)
     f.order_blocks = _multi_timeframe_order_blocks(state)
+    f.chart_order_blocks = chart_order_blocks(state, as_of)
     ob15 = f.order_blocks.get("15m") or _order_block_detail(state.candles_15)
     f.order_block_direction = str(ob15.get("direction") or "NONE")
     f.order_block_mid = ob15.get("mid")

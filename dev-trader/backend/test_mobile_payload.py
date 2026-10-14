@@ -40,8 +40,9 @@ def test_chart_overlay_payload_uses_reaction_aware_semantic_levels():
     rows = main.chart_overlay_payload(f, diag)
     kinds = {row['kind'] for row in rows}
     labels = {row['label'] for row in rows}
-    assert {'SFP', 'DLINE', 'OB', 'NPOC', 'DAILY', 'WEEKLY_OPEN'}.issubset(kinds)
-    assert {'D HIGH', 'D LOW', 'W OPEN', '15M OB', '1H OB'}.issubset(labels)
+    assert {'SFP', 'DLINE', 'NPOC', 'DAILY', 'WEEKLY_OPEN'}.issubset(kinds)
+    assert {'D HIGH', 'D LOW', 'W OPEN'}.issubset(labels)
+    assert 'OB' not in kinds  # Unscored legacy reactions are not strong chart OBs.
     assert '15M H' not in labels and '15M L' not in labels
     assert len(rows) <= 24
 

@@ -8,6 +8,7 @@ import os
 import re
 import time
 from dataclasses import dataclass
+from functools import lru_cache
 from urllib.parse import urlparse
 
 import jwt
@@ -44,13 +45,20 @@ def settings() -> tuple[str, str, str, frozenset[str]]:
             raise AuthUnavailable("Firebase issuer, project audience and signing keys must match")
     return issuer, audience, jwks, ids
 
+@lru_cache(maxsize=4)
+def signing_keys(jwks: str):
+    # Keep the bounded JWKS cache across requests, but do not cache individual
+    # keys forever: removed/rotated keys must age out with the JWKS document.
+    return PyJWKClient(jwks, cache_keys=False, lifespan=180, timeout=4)
+
+
 def verify_access_token(token: str) -> Principal:
     if not token or len(token) > 8192:
         raise AuthenticationRejected("Invalid access token")
     issuer, audience, jwks, admins = settings()
     is_firebase = urlparse(issuer).hostname == "securetoken.google.com"
     try:
-        signing_key = PyJWKClient(jwks, cache_keys=True, lifespan=180).get_signing_key_from_jwt(token)
+        signing_key = signing_keys(jwks).get_signing_key_from_jwt(token)
         claims = jwt.decode(
             token, signing_key.key,
             algorithms=["RS256"] if is_firebase else ["RS256", "ES256"], audience=audience,
@@ -60,6 +68,8 @@ def verify_access_token(token: str) -> Principal:
             },
             leeway=20,
         )
+    except jwt.PyJWKClientConnectionError:
+        raise AuthUnavailable("Identity signing keys unavailable") from None
     except (jwt.PyJWTError, ConnectionError, ValueError, OSError):
         raise AuthenticationRejected("Invalid access token") from None
     sub = claims.get("sub")
