@@ -148,7 +148,7 @@ jobs:
           grep -Fq 'kyvoriq_trade_the_plot' "$UI"
           ! grep -Fq 'leftMargin = -dp(10)' "$UI"
           echo 'Public chart has no private signals, trading or fake LIVE badge.'
-      - name: Verify slim 4x1 widget and reference-brand notifications
+      - name: Verify slim 4x1 widget, minimal background status and actionable notifications
         shell: bash
         run: |
           set -euo pipefail
@@ -182,10 +182,16 @@ jobs:
               assert 'kyvoriq_trade_the_plot' in (base/rel).read_text()
           service=Path('dev-trader/android/app/src/main/java/com/devtrader/app/SignalService.kt').read_text()
           provider=Path('dev-trader/android/app/src/main/java/com/devtrader/app/KyvoriqWidgetProvider.kt').read_text()
-          assert 'views.setImageViewResource(R.id.notif_title, R.drawable.kyvoriq_concentric_wordmark)' in service
+          assert 'setCustomContentView(' not in service
+          assert 'setCustomBigContentView(' not in service
+          assert 'buildServiceNotification(state: ServiceUiState)' in service
+          assert 'setOngoing(true)' in service and 'setSilent(true)' in service
+          assert 'if (tier == "INFO") return' in service
+          for alert in ('notifyVerifiedTradeEventOnce(', 'notifyTradeEvent(', 'checkCustomPriceAlerts(', 'alertChannelForTier('):
+              assert alert in service, alert
           assert 'val expanded = minHeight >= 170' in provider
           assert 'if (expanded) views.setTextViewText(R.id.widget_state' in provider
-          print('Compact 4x1 widget, both notification variants and dynamic view bindings verified.')
+          print('Compact widgets verified; background status is minimal and important alerts remain enabled.')
           PY
       - name: Verify compact wordmark safety and non-invasive 404 route fallback
         run: |
@@ -258,9 +264,9 @@ jobs:
           print("APK includes registered Firebase/Google identity config; values redacted.")
           PY
 
-      - name: Build connection recovery instrumentation
+      - name: Build device regression instrumentation
         working-directory: dev-trader/android
-        run: gradle assembleDebug assembleDebugAndroidTest --stacktrace -PdevTraderVersionCode=176 -PdevTraderVersionName=0.21.51
+        run: gradle assembleDebug assembleDebugAndroidTest --stacktrace -PdevTraderVersionCode="${{ steps.meta.outputs.version_code }}" -PdevTraderVersionName="${{ steps.meta.outputs.version_name }}"
 
       - name: Enable emulator hardware acceleration
         run: |
@@ -453,7 +459,7 @@ jobs:
             echo "Existing signed APK must not be replaced."
             exit 1
           fi
-          gh release create "$TAG" --target "$GITHUB_SHA" "$APK" "dev-trader-update.json#dev-trader-update.json" --title "KYVORIQ ${{ steps.meta.outputs.version_name }}" --notes "Signed KYVORIQ Build ${{ steps.meta.outputs.version_code }}: automatic recovery from timeouts and network changes; independent public chart fallback; validated offline candle cache with stale labels; repaired background stale-socket recovery. Preserves Build 175 chart labels, account UI, signing identity and execution safeguards. Device regression tests are required before publication."
+          gh release create "$TAG" --target "$GITHUB_SHA" "$APK" "dev-trader-update.json#dev-trader-update.json" --title "KYVORIQ ${{ steps.meta.outputs.version_name }}" --notes "Signed KYVORIQ Build ${{ steps.meta.outputs.version_code }}: quiet mandatory Android foreground status replaces the oversized LIVE notification; important price, signal, execution and safety alerts preserved; warm ivory identity, chart, widgets and account UI; fluid sliding chart timeframe and Insights selection pills. Preserves the existing authenticated account, download recovery, chart and execution safeguards. Device regression tests required before publication."
 
       - name: Publish update manifest
         env:
