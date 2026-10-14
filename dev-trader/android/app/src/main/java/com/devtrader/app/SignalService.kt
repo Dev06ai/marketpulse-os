@@ -13,8 +13,6 @@ import android.os.Build
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
-import android.view.View
-import android.widget.RemoteViews
 import androidx.core.app.NotificationCompat
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -55,15 +53,6 @@ class SignalService : Service() {
         RECONNECTING,
         AUTH_REQUIRED
     }
-
-    private data class ServiceNotificationModel(
-        val chip: String,
-        val subtitle: String,
-        val body: String,
-        val chipBackground: Int,
-        val chipTextColor: Int,
-        val animate: Boolean
-    )
 
     private var lastServiceUiState: ServiceUiState? = null
     private val handler = Handler(Looper.getMainLooper())
@@ -152,10 +141,10 @@ class SignalService : Service() {
         manager.createNotificationChannel(
             NotificationChannel(
                 SERVICE_CHANNEL,
-                "KYVORIQ Background Service",
+                "KYVORIQ • Quiet monitoring",
                 NotificationManager.IMPORTANCE_LOW
             ).apply {
-                description = "KYVORIQ live market and signal monitoring."
+                description = "Silent Android-required status; important market alerts use separate channels."
                 setShowBadge(false)
                 lockscreenVisibility = Notification.VISIBILITY_PRIVATE
             }
@@ -565,91 +554,27 @@ class SignalService : Service() {
         }
     }
 
-    private fun serviceNotificationModel(state: ServiceUiState): ServiceNotificationModel =
-        when (state) {
-            ServiceUiState.LIVE -> ServiceNotificationModel(
-                chip = "LIVE",
-                subtitle = "Secure monitoring active",
-                body = "BTC / USDT · Alerts enabled",
-                chipBackground = R.drawable.notification_chip_live,
-                chipTextColor = getColor(R.color.kyvoriq_charcoal),
-                animate = true
-            )
-            ServiceUiState.DEGRADED -> ServiceNotificationModel(
-                chip = "DELAYED",
-                subtitle = "Market feed needs attention",
-                body = "Monitoring continues • fresh data required for entries",
-                chipBackground = R.drawable.notification_chip_degraded,
-                chipTextColor = getColor(R.color.kyvoriq_charcoal),
-                animate = false
-            )
-            ServiceUiState.AUTH_REQUIRED -> ServiceNotificationModel(
-                chip = "PAIRING",
-                subtitle = "Secure session expired",
-                body = "Open KYVORIQ to pair this device securely",
-                chipBackground = R.drawable.notification_chip_degraded,
-                chipTextColor = getColor(R.color.kyvoriq_charcoal),
-                animate = false
-            )
-            ServiceUiState.RECONNECTING -> ServiceNotificationModel(
-                chip = "SYNCING",
-                subtitle = "Restoring live monitoring",
-                body = "Secure connection interrupted. Retrying automatically.",
-                chipBackground = R.drawable.notification_chip_reconnecting,
-                chipTextColor = getColor(R.color.kyvoriq_gold),
-                animate = true
-            )
-            ServiceUiState.CONNECTING -> ServiceNotificationModel(
-                chip = "STARTING",
-                subtitle = "Starting signal engine",
-                body = "Opening secure live monitoring channel",
-                chipBackground = R.drawable.notification_chip_connecting,
-                chipTextColor = getColor(R.color.kyvoriq_gold),
-                animate = true
-            )
-        }
-
-    private fun applyServiceRemoteViews(
-        views: RemoteViews,
-        model: ServiceNotificationModel,
-        expanded: Boolean
-    ) {
-        views.setImageViewResource(R.id.notif_logo, R.drawable.kyvoriq_emblem_intro_tight)
-        views.setImageViewResource(R.id.notif_title, R.drawable.kyvoriq_concentric_wordmark)
-        views.setTextViewText(R.id.notif_subtitle, model.subtitle)
-        views.setTextViewText(R.id.notif_chip, model.chip)
-        views.setInt(R.id.notif_chip, "setBackgroundResource", model.chipBackground)
-        views.setTextColor(R.id.notif_chip, model.chipTextColor)
-        if (expanded) {
-            views.setTextViewText(R.id.notif_body, model.body)
-            views.setViewVisibility(R.id.notif_pulse, if (model.animate) View.VISIBLE else View.INVISIBLE)
-        }
-    }
-
+    // The foreground notification is mandatory on Android for continuous monitoring.
+    // Keep it quiet, system-standard and badge-free; real alerts retain separate channels.
     private fun buildServiceNotification(state: ServiceUiState): Notification {
-        val model = serviceNotificationModel(state)
-        val launchIntent = Intent(this, SafeActivity::class.java)
+        val message = when (state) {
+            ServiceUiState.LIVE -> "Background monitoring"
+            ServiceUiState.DEGRADED -> "Market data delayed"
+            ServiceUiState.RECONNECTING -> "Restoring connection"
+            ServiceUiState.CONNECTING -> "Starting background monitoring"
+            ServiceUiState.AUTH_REQUIRED -> "Secure sign-in required"
+        }
         val pending = PendingIntent.getActivity(
-            this, 3100, launchIntent,
+            this, SERVICE_NOTIFICATION_ID,
+            Intent(this, SafeActivity::class.java),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
-
-        val collapsed = RemoteViews(packageName, R.layout.notification_kyvoriq_collapsed).apply {
-            applyServiceRemoteViews(this, model, expanded = false)
-        }
-        val expanded = RemoteViews(packageName, R.layout.notification_kyvoriq_expanded).apply {
-            applyServiceRemoteViews(this, model, expanded = true)
-        }
-
         return NotificationCompat.Builder(this, SERVICE_CHANNEL)
             .setSmallIcon(R.drawable.ic_stat_kyvoriq)
             .setColor(getColor(R.color.kyvoriq_gold))
             .setContentTitle("KYVORIQ")
-            .setContentText(model.subtitle)
+            .setContentText(message)
             .setContentIntent(pending)
-            .setCustomContentView(collapsed)
-            .setCustomBigContentView(expanded)
-            .setStyle(NotificationCompat.DecoratedCustomViewStyle())
             .setOngoing(true)
             .setSilent(true)
             .setOnlyAlertOnce(true)
@@ -733,6 +658,8 @@ class SignalService : Service() {
             confidence >= 0.85 -> "PRIORITY"
             else -> "INFO"
         }
+        // Do not send routine low-confidence updates as notifications.
+        if (tier == "INFO") return
         val launchIntent = Intent(this, SafeActivity::class.java)
         val pending = PendingIntent.getActivity(
             this, SIGNAL_NOTIFICATION_ID, launchIntent,
