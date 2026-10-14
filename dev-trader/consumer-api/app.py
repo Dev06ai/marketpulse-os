@@ -16,6 +16,7 @@ from fastapi.responses import JSONResponse
 
 from auth import verify_access_token, Principal, AuthenticationRejected, AuthUnavailable
 from access_policy import Tier, FEATURE_MIN_TIER, OWNER_ONLY, entitled, grants, parse_tier
+from rate_limit import check_consumer_rate, LimiterUnavailable
 
 app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 
@@ -26,6 +27,17 @@ async def safety_headers(request: Request, call_next):
         return JSONResponse({"detail": "Invalid content length"}, status_code=400)
     if int(supplied_length) > 16_384:
         return JSONResponse({"detail": "Request too large"}, status_code=413)
+    if request.url.path.startswith("/v1/") and os.getenv("KYVORIQ_CONSUMER_OIDC_ISSUER", "").strip():
+        # Rate limiting is mandatory once identity goes live. No permissive
+        # "Redis down, try anyway" fallback for authenticated consumers.
+        try:
+            allowed, wait = await check_consumer_rate(request.client.host if request.client else "unknown")
+        except LimiterUnavailable:
+            return JSONResponse({"detail": "Consumer security service unavailable"},
+                                status_code=503, headers={"Cache-Control": "no-store"})
+        if not allowed:
+            return JSONResponse({"detail": "Too many requests"}, status_code=429,
+                                headers={"Retry-After": str(wait), "Cache-Control": "no-store"})
     response = await call_next(request)
     response.headers.update({
         "Cache-Control": "private, no-store",
@@ -37,6 +49,8 @@ async def safety_headers(request: Request, call_next):
     return response
 
 def require_identity(authorization: str | None = Header(default=None)) -> Principal:
+    if os.getenv("KYVORIQ_CONSUMER_AUTH_ENABLED", "") != "true":
+        raise HTTPException(503, "Consumer authentication not activated")
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(401, "Authentication required", headers={"WWW-Authenticate": "Bearer"})
     try:
@@ -74,7 +88,30 @@ def authoritative_tier(subject: str) -> Tier:
 
 @app.get("/livez")
 def livez():
+    # Liveness does not claim account readiness.
     return {"status": "running"}
+
+@app.get("/readyz", include_in_schema=False)
+def readyz():
+    # Never claim consumer login has launched just because Uvicorn can start.
+    # Return no actual issuer, client IDs, passwords or private connection URL.
+    configured = (
+        os.getenv("KYVORIQ_CONSUMER_AUTH_ENABLED", "") == "true"
+        and bool(os.getenv("KYVORIQ_CONSUMER_OIDC_ISSUER", "").strip())
+        and bool(os.getenv("KYVORIQ_CONSUMER_OIDC_AUDIENCE", "").strip())
+        and bool(os.getenv("KYVORIQ_CONSUMER_OIDC_JWKS_URL", "").strip())
+        and bool(os.getenv("KYVORIQ_CONSUMER_DATABASE_URL", "").strip())
+        and os.getenv("KYVORIQ_CONSUMER_REDIS_URL", "").startswith("rediss://")
+        and len(os.getenv("KYVORIQ_RATE_LIMIT_HMAC_KEY", "").encode()) >= 32
+    )
+    if not configured:
+        return JSONResponse(
+            {"status": "not_configured", "consumer_login_live": False},
+            status_code=503, headers={"Cache-Control": "no-store"}
+        )
+    # Config presence alone is not an end-to-end email/login test. The
+    # deployment gate must separately verify IdP, DB, Redis and mail flows.
+    return {"status": "configured", "consumer_login_live": False}
 
 @app.get("/v1/catalog")
 def catalog():

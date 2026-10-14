@@ -20,6 +20,19 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class HeroChartVisualTest {
     private val inst get() = InstrumentationRegistry.getInstrumentation()
+    private fun activeWindowLabels(): List<String> {
+        // Account sheet is an Android Dialog with its OWN window. Never look
+        // for dialog rows under activity.window.decorView (false negatives).
+        val labels = mutableListOf<String>()
+        fun visit(node: android.view.accessibility.AccessibilityNodeInfo?) {
+            if (node == null) return
+            node.text?.toString()?.let { labels.add(it) }
+            node.contentDescription?.toString()?.let { labels.add(it) }
+            for (i in 0 until node.childCount) visit(node.getChild(i))
+        }
+        visit(inst.uiAutomation.rootInActiveWindow)
+        return labels
+    }
     private fun children(v: View): List<View> = listOf(v) +
         if (v is ViewGroup) (0 until v.childCount).flatMap { children(v.getChildAt(it)) } else emptyList()
     private fun screenshot(name: String) {
@@ -123,11 +136,54 @@ class HeroChartVisualTest {
             SystemClock.sleep(120)
             screenshot("ob-price-labels")
             inst.runOnMainSync {
+                val chart = children(activity.window.decorView)
+                    .filterIsInstance<MarketChartView>().first()
+                val badges = chart.visibleObBadgesForTest()
+                assertTrue("No more than three crowded OB labels", badges.size <= 3)
+                for (i in badges.indices) for (j in i+1 until badges.size) {
+                    assertFalse("OB badges must not overlap",
+                        android.graphics.RectF.intersects(badges[i], badges[j]))
+                    assertTrue("OB badges need 8dp vertical air",
+                        kotlin.math.abs(badges[i].centerY() - badges[j].centerY()) >=
+                            (badges[i].height()+badges[j].height())/2 +
+                            7f*activity.resources.displayMetrics.density)
+                }
+                val pager = chart.obPageControlForTest()
+                assertNotNull("Crowded OB sets must remain browsable", pager)
+                if (pager != null) {
+                    tap(chart, pager.centerX(), pager.centerY())
+                }
+            }
+            SystemClock.sleep(110)
+            screenshot("ob-next-page")
+            // Build 161 consumer Insights must not expose retired debug cards
+            // to anyone, including a locally paired owner.
+            inst.runOnMainSync {
+                val all = children(activity.window.decorView)
+                all.filterIsInstance<Button>().first {
+                    it.contentDescription == "Workspace INSIGHTS"
+                }.performClick()
+                val titles = children(activity.window.decorView)
+                    .filterIsInstance<android.widget.TextView>()
+                    .filter { it.isShown }.map { it.text.toString().uppercase() }
+                for (banned in listOf("ALERT INTELLIGENCE", "POSITION RISK HEAT", "CONNECTION")) {
+                    assertFalse("Retired Insights card leaked: $banned",
+                        titles.any { it == banned })
+                }
+                children(activity.window.decorView).filterIsInstance<Button>()
+                    .first { it.contentDescription == "Workspace TRADE" }.performClick()
+                assertTrue(children(activity.window.decorView)
+                    .any { it is KyvoriqGoldAccountButton })
                 children(activity.window.decorView).filterIsInstance<Button>()
                     .first { it.contentDescription == "Sign in or create a KYVORIQ account" }.performClick()
             }
             SystemClock.sleep(250)
             screenshot("account-free")
+            val consumerRows = activeWindowLabels()
+            for (name in listOf("Log in", "Sign up", "Continue with Google", "Forgot password?")) {
+                assertTrue("Missing consumer auth entry: $name in $consumerRows",
+                    consumerRows.any { it == name || it.startsWith("$name.") })
+            }
             assertFalse("Opening sheet must not grant owner access", KyvoriqSecureSession.isPaired(activity))
             inst.sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_BACK) // close account sheet
             SystemClock.sleep(200)
@@ -139,6 +195,9 @@ class HeroChartVisualTest {
             }
             SystemClock.sleep(250)
             screenshot("account-owner")
+            val ownerRows = activeWindowLabels()
+            assertTrue("Owner account needs explicit Sign out action",
+                ownerRows.any { it == "Sign out" || it.startsWith("Sign out.") })
         } catch (failure: Throwable) {
             screenshot("failure")
             throw failure

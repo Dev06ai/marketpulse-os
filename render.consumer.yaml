@@ -1,0 +1,34 @@
+# KYVORIQ consumer staging, deliberately SEPARATE from the Voroa/Bitget owner backend.
+# Blueprint provisions ONE free, isolated and fail-closed account API. It does not
+# automatically create or consume databases, Redis instances or trading keys.
+# Import only when the hosting workspace is active again.
+services:
+  - type: web
+    name: kyvoriq-consumer-accounts
+    runtime: python
+    plan: free
+    region: singapore
+    repo: https://github.com/Dev06ai/marketpulse-os
+    branch: feature/build161-ob-insights-account
+    rootDir: dev-trader/consumer-api
+    buildCommand: pip install --disable-pip-version-check -r requirements.txt
+    startCommand: uvicorn app:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /livez
+    autoDeploy: false
+    envVars:
+      - key: KYVORIQ_CONSUMER_AUTH_ENABLED
+        value: "false"
+      - key: KYVORIQ_CONSUMER_OIDC_ISSUER
+        sync: false
+      - key: KYVORIQ_CONSUMER_OIDC_AUDIENCE
+        sync: false
+      - key: KYVORIQ_CONSUMER_OIDC_JWKS_URL
+        sync: false
+      - key: KYVORIQ_CONSUMER_DATABASE_URL
+        sync: false
+      - key: KYVORIQ_CONSUMER_REDIS_URL
+        sync: false
+      - key: KYVORIQ_RATE_LIMIT_HMAC_KEY
+        sync: false
+      - key: KYVORIQ_ADMIN_SUBJECTS
+        sync: false

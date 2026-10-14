@@ -63,7 +63,7 @@ object KyvoriqTheme {
 }
 
 /** Native press feedback remains accessible and pauses when detached. */
-class KyvoriqButton(context: Context) : Button(context) {
+open class KyvoriqButton(context: Context) : Button(context) {
     override fun setPressed(pressed: Boolean) {
         super.setPressed(pressed)
         animate().cancel()

@@ -1,0 +1,101 @@
+name: KYVORIQ Firebase-connected 162 • signed testing candidate
+on:
+  workflow_dispatch:
+    inputs:
+      firebase_project_id:
+        description: "Existing authorized Firebase project ID; no credential values"
+        type: string
+        required: true
+      firebase_android_app_id:
+        description: "Firebase Android app ID for com.devtrader.app"
+        type: string
+        required: true
+      google_web_client_id:
+        description: "Google OAuth Web client ID for Firebase Auth"
+        type: string
+        required: true
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      FIREBASE_API_KEY: ${{ secrets.KYVORIQ_FIREBASE_WEB_API_KEY }}
+      FIREBASE_PROJECT_ID: ${{ inputs.firebase_project_id }}
+      FIREBASE_ANDROID_APP_ID: ${{ inputs.firebase_android_app_id }}
+      GOOGLE_WEB_CLIENT_ID: ${{ inputs.google_web_client_id }}
+      KEYSTORE_B64: ${{ secrets.DEV_TRADER_KEYSTORE_BASE64 }}
+      DEV_TRADER_KEYSTORE_PASSWORD: ${{ secrets.DEV_TRADER_KEYSTORE_PASSWORD }}
+      DEV_TRADER_KEY_ALIAS: ${{ secrets.DEV_TRADER_KEY_ALIAS }}
+      DEV_TRADER_KEY_PASSWORD: ${{ secrets.DEV_TRADER_KEY_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.6.0'
+      - name: Fail closed if Firebase/Google project registration is incomplete
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import os,re
+          project=os.environ.get('FIREBASE_PROJECT_ID','')
+          app=os.environ.get('FIREBASE_ANDROID_APP_ID','')
+          web=os.environ.get('GOOGLE_WEB_CLIENT_ID','')
+          api=os.environ.get('FIREBASE_API_KEY','')
+          assert re.fullmatch(r'[a-z][a-z0-9-]{5,29}',project), 'Invalid Firebase project ID'
+          assert re.fullmatch(r'1:[0-9]+:android:[A-Fa-f0-9]+(?:[A-Fa-f0-9:]*)?',app), 'Invalid Android Firebase app ID'
+          assert re.fullmatch(r'[0-9]+-[a-zA-Z0-9_-]+\.apps\.googleusercontent\.com',web), 'Google OAuth Web client required'
+          assert re.fullmatch(r'AIza[A-Za-z0-9_-]{30,}',api), 'Firebase Web API key not installed in GitHub secrets'
+          assert os.environ.get('KEYSTORE_B64'), 'Release keystore missing'
+          assert os.environ.get('DEV_TRADER_KEYSTORE_PASSWORD'), 'Release store password missing'
+          assert os.environ.get('DEV_TRADER_KEY_ALIAS'), 'Release alias missing'
+          assert os.environ.get('DEV_TRADER_KEY_PASSWORD'), 'Release key password missing'
+          print('Firebase configuration shapes and existing release signing setup verified.')
+          PY
+      - name: Decode existing signed-update keystore privately
+        run: |
+          set -euo pipefail
+          umask 077
+          printf '%s' "$KEYSTORE_B64" | base64 --decode > "$RUNNER_TEMP/kyvoriq-162.jks"
+      - name: Build Firebase-connected signed APK/AAB WITHOUT enabling subscriptions
+        working-directory: dev-trader/android
+        env:
+          DEV_TRADER_KEYSTORE_PATH: ${{ runner.temp }}/kyvoriq-162.jks
+        run: |
+          set -euo pipefail
+          export ORG_GRADLE_PROJECT_kyvoriqFirebaseApiKey="$FIREBASE_API_KEY"
+          export ORG_GRADLE_PROJECT_kyvoriqFirebaseAppId="$FIREBASE_ANDROID_APP_ID"
+          export ORG_GRADLE_PROJECT_kyvoriqFirebaseProjectId="$FIREBASE_PROJECT_ID"
+          export ORG_GRADLE_PROJECT_kyvoriqGoogleWebClientId="$GOOGLE_WEB_CLIENT_ID"
+          export ORG_GRADLE_PROJECT_devTraderVersionCode=162
+          export ORG_GRADLE_PROJECT_devTraderVersionName=0.21.37
+          gradle assembleRelease bundleRelease --no-daemon
+      - name: Assert original signing identity, package, and no private assets
+        run: |
+          set -euo pipefail
+          mkdir -p release
+          cp dev-trader/android/app/build/outputs/apk/release/app-release.apk release/KYVORIQ-0.21.37-162-FIREBASE-TEST.apk
+          cp dev-trader/android/app/build/outputs/bundle/release/app-release.aab release/KYVORIQ-0.21.37-162-FIREBASE-TEST.aab
+          SIGNER="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -1)"
+          "$SIGNER" verify --print-certs release/KYVORIQ-0.21.37-162-FIREBASE-TEST.apk > "$RUNNER_TEMP/cert-details"
+          grep -Fq '17e4c550aa235dae926058654f203ecae9d7b30b432bde9dc2c358e28360cbab' "$RUNNER_TEMP/cert-details"
+          AAPT="$(find "$ANDROID_HOME/build-tools" -type f -name aapt | sort -V | tail -1)"
+          "$AAPT" dump badging release/KYVORIQ-0.21.37-162-FIREBASE-TEST.apk | head -1 | grep -E "^package: name='com.devtrader.app' versionCode='162' versionName='0.21.37'"
+          unzip -tq release/KYVORIQ-0.21.37-162-FIREBASE-TEST.apk | grep -Fq 'No errors detected'
+          ! unzip -Z1 release/KYVORIQ-0.21.37-162-FIREBASE-TEST.apk | grep -Eqi 'google-services\.json|service.account|firebase.admin|\.jks$|\.env$'
+          (cd release && sha256sum KYVORIQ* > SHA256SUMS.txt)
+          echo 'SIGNED_FIREBASE_CONFIGURED_CANDIDATE_CREATED_NOT_PUBLISHED'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: KYVORIQ-162-FIREBASE-TESTING-NOT-PUBLIC
+          path: release/
+          retention-days: 7
+          if-no-files-found: error
+      - name: Remove temporary signing material
+        if: always()
+        run: rm -f "$RUNNER_TEMP/kyvoriq-162.jks"
