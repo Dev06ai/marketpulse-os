@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
-      SOURCE_COMMIT: 5723329af9b4f0ff4249bc5029f6080896ab90f1
+      SOURCE_COMMIT: 1d6124fac572f5a49e40b0b476766e8d23879f40
       CONSUMER_API_ORIGIN: 
       FIREBASE_PROJECT_ID: kyvoriq
       FIREBASE_ANDROID_APP_ID: 1:320009995893:android:1ffee780b5cc138a1d5a3c
@@ -24,10 +24,10 @@ jobs:
           [[ "$SOURCE_COMMIT" =~ ^[0-9a-f]{40}$ ]]
           # Never run signing secrets against an arbitrary checkout.
           # This is the reviewed consumer-auth commit with 30 tests and five emulator layouts.
-          [[ "$SOURCE_COMMIT" == "5723329af9b4f0ff4249bc5029f6080896ab90f1" ]]
+          [[ "$SOURCE_COMMIT" == "1d6124fac572f5a49e40b0b476766e8d23879f40" ]]
       - uses: actions/checkout@v4
         with:
-          ref: 5723329af9b4f0ff4249bc5029f6080896ab90f1
+          ref: 1d6124fac572f5a49e40b0b476766e8d23879f40
           persist-credentials: false
       - uses: actions/setup-java@v4
         with:
