@@ -57,7 +57,16 @@ class VolumeProfileClarityTest {
                 .put("source", "MINDPILLAR_SCREENSHOT_2026_10_14")
                 .put("price", price).put("reference_expires_ms", Long.MAX_VALUE))
         }
-        chart.setSessionProfiles(JSONArray().put(profile))
+        // An older session may still be within the visible candle window.
+        // The current session must be the only default VP histogram/readout.
+        val prior = JSONObject().put("source", "OHLCV_15M_ESTIMATE")
+            .put("start_ms", startMs + 38 * 3_600_000L)
+            .put("end_ms", startMs + 69 * 3_600_000L)
+            .put("val", 82100.0).put("poc", 83750.0).put("vah", 84200.0)
+            .put("bins", JSONArray()
+                .put(JSONObject().put("price", 82100.0).put("volume", 15.0))
+                .put(JSONObject().put("price", 83750.0).put("volume", 60.0)))
+        chart.setSessionProfiles(JSONArray().put(prior).put(profile))
         chart.setReferenceLevels(extras)
         chart.setData(candles, null, null, 82800.0, JSONArray())
         chart.layout(0, 0, px(393), px(650))
@@ -100,6 +109,8 @@ class VolumeProfileClarityTest {
         assertTrue(readout[0].startsWith("POC 83,200."))
         assertTrue(readout[1].startsWith("VAH 84,000."))
         assertTrue(readout[2].startsWith("VAL 81,700."))
+        assertFalse("Older session must not take over current POC display",
+            readout.any { it.contains("83,750") })
         assertTrue("VP prices must not be duplicated on top of the live-price badge",
             chart.visibleAxisTagTextsForTest().none { it.startsWith("POC ") })
     }
