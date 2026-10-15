@@ -356,6 +356,129 @@ class KyvoriqMembershipCarousel(private val activity: FragmentActivity) {
         return dialog
     }
 
+
+    /**
+     * Custom ivory/charcoal details bottom sheet, never Android's grey AlertDialog.
+     * There is deliberately no route from this sheet to Play purchase APIs.
+     */
+    private fun showPlanDetails(plan: Plan) {
+        if (activity.isFinishing || activity.isDestroyed) return
+        val sheet = Dialog(activity)
+        val body = LinearLayout(activity).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(22), dp(21), dp(22), dp(21))
+            background = GradientDrawable(GradientDrawable.Orientation.TL_BR,
+                intArrayOf(Color.rgb(36, 35, 32), Color.rgb(17, 18, 20), nearBlack)).apply {
+                cornerRadius = dp(29).toFloat()
+                setStroke(dp(1), Color.argb(200, 243, 228, 196))
+            }
+        }
+        val scroll = ScrollView(activity).apply {
+            isFillViewport = false
+            isVerticalScrollBarEnabled = false
+            addView(body, ScrollView.LayoutParams(-1, -2))
+        }
+        body.addView(View(activity).apply {
+            background = roundSurface(softIvory, 90f)
+        }, LinearLayout.LayoutParams(dp(38), dp(4)).apply {
+            gravity = Gravity.CENTER_HORIZONTAL
+            bottomMargin = dp(17)
+        })
+        body.addView(TextView(activity).apply {
+            text = "K Y V O R I Q    /    " + plan.name
+            textSize = 10.5f
+            letterSpacing = .10f
+            setTextColor(softIvory)
+        })
+        body.addView(TextView(activity).apply {
+            text = plan.name.lowercase().replaceFirstChar { it.uppercase() } + " membership"
+            textSize = 28f
+            typeface = Typeface.create("serif", Typeface.NORMAL)
+            setTextColor(ivory)
+            setPadding(0, dp(12), 0, dp(7))
+        })
+        val tier = when (plan.name) {
+            "PRO" -> KyvoriqAccessTier.PRO
+            "ELITE" -> KyvoriqAccessTier.ELITE
+            else -> KyvoriqAccessTier.BASIC
+        }
+        val amount = KyvoriqRegionalPricing.displayAmount(tier, quote)
+        body.addView(TextView(activity).apply {
+            text = if (tier == KyvoriqAccessTier.BASIC) "Free forever"
+                else if (amount == "TBA") "Regional launch price coming soon"
+                else amount + " / month  •  Indicative preview"
+            textSize = 14f
+            setTextColor(softIvory)
+            setPadding(0, 0, 0, dp(16))
+        })
+        body.addView(View(activity).apply {
+            background = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,
+                intArrayOf(softIvory, Color.TRANSPARENT))
+        }, LinearLayout.LayoutParams(-1, dp(1)).apply { bottomMargin = dp(15) })
+        plan.features.forEach { feature ->
+            val line = LinearLayout(activity).apply {
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(0, dp(8), 0, dp(8))
+            }
+            line.addView(TextView(activity).apply {
+                text = "✓"
+                textSize = 17f
+                setTextColor(softIvory)
+            }, LinearLayout.LayoutParams(dp(28), -2))
+            line.addView(TextView(activity).apply {
+                text = feature
+                textSize = 14f
+                setTextColor(ivory)
+                setLineSpacing(dp(2).toFloat(), 1.08f)
+            }, LinearLayout.LayoutParams(0, -2, 1f))
+            body.addView(line, LinearLayout.LayoutParams(-1, -2))
+        }
+        body.addView(TextView(activity).apply {
+            text = "Preview only. Paid memberships and checkout are not active. " +
+                "Trading signals are coming soon. Final localized prices, cancellation " +
+                "terms and renewal details will be displayed by Google Play when available."
+            textSize = 12f
+            setLineSpacing(dp(2).toFloat(), 1.07f)
+            setTextColor(muted)
+            setPadding(dp(13), dp(13), dp(13), dp(13))
+            background = roundSurface(Color.rgb(31, 32, 33), 16f, Color.rgb(75, 72, 66))
+        }, LinearLayout.LayoutParams(-1, -2).apply {
+            topMargin = dp(16); bottomMargin = dp(15)
+        })
+        val back = Button(activity).apply {
+            text = "BACK TO MEMBERSHIPS"
+            isAllCaps = false
+            textSize = 14f
+            setTextColor(nearBlack)
+            setTypeface(null, Typeface.BOLD)
+            stateListAnimator = null
+            backgroundTintList = null
+            background = RippleDrawable(
+                ColorStateList.valueOf(Color.argb(40, 45, 42, 37)),
+                roundSurface(ivory, 60f), null)
+            setOnClickListener { sheet.dismiss() }
+        }
+        body.addView(back, LinearLayout.LayoutParams(-1, dp(52)))
+        sheet.setContentView(scroll)
+        sheet.show()
+        sheet.window?.apply {
+            setBackgroundDrawable(android.graphics.drawable.ColorDrawable(Color.TRANSPARENT))
+            addFlags(android.view.WindowManager.LayoutParams.FLAG_DIM_BEHIND)
+            attributes = attributes.apply {
+                gravity = Gravity.BOTTOM
+                dimAmount = .72f
+            }
+            setLayout(activity.resources.displayMetrics.widthPixels - dp(15),
+                ViewGroup.LayoutParams.WRAP_CONTENT)
+        }
+        if (KyvoriqTheme.motionEnabled(activity)) {
+            body.alpha = 0f
+            body.translationY = dp(24).toFloat()
+            body.animate().alpha(1f).translationY(0f).setDuration(330L)
+                .setInterpolator(KyvoriqTheme.motion).start()
+        }
+    }
+
     private inner class PlanAdapter(
         private val context: Context,
         private val items: List<Plan>
