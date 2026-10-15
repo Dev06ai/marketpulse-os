@@ -309,7 +309,8 @@ jobs:
           test -s dev-trader/android/app/src/androidTest/java/com/devtrader/app/DewaldSnapshotReferencesTest.kt
           grep -Fq 'DewaldSnapshotReferences.merge(value)' dev-trader/android/app/src/main/java/com/devtrader/app/MarketChartView.kt
           grep -Fq 'String.format(Locale.US, "%,.1f", value)' dev-trader/android/app/src/main/java/com/devtrader/app/MarketChartView.kt
-          ! grep -Ei 'Reference\\("FIB|Reference\\("OB' dev-trader/android/app/src/main/java/com/devtrader/app/DewaldSnapshotReferences.kt
+          ! grep -Fq 'Reference("FIB"' dev-trader/android/app/src/main/java/com/devtrader/app/DewaldSnapshotReferences.kt
+          ! grep -Fq 'Reference("OB"' dev-trader/android/app/src/main/java/com/devtrader/app/DewaldSnapshotReferences.kt
           test -f dev-trader/android/app/src/main/java/com/devtrader/app/MarketChartView.kt
           grep -Fq 'val tag = "TAPPED"' dev-trader/android/app/src/main/java/com/devtrader/app/MarketChartView.kt
           grep -Fq 'tapped_at_ms' dev-trader/android/app/src/main/java/com/devtrader/app/SafeActivity.kt
