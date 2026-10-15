@@ -189,6 +189,7 @@ class SafeActivity : FragmentActivity() {
     private var updatePoll: Runnable? = null
     private val updateVerifying = AtomicBoolean(false)
     private var updateRecoveryUrl: String? = null
+    private val directUpdateInFlight = AtomicBoolean(false)
     private var awaitingUpdateInstallPermission = false
     private val updatePrefs by lazy { getSharedPreferences("kyvoriq_updater_v2", Context.MODE_PRIVATE) }
     private lateinit var checkButton: Button
@@ -5422,11 +5423,11 @@ class SafeActivity : FragmentActivity() {
                             updateButton.isEnabled = true
                             setUpdateStatus("UPDATE METADATA INVALID")
                         } else {
+                            // Keep the official download reachable even when the Android
+                            // DownloadManager cannot resolve GitHub release redirects.
+                            updateRecoveryUrl = apkUrl
                             setUpdateStatus("DOWNLOADING • v" + remoteName)
-                            // Android DownloadManager follows release redirects more reliably than an
-                            // Activity-scoped OkHttp transfer. Do not append a cache-busting query
-                            // to a signed, version-pinned GitHub release asset URL.
-                            startSystemUpdateDownload(apkUrl, expectedSha, remoteName)
+                            downloadAndInstallUpdate(apkUrl, expectedSha, remoteName)
                         }
                     }
                 }
@@ -5437,7 +5438,7 @@ class SafeActivity : FragmentActivity() {
 
     /** Persist signed release downloads outside the Activity lifecycle. */
     private fun startSystemUpdateDownload(apkUrl: String, expectedSha: String, versionName: String) {
-        updateRecoveryUrl = null
+        updateRecoveryUrl = apkUrl
         runCatching {
             require(Regex("https://github\\.com/Dev06ai/marketpulse-os/releases/download/dev-trader-v[0-9]+\\.[0-9]+\\.[0-9]+-[0-9]+/app-release\\.apk").matches(apkUrl))
             require(Regex("[0-9a-fA-F]{64}").matches(expectedSha))
@@ -5464,13 +5465,13 @@ class SafeActivity : FragmentActivity() {
                 .putLong("download_started_ms", System.currentTimeMillis())
                 .putLong("last_download_progress_ms", System.currentTimeMillis())
                 .putLong("last_download_bytes", 0L).apply()
-            updateButton.isEnabled = false
-            setUpdateStatus("DOWNLOADING • Android service")
+            updateButton.isEnabled = true // The browser fallback must remain tappable.
+            setUpdateStatus("DOWNLOADING • Android fallback (tap for options)")
             pollSystemUpdate()
         }.onFailure {
-            // Retain checksum-verified OkHttp on devices without DownloadManager.
-            setUpdateStatus("DOWNLOADING • direct fallback")
-            downloadAndInstallUpdate(apkUrl, expectedSha, versionName)
+            updateRecoveryUrl = apkUrl
+            updateButton.isEnabled = true
+            setUpdateStatus("DOWNLOAD FAILED • ANDROID SERVICE (tap for options)")
         }
     }
 
@@ -5543,10 +5544,10 @@ class SafeActivity : FragmentActivity() {
                     setUpdateStatus("DOWNLOAD FAILED • STALLED • TAP FOR OPTIONS")
                     return
                 }
-                updateButton.isEnabled = false
+                updateButton.isEnabled = true // Keep release-page/browser access available.
                 setUpdateStatus(if (snapshot[0] == DownloadManager.STATUS_PAUSED.toLong())
-                    "DOWNLOADING • waiting for network"
-                    else "DOWNLOADING • " + snapshot[1] + "%")
+                    "DOWNLOADING • waiting for network (tap for options)"
+                    else "DOWNLOADING • " + snapshot[1] + "% (tap for options)")
                 val next = Runnable { pollSystemUpdate() }
                 updatePoll = next
                 handler.postDelayed(next, 1100L)
@@ -5616,109 +5617,152 @@ class SafeActivity : FragmentActivity() {
 
     private fun showUpdateRecoveryOptions() {
         val url = updateRecoveryUrl ?: return checkUpdate()
-        if (!Regex("https://github\\.com/Dev06ai/marketpulse-os/releases/download/dev-trader-v[0-9]+\\.[0-9]+\\.[0-9]+-[0-9]+/app-release\\.apk").matches(url)) {
+        if (!UpdateDownloadPolicy.isTrustedReleaseApkUrl(url)) {
             updateRecoveryUrl = null
             return checkUpdate()
         }
         android.app.AlertDialog.Builder(this)
-            .setTitle("KYVORIQ update download")
-            .setMessage("Android could not finish the signed APK download. Retry through Android Downloads or open the official GitHub release in your browser.")
-            .setPositiveButton("Retry download") { _, _ ->
-                updateRecoveryUrl = null
-                checkUpdate()
+            .setTitle("KYVORIQ signed APK")
+            .setMessage("Download from the app or open the verified GitHub APK in your browser. Both use the same official signed release.")
+            .setPositiveButton("Retry in app") { _, _ ->
+                if (directUpdateInFlight.get()) {
+                    setUpdateStatus("DOWNLOADING • already in progress")
+                } else {
+                    val id = updatePrefs.getLong("download_id", -1L)
+                    if (id > 0L) {
+                        runCatching { (getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager).remove(id) }
+                        clearPendingSystemUpdate()
+                    }
+                    checkUpdate()
+                }
             }
-            .setNeutralButton("Open release") { _, _ ->
-                val page = url.replace("/releases/download/", "/releases/tag/").removeSuffix("/app-release.apk")
+            .setNeutralButton("Download in browser") { _, _ ->
                 runCatching {
-                    startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(page))
+                    startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))
                         .addCategory(Intent.CATEGORY_BROWSABLE))
-                }.onFailure { setUpdateStatus("BROWSER UNAVAILABLE • RETRY UPDATE") }
+                }.onFailure {
+                    setUpdateStatus("BROWSER UNAVAILABLE • RETRY UPDATE")
+                }
             }
-            .setNegativeButton("Cancel", null)
+            .setNegativeButton("Close", null)
             .show()
     }
 
+    /**
+     * Primary transport: app-owned verified HTTPS stream. DownloadManager often gets
+     * stuck at 0 bytes behind GitHub's release-asset CDN redirects on some devices.
+     * Do not install anything before checking its pinned SHA-256 and APK archive.
+     */
     private fun downloadAndInstallUpdate(apkUrl: String, expectedSha: String, versionName: String) {
-        runCatching {
-            val request = Request.Builder().url(apkUrl).get().build()
-            restClient.newBuilder().readTimeout(30, TimeUnit.SECONDS)
-                .callTimeout(180, TimeUnit.SECONDS).build().newCall(request).enqueue(object : okhttp3.Callback {
-                override fun onFailure(call: okhttp3.Call, e: java.io.IOException) {
-                    handler.post {
-                        if (isFinishing || isDestroyed) return@post
-                        updateButton.isEnabled = true
-                        setUpdateStatus("UPDATE DOWNLOAD FAILED • RETRY")
-                    }
-                }
-
-                override fun onResponse(call: okhttp3.Call, response: Response) {
-                    val apk = File(File(cacheDir, "updates"), "dev-trader-" + versionName + ".apk")
-                    try {
-                        response.use {
-                            if (!it.isSuccessful || it.body == null) {
-                                handler.post {
-                                    if (isFinishing || isDestroyed) return@post
-                                    updateButton.isEnabled = true
-                                    setUpdateStatus("UPDATE DOWNLOAD FAILED • HTTP " + it.code)
-                                }
-                                return
-                            }
-                            val maxBytes = 64L * 1024 * 1024
-                            if (it.body!!.contentLength() > maxBytes) throw java.io.IOException("Update is too large")
-                            if (apk.parentFile?.mkdirs() != true && apk.parentFile?.isDirectory != true) {
-                                throw java.io.IOException("Update directory is unavailable")
-                            }
-                            val digest = MessageDigest.getInstance("SHA-256")
-                            FileOutputStream(apk).use { out ->
-                                it.body!!.byteStream().use { input ->
-                                    var bytes = 0L
-                                    val buffer = ByteArray(32 * 1024)
-                                    while (true) {
-                                        val count = input.read(buffer)
-                                        if (count <= 0) break
-                                        bytes += count
-                                        if (bytes > maxBytes) throw java.io.IOException("Update is too large")
-                                        digest.update(buffer, 0, count)
-                                        out.write(buffer, 0, count)
-                                    }
-                                }
-                            }
-                            val actualSha = digest.digest().joinToString("") { b -> "%02x".format(b) }
-                            if (!actualSha.equals(expectedSha, ignoreCase = true)) {
-                                apk.delete()
-                                handler.post {
-                                    if (isFinishing || isDestroyed) return@post
-                                    updateButton.isEnabled = true
-                                    setUpdateStatus("UPDATE BLOCKED • CHECKSUM FAILED")
-                                }
-                                return
-                            }
-                            handler.post {
-                                if (isFinishing || isDestroyed) return@post
-                                updateButton.isEnabled = true
-                                setUpdateStatus("UPDATE VERIFIED • INSTALLING v" + versionName)
-                                installApk(apk)
-                            }
-                        }
-                    } catch (_: Exception) {
-                        apk.delete()
-                        handler.post {
-                            if (isFinishing || isDestroyed) return@post
-                            updateButton.isEnabled = true
-                            setUpdateStatus("UPDATE DOWNLOAD FAILED • RETRY")
-                        }
-                    }
-                }
-            })
-        }.onFailure {
+        if (!UpdateDownloadPolicy.isTrustedReleaseApkUrl(apkUrl) ||
+            !Regex("[0-9a-fA-F]{64}").matches(expectedSha) ||
+            !Regex("[0-9]+\\.[0-9]+\\.[0-9]+").matches(versionName)) {
+            updateRecoveryUrl = null
+            updateButton.isEnabled = true
+            setUpdateStatus("UPDATE BLOCKED • INVALID RELEASE METADATA")
+            return
+        }
+        if (!directUpdateInFlight.compareAndSet(false, true)) return
+        updateRecoveryUrl = apkUrl
+        updateButton.isEnabled = true
+        setUpdateStatus("DOWNLOADING • secure direct download (tap for options)")
+        val request = Request.Builder().url(apkUrl)
+            .header("Accept", "application/octet-stream")
+            .header("Cache-Control", "no-cache").get().build()
+        val downloader = restClient.newBuilder()
+            .connectTimeout(15, TimeUnit.SECONDS)
+            .readTimeout(45, TimeUnit.SECONDS)
+            .callTimeout(150, TimeUnit.SECONDS)
+            .followRedirects(true)
+            .retryOnConnectionFailure(true)
+            .build()
+        val partial = File(File(cacheDir, "updates"), "dev-trader-" + versionName + ".apk.part")
+        val apk = File(File(cacheDir, "updates"), "dev-trader-" + versionName + ".apk")
+        fun fallback() {
+            partial.delete()
+            directUpdateInFlight.set(false)
             handler.post {
                 if (isFinishing || isDestroyed) return@post
                 updateButton.isEnabled = true
-                setUpdateStatus("UPDATE FAILED • RETRY")
+                setUpdateStatus("DOWNLOADING • trying Android service (tap for options)")
+                startSystemUpdateDownload(apkUrl, expectedSha, versionName)
             }
         }
-    }
+        runCatching {
+            downloader.newCall(request).enqueue(object : okhttp3.Callback {
+                override fun onFailure(call: okhttp3.Call, e: java.io.IOException) = fallback()
 
+                override fun onResponse(call: okhttp3.Call, response: Response) {
+                    val success = runCatching {
+                        response.use { http ->
+                            if (!http.isSuccessful) throw java.io.IOException("HTTP " + http.code)
+                            val body = http.body ?: throw java.io.IOException("Empty APK")
+                            val maxBytes = 64L * 1024L * 1024L
+                            if (body.contentLength() > maxBytes) throw java.io.IOException("Oversized APK")
+                            val parent = apk.parentFile ?: throw java.io.IOException("No cache directory")
+                            if (!parent.isDirectory && !parent.mkdirs())
+                                throw java.io.IOException("Update cache is unavailable")
+                            val digest = MessageDigest.getInstance("SHA-256")
+                            var bytes = 0L
+                            var lastUi = 0L
+                            FileOutputStream(partial).use { output ->
+                                body.byteStream().use { input ->
+                                    val buffer = ByteArray(32 * 1024)
+                                    while (true) {
+                                        val count = input.read(buffer)
+                                        if (count < 0) break
+                                        if (count == 0) continue
+                                        bytes += count
+                                        if (bytes > maxBytes) throw java.io.IOException("APK exceeds limit")
+                                        digest.update(buffer, 0, count)
+                                        output.write(buffer, 0, count)
+                                        val now = System.currentTimeMillis()
+                                        if (now - lastUi > 800L) {
+                                            lastUi = now
+                                            val pct = UpdateDownloadPolicy.percent(bytes, body.contentLength())
+                                            handler.post {
+                                                if (!isFinishing && !isDestroyed)
+                                                    setUpdateStatus("DOWNLOADING • " + pct + "% (tap for options)")
+                                            }
+                                        }
+                                    }
+                                    output.fd.sync()
+                                }
+                            }
+                            if (bytes < 100_000L) throw java.io.IOException("APK incomplete")
+                            if (body.contentLength() > 0L && bytes != body.contentLength())
+                                throw java.io.IOException("APK truncated")
+                            val hash = digest.digest().joinToString("") { b -> "%02x".format(b) }
+                            if (!hash.equals(expectedSha, ignoreCase = true))
+                                throw java.io.IOException("APK integrity check failed")
+                            java.util.zip.ZipFile(partial).use { zip ->
+                                if (zip.getEntry("AndroidManifest.xml") == null ||
+                                    zip.getEntry("classes.dex") == null)
+                                    throw java.io.IOException("Invalid APK archive")
+                            }
+                            if (apk.exists() && !apk.delete())
+                                throw java.io.IOException("Cannot replace previous update")
+                            if (!partial.renameTo(apk))
+                                throw java.io.IOException("Cannot finalize verified update")
+                        }
+                        true
+                    }.getOrDefault(false)
+                    if (!success) {
+                        fallback()
+                        return
+                    }
+                    directUpdateInFlight.set(false)
+                    handler.post {
+                        if (isFinishing || isDestroyed) return@post
+                        updateButton.isEnabled = true
+                        updateRecoveryUrl = null
+                        setUpdateStatus("UPDATE VERIFIED • INSTALLING v" + versionName)
+                        installApk(apk)
+                    }
+                }
+            })
+        }.onFailure { fallback() }
+    }
 
     private fun installApk(apk: File) {
         runCatching {
