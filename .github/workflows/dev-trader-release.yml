@@ -459,7 +459,7 @@ jobs:
             echo "Existing signed APK must not be replaced."
             exit 1
           fi
-          gh release create "$TAG" --target "$GITHUB_SHA" "$APK" "dev-trader-update.json#dev-trader-update.json" --title "KYVORIQ ${{ steps.meta.outputs.version_name }}" --notes "Signed KYVORIQ Build ${{ steps.meta.outputs.version_code }}: premium black/ivory membership carousel and Free/Pro/Elite feature previews. All users receive candle Volume and public BTC widgets. VP and fullscreen controls are available to Pro/Elite when verified and to the private owner; checkout remains inactive. No trading-engine, payment or authentication changes."
+          gh release create "$TAG" --target "$GITHUB_SHA" "$APK" "dev-trader-update.json#dev-trader-update.json" --title "KYVORIQ ${{ steps.meta.outputs.version_name }}" --notes "Signed KYVORIQ Build ${{ steps.meta.outputs.version_code }}: redesigned black/ivory membership cards and fluid swipe transitions, custom premium plan detail sheet, localized plan price previews for supported countries, Trade-header membership button, and Alerts/Privacy/Widgets in Account. Active Pro/Elite labels require consumer-server verified entitlements. Payments and checkout remain inactive. Private trading execution and Bitget engine unchanged."
 
       - name: Publish update manifest
         env:
