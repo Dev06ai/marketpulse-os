@@ -227,7 +227,7 @@ class MarketChartView @JvmOverloads constructor(
     private var ema50: Double? = null
     private var overlays = JSONArray()
     private var sessionProfiles = JSONArray()
-    private var screenshotReferences = JSONArray()
+    private var screenshotReferences = DewaldSnapshotReferences.rows()
     private var timeframe = "1h"
     private var livePrice = Double.NaN
     private var feedHealthy = false
@@ -340,15 +340,26 @@ class MarketChartView @JvmOverloads constructor(
     }
 
     fun setReferenceLevels(value: JSONArray?) {
-        screenshotReferences = value ?: JSONArray()
+        screenshotReferences = DewaldSnapshotReferences.merge(value)
         invalidate()
     }
 
     private fun displayLevelRows(): List<JSONObject> {
         val now = System.currentTimeMillis()
-        return (0 until overlays.length()).mapNotNull { overlays.optJSONObject(it) } +
-            (0 until screenshotReferences.length()).mapNotNull { screenshotReferences.optJSONObject(it) }
-                .filter { it.optLong("reference_expires_ms", 0L) > now }
+        // Screenshot references are historical chart annotations, not executable
+        // manual levels. Keep their exact y anchors during a private-feed outage.
+        val refs = (0 until screenshotReferences.length()).mapNotNull {
+            screenshotReferences.optJSONObject(it)
+        }.filter { it.optLong("reference_expires_ms", 0L) > now }
+        val exactKeys = refs.mapNotNull { r ->
+            val p = r.optDouble("price", Double.NaN)
+            if (p.isFinite()) r.optString("kind") + "|" + String.format(Locale.US, "%.1f", p) else null
+        }.toSet()
+        return refs + (0 until overlays.length()).mapNotNull { overlays.optJSONObject(it) }
+            .filter { row ->
+                val p = row.optDouble("price", Double.NaN)
+                !p.isFinite() || row.optString("kind") + "|" + String.format(Locale.US, "%.1f", p) !in exactKeys
+            }
     }
 
     private fun overlayKey(row: JSONObject): String {
@@ -1706,7 +1717,11 @@ class MarketChartView @JvmOverloads constructor(
             val type = when(kind) {
                 "DAILY" -> "D"
                 "NPOC" -> "N"
-                "WEEKLY", "WEEKLY_NPOC", "WEEKLY_OPEN" -> "W"
+                "WEEKLY" -> "W"
+                "WEEKLY_NPOC" -> "WN"
+                "WEEKLY_OPEN" -> "WO"
+                "MONTHLY_POC" -> "M"
+                "RANGE_LOW" -> "RL"
                 "RANGE_POC" -> "P"
                 "RANGE_VAH" -> "H"
                 "RANGE_VAL" -> "L"
@@ -1725,9 +1740,11 @@ class MarketChartView @JvmOverloads constructor(
                 "OB", "OB_ZONE" -> KyvoriqTheme.white
                 else -> KyvoriqTheme.muted
             }
+            val priceLabel = if (row.optString("source") == DewaldSnapshotReferences.SOURCE)
+                String.format(Locale.US, "%,.1f", value) else compactPrice(value)
             AxisLevelMark(mapY(value, low, high, top, bottom), value,
-                type + " " + compactPrice(value), color,
-                when (kind) {
+                type + " " + priceLabel, color,
+                if (row.optString("source") == DewaldSnapshotReferences.SOURCE) 6 else when (kind) {
                     "IPOC", "RANGE_POC", "NPOC", "SFP" -> 4
                     "RANGE_VAH", "RANGE_VAL", "DAILY", "WEEKLY", "WEEKLY_NPOC" -> 3
                     else -> 2
@@ -1792,8 +1809,13 @@ class MarketChartView @JvmOverloads constructor(
 
     private fun axisWidth(): Float {
         val sample = compactPrice(if (livePrice.isFinite()) livePrice else 99999.0)
-        return max(dp(40f), max(livePriceTextPaint.measureText(sample) + dp(8f),
+        val base = max(dp(40f), max(livePriceTextPaint.measureText(sample) + dp(8f),
             axisLevelTextPaint.measureText("VAH $sample") + dp(5f)))
+        // Keep the actual one-decimal values readable instead of replacing them
+        // with rounded 81.7k labels. Width is bounded for small Android phones.
+        val precise = if (DewaldSnapshotReferences.isActive())
+            axisLevelTextPaint.measureText("VAL 89,409.5") + dp(8f) else 0f
+        return max(base, min(width * .32f, precise))
     }
 
     private fun plotRight(): Float = width - axisWidth()
