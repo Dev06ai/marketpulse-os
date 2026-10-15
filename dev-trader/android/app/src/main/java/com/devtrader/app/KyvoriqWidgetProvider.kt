@@ -24,6 +24,10 @@ class KyvoriqWidgetProvider : AppWidgetProvider() {
         private const val KEY_PNL = "pnl"
         private const val KEY_HEALTH = "health"
         private const val KEY_UPDATED = "updated"
+        // Public-only market quote, physically separate from cached owner execution/P&L.
+        private const val KEY_PUBLIC_PRICE = "public_price"
+        private const val KEY_PUBLIC_UPDATED = "public_updated"
+        private const val KEY_PUBLIC_SAVED = "public_saved"
         private const val KEY_OPEN_DIRECTION = "open_direction"
         private const val KEY_OPEN_ENTRY = "open_entry"
         private const val KEY_OPEN_QTY = "open_qty"
@@ -99,6 +103,17 @@ class KyvoriqWidgetProvider : AppWidgetProvider() {
             if (serverPnl.isFinite()) {
                 prefs.edit().putString(KEY_PNL, pnlText).apply()
             }
+            updateAll(context)
+        }
+
+        /** Free widget: last verified public OHLC close, no owner state, no private data. */
+        fun updateFromPublicPrice(context: Context, price: Double, saved: Boolean) {
+            if (!price.isFinite() || price <= 0.0) return
+            context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+                .putString(KEY_PUBLIC_PRICE, String.format(Locale.US, "%,.2f", price))
+                .putLong(KEY_PUBLIC_UPDATED, System.currentTimeMillis())
+                .putBoolean(KEY_PUBLIC_SAVED, saved)
+                .apply()
             updateAll(context)
         }
 
@@ -230,23 +245,25 @@ class KyvoriqWidgetProvider : AppWidgetProvider() {
             val updated = prefs.getLong(KEY_UPDATED, 0L)
             val quoteFresh = updated > 0L && System.currentTimeMillis() - updated in 0L..20_000L
             val paired = KyvoriqSecureSession.isPaired(context)
-            // No consumer widget entitlement provider is live yet. Never
-            // expose cached owner market/execution state after local expiry,
-            // logout or device unpairing. Server-verified Pro/Elite projection
-            // must replace this guard before consumer widget launch.
+            // Basic consumer widgets read ONLY independently sourced public BTC
+            // close prices. Never render shared owner signal, bias, P&L or position
+            // preferences when no private device pairing exists.
             if (!paired) {
-                views.setTextViewText(R.id.widget_price_0, "—")
-                views.setTextViewText(R.id.widget_price_1, "—")
+                val publicPrice = prefs.getString(KEY_PUBLIC_PRICE, "—") ?: "—"
+                val savedQuote = prefs.getBoolean(KEY_PUBLIC_SAVED, false)
+                val publicAge = System.currentTimeMillis() - prefs.getLong(KEY_PUBLIC_UPDATED, 0L)
+                val recentPublic = publicPrice != "—" && !savedQuote && publicAge in 0L..120_000L
+                views.setTextViewText(R.id.widget_price_0, publicPrice)
+                views.setTextViewText(R.id.widget_price_1, publicPrice)
                 views.setDisplayedChild(R.id.widget_price_flipper, 0)
                 views.setTextViewText(R.id.widget_delta, "•")
-                views.setTextViewText(R.id.widget_bias, "LOCKED")
-                views.setTextViewText(R.id.widget_health, "SIGN IN")
+                views.setTextViewText(R.id.widget_bias, "BTC SPOT")
+                views.setTextViewText(R.id.widget_health, if (recentPublic) "LAST BTC" else "SAVED BTC")
                 if (!expanded) {
                     views.setViewVisibility(R.id.widget_market_dot, android.view.View.GONE)
                     views.setViewVisibility(R.id.widget_health, android.view.View.VISIBLE)
-                }
-                if (expanded) {
-                    views.setTextViewText(R.id.widget_state, "MARKET WIDGET LOCKED")
+                } else {
+                    views.setTextViewText(R.id.widget_state, "PUBLIC BTC • VIEW ONLY")
                     views.setTextViewText(R.id.widget_pnl, "P&L  PRIVATE")
                 }
                 manager.updateAppWidget(appWidgetId, views)
