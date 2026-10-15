@@ -387,7 +387,10 @@ jobs:
           grep -Fq 'PAIRING EXPIRED (401)' "$CLIENT"
           grep -Fq 'BACKEND ROUTE UNAVAILABLE (404)' "$CLIENT"
           grep -Fq 'PUBLIC BACKEND  •  REACHABLE' "$CLIENT"
-          grep -Fq 'Bitget execution readiness  •  UNVERIFIED' "$CLIENT"
+          ! grep -Fq 'Bitget execution readiness' "$CLIENT"
+          ! grep -Fq 'Bitget Demo  ' "$CLIENT"
+          grep -Fq 'MarketInsightThesis.render(root)' "$CLIENT"
+          grep -Fq 'DATA NOT VERIFIED' "$CLIENT"
           grep -Fq 'if (!bootstrapFresh && lastHardHttpStatus == null)' "$CLIENT"
           ! grep -Fq 'Backend diagnostics failed.' "$CLIENT"
       - name: Verify matching Build 169 signing certificate
