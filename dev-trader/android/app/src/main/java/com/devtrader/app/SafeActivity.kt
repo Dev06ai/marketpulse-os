@@ -10,7 +10,7 @@
  // Build 110: KYVORIQ Premium Experience Pack — motion, ambience, risk/alert intelligence, privacy and widget.
 // Build 109: KYVORIQ premium semantic haptics across navigation, chart tools and calculator.
 // Build 108: confidence-sized demo execution UI with live-backend capability detection.
-// Build 83: show Bitget Demo funding readiness and demo execution state.
+// Historical build note: private execution telemetry is not consumer market intelligence.
 package com.devtrader.app
 
 import android.Manifest
@@ -2195,7 +2195,7 @@ class SafeActivity : FragmentActivity() {
         "LEVELS & FLOW" -> "Levels & flow"
         "CONNECTION" -> "Connection"
         "SYSTEM" -> "System"
-        "DEMO PERFORMANCE" -> "Demo performance"
+        "PRIVATE PERFORMANCE" -> "Private performance"
         "ACCOUNTING & RISK" -> "Accounting & risk"
         "EXCHANGE POSITIONS" -> "Exchange positions"
         else -> raw
@@ -2359,7 +2359,7 @@ class SafeActivity : FragmentActivity() {
         header.addView(label(humanHeading(title), 12.5f, kyWhite, 0.015f).apply {
             typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
         }, LinearLayout.LayoutParams(0, -2, 1f))
-        header.addView(label(if (title == "DEMO PERFORMANCE") "DEMO" else "MARKET", 9f,
+        header.addView(label(if (title == "PRIVATE PERFORMANCE") "PRIVATE" else "MARKET", 9f,
             kyGold, 0.055f))
         box.addView(header)
         box.addView(View(this).apply {
@@ -3085,7 +3085,7 @@ class SafeActivity : FragmentActivity() {
                         "\nResult  " + if (pnl.isFinite()) String.format(Locale.US, "%+.2f USDT", pnl) else signalLifecycle.replace('_', ' ') +
                         "\nWaiting for the next confirmed setup."
                 )
-                risk.text = "Exchange lifecycle resolved • no active demo position"
+                risk.text = "Previous exchange lifecycle resolved"
             } else {
                 val radar = engine?.optJSONArray("opportunity_radar")
                 val lead = radar?.optJSONObject(0)
@@ -3483,7 +3483,7 @@ class SafeActivity : FragmentActivity() {
                     // Never show a falsely reassuring IDLE state just because
                     // the exchange position was opened manually outside KYVORIQ.
                     riskHeatMeter.setRisk(0f, "UNVERIFIED", animate = false)
-                    riskHeatText.text = "Bitget Demo: $exchangeCount open exchange position(s) • " +
+                    riskHeatText.text = "Private exposure: $exchangeCount exchange position(s) • " +
                         "not attributed to KYVORIQ. Check stops in Bitget."
                     riskHeatText.setTextColor(kyAmber)
                 }
@@ -3494,7 +3494,7 @@ class SafeActivity : FragmentActivity() {
                 }
                 else -> {
                     riskHeatMeter.setRisk(0f, "IDLE", animate = lastDecisionVisualKey.isNotBlank())
-                    riskHeatText.text = "No open demo position • no FOMO, just setups."
+                    riskHeatText.text = "No private exposure reported."
                     riskHeatText.setTextColor(kyGray)
                 }
             }
