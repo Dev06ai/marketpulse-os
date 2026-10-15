@@ -11,8 +11,8 @@ android {
         minSdk = 26
         targetSdk = 37
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        versionCode = (providers.gradleProperty("devTraderVersionCode").orNull ?: "176").toInt()
-        versionName = providers.gradleProperty("devTraderVersionName").orNull ?: "0.21.51"
+        versionCode = (providers.gradleProperty("devTraderVersionCode").orNull ?: "182").toInt()
+        versionName = providers.gradleProperty("devTraderVersionName").orNull ?: "0.21.57"
         val backendUrl = providers.gradleProperty("devTraderBackendUrl").orNull
             ?: "https://kyvoriq-staging.getvoroa.com"
         require(Regex("https://[A-Za-z0-9.-]+(?::[0-9]+)?/?").matches(backendUrl)) {
@@ -79,6 +79,7 @@ dependencies {
     androidTestImplementation("androidx.test:runner:1.7.0")
     androidTestImplementation("androidx.test.ext:junit:1.3.0")
     implementation("androidx.core:core-ktx:1.17.0")
+    implementation("androidx.viewpager2:viewpager2:1.1.0")
     implementation("com.airbnb.android:lottie:6.7.1")
     implementation("androidx.biometric:biometric:1.1.0")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
