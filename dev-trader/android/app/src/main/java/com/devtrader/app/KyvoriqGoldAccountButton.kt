@@ -67,7 +67,7 @@ class KyvoriqGoldAccountButton(context: Context) : KyvoriqButton(context) {
             val center = sweep * width
             shimmerPaint.shader = LinearGradient(
                 center-34f*d, 0f, center+34f*d, 0f,
-                intArrayOf(Color.TRANSPARENT, Color.argb(40, 190, 148, 76), Color.TRANSPARENT),
+                intArrayOf(Color.TRANSPARENT, Color.argb(48, 245, 241, 230), Color.TRANSPARENT),
                 null, Shader.TileMode.CLAMP
             )
             canvas.drawRect(shimmerBounds, shimmerPaint)
