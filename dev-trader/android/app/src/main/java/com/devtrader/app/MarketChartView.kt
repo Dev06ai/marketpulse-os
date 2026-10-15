@@ -246,28 +246,61 @@ class MarketChartView @JvmOverloads constructor(
     private var showSessionProfiles = layerPrefs.getBoolean("session_profile", true)
     private var levelMenuOpen = false
     private var fullscreenMode = false
+    private var accessTier = KyvoriqAccessTier.BASIC
     var onFullscreenRequested: (() -> Unit)? = null
+    var onUpgradeRequested: ((String) -> Unit)? = null
+
+    /** The consumer server must verify any future paid tier; clients cannot grant purchases. */
+    fun setAccessTier(value: KyvoriqAccessTier) {
+        if (accessTier == value) return
+        accessTier = value
+        if (fullscreenMode && !accessTier.fullscreenChart()) onFullscreenRequested?.invoke()
+        levelMenuOpen = false
+        invalidate()
+    }
+
+    fun canUseFullscreenChart(): Boolean = accessTier.fullscreenChart()
 
     fun setFullscreenMode(value: Boolean) {
-        fullscreenMode = value
+        fullscreenMode = value && accessTier.fullscreenChart()
         levelMenuOpen = false
         invalidate()
     }
 
     private fun hasVisibleLevelLayers(): Boolean =
-        showSfpLevels || showNpocLevels || showObLevels || showDailyLevels || showWeeklyLevels || showOtherLevels
+        showSfpLevels ||
+        (accessTier.dailyWeeklyNpoc() && (showNpocLevels || showDailyLevels || showWeeklyLevels)) ||
+        (accessTier.highValueOrderBlocks() && showObLevels) ||
+        (accessTier.dLineAndValueArea() && showOtherLevels)
+
+    private fun requiredTier(key: String): KyvoriqAccessTier = when (key) {
+        "VP", "FULL", "NPOC", "DAILY", "WEEK" -> KyvoriqAccessTier.PRO
+        "OB", "OTHER" -> KyvoriqAccessTier.ELITE
+        else -> KyvoriqAccessTier.BASIC
+    }
+
+    private fun mayUse(key: String): Boolean = accessTier.isAtLeast(requiredTier(key))
 
     private fun isOverlayVisible(row: JSONObject): Boolean {
-        if (row.optString("source", "").startsWith("MINDPILLAR_SCREENSHOT_")) return showSessionProfiles
+        if (row.optString("source", "").startsWith("MINDPILLAR_SCREENSHOT_")) {
+            return accessTier.volumeProfile() && showSessionProfiles
+        }
         val kind = row.optString("kind", "LEVEL").uppercase(Locale.US)
         val label = row.optString("label", kind).uppercase(Locale.US)
         return when {
             kind == "SFP" || label.startsWith("SFP") -> showSfpLevels
-            kind in setOf("WEEKLY", "WEEKLY_OPEN", "WEEKLY_NPOC") || label.startsWith("WEEKLY") -> showWeeklyLevels
-            kind in setOf("NPOC", "RANGE_POC") || label.contains("NPOC") || label.contains("POC") -> showNpocLevels
-            kind in setOf("OB", "OB_ZONE", "SUPPLY_ZONE", "DEMAND_ZONE") || label.contains(" OB") || label.endsWith("OB") -> showObLevels
-            kind == "DAILY" || label.startsWith("D HIGH") || label.startsWith("D LOW") || label.startsWith("DAILY") -> showDailyLevels
-            else -> showOtherLevels
+            kind in setOf("OB", "OB_ZONE", "SUPPLY_ZONE", "DEMAND_ZONE") || label.contains(" OB") || label.endsWith("OB") ->
+                accessTier.highValueOrderBlocks() && showObLevels
+            kind in setOf("RANGE_VAH", "RANGE_VAL", "D_LINE", "D-LINE", "DLINE") ||
+                label.contains("VAH") || label.contains("VAL") || label.contains("D-LINE") ->
+                accessTier.dLineAndValueArea() && showOtherLevels
+            kind in setOf("WEEKLY", "WEEKLY_OPEN", "WEEKLY_NPOC") || label.startsWith("WEEKLY") ->
+                accessTier.dailyWeeklyNpoc() && showWeeklyLevels
+            kind in setOf("NPOC", "RANGE_POC", "IPOC") || label.contains("NPOC") || label.contains("POC") ->
+                accessTier.dailyWeeklyNpoc() && showNpocLevels
+            kind == "DAILY" || label.startsWith("D HIGH") || label.startsWith("D LOW") || label.startsWith("DAILY") ->
+                accessTier.dailyWeeklyNpoc() && showDailyLevels
+            else -> accessTier.dLineAndValueArea() && showOtherLevels
         }
     }
 
@@ -601,7 +634,7 @@ class MarketChartView @JvmOverloads constructor(
         // Reserve two blank bar slots by the axis so the latest wick never crowds the price labels.
         // This changes visual spacing only; candle timestamps, prices and indicator values are untouched.
         val step = (right - left) / (actualVisible + 2f)
-        if (showSessionProfiles) drawSessionVolumeProfiles(canvas, start, left, right, top, priceBottom, low, high, step)
+        if (showSessionProfiles && accessTier.volumeProfile()) drawSessionVolumeProfiles(canvas, start, left, right, top, priceBottom, low, high, step)
         val candleWidth = max(dp(2.4f), min(dp(9.2f), step * 0.62f))
 
         for (j in 0 until actualVisible) {
@@ -644,7 +677,7 @@ class MarketChartView @JvmOverloads constructor(
 
         if (showBollinger) drawBollinger(canvas, start, actualVisible, left, top, priceBottom, low, high, step)
         if (showEma) drawEma50(canvas, start, actualVisible, left, top, priceBottom, low, high, step)
-        if (hasVisibleLevelLayers() || showSessionProfiles) drawStructureOverlays(canvas, left, right, top, priceBottom, low, high)
+        if (hasVisibleLevelLayers() || (showSessionProfiles && accessTier.volumeProfile())) drawStructureOverlays(canvas, left, right, top, priceBottom, low, high)
         if (hasVisibleLevelLayers()) {
             signal?.let { s ->
                 val revealBase = if (tradeRevealStartedAt > 0L && KyvoriqTheme.motionEnabled(context)) {
@@ -714,8 +747,8 @@ class MarketChartView @JvmOverloads constructor(
                     "EMA" -> showEma
                     "LVL" -> hasVisibleLevelLayers()
                     "VOL" -> showVolume
-                    "VP" -> showSessionProfiles
-                    "FULL" -> fullscreenMode
+                    "VP" -> showSessionProfiles && accessTier.volumeProfile()
+                    "FULL" -> fullscreenMode && accessTier.fullscreenChart()
                     else -> false
                 }
                 canvas.drawRoundRect(rect, dp(5f), dp(5f), if (active) controlActivePaint else controlInactivePaint)
@@ -723,6 +756,7 @@ class MarketChartView @JvmOverloads constructor(
                 canvas.drawRoundRect(rect, dp(5f), dp(5f), controlBorderPaint)
                 controlTextPaint.color = when {
                     active -> KyvoriqTheme.charcoal
+                    !mayUse(key) -> KyvoriqTheme.muted
                     key == "FULL" -> KyvoriqTheme.white
                     else -> KyvoriqTheme.muted
                 }
@@ -784,11 +818,11 @@ class MarketChartView @JvmOverloads constructor(
 
     private fun layerEnabled(key: String): Boolean = when (key) {
         "SFP" -> showSfpLevels
-        "NPOC" -> showNpocLevels
-        "OB" -> showObLevels
-        "DAILY" -> showDailyLevels
-        "WEEK" -> showWeeklyLevels
-        else -> showOtherLevels
+        "NPOC" -> accessTier.dailyWeeklyNpoc() && showNpocLevels
+        "OB" -> accessTier.highValueOrderBlocks() && showObLevels
+        "DAILY" -> accessTier.dailyWeeklyNpoc() && showDailyLevels
+        "WEEK" -> accessTier.dailyWeeklyNpoc() && showWeeklyLevels
+        else -> accessTier.dLineAndValueArea() && showOtherLevels
     }
 
     private fun drawLevelMenu(canvas: Canvas, left: Float) {
@@ -806,6 +840,10 @@ class MarketChartView @JvmOverloads constructor(
     private fun toggleLevelFilterAt(x: Float, y: Float): Boolean {
         if (!levelMenuOpen || height < dp(190f)) return false
         val key = levelFilterChipRects(dp(4f)).firstOrNull { it.second.contains(x, y) }?.first ?: return false
+        if (!mayUse(key)) {
+            onUpgradeRequested?.invoke(key)
+            return true
+        }
         when (key) {
             "SFP" -> showSfpLevels = !showSfpLevels
             "NPOC" -> showNpocLevels = !showNpocLevels
@@ -823,6 +861,10 @@ class MarketChartView @JvmOverloads constructor(
         if (height < dp(190f)) return false
         val left = dp(4f)
         val hit = indicatorChipRects(left).firstOrNull { it.second.contains(x, y) }?.first ?: return false
+        if (!mayUse(hit)) {
+            onUpgradeRequested?.invoke(hit)
+            return true
+        }
         when (hit) {
             "BB" -> showBollinger = !showBollinger
             "EMA" -> showEma = !showEma
@@ -1648,7 +1690,7 @@ class MarketChartView @JvmOverloads constructor(
     ): List<Float> {
         frameAxisLabelRects = emptyList()
         frameAxisSourceCenters = emptyList()
-        if (!hasVisibleLevelLayers() && !showSessionProfiles) return emptyList()
+        if (!hasVisibleLevelLayers() && !(showSessionProfiles && accessTier.volumeProfile())) return emptyList()
         val wallNow = System.currentTimeMillis()
         val liveY = if (livePrice.isFinite() && livePrice in low..high) mapY(livePrice, low, high, top, bottom)
                     else Float.NaN
@@ -1693,7 +1735,7 @@ class MarketChartView @JvmOverloads constructor(
         }
         val earliest = candles.optJSONObject(start)?.optLong("start", 0L) ?: 0L
         val latest = candles.optJSONObject(endExclusive - 1)?.optLong("end", 0L) ?: 0L
-        val profileMarkers = if (!showSessionProfiles) emptyList() else {
+        val profileMarkers = if (!(showSessionProfiles && accessTier.volumeProfile())) emptyList() else {
             val active = (0 until sessionProfiles.length()).mapNotNull { sessionProfiles.optJSONObject(it) }
                 .lastOrNull { it.optLong("start_ms", Long.MAX_VALUE) <= latest &&
                     it.optLong("end_ms", 0L) >= earliest }
