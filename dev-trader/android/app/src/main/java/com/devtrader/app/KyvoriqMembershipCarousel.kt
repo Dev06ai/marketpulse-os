@@ -376,7 +376,7 @@ class KyvoriqMembershipCarousel(private val activity: FragmentActivity) {
         val scroll = ScrollView(activity).apply {
             isFillViewport = false
             isVerticalScrollBarEnabled = false
-            addView(body, ScrollView.LayoutParams(-1, -2))
+            addView(body, FrameLayout.LayoutParams(-1, -2))
         }
         body.addView(View(activity).apply {
             background = roundSurface(softIvory, 90f)
