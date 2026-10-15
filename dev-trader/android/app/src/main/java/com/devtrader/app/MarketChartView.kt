@@ -144,6 +144,15 @@ class MarketChartView @JvmOverloads constructor(
     private val profileDownPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(84, 122, 174); alpha = 84 }
     private val profileLinePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { strokeWidth = dp(.85f); alpha = 165 }
     private val profileCaptionPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = KyvoriqTheme.muted; textSize = dp(7.1f) }
+    private val profileReadoutPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = KyvoriqTheme.white
+        textSize = dp(8.0f)
+        typeface = android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.NORMAL)
+    }
+    private val profileReadoutBg = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = KyvoriqTheme.graphite
+        alpha = 225
+    }
     private val liveChipPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = KyvoriqTheme.graphite }
     private val liveDotPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(198, 201, 205) }
     private val controlActivePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(216, 218, 221) }
@@ -556,7 +565,10 @@ class MarketChartView @JvmOverloads constructor(
     // Shared by drawing, gesture scale and instrumentation: enlarging the View
     // must enlarge the real candle region, not a wrapper around a fixed plot.
     internal fun plotGeometry(): PlotGeometry {
-        val top = dp(if (height < dp(190f)) 32f else if (levelMenuOpen) 66f else 42f)
+        val baseTop = if (height < dp(190f)) 32f else if (levelMenuOpen) 66f else 42f
+        val profileReadoutHeight = if (height >= dp(190f) &&
+            showSessionProfiles && accessTier.volumeProfile() && sessionProfiles.length() > 0) 20f else 0f
+        val top = dp(baseTop + profileReadoutHeight)
         val bottom = height - dp(22f)
         val volumeHeight = if (showVolume) height * 0.20f else 0f
         val volumeTop = bottom - volumeHeight
@@ -600,6 +612,9 @@ class MarketChartView @JvmOverloads constructor(
         val endExclusive = candles.length() - candleShift.roundToInt()
         val start = max(0, endExclusive - visible)
         val actualVisible = max(1, endExclusive - start)
+        val selectedProfile = if (showSessionProfiles && accessTier.volumeProfile())
+            selectedSessionVolumeProfile(start, endExclusive) else null
+        drawVolumeProfileReadout(canvas, selectedProfile, left, right, top)
 
         var high = Double.NEGATIVE_INFINITY
         var low = Double.POSITIVE_INFINITY
@@ -664,7 +679,7 @@ class MarketChartView @JvmOverloads constructor(
         // Reserve two blank bar slots by the axis so the latest wick never crowds the price labels.
         // This changes visual spacing only; candle timestamps, prices and indicator values are untouched.
         val step = (right - left) / (actualVisible + 2f)
-        if (showSessionProfiles && accessTier.volumeProfile()) drawSessionVolumeProfiles(canvas, start, left, right, top, priceBottom, low, high, step)
+        if (selectedProfile != null) drawSessionVolumeProfiles(canvas, selectedProfile, start, left, right, top, priceBottom, low, high, step)
         val candleWidth = max(dp(2.4f), min(dp(9.2f), step * 0.62f))
 
         for (j in 0 until actualVisible) {
@@ -753,7 +768,7 @@ class MarketChartView @JvmOverloads constructor(
         }
         // OB labels must be painted last so candles/EMA cannot cover prices.
         if (hasVisibleLevelLayers()) drawZonePriceBadges(canvas, left, right, top, priceBottom, low, high)
-        val occupiedAxisTags = drawAxisLevelLabels(canvas, right, top, priceBottom, low, high, start, endExclusive)
+        val occupiedAxisTags = drawAxisLevelLabels(canvas, right, top, priceBottom, low, high, start, endExclusive, selectedProfile)
 
         if (!livePrice.isNaN() && visibleLive) {
             val y = mapY(livePrice, low, high, top, priceBottom)
@@ -1597,10 +1612,73 @@ class MarketChartView @JvmOverloads constructor(
     }
 
 
+    private var frameVpReadout: List<String> = emptyList()
+    internal fun visibleVpReadoutForTest(): List<String> = frameVpReadout.toList()
+
+    /** One valid visible UTC 15m-estimated session is used throughout the chart.
+     * This is read-only metadata; it is never consulted by the signal engine.
+     */
+    private fun selectedSessionVolumeProfile(start: Int, endExclusive: Int): JSONObject? {
+        val first = candles.optJSONObject(start)?.optLong("start", 0L) ?: return null
+        val last = candles.optJSONObject(endExclusive - 1)?.optLong("end", 0L) ?: return null
+        if (first <= 0L || last <= first) return null
+        return (0 until sessionProfiles.length())
+            .mapNotNull { sessionProfiles.optJSONObject(it) }
+            .filter { profile ->
+                val begin = profile.optLong("start_ms", 0L)
+                val end = profile.optLong("end_ms", 0L)
+                val valPrice = profile.optDouble("val", Double.NaN)
+                val pocPrice = profile.optDouble("poc", Double.NaN)
+                val vahPrice = profile.optDouble("vah", Double.NaN)
+                profile.optString("source") == "OHLCV_15M_ESTIMATE" &&
+                    begin > 0L && end > begin && begin <= last && end > first &&
+                    valPrice.isFinite() && valPrice > 0.0 &&
+                    pocPrice.isFinite() && vahPrice.isFinite() &&
+                    valPrice <= pocPrice && pocPrice <= vahPrice &&
+                    profile.optJSONArray("bins")?.length()?.let { it >= 2 } == true
+            }.maxWithOrNull(compareBy<JSONObject> { it.optLong("start_ms", 0L) }
+                .thenBy { it.optLong("end_ms", 0L) })
+    }
+
+    /** Three values stay readable even when an axis badge is near the live tag.
+     * Draw in reserved space immediately below the indicator controls.
+     */
+    private fun drawVolumeProfileReadout(
+        canvas: Canvas, profile: JSONObject?, left: Float, right: Float, chartTop: Float
+    ) {
+        frameVpReadout = emptyList()
+        if (profile == null || height < dp(190f)) return
+        val segment = (right - left) / 3f
+        if (segment <= dp(42f)) return
+        val items = listOf(
+            Triple("POC", "poc", Color.rgb(218, 113, 143)),
+            Triple("VAH", "vah", Color.rgb(85, 139, 218)),
+            Triple("VAL", "val", Color.rgb(85, 139, 218))
+        )
+        val drawn = mutableListOf<String>()
+        items.forEachIndexed { index, (name, field, color) ->
+            val value = profile.optDouble(field, Double.NaN)
+            if (!value.isFinite()) return@forEachIndexed
+            val longLabel = name + " " + String.format(Locale.US, "%,.2f", value)
+            val shortLabel = name + " " + String.format(Locale.US, "%,.1f", value)
+            val label = if (profileReadoutPaint.measureText(longLabel) <= segment - dp(9f))
+                longLabel else shortLabel
+            if (profileReadoutPaint.measureText(label) > segment - dp(9f)) return@forEachIndexed
+            val leftX = left + segment * index
+            val panel = RectF(leftX + dp(1f), chartTop - dp(18f),
+                leftX + segment - dp(2f), chartTop - dp(2f))
+            canvas.drawRoundRect(panel, dp(5f), dp(5f), profileReadoutBg)
+            profileReadoutPaint.color = color
+            canvas.drawText(label, panel.left + dp(4f), chartTop - dp(6f), profileReadoutPaint)
+            drawn.add(label)
+        }
+        frameVpReadout = drawn
+    }
+
     // Uses the chart's actual candle-time and price transforms, including pan,
     // zoom and portrait/fullscreen changes. The estimate does not drive trades.
     private fun drawSessionVolumeProfiles(
-        canvas: Canvas, startIndex: Int, left: Float, right: Float,
+        canvas: Canvas, session: JSONObject, startIndex: Int, left: Float, right: Float,
         top: Float, bottom: Float, low: Double, high: Double, candleStep: Float
     ) {
         val firstTs = candles.optJSONObject(startIndex)?.optLong("start", 0L) ?: return
@@ -1617,9 +1695,9 @@ class MarketChartView @JvmOverloads constructor(
         var drawnProfile = false
         canvas.save()
         canvas.clipRect(left, top, right, bottom)
-        for (idx in 0 until sessionProfiles.length()) {
-            val session = sessionProfiles.optJSONObject(idx) ?: continue
-            if (session.optString("source") != "OHLCV_15M_ESTIMATE") continue
+        run {
+            // Keep one active session visible; historical session profiles are
+            // still available when the user pans back to those timestamps.
             val begin = session.optLong("start_ms", 0L)
             val finish = session.optLong("end_ms", 0L)
             if (begin <= 0L || finish <= begin) continue
@@ -1627,7 +1705,7 @@ class MarketChartView @JvmOverloads constructor(
             val visibleRight = min(right - dp(2f), timeX(finish) - dp(2f))
             if (visibleRight - visibleLeft < dp(16f)) continue
             val bins = session.optJSONArray("bins") ?: continue
-            val histogramWidth = min(dp(48f), (visibleRight - visibleLeft) * .42f)
+            val histogramWidth = min(dp(34f), (visibleRight - visibleLeft) * .28f)
             val maxVolume = (0 until bins.length()).mapNotNull { bins.optJSONObject(it) }
                 .maxOfOrNull { it.optDouble("volume", 0.0) } ?: 0.0
             if (maxVolume <= 0.0) continue
@@ -1718,7 +1796,8 @@ class MarketChartView @JvmOverloads constructor(
         low: Double,
         high: Double,
         start: Int,
-        endExclusive: Int
+        endExclusive: Int,
+        selectedProfile: JSONObject?
     ): List<Float> {
         frameAxisLabelRects = emptyList()
         frameAxisSourceCenters = emptyList()
@@ -1772,35 +1851,19 @@ class MarketChartView @JvmOverloads constructor(
                     else -> 2
                 })
         }
-        val earliest = candles.optJSONObject(start)?.optLong("start", 0L) ?: 0L
-        val latest = candles.optJSONObject(endExclusive - 1)?.optLong("end", 0L) ?: 0L
-        val profileMarkers = if (!(showSessionProfiles && accessTier.volumeProfile())) emptyList() else {
-            val active = (0 until sessionProfiles.length())
-                .mapNotNull { sessionProfiles.optJSONObject(it) }
-                .lastOrNull { session ->
-                    session.optString("source") == "OHLCV_15M_ESTIMATE" &&
-                    session.optLong("start_ms", Long.MAX_VALUE) <= latest &&
-                    session.optLong("end_ms", 0L) >= earliest &&
-                    session.optDouble("val", Double.NaN).let { it.isFinite() && it > 0.0 } &&
-                    session.optDouble("poc", Double.NaN).let { it.isFinite() && it > 0.0 } &&
-                    session.optDouble("vah", Double.NaN).let { it.isFinite() && it > 0.0 } &&
-                    session.optDouble("val") <= session.optDouble("poc") &&
-                    session.optDouble("poc") <= session.optDouble("vah")
-                }
-            if (active == null) emptyList() else {
-                // One selected session, three interpretable labels, not dozens
-                // of screenshot levels or developing iPOC badges.
-                listOf(
-                    Triple("poc", Color.rgb(218, 113, 143), "POC"),
-                    Triple("vah", Color.rgb(85, 139, 218), "VAH"),
-                    Triple("val", Color.rgb(85, 139, 218), "VAL")
-                ).mapNotNull { (field, color, tag) ->
-                    val value = active.optDouble(field, Double.NaN)
-                    if (value.isFinite() && value in low..high)
-                        AxisLevelMark(mapY(value, low, high, top, bottom), value,
-                            tag + " " + compactPrice(value), color, 7)
-                    else null
-                }
+        val profileMarkers = if (selectedProfile == null) emptyList() else {
+            // Readout and rail share the same selected session. Suppressing an
+            // axis badge near the live-price marker never hides its readout.
+            listOf(
+                Triple("poc", Color.rgb(218, 113, 143), "POC"),
+                Triple("vah", Color.rgb(85, 139, 218), "VAH"),
+                Triple("val", Color.rgb(85, 139, 218), "VAL")
+            ).mapNotNull { (field, color, tag) ->
+                val value = selectedProfile.optDouble(field, Double.NaN)
+                if (value.isFinite() && value in low..high)
+                    AxisLevelMark(mapY(value, low, high, top, bottom), value,
+                        tag + " " + compactPrice(value), color, 7)
+                else null
             }
         }
         // Preserve actual source prices; remove visually duplicate rounded captions.
