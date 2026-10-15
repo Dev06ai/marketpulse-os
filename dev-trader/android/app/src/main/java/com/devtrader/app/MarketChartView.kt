@@ -1625,8 +1625,11 @@ class MarketChartView @JvmOverloads constructor(
      * available profile as PINNED, never as volume calculated for the viewport.
      */
     private fun selectedSessionVolumeProfile(start: Int, endExclusive: Int): JSONObject? {
+        // A negative shift opens a blank future-side gutter. Restrict session
+        // lookups to real candles, not the virtual empty bar slots.
+        val realEndExclusive = endExclusive.coerceAtMost(candles.length())
         val first = candles.optJSONObject(start)?.optLong("start", 0L) ?: 0L
-        val last = candles.optJSONObject(endExclusive - 1)?.optLong("end", 0L) ?: 0L
+        val last = candles.optJSONObject(realEndExclusive - 1)?.optLong("end", 0L) ?: 0L
         val selection = VolumeProfileViewportPolicy.select(sessionProfiles, first, last)
         frameVpPinned = selection?.pinned == true
         return selection?.profile
