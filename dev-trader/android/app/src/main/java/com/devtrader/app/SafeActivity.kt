@@ -5335,7 +5335,7 @@ class SafeActivity : FragmentActivity() {
         if (::updateButton.isInitialized) {
             updateButton.text = when {
                 message.startsWith("Checking") -> "CHECKING…"
-                message.startsWith("DOWNLOADING") -> "DOWNLOADING…"
+                message.startsWith("DOWNLOADING") -> "DOWNLOAD OPTIONS ↗"
                 message.startsWith("VERIFYING") -> "VERIFYING…"
                 message.startsWith("INSTALLER OPEN") -> "INSTALLING…"
                 message.startsWith("DOWNLOAD FAILED") -> "RETRY / BROWSER"
@@ -5720,9 +5720,10 @@ class SafeActivity : FragmentActivity() {
                                         if (now - lastUi > 800L) {
                                             lastUi = now
                                             val pct = UpdateDownloadPolicy.percent(bytes, body.contentLength())
+                                            val progress = if (pct >= 0) pct.toString() + "%" else (bytes / 1024L).toString() + " KB"
                                             handler.post {
                                                 if (!isFinishing && !isDestroyed)
-                                                    setUpdateStatus("DOWNLOADING • " + pct + "% (tap for options)")
+                                                    setUpdateStatus("DOWNLOADING • " + progress + " (tap for options)")
                                             }
                                         }
                                     }
