@@ -1,0 +1,75 @@
+name: KYVORIQ 179 updater download regression
+on:
+  push:
+    branches: [fix/kyvoriq-179-update-download-20261015]
+    paths:
+      - dev-trader/android/**
+      - .github/workflows/verify-update-179.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: {distribution: temurin, java-version: '21'}
+      - uses: gradle/actions/setup-gradle@v4
+        with: {gradle-version: '9.6.0'}
+      - name: Check updater safety, recovery and Android install contracts
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          base = Path("dev-trader/android/app/src/main/java/com/devtrader/app")
+          act = (base/"SafeActivity.kt").read_text()
+          policy = (base/"UpdateDownloadPolicy.kt").read_text()
+          for marker in (
+              'downloadAndInstallUpdate(apkUrl, expectedSha, remoteName)',
+              'UpdateDownloadPolicy.isTrustedReleaseApkUrl(apkUrl)',
+              'updateRecoveryUrl = apkUrl',
+              'setNeutralButton("Download in browser")',
+              'https://api.github.com/repos/Dev06ai/marketpulse-os/releases/latest',
+              'digest.digest().joinToString',
+              'java.util.zip.ZipFile(partial)',
+              'if (!partial.renameTo(apk))',
+              'startSystemUpdateDownload(apkUrl, expectedSha, versionName)',
+              'FileProvider.getUriForFile',
+              'packageManager.canRequestPackageInstalls()',
+              'installApk(apk)',
+              'UpdateDownloadPolicy.isStalled',
+          ):
+              assert marker in act, marker
+          for marker in ('isTrustedReleaseApkUrl', 'fun percent(', 'isStalled'):
+              assert marker in policy, marker
+          assert 'REQUEST_INSTALL_PACKAGES' in Path("dev-trader/android/app/src/main/AndroidManifest.xml").read_text()
+          print("OTA_UPDATE_SAFETY_CONTRACT_PASS")
+          PY
+      - name: Assemble new APK and policy test APK
+        working-directory: dev-trader/android
+        run: gradle assembleDebug assembleDebugAndroidTest --no-daemon --stacktrace -PdevTraderVersionCode=179 -PdevTraderVersionName=0.21.54
+      - name: Run policy and recovery tests on Android emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: default
+          profile: pixel_6
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+          script: |
+            set -eu
+            adb install -r dev-trader/android/app/build/outputs/apk/debug/app-debug.apk
+            adb install -r dev-trader/android/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
+            timeout -k 10s 240s adb shell am instrument -w -e class com.devtrader.app.UpdateDownloadPolicyTest,com.devtrader.app.KyvoriqUpdaterVisualTest,com.devtrader.app.MarketRecoveryTest com.devtrader.app.debug.test/androidx.test.runner.AndroidJUnitRunner | tee update-179-instrument.txt
+            grep -q "OK (" update-179-instrument.txt
+            ! grep -E "FAILURES!!!|INSTRUMENTATION_FAILED|Process crashed" update-179-instrument.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: kyvoriq-179-updater-qa
+          path: |
+            update-179-instrument.txt
+            dev-trader/android/app/build/outputs/apk/debug/
+            dev-trader/android/app/build/reports/
+          retention-days: 10
