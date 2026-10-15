@@ -196,6 +196,10 @@ class SafeActivity : FragmentActivity() {
     private val updatePrefs by lazy { getSharedPreferences("kyvoriq_updater_v2", Context.MODE_PRIVATE) }
     private lateinit var checkButton: Button
     private lateinit var alertsButton: Button
+    private var membershipHeaderButton: Button? = null
+    // UI label only. Server-valid subscription status is the sole authority;
+    // no preference, selected card or fake billing event can grant a paid tier.
+    private var verifiedConsumerTier = KyvoriqAccessTier.BASIC
     private lateinit var privacyButton: Button
     private lateinit var widgetButton: Button
     private var selectedTf = "1h"
@@ -896,24 +900,23 @@ class SafeActivity : FragmentActivity() {
         identityRow.addView(account, LinearLayout.LayoutParams(dp(76), dp(40)).apply {
             rightMargin = dp(if (narrowHeader) 0 else 6)
         })
-        alertsButton = compactPillButton(compactHeaderLabel("ALERTS")).apply {
-            contentDescription = "Enable trade alerts"
-            textSize = if (layout.compactActions) 11f else 12f
+        // Preserve internal alert lifecycle state, but remove it from the Trade header.
+        alertsButton = compactPillButton("ALERTS")
+        val membershipHeader = compactPillButton("EXPLORE MEMBERSHIP").apply {
+            contentDescription = "Explore KYVORIQ membership"
+            textSize = if (layout.compactActions) 10.5f else 11.5f
             isSingleLine = true
-            setAutoSizeTextTypeUniformWithConfiguration(10, 13, 1, android.util.TypedValue.COMPLEX_UNIT_SP)
-        }
-        alertsButton.setOnClickListener {
-            haptic(it, KyvoriqHaptics.Cue.ACTION)
-            if (KyvoriqSecureSession.isPaired(this)) {
-                safe { requestAlertPermission() }
-            } else {
-                showConsumerPlans()
+            setAutoSizeTextTypeUniformWithConfiguration(9, 12, 1,
+                android.util.TypedValue.COMPLEX_UNIT_SP)
+            setOnClickListener {
+                haptic(it, KyvoriqHaptics.Cue.ACTION)
+                showConsumerPlans(if (verifiedConsumerTier == KyvoriqAccessTier.ELITE) 2 else 1)
             }
         }
-        actions.addView(alertsButton,
-            LinearLayout.LayoutParams(if (narrowHeader) 0 else dp(layout.alertsDp), dp(34), if (narrowHeader) 1f else 0f).apply {
-                rightMargin = dp(5)
-            })
+        membershipHeaderButton = membershipHeader
+        actions.addView(membershipHeader,
+            LinearLayout.LayoutParams(if (narrowHeader) 0 else dp(layout.alertsDp), dp(34),
+                if (narrowHeader) 1f else 0f).apply { rightMargin = dp(5) })
         retryButton = compactPillButton(compactHeaderLabel("RETRY", retry = true)).apply {
             contentDescription = "Reconnect market data"
             isSingleLine = true
@@ -1434,15 +1437,23 @@ class SafeActivity : FragmentActivity() {
         accountButton?.text = if (owner || KyvoriqConsumerIdentity.hasVerifiedSession(this)) "ACCOUNT" else "SIGN IN"
         accountButton?.contentDescription =
             if (owner) "Admin account and management" else "Sign in or create a KYVORIQ account"
+        membershipHeaderButton?.apply {
+            text = when (verifiedConsumerTier) {
+                KyvoriqAccessTier.PRO -> "PRO MEMBER"
+                KyvoriqAccessTier.ELITE -> "ELITE MEMBER"
+                else -> "EXPLORE MEMBERSHIP"
+            }
+            isEnabled = true
+            contentDescription = if (verifiedConsumerTier == KyvoriqAccessTier.BASIC)
+                "Explore KYVORIQ membership plans" else "View verified membership details"
+        }
     }
 
     private fun showConsumerAccountPanel(showSecurity: Boolean = false) {
         // One clean login surface for guests, including phones privately paired
         // to the owner API. The security drawer is a separate, explicit option.
-        if (!showSecurity && !KyvoriqConsumerIdentity.hasVerifiedSession(this)) {
-            showConsumerEmailAuth("login")
-            return
-        }
+        // Guest accounts can open this panel to access alerts, privacy, widgets
+        // and sign-in. Do not force the authentication screen before these controls.
         // This is a custom adaptive panel, not a stock platform AlertDialog.
         // It never changes chart scroll, zoom, timeframe or selected workspace.
         val ownerDevice = KyvoriqSecureSession.isPaired(this)
@@ -1636,8 +1647,22 @@ class SafeActivity : FragmentActivity() {
                 pairingButton?.let { showPairingDialog(it) }
             }
         }
-        actionRow(R.drawable.ic_account_tiers, "Compare Free / Pro / Elite", "Chart levels and notification eligibility") {
-            showConsumerPlans()
+        actionRow(R.drawable.ic_account_access, "Alerts & notifications",
+            if (ownerDevice) "Manage BTC alerts and background notifications"
+            else "Premium alerts • Pro / Elite preview") {
+            if (ownerDevice) showBtcPriceAlerts() else showConsumerPlans(1)
+        }
+        actionRow(R.drawable.ic_account_privacy, "Privacy & security",
+            "Device privacy settings, available to every user") {
+            showPrivacyControls()
+        }
+        actionRow(R.drawable.ic_account_portfolio, "Home-screen widgets",
+            "Pin public BTC price widgets to your home screen") {
+            requestHomeWidgetPin()
+        }
+        actionRow(R.drawable.ic_account_tiers, "Membership & plans",
+            "View your plan, compare Basic / Pro / Elite") {
+            showConsumerPlans(if (verifiedConsumerTier == KyvoriqAccessTier.ELITE) 2 else 1)
         }
         surface.addView(label(
             "Signals are coming soon for all plans. Paid checkout is not active.",
@@ -2534,8 +2559,7 @@ class SafeActivity : FragmentActivity() {
         if (::integrity.isInitialized) integrity.text = "PUBLIC MARKET • VIEW ONLY • NO PRIVATE TRADES"
         publicMarketMessage?.visibility = View.VISIBLE
         if (::alertsButton.isInitialized) {
-            alertsButton.text = "EXPLORE PRO"
-            alertsButton.isEnabled = true
+            // Premium member status is never derived from a notification toggle.
         }
     }
 
@@ -4536,8 +4560,7 @@ class SafeActivity : FragmentActivity() {
 
     private fun startBackgroundAlerts() {
         if (publicMarketOnly || !KyvoriqSecureSession.isPaired(this)) {
-            alertsButton.text = "EXPLORE PRO"
-            alertsButton.isEnabled = true
+            // Trade header is always membership; guest alert settings live in Account.
             return
         }
         if (Build.VERSION.SDK_INT >= 33 &&
