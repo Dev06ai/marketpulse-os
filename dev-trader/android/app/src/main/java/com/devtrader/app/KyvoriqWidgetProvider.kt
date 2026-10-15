@@ -270,6 +270,16 @@ class KyvoriqWidgetProvider : AppWidgetProvider() {
             }
             views.setTextColor(R.id.widget_price_0, currentColor)
             views.setTextColor(R.id.widget_price_1, currentColor)
+            if (!expanded) {
+                val sizeSp = WidgetTickerLayoutPolicy.priceSp(minWidth, price,
+                    context.resources.configuration.fontScale)
+                // RemoteViews autoSize may silently ellipsize the BTC digits.
+                // An explicit width-aware size keeps the full quote on screen.
+                views.setTextViewTextSize(R.id.widget_price_0,
+                    android.util.TypedValue.COMPLEX_UNIT_SP, sizeSp)
+                views.setTextViewTextSize(R.id.widget_price_1,
+                    android.util.TypedValue.COMPLEX_UNIT_SP, sizeSp)
+            }
             views.setDisplayedChild(R.id.widget_price_flipper, slot)
             views.setTextViewText(R.id.widget_delta, if (paired && quoteFresh) delta else "•")
             views.setTextColor(R.id.widget_delta, deltaColor)
