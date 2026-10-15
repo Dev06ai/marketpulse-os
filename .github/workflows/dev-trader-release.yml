@@ -459,7 +459,7 @@ jobs:
             echo "Existing signed APK must not be replaced."
             exit 1
           fi
-          gh release create "$TAG" --target "$GITHUB_SHA" "$APK" "dev-trader-update.json#dev-trader-update.json" --title "KYVORIQ ${{ steps.meta.outputs.version_name }}" --notes "Signed KYVORIQ Build ${{ steps.meta.outputs.version_code }}: quiet mandatory Android foreground status replaces the oversized LIVE notification; important price, signal, execution and safety alerts preserved; warm ivory identity, chart, widgets and account UI; fluid sliding chart timeframe and Insights selection pills. Preserves the existing authenticated account, download recovery, chart and execution safeguards. Device regression tests required before publication."
+          gh release create "$TAG" --target "$GITHUB_SHA" "$APK" "dev-trader-update.json#dev-trader-update.json" --title "KYVORIQ ${{ steps.meta.outputs.version_name }}" --notes "Signed KYVORIQ Build ${{ steps.meta.outputs.version_code }}: premium black/ivory membership carousel and Free/Pro/Elite feature previews. All users receive candle Volume and public BTC widgets. VP and fullscreen controls are available to Pro/Elite when verified and to the private owner; checkout remains inactive. No trading-engine, payment or authentication changes."
 
       - name: Publish update manifest
         env:
