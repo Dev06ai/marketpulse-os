@@ -151,6 +151,64 @@ object KyvoriqConsumerIdentity {
         }
     }
 
+
+    /**
+     * Read-only membership projection from the consumer server, not Firebase
+     * profile metadata, Android preferences, plan selection or purchase callbacks.
+     *
+     * Expected /v1/me response:
+     * { "subject": "<firebase uid>",
+     *   "subscription": {"tier":"PRO"|"ELITE","status":"ACTIVE",
+     *                    "expires_at_ms": 1780000000000} }
+     * Missing or incomplete claims fail closed to BASIC. Real subscriptions are
+     * intentionally unavailable until the consumer API verifies Play purchases.
+     */
+    fun fetchVerifiedMembershipTier(activity: Activity, done: (KyvoriqAccessTier) -> Unit) {
+        val origin = BuildConfig.CONSUMER_API_ORIGIN.trimEnd('/')
+        if (origin.isBlank()) return done(KyvoriqAccessTier.BASIC)
+        val auth = client(activity)
+        val user = auth?.currentUser?.takeIf { it.isEmailVerified }
+            ?: return done(KyvoriqAccessTier.BASIC)
+        val expectedSubject = user.uid
+        user.getIdToken(false).addOnCompleteListener(activity) { task ->
+            val token = if (task.isSuccessful) task.result?.token else null
+            if (token.isNullOrBlank() || token.length > 8192) {
+                done(KyvoriqAccessTier.BASIC)
+                return@addOnCompleteListener
+            }
+            val http = OkHttpClient.Builder()
+                .followRedirects(false).followSslRedirects(false)
+                .connectTimeout(5, TimeUnit.SECONDS).readTimeout(10, TimeUnit.SECONDS)
+                .build()
+            val request = Request.Builder().url(origin + "/v1/me")
+                .header("Authorization", "Bearer " + token).get().build()
+            http.newCall(request).enqueue(object : okhttp3.Callback {
+                override fun onFailure(call: okhttp3.Call, e: IOException) {
+                    activity.runOnUiThread { done(KyvoriqAccessTier.BASIC) }
+                }
+                override fun onResponse(call: okhttp3.Call, response: Response) {
+                    val tier = response.use { res ->
+                        if (res.code != 200) KyvoriqAccessTier.BASIC else runCatching {
+                            val json = JSONObject(res.body?.string().orEmpty())
+                            val sub = json.optJSONObject("subscription")
+                            val active = sub?.optString("status", "") == "ACTIVE"
+                            val expiresAt = sub?.optLong("expires_at_ms", 0L) ?: 0L
+                            if (json.optString("subject") != expectedSubject ||
+                                !active || expiresAt <= System.currentTimeMillis()) {
+                                KyvoriqAccessTier.BASIC
+                            } else when (sub?.optString("tier", "")) {
+                                "PRO" -> KyvoriqAccessTier.PRO
+                                "ELITE" -> KyvoriqAccessTier.ELITE
+                                else -> KyvoriqAccessTier.BASIC
+                            }
+                        }.getOrDefault(KyvoriqAccessTier.BASIC)
+                    }
+                    activity.runOnUiThread { done(tier) }
+                }
+            })
+        }
+    }
+
     fun fetchServerVerifiedAccount(activity: Activity, done: (String) -> Unit) {
         // The Firebase SDK can establish *identity*, never a subscription or
         // KYVORIQ admin role. These are projected by a separate HTTPS service
