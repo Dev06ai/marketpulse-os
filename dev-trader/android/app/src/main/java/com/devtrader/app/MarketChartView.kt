@@ -1695,7 +1695,7 @@ class MarketChartView @JvmOverloads constructor(
         var drawnProfile = false
         canvas.save()
         canvas.clipRect(left, top, right, bottom)
-        profile@ run {
+        run profile@ {
             // Keep one active session visible; historical session profiles are
             // still available when the user pans back to those timestamps.
             val begin = session.optLong("start_ms", 0L)
