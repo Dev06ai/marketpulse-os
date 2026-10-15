@@ -18,4 +18,24 @@ class UpdateDownloadPolicyTest {
     @Test fun clockRollbackMustNotCancelValidDownload() {
         assertFalse(UpdateDownloadPolicy.isStalled(60_000L, 60_000L, 1000L))
     }
+    @Test fun releaseAssetUrlMustBeExactSignedApkPath() {
+        assertTrue(UpdateDownloadPolicy.isTrustedReleaseApkUrl(
+            "https://github.com/Dev06ai/marketpulse-os/releases/download/dev-trader-v0.21.54-179/app-release.apk"))
+        assertFalse(UpdateDownloadPolicy.isTrustedReleaseApkUrl(
+            "http://github.com/Dev06ai/marketpulse-os/releases/download/dev-trader-v0.21.54-179/app-release.apk"))
+        assertFalse(UpdateDownloadPolicy.isTrustedReleaseApkUrl(
+            "https://github.com/attacker/marketpulse-os/releases/download/dev-trader-v0.21.54-179/app-release.apk"))
+        assertFalse(UpdateDownloadPolicy.isTrustedReleaseApkUrl(
+            "https://github.com/Dev06ai/marketpulse-os/releases/download/dev-trader-v0.21.54-179/app-release.apk?redirect=evil"))
+        assertFalse(UpdateDownloadPolicy.isTrustedReleaseApkUrl(
+            "https://github.com/Dev06ai/marketpulse-os/releases/download/dev-trader-v0.21.54-179/malware.apk"))
+    }
+
+    @Test fun downloadProgressNeverPretendsUnknownSizeIsZeroPercent() {
+        assertEquals(-1, UpdateDownloadPolicy.percent(65536L, -1L))
+        assertEquals(-1, UpdateDownloadPolicy.percent(-5L, 100L))
+        assertEquals(25, UpdateDownloadPolicy.percent(250L, 1000L))
+        assertEquals(99, UpdateDownloadPolicy.percent(1000L, 1000L))
+        assertEquals(99, UpdateDownloadPolicy.percent(4000L, 1000L))
+    }
 }
