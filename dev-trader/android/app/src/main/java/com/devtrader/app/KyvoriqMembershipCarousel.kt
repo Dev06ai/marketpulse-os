@@ -1,6 +1,6 @@
 package com.devtrader.app
 
-import android.app.AlertDialog
+import android.widget.ImageView
 import android.app.Dialog
 import android.content.Context
 import android.content.res.ColorStateList
@@ -28,10 +28,12 @@ import kotlin.math.abs
  * signals are ever derived from this view. Billing and feature access must be server-owned.
  */
 class KyvoriqMembershipCarousel(private val activity: FragmentActivity) {
-    private val ivory = Color.rgb(242, 238, 227)
+    private val ivory = Color.rgb(244, 239, 226)
+    private val softIvory = Color.rgb(222, 208, 180)
+    private val quote = KyvoriqRegionalPricing.forDevice(activity)
     private val muted = Color.rgb(164, 161, 155)
     private val nearBlack = Color.rgb(7, 8, 10)
-    private val surface = Color.rgb(23, 24, 26)
+    private val surface = Color.rgb(17, 18, 20)
 
     private data class Plan(
         val name: String,
@@ -106,10 +108,15 @@ class KyvoriqMembershipCarousel(private val activity: FragmentActivity) {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
         }
+        header.addView(ImageView(activity).apply {
+            setImageResource(R.drawable.kyvoriq_mark)
+            scaleType = ImageView.ScaleType.FIT_CENTER
+            contentDescription = "KYVORIQ logo"
+        }, LinearLayout.LayoutParams(dp(29), dp(32)).apply { rightMargin = dp(12) })
         header.addView(TextView(activity).apply {
-            text = "✦  KYVORIQ"
-            textSize = 17f
-            letterSpacing = .12f
+            text = "K Y V O R I Q"
+            textSize = 15f
+            letterSpacing = .09f
             setTextColor(ivory)
             setTypeface(null, Typeface.BOLD)
             contentDescription = "KYVORIQ membership plans"
@@ -119,7 +126,7 @@ class KyvoriqMembershipCarousel(private val activity: FragmentActivity) {
             gravity = Gravity.CENTER
             textSize = 30f
             setTextColor(ivory)
-            background = roundSurface(Color.rgb(30, 30, 33), 40f, Color.rgb(58, 58, 62))
+            background = roundSurface(Color.rgb(25, 26, 28), 40f, Color.rgb(90, 83, 73))
             contentDescription = "Close membership plans"
             isClickable = true
             isFocusable = true
@@ -146,33 +153,29 @@ class KyvoriqMembershipCarousel(private val activity: FragmentActivity) {
             textSize = 11f
             letterSpacing = .24f
             setTextColor(muted)
-            setPadding(0, dp(21), 0, dp(10))
+            setPadding(0, dp(23), 0, dp(12))
         }, LinearLayout.LayoutParams(-1, -2))
 
-        val symbol = TextView(activity).apply {
-            text = "✦"
-            gravity = Gravity.CENTER
-            textSize = 27f
-            setTextColor(ivory)
-            background = roundSurface(Color.rgb(30, 29, 28), 22f, Color.rgb(68, 65, 59))
-        }
-        content.addView(symbol, LinearLayout.LayoutParams(dp(52), dp(52)).apply {
-            bottomMargin = dp(13)
-        })
+        // The identity mark now lives in the header, leaving room for a premium serif hero.
         val headline = TextView(activity).apply {
             gravity = Gravity.CENTER
-            textSize = 22f
+            textSize = if (activity.resources.configuration.screenWidthDp < 360) 28f else 32f
             setTextColor(ivory)
-            setTypeface(null, Typeface.BOLD)
+            typeface = Typeface.create("serif", Typeface.NORMAL)
+            includeFontPadding = false
+            setLineSpacing(dp(2).toFloat(), 1.01f)
             maxLines = 2
         }
-        content.addView(headline, LinearLayout.LayoutParams(-1, -2))
+        content.addView(headline, LinearLayout.LayoutParams(-1, -2).apply {
+            topMargin = dp(6); bottomMargin = dp(9)
+        })
         val subtitle = TextView(activity).apply {
             gravity = Gravity.CENTER
             textSize = 13f
             setTextColor(muted)
             maxLines = 3
-            setPadding(dp(22), dp(8), dp(22), dp(7))
+            setLineSpacing(dp(2).toFloat(), 1.09f)
+            setPadding(dp(12), 0, dp(12), dp(5))
         }
         content.addView(subtitle, LinearLayout.LayoutParams(-1, dp(64)))
 
@@ -184,19 +187,22 @@ class KyvoriqMembershipCarousel(private val activity: FragmentActivity) {
             background = GradientDrawable().apply {
                 shape = GradientDrawable.OVAL
                 gradientType = GradientDrawable.RADIAL_GRADIENT
-                setColors(intArrayOf(Color.argb(88, 242, 238, 227), Color.argb(25, 242, 238, 227), Color.TRANSPARENT))
-                gradientRadius = dp(190).toFloat()
+                setColors(intArrayOf(
+                    Color.argb(142, 248, 227, 189), Color.argb(86, 244, 231, 210),
+                    Color.argb(20, 242, 238, 227), Color.TRANSPARENT))
+                gradientRadius = dp(220).toFloat()
             }
             importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
         }
-        glowHost.addView(glow, FrameLayout.LayoutParams(-1, dp(295), Gravity.CENTER))
+        val cardHeight = (activity.resources.configuration.screenHeightDp * .44f).toInt().coerceIn(295, 400)
+        glowHost.addView(glow, FrameLayout.LayoutParams(-1, dp(cardHeight + 50), Gravity.CENTER))
         val pager = ViewPager2(activity).apply {
             orientation = ViewPager2.ORIENTATION_HORIZONTAL
             adapter = PlanAdapter(activity, plans)
             offscreenPageLimit = 2
             clipChildren = false
             clipToPadding = false
-            setPadding(dp(36), 0, dp(36), 0)
+            setPadding(dp(45), 0, dp(45), 0)
         }
         (pager.getChildAt(0) as? RecyclerView)?.apply {
             clipChildren = false
@@ -207,19 +213,26 @@ class KyvoriqMembershipCarousel(private val activity: FragmentActivity) {
         pager.setPageTransformer { page, position ->
             if (allowMotion) {
                 val distance = abs(position).coerceIn(0f, 1f)
-                page.scaleX = 1f - .055f * distance
-                page.scaleY = 1f - .11f * distance
-                page.alpha = 1f - .36f * distance
-                page.translationY = dp(12) * distance
+                page.scaleX = 1f - .10f * distance
+                page.scaleY = 1f - .13f * distance
+                page.alpha = 1f - .44f * distance
+                page.translationY = dp(19) * distance
             } else {
                 page.scaleX = 1f
                 page.scaleY = 1f
                 page.alpha = 1f
                 page.translationY = 0f
             }
+            // Ivory border brightens as a card approaches the carousel center.
+            (page as? FrameLayout)?.getChildAt(0)?.let { card ->
+                (card.background as? GradientDrawable)?.setStroke(
+                    dp(1).coerceAtLeast(1),
+                    Color.argb(((1f - .70f * abs(position).coerceIn(0f, 1f)) * 240).toInt(),
+                        245, 237, 217))
+            }
         }
-        glowHost.addView(pager, FrameLayout.LayoutParams(-1, dp(289)))
-        content.addView(glowHost, LinearLayout.LayoutParams(-1, dp(289)).apply { topMargin = dp(3) })
+        glowHost.addView(pager, FrameLayout.LayoutParams(-1, dp(cardHeight)))
+        content.addView(glowHost, LinearLayout.LayoutParams(-1, dp(cardHeight)).apply { topMargin = dp(3) })
 
         val dots = LinearLayout(activity).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -234,6 +247,14 @@ class KyvoriqMembershipCarousel(private val activity: FragmentActivity) {
             setPadding(dp(12), dp(4), dp(12), dp(12))
         }
         content.addView(featureLabel, LinearLayout.LayoutParams(-1, -2))
+        content.addView(TextView(activity).apply {
+            val region = quote.regionName
+            text = (if (region.length == 2) "Your region (" + region + ")" else region) +
+                "  •  Indicative launch prices"
+            gravity = Gravity.CENTER
+            textSize = 10f
+            setTextColor(muted)
+        }, LinearLayout.LayoutParams(-1, dp(24)))
         val action = Button(activity).apply {
             isAllCaps = false
             textSize = 15f
@@ -244,11 +265,11 @@ class KyvoriqMembershipCarousel(private val activity: FragmentActivity) {
                 ColorStateList.valueOf(Color.argb(46, 30, 30, 30)),
                 roundSurface(ivory, 48f), null
             )
-            minHeight = dp(55)
+            minHeight = dp(58)
             stateListAnimator = null
             contentDescription = "View selected membership features"
         }
-        root.addView(action, LinearLayout.LayoutParams(-1, dp(55)).apply {
+        root.addView(action, LinearLayout.LayoutParams(-1, dp(58)).apply {
             leftMargin = dp(19)
             rightMargin = dp(19)
             topMargin = dp(9)
@@ -269,17 +290,21 @@ class KyvoriqMembershipCarousel(private val activity: FragmentActivity) {
             selectedPlan = index
             headline.animate().cancel()
             subtitle.animate().cancel()
-            headline.text = plan.headline
+            headline.text = when (index) {
+                0 -> "Discover the\nmarket."
+                1 -> "Unlock premium\nmarket analysis."
+                else -> "See the complete\nmarket picture."
+            }
             subtitle.text = plan.description
             if (changed && allowMotion) {
                 headline.alpha = .45f
                 headline.translationY = dp(7).toFloat()
                 headline.animate().alpha(1f).translationY(0f)
-                    .setDuration(220L).setInterpolator(KyvoriqTheme.motion).start()
+                    .setDuration(340L).setInterpolator(KyvoriqTheme.motion).start()
                 subtitle.alpha = .45f
                 subtitle.translationY = dp(5).toFloat()
                 subtitle.animate().alpha(1f).translationY(0f)
-                    .setDuration(260L).setInterpolator(KyvoriqTheme.motion).start()
+                    .setDuration(380L).setInterpolator(KyvoriqTheme.motion).start()
             } else {
                 headline.alpha = 1f
                 headline.translationY = 0f
@@ -287,7 +312,17 @@ class KyvoriqMembershipCarousel(private val activity: FragmentActivity) {
                 subtitle.translationY = 0f
             }
             featureLabel.text = plan.caption
-            action.text = if (index == 0) "EXPLORE BASIC" else "EXPLORE " + plan.name
+            action.text = "EXPLORE " + plan.name + "    ↗"
+            if (changed && allowMotion) {
+                glow.animate().cancel()
+                glow.alpha = .55f
+                glow.animate().alpha(1f).setDuration(420L)
+                    .setInterpolator(KyvoriqTheme.motion).start()
+                action.animate().cancel()
+                action.scaleX = .97f
+                action.animate().scaleX(1f).setDuration(310L)
+                    .setInterpolator(KyvoriqTheme.motion).start()
+            }
             dots.removeAllViews()
             plans.indices.forEach { i ->
                 val active = i == index
@@ -303,14 +338,7 @@ class KyvoriqMembershipCarousel(private val activity: FragmentActivity) {
                 }, FrameLayout.LayoutParams(dp(if (active) 21 else 7), dp(7), Gravity.CENTER))
                 dots.addView(target, LinearLayout.LayoutParams(dp(38), dp(34)))
             }
-            action.setOnClickListener {
-                AlertDialog.Builder(activity)
-                    .setTitle(plan.name + " membership")
-                    .setMessage(plan.features.joinToString("\n\n") { "•  " + it } +
-                        "\n\nTrading signals and paid checkout are coming later. No purchase is available yet.")
-                    .setPositiveButton("Close", null)
-                    .show()
-            }
+            action.setOnClickListener { showPlanDetails(plan) }
         }
         val callback = object : ViewPager2.OnPageChangeCallback() {
             override fun onPageSelected(position: Int) = select(position)
@@ -352,16 +380,16 @@ class KyvoriqMembershipCarousel(private val activity: FragmentActivity) {
                 gravity = Gravity.CENTER_HORIZONTAL
                 setPadding(dp(15), dp(17), dp(15), dp(16))
                 background = GradientDrawable(GradientDrawable.Orientation.TL_BR,
-                    intArrayOf(Color.rgb(41, 41, 40), surface)).apply {
-                    cornerRadius = dp(24).toFloat()
-                    setStroke(dp(1), Color.rgb(180, 176, 163))
+                    intArrayOf(Color.rgb(38, 37, 33), surface, Color.rgb(12, 13, 15))).apply {
+                    cornerRadius = dp(28).toFloat()
+                    setStroke(dp(1), softIvory)
                 }
                 elevation = dp(3).toFloat()
                 contentDescription = plan.name + " membership: " + plan.features.joinToString(", ")
             }
             holder.container.addView(card, FrameLayout.LayoutParams(-1, -1))
             card.addView(TextView(context).apply {
-                text = plan.marker
+                text = if (position == 1) "MOST POPULAR" else plan.marker
                 textSize = 10f
                 letterSpacing = .14f
                 gravity = Gravity.CENTER
@@ -372,24 +400,46 @@ class KyvoriqMembershipCarousel(private val activity: FragmentActivity) {
             card.addView(TextView(context).apply {
                 text = plan.name
                 setTextColor(ivory)
-                textSize = 30f
-                letterSpacing = .08f
+                textSize = 29f
+                letterSpacing = .04f
                 gravity = Gravity.CENTER
-                setTypeface(null, Typeface.BOLD)
+                typeface = Typeface.create("serif", Typeface.NORMAL)
             }, LinearLayout.LayoutParams(-1, dp(66)).apply { topMargin = dp(7) })
             card.addView(View(context).apply {
                 setBackgroundColor(Color.rgb(106, 102, 94))
             }, LinearLayout.LayoutParams(dp(46), dp(1)).apply { bottomMargin = dp(13) })
-            plan.features.take(4).forEach { feature ->
+            plan.features.take(3).forEach { feature ->
                 card.addView(TextView(context).apply {
-                    text = "✦  " + feature
+                    text = "✓  " + feature
                     setTextColor(ivory)
-                    textSize = 11.5f
+                    textSize = 11.2f
                     gravity = Gravity.CENTER
                     maxLines = 2
                     setPadding(0, dp(5), 0, dp(5))
                 }, LinearLayout.LayoutParams(-1, -2))
             }
+            card.addView(View(context), LinearLayout.LayoutParams(1, 0, 1f))
+            val price = KyvoriqRegionalPricing.displayAmount(
+                when (position) {
+                    0 -> KyvoriqAccessTier.BASIC
+                    1 -> KyvoriqAccessTier.PRO
+                    else -> KyvoriqAccessTier.ELITE
+                }, quote)
+            card.addView(TextView(context).apply {
+                text = price
+                textSize = if (price.length > 10) 22f else 29f
+                setTextColor(ivory)
+                gravity = Gravity.CENTER
+                typeface = Typeface.create("serif", Typeface.NORMAL)
+                maxLines = 1
+            }, LinearLayout.LayoutParams(-1, dp(41)))
+            card.addView(TextView(context).apply {
+                text = if (position == 0) "Always free" else if (price == "TBA")
+                    "Regional price coming soon" else "per month  •  preview"
+                textSize = 10.5f
+                setTextColor(muted)
+                gravity = Gravity.CENTER
+            }, LinearLayout.LayoutParams(-1, dp(24)))
         }
     }
 
