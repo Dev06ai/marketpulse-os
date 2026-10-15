@@ -238,15 +238,34 @@ class MarketChartView @JvmOverloads constructor(
 
     private val layerPrefs = context.getSharedPreferences("kyvoriq_chart_layers", Context.MODE_PRIVATE)
     private var showSfpLevels = layerPrefs.getBoolean("sfp", false)
-    private var showNpocLevels = layerPrefs.getBoolean("npoc", true)
-    private var showObLevels = layerPrefs.getBoolean("ob", true)
-    private var showDailyLevels = layerPrefs.getBoolean("daily", true)
-    private var showWeeklyLevels = layerPrefs.getBoolean("weekly", true)
+    private var showNpocLevels = layerPrefs.getBoolean("npoc", false)
+    private var showObLevels = layerPrefs.getBoolean("ob", false)
+    private var showDailyLevels = layerPrefs.getBoolean("daily", false)
+    private var showWeeklyLevels = layerPrefs.getBoolean("weekly", false)
     private var showOtherLevels = layerPrefs.getBoolean("other", false)
     private var showSessionProfiles = layerPrefs.getBoolean("session_profile", true)
     private var levelMenuOpen = false
     private var fullscreenMode = false
     private var accessTier = KyvoriqAccessTier.BASIC
+
+    init {
+        // Previous builds enabled several unrelated reference layers at once.
+        // Migrate one time to a clean VP chart, but allow users to turn them
+        // back on individually in LVL; never change paid-tier entitlements.
+        if (!layerPrefs.getBoolean("vp_core_only_v1", false)) {
+            showNpocLevels = false
+            showObLevels = false
+            showDailyLevels = false
+            showWeeklyLevels = false
+            showOtherLevels = false
+            layerPrefs.edit()
+                .putBoolean("npoc", false).putBoolean("ob", false)
+                .putBoolean("daily", false).putBoolean("weekly", false)
+                .putBoolean("other", false)
+                .putBoolean("vp_core_only_v1", true).apply()
+        }
+    }
+
     var onFullscreenRequested: (() -> Unit)? = null
     var onUpgradeRequested: ((String) -> Unit)? = null
 
@@ -282,9 +301,9 @@ class MarketChartView @JvmOverloads constructor(
     private fun mayUse(key: String): Boolean = accessTier.isAtLeast(requiredTier(key))
 
     private fun isOverlayVisible(row: JSONObject): Boolean {
-        if (row.optString("source", "").startsWith("MINDPILLAR_SCREENSHOT_")) {
-            return accessTier.volumeProfile() && showSessionProfiles
-        }
+        // A reference sourced from a screenshot is not a live volume-profile
+        // component. Never turn on iPOC, SFP gap, Daily or range lines simply
+        // because VP was selected. Apply normal LVL filters and tier checks.
         val kind = row.optString("kind", "LEVEL").uppercase(Locale.US)
         val label = row.optString("label", kind).uppercase(Locale.US)
         return when {
@@ -1715,18 +1734,18 @@ class MarketChartView @JvmOverloads constructor(
             if (!value.isFinite() || value !in low..high) return@mapNotNull null
             val kind = row.optString("kind", "LEVEL").uppercase(Locale.US)
             val type = when(kind) {
-                "DAILY" -> "D"
-                "NPOC" -> "N"
+                "DAILY" -> "DAY"
+                "NPOC" -> "nPOC"
                 "WEEKLY" -> "W"
                 "WEEKLY_NPOC" -> "WN"
                 "WEEKLY_OPEN" -> "WO"
                 "MONTHLY_POC" -> "M"
                 "RANGE_LOW" -> "RL"
-                "RANGE_POC" -> "P"
-                "RANGE_VAH" -> "H"
-                "RANGE_VAL" -> "L"
-                "IPOC" -> "iP"
-                "SFP_GAP" -> "G"
+                "RANGE_POC" -> "RPOC"
+                "RANGE_VAH" -> "RVAH"
+                "RANGE_VAL" -> "RVAL"
+                "IPOC" -> "iPOC"
+                "SFP_GAP" -> "GAP"
                 "SFP" -> "S"
                 "OB", "OB_ZONE" -> "OB"
                 else -> "L"
@@ -1753,18 +1772,30 @@ class MarketChartView @JvmOverloads constructor(
         val earliest = candles.optJSONObject(start)?.optLong("start", 0L) ?: 0L
         val latest = candles.optJSONObject(endExclusive - 1)?.optLong("end", 0L) ?: 0L
         val profileMarkers = if (!(showSessionProfiles && accessTier.volumeProfile())) emptyList() else {
-            val active = (0 until sessionProfiles.length()).mapNotNull { sessionProfiles.optJSONObject(it) }
-                .lastOrNull { it.optLong("start_ms", Long.MAX_VALUE) <= latest &&
-                    it.optLong("end_ms", 0L) >= earliest }
+            val active = (0 until sessionProfiles.length())
+                .mapNotNull { sessionProfiles.optJSONObject(it) }
+                .lastOrNull { session ->
+                    session.optString("source") == "OHLCV_15M_ESTIMATE" &&
+                    session.optLong("start_ms", Long.MAX_VALUE) <= latest &&
+                    session.optLong("end_ms", 0L) >= earliest &&
+                    session.optDouble("val", Double.NaN).let { it.isFinite() && it > 0.0 } &&
+                    session.optDouble("poc", Double.NaN).let { it.isFinite() && it > 0.0 } &&
+                    session.optDouble("vah", Double.NaN).let { it.isFinite() && it > 0.0 } &&
+                    session.optDouble("val") <= session.optDouble("poc") &&
+                    session.optDouble("poc") <= session.optDouble("vah")
+                }
             if (active == null) emptyList() else {
+                // One selected session, three interpretable labels, not dozens
+                // of screenshot levels or developing iPOC badges.
                 listOf(
-                    Triple("poc", Color.rgb(218, 113, 143), "P"),
-                    Triple("vah", Color.rgb(85, 139, 218), "H"),
-                    Triple("val", Color.rgb(85, 139, 218), "L")
+                    Triple("poc", Color.rgb(218, 113, 143), "POC"),
+                    Triple("vah", Color.rgb(85, 139, 218), "VAH"),
+                    Triple("val", Color.rgb(85, 139, 218), "VAL")
                 ).mapNotNull { (field, color, tag) ->
                     val value = active.optDouble(field, Double.NaN)
                     if (value.isFinite() && value in low..high)
-                        AxisLevelMark(mapY(value, low, high, top, bottom), value, tag + " " + compactPrice(value), color)
+                        AxisLevelMark(mapY(value, low, high, top, bottom), value,
+                            tag + " " + compactPrice(value), color, 7)
                     else null
                 }
             }
