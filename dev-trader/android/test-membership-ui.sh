@@ -11,7 +11,7 @@ for dimensions in '720x1280:320' '1080x2400:420'; do
   adb shell wm size "$resolution"
   adb shell wm density "$density"
   adb shell am instrument -w \
-    -e class com.devtrader.app.KyvoriqMembershipCarouselTest,com.devtrader.app.KyvoriqMembershipAccessTest \
+    -e class com.devtrader.app.KyvoriqMembershipCarouselTest,com.devtrader.app.KyvoriqMembershipAccessTest,com.devtrader.app.KyvoriqRegionalPricingTest \
     com.devtrader.app.debug.test/androidx.test.runner.AndroidJUnitRunner | tee /tmp/kyvoriq-membership-tests.txt
   grep -q "OK (" /tmp/kyvoriq-membership-tests.txt
 done
