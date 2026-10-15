@@ -138,11 +138,13 @@ internal object MarketInsightThesis {
             .minByOrNull { spot - it.price }
         fun mapped(level: Level?): String = if (level == null) "Not available" else
             "${level.name} ${price(level.price)} (${level.source})"
-        val cvd = observedString(features, "cvd_price_divergence")
+        // NONE is an explicit "no divergence" classifier from the backend.
+        // Missing/unknown/null is not evidence of an absent divergence.
+        val cvd = features.optString("cvd_price_divergence", "").trim().uppercase(Locale.US)
         val cvdText = when (cvd) {
             "BULLISH", "BEARISH" -> "${cvd.lowercase(Locale.US)} divergence flagged; requires price confirmation"
-            "UNAVAILABLE" -> "Divergence data unavailable"
-            else -> "No confirmed divergence flagged (not proof of neutral order flow)"
+            "NONE", "NEUTRAL" -> "No confirmed divergence flagged (not proof of neutral order flow)"
+            else -> "Divergence data unavailable"
         }
         val oi = features.optDouble("oi_change_5m_pct", Double.NaN)
         val oiText = if (oi.isFinite() && abs(oi) <= 100.0)
