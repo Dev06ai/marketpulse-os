@@ -1905,6 +1905,7 @@ class MarketChartView @JvmOverloads constructor(
         val occupied = mutableListOf<Float>()
         val anchors = mutableListOf<Pair<Float, Float>>()
         val drawnTexts = mutableListOf<String>()
+        val actuallyDrawnKeys = mutableSetOf<String>()
         markers.zip(centers).forEach { (mark, tagY) ->
             if (tagY == null) return@forEach
             val rect = RectF(axisLeft, tagY - dp(9f), axisRight, tagY + dp(9f))
@@ -1926,12 +1927,11 @@ class MarketChartView @JvmOverloads constructor(
             occupied.add(tagY)
             anchors.add(mark.originalY to tagY)
             drawnTexts.add(text)
+            actuallyDrawnKeys.add(mark.key)
         }
         // Keep the actual source-level values accessible when geometry or the
         // live price prevents all badges from fitting in the narrow rail.
-        val visibleKeys = markers.zip(centers).filter { (_, y) -> y != null }
-            .map { it.first.key }.toSet()
-        frameStructureOverflow = markers.filterNot { it.key in visibleKeys }
+        frameStructureOverflow = markers.filterNot { it.key in actuallyDrawnKeys }
         frameAxisLabelRects = rendered
         frameAxisSourceCenters = anchors
         frameAxisTexts = drawnTexts
