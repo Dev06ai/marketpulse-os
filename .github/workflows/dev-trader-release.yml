@@ -326,9 +326,13 @@ jobs:
           grep -Fq 'VP 15m • EST • PINNED' dev-trader/android/app/src/main/java/com/devtrader/app/MarketChartView.kt
           ! grep -Fq 'return Selection(nearest, false)' dev-trader/android/app/src/main/java/com/devtrader/app/VolumeProfileViewportPolicy.kt
           grep -Fq 'vp_core_only_v1' dev-trader/android/app/src/main/java/com/devtrader/app/MarketChartView.kt
-          grep -Fq 'Triple("poc", Color.rgb(218, 113, 143), "POC")' dev-trader/android/app/src/main/java/com/devtrader/app/MarketChartView.kt
-          grep -Fq 'Triple("vah", Color.rgb(85, 139, 218), "VAH")' dev-trader/android/app/src/main/java/com/devtrader/app/MarketChartView.kt
-          grep -Fq 'Triple("val", Color.rgb(85, 139, 218), "VAL")' dev-trader/android/app/src/main/java/com/devtrader/app/MarketChartView.kt
+          # VP retains POC/VAH/VAL in its own readout. Do not force old rail
+          # markers back into the UI and obscure Daily / Weekly / SFP / nPOC.
+          grep -Fq 'val items = listOf(' dev-trader/android/app/src/main/java/com/devtrader/app/MarketChartView.kt
+          grep -Fq 'Triple("POC", "poc"' dev-trader/android/app/src/main/java/com/devtrader/app/MarketChartView.kt
+          grep -Fq 'Triple("VAH", "vah"' dev-trader/android/app/src/main/java/com/devtrader/app/MarketChartView.kt
+          grep -Fq 'Triple("VAL", "val"' dev-trader/android/app/src/main/java/com/devtrader/app/MarketChartView.kt
+          grep -Fq 'val markers = manualMarkers' dev-trader/android/app/src/main/java/com/devtrader/app/MarketChartView.kt
           grep -Fq 'DewaldSnapshotReferences.merge(value)' dev-trader/android/app/src/main/java/com/devtrader/app/MarketChartView.kt
           grep -Fq 'String.format(Locale.US, "%,.1f", value)' dev-trader/android/app/src/main/java/com/devtrader/app/MarketChartView.kt
           ! grep -Fq 'Reference("FIB"' dev-trader/android/app/src/main/java/com/devtrader/app/DewaldSnapshotReferences.kt
