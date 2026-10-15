@@ -467,6 +467,15 @@ class MarketChartView @JvmOverloads constructor(
     // future-side gutter so dragging right can move the latest candle left.
     private var candleShift = 0f
     private var verticalOffset = 0.0
+    /** Deterministic regression hook for the same viewport state as real pan
+     * and pinch gestures; does not modify candles or source VP prices.
+     */
+    internal fun setViewportForTest(barShift: Float, priceOffset: Double = 0.0) {
+        followLive = false
+        candleShift = barShift
+        verticalOffset = priceOffset
+        invalidate()
+    }
     // The reference screenshot is a wide, context-first default chart.
     // One zoom unit shows roughly 65–80 15m candles instead of a tightly
     // cropped 35–45 candle viewport. Pinch gestures still work normally.
