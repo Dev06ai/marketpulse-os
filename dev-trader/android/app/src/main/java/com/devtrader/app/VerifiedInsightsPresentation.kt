@@ -32,7 +32,10 @@ internal object VerifiedInsightsPresentation {
     }
 
     fun usable(data: JSONObject?, now: Long): Boolean {
-        if (data == null || state(data) !in setOf("LIVE", "PARTIAL")) return false
+        if (data == null || data.optInt("schema", 0) != 1 ||
+            data.optString("source") != "BITGET_PUBLIC_BTCUSDT_PERPETUAL" ||
+            state(data) !in setOf("LIVE", "PARTIAL") ||
+            data.optDouble("price", Double.NaN).let { !it.isFinite() || it <= 0.0 }) return false
         val stamp = data.optLong("generated_at_ms", 0L)
         val market = data.optLong("market_as_of_ms", 0L)
         if (stamp <= 0L || market <= 0L || stamp > now + 15_000L ||
@@ -51,11 +54,13 @@ internal object VerifiedInsightsPresentation {
         }
         val info = data!!.optJSONObject("context") ?: JSONObject()
         val frames = info.optJSONObject("trends") ?: JSONObject()
-        val bias = info.optString("bias", "UNCONFIRMED")
+        val rawBias = info.optString("bias", "UNCONFIRMED").uppercase(Locale.US)
+        val bias = rawBias.takeIf { it in setOf("BEARISH", "BULLISH", "MIXED", "UNCONFIRMED") } ?: "UNCONFIRMED"
         val thesis = info.optString("thesis", "Insufficient verified evidence.")
             .take(260).ifBlank { "Insufficient verified evidence." }
         val structure = info.optString("structure_15m", "UNKNOWN")
         return "DATA · $quality · BTCUSDT perpetual\n" +
+            "LAST TRADE · " + money(data.optDouble("price", Double.NaN)) + " USDT\n" +
             age(data, now) + "\n" +
             "THESIS · $bias\n" +
             "4H ${trend(frames.optString("4h"))}  |  1H ${trend(frames.optString("1h"))}  |  " +
@@ -70,9 +75,12 @@ internal object VerifiedInsightsPresentation {
         else -> "UNCONFIRMED"
     }
 
-    private fun level(label: String, level: JSONObject?): String {
+    private fun level(label: String, level: JSONObject?, marketPrice: Double): String {
         if (level == null) return "$label · Not confirmed"
         val price = level.optDouble("price", Double.NaN)
+        if (!price.isFinite() || price <= 0.0 ||
+            (label == "Above" && price <= marketPrice) ||
+            (label == "Below" && price >= marketPrice)) return "$label · Not confirmed"
         val kind = level.optString("kind", "LEVEL").take(22)
         val distance = level.optDouble("distance_pct", Double.NaN)
         return "$label · $kind ${money(price)}" +
@@ -95,8 +103,8 @@ internal object VerifiedInsightsPresentation {
         val cvdText = if (!cvdOk) "Not verified" else if (cvd == "NONE")
             "No divergence observed" else "$cvd divergence (heuristic)"
         return "CONFIRMED MARKET REFERENCES\n" +
-            level("Above", levels.optJSONObject("above")) + "\n" +
-            level("Below", levels.optJSONObject("below")) + "\n" +
+            level("Above", levels.optJSONObject("above"), data.optDouble("price", Double.NaN)) + "\n" +
+            level("Below", levels.optJSONObject("below"), data.optDouble("price", Double.NaN)) + "\n" +
             "OI · " + (if (oiOk) String.format(Locale.US, "5m %+.3f%%", oi) else "5m unavailable") + "\n" +
             "CVD · $cvdText\n" +
             "Live observations, not automatic support/resistance or trades."
