@@ -1185,8 +1185,9 @@ class SafeActivity : FragmentActivity() {
 
         val story = premiumCard("MARKET CONTEXT", "Reading the market…", 12.5f)
         features = story.second
-        features.maxLines = 7
-        features.ellipsize = android.text.TextUtils.TruncateAt.END
+        // The evidence-based thesis must never be truncated mid-risk caveat.
+        features.maxLines = Int.MAX_VALUE
+        features.ellipsize = null
         story.first.setOnClickListener {
             haptic(it, KyvoriqHaptics.Cue.TAP)
             showInfoDialog("Market context", features.text.toString())
@@ -3209,41 +3210,11 @@ class SafeActivity : FragmentActivity() {
                 "MTF STORY\n" + first + if (remainder.isBlank()) "" else "\n" + remainder
             }
         }
-        val storyObj = engine?.optJSONObject("market_story")
-        val storyBias = storyObj?.optString("bias", "BALANCED") ?: "BALANCED"
-        val storySummary = storyObj?.optString("summary", "").orEmpty()
-        val wave15Obj = storyObj?.optJSONObject("wave_context")?.optJSONObject("15m")
-        val wave1hObj = storyObj?.optJSONObject("wave_context")?.optJSONObject("1h")
-        val storyTriggers = storyObj?.optJSONArray("trigger_map")
-        val triggerText = if (storyTriggers != null && storyTriggers.length() > 0) {
-            (0 until minOf(3, storyTriggers.length())).joinToString(" • ") { storyTriggers.optString(it) }
-        } else "Waiting for a confirmed trigger"
-        val storyNarrative = storyObj?.optJSONArray("narrative")
-        val narrativeText = if (storyNarrative != null && storyNarrative.length() > 0) {
-            (0 until minOf(3, storyNarrative.length())).joinToString("\n") { "• " + storyNarrative.optString(it) }
-        } else "• Building market narrative from live structure and flow"
-        val noTradeReason = storyObj?.optString("no_trade_reason", "").orEmpty()
-        val longScore = storyObj?.optInt("long_score", 0) ?: 0
-        val shortScore = storyObj?.optInt("short_score", 0) ?: 0
-
-        val mtf15 = wave15Obj?.optString("direction")?.takeUnless { it.isBlank() || it == "UNKNOWN" } ?: f?.optString("trend_15", "UNKNOWN") ?: "UNKNOWN"
-        val mtf1h = wave1hObj?.optString("direction")?.takeUnless { it.isBlank() || it == "UNKNOWN" } ?: f?.optString("trend_60", "UNKNOWN") ?: "UNKNOWN"
-        val mtf4h = f?.optString("trend_240", "UNKNOWN") ?: "UNKNOWN"
-        val regime = f?.optString("regime", "—") ?: "—"
-        val structure = f?.optString("market_structure", "—") ?: "—"
-        val triggerCompact = triggerText.replace("\n", " ").trim().take(46)
-        val marketAside = when {
-            !authoritativeFeedHealthy -> "Feed unverified — entries stay on hold."
-            signalObj != null -> "Setup in focus. Risk checks call the shots."
-            regime.contains("RANGE", ignoreCase = true) -> "Range market? The chart's on a side quest."
-            else -> "No FOMO. Clean triggers only."
-        }
-        features.text =
-            "Bias • $storyBias" +
-            "\nTrend • 4H $mtf4h / 1H $mtf1h / 15m $mtf15" +
-            "\nRegime • $regime / $structure" +
-            "\nTrigger • " + (if (triggerCompact.isBlank()) "Waiting for confirmation" else triggerCompact) +
-            "\n" + marketAside
+        // Insights never recycles the strategy engine's subjective market
+        // narrative. Only server-verified, timestamped public BTC data may
+        // produce a market thesis; unsupported/stale data fails closed.
+        val insights = root.optJSONObject("market_insights")
+        features.text = VerifiedInsightsPresentation.marketContext(insights)
 
         chart.setLivePrice(priceValue)
         if (requestChart) requestChartIfNeeded()
@@ -3379,11 +3350,8 @@ class SafeActivity : FragmentActivity() {
                 "  •  " + nearestLevel.optString("direction", "BOTH") +
                 if (score > 0) "  •  $score/$required" else ""
         } else "Waiting for price to approach mapped levels"
-        insightContext.text =
-            "LEVEL MAP  $levelState\n" +
-            activeLevelText +
-            "\nCVD  ${f.optString("cvd_price_divergence", "—")}  •  OI5m ${money(f.optDouble("oi_change_5m_pct", Double.NaN), true)}%\n" +
-            "Structure  ${f.optString("market_structure", "—")}"
+        insightContext.text = VerifiedInsightsPresentation.levelsFlow(
+            root.optJSONObject("market_insights"))
         if (s != null) {
             val direction = s.optString("direction", "WAIT")
             val lifecycle = s.optString("lifecycle", "ACTIVE")
@@ -5333,7 +5301,7 @@ class SafeActivity : FragmentActivity() {
                             }
                             check.text = "PRIVATE DIAGNOSTICS  •  " + fault +
                                 "\n" + publicReport +
-                                "\nBitget execution readiness  •  UNVERIFIED" +
+                                "\nMarket intelligence  •  WAITING FOR VERIFIED DATA" +
                                 if (body == "HTTP 401") "\nACTION  •  TAP RE-PAIR DEVICE" else "\nACTION  •  RETRY AFTER RESTORING CONNECTION"
                             checkButton.isEnabled = true
                         }
@@ -5343,14 +5311,11 @@ class SafeActivity : FragmentActivity() {
                 safe {
                     val j = JSONObject(body)
                     val market = j.optJSONObject("market")
-                    val strategy = j.optJSONObject("strategy")
                     val api = j.optBoolean("backend_ok", false)
                     val dataHealth = market?.optString("data_health", "UNKNOWN") ?: "UNKNOWN"
                     val ws = market?.optBoolean("ws_connected", false) == true
                     val marketFeed = j.optJSONObject("market_feed")
                     val feedSource = marketFeed?.optString("source", "NONE") ?: "NONE"
-                    val signalState = strategy?.optString("signal_state", "NONE") ?: "NONE"
-                    val scanning = strategy?.optString("status") == "SCANNING"
                     val notifications = Build.VERSION.SDK_INT < 33 ||
                         checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
 
@@ -5363,36 +5328,12 @@ class SafeActivity : FragmentActivity() {
                     }
                     val wsText = if (ws) "CONNECTED" else "DISCONNECTED"
                     val sourceText = feedSource.replace("_", " ")
-                    val strategyText = when {
-                        signalState == "ACTIVE" -> "ACTIVE"
-                        scanning -> "SCANNING"
-                        else -> "NOT READY"
-                    }
                     val alertText = if (notifications) "READY" else "NOT ENABLED"
                     val featureJson = j.optJSONObject("features")
-                    val demo = strategy?.optJSONObject("demo_execution")
-                    val demoSummary = demo?.optJSONObject("summary")
-                    val demoReady = demoSummary?.optBoolean("ready", false) == true
-                    val demoClient = demoSummary?.optJSONObject("client_status")
-                    val demoBalance = demoClient?.optDouble("available_balance_usdt", Double.NaN) ?: Double.NaN
-                    val demoClientReason = demoClient?.optString(
-                        "reason",
-                        demoClient?.optString("readiness_reason", "")
-                    ) ?: ""
-                    val demoText = when {
-                        demoReady -> "READY" + if (!demoBalance.isNaN()) " • " + String.format(Locale.US, "%.2f USDT", demoBalance) else ""
-                        demoClientReason.contains("40099") ||
-                            demoClientReason.contains("exchange environment is incorrect", ignoreCase = true) ->
-                            "WRONG DEMO ENVIRONMENT"
-                        !demoBalance.isNaN() && demoBalance <= 0.0 -> "WAITING FOR FUNDS"
-                        else -> "CHECK CONNECTION"
-                    }
                     check.text = "API  " + apiText +
                         "\nMarket Feed  " + feedHealth + " • " + sourceText +
                         "\nPrimary WS  " + wsText +
-                        "\nStrategy  " + strategyText +
-                        "\nSignal  " + (strategy?.optString("signal_state", "NONE") ?: "NONE") +
-                        "\nBitget Demo  " + demoText +
+                        "\nPublic market data only; no exchange-account diagnostics" +
                         "\nRegime  " + (featureJson?.optString("regime", "—") ?: "—") +
                         "\nStructure  " + (featureJson?.optString("market_structure", "—") ?: "—") +
                         "\nAlerts  " + alertText
