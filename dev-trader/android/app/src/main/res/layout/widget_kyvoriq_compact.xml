@@ -20,7 +20,7 @@
         android:scaleType="fitCenter"
         android:contentDescription="KYVORIQ emblem"/>
 
-    <View
+    <TextView
         android:id="@+id/widget_brand_divider"
         android:layout_width="1dp"
         android:layout_height="25dp"
@@ -101,7 +101,7 @@
         </ViewFlipper>
     </LinearLayout>
 
-    <View
+    <TextView
         android:id="@+id/widget_market_divider"
         android:layout_width="1dp"
         android:layout_height="21dp"
@@ -116,7 +116,7 @@
         android:orientation="horizontal"
         android:gravity="center_vertical"
         android:contentDescription="Market feed status">
-        <View
+        <TextView
             android:id="@+id/widget_market_dot"
             android:layout_width="6dp"
             android:layout_height="6dp"
