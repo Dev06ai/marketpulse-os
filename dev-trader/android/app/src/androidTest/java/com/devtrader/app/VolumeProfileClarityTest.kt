@@ -88,10 +88,14 @@ class VolumeProfileClarityTest {
     @Test fun vpShowsOnlyThreeCoreReadablePriceLabels() {
         val chart = chartWithProfile(KyvoriqAccessTier.OWNER)
         val labels = render(chart)
-        assertTrue("POC is the highest-priority VP level", labels.any { it.startsWith("POC ") })
-        assertTrue("Value-area high should be available", labels.any { it.startsWith("VAH ") })
-        assertTrue("Value-area low should be available", labels.any { it.startsWith("VAL ") })
-        assertTrue("Unexpected extra VP badges: $labels", labels.size <= 3)
+        val vpReadout = chart.visibleVpReadoutForTest()
+        assertEquals("POC VAH VAL must live in their own row", 3, vpReadout.size)
+        assertTrue(vpReadout[0].startsWith("POC "))
+        assertTrue(vpReadout[1].startsWith("VAH "))
+        assertTrue(vpReadout[2].startsWith("VAL "))
+        assertTrue("VP must not consume structure price rail slots", labels.none {
+            it.startsWith("POC ") || it.startsWith("VAH ") || it.startsWith("VAL ")
+        })
         assertTrue("Legacy iPOC, daily, GAP and range labels must be hidden", labels.none {
             it.startsWith("iP") || it.startsWith("G") || it.startsWith("DAY") || it.startsWith("R")
         })
@@ -104,6 +108,64 @@ class VolumeProfileClarityTest {
         assertTrue(chart.visibleAxisPriceAnchorsForTest().all { (priceY, tagY) ->
             abs(priceY - tagY) <= 6 * density + 0.1f
         })
+    }
+
+    @Test fun vpEnabledStillShowsEnabledDailyWeeklySfpNpocWithoutFalseAxisPrices() {
+        val prefs = ctx.getSharedPreferences("kyvoriq_chart_layers", android.content.Context.MODE_PRIVATE)
+        prefs.edit().clear().putBoolean("vp_core_only_v1", true)
+            .putBoolean("session_profile", true).putBoolean("sfp", true)
+            .putBoolean("npoc", true).putBoolean("daily", true)
+            .putBoolean("weekly", true).commit()
+        val chart = chartWithProfile(KyvoriqAccessTier.OWNER, optionalLevelsEnabled = true)
+        // chartWithProfile reloads prefs; explicitly persist the SFP flag before
+        // constructing a new chart from this fixture, not by forging entitlements.
+        prefs.edit().putBoolean("sfp", true).commit()
+        val fresh = MarketChartView(ctx).apply {
+            setAccessTier(KyvoriqAccessTier.OWNER)
+        }
+        val base = 1_760_000_000_000L
+        val candles = JSONArray()
+        repeat(90) { i ->
+            val ts = base + i * 3_600_000L
+            candles.put(JSONObject().put("start", ts).put("end", ts + 3_600_000L - 1)
+                .put("open", 83000.0).put("close", 82800.0)
+                .put("high", 84500.0).put("low", 80600.0).put("volume", 200.0))
+        }
+        val profile = JSONObject().put("source", "OHLCV_15M_ESTIMATE")
+            .put("start_ms", base + 66 * 3_600_000L).put("end_ms", base + 90 * 3_600_000L)
+            .put("val", 81900.0).put("poc", 83125.0).put("vah", 83900.0)
+            .put("bins", JSONArray().put(JSONObject().put("price", 81900.0).put("volume", 10.0))
+                .put(JSONObject().put("price", 83125.0).put("volume", 20.0)))
+        val rows = JSONArray()
+        listOf(
+            "DAILY" to 83125.7,
+            "WEEKLY" to 83143.0,
+            "NPOC" to 83225.0,
+            "SFP" to 83350.0
+        ).forEachIndexed { i, (kind, price) ->
+            rows.put(JSONObject().put("kind", kind).put("label", kind)
+                .put("price", price).put("id", "test-$i")
+                .put("reference_expires_ms", Long.MAX_VALUE))
+        }
+        fresh.setSessionProfiles(JSONArray().put(profile))
+        fresh.setReferenceLevels(rows)
+        fresh.setData(candles, null, null, 82500.0, JSONArray())
+        fresh.layout(0, 0, px(393), px(650))
+        val axis = render(fresh)
+        val overflow = fresh.visibleStructureOverflowForTest()
+        val combined = axis + overflow
+        assertTrue("Daily missing with VP enabled: $combined", combined.any { it.startsWith("DAY ") })
+        assertTrue("Weekly missing with VP enabled: $combined", combined.any { it.startsWith("W ") })
+        assertTrue("nPOC missing with VP enabled: $combined", combined.any { it.startsWith("nPOC ") })
+        assertTrue("SFP missing with VP enabled: $combined", combined.any { it.startsWith("S ") })
+        assertEquals(3, fresh.visibleVpReadoutForTest().size)
+        assertTrue("No duplicate VP rail tags", axis.none {
+            it.startsWith("POC ") || it.startsWith("VAH ") || it.startsWith("VAL ")
+        })
+        val rects = fresh.visibleAxisLabelRectsForTest()
+        for (i in rects.indices) for (j in i + 1 until rects.size) {
+            assertFalse("Structure tags overlap", RectF.intersects(rects[i], rects[j]))
+        }
     }
 
     @Test fun importantVpPricesRemainVisibleWhenLiveTagCoversPocAxis() {
