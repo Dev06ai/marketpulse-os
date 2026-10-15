@@ -9,7 +9,10 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class VerifiedInsightsPresentationTest {
     private val now = 1_760_544_300_000L
-    private fun packet() = JSONObject().put("quality", "LIVE")
+    private fun packet() = JSONObject().put("schema", 1)
+        .put("source", "BITGET_PUBLIC_BTCUSDT_PERPETUAL")
+        .put("price", 82400.0)
+        .put("quality", "LIVE")
         .put("source", "BITGET_PUBLIC_BTCUSDT_PERPETUAL")
         .put("generated_at_ms", now - 2_000)
         .put("market_as_of_ms", now - 9_000)
