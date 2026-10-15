@@ -255,9 +255,20 @@ class KyvoriqWidgetProvider : AppWidgetProvider() {
                 val recentPublic = publicPrice != "—" && !savedQuote && publicAge in 0L..120_000L
                 views.setTextViewText(R.id.widget_price_0, publicPrice)
                 views.setTextViewText(R.id.widget_price_1, publicPrice)
+                if (!expanded) {
+                    val readableSp = WidgetTickerLayoutPolicy.priceSp(
+                        minWidth, publicPrice, context.resources.configuration.fontScale
+                    )
+                    views.setTextViewTextSize(R.id.widget_price_0,
+                        android.util.TypedValue.COMPLEX_UNIT_SP, readableSp)
+                    views.setTextViewTextSize(R.id.widget_price_1,
+                        android.util.TypedValue.COMPLEX_UNIT_SP, readableSp)
+                }
+                views.setTextColor(R.id.widget_price_0, KyvoriqTheme.gold)
+                views.setTextColor(R.id.widget_price_1, KyvoriqTheme.gold)
                 views.setDisplayedChild(R.id.widget_price_flipper, 0)
                 views.setTextViewText(R.id.widget_delta, "•")
-                views.setTextViewText(R.id.widget_bias, "BTC SPOT")
+                views.setTextViewText(R.id.widget_bias, "BTC MARKET")
                 views.setTextViewText(R.id.widget_health, if (recentPublic) "LAST BTC" else "SAVED BTC")
                 if (!expanded) {
                     views.setViewVisibility(R.id.widget_market_dot, android.view.View.GONE)
