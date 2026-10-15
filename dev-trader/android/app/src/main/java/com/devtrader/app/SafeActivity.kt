@@ -1185,8 +1185,8 @@ class SafeActivity : FragmentActivity() {
 
         val story = premiumCard("MARKET CONTEXT", "Reading the market…", 12.5f)
         features = story.second
-        features.maxLines = 7
-        features.ellipsize = android.text.TextUtils.TruncateAt.END
+        features.maxLines = 14
+        features.ellipsize = null
         story.first.setOnClickListener {
             haptic(it, KyvoriqHaptics.Cue.TAP)
             showInfoDialog("Market context", features.text.toString())
@@ -1208,6 +1208,10 @@ class SafeActivity : FragmentActivity() {
 
         val levels = compactCard("LEVELS & FLOW", "Loading confirmed context…", 12.5f)
         insightContext = levels.value
+        levels.container.setOnClickListener {
+            haptic(it, KyvoriqHaptics.Cue.TAP)
+            showInfoDialog("Verified levels & flow", insightContext.text.toString())
+        }
         insightsContent.addView(levels.container, margins(bottom = 10))
         adminOnlyViews.add(levels.container)
         // Maintain private diagnostic source state without displaying a
@@ -3238,12 +3242,11 @@ class SafeActivity : FragmentActivity() {
             regime.contains("RANGE", ignoreCase = true) -> "Range market? The chart's on a side quest."
             else -> "No FOMO. Clean triggers only."
         }
-        features.text =
-            "Bias • $storyBias" +
-            "\nTrend • 4H $mtf4h / 1H $mtf1h / 15m $mtf15" +
-            "\nRegime • $regime / $structure" +
-            "\nTrigger • " + (if (triggerCompact.isBlank()) "Waiting for confirmation" else triggerCompact) +
-            "\n" + marketAside
+        // The previous heuristic story mixed strategy/execution state into
+        // a supposedly factual market analysis. Use only the backend's
+        // timestamped, read-only public-market evidence; fail closed.
+        features.text = VerifiedMarketInsightsPresentation
+            .present(root.optJSONObject("market_insights")).context
 
         chart.setLivePrice(priceValue)
         if (requestChart) requestChartIfNeeded()
@@ -3379,11 +3382,10 @@ class SafeActivity : FragmentActivity() {
                 "  •  " + nearestLevel.optString("direction", "BOTH") +
                 if (score > 0) "  •  $score/$required" else ""
         } else "Waiting for price to approach mapped levels"
-        insightContext.text =
-            "LEVEL MAP  $levelState\n" +
-            activeLevelText +
-            "\nCVD  ${f.optString("cvd_price_divergence", "—")}  •  OI5m ${money(f.optDouble("oi_change_5m_pct", Double.NaN), true)}%\n" +
-            "Structure  ${f.optString("market_structure", "—")}"
+        // Do not present trade-engine arming, execution triggers or unverified
+        // default-zero OI/CVD as market structure.
+        insightContext.text = VerifiedMarketInsightsPresentation
+            .present(root.optJSONObject("market_insights")).levelsAndFlow
         if (s != null) {
             val direction = s.optString("direction", "WAIT")
             val lifecycle = s.optString("lifecycle", "ACTIVE")
@@ -5333,7 +5335,7 @@ class SafeActivity : FragmentActivity() {
                             }
                             check.text = "PRIVATE DIAGNOSTICS  •  " + fault +
                                 "\n" + publicReport +
-                                "\nBitget execution readiness  •  UNVERIFIED" +
+                                "\nMarket analysis  •  UNVERIFIED" +
                                 if (body == "HTTP 401") "\nACTION  •  TAP RE-PAIR DEVICE" else "\nACTION  •  RETRY AFTER RESTORING CONNECTION"
                             checkButton.isEnabled = true
                         }
@@ -5370,32 +5372,12 @@ class SafeActivity : FragmentActivity() {
                     }
                     val alertText = if (notifications) "READY" else "NOT ENABLED"
                     val featureJson = j.optJSONObject("features")
-                    val demo = strategy?.optJSONObject("demo_execution")
-                    val demoSummary = demo?.optJSONObject("summary")
-                    val demoReady = demoSummary?.optBoolean("ready", false) == true
-                    val demoClient = demoSummary?.optJSONObject("client_status")
-                    val demoBalance = demoClient?.optDouble("available_balance_usdt", Double.NaN) ?: Double.NaN
-                    val demoClientReason = demoClient?.optString(
-                        "reason",
-                        demoClient?.optString("readiness_reason", "")
-                    ) ?: ""
-                    val demoText = when {
-                        demoReady -> "READY" + if (!demoBalance.isNaN()) " • " + String.format(Locale.US, "%.2f USDT", demoBalance) else ""
-                        demoClientReason.contains("40099") ||
-                            demoClientReason.contains("exchange environment is incorrect", ignoreCase = true) ->
-                            "WRONG DEMO ENVIRONMENT"
-                        !demoBalance.isNaN() && demoBalance <= 0.0 -> "WAITING FOR FUNDS"
-                        else -> "CHECK CONNECTION"
-                    }
                     check.text = "API  " + apiText +
                         "\nMarket Feed  " + feedHealth + " • " + sourceText +
                         "\nPrimary WS  " + wsText +
-                        "\nStrategy  " + strategyText +
-                        "\nSignal  " + (strategy?.optString("signal_state", "NONE") ?: "NONE") +
-                        "\nBitget Demo  " + demoText +
-                        "\nRegime  " + (featureJson?.optString("regime", "—") ?: "—") +
-                        "\nStructure  " + (featureJson?.optString("market_structure", "—") ?: "—") +
-                        "\nAlerts  " + alertText
+                        "\nMarket structure  " + (featureJson?.optString("market_structure", "UNKNOWN") ?: "UNKNOWN") +
+                        "\nNotifications  " + alertText +
+                        "\nPrivate order state is not displayed in Insights."
                 }
                 checkButton.isEnabled = true
             }
