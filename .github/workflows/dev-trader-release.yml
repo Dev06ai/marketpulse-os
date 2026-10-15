@@ -294,7 +294,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: kyvoriq-185-clean-vp-evidence
+          name: kyvoriq-186-vp-readout-evidence
           path: recovery-qa/
           retention-days: 14
 
@@ -308,6 +308,9 @@ jobs:
           test -s dev-trader/android/app/src/androidTest/java/com/devtrader/app/UpdateDownloadPolicyTest.kt
           test -s dev-trader/android/app/src/androidTest/java/com/devtrader/app/DewaldSnapshotReferencesTest.kt
           test -s dev-trader/android/app/src/androidTest/java/com/devtrader/app/VolumeProfileClarityTest.kt
+          grep -Fq 'visibleVpReadoutForTest' dev-trader/android/app/src/main/java/com/devtrader/app/MarketChartView.kt
+          grep -Fq 'selectedSessionVolumeProfile(start, endExclusive)' dev-trader/android/app/src/main/java/com/devtrader/app/MarketChartView.kt
+          grep -Fq 'drawVolumeProfileReadout(canvas, selectedProfile' dev-trader/android/app/src/main/java/com/devtrader/app/MarketChartView.kt
           grep -Fq 'vp_core_only_v1' dev-trader/android/app/src/main/java/com/devtrader/app/MarketChartView.kt
           grep -Fq 'Triple("poc", Color.rgb(218, 113, 143), "POC")' dev-trader/android/app/src/main/java/com/devtrader/app/MarketChartView.kt
           grep -Fq 'Triple("vah", Color.rgb(85, 139, 218), "VAH")' dev-trader/android/app/src/main/java/com/devtrader/app/MarketChartView.kt
