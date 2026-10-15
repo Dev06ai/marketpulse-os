@@ -241,6 +241,16 @@ class KyvoriqWidgetProvider : AppWidgetProvider() {
                 "SHORT", "BEARISH" -> KyvoriqTheme.white
                 else -> KyvoriqTheme.gold
             }
+            fun destination(name: String, index: Int): PendingIntent {
+                val route = Intent(context, SafeActivity::class.java).apply {
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                    data = android.net.Uri.parse("kyvoriq://widget/$appWidgetId/$name")
+                    putExtra("widget_destination", name)
+                }
+                return PendingIntent.getActivity(context, appWidgetId * 10 + index, route,
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+            }
+
             // Cached prices are not live after a service stop or expired pairing.
             val updated = prefs.getLong(KEY_UPDATED, 0L)
             val quoteFresh = updated > 0L && System.currentTimeMillis() - updated in 0L..20_000L
@@ -276,6 +286,15 @@ class KyvoriqWidgetProvider : AppWidgetProvider() {
                 } else {
                     views.setTextViewText(R.id.widget_state, "PUBLIC BTC • VIEW ONLY")
                     views.setTextViewText(R.id.widget_pnl, "P&L  PRIVATE")
+                }
+                // Even Basic widgets remain interactive; private views stay locked.
+                views.setOnClickPendingIntent(R.id.widget_price_flipper, destination("chart", 1))
+                views.setOnClickPendingIntent(R.id.widget_health, destination("insights", 2))
+                if (!expanded) views.setOnClickPendingIntent(R.id.widget_market_status, destination("insights", 2))
+                views.setOnClickPendingIntent(R.id.widget_alerts, destination("alerts", 3))
+                if (expanded) {
+                    views.setOnClickPendingIntent(R.id.widget_chart, destination("chart", 4))
+                    views.setOnClickPendingIntent(R.id.widget_positions, destination("insights", 5))
                 }
                 manager.updateAppWidget(appWidgetId, views)
                 return
@@ -341,15 +360,6 @@ class KyvoriqWidgetProvider : AppWidgetProvider() {
                 views.setTextColor(R.id.widget_pnl, pnlColor)
             }
 
-            fun destination(name: String, index: Int): PendingIntent {
-                val route = Intent(context, SafeActivity::class.java).apply {
-                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-                    data = android.net.Uri.parse("kyvoriq://widget/$appWidgetId/$name")
-                    putExtra("widget_destination", name)
-                }
-                return PendingIntent.getActivity(context, appWidgetId * 10 + index, route,
-                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-            }
             views.setOnClickPendingIntent(R.id.widget_price_flipper, destination("chart", 1))
             views.setOnClickPendingIntent(R.id.widget_health, destination("insights", 2))
             if (!expanded) views.setOnClickPendingIntent(R.id.widget_market_status, destination("insights", 2))
