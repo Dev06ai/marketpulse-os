@@ -321,6 +321,9 @@ jobs:
           grep -Fq 'vpEnabledStillShowsEnabledDailyWeeklySfpNpocWithoutFalseAxisPrices' dev-trader/android/app/src/androidTest/java/com/devtrader/app/VolumeProfileClarityTest.kt
           grep -Fq 'frameStructureOverflow = markers.filterNot' dev-trader/android/app/src/main/java/com/devtrader/app/MarketChartView.kt
           grep -Fq 'drawStructuralOverflow(canvas' dev-trader/android/app/src/main/java/com/devtrader/app/MarketChartView.kt
+          grep -Fq 'visibleTimeAxisLabelRectsForTest()' dev-trader/android/app/src/main/java/com/devtrader/app/MarketChartView.kt
+          grep -Fq 'timeAxisLabelsRemainSeparatedDuringPanAtNarrowPhoneWidth' dev-trader/android/app/src/androidTest/java/com/devtrader/app/ChartAxisRailTest.kt
+          grep -Fq 'MORE · $caption' dev-trader/android/app/src/main/java/com/devtrader/app/MarketChartView.kt
           grep -Fq 'The POC / VAH / VAL values already occupy' dev-trader/android/app/src/main/java/com/devtrader/app/MarketChartView.kt
           ! grep -Fq 'occupiedAxisTags + occupiedOffscreenHints' dev-trader/android/app/src/main/java/com/devtrader/app/MarketChartView.kt
           grep -Fq 'VP 15m • EST • PINNED' dev-trader/android/app/src/main/java/com/devtrader/app/MarketChartView.kt
