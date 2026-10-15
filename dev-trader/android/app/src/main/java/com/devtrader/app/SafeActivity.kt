@@ -434,7 +434,12 @@ class SafeActivity : FragmentActivity() {
         if (!privacyAuthenticated) return
         intent.removeExtra("widget_destination")
         when (destination) {
-            "alerts" -> handler.post { if (!isFinishing && privacyAuthenticated) showBtcPriceAlerts() }
+            "alerts" -> handler.post {
+                if (!isFinishing && privacyAuthenticated) {
+                    if (KyvoriqSecureSession.isPaired(this)) showBtcPriceAlerts()
+                    else showConsumerPlans(1)
+                }
+            }
             "positions" -> selectWorkspace(1)
             "insights" -> selectWorkspace(2)
             else -> selectWorkspace(0)
@@ -4285,6 +4290,7 @@ class SafeActivity : FragmentActivity() {
                         if (publicMarketOnly) JSONArray() else chartOverlays(latestRoot)
                     )
                     if (publicMarketOnly) {
+                        KyvoriqWidgetProvider.updateFromPublicPrice(this, lastPrice, saved = false)
                         price.setPrice(lastPrice, animate = false)
                         oiView.text = "OI  —  •  PRIVATE"
                         status.text = "VIEW ONLY"
@@ -4321,6 +4327,7 @@ class SafeActivity : FragmentActivity() {
         chart.setSignal(null)
         chart.setTradeEvent(null)
         chart.setFeedHealthy(false)
+        KyvoriqWidgetProvider.updateFromPublicPrice(this, lastPrice, saved = cached)
         price.setPrice(lastPrice, animate = false)
         status.text = if (cached) "SAVED • OFFLINE" else "VIEW ONLY"
         oiView.text = "OI  —"
