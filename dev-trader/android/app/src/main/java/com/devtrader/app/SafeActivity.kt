@@ -456,7 +456,22 @@ class SafeActivity : FragmentActivity() {
         }
     }
 
+    private fun updateChartMembershipAccess() {
+        if (!::chart.isInitialized) return
+        chart.setAccessTier(
+            if (debugPreview) KyvoriqAccessTier.OWNER else
+            KyvoriqMembershipAccess.current(
+                ownerSessionPaired = !publicMarketOnly && KyvoriqSecureSession.isPaired(this)
+            )
+        )
+    }
+
     private fun toggleChartFullscreen() {
+        updateChartMembershipAccess()
+        if (chartFullscreenHost == null && !chart.canUseFullscreenChart()) {
+            showConsumerPlans(1)
+            return
+        }
         if (chartFullscreenHost == null) showChartFullscreen() else closeChartFullscreen()
     }
 
@@ -981,7 +996,11 @@ class SafeActivity : FragmentActivity() {
             minimumHeight = 0
             contentDescription = "Interactive price chart"
             onFullscreenRequested = { toggleChartFullscreen() }
+            onUpgradeRequested = { key ->
+                showConsumerPlans(if (key == "OB" || key == "OTHER") 2 else 1)
+            }
         }
+        updateChartMembershipAccess()
         tradePage.addView(
             chart,
             LinearLayout.LayoutParams(-1, dp(layout.chartHeightDp)).apply {
@@ -1214,8 +1233,8 @@ class SafeActivity : FragmentActivity() {
             requestHomeWidgetPin()
         }
         deviceTools.addView(widgetButton, LinearLayout.LayoutParams(0, dp(44), 1f))
+        // Widget and privacy controls are available to every membership tier.
         insightsContent.addView(deviceTools)
-        adminOnlyViews.add(deviceTools)
         val pairButton = compactPillButton(
             if (KyvoriqSecureSession.isPaired(this)) "DEVICE PAIRED  •  SECURE" else "PAIR DEVICE  •  PRIVATE API"
         )
@@ -1226,13 +1245,22 @@ class SafeActivity : FragmentActivity() {
         }
         insightsContent.addView(pairButton, margins(top = 7, bottom = 8))
         adminOnlyViews.add(pairButton)
+        val membershipButton = compactPillButton("EXPLORE MEMBERSHIPS").apply {
+            contentDescription = "Explore Basic, Pro and Elite membership plans"
+        }
+        membershipButton.setOnClickListener {
+            haptic(it, KyvoriqHaptics.Cue.ACTION)
+            showConsumerPlans()
+        }
+        insightsContent.addView(membershipButton, margins(bottom = 8))
         insightSections.addAll(listOf(
             1 to story.first,
             1 to levels.container,
             2 to sys.container,
             2 to tools,
             2 to deviceTools,
-            2 to pairButton
+            2 to pairButton,
+            2 to membershipButton
         ))
         insightsMotionViews.clear()
         insightsMotionViews.addAll(
@@ -1242,7 +1270,8 @@ class SafeActivity : FragmentActivity() {
                 sys.container,
                 tools,
                 deviceTools,
-                pairButton
+                pairButton,
+                membershipButton
             )
         )
         refreshPrivacyButton()
@@ -1383,6 +1412,7 @@ class SafeActivity : FragmentActivity() {
      * Existing owner pairing is the only recognized admin credential during migration.
      */
     private fun refreshConsumerPresentation() {
+        updateChartMembershipAccess()
         val owner = KyvoriqSecureSession.isPaired(this)
         adminOnlyViews.forEach { it.visibility = if (owner) View.VISIBLE else View.GONE }
         consumerPositionTab?.visibility = View.VISIBLE
@@ -1952,14 +1982,8 @@ class SafeActivity : FragmentActivity() {
         }
     }
 
-    private fun showConsumerPlans() {
-        showInfoDialog("KYVORIQ access levels",
-            "FREE • Bollinger Bands, 50 EMA, SFP watch references. No market alerts.\n\n" +
-            "PRO • Adds daily, weekly and NPOC levels and eligible alerts.\n\n" +
-            "ELITE • Adds order blocks, D-line, VAH and VAL and eligible alerts.\n\n" +
-            "OWNER • Private management and testing.\n\n" +
-            "Signals remain Coming soon for every plan. Checkout is unavailable " +
-            "until server-verified accounts and subscriptions are operational.")
+    private fun showConsumerPlans(initialPlan: Int = 1) {
+        KyvoriqMembershipCarousel(this).show(initialPlan)
     }
 
     private fun openConsumerPortal(destination: String) {
@@ -2475,6 +2499,7 @@ class SafeActivity : FragmentActivity() {
         if (debugPreview) return
         if (!publicMarketOnly) {
             publicMarketOnly = true
+            updateChartMembershipAccess()
             runCatching { socket?.cancel() }
             socket = null
             reconnectRunnable?.let { handler.removeCallbacks(it) }
@@ -2838,6 +2863,7 @@ class SafeActivity : FragmentActivity() {
                     }
                     privateRouteFallback = false
                     publicMarketOnly = false
+                    updateChartMembershipAccess()
                     publicMarketMessage?.visibility = View.GONE
                     if (chartSource != MarketRecovery.PERPETUAL) {
                         latestChartCandles = JSONArray()
@@ -5956,6 +5982,7 @@ class SafeActivity : FragmentActivity() {
                             if (saved) {
                                 button.text = "DEVICE PAIRED  •  SECURE"
                                 publicMarketOnly = false
+                                updateChartMembershipAccess()
                                 publicMarketMessage?.visibility = View.GONE
                                 showInfoDialog("Secure pairing active", "Your private trading session is encrypted on this device for up to 7 days. Renew it from this button when it expires.")
                                 refreshConsumerPresentation()
@@ -6008,6 +6035,7 @@ class SafeActivity : FragmentActivity() {
 
     override fun onResume() {
         super.onResume()
+        updateChartMembershipAccess()
         if (debugPreview || biometricPromptActive) return
         // Resume permission handoff without redownloading the already verified
         // release or repeatedly reopening the installer when the user cancels.
