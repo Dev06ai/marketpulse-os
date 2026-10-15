@@ -621,8 +621,12 @@ class MarketChartView @JvmOverloads constructor(
         val endExclusive = candles.length() - candleShift.roundToInt()
         val start = max(0, endExclusive - visible)
         val actualVisible = max(1, endExclusive - start)
-        val selectedProfile = if (showSessionProfiles && accessTier.volumeProfile())
-            selectedSessionVolumeProfile(start, endExclusive) else null
+        val selectedProfile = if (showSessionProfiles && accessTier.volumeProfile()) {
+            selectedSessionVolumeProfile(start, endExclusive)
+        } else {
+            frameVpPinned = false
+            null
+        }
         drawVolumeProfileReadout(canvas, selectedProfile, left, right, top)
 
         var high = Double.NEGATIVE_INFINITY
@@ -1965,7 +1969,8 @@ class MarketChartView @JvmOverloads constructor(
             val cy = if (aboveView) top + dp(13f) else bottom - dp(13f)
             if (occupied.any { abs(it - cy) < dp(23f) } ||
                 usedCenters.any { abs(it - cy) < dp(23f) } ||
-                (liveY.isFinite() && abs(liveY - cy) < dp(25f))) return
+                (liveY.isFinite() && abs(liveY - cy) < dp(25f)) ||
+                (crosshairVisible && abs(crosshairY - cy) < dp(24f))) return
             val rect = RectF(right + dp(1f), cy - dp(9f), width - dp(2f), cy + dp(9f))
             axisLevelBgPaint.color = KyvoriqTheme.slate
             canvas.drawRoundRect(rect, dp(3f), dp(3f), axisLevelBgPaint)
