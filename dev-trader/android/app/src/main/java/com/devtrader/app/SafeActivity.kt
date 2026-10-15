@@ -189,6 +189,8 @@ class SafeActivity : FragmentActivity() {
     private var updatePoll: Runnable? = null
     private val updateVerifying = AtomicBoolean(false)
     private var updateRecoveryUrl: String? = null
+    private var updateRecoverySha: String? = null
+    private var updateRecoveryVersion: String? = null
     private val directUpdateInFlight = AtomicBoolean(false)
     private var awaitingUpdateInstallPermission = false
     private val updatePrefs by lazy { getSharedPreferences("kyvoriq_updater_v2", Context.MODE_PRIVATE) }
@@ -5426,6 +5428,8 @@ class SafeActivity : FragmentActivity() {
                             // Keep the official download reachable even when the Android
                             // DownloadManager cannot resolve GitHub release redirects.
                             updateRecoveryUrl = apkUrl
+                            updateRecoverySha = expectedSha
+                            updateRecoveryVersion = remoteName
                             setUpdateStatus("DOWNLOADING • v" + remoteName)
                             downloadAndInstallUpdate(apkUrl, expectedSha, remoteName)
                         }
@@ -5633,7 +5637,15 @@ class SafeActivity : FragmentActivity() {
                         runCatching { (getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager).remove(id) }
                         clearPendingSystemUpdate()
                     }
-                    checkUpdate()
+                    val sha = updateRecoverySha
+                        ?: updatePrefs.getString("sha256", null)
+                    val version = updateRecoveryVersion
+                        ?: updatePrefs.getString("version", null)
+                    if (sha != null && version != null &&
+                        Regex("[0-9a-fA-F]{64}").matches(sha) &&
+                        Regex("[0-9]+\\.[0-9]+\\.[0-9]+").matches(version)) {
+                        downloadAndInstallUpdate(url, sha, version)
+                    } else checkUpdate()
                 }
             }
             .setNeutralButton("Download in browser") { _, _ ->
@@ -5664,6 +5676,8 @@ class SafeActivity : FragmentActivity() {
         }
         if (!directUpdateInFlight.compareAndSet(false, true)) return
         updateRecoveryUrl = apkUrl
+        updateRecoverySha = expectedSha
+        updateRecoveryVersion = versionName
         updateButton.isEnabled = true
         setUpdateStatus("DOWNLOADING • secure direct download (tap for options)")
         val request = Request.Builder().url(apkUrl)
@@ -5757,6 +5771,8 @@ class SafeActivity : FragmentActivity() {
                         if (isFinishing || isDestroyed) return@post
                         updateButton.isEnabled = true
                         updateRecoveryUrl = null
+                        updateRecoverySha = null
+                        updateRecoveryVersion = null
                         setUpdateStatus("UPDATE VERIFIED • INSTALLING v" + versionName)
                         installApk(apk)
                     }
