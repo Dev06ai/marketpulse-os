@@ -22,6 +22,12 @@ class WidgetReferenceVisualTest {
             for (width in listOf(180, 240, 260, 315, 340, 385, 460)) {
                 val rv = RemoteViews(context.packageName, R.layout.widget_kyvoriq_compact)
                 rv.setTextViewText(R.id.widget_price_0, "81,574.90")
+                val sp = WidgetTickerLayoutPolicy.priceSp(width, "81,574.90",
+                    context.resources.configuration.fontScale)
+                rv.setTextViewTextSize(R.id.widget_price_0,
+                    android.util.TypedValue.COMPLEX_UNIT_SP, sp)
+                rv.setTextViewTextSize(R.id.widget_price_1,
+                    android.util.TypedValue.COMPLEX_UNIT_SP, sp)
                 val mark = if (width >= 315) View.VISIBLE else View.GONE
                 rv.setViewVisibility(R.id.widget_wordmark, mark)
                 rv.setViewVisibility(R.id.widget_brand_divider, mark)
