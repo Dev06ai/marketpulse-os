@@ -769,6 +769,7 @@ class MarketChartView @JvmOverloads constructor(
         // OB labels must be painted last so candles/EMA cannot cover prices.
         if (hasVisibleLevelLayers()) drawZonePriceBadges(canvas, left, right, top, priceBottom, low, high)
         val occupiedAxisTags = drawAxisLevelLabels(canvas, right, top, priceBottom, low, high, start, endExclusive, selectedProfile)
+        val occupiedOffscreenHints = drawOffscreenLevelHints(canvas, right, top, priceBottom, low, high, occupiedAxisTags)
 
         if (!livePrice.isNaN() && visibleLive) {
             val y = mapY(livePrice, low, high, top, priceBottom)
@@ -780,7 +781,7 @@ class MarketChartView @JvmOverloads constructor(
         drawCrosshair(canvas, start, actualVisible, left, right, top, priceBottom, bottom, low, high, step)
         // Ticks are LAST and only use space left by the ACTUAL (possibly shifted) level badges,
         // live tag and crosshair. Never overwrite a high-priority price annotation.
-        drawAxisTicks(canvas, right, top, priceBottom, low, high, occupiedAxisTags)
+        drawAxisTicks(canvas, right, top, priceBottom, low, high, occupiedAxisTags + occupiedOffscreenHints)
     }
 
     private fun drawHeader(canvas: Canvas, left: Float, top: Float) {
@@ -1613,31 +1614,22 @@ class MarketChartView @JvmOverloads constructor(
 
 
     private var frameVpReadout: List<String> = emptyList()
+    private var frameVpPinned = false
     internal fun visibleVpReadoutForTest(): List<String> = frameVpReadout.toList()
+    internal fun isVpPinnedForTest(): Boolean = frameVpPinned
+    private var frameOffscreenPriceHints: List<String> = emptyList()
+    internal fun visibleOffscreenPriceHintsForTest(): List<String> = frameOffscreenPriceHints.toList()
 
-    /** One valid visible UTC 15m-estimated session is used throughout the chart.
-     * This is read-only metadata; it is never consulted by the signal engine.
+    /** One genuine 15m-estimated session for both the readout and histogram.
+     * If the view is outside the provider's short history, show the nearest
+     * available profile as PINNED, never as volume calculated for the viewport.
      */
     private fun selectedSessionVolumeProfile(start: Int, endExclusive: Int): JSONObject? {
-        val first = candles.optJSONObject(start)?.optLong("start", 0L) ?: return null
-        val last = candles.optJSONObject(endExclusive - 1)?.optLong("end", 0L) ?: return null
-        if (first <= 0L || last <= first) return null
-        return (0 until sessionProfiles.length())
-            .mapNotNull { sessionProfiles.optJSONObject(it) }
-            .filter { profile ->
-                val begin = profile.optLong("start_ms", 0L)
-                val end = profile.optLong("end_ms", 0L)
-                val valPrice = profile.optDouble("val", Double.NaN)
-                val pocPrice = profile.optDouble("poc", Double.NaN)
-                val vahPrice = profile.optDouble("vah", Double.NaN)
-                profile.optString("source") == "OHLCV_15M_ESTIMATE" &&
-                    begin > 0L && end > begin && begin <= last && end > first &&
-                    valPrice.isFinite() && valPrice > 0.0 &&
-                    pocPrice.isFinite() && vahPrice.isFinite() &&
-                    valPrice <= pocPrice && pocPrice <= vahPrice &&
-                    profile.optJSONArray("bins")?.length()?.let { it >= 2 } == true
-            }.maxWithOrNull(compareBy<JSONObject> { it.optLong("start_ms", 0L) }
-                .thenBy { it.optLong("end_ms", 0L) })
+        val first = candles.optJSONObject(start)?.optLong("start", 0L) ?: 0L
+        val last = candles.optJSONObject(endExclusive - 1)?.optLong("end", 0L) ?: 0L
+        val selection = VolumeProfileViewportPolicy.select(sessionProfiles, first, last)
+        frameVpPinned = selection?.pinned == true
+        return selection?.profile
     }
 
     /** Three values stay readable even when an axis badge is near the live tag.
@@ -1701,8 +1693,12 @@ class MarketChartView @JvmOverloads constructor(
             val begin = session.optLong("start_ms", 0L)
             val finish = session.optLong("end_ms", 0L)
             if (begin <= 0L || finish <= begin) return@profile
-            val visibleLeft = max(left + dp(2f), timeX(begin) + dp(2f))
-            val visibleRight = min(right - dp(2f), timeX(finish) - dp(2f))
+            val naturalLeft = max(left + dp(2f), timeX(begin) + dp(2f))
+            val naturalRight = min(right - dp(2f), timeX(finish) - dp(2f))
+            val pinToRight = frameVpPinned || naturalRight - naturalLeft < dp(16f)
+            if (pinToRight) frameVpPinned = true
+            val visibleLeft = if (pinToRight) right - dp(39f) else naturalLeft
+            val visibleRight = if (pinToRight) right - dp(4f) else naturalRight
             if (visibleRight - visibleLeft < dp(16f)) return@profile
             val bins = session.optJSONArray("bins") ?: return@profile
             val histogramWidth = min(dp(34f), (visibleRight - visibleLeft) * .28f)
@@ -1744,7 +1740,7 @@ class MarketChartView @JvmOverloads constructor(
             }
         }
         if (drawnProfile) {
-            val caption = "VP 15m • EST"
+            val caption = if (frameVpPinned) "VP 15m • EST • PINNED" else "VP 15m • EST"
             canvas.drawText(caption, right - profileCaptionPaint.measureText(caption) - dp(6f),
                 top + dp(10f), profileCaptionPaint)
         }
@@ -1905,6 +1901,71 @@ class MarketChartView @JvmOverloads constructor(
         frameAxisSourceCenters = anchors
         frameAxisTexts = drawnTexts
         return occupied
+    }
+
+    /** Offscreen indicators retain source prices but never claim to be located
+     * at the upper/lower plot tick. The arrows explicitly mean outside view.
+     * At most one per side and only while browsing, not in default live mode.
+     */
+    private fun drawOffscreenLevelHints(
+        canvas: Canvas, right: Float, top: Float, bottom: Float,
+        low: Double, high: Double, occupied: List<Float>
+    ): List<Float> {
+        frameOffscreenPriceHints = emptyList()
+        if (followLive || !hasVisibleLevelLayers()) return emptyList()
+        val now = System.currentTimeMillis()
+        val rows = displayLevelRows().filter { row ->
+            isOverlayVisible(row) &&
+                row.optLong("hide_after_ms", Long.MAX_VALUE) > now &&
+                !(row.optDouble("zone_low", Double.NaN).isFinite() &&
+                    row.optDouble("zone_high", Double.NaN).isFinite())
+        }
+        val (above, below) = VolumeProfileViewportPolicy.offscreenPriceLevels(rows, low, high)
+        val displayed = mutableListOf<String>()
+        val usedCenters = mutableListOf<Float>()
+        val liveY = if (livePrice.isFinite() && livePrice in low..high)
+            mapY(livePrice, low, high, top, bottom) else Float.NaN
+        fun show(row: JSONObject?, aboveView: Boolean) {
+            if (row == null) return
+            val price = row.optDouble("price", Double.NaN)
+            if (!price.isFinite()) return
+            val kind = row.optString("kind", "").uppercase(Locale.US)
+            val type = when (kind) {
+                "DAILY" -> "DAY"
+                "WEEKLY" -> "W"
+                "WEEKLY_NPOC" -> "WN"
+                "NPOC" -> "nPOC"
+                "RANGE_POC" -> "RPOC"
+                "RANGE_VAL" -> "RVAL"
+                "RANGE_VAH" -> "RVAH"
+                "SFP", "SFP_GAP" -> "SFP"
+                else -> "LVL"
+            }
+            val arrow = if (aboveView) "↑" else "↓"
+            val full = arrow + " " + type + " " + String.format(Locale.US, "%,.1f", price)
+            val shorter = arrow + " " + String.format(Locale.US, "%,.1f", price)
+            val availableWidth = width - right - dp(8f)
+            val label = when {
+                axisLevelTextPaint.measureText(full) <= availableWidth -> full
+                axisLevelTextPaint.measureText(shorter) <= availableWidth -> shorter
+                else -> return
+            }
+            val cy = if (aboveView) top + dp(13f) else bottom - dp(13f)
+            if (occupied.any { abs(it - cy) < dp(23f) } ||
+                usedCenters.any { abs(it - cy) < dp(23f) } ||
+                (liveY.isFinite() && abs(liveY - cy) < dp(25f))) return
+            val rect = RectF(right + dp(1f), cy - dp(9f), width - dp(2f), cy + dp(9f))
+            axisLevelBgPaint.color = KyvoriqTheme.slate
+            canvas.drawRoundRect(rect, dp(3f), dp(3f), axisLevelBgPaint)
+            axisLevelTextPaint.color = KyvoriqTheme.white
+            canvas.drawText(label, rect.left + dp(3f), cy + dp(3f), axisLevelTextPaint)
+            displayed.add(label)
+            usedCenters.add(cy)
+        }
+        show(above, true)
+        show(below, false)
+        frameOffscreenPriceHints = displayed
+        return usedCenters
     }
 
     private fun axisWidth(): Float {
