@@ -72,15 +72,11 @@
                 android:textColor="#F5F1E6"
                 android:fontFamily="sans-serif-medium"
                 android:textStyle="bold"
-                android:textSize="28sp"
+                android:textSize="18sp"
                 android:gravity="center_vertical"
                 android:includeFontPadding="false"
                 android:singleLine="true"
-                android:ellipsize="end"
-                android:autoSizeTextType="uniform"
-                android:autoSizeMinTextSize="11sp"
-                android:autoSizeMaxTextSize="28sp"
-                android:autoSizeStepGranularity="1sp" />
+                android:ellipsize="end" />
             <TextView
                 android:id="@+id/widget_price_1"
                 android:layout_width="match_parent"
@@ -89,15 +85,11 @@
                 android:textColor="#F5F1E6"
                 android:fontFamily="sans-serif-medium"
                 android:textStyle="bold"
-                android:textSize="28sp"
+                android:textSize="18sp"
                 android:gravity="center_vertical"
                 android:includeFontPadding="false"
                 android:singleLine="true"
-                android:ellipsize="end"
-                android:autoSizeTextType="uniform"
-                android:autoSizeMinTextSize="11sp"
-                android:autoSizeMaxTextSize="28sp"
-                android:autoSizeStepGranularity="1sp" />
+                android:ellipsize="end" />
         </ViewFlipper>
     </LinearLayout>
 
