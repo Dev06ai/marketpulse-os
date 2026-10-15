@@ -115,6 +115,41 @@ class VolumeProfileClarityTest {
             chart.visibleAxisTagTextsForTest().none { it.startsWith("POC ") })
     }
 
+    @Test fun horizontalPanBeyondProfileTimeKeepsPinnedRealVpReadout() {
+        val chart = chartWithProfile(KyvoriqAccessTier.OWNER)
+        val base = 1_760_000_000_000L
+        val recent = JSONObject().put("source", "OHLCV_15M_ESTIMATE")
+            .put("start_ms", base + 82 * 3_600_000L)
+            .put("end_ms", base + 90 * 3_600_000L)
+            .put("val", 81700.0).put("poc", 83200.0).put("vah", 84000.0)
+            .put("bins", JSONArray()
+                .put(JSONObject().put("price", 81700.0).put("volume", 10.0))
+                .put(JSONObject().put("price", 83200.0).put("volume", 70.0)))
+        chart.setSessionProfiles(JSONArray().put(recent))
+        chart.setViewportForTest(28f)
+        render(chart)
+        assertTrue("Historical viewport should show a pinned verified snapshot", chart.isVpPinnedForTest())
+        assertEquals(3, chart.visibleVpReadoutForTest().size)
+        assertTrue(chart.visibleVpReadoutForTest()[0].contains("83,200"))
+    }
+
+    @Test fun dragIntoBlankFutureGutterCannotEraseProfileSelection() {
+        val chart = chartWithProfile(KyvoriqAccessTier.OWNER)
+        chart.setViewportForTest(-9f)
+        render(chart)
+        assertEquals("Virtual future bars must not erase VP", 3,
+            chart.visibleVpReadoutForTest().size)
+        assertFalse("Real recent session remains current", chart.isVpPinnedForTest())
+    }
+
+    @Test fun verticalPricePanKeepsHonestVpReadoutEvenWhenBinsAreOutsidePlot() {
+        val chart = chartWithProfile(KyvoriqAccessTier.OWNER)
+        chart.setViewportForTest(0f, -6000.0)
+        render(chart)
+        assertEquals(3, chart.visibleVpReadoutForTest().size)
+        assertTrue(chart.visibleVpReadoutForTest()[0].startsWith("POC "))
+    }
+
     @Test fun profileReadoutNeverAppearsForBasicAccount() {
         val chart = chartWithProfile(KyvoriqAccessTier.BASIC)
         render(chart)
