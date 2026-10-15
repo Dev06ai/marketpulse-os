@@ -133,4 +133,40 @@ class ChartAxisRailTest {
             bitmap.recycle()
         }
     }
+    @Test fun timeAxisLabelsRemainSeparatedDuringPanAtNarrowPhoneWidth() {
+        context.getSharedPreferences("kyvoriq_chart_layers", android.content.Context.MODE_PRIVATE)
+            .edit().putBoolean("vp_core_only_v1", true).commit()
+        val chart = MarketChartView(context).apply { setAccessTier(KyvoriqAccessTier.OWNER) }
+        val w = d(260f).toInt()
+        val h = d(470f).toInt()
+        chart.layout(0, 0, w, h)
+        val candles = JSONArray()
+        val startMs = 1_760_000_000_000L
+        repeat(90) { i ->
+            val ts = startMs + i * 3_600_000L
+            candles.put(JSONObject().put("start", ts).put("end", ts + 3_600_000L - 1)
+                .put("open", 83000.0).put("close", 82900.0)
+                .put("high", 84000.0).put("low", 82000.0).put("volume", 100.0))
+        }
+        chart.setData(candles, null, null, 83000.0, JSONArray())
+        val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+        try {
+            for (shift in listOf(0f, 12f, 40f, -9f)) {
+                chart.setViewportForTest(shift)
+                chart.draw(Canvas(bmp))
+                val labels = chart.visibleTimeAxisLabelRectsForTest()
+                assertTrue("At least one date must remain readable after shift=$shift", labels.isNotEmpty())
+                labels.forEach { rect ->
+                    assertTrue("Date text escaped plotting area", rect.left >= chart.plotGeometry().price.left - 1f)
+                    assertTrue("Date text collided with price rail",
+                        rect.right <= chart.plotGeometry().price.right + 1f)
+                }
+                for (i in labels.indices) for (j in i + 1 until labels.size) {
+                    assertTrue("Time labels overlap at shift=$shift", labels[i].right + d(5f) <= labels[j].left ||
+                        labels[j].right + d(5f) <= labels[i].left)
+                }
+            }
+        } finally { bmp.recycle() }
+    }
+
 }
