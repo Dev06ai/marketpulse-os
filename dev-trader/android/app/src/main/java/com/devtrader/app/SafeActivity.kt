@@ -2103,6 +2103,15 @@ class SafeActivity : FragmentActivity() {
             }
         }
         latestRoot?.let { renderWorkspace(it) }
+        // A websocket can stall while the user is on another tab. Refresh
+        // evidence freshness whenever Insights is opened, even without a tick.
+        if (index == 2) {
+            val report = latestRoot?.let { MarketInsightThesis.render(it) }
+            if (::features.isInitialized) features.text = report?.context ?:
+                "DATA NOT VERIFIED\nNo authenticated market snapshot is available."
+            if (::insightContext.isInitialized) insightContext.text = report?.flow ?:
+                "DATA NOT VERIFIED\nLevel and order-flow evidence is unavailable."
+        }
         if (index == 2 && previous != 2 && !debugPreview && KyvoriqTheme.motionEnabled(this)) animateInsightsEntrance()
     }
 
@@ -2560,6 +2569,12 @@ class SafeActivity : FragmentActivity() {
             reconnectRunnable = null
             reconnectScheduled.set(false)
             latestRoot = null
+            // Old private evidence must never linger on Insights after a route
+            // failure or the device switching into public-only chart mode.
+            if (::features.isInitialized) features.text =
+                "DATA NOT VERIFIED\nPrivate market snapshot disconnected."
+            if (::insightContext.isInitialized) insightContext.text =
+                "DATA NOT VERIFIED\nMapped levels and flow require a fresh verified feed."
             overlayFeatures = null
             overlayStrategy = null
             if (::chart.isInitialized) {
