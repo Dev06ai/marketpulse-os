@@ -119,7 +119,7 @@ class VolumeProfileClarityTest {
         val chart = chartWithProfile(KyvoriqAccessTier.OWNER, optionalLevelsEnabled = true)
         // chartWithProfile reloads prefs; explicitly persist the SFP flag before
         // constructing a new chart from this fixture, not by forging entitlements.
-        prefs.edit().putBoolean("sfp", true).commit()
+        prefs.edit().putBoolean("sfp", true).putBoolean("weekly", true).commit()
         val fresh = MarketChartView(ctx).apply {
             setAccessTier(KyvoriqAccessTier.OWNER)
         }
