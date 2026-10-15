@@ -1,0 +1,58 @@
+name: KYVORIQ Build 182 Membership Preflight (no deployment)
+
+on:
+  push:
+    branches:
+      - work/kyvoriq-ivory-membership-182-20261015
+
+permissions:
+  contents: read
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.6.0'
+      - name: Compile candidate and instrumentation tests
+        working-directory: dev-trader/android
+        run: gradle assembleDebug assembleDebugAndroidTest -PdevTraderVersionCode=182 -PdevTraderVersionName=0.21.57 --stacktrace
+      - name: Enable Android emulator acceleration
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Test plan navigation and feature gates without private credentials
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          profile: pixel_2
+          disable-animations: false
+          script: |
+            set -euo pipefail
+            adb install -r dev-trader/android/app/build/outputs/apk/debug/app-debug.apk
+            adb install -r dev-trader/android/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
+            for dimensions in "720x1280:320" "1080x2400:420"; do
+              resolution="${dimensions%%:*}"
+              density="${dimensions##*:}"
+              adb shell wm size "$resolution"
+              adb shell wm density "$density"
+              adb shell am instrument -w -e class com.devtrader.app.KyvoriqMembershipCarouselTest,com.devtrader.app.KyvoriqMembershipAccessTest com.devtrader.app.debug.test/androidx.test.runner.AndroidJUnitRunner | tee /tmp/membership-tests.txt
+              grep -q "OK (" /tmp/membership-tests.txt
+            done
+      - name: Source-only safety attestation
+        run: |
+          set -euo pipefail
+          grep -Fq 'val tag = "TAPPED"' dev-trader/android/app/src/main/java/com/devtrader/app/MarketChartView.kt
+          grep -Fq 'tapped_at_ms' dev-trader/android/app/src/main/java/com/devtrader/app/SafeActivity.kt
+          grep -Fq 'fun homeWidgets(): Boolean = true' dev-trader/android/app/src/main/java/com/devtrader/app/KyvoriqFeatureAccess.kt
+          grep -Fq 'fun volumeProfile(): Boolean = isAtLeast(PRO)' dev-trader/android/app/src/main/java/com/devtrader/app/KyvoriqFeatureAccess.kt
+          echo 'Client-only membership preview and chart access validated; no payments or backend deployment.'
