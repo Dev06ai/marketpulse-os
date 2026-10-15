@@ -79,6 +79,12 @@ class ChartAxisRailTest {
     @Test fun renderedPriceRailIsInsideCanvasAndBadgesDoNotIntersect() {
         // This geometry fixture intentionally contains Pro-level NPOC/Daily/Weekly
         // overlays, so render as the private owner. Basic must not expose them.
+        // The default chart is now intentionally uncluttered. Enable optional
+        // level layers explicitly for this overlap geometry fixture.
+        context.getSharedPreferences("kyvoriq_chart_layers", android.content.Context.MODE_PRIVATE)
+            .edit().putBoolean("vp_core_only_v1", true)
+            .putBoolean("npoc", true).putBoolean("daily", true)
+            .putBoolean("weekly", true).commit()
         val chart = MarketChartView(context).apply { setAccessTier(KyvoriqAccessTier.OWNER) }
         val chartWidth = d(393f).toInt()
         val chartHeight = d(630f).toInt()
