@@ -605,6 +605,7 @@ class MarketChartView @JvmOverloads constructor(
         canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), bgPaint)
         bgPaint.shader = null
 
+        frameTimeAxisLabelRects = emptyList()
         val geometry = plotGeometry()
         val left = geometry.price.left
         val right = geometry.price.right
@@ -998,17 +999,31 @@ class MarketChartView @JvmOverloads constructor(
         bottom: Float,
         step: Float
     ) {
+        // On narrow phones or while dragging into future candles, the
+        // final date labels can compress into the same horizontal space.
+        // Reserve actual measured rectangles; never draw overlapping dates.
         val marks = 5
+        val placed = mutableListOf<RectF>()
+        val minGap = dp(6f)
         for (i in 0 until marks) {
             val idx = min(start + (visible - 1) * i / (marks - 1), candles.length() - 1)
             val c = candles.optJSONObject(idx) ?: continue
             val x = left + ((idx - start) + 0.5f) * step
             val ts = c.optLong("start", 0L)
+            if (ts <= 0L) continue
             val label = formatAxisTime(ts)
             val labelWidth = axisLabelPaint.measureText(label)
-            val labelX = (x - labelWidth / 2f).coerceIn(left, max(left, right - labelWidth))
+            if (labelWidth <= 0f || labelWidth > right - left) continue
+            val labelX = (x - labelWidth / 2f).coerceIn(left, right - labelWidth)
+            val rect = RectF(labelX, bottom + dp(2f),
+                labelX + labelWidth, bottom + dp(19f))
+            if (placed.any { other ->
+                    rect.left < other.right + minGap && rect.right + minGap > other.left
+                }) continue
             canvas.drawText(label, labelX, bottom + dp(14f), axisLabelPaint)
+            placed.add(rect)
         }
+        frameTimeAxisLabelRects = placed
     }
 
     private fun drawCrosshair(
@@ -1785,6 +1800,9 @@ class MarketChartView @JvmOverloads constructor(
     private var frameAxisSourceCenters: List<Pair<Float, Float>> = emptyList()
     private var frameAxisTexts: List<String> = emptyList()
     private var frameStructureOverflow: List<AxisLevelMark> = emptyList()
+    private var frameTimeAxisLabelRects: List<RectF> = emptyList()
+    internal fun visibleTimeAxisLabelRectsForTest(): List<RectF> =
+        frameTimeAxisLabelRects.map { RectF(it) }
     internal fun visibleStructureOverflowForTest(): List<String> =
         frameStructureOverflow.map { it.text }
     internal fun visibleAxisTagTextsForTest(): List<String> = frameAxisTexts.toList()
@@ -1849,8 +1867,8 @@ class MarketChartView @JvmOverloads constructor(
                 "DAILY" -> "DAY"
                 "NPOC" -> "nPOC"
                 "WEEKLY" -> "W"
-                "WEEKLY_NPOC" -> "WN"
-                "WEEKLY_OPEN" -> "WO"
+                "WEEKLY_NPOC" -> "WnP"
+                "WEEKLY_OPEN" -> "WOP"
                 "MONTHLY_POC" -> "M"
                 "RANGE_LOW" -> "RL"
                 "RANGE_POC" -> "RPOC"
@@ -1858,7 +1876,7 @@ class MarketChartView @JvmOverloads constructor(
                 "RANGE_VAL" -> "RVAL"
                 "IPOC" -> "iPOC"
                 "SFP_GAP" -> "GAP"
-                "SFP" -> "S"
+                "SFP" -> "SFP"
                 "OB", "OB_ZONE" -> "OB"
                 else -> "L"
             }
@@ -1961,7 +1979,7 @@ class MarketChartView @JvmOverloads constructor(
             val shortCaption = mark.text.substringBefore(' ') + " " + compactPrice(mark.value)
             val more = hidden.size - 2
             val suffix = if (index == 1 && more > 0) " +$more" else ""
-            val actual = listOf("LVL · $caption$suffix", "LVL · $shortCaption$suffix",
+            val actual = listOf("MORE · $caption$suffix", "MORE · $shortCaption$suffix",
                 shortCaption + suffix).firstOrNull {
                 profileReadoutPaint.measureText(it) <= itemWidth - dp(12f)
             } ?: return@forEachIndexed
