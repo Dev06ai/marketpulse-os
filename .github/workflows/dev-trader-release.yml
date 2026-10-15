@@ -285,7 +285,7 @@ jobs:
             mkdir -p recovery-qa
             adb install -r dev-trader/android/app/build/outputs/apk/debug/app-debug.apk
             adb install -r dev-trader/android/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
-            timeout -k 10s 240s adb shell am instrument -w -e class com.devtrader.app.MarketRecoveryTest,com.devtrader.app.ChartAxisRailTest,com.devtrader.app.OrderBlockPolicyTest,com.devtrader.app.KyvoriqUpdaterVisualTest,com.devtrader.app.UpdateDownloadPolicyTest com.devtrader.app.debug.test/androidx.test.runner.AndroidJUnitRunner > recovery-qa/instrumentation.txt 2>&1 || { cat recovery-qa/instrumentation.txt; adb logcat -d -t 2500 > recovery-qa/logcat.txt || true; echo 'Instrumentation failed or exceeded 240 seconds; release remains blocked.'; exit 1; }
+            timeout -k 10s 240s adb shell am instrument -w -e class com.devtrader.app.MarketRecoveryTest,com.devtrader.app.ChartAxisRailTest,com.devtrader.app.OrderBlockPolicyTest,com.devtrader.app.KyvoriqUpdaterVisualTest,com.devtrader.app.UpdateDownloadPolicyTest,com.devtrader.app.WidgetReferenceVisualTest com.devtrader.app.debug.test/androidx.test.runner.AndroidJUnitRunner > recovery-qa/instrumentation.txt 2>&1 || { cat recovery-qa/instrumentation.txt; adb logcat -d -t 2500 > recovery-qa/logcat.txt || true; echo 'Instrumentation failed or exceeded 240 seconds; release remains blocked.'; exit 1; }
             cat recovery-qa/instrumentation.txt
             grep -q 'OK (' recovery-qa/instrumentation.txt
             ! grep -E 'FAILURES!!!|INSTRUMENTATION_FAILED|Process crashed' recovery-qa/instrumentation.txt
