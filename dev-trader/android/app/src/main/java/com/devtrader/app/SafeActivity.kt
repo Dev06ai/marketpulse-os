@@ -4954,9 +4954,9 @@ class SafeActivity : FragmentActivity() {
     // keeping all auth decisions in their original Firebase/server callbacks.
     private fun premiumDialogBackground(): GradientDrawable =
         GradientDrawable(GradientDrawable.Orientation.TL_BR,
-            intArrayOf(Color.rgb(34, 32, 32), Color.rgb(16, 17, 21), Color.rgb(11, 12, 16))).apply {
+            intArrayOf(Color.rgb(28, 29, 33), Color.rgb(17, 18, 22), Color.rgb(11, 12, 16))).apply {
             cornerRadius = dp(24).toFloat()
-            setStroke(dp(1), Color.rgb(108, 102, 92))
+            setStroke(dp(1), Color.argb(100, 245, 241, 230))
         }
 
     private fun premiumDialogButton(title: String, primary: Boolean = true,
@@ -4973,20 +4973,20 @@ class SafeActivity : FragmentActivity() {
             })
             minHeight = dp(48)
             background = android.graphics.drawable.RippleDrawable(
-                android.content.res.ColorStateList.valueOf(Color.argb(48, 246, 215, 158)),
+                android.content.res.ColorStateList.valueOf(Color.argb(46, 245, 241, 230)),
                 GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,
                     if (primary && !destructive)
-                        intArrayOf(Color.rgb(252, 250, 245), Color.rgb(214, 205, 186))
-                    else intArrayOf(Color.rgb(37, 37, 43), Color.rgb(27, 28, 33))).apply {
+                        intArrayOf(Color.rgb(252, 250, 245), Color.rgb(245, 241, 230))
+                    else intArrayOf(Color.rgb(32, 33, 38), Color.rgb(20, 21, 26))).apply {
                     cornerRadius = dp(14).toFloat()
                     if (!primary || destructive) setStroke(dp(1),
-                        if (destructive) Color.rgb(110, 54, 61) else Color.rgb(65, 63, 60))
+                        if (destructive) Color.rgb(110, 54, 61) else Color.argb(95, 245, 241, 230))
                 }, null
             )
             microMotion(this)
         }
 
-    private fun premiumDialogContainer(title: String, subtitle: String): LinearLayout {
+    private fun premiumDialogContainer(title: String, subtitle: String, section: String = "ACCOUNT"): LinearLayout {
         val panel = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(22), dp(20), dp(22), dp(20))
@@ -4999,9 +4999,9 @@ class SafeActivity : FragmentActivity() {
             contentDescription = "KYVORIQ"
             setPadding(dp(8), dp(8), dp(8), dp(8))
             background = GradientDrawable().apply {
-                setColor(Color.rgb(41, 41, 39))
+                setColor(Color.rgb(36, 37, 42))
                 cornerRadius = dp(14).toFloat()
-                setStroke(dp(1), Color.rgb(101, 96, 88))
+                setStroke(dp(1), Color.argb(96, 245, 241, 230))
             }
         }
         headingRow.addView(emblem, LinearLayout.LayoutParams(dp(45), dp(45)))
@@ -5009,7 +5009,7 @@ class SafeActivity : FragmentActivity() {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(12), 0, 0, 0)
         }
-        words.addView(label("KYVORIQ  /  ACCOUNT", 9.5f, kyGold, 0.055f))
+        words.addView(label("KYVORIQ  /  " + section, 9.5f, kyGold, 0.055f))
         words.addView(label(title, 19f, kyWhite, 0f).apply {
             typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
             setLineSpacing(dp(1).toFloat(), 1.04f)
@@ -5018,7 +5018,7 @@ class SafeActivity : FragmentActivity() {
         panel.addView(headingRow, margins(bottom = 15))
         val goldLine = View(this).apply {
             background = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,
-                intArrayOf(kyGold, Color.rgb(212, 205, 186), Color.TRANSPARENT))
+                intArrayOf(kyGold, kyDeepGold, Color.TRANSPARENT))
         }
         panel.addView(goldLine, LinearLayout.LayoutParams(-1, dp(1)))
         if (subtitle.isNotBlank()) {
