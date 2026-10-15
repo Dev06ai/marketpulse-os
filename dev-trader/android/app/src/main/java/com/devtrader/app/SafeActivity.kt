@@ -1418,10 +1418,10 @@ class SafeActivity : FragmentActivity() {
             setPadding(dp(20), dp(18), dp(20), dp(16))
             background = GradientDrawable(
                 GradientDrawable.Orientation.TL_BR,
-                intArrayOf(Color.rgb(29, 28, 29), Color.rgb(12, 13, 17), Color.rgb(9, 10, 13))
+                intArrayOf(Color.rgb(24, 25, 29), Color.rgb(14, 15, 19), Color.rgb(10, 11, 14))
             ).apply {
                 cornerRadius = dp(26).toFloat()
-                setStroke(dp(1), Color.rgb(112, 105, 93))
+                setStroke(dp(1), Color.argb(100, 245, 241, 230))
             }
         }
         val header = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
@@ -1446,7 +1446,7 @@ class SafeActivity : FragmentActivity() {
         surface.addView(header, margins(bottom = 14))
         val accentRule = View(this).apply {
             background = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,
-                intArrayOf(kyDeepGold, Color.rgb(212, 205, 186), Color.TRANSPARENT))
+                intArrayOf(kyGold, kyDeepGold, Color.TRANSPARENT))
         }
         surface.addView(accentRule, LinearLayout.LayoutParams(-1, dp(1)).apply { bottomMargin = dp(15) })
         val statusLine = label(
@@ -1455,12 +1455,12 @@ class SafeActivity : FragmentActivity() {
             else "FREE  •  Market chart access without a subscription",
             10.5f, kyGray, 0f
         ).apply {
-            setTextColor(Color.rgb(236, 230, 214))
+            setTextColor(kyGold)
             setPadding(dp(14), dp(13), dp(14), dp(13))
             background = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,
-                intArrayOf(Color.rgb(41, 41, 39), Color.rgb(24, 24, 27))).apply {
+                intArrayOf(Color.rgb(36, 37, 40), Color.rgb(21, 22, 26))).apply {
                 cornerRadius = dp(14).toFloat()
-                setStroke(dp(1), Color.rgb(89, 86, 78))
+                setStroke(dp(1), Color.argb(65, 245, 241, 230))
             }
         }
         surface.addView(statusLine, margins(bottom = 15))
@@ -1471,12 +1471,12 @@ class SafeActivity : FragmentActivity() {
                 setPadding(dp(13), dp(12), dp(14), dp(12))
                 background = android.graphics.drawable.RippleDrawable(
                     android.content.res.ColorStateList.valueOf(
-                        if (destructive) Color.argb(48, 220, 82, 89) else Color.argb(46, 194, 155, 87)),
+                        if (destructive) Color.argb(48, 220, 82, 89) else Color.argb(38, 245, 241, 230)),
                     GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,
-                        intArrayOf(Color.rgb(31, 31, 35), Color.rgb(18, 19, 23))).apply {
+                        intArrayOf(Color.rgb(32, 33, 38), Color.rgb(19, 20, 25))).apply {
                         cornerRadius = dp(17).toFloat()
                         setStroke(dp(1), if (destructive)
-                            Color.rgb(80, 44, 49) else Color.rgb(57, 55, 57))
+                            Color.rgb(80, 44, 49) else Color.argb(45, 245, 241, 230))
                     }, null)
                 isClickable = true
                 isFocusable = true
@@ -1493,9 +1493,9 @@ class SafeActivity : FragmentActivity() {
                 scaleType = ImageView.ScaleType.FIT_CENTER
                 setPadding(dp(7), dp(7), dp(7), dp(7))
                 background = GradientDrawable().apply {
-                    setColor(Color.rgb(46, 46, 44))
+                    setColor(Color.rgb(39, 40, 45))
                     cornerRadius = dp(12).toFloat()
-                    setStroke(dp(1), Color.rgb(100, 96, 88))
+                    setStroke(dp(1), Color.argb(85, 245, 241, 230))
                 }
                 importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
             }
@@ -1657,10 +1657,10 @@ class SafeActivity : FragmentActivity() {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(22), dp(24), dp(22), dp(22))
             background = GradientDrawable(GradientDrawable.Orientation.TL_BR,
-                intArrayOf(Color.rgb(30, 31, 34), Color.rgb(17, 18, 22), Color.rgb(13, 14, 18))
+                intArrayOf(Color.rgb(26, 27, 31), Color.rgb(16, 17, 21), Color.rgb(10, 11, 15))
             ).apply {
                 cornerRadius = dp(26).toFloat()
-                setStroke(dp(1), Color.rgb(98, 97, 91))
+                setStroke(dp(1), Color.argb(95, 245, 241, 230))
             }
         }
         val brand = ImageView(this).apply {
@@ -1685,9 +1685,9 @@ class SafeActivity : FragmentActivity() {
 
         fun fieldDecoration(): GradientDrawable =
             GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,
-                intArrayOf(Color.rgb(42, 43, 47), Color.rgb(30, 31, 36))).apply {
+                intArrayOf(Color.rgb(35, 36, 41), Color.rgb(23, 24, 29))).apply {
                 cornerRadius = dp(15).toFloat()
-                setStroke(dp(1), Color.rgb(58, 58, 64))
+                setStroke(dp(1), Color.argb(51, 245, 241, 230))
             }
 
         fun inputRow(iconRes: Int, fieldName: String, hintValue: String,
@@ -1699,7 +1699,7 @@ class SafeActivity : FragmentActivity() {
             }
             val glyph = ImageView(this).apply {
                 setImageResource(iconRes)
-                setColorFilter(Color.rgb(181, 183, 190))
+                setColorFilter(kyGold)
                 contentDescription = null
                 importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
                 scaleType = ImageView.ScaleType.CENTER_INSIDE
