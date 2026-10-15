@@ -318,7 +318,12 @@ jobs:
           grep -Fq 'VerifiedInsightsPresentation.marketContext(verified, now)' dev-trader/android/app/src/main/java/com/devtrader/app/MarketInsightThesis.kt
           grep -Fq 'VerifiedInsightsPresentation.levelsFlow(verified, now)' dev-trader/android/app/src/main/java/com/devtrader/app/MarketInsightThesis.kt
           grep -Fq 'No directional claim will be inferred from cached signals.' dev-trader/android/app/src/main/java/com/devtrader/app/VerifiedInsightsPresentation.kt
-          grep -Fq 'DATA NOT VERIFIED' dev-trader/android/app/src/main/java/com/devtrader/app/MarketInsightThesis.kt
+          # Stale quality warning is rendered by the verified formatter, not
+          # by the thin MarketInsightThesis adapter.
+          grep -Fq 'MARKET DATA · UNVERIFIED / STALE' dev-trader/android/app/src/main/java/com/devtrader/app/VerifiedInsightsPresentation.kt
+          grep -Fq 'data.optInt("schema", 0) != 1' dev-trader/android/app/src/main/java/com/devtrader/app/VerifiedInsightsPresentation.kt
+          grep -Fq 'BITGET_PUBLIC_BTCUSDT_PERPETUAL' dev-trader/android/app/src/main/java/com/devtrader/app/VerifiedInsightsPresentation.kt
+          ! grep -Fq '"\\nBitget Demo  "' dev-trader/android/app/src/main/java/com/devtrader/app/SafeActivity.kt
           ! grep -Fq 'Bitget Demo  ' dev-trader/android/app/src/main/java/com/devtrader/app/SafeActivity.kt
           ! grep -Fq 'Bitget execution readiness' dev-trader/android/app/src/main/java/com/devtrader/app/SafeActivity.kt
           grep -Fq 'VolumeProfileViewportPolicy.select(sessionProfiles, first, last)' dev-trader/android/app/src/main/java/com/devtrader/app/MarketChartView.kt
