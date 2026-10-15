@@ -200,6 +200,7 @@ class SafeActivity : FragmentActivity() {
     // UI label only. Server-valid subscription status is the sole authority;
     // no preference, selected card or fake billing event can grant a paid tier.
     private var verifiedConsumerTier = KyvoriqAccessTier.BASIC
+    private var membershipFetchGeneration = 0L
     private lateinit var privacyButton: Button
     private lateinit var widgetButton: Button
     private var selectedTf = "1h"
@@ -467,12 +468,24 @@ class SafeActivity : FragmentActivity() {
 
     private fun updateChartMembershipAccess() {
         if (!::chart.isInitialized) return
-        chart.setAccessTier(
-            if (debugPreview) KyvoriqAccessTier.OWNER else
-            KyvoriqMembershipAccess.current(
-                ownerSessionPaired = !publicMarketOnly && KyvoriqSecureSession.isPaired(this)
-            )
-        )
+        val owner = debugPreview ||
+            (!publicMarketOnly && KyvoriqSecureSession.isPaired(this))
+        chart.setAccessTier(if (owner) KyvoriqAccessTier.OWNER else verifiedConsumerTier)
+    }
+
+    private fun syncVerifiedMembership() {
+        val generation = ++membershipFetchGeneration
+        if (!KyvoriqConsumerIdentity.hasVerifiedSession(this)) {
+            verifiedConsumerTier = KyvoriqAccessTier.BASIC
+            refreshConsumerPresentation()
+            return
+        }
+        KyvoriqConsumerIdentity.fetchVerifiedMembershipTier(this) { confirmed ->
+            if (generation != membershipFetchGeneration || isFinishing || isDestroyed) return@fetchVerifiedMembershipTier
+            verifiedConsumerTier = if (KyvoriqConsumerIdentity.hasVerifiedSession(this))
+                confirmed else KyvoriqAccessTier.BASIC
+            refreshConsumerPresentation()
+        }
     }
 
     private fun toggleChartFullscreen() {
@@ -910,6 +923,7 @@ class SafeActivity : FragmentActivity() {
                 android.util.TypedValue.COMPLEX_UNIT_SP)
             setOnClickListener {
                 haptic(it, KyvoriqHaptics.Cue.ACTION)
+                syncVerifiedMembership()
                 showConsumerPlans(if (verifiedConsumerTier == KyvoriqAccessTier.ELITE) 2 else 1)
             }
         }
@@ -1420,6 +1434,7 @@ class SafeActivity : FragmentActivity() {
      * Existing owner pairing is the only recognized admin credential during migration.
      */
     private fun refreshConsumerPresentation() {
+        if (!KyvoriqConsumerIdentity.hasVerifiedSession(this)) verifiedConsumerTier = KyvoriqAccessTier.BASIC
         updateChartMembershipAccess()
         val owner = KyvoriqSecureSession.isPaired(this)
         adminOnlyViews.forEach { it.visibility = if (owner) View.VISIBLE else View.GONE }
@@ -6067,6 +6082,7 @@ class SafeActivity : FragmentActivity() {
         super.onResume()
         updateChartMembershipAccess()
         if (debugPreview || biometricPromptActive) return
+        syncVerifiedMembership()
         // Resume permission handoff without redownloading the already verified
         // release or repeatedly reopening the installer when the user cancels.
         if (awaitingUpdateInstallPermission) {
