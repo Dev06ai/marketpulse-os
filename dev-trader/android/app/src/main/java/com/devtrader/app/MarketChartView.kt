@@ -1695,20 +1695,20 @@ class MarketChartView @JvmOverloads constructor(
         var drawnProfile = false
         canvas.save()
         canvas.clipRect(left, top, right, bottom)
-        run {
+        profile@ run {
             // Keep one active session visible; historical session profiles are
             // still available when the user pans back to those timestamps.
             val begin = session.optLong("start_ms", 0L)
             val finish = session.optLong("end_ms", 0L)
-            if (begin <= 0L || finish <= begin) continue
+            if (begin <= 0L || finish <= begin) return@profile
             val visibleLeft = max(left + dp(2f), timeX(begin) + dp(2f))
             val visibleRight = min(right - dp(2f), timeX(finish) - dp(2f))
-            if (visibleRight - visibleLeft < dp(16f)) continue
-            val bins = session.optJSONArray("bins") ?: continue
+            if (visibleRight - visibleLeft < dp(16f)) return@profile
+            val bins = session.optJSONArray("bins") ?: return@profile
             val histogramWidth = min(dp(34f), (visibleRight - visibleLeft) * .28f)
             val maxVolume = (0 until bins.length()).mapNotNull { bins.optJSONObject(it) }
                 .maxOfOrNull { it.optDouble("volume", 0.0) } ?: 0.0
-            if (maxVolume <= 0.0) continue
+            if (maxVolume <= 0.0) return@profile
             val first = bins.optJSONObject(0)?.optDouble("price", Double.NaN) ?: Double.NaN
             val second = bins.optJSONObject(1)?.optDouble("price", Double.NaN) ?: Double.NaN
             val pixelHeight = if (first.isFinite() && second.isFinite()) {
