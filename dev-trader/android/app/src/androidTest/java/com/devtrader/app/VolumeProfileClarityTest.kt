@@ -43,6 +43,10 @@ class VolumeProfileClarityTest {
         val profile = JSONObject().put("source", "OHLCV_15M_ESTIMATE")
             .put("start_ms", earliest).put("end_ms", startMs + 90 * 3_600_000L)
             .put("val", 81700.0).put("poc", 83200.0).put("vah", 84000.0)
+            .put("bins", JSONArray()
+                .put(JSONObject().put("price", 81700.0).put("volume", 20.0).put("down", 8.0))
+                .put(JSONObject().put("price", 83200.0).put("volume", 80.0).put("down", 35.0))
+                .put(JSONObject().put("price", 84000.0).put("volume", 30.0).put("down", 5.0)))
         val extras = JSONArray()
         listOf(
             "SFP_GAP" to 84362.3, "IPOC" to 82719.8,
@@ -85,6 +89,25 @@ class VolumeProfileClarityTest {
         assertTrue(chart.visibleAxisPriceAnchorsForTest().all { (priceY, tagY) ->
             abs(priceY - tagY) <= 6 * density + 0.1f
         })
+    }
+
+    @Test fun importantVpPricesRemainVisibleWhenLiveTagCoversPocAxis() {
+        val chart = chartWithProfile(KyvoriqAccessTier.OWNER)
+        chart.setLivePrice(83200.0)
+        render(chart)
+        val readout = chart.visibleVpReadoutForTest()
+        assertEquals("POC / VAH / VAL must always remain in the reserved row", 3, readout.size)
+        assertTrue(readout[0].startsWith("POC 83,200."))
+        assertTrue(readout[1].startsWith("VAH 84,000."))
+        assertTrue(readout[2].startsWith("VAL 81,700."))
+        assertTrue("VP prices must not be duplicated on top of the live-price badge",
+            chart.visibleAxisTagTextsForTest().none { it.startsWith("POC ") })
+    }
+
+    @Test fun profileReadoutNeverAppearsForBasicAccount() {
+        val chart = chartWithProfile(KyvoriqAccessTier.BASIC)
+        render(chart)
+        assertEquals(emptyList<String>(), chart.visibleVpReadoutForTest())
     }
 
     @Test fun noPrivateMembershipPrivilegeLeaksThroughOldScreenshotReferences() {
