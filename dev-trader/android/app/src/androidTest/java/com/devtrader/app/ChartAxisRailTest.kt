@@ -77,7 +77,9 @@ class ChartAxisRailTest {
     }
 
     @Test fun renderedPriceRailIsInsideCanvasAndBadgesDoNotIntersect() {
-        val chart = MarketChartView(context)
+        // This geometry fixture intentionally contains Pro-level NPOC/Daily/Weekly
+        // overlays, so render as the private owner. Basic must not expose them.
+        val chart = MarketChartView(context).apply { setAccessTier(KyvoriqAccessTier.OWNER) }
         val chartWidth = d(393f).toInt()
         val chartHeight = d(630f).toInt()
         chart.layout(0, 0, chartWidth, chartHeight)
