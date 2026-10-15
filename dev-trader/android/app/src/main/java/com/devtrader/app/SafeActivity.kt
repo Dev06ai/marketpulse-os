@@ -5659,45 +5659,94 @@ class SafeActivity : FragmentActivity() {
         }.start()
     }
 
+    /**
+     * Branded ivory recovery surface. Never loses the verified release URL:
+     * a blocked Android download always leaves a one-tap browser route.
+     */
     private fun showUpdateRecoveryOptions() {
         val url = updateRecoveryUrl ?: return checkUpdate()
         if (!UpdateDownloadPolicy.isTrustedReleaseApkUrl(url)) {
             updateRecoveryUrl = null
             return checkUpdate()
         }
-        android.app.AlertDialog.Builder(this)
-            .setTitle("KYVORIQ signed APK")
-            .setMessage("Download from the app or open the verified GitHub APK in your browser. Both use the same official signed release.")
-            .setPositiveButton("Retry in app") { _, _ ->
-                if (directUpdateInFlight.get()) {
-                    setUpdateStatus("DOWNLOADING • already in progress")
-                } else {
-                    val id = updatePrefs.getLong("download_id", -1L)
-                    if (id > 0L) {
-                        runCatching { (getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager).remove(id) }
-                        clearPendingSystemUpdate()
-                    }
-                    val sha = updateRecoverySha
-                        ?: updatePrefs.getString("sha256", null)
-                    val version = updateRecoveryVersion
-                        ?: updatePrefs.getString("version", null)
-                    if (sha != null && version != null &&
-                        Regex("[0-9a-fA-F]{64}").matches(sha) &&
-                        Regex("[0-9]+\\.[0-9]+\\.[0-9]+").matches(version)) {
-                        downloadAndInstallUpdate(url, sha, version)
-                    } else checkUpdate()
-                }
+        val dialog = android.app.Dialog(this)
+        val panel = premiumDialogContainer(
+            "Update download",
+            "The signed APK could not finish downloading on this device. Retry securely inside KYVORIQ or download the official release through your browser.",
+            section = "UPDATE CENTER"
+        )
+        val headingRow = panel.getChildAt(0) as LinearLayout
+        val closeIcon = premiumDialogButton("✕", primary = false).apply {
+            contentDescription = "Close update options"
+            textSize = 17f
+            minHeight = dp(38)
+            setOnClickListener { haptic(it); dialog.dismiss() }
+        }
+        headingRow.addView(closeIcon, LinearLayout.LayoutParams(dp(40), dp(40)).apply {
+            leftMargin = dp(8)
+        })
+        val trustNote = label("●  OFFICIAL GITHUB RELEASE   •   SHA-256 CHECK REQUIRED",
+            9.5f, kyGold, 0.01f).apply {
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(12), dp(12), dp(10), dp(12))
+            background = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,
+                intArrayOf(Color.rgb(36, 37, 41), Color.rgb(23, 24, 28))).apply {
+                cornerRadius = dp(13).toFloat()
+                setStroke(dp(1), Color.argb(57, 245, 241, 230))
             }
-            .setNeutralButton("Download in browser") { _, _ ->
+        }
+        panel.addView(trustNote, LinearLayout.LayoutParams(-1, -2).apply {
+            bottomMargin = dp(15)
+        })
+        val retry = premiumDialogButton("Retry secure download   ↗", primary = true)
+        val browser = premiumDialogButton("Download from GitHub   ↗", primary = false)
+        panel.addView(retry, LinearLayout.LayoutParams(-1, dp(52)).apply {
+            bottomMargin = dp(10)
+        })
+        panel.addView(browser, LinearLayout.LayoutParams(-1, dp(50)))
+        val later = label("Not now", 12f, kyGray, 0f).apply {
+            gravity = Gravity.CENTER
+            contentDescription = "Dismiss download options"
+            setPadding(dp(12), dp(17), dp(12), dp(8))
+            isClickable = true
+            isFocusable = true
+            setOnClickListener { haptic(it); dialog.dismiss() }
+        }
+        panel.addView(later, LinearLayout.LayoutParams(-1, -2))
+        retry.setOnClickListener {
+            haptic(it, KyvoriqHaptics.Cue.ACTION)
+            dialog.dismiss()
+            if (directUpdateInFlight.get()) {
+                setUpdateStatus("DOWNLOADING • already in progress")
+                return@setOnClickListener
+            }
+            val id = updatePrefs.getLong("download_id", -1L)
+            if (id > 0L) {
                 runCatching {
-                    startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))
-                        .addCategory(Intent.CATEGORY_BROWSABLE))
-                }.onFailure {
-                    setUpdateStatus("BROWSER UNAVAILABLE • RETRY UPDATE")
+                    (getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager).remove(id)
                 }
+                clearPendingSystemUpdate()
             }
-            .setNegativeButton("Close", null)
-            .show()
+            val sha = updateRecoverySha ?: updatePrefs.getString("sha256", null)
+            val version = updateRecoveryVersion ?: updatePrefs.getString("version", null)
+            if (sha != null && version != null &&
+                Regex("[0-9a-fA-F]{64}").matches(sha) &&
+                Regex("[0-9]+\\.[0-9]+\\.[0-9]+").matches(version)) {
+                downloadAndInstallUpdate(url, sha, version)
+            } else checkUpdate()
+        }
+        browser.setOnClickListener {
+            haptic(it, KyvoriqHaptics.Cue.ACTION)
+            dialog.dismiss()
+            runCatching {
+                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
+                    addCategory(Intent.CATEGORY_BROWSABLE)
+                })
+            }.onFailure {
+                setUpdateStatus("BROWSER UNAVAILABLE • RETRY UPDATE")
+            }
+        }
+        openPremiumDialog(dialog, panel)
     }
 
     /**
