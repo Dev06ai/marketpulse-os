@@ -5330,15 +5330,14 @@ class SafeActivity : FragmentActivity() {
                     }
                     val alertText = if (notifications) "READY" else "NOT ENABLED"
                     val featureJson = j.optJSONObject("features")
+                    // Consumer/owner Insights diagnostics are market-health
+                    // only. Demo account readiness, positions, signal routing
+                    // and exchange execution stay owner-private elsewhere.
                     check.text = "API  " + apiText +
-                        "\nMarket Feed  " + feedHealth + " • " + sourceText +
+                        "\nMarket feed  " + feedHealth + " • " + sourceText +
                         "\nPrimary WS  " + wsText +
-                        "\nStrategy  " + strategyText +
-                        "\nSignal  " + (strategy?.optString("signal_state", "NONE") ?: "NONE") +
-                        "\nMarket evidence  •  Verified from fresh feed only" +
-                        "\nRegime  " + (featureJson?.optString("regime", "—") ?: "—") +
-                        "\nStructure  " + (featureJson?.optString("market_structure", "—") ?: "—") +
-                        "\nAlerts  " + alertText
+                        "\nMarket analysis  •  Timestamp-verified BTC evidence only" +
+                        "\nNotifications  " + alertText
                 }
                 checkButton.isEnabled = true
             }
