@@ -1679,6 +1679,8 @@ class MarketChartView @JvmOverloads constructor(
     )
     private var frameAxisLabelRects: List<RectF> = emptyList()
     private var frameAxisSourceCenters: List<Pair<Float, Float>> = emptyList()
+    private var frameAxisTexts: List<String> = emptyList()
+    internal fun visibleAxisTagTextsForTest(): List<String> = frameAxisTexts.toList()
     internal fun visibleAxisLabelRectsForTest(): List<RectF> = frameAxisLabelRects.map { RectF(it) }
     internal fun visibleAxisPriceAnchorsForTest(): List<Pair<Float, Float>> =
         frameAxisSourceCenters.toList()
@@ -1720,6 +1722,7 @@ class MarketChartView @JvmOverloads constructor(
     ): List<Float> {
         frameAxisLabelRects = emptyList()
         frameAxisSourceCenters = emptyList()
+        frameAxisTexts = emptyList()
         if (!hasVisibleLevelLayers() && !(showSessionProfiles && accessTier.volumeProfile())) return emptyList()
         val wallNow = System.currentTimeMillis()
         val liveY = if (livePrice.isFinite() && livePrice in low..high) mapY(livePrice, low, high, top, bottom)
@@ -1817,6 +1820,7 @@ class MarketChartView @JvmOverloads constructor(
         val rendered = mutableListOf<RectF>()
         val occupied = mutableListOf<Float>()
         val anchors = mutableListOf<Pair<Float, Float>>()
+        val drawnTexts = mutableListOf<String>()
         markers.zip(centers).forEach { (mark, tagY) ->
             if (tagY == null) return@forEach
             val rect = RectF(axisLeft, tagY - dp(9f), axisRight, tagY + dp(9f))
@@ -1832,9 +1836,11 @@ class MarketChartView @JvmOverloads constructor(
             rendered.add(rect)
             occupied.add(tagY)
             anchors.add(mark.originalY to tagY)
+            drawnTexts.add(mark.text)
         }
         frameAxisLabelRects = rendered
         frameAxisSourceCenters = anchors
+        frameAxisTexts = drawnTexts
         return occupied
     }
 
