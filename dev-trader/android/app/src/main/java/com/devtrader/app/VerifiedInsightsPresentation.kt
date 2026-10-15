@@ -31,7 +31,7 @@ internal object VerifiedInsightsPresentation {
         return "Feed $at · ${ageSeconds}s old (device local)"
     }
 
-    private fun usable(data: JSONObject?, now: Long): Boolean {
+    fun usable(data: JSONObject?, now: Long): Boolean {
         if (data == null || state(data) !in setOf("LIVE", "PARTIAL")) return false
         val stamp = data.optLong("generated_at_ms", 0L)
         val market = data.optLong("market_as_of_ms", 0L)
