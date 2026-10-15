@@ -19,18 +19,24 @@ class VolumeProfileClarityTest {
     private val density get() = ctx.resources.displayMetrics.density
     private fun px(dp: Int) = (dp * density).toInt()
 
-    private fun chartWithProfile(tier: KyvoriqAccessTier): MarketChartView {
+    private fun chartWithProfile(
+        tier: KyvoriqAccessTier, optionalLevelsEnabled: Boolean = false
+    ): MarketChartView {
         val prefs = ctx.getSharedPreferences("kyvoriq_chart_layers", android.content.Context.MODE_PRIVATE)
-        // Simulate an existing cluttered Build 184 user: after one-time migration,
-        // LVL reference layers are OFF, while VP retains its current setting.
-        prefs.edit().clear().putBoolean("npoc", true).putBoolean("daily", true)
-            .putBoolean("weekly", true).putBoolean("ob", true)
+        // Old users migrate to clean defaults. A separate fixture opts into
+        // level filters explicitly so offscreen price presentation is tested.
+        prefs.edit().clear().putBoolean("vp_core_only_v1", optionalLevelsEnabled)
+            .putBoolean("npoc", true).putBoolean("daily", true)
+            .putBoolean("weekly", !optionalLevelsEnabled)
+            .putBoolean("ob", !optionalLevelsEnabled)
             .putBoolean("session_profile", true).commit()
         val chart = MarketChartView(ctx).apply { setAccessTier(tier) }
-        assertFalse(prefs.getBoolean("npoc", true))
-        assertFalse(prefs.getBoolean("daily", true))
-        assertFalse(prefs.getBoolean("weekly", true))
-        assertFalse(prefs.getBoolean("ob", true))
+        if (!optionalLevelsEnabled) {
+            assertFalse(prefs.getBoolean("npoc", true))
+            assertFalse(prefs.getBoolean("daily", true))
+            assertFalse(prefs.getBoolean("weekly", true))
+            assertFalse(prefs.getBoolean("ob", true))
+        }
         val startMs = 1_760_000_000_000L
         val candles = JSONArray()
         repeat(90) { i ->
@@ -148,6 +154,26 @@ class VolumeProfileClarityTest {
         render(chart)
         assertEquals(3, chart.visibleVpReadoutForTest().size)
         assertTrue(chart.visibleVpReadoutForTest()[0].startsWith("POC "))
+    }
+
+    @Test fun offscreenMonthlyPocShowsBelowContextNotFalsePriceAxisLocation() {
+        val chart = chartWithProfile(KyvoriqAccessTier.OWNER, optionalLevelsEnabled = true)
+        val outside = JSONObject()
+            .put("kind", "MONTHLY_POC").put("label", "Monthly POC")
+            .put("source", "TEST_CHART_REFERENCE")
+            .put("price", 77249.9).put("reference_expires_ms", Long.MAX_VALUE)
+        chart.setReferenceLevels(JSONArray().put(outside))
+        chart.setViewportForTest(0f)
+        render(chart)
+        val hints = chart.visibleOffscreenPriceHintsForTest()
+        assertTrue("Below-view level must have a direction and real price: $hints",
+            hints.any { it.contains("↓") && it.contains("77,249.9") })
+        assertTrue("Offscreen contextual strip must explain that price is below view: $hints",
+            hints.any { it.contains("BELOW") })
+        assertFalse("77,249.9 is not at a visible axis coordinate",
+            chart.visibleAxisTagTextsForTest().any { it.contains("77,249") })
+        assertEquals("VP readout must still be present", 3,
+            chart.visibleVpReadoutForTest().size)
     }
 
     @Test fun profileReadoutNeverAppearsForBasicAccount() {
