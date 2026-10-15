@@ -5353,16 +5353,21 @@ class SafeActivity : FragmentActivity() {
         }
     }
 
-    /** Use two fixed public CDNs, not the private trading backend, for OTA metadata. */
+    /**
+     * OTA metadata never touches the private trading server. If the raw/CDN
+     * manifest is blocked, derive the exact release URL and GitHub SHA-256 digest
+     * from GitHub's public releases API instead of getting stuck on CHECKING.
+     */
     private fun fetchUpdateManifest(callback: (Boolean, String) -> Unit) {
         val now = System.currentTimeMillis()
         val origins = listOf(
             "https://raw.githubusercontent.com/Dev06ai/marketpulse-os/dev-trader-v1/dev-trader/update.json?ts=" + now,
-            "https://cdn.jsdelivr.net/gh/Dev06ai/marketpulse-os@dev-trader-v1/dev-trader/update.json?ts=" + now
+            "https://cdn.jsdelivr.net/gh/Dev06ai/marketpulse-os@dev-trader-v1/dev-trader/update.json?ts=" + now,
+            "https://api.github.com/repos/Dev06ai/marketpulse-os/releases/latest"
         )
         fun attempt(index: Int) {
             if (index >= origins.size) {
-                handler.post { if (!isFinishing && !isDestroyed) callback(false, "CDN UNREACHABLE") }
+                handler.post { if (!isFinishing && !isDestroyed) callback(false, "RELEASE SOURCES UNREACHABLE") }
                 return
             }
             val request = Request.Builder().url(origins[index]).get()
@@ -5374,11 +5379,46 @@ class SafeActivity : FragmentActivity() {
                 override fun onResponse(call: okhttp3.Call, response: Response) {
                     val body = response.use {
                         if (!it.isSuccessful) null else runCatching {
-                            it.body?.string()?.takeIf { json -> json.length in 25..8192 }
+                            it.body?.string()?.takeIf { json ->
+                                json.length in 25..(if (index == 2) 524288 else 8192)
+                            }
                         }.getOrNull()
                     }
-                    if (body == null) attempt(index + 1)
-                    else handler.post { if (!isFinishing && !isDestroyed) callback(true, body) }
+                    if (body == null) {
+                        attempt(index + 1)
+                        return
+                    }
+                    // GitHub API metadata is a release descriptor, not update.json.
+                    val payload = if (index == 2) runCatching {
+                        val release = JSONObject(body)
+                        val tag = release.optString("tag_name", "")
+                        val version = Regex("""dev-trader-v([0-9]+[.][0-9]+[.][0-9]+)-([0-9]+)""")
+                            .matchEntire(tag) ?: throw java.io.IOException("Invalid release tag")
+                        val assets = release.getJSONArray("assets")
+                        var official: JSONObject? = null
+                        for (i in 0 until assets.length()) {
+                            val asset = assets.optJSONObject(i)
+                            if (asset?.optString("name") == "app-release.apk") {
+                                official = asset
+                                break
+                            }
+                        }
+                        val apk = official ?: throw java.io.IOException("Signed APK missing")
+                        val url = apk.optString("browser_download_url", "")
+                        val digest = apk.optString("digest", "").removePrefix("sha256:")
+                        if (!UpdateDownloadPolicy.isTrustedReleaseApkUrl(url) ||
+                            !Regex("[0-9a-fA-F]{64}").matches(digest))
+                            throw java.io.IOException("Unverified release asset")
+                        JSONObject()
+                            .put("enabled", true)
+                            .put("versionName", version.groupValues[1])
+                            .put("versionCode", version.groupValues[2].toLong())
+                            .put("apkUrl", url)
+                            .put("sha256", digest)
+                            .toString()
+                    }.getOrNull() else body
+                    if (payload == null) attempt(index + 1)
+                    else handler.post { if (!isFinishing && !isDestroyed) callback(true, payload) }
                 }
             })
         }
