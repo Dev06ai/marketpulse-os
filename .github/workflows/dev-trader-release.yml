@@ -294,7 +294,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: kyvoriq-187-vp-pan-evidence
+          name: kyvoriq-188-offscreen-context-evidence
           path: recovery-qa/
           retention-days: 14
 
@@ -315,6 +315,10 @@ jobs:
           grep -Fq 'VolumeProfileViewportPolicy.select(sessionProfiles, first, last)' dev-trader/android/app/src/main/java/com/devtrader/app/MarketChartView.kt
           grep -Fq 'coerceAtMost(candles.length())' dev-trader/android/app/src/main/java/com/devtrader/app/MarketChartView.kt
           grep -Fq 'drawOffscreenLevelHints(canvas' dev-trader/android/app/src/main/java/com/devtrader/app/MarketChartView.kt
+          grep -Fq 'val offscreenHintHeight' dev-trader/android/app/src/main/java/com/devtrader/app/MarketChartView.kt
+          grep -Fq 'val choices = listOf(' dev-trader/android/app/src/main/java/com/devtrader/app/MarketChartView.kt
+          grep -Fq 'offscreenMonthlyPocShowsBelowContextNotFalsePriceAxisLocation' dev-trader/android/app/src/androidTest/java/com/devtrader/app/VolumeProfileClarityTest.kt
+          ! grep -Fq 'occupiedAxisTags + occupiedOffscreenHints' dev-trader/android/app/src/main/java/com/devtrader/app/MarketChartView.kt
           grep -Fq 'VP 15m • EST • PINNED' dev-trader/android/app/src/main/java/com/devtrader/app/MarketChartView.kt
           ! grep -Fq 'return Selection(nearest, false)' dev-trader/android/app/src/main/java/com/devtrader/app/VolumeProfileViewportPolicy.kt
           grep -Fq 'vp_core_only_v1' dev-trader/android/app/src/main/java/com/devtrader/app/MarketChartView.kt
