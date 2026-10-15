@@ -577,7 +577,11 @@ class MarketChartView @JvmOverloads constructor(
         val baseTop = if (height < dp(190f)) 32f else if (levelMenuOpen) 66f else 42f
         val profileReadoutHeight = if (height >= dp(190f) &&
             showSessionProfiles && accessTier.volumeProfile() && sessionProfiles.length() > 0) 20f else 0f
-        val top = dp(baseTop + profileReadoutHeight)
+        // During chart browsing, offscreen level hints occupy their OWN
+        // contextual row, never a false tick on the transformed price rail.
+        val offscreenHintHeight = if (height >= dp(190f) && !followLive &&
+            hasVisibleLevelLayers()) 20f else 0f
+        val top = dp(baseTop + profileReadoutHeight + offscreenHintHeight)
         val bottom = height - dp(22f)
         val volumeHeight = if (showVolume) height * 0.20f else 0f
         val volumeTop = bottom - volumeHeight
@@ -627,7 +631,9 @@ class MarketChartView @JvmOverloads constructor(
             frameVpPinned = false
             null
         }
-        drawVolumeProfileReadout(canvas, selectedProfile, left, right, top)
+        val contextualRowHeight = if (height >= dp(190f) && !followLive &&
+            hasVisibleLevelLayers()) dp(20f) else 0f
+        drawVolumeProfileReadout(canvas, selectedProfile, left, right, top - contextualRowHeight)
 
         var high = Double.NEGATIVE_INFINITY
         var low = Double.POSITIVE_INFINITY
@@ -782,7 +788,7 @@ class MarketChartView @JvmOverloads constructor(
         // OB labels must be painted last so candles/EMA cannot cover prices.
         if (hasVisibleLevelLayers()) drawZonePriceBadges(canvas, left, right, top, priceBottom, low, high)
         val occupiedAxisTags = drawAxisLevelLabels(canvas, right, top, priceBottom, low, high, start, endExclusive, selectedProfile)
-        val occupiedOffscreenHints = drawOffscreenLevelHints(canvas, right, top, priceBottom, low, high, occupiedAxisTags)
+        drawOffscreenLevelHints(canvas, left, right, top, priceBottom, low, high)
 
         if (!livePrice.isNaN() && visibleLive) {
             val y = mapY(livePrice, low, high, top, priceBottom)
@@ -794,7 +800,7 @@ class MarketChartView @JvmOverloads constructor(
         drawCrosshair(canvas, start, actualVisible, left, right, top, priceBottom, bottom, low, high, step)
         // Ticks are LAST and only use space left by the ACTUAL (possibly shifted) level badges,
         // live tag and crosshair. Never overwrite a high-priority price annotation.
-        drawAxisTicks(canvas, right, top, priceBottom, low, high, occupiedAxisTags + occupiedOffscreenHints)
+        drawAxisTicks(canvas, right, top, priceBottom, low, high, occupiedAxisTags)
     }
 
     private fun drawHeader(canvas: Canvas, left: Float, top: Float) {
@@ -1919,16 +1925,17 @@ class MarketChartView @JvmOverloads constructor(
         return occupied
     }
 
-    /** Offscreen indicators retain source prices but never claim to be located
-     * at the upper/lower plot tick. The arrows explicitly mean outside view.
-     * At most one per side and only while browsing, not in default live mode.
+    /** This contextual readout is deliberately OUTSIDE the price-axis rail.
+     * Showing a 77,249.9 badge beside the 80k tick can misrepresent the true
+     * market level. Above/below means OUTSIDE this viewport, not at its border.
+     * It never changes stored levels or the market data used by trading.
      */
     private fun drawOffscreenLevelHints(
-        canvas: Canvas, right: Float, top: Float, bottom: Float,
-        low: Double, high: Double, occupied: List<Float>
-    ): List<Float> {
+        canvas: Canvas, left: Float, right: Float, top: Float, bottom: Float,
+        low: Double, high: Double
+    ) {
         frameOffscreenPriceHints = emptyList()
-        if (followLive || !hasVisibleLevelLayers()) return emptyList()
+        if (followLive || !hasVisibleLevelLayers() || height < dp(190f)) return
         val now = System.currentTimeMillis()
         val rows = displayLevelRows().filter { row ->
             isOverlayVisible(row) &&
@@ -1937,19 +1944,20 @@ class MarketChartView @JvmOverloads constructor(
                     row.optDouble("zone_high", Double.NaN).isFinite())
         }
         val (above, below) = VolumeProfileViewportPolicy.offscreenPriceLevels(rows, low, high)
+        val widthEach = (right - left) / 2f
+        if (widthEach <= dp(38f)) return
         val displayed = mutableListOf<String>()
-        val usedCenters = mutableListOf<Float>()
-        val liveY = if (livePrice.isFinite() && livePrice in low..high)
-            mapY(livePrice, low, high, top, bottom) else Float.NaN
-        fun show(row: JSONObject?, aboveView: Boolean) {
-            if (row == null) return
+        val items = listOf(Triple(above, "↑", "ABOVE"), Triple(below, "↓", "BELOW"))
+        items.forEachIndexed { index, (row, arrow, direction) ->
+            if (row == null) return@forEachIndexed
             val price = row.optDouble("price", Double.NaN)
-            if (!price.isFinite()) return
+            if (!price.isFinite() || price <= 0.0) return@forEachIndexed
             val kind = row.optString("kind", "").uppercase(Locale.US)
             val type = when (kind) {
+                "MONTHLY_POC" -> "MPOC"
+                "WEEKLY_NPOC" -> "WNPOC"
+                "WEEKLY", "WEEKLY_OPEN" -> "W"
                 "DAILY" -> "DAY"
-                "WEEKLY" -> "W"
-                "WEEKLY_NPOC" -> "WN"
                 "NPOC" -> "nPOC"
                 "RANGE_POC" -> "RPOC"
                 "RANGE_VAL" -> "RVAL"
@@ -1957,32 +1965,28 @@ class MarketChartView @JvmOverloads constructor(
                 "SFP", "SFP_GAP" -> "SFP"
                 else -> "LVL"
             }
-            val arrow = if (aboveView) "↑" else "↓"
-            val full = arrow + " " + type + " " + String.format(Locale.US, "%,.1f", price)
-            val shorter = arrow + " " + String.format(Locale.US, "%,.1f", price)
-            val availableWidth = width - right - dp(8f)
-            val label = when {
-                axisLevelTextPaint.measureText(full) <= availableWidth -> full
-                axisLevelTextPaint.measureText(shorter) <= availableWidth -> shorter
-                else -> return
-            }
-            val cy = if (aboveView) top + dp(13f) else bottom - dp(13f)
-            if (occupied.any { abs(it - cy) < dp(23f) } ||
-                usedCenters.any { abs(it - cy) < dp(23f) } ||
-                (liveY.isFinite() && abs(liveY - cy) < dp(25f)) ||
-                (crosshairVisible && abs(crosshairY - cy) < dp(24f))) return
-            val rect = RectF(right + dp(1f), cy - dp(9f), width - dp(2f), cy + dp(9f))
-            axisLevelBgPaint.color = KyvoriqTheme.slate
-            canvas.drawRoundRect(rect, dp(3f), dp(3f), axisLevelBgPaint)
-            axisLevelTextPaint.color = KyvoriqTheme.white
-            canvas.drawText(label, rect.left + dp(3f), cy + dp(3f), axisLevelTextPaint)
+            val exact = String.format(Locale.US, "%,.1f", price)
+            // Always show the direction AND exact price. Select a shorter
+            // context label if the phone has increased font scaling.
+            val choices = listOf(
+                "$arrow $direction · $type $exact",
+                "$arrow $direction · $exact",
+                "$arrow $exact"
+            )
+            val textWidth = widthEach - dp(12f)
+            val label = choices.firstOrNull {
+                profileReadoutPaint.measureText(it) <= textWidth
+            } ?: return@forEachIndexed
+            val x = left + widthEach * index + dp(1f)
+            val rect = RectF(x, top - dp(18f),
+                x + widthEach - dp(3f), top - dp(2f))
+            canvas.drawRoundRect(rect, dp(5f), dp(5f), profileReadoutBg)
+            profileReadoutPaint.color = KyvoriqTheme.white
+            canvas.drawText(label, rect.left + dp(4f),
+                top - dp(6f), profileReadoutPaint)
             displayed.add(label)
-            usedCenters.add(cy)
         }
-        show(above, true)
-        show(below, false)
         frameOffscreenPriceHints = displayed
-        return usedCenters
     }
 
     private fun axisWidth(): Float {
