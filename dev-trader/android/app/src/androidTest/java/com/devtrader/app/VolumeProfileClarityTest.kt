@@ -157,7 +157,7 @@ class VolumeProfileClarityTest {
         assertTrue("Daily missing with VP enabled: $combined", combined.any { it.startsWith("DAY ") })
         assertTrue("Weekly missing with VP enabled: $combined", combined.any { it.startsWith("W ") })
         assertTrue("nPOC missing with VP enabled: $combined", combined.any { it.startsWith("nPOC ") })
-        assertTrue("SFP missing with VP enabled: $combined", combined.any { it.startsWith("S ") })
+        assertTrue("SFP missing with VP enabled: $combined", combined.any { it.startsWith("SFP ") })
         assertEquals(3, fresh.visibleVpReadoutForTest().size)
         assertTrue("No duplicate VP rail tags", axis.none {
             it.startsWith("POC ") || it.startsWith("VAH ") || it.startsWith("VAL ")
