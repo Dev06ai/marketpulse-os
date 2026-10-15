@@ -581,7 +581,11 @@ class MarketChartView @JvmOverloads constructor(
         // contextual row, never a false tick on the transformed price rail.
         val offscreenHintHeight = if (height >= dp(190f) && !followLive &&
             hasVisibleLevelLayers()) 20f else 0f
-        val top = dp(baseTop + profileReadoutHeight + offscreenHintHeight)
+        // When VP shares the chart with enabled structure filters, reserve a
+        // small readout for price labels that cannot fit the true-price rail.
+        val structureOverflowHeight = if (height >= dp(190f) && hasVisibleLevelLayers() &&
+            showSessionProfiles && accessTier.volumeProfile()) 20f else 0f
+        val top = dp(baseTop + profileReadoutHeight + offscreenHintHeight + structureOverflowHeight)
         val bottom = height - dp(22f)
         val volumeHeight = if (showVolume) height * 0.20f else 0f
         val volumeTop = bottom - volumeHeight
@@ -633,7 +637,10 @@ class MarketChartView @JvmOverloads constructor(
         }
         val contextualRowHeight = if (height >= dp(190f) && !followLive &&
             hasVisibleLevelLayers()) dp(20f) else 0f
-        drawVolumeProfileReadout(canvas, selectedProfile, left, right, top - contextualRowHeight)
+        val structuralRowHeight = if (height >= dp(190f) && hasVisibleLevelLayers() &&
+            showSessionProfiles && accessTier.volumeProfile()) dp(20f) else 0f
+        drawVolumeProfileReadout(canvas, selectedProfile, left, right,
+            top - contextualRowHeight - structuralRowHeight)
 
         var high = Double.NEGATIVE_INFINITY
         var low = Double.POSITIVE_INFINITY
@@ -788,7 +795,8 @@ class MarketChartView @JvmOverloads constructor(
         // OB labels must be painted last so candles/EMA cannot cover prices.
         if (hasVisibleLevelLayers()) drawZonePriceBadges(canvas, left, right, top, priceBottom, low, high)
         val occupiedAxisTags = drawAxisLevelLabels(canvas, right, top, priceBottom, low, high, start, endExclusive, selectedProfile)
-        drawOffscreenLevelHints(canvas, left, right, top, priceBottom, low, high)
+        drawOffscreenLevelHints(canvas, left, right, top - structuralRowHeight, priceBottom, low, high)
+        drawStructuralOverflow(canvas, left, right, top, structuralRowHeight)
 
         if (!livePrice.isNaN() && visibleLive) {
             val y = mapY(livePrice, low, high, top, priceBottom)
@@ -1771,11 +1779,14 @@ class MarketChartView @JvmOverloads constructor(
 
     private data class AxisLevelMark(
         val originalY: Float, val value: Double, val text: String, val color: Int,
-        val priority: Int = 1
+        val priority: Int = 1, val key: String = text
     )
     private var frameAxisLabelRects: List<RectF> = emptyList()
     private var frameAxisSourceCenters: List<Pair<Float, Float>> = emptyList()
     private var frameAxisTexts: List<String> = emptyList()
+    private var frameStructureOverflow: List<AxisLevelMark> = emptyList()
+    internal fun visibleStructureOverflowForTest(): List<String> =
+        frameStructureOverflow.map { it.text }
     internal fun visibleAxisTagTextsForTest(): List<String> = frameAxisTexts.toList()
     internal fun visibleAxisLabelRectsForTest(): List<RectF> = frameAxisLabelRects.map { RectF(it) }
     internal fun visibleAxisPriceAnchorsForTest(): List<Pair<Float, Float>> =
@@ -1820,6 +1831,7 @@ class MarketChartView @JvmOverloads constructor(
         frameAxisLabelRects = emptyList()
         frameAxisSourceCenters = emptyList()
         frameAxisTexts = emptyList()
+        frameStructureOverflow = emptyList()
         if (!hasVisibleLevelLayers() && !(showSessionProfiles && accessTier.volumeProfile())) return emptyList()
         val wallNow = System.currentTimeMillis()
         val liveY = if (livePrice.isFinite() && livePrice in low..high) mapY(livePrice, low, high, top, bottom)
@@ -1861,35 +1873,26 @@ class MarketChartView @JvmOverloads constructor(
             }
             val priceLabel = if (row.optString("source") == DewaldSnapshotReferences.SOURCE)
                 String.format(Locale.US, "%,.1f", value) else compactPrice(value)
-            AxisLevelMark(mapY(value, low, high, top, bottom), value,
-                type + " " + priceLabel, color,
-                if (row.optString("source") == DewaldSnapshotReferences.SOURCE) 6 else when (kind) {
-                    "IPOC", "RANGE_POC", "NPOC", "SFP" -> 4
-                    "RANGE_VAH", "RANGE_VAL", "DAILY", "WEEKLY", "WEEKLY_NPOC" -> 3
-                    else -> 2
-                })
-        }
-        val profileMarkers = if (selectedProfile == null) emptyList() else {
-            // Readout and rail share the same selected session. Suppressing an
-            // axis badge near the live-price marker never hides its readout.
-            listOf(
-                Triple("poc", Color.rgb(218, 113, 143), "POC"),
-                Triple("vah", Color.rgb(85, 139, 218), "VAH"),
-                Triple("val", Color.rgb(85, 139, 218), "VAL")
-            ).mapNotNull { (field, color, tag) ->
-                val value = selectedProfile.optDouble(field, Double.NaN)
-                if (value.isFinite() && value in low..high)
-                    AxisLevelMark(mapY(value, low, high, top, bottom), value,
-                        tag + " " + compactPrice(value), color, 7)
-                else null
+            // Tier-authorized structure ALWAYS wins axis space ahead of VP.
+            // Screenshot origin is not a reason to outrank current live levels.
+            val priority = when (kind) {
+                "SFP", "SFP_GAP" -> 12
+                "NPOC", "WEEKLY_NPOC" -> 11
+                "DAILY", "WEEKLY", "WEEKLY_OPEN" -> 10
+                "RANGE_POC", "IPOC", "MONTHLY_POC" -> 9
+                else -> 8
             }
+            AxisLevelMark(mapY(value, low, high, top, bottom), value,
+                type + " " + priceLabel, color, priority,
+                kind + "|" + String.format(Locale.US, "%.2f", value))
         }
-        // Preserve actual source prices; remove visually duplicate rounded captions.
-        // Prioritize important manual levels before estimated session-profile labels.
-        val markers = (manualMarkers + profileMarkers)
+        // The POC / VAH / VAL values already occupy their own always-visible
+        // readout. Repeating them on the rail hides Daily, Weekly, SFP and nPOC
+        // labels, so the VP rail markers are intentionally omitted.
+        val markers = manualMarkers
             .sortedWith(compareByDescending<AxisLevelMark> { it.priority }
                 .thenBy { abs(it.originalY - if (liveY.isFinite()) liveY else (top + bottom) / 2f) })
-            .distinctBy { it.text }
+            .distinctBy { it.key }
 
         val reserved = buildList {
             if (liveY.isFinite()) add(liveY)
@@ -1906,19 +1909,29 @@ class MarketChartView @JvmOverloads constructor(
             if (tagY == null) return@forEach
             val rect = RectF(axisLeft, tagY - dp(9f), axisRight, tagY + dp(9f))
             // Skip rather than truncate misleading price text on unusually narrow screens.
-            if (axisLevelTextPaint.measureText(mark.text) > rect.width() - dp(4f)) return@forEach
+            // Use short prices in narrow rails, retaining exact data in the
+            // model and the contextual overflow readout if still not fit.
+            val shortTag = mark.text.substringBefore(' ') + " " + compactPrice(mark.value)
+            val text = if (axisLevelTextPaint.measureText(mark.text) <= rect.width() - dp(4f))
+                mark.text else shortTag
+            if (axisLevelTextPaint.measureText(text) > rect.width() - dp(4f)) return@forEach
             axisLevelBgPaint.color = KyvoriqTheme.slate
             canvas.drawRoundRect(rect, dp(3f), dp(3f), axisLevelBgPaint)
             axisLevelGuidePaint.color = mark.color
             // Short horizontal tick at the ORIGINAL price: never a long diagonal.
             canvas.drawLine(right, mark.originalY, axisLeft + dp(2f), mark.originalY, axisLevelGuidePaint)
             axisLevelTextPaint.color = mark.color
-            canvas.drawText(mark.text, axisLeft + dp(2f), tagY + dp(2.8f), axisLevelTextPaint)
+            canvas.drawText(text, axisLeft + dp(2f), tagY + dp(2.8f), axisLevelTextPaint)
             rendered.add(rect)
             occupied.add(tagY)
             anchors.add(mark.originalY to tagY)
-            drawnTexts.add(mark.text)
+            drawnTexts.add(text)
         }
+        // Keep the actual source-level values accessible when geometry or the
+        // live price prevents all badges from fitting in the narrow rail.
+        val visibleKeys = markers.zip(centers).filter { (_, y) -> y != null }
+            .map { it.first.key }.toSet()
+        frameStructureOverflow = markers.filterNot { it.key in visibleKeys }
         frameAxisLabelRects = rendered
         frameAxisSourceCenters = anchors
         frameAxisTexts = drawnTexts
@@ -1930,6 +1943,36 @@ class MarketChartView @JvmOverloads constructor(
      * market level. Above/below means OUTSIDE this viewport, not at its border.
      * It never changes stored levels or the market data used by trading.
      */
+    /** Compact, separate legend for in-range important levels whose TRUE-price
+     * tags are too close to another badge to fit. Never place an unanchored
+     * price beside a false vertical axis coordinate.
+     */
+    private fun drawStructuralOverflow(
+        canvas: Canvas, left: Float, right: Float, top: Float, heightPx: Float
+    ) {
+        if (heightPx <= 0f || frameStructureOverflow.isEmpty()) return
+        val available = right - left
+        if (available <= dp(92f)) return
+        val hidden = frameStructureOverflow
+        val itemWidth = available / 2f
+        hidden.take(2).forEachIndexed { index, mark ->
+            val caption = mark.text.substringBefore(' ') + " " +
+                String.format(Locale.US, "%,.1f", mark.value)
+            val shortCaption = mark.text.substringBefore(' ') + " " + compactPrice(mark.value)
+            val more = hidden.size - 2
+            val suffix = if (index == 1 && more > 0) " +$more" else ""
+            val actual = listOf("LVL · $caption$suffix", "LVL · $shortCaption$suffix",
+                shortCaption + suffix).firstOrNull {
+                profileReadoutPaint.measureText(it) <= itemWidth - dp(12f)
+            } ?: return@forEachIndexed
+            val x = left + index * itemWidth + dp(1f)
+            val rect = RectF(x, top - dp(18f), x + itemWidth - dp(3f), top - dp(2f))
+            canvas.drawRoundRect(rect, dp(5f), dp(5f), profileReadoutBg)
+            profileReadoutPaint.color = mark.color
+            canvas.drawText(actual, rect.left + dp(4f), top - dp(6f), profileReadoutPaint)
+        }
+    }
+
     private fun drawOffscreenLevelHints(
         canvas: Canvas, left: Float, right: Float, top: Float, bottom: Float,
         low: Double, high: Double
