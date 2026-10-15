@@ -223,18 +223,25 @@ class SignalService : Service() {
             override fun onAvailable(network: Network) {
                 handler.post {
                     if (stopped) return@post
-                    restClient.dispatcher.cancelAll()
-                    restClient.connectionPool.evictAll()
-                    client.connectionPool.evictAll()
-                    val old = socket
+                    val previousSocket = socket
                     socket = null
-                    old?.cancel()
                     reconnectAttempt = 0
                     reconnectScheduled = false
                     lastHeartbeatProbeMs = 0L
                     lastTradeFallbackMs = 0L
-                    // Network changes must never bypass a rejected device session.
-                    connect()
+                    // Closing pooled TLS sockets may perform network I/O.
+                    // Never evict/cancel connections on Android's main thread.
+                    Thread({
+                        runCatching { restClient.dispatcher.cancelAll() }
+                        runCatching { restClient.connectionPool.evictAll() }
+                        runCatching { client.connectionPool.evictAll() }
+                        runCatching { previousSocket?.cancel() }
+                        handler.post {
+                            if (stopped) return@post
+                            // Network changes must never bypass rejected sessions.
+                            connect()
+                        }
+                    }, "kyvoriq-network-recovery").start()
                 }
             }
             override fun onLost(network: Network) {
