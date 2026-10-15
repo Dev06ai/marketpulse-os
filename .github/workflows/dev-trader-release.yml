@@ -294,7 +294,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: kyvoriq-188-offscreen-context-evidence
+          name: kyvoriq-189-structure-vp-evidence
           path: recovery-qa/
           retention-days: 14
 
@@ -318,6 +318,10 @@ jobs:
           grep -Fq 'val offscreenHintHeight' dev-trader/android/app/src/main/java/com/devtrader/app/MarketChartView.kt
           grep -Fq 'val choices = listOf(' dev-trader/android/app/src/main/java/com/devtrader/app/MarketChartView.kt
           grep -Fq 'offscreenMonthlyPocShowsBelowContextNotFalsePriceAxisLocation' dev-trader/android/app/src/androidTest/java/com/devtrader/app/VolumeProfileClarityTest.kt
+          grep -Fq 'vpEnabledStillShowsEnabledDailyWeeklySfpNpocWithoutFalseAxisPrices' dev-trader/android/app/src/androidTest/java/com/devtrader/app/VolumeProfileClarityTest.kt
+          grep -Fq 'frameStructureOverflow = markers.filterNot' dev-trader/android/app/src/main/java/com/devtrader/app/MarketChartView.kt
+          grep -Fq 'drawStructuralOverflow(canvas' dev-trader/android/app/src/main/java/com/devtrader/app/MarketChartView.kt
+          grep -Fq 'The POC / VAH / VAL values already occupy' dev-trader/android/app/src/main/java/com/devtrader/app/MarketChartView.kt
           ! grep -Fq 'occupiedAxisTags + occupiedOffscreenHints' dev-trader/android/app/src/main/java/com/devtrader/app/MarketChartView.kt
           grep -Fq 'VP 15m • EST • PINNED' dev-trader/android/app/src/main/java/com/devtrader/app/MarketChartView.kt
           ! grep -Fq 'return Selection(nearest, false)' dev-trader/android/app/src/main/java/com/devtrader/app/VolumeProfileViewportPolicy.kt
